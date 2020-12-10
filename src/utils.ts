@@ -141,14 +141,15 @@ export function mapObject(target, callbackfn: MapObjectClbkFn, opt?: MapObjectOp
     const filtered = !filter ? result : result.filter(([, v]) => !_isUndef(v))
     return Object.fromEntries(filtered)
   }
+  return undefined
 }
 
 export function filterObject(target, callbackfn) {
-  return mapObject(target, (value, key, ...args) => {
+  return mapObject(target, (value, key, ...args): [any, any] | null => {
     if (_isFn(callbackfn) && callbackfn(value, key, ...args)) {
       return [key, value]
     }
-    return
+    return null
   }, { advanced: true, filter: true })
 }
 

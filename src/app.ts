@@ -1,6 +1,6 @@
 import { s } from './utils'
 import { Sig, Data, n } from './const'
-import { Normalized } from './models/normalized'
+// import { Normalized } from './models/normalized'
 import { Document } from './models/document'
 import { Collection } from './models/collection'
 import { ID } from './types/data'
