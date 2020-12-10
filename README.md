@@ -1,0 +1,3 @@
+# @aglyn/core
+
+Core files
