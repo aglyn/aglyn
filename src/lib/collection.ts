@@ -74,7 +74,6 @@ export class Collection<T extends DocumentModel = Document, F = any> extends Doc
   getAllDocuments(): T[] {
     return this.documents
   }
-
   getDocumentById(id: ID): T | undefined
   getDocumentById(...ids: ID[]): T[]
   getDocumentById(id: ID, ...ids: ID[]): T | T[] | undefined {

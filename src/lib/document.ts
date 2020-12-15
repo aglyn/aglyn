@@ -29,6 +29,7 @@ export interface DocumentModel<F = any> extends CrudModel {
 
   createSubField(...args: any[]): DocumentModel
 
+  getAllSubFields(): DocumentModel[]
   getSubFieldById(id: ID): DocumentModel | undefined
   getSubFieldById(...ids: ID[]): DocumentModel[]
   getSubFieldById(id: ID, ...ids: ID[]): DocumentModel | DocumentModel[] | undefined
@@ -39,6 +40,20 @@ export interface DocumentModel<F = any> extends CrudModel {
   removeSubField(item: DocumentModel): this
   removeSubField(item: ID | DocumentModel): this
 
+  createField(...args: any[]): DocumentModel
+
+  getAllFields(): DocumentModel[]
+  getFieldById(id: ID): DocumentModel | undefined
+  getFieldById(...ids: ID[]): DocumentModel[]
+  getFieldById(id: ID, ...ids: ID[]): DocumentModel | DocumentModel[] | undefined
+
+  addField(item: DocumentModel): this
+
+  removeField(id: ID): this
+  removeField(item: DocumentModel): this
+  removeField(item: ID | DocumentModel): this
+
+  getAllSubCollections(): DocumentModel[]
   getSubCollectionById(id: ID): CollectionModel | undefined
   getSubCollectionById(...ids: ID[]): CollectionModel[]
   getSubCollectionById(id: ID, ...ids: ID[]): CollectionModel | CollectionModel[] | undefined
@@ -68,6 +83,9 @@ export class Document<F = any> implements DocumentModel<F> {
   public get subFields(): DocumentModel[] { return this.data['subFields'] }
   public set subFields(v: DocumentModel[]) { this.data['subFields'] = v }
 
+  public get fields(): DocumentModel[] { return this.data['fields'] }
+  public set fields(v: DocumentModel[]) { this.data['fields'] = v }
+
   constructor(public data: Readonly<F> | F = {} as any) { }
 
   /**
@@ -87,12 +105,25 @@ export class Document<F = any> implements DocumentModel<F> {
    */
   init(): this {
     this.preInit && this.preInit()
+    this.initFields()
     this.initSubFields()
     this.onInit && this.onInit()
     return this
   }
 
+  protected initFields() {
+    if (!this.fields) { return }
+    // Ensure if items are an object we ensure they are a document instance
+    this.fields = (this.fields ??= []).map(item => {
+      if (_isObj(item) && !(item instanceof this.model)) {
+        return this.createField(item).init()
+      }
+      return item
+    })
+  }
+
   protected initSubFields() {
+    if (!this.subFields) { return }
     // Ensure if items are an object we ensure they are a document instance
     this.subFields = (this.subFields ??= []).map(item => {
       if (_isObj(item) && !(item instanceof this.model)) {
@@ -121,6 +152,9 @@ export class Document<F = any> implements DocumentModel<F> {
     return new this.model(...args)
   }
 
+  getAllSubFields(): DocumentModel[] {
+    return this.subFields
+  }
   getSubFieldById(id: ID): DocumentModel | undefined
   getSubFieldById(...ids: ID[]): DocumentModel[]
   getSubFieldById(id: ID, ...ids: ID[]): DocumentModel | DocumentModel[] | undefined {
@@ -145,6 +179,40 @@ export class Document<F = any> implements DocumentModel<F> {
     return this
   }
 
+  createField(...args: any[]): DocumentModel {
+    return new this.model(...args)
+  }
+
+  getAllFields(): DocumentModel[] {
+    return this.fields
+  }
+  getFieldById(id: ID): DocumentModel | undefined
+  getFieldById(...ids: ID[]): DocumentModel[]
+  getFieldById(id: ID, ...ids: ID[]): DocumentModel | DocumentModel[] | undefined {
+    if (ids.length) {
+      const _ids = Array.from([id, ...ids])
+      return this.fields?.filter(d => _ids.some(i => i === d?.get('id')))
+    }
+    return this.fields?.find(i => i?.get('id') === id)
+  }
+
+  addField(item: DocumentModel): this {
+    (this.fields ??= []).push(item)
+    return this
+  }
+
+  removeField(id: ID): this
+  removeField(item: DocumentModel): this
+  removeField(item: ID | DocumentModel): this {
+    const _item = _isObj(item) ? item : this.getFieldById(item)
+    const items = Array.from(this.fields)
+    this.fields = items.filter(i => i != _item)
+    return this
+  }
+
+  getAllSubCollections(): CollectionModel[] {
+    return this.subCollections
+  }
   getSubCollectionById(id: ID): CollectionModel | undefined
   getSubCollectionById(...ids: ID[]): CollectionModel[]
   getSubCollectionById(id: ID, ...ids: ID[]): CollectionModel | CollectionModel[] | undefined {

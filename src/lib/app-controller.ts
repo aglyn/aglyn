@@ -2,7 +2,7 @@ import { defaultAppConfig } from '../app-defaults'
 
 import { Collection, CollectionModel } from './collection'
 import { DK } from './config'
-import { Document } from './document'
+import { DocumentModel } from './document'
 import { Dictionary, FieldType, ID } from './types'
 
 interface ModelBase extends Dictionary {
@@ -115,7 +115,7 @@ export class AppController {
    * Living data
    *
    * @private
-   * @type {Collection<Collection<Document>>}
+   * @type {CollectionModel}
    * @memberof AppController
    */
   private _collections: CollectionModel
@@ -135,7 +135,7 @@ export class AppController {
     return this._collections.getSubCollectionById(id, ...ids)
   }
 
-  addCollection(v: CollectionModel<Document>): this {
+  addCollection(v: CollectionModel<DocumentModel>): this {
     this._collections.addSubCollection(v)
     return this
   }
