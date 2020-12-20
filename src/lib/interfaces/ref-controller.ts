@@ -1,7 +1,7 @@
 import { ID } from '../types'
 
 import { CrudModel } from "./crud"
-import { Dod } from './dod'
+import { Box, FieldValueType, Ref } from './dod'
 import { Initializable } from './initializable'
 import { NormalizedData } from './normalized'
 
@@ -15,7 +15,7 @@ import { NormalizedData } from './normalized'
  * @extends {toJSON<T>}
  * @template T
  */
-export interface BaseRef<T extends Dod.Ref.Id = Dod.Ref.Id> extends Initializable, CrudModel<T> {
+export interface BaseRef<T extends Box.Id = Box.Id> extends Initializable, CrudModel<T> {
   id: ID
 }
 
@@ -24,11 +24,11 @@ export interface BaseRef<T extends Dod.Ref.Id = Dod.Ref.Id> extends Initializabl
  *
  * @export
  * @interface FieldRef
- * @extends {Dod.FieldRef<T>}
- * @extends {BaseRef<Dod.FieldRef<T>>}
+ * @extends {FieldRef<T>}
+ * @extends {BaseRef<FieldRef<T>>}
  * @template T
  */
-export interface FieldRef<T extends Dod.FieldValueType = Dod.FieldValueType> extends Dod.Ref.FieldRef<T>, BaseRef<Dod.Ref.FieldRef<T>> {
+export interface FieldRef<T extends FieldValueType = FieldValueType> extends Ref.Field<T>, BaseRef<Ref.Field<T>> {
 
   readonly value: T | null
   readonly kind: string | number
@@ -46,36 +46,28 @@ export interface FieldRef<T extends Dod.FieldValueType = Dod.FieldValueType> ext
  *
  * @export
  * @interface DocumentRef
- * @extends {Dod.DocumentRef<FT, ST>}
- * @extends {BaseRef<Dod.DocumentRef<FT, ST>>}
+ * @extends {DocumentRef<FT, ST>}
+ * @extends {BaseRef<DocumentRef<FT, ST>>}
  * @template FT
  * @template ST
  */
-export interface DocumentRef<FT extends FieldRef = FieldRef, ST extends CollectionRef = CollectionRef> extends Dod.Ref.DocumentRef<FT, ST>, BaseRef<Dod.Ref.DocumentRef<FT, ST>> {
+export interface DocumentRef<FT extends FieldRef = FieldRef> extends Ref.Document<FT>, BaseRef<Ref.Document<FT>> {
 
   fieldModel: new (...args: any[]) => FT
-  subcollectionModel: new (...args: any[]) => ST
 
   readonly fields: NormalizedData<FT>
-  readonly subcollections: NormalizedData<ST>
 
   createField(...args: any[]): FT
-  createSubcollection(...args: any[]): ST
 
   setField(id: ID, value: FT, index?: number): this
-  setSubcollection(id: ID, value: ST, index?: number): this
 
   getField(id: ID): FT | null
-  getSubcollection(id: ID): ST | null
 
   removeField(id: ID): this
-  removeSubcollection(id: ID): this
 
   getAllFields(): FT[]
-  getAllSubcollections(): ST[]
 
   setFields(fields: NormalizedData<FT>): this
-  setSubcollections(collections: NormalizedData<ST>): this
 
 }
 
@@ -90,7 +82,7 @@ export interface DocumentRef<FT extends FieldRef = FieldRef, ST extends Collecti
  * @template D
  * @template F
  */
-export interface CollectionRef<D extends DocumentRef = any> extends Dod.Ref.CollectionRef<D>, BaseRef<Dod.Ref.CollectionRef<D>> {
+export interface CollectionRef<D extends DocumentRef = any> extends Ref.Collection<D>, BaseRef<Ref.Collection<D>> {
 
   documentModel: new (...args: any[]) => D
   readonly documents: NormalizedData<D>

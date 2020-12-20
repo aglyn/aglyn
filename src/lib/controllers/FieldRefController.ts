@@ -1,4 +1,4 @@
-import { Dod } from '../interfaces/dod'
+import { FieldValueType, Ref } from '../interfaces/dod'
 import { FieldRef } from '../interfaces/ref-controller'
 import { ID } from '../types'
 
@@ -9,11 +9,11 @@ import { BaseRefController } from './BaseRefController'
  *
  * @export
  * @class FieldRefController
- * @extends {BaseRefController<Dod.FieldRef<T>>}
+ * @extends {BaseRefController<FieldRef<T>>}
  * @implements {FieldRef<T>}
  * @template T
  */
-export class FieldRefController<T extends Dod.FieldValueType = Dod.FieldValueType> extends BaseRefController<Dod.Ref.FieldRef<T>> implements FieldRef<T> {
+export class FieldRefController<T extends FieldValueType = FieldValueType> extends BaseRefController<Ref.Field<T>> implements FieldRef<T> {
 
   public get value(): T { return this.get('value') }
   public get kind(): string | number { return this.get('kind') }
@@ -22,8 +22,8 @@ export class FieldRefController<T extends Dod.FieldValueType = Dod.FieldValueTyp
     super({ id, kind, value })
   }
 
-  public static from<T extends Dod.Ref.FieldRef>(data: T) {
-    return new this(data?.id, <any>data?.kind, data?.value)
+  public static from<T extends Ref.Field>(model: T) {
+    return new this(model?.id, <any>model?.kind, model?.value)
   }
 
   /**

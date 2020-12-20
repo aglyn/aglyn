@@ -1,23 +1,17 @@
 import { blueprintModelId, createNewBlueprintEntryDocument, defaultAppConfig } from '../app-defaults'
-import { Dod } from '../interfaces/dod'
+import { CollectionType } from '../interfaces/dod'
 import { CollectionRef, DocumentRef } from "../interfaces/ref-controller"
 import { copyJson } from '../tools/utils'
 import { ID } from '../types'
 
 import { DocumentRefController } from './DocumentRefController'
 
-
-export interface CollectionSchema {
-  name: Dod.FT.Text
-
-}
-
 /**
  * Describes the initial configuration for the application controller
  */
 export interface AppControllerConfig {
   blueprints: DocumentRef
-  collections: Dod.CollectionType
+  collections: CollectionType
 }
 
 /**

@@ -17,9 +17,9 @@ export * from './lib/interfaces/crud'
 export * from './lib/interfaces/dod'
 export * from './lib/interfaces/initializable'
 export * from './lib/interfaces/json'
+export * from './lib/interfaces/name'
 export * from './lib/interfaces/normalized'
 export * from './lib/interfaces/ref-controller'
-export * from './lib/interfaces/stamped'
 
 // Models
 export * from './lib/models/Crud'

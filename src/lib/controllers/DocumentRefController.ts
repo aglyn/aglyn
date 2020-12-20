@@ -1,11 +1,10 @@
-import { Dod } from '../interfaces/dod'
+import { Ref } from '../interfaces/dod'
 import { NormalizedData } from '../interfaces/normalized'
-import { CollectionRef, DocumentRef, FieldRef } from '../interfaces/ref-controller'
-import { Normalized } from '../models/normalized'
+import { DocumentRef, FieldRef } from '../interfaces/ref-controller'
+import { Normalized } from '../models/Normalized'
 import { ID } from '../types'
 
 import { BaseRefController } from './BaseRefController'
-import { CollectionRefController } from './CollectionRefController'
 import { FieldRefController } from './FieldRefController'
 
 
@@ -16,29 +15,26 @@ import { FieldRefController } from './FieldRefController'
  *
  * @export
  * @class DocumentRefController
- * @extends {BaseRefController<Dod.DocumentRef<FT, ST>>}
+ * @extends {BaseRefController<DocumentRef<FT, ST>>}
  * @implements {DocumentRef<FT, ST>}
  * @template FT
  * @template ST
  */
-export class DocumentRefController<FT extends FieldRef = FieldRef, ST extends CollectionRef = CollectionRef> extends BaseRefController<Dod.Ref.DocumentRef<FT, ST>> implements DocumentRef<FT, ST> {
+export class DocumentRefController<FT extends FieldRef = FieldRef> extends BaseRefController<Ref.Document<FT>> implements DocumentRef<FT> {
 
   public fieldModel: new (...args: any[]) => FT = FieldRefController as any
-  public subcollectionModel: new (...args: any[]) => ST = CollectionRefController as any
 
   public get fields(): NormalizedData<FT> { return this.get('fields') }
-  public get subcollections(): NormalizedData<ST> { return this.get('subcollections') }
 
-  constructor(id: ID, fields?: NormalizedData<FT>, subcollections?: NormalizedData<ST>) {
+  constructor(id: ID, fields?: NormalizedData<FT>) {
     super({
       id,
       fields: new Normalized(fields),
-      subcollections: new Normalized(subcollections)
     })
   }
 
-  public static from<T extends Dod.Ref.DocumentRef>(data: T) {
-    return new this(data?.id, <any>data?.fields, <any>data?.subcollections)
+  public static from<T extends Ref.Document>(model: T) {
+    return new this(model?.id, <any>model?.fields)
   }
 
   /**
@@ -51,7 +47,6 @@ export class DocumentRefController<FT extends FieldRef = FieldRef, ST extends Co
   public init(): this {
     this.preInit && this.preInit()
     this.initFields()
-    this.initSubcollections()
     this.onInit && this.onInit()
     return this
   }
@@ -73,31 +68,9 @@ export class DocumentRefController<FT extends FieldRef = FieldRef, ST extends Co
     }
   }
 
-  protected initSubcollections() {
-    console.debug('initSubcollections', this.id, this.subcollections)
-    // Ensure if items are an object we ensure they are a document instance
-    if (!(this.subcollections instanceof Normalized)) {
-      this.setSubcollections(new Normalized(this.subcollections))
-    }
-    if (this.subcollections instanceof Normalized) {
-      this.subcollections.toArray().forEach(col => {
-        if (!(col instanceof CollectionRefController)) {
-          this.setSubcollection(
-            col.id, this.createSubcollection(col).init()
-          )
-        }
-      })
-    }
-  }
-
-  public createField(data?): FT {
-    const { id, kind, value } = data
+  public createField(model?): FT {
+    const { id, kind, value } = model
     return new this.fieldModel(id, kind, value)
-  }
-
-  public createSubcollection(data): ST {
-    const { id, documents } = data
-    return new this.subcollectionModel(id, documents)
   }
 
   public setField(id: ID, value: FT, index?: number): this {
@@ -105,17 +78,8 @@ export class DocumentRefController<FT extends FieldRef = FieldRef, ST extends Co
     return this
   }
 
-  public setSubcollection(id: ID, value: ST, index?: number): this {
-    Normalized.set([id, value], this.subcollections, index)
-    return this
-  }
-
   public getField(id: ID): FT | null {
     return Normalized.get(id, this.fields)
-  }
-
-  public getSubcollection(id: ID): ST | null {
-    return Normalized.get(id, this.subcollections)
   }
 
   public removeField(id: ID): this {
@@ -123,17 +87,8 @@ export class DocumentRefController<FT extends FieldRef = FieldRef, ST extends Co
     return this
   }
 
-  public removeSubcollection(id: ID): this {
-    Normalized.remove(id, this.subcollections)
-    return this
-  }
-
   public getAllFields(): FT[] {
     return Normalized.toArray(this.fields)
-  }
-
-  public getAllSubcollections(): ST[] {
-    return Normalized.toArray(this.subcollections)
   }
 
   public setFields(fields: NormalizedData<FT>): this {
@@ -142,13 +97,5 @@ export class DocumentRefController<FT extends FieldRef = FieldRef, ST extends Co
     )
     return this
   }
-
-  public setSubcollections(collections: NormalizedData<ST>): this {
-    this.set('subcollections', collections instanceof Normalized
-      ? collections : new Normalized(collections)
-    )
-    return this
-  }
-
 
 }

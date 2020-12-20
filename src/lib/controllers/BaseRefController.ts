@@ -1,4 +1,4 @@
-import { Dod } from '../interfaces/dod'
+import { Box } from '../interfaces/dod'
 import { BaseRef } from '../interfaces/ref-controller'
 import { Crud } from '../models/Crud'
 import { ID } from '../types'
@@ -13,7 +13,7 @@ import { ID } from '../types'
  * @implements {BaseRef<T>}
  * @template T
  */
-export class BaseRefController<T extends Dod.Ref.Id = Dod.Ref.Id> extends Crud<T> implements BaseRef<T> {
+export class BaseRefController<T extends Box.Id = Box.Id> extends Crud<T> implements BaseRef<T> {
 
   public get id(): ID { return this.get('id') }
   public set id(value: ID) { this.set('id', value) }

@@ -94,14 +94,14 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @static
    * @template T
    * @param {ID} id
-   * @param {NormalizedData<T>} data
+   * @param {NormalizedData<T>} model
    * @returns {NormalizedData<T>}
    * @memberof Normalized
    */
-  public static remove<T extends NormalizedData<any, K>, K extends ID>(id: K, data: T): T {
-    data.allIds = removeFromArray(id, data.allIds)
-    data.byId = deleteProperty(data.byId, id)
-    return data
+  public static remove<T extends NormalizedData<any, K>, K extends ID>(id: K, model: T): T {
+    model.allIds = removeFromArray(id, model.allIds)
+    model.byId = deleteProperty(model.byId, id)
+    return model
   }
 
   /**
@@ -112,43 +112,43 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @template V
    * @template K
    * @param {[id: K, value: V]} item
-   * @param {T} data
+   * @param {T} model
    * @param {number} [index]
    * @returns {T}
    * @memberof Normalized
    */
   public static set<T extends NormalizedData<V, K>, V, K extends ID>(
     item: [id: K, value: V],
-    data: T,
+    model: T,
     index?: number,
   ): T {
     const [id, value] = item
-    const currentIndex = data.allIds.indexOf(id)
+    const currentIndex = model.allIds.indexOf(id)
     const isUpdate = currentIndex !== -1
 
-    data.byId[id] = value
+    model.byId[id] = value
 
     if (!isUpdate) {
-      data.allIds.push(id)
+      model.allIds.push(id)
     } else if (_isNum(index) && currentIndex !== index) {
-      data.allIds = reorderArray(data.allIds, currentIndex, index)
+      model.allIds = reorderArray(model.allIds, currentIndex, index)
     }
 
-    return data
+    return model
   }
 
   /**
-   * Get a property from the key value. shortens call such as data.byId[foo]
+   * Get a property from the key value. shortens call such as model.byId[foo]
    *
    * @static
    * @template T
    * @param {ID} id
-   * @param {NormalizedData<T>} data
+   * @param {NormalizedData<T>} model
    * @returns {(undefined | T)}
    * @memberof Normalized
    */
-  public static get<T extends NormalizedData<V, K>, K extends ID, V>(id: K, data: T): V | null {
-    return data.byId[id] ?? null
+  public static get<T extends NormalizedData<V, K>, K extends ID, V>(id: K, model: T): V | null {
+    return model.byId[id] ?? null
   }
 
   /**
@@ -182,7 +182,7 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
   }
 
   /**
-   * Returns whether or not the data byId has property key/id
+   * Returns whether or not the model byId has property key/id
    *
    * @param {ID} id
    * @returns {boolean}

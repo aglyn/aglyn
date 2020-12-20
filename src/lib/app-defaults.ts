@@ -3,7 +3,7 @@ import { AppControllerConfig } from './controllers/AppController'
 import { CollectionRefController } from './controllers/CollectionRefController'
 import { DocumentRefController } from './controllers/DocumentRefController'
 import { FieldRefController } from './controllers/FieldRefController'
-import { Dod } from './interfaces/dod'
+import { Ref } from './interfaces/dod'
 import { Normalized } from './models/Normalized'
 import { createUid } from './tools/uid'
 import { copyJson, s } from './tools/utils'
@@ -66,7 +66,7 @@ export const createNewBlueprintDocument = (
 
 export const createNewBlueprintFieldDocument = (blueprint: DocumentRefController) => {
   const modelField = blueprint.getField(fieldModelId)
-  const copied = copyJson(modelField.getValue() as Dod.Ref.DocumentRef)
+  const copied = copyJson(modelField.getValue() as Ref.Document)
   const modelFieldVal = DocumentRefController.from(copied).init()
 
   return new DocumentRefController(
@@ -80,12 +80,11 @@ export const createNewBlueprintEntryDocument = (blueprint: DocumentRefController
   console.log('before fieldsCollection', blueprint)
   const fieldsCollection = CollectionRefController.from(
     copyJson(
-      <Dod.Ref.CollectionRef>blueprint.getSubcollection(Sig.Fields)
+      <Ref.Collection>blueprint.getSubcollection(Sig.Fields)
     )
   ).init()
   console.log('after fieldsCollection', fieldsCollection)
   const entryFields = new Normalized()
-  const entrySubcollections = new Normalized()
 
   fieldsCollection.getAllDocuments().forEach(document => {
     const _document = DocumentRefController.from(document).init()
@@ -97,19 +96,11 @@ export const createNewBlueprintEntryDocument = (blueprint: DocumentRefController
         _document.getField(Sig.Value).getValue(),
       )
     )
-    _document.getAllSubcollections().forEach(collection => {
-      const _collection = CollectionRefController.from(collection).init()
-      entrySubcollections.set(
-        _collection.id,
-        _collection
-      )
-    })
   })
 
   return new DocumentRefController(
     createUid(),
-    entryFields,
-    entrySubcollections
+    entryFields
   ).init()
 }
 
@@ -146,12 +137,6 @@ blueprints
   .getSubcollection('blueprints')
   .setDocument(sampleBlueprint.id, sampleBlueprint)
 
-
-
-console.log('sampleBlueprint', sampleBlueprint)
-console.log('blueprintsblueprintsblueprints', blueprints)
-console.log('blueprintsblue', blueprints.getSubcollection(Sig.Blueprints))
-console.log('blueprintsblue333', blueprints.getSubcollection(Sig.Blueprints).getAllDocuments())
 
 // /**
 //  * App config data structure

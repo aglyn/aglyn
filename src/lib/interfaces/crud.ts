@@ -19,10 +19,10 @@ export interface CrudModel<T = any, V = any> extends toJSON<T> {
    * @type {T}
    * @memberof CrudModel
    */
-  readonly data: T
+  readonly model: T
 
   /**
-   *  Set the value of an index on the data property
+   *  Set the value of an index on the model property
    *
    * @param {ID} id
    * @param {V} value
@@ -32,7 +32,7 @@ export interface CrudModel<T = any, V = any> extends toJSON<T> {
   set<K extends keyof T>(id: K, value: V): this
 
   /**
-   * Get the value of an index on the data property
+   * Get the value of an index on the model property
    *
    * @param {ID} id
    * @returns {(V | null)}
@@ -41,7 +41,7 @@ export interface CrudModel<T = any, V = any> extends toJSON<T> {
   get<K extends keyof T>(id: K): T[K] | null
 
   /**
-   * Check if the index signature (id) exists on the data property
+   * Check if the index signature (id) exists on the model property
    *
    * @param {ID} id
    * @returns {boolean}
@@ -50,7 +50,7 @@ export interface CrudModel<T = any, V = any> extends toJSON<T> {
   has<K extends keyof T>(id: K): boolean
 
   /**
-   * Remove an index from the data property
+   * Remove an index from the model property
    *
    * @param {ID} id
    * @returns {this}

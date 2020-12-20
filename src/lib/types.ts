@@ -3,9 +3,6 @@ import { DK } from './constants'
 /** The index signature of any object */
 export type ID = string
 
-/** The index signature of object and arrays */
-export type Index = string | number
-
 /** Allows conditional typing type alias */
 export type Conditional<T, U, X, Y> = T extends U ? X : Y
 
@@ -18,12 +15,6 @@ export type SignatureTypeOf<T extends Dictionary> = keyof T
 /** The index type within the dictionary */
 export type IndexOf<T extends Dictionary, K extends keyof T = any> = T[K]
 
-/** A boxed `value` property */
-export type BoxedValue<T> = { value: T }
-
-/** Describe the long/lat of coordinates */
-export type GeoPoint = { longitude: number, latitude: number }
-
 /** The Type literal equivalent for named constants in FieldKind */
 /** A document-oriented database *document value type* i.e. {[P in Key]: <Field>value} */
 export type FieldType<Kind extends DK = any> =
@@ -32,7 +23,7 @@ export type FieldType<Kind extends DK = any> =
   : Kind extends DK.BLOB ? Uint8Array | string /* Base64 string */
   : Kind extends DK.DATETIME ? number | Date
   : Kind extends DK.FLOAT ? number
-  : Kind extends DK.GEOPOINT ? GeoPoint
+  // : Kind extends DK.GEOPOINT ? GeoPoint
   : Kind extends DK.INTEGER ? number
   : Kind extends DK.DICTIONARY ? Dictionary
   : Kind extends DK.NULL ? null

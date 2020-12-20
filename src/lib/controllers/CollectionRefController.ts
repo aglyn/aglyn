@@ -1,7 +1,7 @@
-import { Dod } from '../interfaces/dod'
+import { Ref } from '../interfaces/dod'
 import { NormalizedData } from '../interfaces/normalized'
 import { CollectionRef, DocumentRef } from '../interfaces/ref-controller'
-import { Normalized } from '../models/normalized'
+import { Normalized } from '../models/Normalized'
 import { ID } from '../types'
 
 import { BaseRefController } from './BaseRefController'
@@ -15,7 +15,7 @@ import { DocumentRefController } from './DocumentRefController'
  * @implements {CollectionRef<D>}
  * @template D
  */
-export class CollectionRefController<D extends DocumentRef = DocumentRef> extends BaseRefController<Dod.Ref.CollectionRef<D>> implements CollectionRef<D> {
+export class CollectionRefController<D extends DocumentRef = DocumentRef> extends BaseRefController<Ref.Collection<D>> implements CollectionRef<D> {
 
   public documentModel: new (...args: any[]) => D = DocumentRefController as any
   public get documents(): NormalizedData<D> { return this.get('documents') }
@@ -27,9 +27,9 @@ export class CollectionRefController<D extends DocumentRef = DocumentRef> extend
     })
   }
 
-  public static from<T extends Dod.Ref.CollectionRef>(data: T) {
-    console.log('collection from', data)
-    return new this(data?.id, <any>data?.documents)
+  public static from<T extends Ref.Collection>(model: T) {
+    console.log('collection from', model)
+    return new this(model?.id, <any>model?.documents)
   }
 
   /**
@@ -63,8 +63,8 @@ export class CollectionRefController<D extends DocumentRef = DocumentRef> extend
     }
   }
 
-  public createDocument(data?): D {
-    const { id, fields, subcollections } = data
+  public createDocument(model?): D {
+    const { id, fields, subcollections } = model
     return new this.documentModel(id, fields, subcollections)
   }
 
