@@ -1,6 +1,6 @@
-import { ID } from '../types'
-
 import { toJSON } from './json'
+
+type ID = string
 
 /** Normalized local state design for interfacing with 3NF rules  */
 export type NormalizedData<T = any, K extends ID = ID> = {

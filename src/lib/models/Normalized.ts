@@ -1,8 +1,8 @@
 import { NormalizedData, NormalizedModel } from '../interfaces/normalized'
 import { _isNum, _isObj } from '../tools/guards'
 import { deleteProperty, removeFromArray, reorderArray } from '../tools/utils'
-import { ID } from '../types'
 
+type ID = string
 
 /**
  * Normalized data for 3NF

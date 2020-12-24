@@ -1,15 +1,15 @@
-import { PKey, Ref, Schema } from '../interfaces/dod'
+import { PKey, Schema } from '../interfaces/dod'
 
 import { BaseRefController } from './BaseRefController'
 
 
-export class DatabaseRefController<Ss extends Schema.CollectionModels> extends BaseRefController<Ss, Ref.DatabaseCollections<Ss>> {
+export class DatabaseRefController<Ss extends Schema.CollectionModels> extends BaseRefController<Ss, Schema.DatabaseCollections<Ss>> {
 
-  constructor(id: PKey, schemas: Ss, instances?: Ref.DatabaseCollections<Ss>) {
+  constructor(id: PKey, schemas: Ss, instances?: Schema.DatabaseCollections<Ss>) {
     super({ id, schema: schemas }, { ...instances })
   }
 
-  public static from<Ss extends Schema.CollectionModels>(id: PKey, schemas: Ss, collections: Ref.DatabaseCollections<Ss>) {
+  public static from<Ss extends Schema.CollectionModels>(id: PKey, schemas: Ss, collections: Schema.DatabaseCollections<Ss>) {
     return new this(id, schemas, collections)
   }
 
@@ -48,11 +48,11 @@ export class DatabaseRefController<Ss extends Schema.CollectionModels> extends B
     return super.getSchema()[id]
   }
 
-  public getCollections(): Ref.DatabaseCollections<Ss> {
+  public getCollections(): Schema.DatabaseCollections<Ss> {
     return this.model
   }
 
-  public setCollections(value: Ref.DatabaseCollections<Ss>): this {
+  public setCollections(value: Schema.DatabaseCollections<Ss>): this {
     this.model = value
     return this
   }

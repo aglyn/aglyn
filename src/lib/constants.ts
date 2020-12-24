@@ -1,32 +1,4 @@
-/**
- * Data kind
- *
- * @export
- * @enum {string}
- */
-export enum DK {
-  FIELD = 'f2ld',
-  SUBFIELD = 's5ld',
-  DOCUMENT = 'd5nt',
-  COLLECTION = 'c7on',
-  SUBCOLLECTION = 'sAon',
-
-  BLUEPRINT = 'b6nt',
-  ENTRY = 'e2ry',
-
-  ARRAY = 'a2ay',
-  BOOLEAN = 'b4an',
-  BLOB = 'b1ob',
-  DATETIME = 'd5me',
-  DICTIONARY = 'd7ry',
-  FLOAT = 'f2at',
-  GEOPOINT = 'g5nt',
-  INTEGER = 'i4er',
-  NULL = 'n2ll',
-  TEXT = 't1xt',
-
-  RELATION = 'r5on',
-}
+import { FT } from './interfaces/dod'
 
 /**
  * Evaluation kinds
@@ -60,6 +32,7 @@ export const Sig = {
   Id: 'id',
   Name: 'name',
   Kind: 'kind',
+  Type: 'type',
   Value: 'value',
 
   Created: 'created',
@@ -75,28 +48,18 @@ export const Sig = {
  */
 export const lbl = {
 
-  /** System class types */
-  [DK.FIELD]: 'Field',
-  [DK.SUBFIELD]: 'Subfield',
-  [DK.DOCUMENT]: 'Document',
-  [DK.COLLECTION]: 'Collection',
-  [DK.SUBCOLLECTION]: 'Subcollection',
-
-  [DK.BLUEPRINT]: 'Blueprint',
-  [DK.ENTRY]: 'Entry',
-
   /** Field Data Types */
-  [DK.ARRAY]: 'Array',
-  [DK.BOOLEAN]: 'Boolean',
-  [DK.BLOB]: 'Bytes',
-  [DK.DATETIME]: 'Date Time',
-  [DK.FLOAT]: 'Float',
-  [DK.GEOPOINT]: 'Geographical Point',
-  [DK.INTEGER]: 'Integer',
-  [DK.DICTIONARY]: 'Map',
-  [DK.NULL]: 'Null',
-  [DK.RELATION]: 'Relation',
-  [DK.TEXT]: 'Text',
+  [FT.Tag.bool]: 'True/False',
+  [FT.Tag.bytes]: 'Bytes',
+  [FT.Tag.timestamp]: 'Date/Time',
+  [FT.Tag.float]: 'Decimal',
+  [FT.Tag.int32]: 'Number',
+  [FT.Tag.int64]: 'Large Number',
+  [FT.Tag.nil]: 'Null',
+  [FT.Tag.text]: 'Text',
+  [FT.Tag.coordinates]: 'Coordinates (lat/lon)',
+  [FT.Tag.map]: 'Map',
+  [FT.Tag.sorted]: 'Sorted',
 
   /** Entity type fields */
   [Sig.Field]: 'Field',
@@ -120,6 +83,7 @@ export const lbl = {
   [Sig.Id]: 'Unique ID',
   [Sig.Name]: 'Display Name',
   [Sig.Kind]: 'Kind',
+  [Sig.Type]: 'Type',
   [Sig.Value]: 'Value',
 
   /** Timestamp fields */

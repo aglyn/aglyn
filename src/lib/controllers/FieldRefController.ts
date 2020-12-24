@@ -1,4 +1,4 @@
-import { FT, PKey, Ref, Schema } from '../interfaces/dod'
+import { PKey, Ref, Schema } from '../interfaces/dod'
 
 import { BaseRefController } from './BaseRefController'
 
@@ -10,13 +10,13 @@ import { BaseRefController } from './BaseRefController'
  * @extends {BaseRefController<Ref.Field<S>>}
  * @template S
  */
-export class FieldRefController<S extends Schema.FieldMeta> extends BaseRefController<S, { value: Ref.Field<S> }> {
+export class FieldRefController<S extends Schema.FieldDefinition> extends BaseRefController<S, { value: Ref.Field<S> }> {
 
-  constructor(id: PKey, schema: S, value?: FT.TypeFromTag<S['$type']>) {
+  constructor(id: PKey, schema: S, value?: Ref.Field<S>) {
     super({ id, schema }, { value: value })
   }
 
-  public static from<S extends Schema.FieldMeta>(id: PKey, schema: S, value: Ref.Field<S>) {
+  public static from<S extends Schema.FieldDefinition>(id: PKey, schema: S, value: Ref.Field<S>) {
     return new this(id, schema, value)
   }
 

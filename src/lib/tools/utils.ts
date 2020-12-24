@@ -10,7 +10,7 @@ import { _isArr, _isFn, _isNum, _isObj, _isStr, _isUndef, hasLn } from './guards
  * @returns {number}
  */
 export function ln<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (Object.prototype.hasOwnProperty.call(val ?? [], 'length')) {
+  if (val) {
     return val['length'] ?? 0
   }
   return 0

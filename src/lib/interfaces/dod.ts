@@ -18,7 +18,7 @@
  * which provide the outlines for capabilities such
  * as relational- and model-driven
  *
- * @module DoD
+ * @module dod
  */
 
 import { Dictionary } from '../types'
@@ -134,17 +134,31 @@ export namespace FT {
     | Text
 
   export namespace Tag {
-    export const bool: unique symbol = Symbol('bool')
-    export const bytes: unique symbol = Symbol('bytes')
-    export const timestamp: unique symbol = Symbol('timestamp')
-    export const float: unique symbol = Symbol('float')
-    export const int32: unique symbol = Symbol('int32')
-    export const int64: unique symbol = Symbol('int64')
-    export const nil: unique symbol = Symbol('nil')
-    export const text: unique symbol = Symbol('text')
-    export const coordinates: unique symbol = Symbol('coordinates')
-    export const map: unique symbol = Symbol('map')
-    export const sorted: unique symbol = Symbol('sorted')
+    export const bool = 'bool'
+    export const bytes = 'bytes'
+    export const timestamp = 'timestamp'
+    export const float = 'float'
+    export const int32 = 'int32'
+    export const int64 = 'int64'
+    export const nil = 'nil'
+    export const text = 'text'
+    export const coordinates = 'coordinates'
+    export const map = 'map'
+    export const sorted = 'sorted'
+
+    export const all = [
+      bool,
+      bytes,
+      timestamp,
+      float,
+      int32,
+      int64,
+      nil,
+      text,
+      coordinates,
+      map,
+      sorted,
+    ]
 
     export type T =
       typeof bool
@@ -195,7 +209,7 @@ export namespace Schema {
   /**
    * Name fields
    */
-  export type Name = FT.Text | {
+  export type Name = {
     singular?: FT.Text
     plural?: FT.Text
   }
@@ -217,8 +231,9 @@ export namespace Schema {
   /**
    * Describes the meta object for a field instance
    */
-  export interface FieldMeta extends NamedField {
-    $type: FT.Tag.T
+  export interface FieldDefinition extends NamedField {
+    type: FT.Tag.T
+    description?: FT.Text
   }
 
   /**
@@ -226,7 +241,7 @@ export namespace Schema {
    * document instance within the parent collection
    */
   export type ModelFields = {
-    [fieldId: string]: FieldMeta
+    [fieldId: string]: FieldDefinition
   }
 
   /**
@@ -255,7 +270,7 @@ export namespace Schema {
    */
   export type CollectionInstance<T extends CollectionModel> = CollectionType & {
     [documentId: string]: DocumentType<
-      FT.TypeFromTag<T['fields'][string]['$type']>
+      FT.TypeFromTag<T['fields'][string]['type']>
     >
   }
 
@@ -278,7 +293,7 @@ export namespace Ref {
   /**
    * =======================================================
    */
-  export type Field<S extends Schema.FieldMeta> = FT.TypeFromTag<S['$type']>
+  export type Field<S extends Schema.FieldDefinition> = FT.TypeFromTag<S['type']>
 
   /**
    * =======================================================
@@ -299,9 +314,9 @@ export namespace Ref {
   /**
    * =======================================================
    */
-  export type DatabaseCollections<S extends Schema.CollectionModels> = {
-    [K in keyof S]: Collection<S[K]>
-  }
+  // export type DatabaseCollections<S extends Schema.CollectionModels> = {
+  //   [K in keyof S]: Collection<S[K]>
+  // }
   export interface Database {
     schemas: Schema.CollectionModels
     instances: Schema.DatabaseCollections<this['schemas']>

@@ -156,11 +156,11 @@ const testDb: Ref.Database = {
       fields: {
         sjdf5lgnc: {
           name: { singular: 'First Name', plural: 'First Names' },
-          $type: FT.Tag.text
+          type: FT.Tag.text
         },
         sdkgmlr34: {
           name: { singular: 'Last Name', plural: 'Last Names' },
-          $type: FT.Tag.text
+          type: FT.Tag.text
         },
       }
     }
