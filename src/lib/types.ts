@@ -9,3 +9,10 @@ export type SignatureTypeOf<T extends Dictionary> = keyof T
 
 /** The index type within the dictionary */
 export type IndexOf<T extends Dictionary, K extends keyof T = keyof T> = T[K]
+
+/** Persistence types */
+export enum Persist {
+  NONE = 'none',
+  SESSION = 'session',
+  LOCAL = 'local',
+}

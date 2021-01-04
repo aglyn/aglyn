@@ -25,7 +25,7 @@ export * from './lib/models/Crud'
 export * from './lib/models/Normalized'
 
 // Controllers
-export * from './lib/controllers/AppController'
+export * from './lib/controllers/app-controller'
 export * from './lib/controllers/BaseRefController'
 export * from './lib/controllers/CollectionRefController'
 export * from './lib/controllers/DatabaseRefController'
@@ -33,11 +33,4 @@ export * from './lib/controllers/DocumentRefController'
 export * from './lib/controllers/FieldRefController'
 
 // Data
-export * from './lib/app-defaults'
 export * from './lib/constants'
-
-// TODO: Implement middlemen functions so we do not have to export these
-// Firebase
-export * from './lib/firebase'
-export * from './lib/firebase.cookies'
-export * from './lib/firebase.user'

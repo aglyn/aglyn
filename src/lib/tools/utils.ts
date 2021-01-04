@@ -250,14 +250,14 @@ export function mapObject(target, callbackfn: MapObjectClbkFn, opt?: MapObjectOp
   const { copy: cp = false, filter = false, advanced = false, forEach = false } = opt ?? {}
   const data = cp ? copy(target) : target
   const entries = Object.entries(data) ?? []
-  const method = forEach ? entries.forEach.bind(null) : entries.map.bind(null)
-  const result: any = method(([key, value], index, array) => (
+  const handler = ([key, value], index, array) => (
     // If advanced is true allow the user to set the
     // full tuple (i.e. including the object key)
     !advanced
       ? [key, callbackfn(value, key, index, array)]
       : callbackfn(value, key, index, array)
-  ))
+  )
+  const result: any = forEach ? entries.forEach(handler) : entries.map(handler)
   if (!forEach) {
     const filtered = !filter ? result : result.filter(([, v]) => !_isUndef(v))
     return Object.fromEntries(filtered)
