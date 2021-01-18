@@ -131,6 +131,7 @@ export const defaultAppConfig: AppControllerConfig = {
   //   test_db: testDb
   // }
 }
+const isProduction = process.env.NODE_ENV === 'production'
 
 let app: FbApp
 
@@ -194,20 +195,32 @@ export function withAppController(options: AppControllerConfig = defaultAppConfi
     ...options
   }
 
-  const firebaseConfig = {
-    apiKey: config.apiKey,
-    authDomain: config.authDomain,
-    databaseURL: config.databaseURL,
-    projectId: config.projectId,
-    storageBucket: config.storageBucket,
-    messagingSenderId: config.messagingSenderId,
-    appId: config.appId,
-    measurementId: config.measurementId,
-  }
+  const firebaseConfig = isProduction ?
+    {
+      apiKey: config.apiKey,
+      authDomain: config.authDomain,
+      databaseURL: config.databaseURL,
+      projectId: config.projectId,
+      storageBucket: config.storageBucket,
+      messagingSenderId: config.messagingSenderId,
+      appId: config.appId,
+      measurementId: config.measurementId,
+    } : {
+      apiKey: config.apiKey,
+      authDomain: config.authDomain,
+      databaseURL: config.databaseURL,
+      projectId: config.projectId,
+      storageBucket: config.storageBucket,
+      messagingSenderId: config.messagingSenderId,
+      appId: config.appId,
+    }
 
   /////////////////////////////
   // MARK: Instances
   /////////////////////////////
+
+  let setAuth = false
+  let setFirestore = false
 
   const getConfig = (): AppControllerConfig => {
     return config
@@ -216,13 +229,26 @@ export function withAppController(options: AppControllerConfig = defaultAppConfi
     return app
   }
   const getAnalytics = (): FbAnalytics => {
-    return app?.analytics()
+    if (firebaseConfig.measurementId) {
+      return app?.analytics()
+    }
+    return null
   }
   const getAuth = (): FbAuth => {
-    return app?.auth()
+    const auth = app?.auth()
+    if (!setAuth && !isProduction) {
+      setAuth = true
+      auth.useEmulator('http://localhost:9099/')
+    }
+    return auth
   }
   const getFirestore = (): FbFirestore => {
-    return app?.firestore()
+    const firestore = app?.firestore()
+    if (!setFirestore && !isProduction) {
+      setFirestore = true
+      firestore.useEmulator('localhost', 8080)
+    }
+    return firestore
   }
 
 
