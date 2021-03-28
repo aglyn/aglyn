@@ -3,7 +3,7 @@ import Button, { ButtonProps as MuiButtonProps } from '@material-ui/core/Button'
 import GridItems, { GridItemsProps } from '../grid-items/grid-items'
 
 export type ButtonItem = MuiButtonProps & {
-  GridItemProps: GridItemsProps
+  GridItemProps: GridItemsProps['items'][number]
 }
 
 /* eslint-disable-next-line */

@@ -1,3 +1,13 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC and its affiliates
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+//TODO: FIX ALL TYPINGS AND REFACTOR OPTIONS/PROPS
+
 import React, { HTMLProps, PropsWithChildren, useState } from 'react'
 
 import { jssPreset, StylesProvider } from '@material-ui/core/styles'
@@ -12,7 +22,7 @@ import useCombinedRefs from '../hooks/use-combined-refs'
 /* eslint-disable-next-line */
 export interface MuiShadowDomProps {}
 
-const MuiStylesProvider = React.forwardRef<HTMLProps<HTMLDivElement>, PropsWithChildren<MuiShadowDomProps>>(
+const MuiShadowStylesProvider = React.forwardRef<HTMLProps<HTMLDivElement>, PropsWithChildren<MuiShadowDomProps>>(
   function RefRenderFn(props, ref) {
     const { children } = props
     const [styleNode, setStyleNode] = useState(null)
@@ -30,17 +40,17 @@ const MuiStylesProvider = React.forwardRef<HTMLProps<HTMLDivElement>, PropsWithC
     )
   }
 )
-MuiStylesProvider.displayName = 'MuiStylesProvider'
+MuiShadowStylesProvider.displayName = 'MuiShadowStylesProvider'
 
 export const MuiShadowDom = createShadowDomProxy({}, {
   keyPrefix: 'mui',
-  renderFn: function renderFn(props) {
+  render: function (props) {
     const { children } = props
 
     return (
-      <MuiStylesProvider>
+      <MuiShadowStylesProvider>
         {children}
-      </MuiStylesProvider>
+      </MuiShadowStylesProvider>
     )
   }
 })

@@ -1,3 +1,13 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC and its affiliates
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+//TODO: FIX ALL TYPINGS AND REFACTOR OPTIONS/PROPS
+
 import React, {
   forwardRef,
   ForwardRefExoticComponent,
@@ -8,12 +18,13 @@ import React, {
   ReactChild,
   useRef,
   useState,
+  ElementType,
+  ReactPortal, ReactElement,
 } from 'react'
 import { createPortal } from 'react-dom'
 
-import { decamelize } from 'humps'
-
 import useCombinedRefs from '../hooks/use-combined-refs'
+import {_isStr, _isFn, getDisplayName, ChangeCase} from '@aglyn/tools'
 
 declare global {
   /** POLYFILL FOR adoptedStyleSheets */
@@ -22,34 +33,31 @@ declare global {
   }
 }
 
-export type ShadowDomContentProps = {
-  shadowRoot: ShadowRoot
+export type ShadowDomContentProps<T extends ShadowRoot = ShadowRoot> = {
+  shadowRoot: T
   children: ReactNode
+  key?: null | string
 }
-
-export function ShadowDomContentPortal(props: ShadowDomContentProps) {
-  const { shadowRoot, children } = props
-  return createPortal(children, shadowRoot as unknown as Element)
-}
-
-export type RenderProps = {
+export type ShadowDomRootRenderProps = {
   shadowRoot: ShadowRoot
-  children: ReactChild
+  children?: ReactNode
 }
-export type ShadowDomRootFactoryParams = {
-  component: string
-  renderFn?: (props: RenderProps) => JSX.Element
+export type ShadowDomRootFactoryOptions = {
+  render?: (props: ShadowDomRootRenderProps) => ReactNode
 }
 export type ShadowDomRootProps = ShadowRootInit & {
   styleSheets?: string[]
   adoptedStyleSheets?: string[]
-  children: ReactChild
+}
+export type ShadowDomRootExoticComponent<T, P> = ForwardRefExoticComponent<PropsWithoutRef<ShadowDomRootProps> & RefAttributes<T>>
+
+export function ShadowDomContentPortal<T extends ShadowRoot>(props: ShadowDomContentProps<T>): ReactPortal {
+  const { children, shadowRoot, key } = props
+  return createPortal(children, shadowRoot as unknown as Element, key)
 }
 
-
-function createShadowDomRoot<T>(params: ShadowDomRootFactoryParams): ForwardRefExoticComponent<PropsWithoutRef<ShadowDomRootProps> & RefAttributes<T>> {
-  const { component, renderFn } = params
-  const Component = component as any
+  export function createShadowDomRoot<T, P>(options: ShadowDomRootFactoryOptions, Component): ShadowDomRootExoticComponent<T, P> {
+  const { render } = options
   const ShadowDomRoot = forwardRef<T, ShadowDomRootProps>(
     function RefRenderFn(props, ref) {
       const { mode, delegatesFocus, styleSheets, adoptedStyleSheets, children, ...rest } = props
@@ -73,10 +81,10 @@ function createShadowDomRoot<T>(params: ShadowDomRootFactoryParams): ForwardRefE
       }, [localRef, mode, delegatesFocus, styleSheets, adoptedStyleSheets])
 
       return (
-        <Component key={key} ref={elemRef} {...rest}>
+        <Component key={key} ref={elemRef} {...rest as unknown as P}>
           {shadowRoot ? (
             <ShadowDomContentPortal shadowRoot={shadowRoot}>
-              {renderFn ? renderFn({shadowRoot, children}) : children}
+              {_isFn(render) ? render({shadowRoot, children}) : children}
             </ShadowDomContentPortal>
           ) : null}
         </Component>
@@ -84,7 +92,8 @@ function createShadowDomRoot<T>(params: ShadowDomRootFactoryParams): ForwardRefE
     }
   )
 
-  ShadowDomRoot.displayName = 'ShadowDomRoot'
+  const name = getDisplayName(Component, null) ?? _isStr(Component) ? Component : 'Component'
+  ShadowDomRoot.displayName = `ShadowDomRoot(${name})`
   ShadowDomRoot.defaultProps = {
     mode: 'open',
     delegatesFocus: false,
@@ -94,23 +103,24 @@ function createShadowDomRoot<T>(params: ShadowDomRootFactoryParams): ForwardRefE
   return ShadowDomRoot
 }
 
-const components = new Map()
+const components = new Map<string, ReturnType<typeof createShadowDomRoot>>()
 
-export type Options = {
+export type CreateShadowDomFactoryOptions = {
   keyPrefix?: string
-  renderFn?: ShadowDomRootFactoryParams['renderFn']
+  render?: ShadowDomRootFactoryOptions['render']
 }
 
-export function createShadowDomProxy(target = {}, options?: Options) {
-  const {keyPrefix, renderFn: _renderFn} = options ?? {}
-  const renderFn: any = _renderFn ?? (({children}) => children)
+export function createShadowDomProxy(target = {}, options?: CreateShadowDomFactoryOptions) {
+  const {keyPrefix, render: _renderFn} = options ?? {}
+  const render = _renderFn ?? (({children}: ShadowDomRootRenderProps) => children)
 
   return new Proxy(target, {
     get: (_, name: string) => {
-      const component = decamelize(name, { separator: '-' }) ?? 'div'
-      const key = `${keyPrefix ?? 'default'}-${component}`
+      const component = ChangeCase.paramCase(name) ?? 'div'
+      const key = `${keyPrefix ?? 'default'}-${name}`
       if (!components.has(key)) {
-        components.set(key, createShadowDomRoot({ component, renderFn }))
+        const root = createShadowDomRoot({ render }, component)
+        components.set(key, root)
       }
       return components.get(key)
     },

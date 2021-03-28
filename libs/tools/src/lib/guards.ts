@@ -13,7 +13,7 @@
  * @param {*} val
  * @returns {val is boolean}
  */
-export function _isBool(val: any): val is boolean {
+export function _isBool(val: unknown): val is boolean {
   return typeof val === 'boolean'
 }
 /**
@@ -23,7 +23,7 @@ export function _isBool(val: any): val is boolean {
  * @param {*} val
  * @returns {val is bigint}
  */
-export function _isBig(val: any): val is bigint {
+export function _isBig(val: unknown): val is bigint {
   return typeof val === 'bigint'
 }
 /**
@@ -33,7 +33,7 @@ export function _isBig(val: any): val is bigint {
  * @param {*} val
  * @returns {val is number}
  */
-export function _isNumT(val: any): val is number {
+export function _isNumT(val: unknown): val is number {
   return typeof val === 'number'
 }
 /**
@@ -44,7 +44,7 @@ export function _isNumT(val: any): val is number {
  * @param {boolean} [noStr]
  * @returns {val is number}
  */
-export function _isNum(val: any, noStr?: boolean): val is number {
+export function _isNum(val: unknown, noStr?: boolean): val is number {
   return noStr && _isStr(val) ? false : !isNaN(Number(val))
 }
 /**
@@ -54,7 +54,7 @@ export function _isNum(val: any, noStr?: boolean): val is number {
  * @param {*} val
  * @returns {val is symbol}
  */
-export function _isSym(val: any): val is symbol {
+export function _isSym(val: unknown): val is symbol {
   return typeof val === 'symbol'
 }
 /**
@@ -64,10 +64,10 @@ export function _isSym(val: any): val is symbol {
  * @param {*} val
  * @returns {val is Function}
  */
-export function _isFn(val: any): val is Func {
+export function _isFn(val: unknown): val is Func {
   return typeof val === 'function'
 }
-export interface Func { (...args: any[]): any }
+export interface Func { (...args: unknown[]): unknown }
 /**
  * Shortcut for Array.isArray
  *
@@ -75,7 +75,7 @@ export interface Func { (...args: any[]): any }
  * @param {*} val
  * @returns {val is any[]}
  */
-export function _isArr(val: any): val is any[] {
+export function _isArr(val: unknown): val is unknown[] {
   return Array.isArray(val)
 }
 /**
@@ -85,7 +85,7 @@ export function _isArr(val: any): val is any[] {
  * @param {*} val
  * @returns {val is []}
  */
-export function _isArrEmpty(val: any): val is [] {
+export function _isArrEmpty(val: unknown): val is [] {
   return _isArr(val) && !val.length
 }
 /**
@@ -96,7 +96,7 @@ export function _isArrEmpty(val: any): val is [] {
  * @param {*} val
  * @returns {val is object}
  */
-export function _isObjT(val: any): val is Record<string | number, unknown> {
+export function _isObjT(val: unknown): val is Record<string | number, unknown> {
   return typeof val === 'object'
 }
 /**
@@ -107,7 +107,7 @@ export function _isObjT(val: any): val is Record<string | number, unknown> {
  * @param {*} val
  * @returns {val is Object}
  */
-export function _isObj(val: any): val is Record<string, unknown> {
+export function _isObj(val: unknown): val is Record<string, unknown> {
   return !_isNull(val) && _isObjT(val) && !_isArr(val)
 }
 /**
@@ -117,7 +117,7 @@ export function _isObj(val: any): val is Record<string, unknown> {
  * @param {*} val
  * @returns {val is null}
  */
-export function _isNull(val: any): val is null {
+export function _isNull(val: unknown): val is null {
   return _isObjT(val) && typeof val === null
 }
 /**
@@ -127,7 +127,7 @@ export function _isNull(val: any): val is null {
  * @param {*} val
  * @returns {val is undefined}
  */
-export function _isUndef(val: any): val is undefined {
+export function _isUndef(val: unknown): val is undefined {
   return typeof val === 'undefined'
 }
 /**
@@ -137,7 +137,7 @@ export function _isUndef(val: any): val is undefined {
  * @param {*} val
  * @returns {(val is null | undefined)}
  */
-export function _isUndOrNull(val: any): val is null | undefined {
+export function _isUndOrNull(val: unknown): val is null | undefined {
   return _isNull(val) || _isUndef(val)
 }
 /**
@@ -147,7 +147,7 @@ export function _isUndOrNull(val: any): val is null | undefined {
  * @param {*} val
  * @returns {val is string}
  */
-export function _isStr(val: any): val is string {
+export function _isStr(val: unknown): val is string {
   return typeof val === 'string'
 }
 /**
@@ -157,7 +157,7 @@ export function _isStr(val: any): val is string {
  * @param {*} val
  * @returns {val is ''}
  */
-export function _isStrEmpty(val: any): val is '' {
+export function _isStrEmpty(val: unknown): val is '' {
   return _isStr(val) && !val.length
 }
 /**
@@ -167,7 +167,7 @@ export function _isStrEmpty(val: any): val is '' {
  * @param {*} val
  * @returns {(val is '' | [])}
  */
-export function _isEmptyStrOrArr(val: any): val is ('' | []) {
+export function _isEmptyStrOrArr(val: unknown): val is ('' | []) {
   return _isStrEmpty(val) && _isArrEmpty(val)
 }
 /**
@@ -177,7 +177,7 @@ export function _isEmptyStrOrArr(val: any): val is ('' | []) {
  * @param {*} val
  * @returns {val is Buffer}
  */
-export function isBuffer(val: any): val is Buffer {
+export function isBuffer(val: unknown): val is Buffer {
   return _isObjT(val) && _isObjT(val.constructor) && 'isBuffer' in val.constructor &&
     _isFn((val.constructor as any).isBuffer) && (val.constructor as any).isBuffer(val)
 }
@@ -188,7 +188,7 @@ export function isBuffer(val: any): val is Buffer {
  * @param {*} val
  * @returns {val is Primitive}
  */
-export function _isPrim(val: any): val is Primitive {
+export function _isPrim(val: unknown): val is Primitive {
   return Boolean(
     _isSym(val)
     || _isBig(val)
@@ -258,11 +258,10 @@ export function hasLn<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, 
   const et = _isNum(e)
   const lt = _isNum(l)
   const mt = _isNum(m)
-  const func = _isFn(also) ? also : false
   const noOpt = !et && !lt && !mt
   const chkFunc = (firstCheck: boolean): boolean => {
-    if (func) {
-      return and ? firstCheck && func(len, v) : firstCheck || func(len, v)
+    if (_isFn(also)) {
+      return Boolean(and ? firstCheck && also(len, v) : firstCheck || also(len, v))
     }
     // !opts && console.log('has len', val, len, isPosNum(len))
     return firstCheck
@@ -301,7 +300,7 @@ export type HasLenOpt<U> = {
  * @param {*} val
  * @returns {(val is number & boolean)}
  */
-export function isNegNum(val: any): val is number & boolean {
+export function isNegNum(val: unknown): val is number & boolean {
   return _isNum(val) && Number(val) < 0
 }
 /**
@@ -311,7 +310,7 @@ export function isNegNum(val: any): val is number & boolean {
  * @param {*} val
  * @returns {(val is number & boolean)}
  */
-export function isPosNum(val: any): val is number & boolean {
+export function isPosNum(val: unknown): val is number & boolean {
   return _isNum(val) && Number(val) > 0
 }
 /**
@@ -321,7 +320,7 @@ export function isPosNum(val: any): val is number & boolean {
  * @param {*} val
  * @returns {val is 0}
  */
-export function isZero(val: any): val is 0 {
+export function isZero(val: unknown): val is 0 {
   return _isNum(val) && Number(val) === 0
 }
 /**
@@ -333,6 +332,6 @@ export function isZero(val: any): val is 0 {
  * @param {Array<U>} possible
  * @returns {val is U}
  */
-export function isOneOf<U>(val: any, possible: Array<U>): val is U {
+export function isOneOf<U>(val: unknown, possible: Array<U>): val is U {
   return possible.some(i => val === i)
 }

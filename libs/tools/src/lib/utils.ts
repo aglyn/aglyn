@@ -300,11 +300,9 @@ export type MapObjectOptions = {
 /**
  * Filter indexes inside an object literal. Similar to
  * Array.filter(...)
- *
- * @export
- * @param {*} target
- * @param {*} callbackfn
- * @returns
+ * @param target
+ * @param {FilterObjPredicate<T>} predicate
+ * @returns {{[p: string]: any}}
  */
 export function filterObject<T>(target, predicate: FilterObjPredicate<T>) {
   return mapObject(target, (v, k, i, a): [any, any] | null => {
@@ -594,7 +592,7 @@ export function toNum(val: any, elseT?: any, radix?: number): number | typeof el
  * @param {number} val
  * @returns {string}
  */
-export function numToHex(val: number): string {
+export function numberToHexadecimal(val: number): string {
   return Number(val).toString(16)
 }
 
@@ -605,14 +603,25 @@ export function numToHex(val: number): string {
  * @param {string} val
  * @returns {number}
  */
-export function hexToNum(val: string): number {
+export function hexadecimalToNumber(val: string): number {
   return toNum(val, 0, 16)
 }
 
-/** ===================================================================================
- * START CHERRY PICK FROM:
- * https://github.com/kolodny/immutability-helper/blob/master/index.ts
- * =================================================================================== */
+/**
+ * Get the display name of a function, react component
+ * @export
+ * @param {*} fn
+ * @param {string} fallback
+ * @returns {string}
+ */
+export function getDisplayName(fn, fallback = 'Component'): string {
+  return fn?.displayName ?? fn?.name ?? fallback
+}
+
+/** =========
+ * START CHERRY PICK `kolodny/immutability-helper`
+ * @see https://github.com/kolodny/immutability-helper/blob/master/index.ts
+ * ========== */
 function type<T>(obj: T) {
   return (toString.call(obj) as string).slice(8, -1)
 }
@@ -648,9 +657,7 @@ export function copy<T, U, K, V, X>(
           /* istanbul ignore next */
           : value as T
 }
-/** ===================================================================================
- * END CHERRY PICK FROM:
- * https://github.com/kolodny/immutability-helper/blob/master/index.ts
- * =================================================================================== */
-
-export { default as deepEqual } from 'deep-equal'
+/** =========
+ * END CHERRY PICK `kolodny/immutability-helper`
+ * @see https://github.com/kolodny/immutability-helper/blob/master/index.ts
+ * ========== */
