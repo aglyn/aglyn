@@ -1,8 +1,4 @@
 {
-  "npmScope": "aglyn",
-  "affected": {
-    "defaultBase": "master"
-  },
   "implicitDependencies": {
     "workspace.json": "*",
     "package.json": {
@@ -14,6 +10,10 @@
     ".eslintrc.json": "*",
     "nx.json": "*"
   },
+  "affected": {
+    "defaultBase": "master"
+  },
+  "npmScope": "aglyn",
   "tasksRunnerOptions": {
     "default": {
       "runner": "@nrwl/workspace/tasks-runners/default",
@@ -22,5 +22,13 @@
       }
     }
   },
-  "projects": {}
+  "projects": {
+    "console": {
+      "tags": []
+    },
+    "console-e2e": {
+      "tags": [],
+      "implicitDependencies": ["console"]
+    }
+  }
 }
