@@ -18,6 +18,7 @@
   "projects": {
     "console": { "tags": [] },
     "console-e2e": { "tags": [], "implicitDependencies": ["console"] },
-    "ui-common": { "tags": [] }
+    "ui-common": { "tags": [] },
+    "tools": { "tags": [] }
   }
 }
