@@ -20,6 +20,6 @@
     "console-e2e": { "tags": [], "implicitDependencies": ["console"] },
     "ui-common": { "tags": [] },
     "tools": { "tags": [] },
-    "designer": { "tags": [] }
+    "app-core": { "tags": [] }
   }
 }
