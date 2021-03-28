@@ -1,3 +1,23 @@
 {
-  "singleQuote": true
+  "singleQuote": true,
+  "tabWith": 2,
+  "useTabs": false,
+  "semi": false,
+  "trailingComma": "es5",
+  "jsxBracketSameLine": false,
+  "importOrder": [
+    "react",
+    "react-dom",
+    "clsx",
+    "^next/(.*)$",
+    "^@material-ui/styles(.*)$",
+    "^@material-ui/core(.*)$",
+    "^@material-ui/lab(.*)$",
+    "^@aglyn/(.*)$",
+    "mdi-icons",
+    "^[^./]",
+    "^[./]",
+    ".*"
+  ],
+  "importOrderSeparation": true
 }

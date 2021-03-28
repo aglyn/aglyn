@@ -4,5 +4,6 @@ module.exports = {
     '<rootDir>/libs/ui-common',
     '<rootDir>/libs/tools',
     '<rootDir>/libs/app-core',
+    '<rootDir>/libs/mdi-icons',
   ],
-};
+}

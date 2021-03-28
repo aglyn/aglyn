@@ -1,11 +1,20 @@
 {
   "version": 2,
-  "cli": { "defaultCollection": "@nrwl/next" },
+  "cli": {
+    "defaultCollection": "@nrwl/next"
+  },
   "defaultProject": "console",
   "generators": {
-    "@nrwl/react": { "application": { "babel": true } },
+    "@nrwl/react": {
+      "application": {
+        "babel": true
+      }
+    },
     "@nrwl/next": {
-      "application": { "style": "@emotion/styled", "linter": "eslint" }
+      "application": {
+        "style": "@emotion/styled",
+        "linter": "eslint"
+      }
     }
   },
   "projects": {
@@ -16,16 +25,23 @@
       "targets": {
         "build": {
           "executor": "@nrwl/next:build",
-          "outputs": ["{options.outputPath}"],
+          "outputs": [
+            "{options.outputPath}"
+          ],
           "options": {
             "root": "apps/console",
             "outputPath": "dist/apps/console"
           },
-          "configurations": { "production": {} }
+          "configurations": {
+            "production": {}
+          }
         },
         "serve": {
           "executor": "@nrwl/next:server",
-          "options": { "buildTarget": "console:build", "dev": true },
+          "options": {
+            "buildTarget": "console:build",
+            "dev": true
+          },
           "configurations": {
             "production": {
               "buildTarget": "console:build:production",
@@ -35,11 +51,15 @@
         },
         "export": {
           "executor": "@nrwl/next:export",
-          "options": { "buildTarget": "console:build:production" }
+          "options": {
+            "buildTarget": "console:build:production"
+          }
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/apps/console"],
+          "outputs": [
+            "coverage/apps/console"
+          ],
           "options": {
             "jestConfig": "apps/console/jest.config.js",
             "passWithNoTests": true
@@ -48,7 +68,9 @@
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["apps/console/**/*.{ts,tsx,js,jsx}"]
+            "lintFilePatterns": [
+              "apps/console/**/*.{ts,tsx,js,jsx}"
+            ]
           }
         }
       }
@@ -66,12 +88,18 @@
             "devServerTarget": "console:serve"
           },
           "configurations": {
-            "production": { "devServerTarget": "console:serve:production" }
+            "production": {
+              "devServerTarget": "console:serve:production"
+            }
           }
         },
         "lint": {
           "executor": "@nrwl/linter:eslint",
-          "options": { "lintFilePatterns": ["apps/console-e2e/**/*.{js,ts}"] }
+          "options": {
+            "lintFilePatterns": [
+              "apps/console-e2e/**/*.{js,ts}"
+            ]
+          }
         }
       }
     },
@@ -83,12 +111,16 @@
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/ui-common/**/*.{ts,tsx,js,jsx}"]
+            "lintFilePatterns": [
+              "libs/ui-common/**/*.{ts,tsx,js,jsx}"
+            ]
           }
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/ui-common"],
+          "outputs": [
+            "coverage/libs/ui-common"
+          ],
           "options": {
             "jestConfig": "libs/ui-common/jest.config.js",
             "passWithNoTests": true
@@ -103,11 +135,17 @@
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
-          "options": { "lintFilePatterns": ["libs/tools/**/*.ts"] }
+          "options": {
+            "lintFilePatterns": [
+              "libs/tools/**/*.ts"
+            ]
+          }
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/tools"],
+          "outputs": [
+            "coverage/libs/tools"
+          ],
           "options": {
             "jestConfig": "libs/tools/jest.config.js",
             "passWithNoTests": true
@@ -122,13 +160,44 @@
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
-          "options": { "lintFilePatterns": ["libs/app-core/**/*.ts"] }
+          "options": {
+            "lintFilePatterns": [
+              "libs/app-core/**/*.ts"
+            ]
+          }
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/app-core"],
+          "outputs": [
+            "coverage/libs/app-core"
+          ],
           "options": {
             "jestConfig": "libs/app-core/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      }
+    },
+    "mdi-icons": {
+      "root": "libs/mdi-icons",
+      "sourceRoot": "libs/mdi-icons/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": [
+              "libs/mdi-icons/**/*.ts"
+            ]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": [
+            "coverage/libs/mdi-icons"
+          ],
+          "options": {
+            "jestConfig": "libs/mdi-icons/jest.config.js",
             "passWithNoTests": true
           }
         }

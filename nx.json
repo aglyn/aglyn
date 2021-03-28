@@ -20,6 +20,7 @@
     "console-e2e": { "tags": [], "implicitDependencies": ["console"] },
     "ui-common": { "tags": [] },
     "tools": { "tags": [] },
-    "app-core": { "tags": [] }
+    "app-core": { "tags": [] },
+    "mdi-icons": { "tags": [] }
   }
 }
