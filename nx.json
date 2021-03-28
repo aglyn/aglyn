@@ -19,6 +19,7 @@
     "console": { "tags": [] },
     "console-e2e": { "tags": [], "implicitDependencies": ["console"] },
     "ui-common": { "tags": [] },
-    "tools": { "tags": [] }
+    "tools": { "tags": [] },
+    "designer": { "tags": [] }
   }
 }

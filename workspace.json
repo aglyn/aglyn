@@ -152,6 +152,31 @@
           }
         }
       }
+    },
+    "designer": {
+      "root": "libs/designer",
+      "sourceRoot": "libs/designer/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": [
+              "libs/designer/**/*.ts"
+            ]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": [
+            "coverage/libs/designer"
+          ],
+          "options": {
+            "jestConfig": "libs/designer/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      }
     }
   }
 }

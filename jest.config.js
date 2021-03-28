@@ -3,5 +3,6 @@ module.exports = {
     '<rootDir>/apps/console',
     '<rootDir>/libs/ui-common',
     '<rootDir>/libs/tools',
+    '<rootDir>/libs/designer',
   ],
 };

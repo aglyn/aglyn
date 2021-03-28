@@ -16,7 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@aglyn/ui-common": ["libs/ui-common/src/index.ts"],
-      "@aglyn/tools": ["libs/tools/src/index.ts"]
+      "@aglyn/tools": ["libs/tools/src/index.ts"],
+      "@aglyn/designer": ["libs/designer/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
