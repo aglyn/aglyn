@@ -1,26 +1,46 @@
 {
   "implicitDependencies": {
     "workspace.json": "*",
-    "package.json": { "dependencies": "*", "devDependencies": "*" },
+    "package.json": {
+      "dependencies": "*",
+      "devDependencies": "*"
+    },
     "tsconfig.base.json": "*",
     "tslint.json": "*",
     ".eslintrc.json": "*",
     "nx.json": "*"
   },
-  "affected": { "defaultBase": "master" },
+  "affected": {
+    "defaultBase": "main"
+  },
   "npmScope": "aglyn",
   "tasksRunnerOptions": {
     "default": {
       "runner": "@nrwl/workspace/tasks-runners/default",
-      "options": { "cacheableOperations": ["build", "lint", "test", "e2e"] }
+      "options": {
+        "cacheableOperations": ["build", "lint", "test", "e2e"]
+      }
     }
   },
   "projects": {
-    "console": { "tags": [] },
-    "console-e2e": { "tags": [], "implicitDependencies": ["console"] },
-    "ui-common": { "tags": [] },
-    "tools": { "tags": [] },
-    "app-core": { "tags": [] },
-    "mdi-icons": { "tags": [] }
+    "console": {
+      "tags": []
+    },
+    "console-e2e": {
+      "tags": [],
+      "implicitDependencies": ["console"]
+    },
+    "ui-common": {
+      "tags": []
+    },
+    "tools": {
+      "tags": []
+    },
+    "mdi-icons": {
+      "tags": []
+    },
+    "site-core": {
+      "tags": []
+    }
   }
 }

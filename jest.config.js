@@ -3,7 +3,7 @@ module.exports = {
     '<rootDir>/apps/console',
     '<rootDir>/libs/ui-common',
     '<rootDir>/libs/tools',
-    '<rootDir>/libs/app-core',
+    '<rootDir>/libs/site-core',
     '<rootDir>/libs/mdi-icons',
   ],
 }

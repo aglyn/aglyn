@@ -1,5 +1,5 @@
 module.exports = {
-  displayName: 'app-core',
+  displayName: 'site-core',
   preset: '../../jest.preset.js',
   globals: {
     'ts-jest': {
@@ -10,5 +10,5 @@ module.exports = {
     '^.+\\.[tj]sx?$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../coverage/libs/app-core',
-};
+  coverageDirectory: '../../coverage/libs/site-core',
+}

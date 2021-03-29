@@ -17,8 +17,8 @@
     "paths": {
       "@aglyn/ui-common": ["libs/ui-common/src/index.ts"],
       "@aglyn/tools": ["libs/tools/src/index.ts"],
-      "@aglyn/app-core": ["libs/app-core/src/index.ts"],
-      "@aglyn/mdi-icons": ["libs/mdi-icons/src/index.ts"]
+      "@aglyn/mdi-icons": ["libs/mdi-icons/src/index.ts"],
+      "@aglyn/site-core": ["libs/site-core/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
