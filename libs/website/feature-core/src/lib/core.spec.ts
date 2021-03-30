@@ -1,4 +1,4 @@
-import { site } from './site'
+import { site } from './core'
 
 describe('site', () => {
   it('should work', () => {

@@ -19,7 +19,7 @@
       "@aglyn/shared/ui-react": ["libs/shared/ui-react/src/index.ts"],
       "@aglyn/shared/util": ["libs/shared/util/src/index.ts"],
       "@aglyn/shared/feature-mdi-icon": ["libs/shared/feature-mdi-icon/src/index.ts"],
-      "@aglyn/website/feature-site": ["libs/website/feature-site/src/index.ts"]
+      "@aglyn/website/feature-core": ["libs/website/feature-core/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
