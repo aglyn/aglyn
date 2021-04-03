@@ -6,14 +6,5 @@
  * found in the root directory of this source tree.
  */
 
-import * as _core from './core'
-import * as _app from './app'
-
-namespace Website {
-
-  export const core = _core
-  export const app = _app
-
-}
-
-export const website = Website
+export * as core from './core'
+export * as app from './app'

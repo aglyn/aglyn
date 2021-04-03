@@ -26,7 +26,13 @@
       "extends": ["plugin:@nrwl/nx/typescript"],
       "rules": {
         "@typescript-eslint/no-explicit-any": "off",
-        "@typescript-eslint/no-namespace": "off"
+        "@typescript-eslint/no-namespace": "off",
+        "@typescript-eslint/no-unused-vars": ["warn", {
+          "argsIgnorePattern": "^_",
+          "caughtErrors": "none",
+          "ignoreRestSiblings": false,
+          "varsIgnorePattern": "^_[A-Z|0-9]"
+        }]
       }
     },
     {
