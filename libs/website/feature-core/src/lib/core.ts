@@ -14,20 +14,21 @@ export type AnyProps = Record<string, unknown>
 
 export interface Module {
   _id?: string
-  declarations: (Component[])[]
+  declarations: Component[]
 }
 
 export interface Component<T = unknown> {
   _id: string
-  displayName?: string
-  description?: string
-  title?: string
-  subtitle?: string
-  icon?: any
-  defaultProps?: Partial<AnyProps>
-  resolveProps?: <T>(...args: T[]) => Partial<AnyProps> | void
-  propsSchema?: DdfSchema
-  options?: {
+  ctor: T
+  metadata: {
+    displayName?: string
+    description?: string
+    title?: string
+    subtitle?: string
+    icon?: any
+    propsSchema?: DdfSchema
+    defaultProps?: Partial<AnyProps>
+    resolveProps?: <T>(...args: T[]) => Partial<AnyProps> | void
     disableActions?: boolean
     disableBadge?: boolean
     disableCopying?: boolean

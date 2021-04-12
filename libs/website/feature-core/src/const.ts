@@ -14,7 +14,8 @@ export const PRODUCTION = process.env.NODE_ENV === 'production'
 
 export enum EventFlag {
   INSTANCE_CREATED = 'website:app:created-instance',
-  COMPONENT_REGISTERED = 'website:app:set-component',
+  SET_MODULE = 'website:app:set-module',
+  SET_COMPONENT = 'website:app:set-component',
 }
 
 export enum RestrictType {

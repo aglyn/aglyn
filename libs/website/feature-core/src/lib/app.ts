@@ -21,51 +21,46 @@ export class App {
 
   private static instance?: App
 
-  private constructor() {}
+  private constructor() {/* empty */}
 
 
   /**
-   * Get the currently living singleton instance of App
-   * @throws
-   * @returns {App} instance
+   * Get or creates the currently living singleton instance of App
+   * @returns {this} instance
    */
   public static getInstance(): App {
-    if (App.instance instanceof App) {
-      return App.instance
+    if (this.instance instanceof this) {
+      return this.instance
     }
-    throw new Error('Instance doesn\'t exist! You must call createInstance(...) first!')
+    this.instance = new this()
+    this.event.emit(EventFlag.INSTANCE_CREATED, this, this.instance)
+    return this.instance
   }
 
-  /**
-   * Creates a new singleton instance of App
-   * @throws
-   */
-  public static createInstance(): App {
-    if (App.instance instanceof App) {
-      throw new Error('Instance exist! You have already created an instance.')
-    }
-    App.instance = new App()
-    App.event.emit(EventFlag.INSTANCE_CREATED, this, App.instance)
-    return App.instance
+  public static setModule(props: { _id: string, declarations: Component[] }) {
+    const { _id, declarations } = props
+    const module = { _id, declarations }
+    this.modules.set(_id, module)
+    this.event.emit(EventFlag.SET_MODULE, this, module)
+    return this
   }
 
-  /**
-   * Builds and registers a {@link Module} instance from the
-   * provided {@link Component}
-   * @param {string} _id
-   * @param {Component["ctor"]} ctor
-   * @param {Component["config"]} config
-   * @returns {App}
-   */
-  public static setComponent(
-    _id: string,
+  public static setComponent(props: {
+    moduleId: string,
+    _id: string
     ctor: Component['ctor'],
-    meta?: Component['metadata'],
-  ) {
-    const component: Component = { metadata: { ...meta, _id }, ctor }
-    const module: Module = new class ComponentModule {}
-    App.modules.set(_id, module)
-    App.event.emit(EventFlag.COMPONENT_REGISTERED, App, module)
+    metadata?: Component['metadata']
+  }) {
+    const { moduleId, _id, ctor, metadata } = props
+    const module = this.modules.get(moduleId) ?? { _id: moduleId, declarations: [] }
+    let component
+    if (module.declarations.some(i=>i._id === _id)) {
+      component = module.declarations.find(i=>i._id === _id)
+    }
+    component = {...component,  _id, ctor, metadata}
+    module.declarations.push(component)
+    this.modules.set(_id, module)
+    this.event.emit(EventFlag.SET_COMPONENT, this, module)
     return this
   }
 
