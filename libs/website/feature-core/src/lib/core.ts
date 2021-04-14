@@ -7,7 +7,7 @@
  */
 
 import DdfSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
-import { RestrictType } from '../const'
+import type { RestrictType } from '../const'
 
 
 export type AnyProps = Record<string, unknown>

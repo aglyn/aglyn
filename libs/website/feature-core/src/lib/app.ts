@@ -7,7 +7,7 @@
  */
 
 // import EventEmitter from 'events'
-import { Component, Module, ModulesMap } from './core'
+import { Component, ModulesMap } from './core'
 import { EventFlag, PKG_VERSION } from '../const'
 import EventEmitter from 'events'
 
