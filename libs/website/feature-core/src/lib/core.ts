@@ -44,10 +44,10 @@ export interface Component<T = unknown> {
   }
 }
 
-export interface Element {
+export interface DataElement {
   _id: string
   component?: Component | string
-  children?: Element[]
+  children?: DataElement[]
   props: AnyProps
   temp?: boolean
   parent?: string

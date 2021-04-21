@@ -21,6 +21,8 @@ export class App {
 
   private static instance?: App
 
+  public readonly $CREATED = new Date().toUTCString()
+
   private constructor() {/* empty */}
 
 
@@ -49,6 +51,11 @@ export class App {
     return this
   }
 
+  public static getComponent(props: { moduleId: string, componentId: string }) {
+    const { moduleId, componentId } = props
+    return this.modules.get(moduleId)?.declarations.find(m=>m._id === componentId)
+  }
+
   public static setComponent(props: {
     moduleId: string,
     _id: string
@@ -63,7 +70,7 @@ export class App {
     }
     component = {...component,  _id, ctor, metadata}
     module.declarations.push(component)
-    this.modules.set(_id, module)
+    this.modules.set(moduleId, module)
     this.event.emit(EventFlag.SET_COMPONENT, this, module)
     return this
   }
