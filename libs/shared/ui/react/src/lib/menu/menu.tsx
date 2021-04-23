@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
 import React, { HTMLProps, Children, MouseEvent, useState, forwardRef, cloneElement } from 'react'
 import MuiMenu, { MenuProps as MuiMenuProps } from '@material-ui/core/Menu'
 import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@material-ui/core/MenuItem'

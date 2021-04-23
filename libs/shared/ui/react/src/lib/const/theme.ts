@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
 import { Color } from '@material-ui/core'
 import { cyan, lightBlue, lime, orange, red, purple } from '@material-ui/core/colors'
 import { createMuiTheme, responsiveFontSizes, Theme, ThemeOptions } from '@material-ui/core/styles'

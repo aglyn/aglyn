@@ -1,3 +1,11 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
 import React, { forwardRef } from 'react'
 import Button, { ButtonProps as MuiButtonProps } from '@material-ui/core/Button'
 import GridItems, { GridItemsProps } from '../grid-items/grid-items'
