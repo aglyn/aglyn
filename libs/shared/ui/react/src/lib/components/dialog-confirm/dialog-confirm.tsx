@@ -16,19 +16,19 @@ import DialogTitle, { DialogTitleProps } from '@material-ui/core/DialogTitle'
 
 
 export interface DialogConfirmOptions {
-  cancellationText: ButtonProps['children']
-  confirmationText: ButtonProps['children']
+  cancellationText?: ButtonProps['children']
+  confirmationText?: ButtonProps['children']
   cancellationButtonProps?: Partial<ButtonProps>
   confirmationButtonProps?: Partial<ButtonProps>
-  dialogProps?: DialogProps
+  dialogProps?: Partial<DialogProps>
   title?: DialogTitleProps['children']
   description?: DialogContentTextProps['children']
 }
 
 export interface DialogConfirmProps extends DialogProps {
-  options: DialogConfirmOptions
-  onConfirm: ButtonProps['onClick']
-  onCancel: ButtonProps['onClick']
+  options?: DialogConfirmOptions
+  onConfirm?: ButtonProps['onClick']
+  onCancel?: ButtonProps['onClick']
 }
 
 export const DialogConfirm = forwardRef<any, DialogConfirmProps>(

@@ -13,7 +13,7 @@ import DialogConfirm from './dialog-confirm'
 
 describe('NavbarDrawer', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<DialogConfirm />)
+    const { baseElement } = render(<DialogConfirm open />)
     expect(baseElement).toBeTruthy()
   })
 })
