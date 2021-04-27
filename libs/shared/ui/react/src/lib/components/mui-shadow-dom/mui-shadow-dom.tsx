@@ -16,7 +16,7 @@ import { create } from 'jss'
 import rtl from 'jss-rtl'
 
 import { createShadowDomProxy } from '../shadow-dom/shadow-dom'
-import useCombinedRefs from '../hooks/use-combined-refs'
+import useCombinedRefs from '../../hooks/use-combined-refs'
 
 /* eslint-disable-next-line */
 export interface MuiShadowDomProps {}

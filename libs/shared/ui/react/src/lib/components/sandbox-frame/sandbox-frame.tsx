@@ -24,7 +24,7 @@ import { jssPreset, StylesProvider, useTheme } from '@material-ui/core/styles'
 import { create, Jss, JssOptions } from 'jss'
 import rtl from 'jss-rtl'
 
-import useCombinedRefs from '../hooks/use-combined-refs'
+import useCombinedRefs from '../../hooks/use-combined-refs'
 
 export type SandboxFrameDocument = HTMLIFrameElement['contentDocument']
 export type SandboxFrameWindow = HTMLIFrameElement['contentWindow']

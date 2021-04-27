@@ -24,7 +24,7 @@ import React, {
 } from 'react'
 import { createPortal } from 'react-dom'
 
-import useCombinedRefs from '../hooks/use-combined-refs'
+import useCombinedRefs from '../../hooks/use-combined-refs'
 import { _isStr, _isFn, getDisplayName, ChangeCase } from '@aglyn/shared/util/helpers'
 
 declare global {

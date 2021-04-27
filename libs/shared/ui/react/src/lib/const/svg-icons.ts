@@ -6,7 +6,7 @@
  * found in the root directory of this source tree.
  */
 
-import { createSvgPathIcon } from '../svg-path-icon/svg-path-icon'
+import { createSvgPathIcon } from '../components/svg-path-icon/svg-path-icon'
 
 export type IconPath = string
 
