@@ -11,7 +11,7 @@ import Website from '@aglyn/website/core'
 import { _isArr, _isArrEmpty, _isFn, _isStr, deepMerge } from '@aglyn/shared/util/helpers'
 import * as ReactIs from 'react-is'
 
-/* eslint-disable-next-line */
+
 export interface ElementComponentProps {
   elementData: Website.ElementData
   childrenComponent?: React.ComponentType<ElementComponentProps>
@@ -32,11 +32,17 @@ export function ElementComponent(props: ElementComponentProps) {
   const ComponentCtor = ReactIs.isValidElementType(ctor) ? ctor : 'div'
   return (
     <ComponentCtor {...ctorProps}>
-      {!_isArr(children) || _isArrEmpty(children)
-        ? content
-        : children.map((data) => (
-            <ChildrenComponent key={data.$id} childrenComponent={ChildrenComponent} elementData={data} />
-          ))}
+      {
+        (!_isArr(children) || _isArrEmpty(children))
+          ? content
+          : children.map((data) => (
+            <ChildrenComponent
+              key={data.$id}
+              childrenComponent={ChildrenComponent}
+              elementData={data}
+            />
+          ))
+      }
     </ComponentCtor>
   )
 }

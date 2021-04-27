@@ -16,6 +16,8 @@ export interface Module {
   declarations: Component[]
 }
 
+export type ModuleMap = Map<string, Module>
+
 export interface Component<T = unknown> {
   $id: string
   ctor: T
@@ -53,8 +55,6 @@ export interface ElementData {
   name?: string
   description?: string
 }
-
-export type ModulesMap = Map<string, Module>
 
 export function core() {
   return 'core'

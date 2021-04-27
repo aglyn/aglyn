@@ -6,23 +6,18 @@
  * found in the root directory of this source tree.
  */
 
-import { Component, ModulesMap } from './core'
+import { Component, ModuleMap } from './core'
 import { EventFlag, PKG_VERSION } from './const'
 import EventEmitter from 'events'
 
+
 export class App {
-  public static readonly $VERSION: string = PKG_VERSION
-
+  public static readonly VERSION: string = PKG_VERSION
   public static event: EventEmitter = new EventEmitter()
-  public static modules: ModulesMap = new Map()
-
+  public static modules: ModuleMap = new Map()
+  public readonly CREATED = new Date().toUTCString()
   private static instance?: App
-
-  public readonly $CREATED = new Date().toUTCString()
-
-  private constructor() {
-    /* empty */
-  }
+  private constructor() {/*empty*/}
 
   public static getInstance(): App {
     if (this.instance instanceof this) {
@@ -71,5 +66,5 @@ export class App {
 }
 
 export function app() {
-  return 'app'
+  return
 }

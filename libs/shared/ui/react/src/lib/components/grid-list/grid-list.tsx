@@ -116,33 +116,32 @@ export type ItemProps = Omit<HTMLProps<HTMLDivElement>, 'onClick'> & {
 }
 
 export const CardIconListItem = withStyles(itemStyles, { name: 'IconListItem' })(
-  forwardRef<any, ItemProps & WithStyles<typeof itemStyles>>(function RefRenderFn(props, ref) {
-    const { classes, className, selected, item, label, onActionClick, preview, ...restProps } = props
-    const isSelected = Boolean(selected)
-    const elemClassName = clsx(classes.root, { [classes.selected]: isSelected }, className)
-    const handleClick = useCallback(
-      (e) => {
+  forwardRef<any, ItemProps & WithStyles<typeof itemStyles>>(
+    function RefRenderFn(props, ref) {
+      const { classes, className, selected, item, label, onActionClick, preview, ...restProps } = props
+      const isSelected = Boolean(selected)
+      const elemClassName = clsx(classes.root, { [classes.selected]: isSelected }, className)
+      const handleClick = useCallback((e) => {
         onActionClick && onActionClick(e, item)
-      },
-      [item, onActionClick]
-    )
-    return (
-      <Card ref={ref} className={elemClassName} {...restProps}>
-        <CardActionArea className={classes.actionArea} disabled={isSelected} onClick={handleClick}>
-          <div className={classes.wrapper}>
-            <div className={classes.content}>
-              <span>{preview}</span>
-              {label && (
-                <Typography className={classes.label} component="span" display="block" variant="subtitle2">
-                  {label}
-                </Typography>
-              )}
+      }, [item, onActionClick])
+      return (
+        <Card ref={ref as any} className={elemClassName} {...restProps}>
+          <CardActionArea className={classes.actionArea} disabled={isSelected} onClick={handleClick}>
+            <div className={classes.wrapper}>
+              <div className={classes.content}>
+                <span>{preview}</span>
+                {label && (
+                  <Typography className={classes.label} component="span" display="block" variant="subtitle2">
+                    {label}
+                  </Typography>
+                )}
+              </div>
             </div>
-          </div>
-        </CardActionArea>
-      </Card>
-    )
-  })
+          </CardActionArea>
+        </Card>
+      )
+    }
+  )
 )
 
 const ItemWrapper = styled('div')({
@@ -176,83 +175,88 @@ export type Item = {
 
 /* eslint-disable-next-line */
 export interface GridListProps extends Partial<VirtuosoGridProps> {
-  items: { id: string | number | symbol }[]
-  renderItemContent: (item: GridListProps['items'][number], index: number, items: GridListProps['items']) => ReactNode
+  items?: { id: string | number | symbol }[]
+  renderItemContent?: (item: GridListProps['items'][number], index: number, items: GridListProps['items']) => ReactNode
   GridContainerProps?: MuiGridProps
   GridItemProps?: MuiGridProps
   ListWrapperProps?: HTMLProps<HTMLDivElement>
 }
 
 export const GridList = withStyles(styles, { name: 'GridList' })(
-  forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<typeof styles>>(function RefRenderFn(props, ref) {
-    const {
-      classes,
-      className,
-      items,
-      renderItemContent,
-      ListWrapperProps,
-      GridContainerProps,
-      GridItemProps,
-      ...rest
-    } = props
-    const computeItemKey = useCallback((index: number) => items[index].id as any, [items])
+  forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<typeof styles>>(
+    function RefRenderFn(props, ref) {
+      const {
+        classes,
+        className,
+        items,
+        renderItemContent,
+        ListWrapperProps,
+        GridContainerProps,
+        GridItemProps,
+        ...rest
+      } = props
+      const computeItemKey = useCallback((index: number) => items[index].id as any, [items])
 
-    const GridContainer = useMemo(
-      () =>
-        forwardRef<any, MuiGridProps>(function RefRenderFn(props, ref) {
-          return (
-            <div {...ListWrapperProps} className={clsx(classes.listRoot, ListWrapperProps?.className)}>
-              <Grid ref={ref} container {...GridContainerProps} {...props} />
-            </div>
-          )
-        }),
-      [ListWrapperProps, GridContainerProps, classes]
-    )
+      const GridContainer = useMemo(
+        () =>
+          forwardRef<any, MuiGridProps>(function RefRenderFn(props, ref) {
+            return (
+              <div {...ListWrapperProps} className={clsx(classes.listRoot, ListWrapperProps?.className)}>
+                <Grid ref={ref} container {...GridContainerProps} {...props} />
+              </div>
+            )
+          }),
+        [ListWrapperProps, GridContainerProps, classes]
+      )
 
-    const GridItem = useMemo(
-      () =>
-        forwardRef<any, MuiGridProps>(function RefRenderFn(itemProps, ref) {
-          return <Grid ref={ref} item {...GridItemProps} {...itemProps} />
-        }),
-      [GridItemProps]
-    )
+      const GridItem = useMemo(
+        () =>
+          forwardRef<any, MuiGridProps>(function RefRenderFn(itemProps, ref) {
+            return <Grid ref={ref} item {...GridItemProps} {...itemProps} />
+          }),
+        [GridItemProps]
+      )
 
-    const MemoizedItemContent = useMemo(
-      () =>
-        forwardRef<any, MuiGridProps>(function RefRenderFn(props, ref) {
-          const { children, ...restProps } = props
-          return (
-            <ItemWrapper ref={ref} className={classes.itemWrapper} {...restProps}>
-              <ItemContent className={classes.itemContent}>{children}</ItemContent>
-            </ItemWrapper>
-          )
-        }),
-      [classes]
-    )
+      const MemoizedItemContent = useMemo(
+        () =>
+          forwardRef<any, MuiGridProps>(function RefRenderFn(props, ref) {
+            const { children, ...restProps } = props
+            return (
+              <ItemWrapper ref={ref} className={classes.itemWrapper} {...restProps}>
+                <ItemContent className={classes.itemContent}>{children}</ItemContent>
+              </ItemWrapper>
+            )
+          }),
+        [classes]
+      )
 
-    const itemContent = useCallback(
-      (index) => <MemoizedItemContent>{renderItemContent(items[index], index, items)}</MemoizedItemContent>,
-      [renderItemContent]
-    )
+      const itemContent = useCallback(
+        (index) => <MemoizedItemContent>{renderItemContent(items[index], index, items)}</MemoizedItemContent>,
+        [renderItemContent]
+      )
 
-    return (
-      <VirtuosoGrid
-        ref={ref}
-        className={clsx(classes.root, className)}
-        computeItemKey={computeItemKey}
-        itemContent={itemContent}
-        totalCount={items.length}
-        {...rest}
-        components={{
-          Item: GridItem,
-          List: GridContainer,
-          ...rest.components,
-        }}
-      />
-    )
-  })
+      return (
+        <VirtuosoGrid
+          ref={ref}
+          className={clsx(classes.root, className)}
+          computeItemKey={computeItemKey}
+          itemContent={itemContent}
+          totalCount={items.length}
+          {...rest}
+          components={{
+            Item: GridItem,
+            List: GridContainer,
+            ...rest.components,
+          }}
+        />
+      )
+    }
+  )
 )
 
 GridList.displayName = 'GridList'
+GridList.defaultProps = {
+  renderItemContent: (item) => item
+}
 
 export default GridList
