@@ -50,7 +50,7 @@ export interface ElementData {
   component?: Component | string
   children?: ElementData[]
   props: AnyProps
-  temp?: boolean
+  temporary?: boolean
   parent?: string
   name?: string
   description?: string

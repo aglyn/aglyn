@@ -37,6 +37,10 @@
                 "onlyDependOnLibsWithTags": ["scope:website:core", "scope:shared:util"]
               },
               {
+                "sourceTag": "scope:website:feature",
+                "onlyDependOnLibsWithTags": ["scope:website:feature", "scope:shared:util", "scope:website:core"]
+              },
+              {
                 "sourceTag": "*",
                 "onlyDependOnLibsWithTags": ["*"]
               }
