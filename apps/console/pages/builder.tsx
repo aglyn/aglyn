@@ -9,26 +9,25 @@
 import React, { useState } from 'react'
 import Website from '@aglyn/website/core'
 import { WebsiteComponent } from '@aglyn/website/feature/react-renderer'
+import { BuilderComponent } from '@aglyn/website/feature/react-builder'
 import { samplePageData } from '../constants/sample-data'
 
 
-export interface BuilderProps {
-
-}
+export interface BuilderProps {}
 
 export function Builder(props: BuilderProps) {
   const [elements, setElements] = useState(samplePageData)
 
   console.log('page:/builder', Website.App.getInstance())
   return (
-    <WebsiteComponent elements={elements} />
+    <BuilderComponent elements={elements} />
   )
 }
 
 export default Builder
 
 
-const Root = ({ children, ...props }) => <span {...props}>{children}</span>
+const Root = ({ children, innerRef, ...props }) => <span ref={innerRef} {...props}>{children}</span>
 
 Website.App.setComponent({
   moduleId: 'react',

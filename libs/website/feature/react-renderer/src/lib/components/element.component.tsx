@@ -6,7 +6,7 @@
  * found in the root directory of this source tree.
  */
 
-import React from 'react'
+import React, { forwardRef } from 'react'
 import Website, { handleResolveProps } from '@aglyn/website/core'
 import { _isArr, _isArrEmpty, _isStr, yes } from '@aglyn/shared/util/helpers'
 import * as ReactIs from 'react-is'
@@ -15,33 +15,42 @@ import ElementsComponent from './elements.component'
 
 export interface ElementComponentProps {
   elementData: Website.ElementData
-  childrenComponent?: React.ComponentType<ElementComponentProps>
+  elementComponent?: React.ComponentType<ElementComponentProps>
 }
 
-export function ElementComponent(props: ElementComponentProps) {
-  const { elementData: data, childrenComponent: ChildrenComponent } = props
-  const component = !_isStr(data?.component)
-    ? (data?.component as Website.Component)
-    : Website.App.getComponent({ moduleId: 'react', componentId: data?.component })
-  const { ctor, metadata = {} } = component ?? {}
-  const resolvedProps = handleResolveProps(data?.props, metadata, component)
-  const { children: content = null, ...ctorProps } = resolvedProps
-  const ComponentCtor = ReactIs.isValidElementType(ctor) ? ctor : 'div'
-  const haveChildren = yes(!_isArr(data?.children) || _isArrEmpty(data?.children))
-  return (
-    <ComponentCtor {...ctorProps}>
-      {haveChildren ? content : (
-        <ElementsComponent
-          childrenComponent={ChildrenComponent}
-          children={data?.children}
-        />
-      )}
-    </ComponentCtor>
-  )
-}
+export const ElementComponent = forwardRef<any, ElementComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      elementData: data,
+      elementComponent,
+      ...rest
+    } = props
 
+    const component = !_isStr(data?.component)
+      ? (data?.component as Website.Component)
+      : Website.App.getComponent({ moduleId: 'react', componentId: data?.component })
+    const { ctor, metadata = {} } = component ?? {}
+    const resolvedProps = handleResolveProps(data?.props, metadata, component)
+    const { children: content = null, ...ctorProps } = resolvedProps
+    const ComponentCtor = ReactIs.isValidElementType(ctor) ? ctor : 'div'
+    const haveChildren = yes(!_isArr(data?.children) || _isArrEmpty(data?.children))
+
+    return (
+      <ComponentCtor innerRef={ref} {...ctorProps} {...rest}>
+        {haveChildren ? content : (
+          <ElementsComponent
+            elementComponent={elementComponent}
+            children={data?.children}
+          />
+        )}
+      </ComponentCtor>
+    )
+  }
+)
+
+ElementComponent.displayName = 'ElementComponent'
 ElementComponent.defaultProps = {
-  childrenComponent: ElementComponent,
+  elementComponent: ElementComponent,
 }
 
 export default ElementComponent

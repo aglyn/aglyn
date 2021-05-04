@@ -26,18 +26,15 @@ export function useClientRect(callback?: UseClientRectCallback, initialRect: Cli
   const [clientRect, setRect] = useState(initialRect)
   const nodeRef = useRef()
 
-  const ref = useCallback(
-    (node) => {
-      nodeRef.current = node
-      if (node) {
-        const clientRect = node.getBoundingClientRect && node.getBoundingClientRect()
-        const newRect = clientRect?.toJSON ? clientRect.toJSON() : clientRect
-        setRect(newRect)
-        callback && callback({ clientRect: newRect, node })
-      }
-    },
-    [callback]
-  )
+  const ref = useCallback((node) => {
+    nodeRef.current = node
+    if (node) {
+      const clientRect = node.getBoundingClientRect && node.getBoundingClientRect()
+      const newRect = clientRect?.toJSON ? clientRect.toJSON() : clientRect
+      setRect(newRect)
+      callback && callback({ clientRect: newRect, node })
+    }
+  }, [callback])
 
   return [clientRect, ref, nodeRef]
 }

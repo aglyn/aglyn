@@ -6,40 +6,43 @@
  * found in the root directory of this source tree.
  */
 
-import React from 'react'
+import React, { forwardRef } from 'react'
 import Website from '@aglyn/website/core'
 import { ElementComponent, ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
 
 
 export interface ElementsComponentProps extends ComponentProp {
-  childrenComponent?: ElementComponentProps['childrenComponent']
+  elementComponent?: ElementComponentProps['elementComponent']
   children?: Website.ElementData[]
 }
 
-export function ElementsComponent(props: ElementsComponentProps) {
-  const {
-    component: Component,
-    childrenComponent: ChildrenComponent,
-    children,
-    ...rest
-  } = props
-  return (
-    <Component {...rest}>
-      {children.map((data, i) => (
-        <ChildrenComponent
-          key={data?.$id ?? i}
-          elementData={data}
-          childrenComponent={ChildrenComponent}
-        />
-      ))}
-    </Component>
-  )
-}
+export const ElementsComponent = forwardRef<any, ElementsComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      component: Component,
+      elementComponent: ElementComponent,
+      children,
+      ...rest
+    } = props
+    return (
+      <Component ref={ref} {...rest}>
+        {children.map((data, i) => (
+          <ElementComponent
+            key={data?.$id ?? i}
+            elementData={data}
+            elementComponent={ElementComponent}
+          />
+        ))}
+      </Component>
+    )
+  }
+)
 
+ElementsComponent.displayName = 'ElementsComponent'
 ElementsComponent.defaultProps = {
   component: React.Fragment,
-  childrenComponent: ElementComponent,
+  elementComponent: ElementComponent,
   children: [],
 }
 

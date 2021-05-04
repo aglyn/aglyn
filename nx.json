@@ -1,32 +1,22 @@
 {
   "implicitDependencies": {
     "workspace.json": "*",
-    "package.json": {
-      "dependencies": "*",
-      "devDependencies": "*"
-    },
+    "package.json": {"dependencies": "*", "devDependencies": "*"},
     "tsconfig.base.json": "*",
     "tslint.json": "*",
     ".eslintrc.json": "*",
     "nx.json": "*"
   },
-  "affected": {
-    "defaultBase": "main"
-  },
+  "affected": {"defaultBase": "main"},
   "npmScope": "aglyn",
   "tasksRunnerOptions": {
     "default": {
       "runner": "@nrwl/workspace/tasks-runners/default",
-      "options": {
-        "cacheableOperations": ["build", "lint", "test", "e2e"]
-      }
+      "options": {"cacheableOperations": ["build", "lint", "test", "e2e"]}
     }
   },
   "projects": {
-    "console": {
-      "tags": ["scope:app", "scope:app:console"],
-      "implicitDependencies": []
-    },
+    "console": {"tags": ["scope:app", "scope:app:console"], "implicitDependencies": []},
     "console-e2e": {
       "tags": ["scope:app", "scope:app:console"],
       "implicitDependencies": ["console"]
@@ -48,6 +38,10 @@
       "implicitDependencies": []
     },
     "website-feature-react-renderer": {
+      "tags": ["scope:lib", "scope:website", "scope:website:feature"],
+      "implicitDependencies": []
+    },
+    "website-feature-react-builder": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
     }

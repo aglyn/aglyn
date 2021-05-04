@@ -6,7 +6,7 @@
  * found in the root directory of this source tree.
  */
 
-import React from 'react'
+import React, { forwardRef } from 'react'
 import { Website } from '@aglyn/website/core'
 import { ElementComponent, ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
@@ -15,26 +15,29 @@ import { ElementsComponent } from './elements.component'
 
 export interface WebsiteComponentProps extends ComponentProp {
   elements?: Website.ElementData[]
-  childrenComponent?: ElementComponentProps['childrenComponent']
+  elementComponent?: ElementComponentProps['elementComponent']
 }
 
-export function WebsiteComponent(props: WebsiteComponentProps) {
-  const {
-    component: Component,
-    childrenComponent,
-    elements,
-    ...rest
-  } = props
-  return (
-    <Component {...rest}>
-      <ElementsComponent
-        children={elements}
-        childrenComponent={childrenComponent}
-      />
-    </Component>
-  )
-}
+export const WebsiteComponent = forwardRef<any, WebsiteComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      component: Component,
+      elementComponent,
+      elements,
+      ...rest
+    } = props
+    return (
+      <Component ref={ref} {...rest}>
+        <ElementsComponent
+          children={elements}
+          elementComponent={elementComponent}
+        />
+      </Component>
+    )
+  }
+)
 
+WebsiteComponent.displayName = 'WebsiteComponent'
 WebsiteComponent.defaultProps = {
   component: 'div',
   elementComponent: ElementComponent,

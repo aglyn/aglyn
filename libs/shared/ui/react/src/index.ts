@@ -11,12 +11,11 @@ export * from './lib/components/sandbox-frame/sandbox-frame'
 export * from './lib/components/shadow-dom/shadow-dom'
 export * from './lib/components/svg-path-icon/svg-path-icon'
 export * from './lib/components/svg-path/svg-path'
-export * from './lib/components/ui-common'
 
 export * from './lib/const/svg-icons'
 export * from './lib/const/theme'
 
-export * from './lib/contexts/user-confirmation'
+export * from './lib/contexts/confirmation'
 
 export * from './lib/hooks/use-client-rect'
 export * from './lib/hooks/use-combined-refs'

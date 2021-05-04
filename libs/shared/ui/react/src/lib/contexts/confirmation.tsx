@@ -23,7 +23,7 @@ import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
 import DialogConfirm from '../components/dialog-confirm/dialog-confirm'
 
 
-export interface UserConfirmationOptions {
+export interface ConfirmationOptions {
   cancellationText?: ButtonProps['children']
   confirmationText?: ButtonProps['children']
   cancellationButtonProps?: Partial<ButtonProps>
@@ -33,15 +33,15 @@ export interface UserConfirmationOptions {
   description?: DialogContentTextProps['children']
 }
 
-export type UserConfirmationContextType = (options?: UserConfirmationOptions) => Promise<unknown>
-export type UseUserConfirmationType = () => UserConfirmationContextType
+export type ConfirmationContextType = (options?: ConfirmationOptions) => Promise<unknown>
+export type UseConfirmationType = () => ConfirmationContextType
 
-export const UserConfirmationContext = createContext<UserConfirmationContextType>(null)
-export const useUserConfirmation: UseUserConfirmationType = () => {
-  return useContext(UserConfirmationContext)
+export const ConfirmationContext = createContext<ConfirmationContextType>(null)
+export const useConfirmationContext: UseConfirmationType = () => {
+  return useContext(ConfirmationContext)
 }
 
-const DEFAULT_OPTIONS: UserConfirmationOptions = {
+const DEFAULT_OPTIONS: ConfirmationOptions = {
   title: 'Are you sure?',
   description: '',
   confirmationText: 'OK',
@@ -74,25 +74,25 @@ const buildOptions = (defaultOptions, options) => {
   }
 }
 
-export interface UserConfirmationProviderComponentProps {
-  defaultOptions?: UserConfirmationOptions
+export interface ConfirmationProviderComponentProps {
+  defaultOptions?: ConfirmationOptions
   children?: ReactNode
   component: ElementType<{
     open: boolean
-    options: UserConfirmationOptions
+    options: ConfirmationOptions
     onClose: MouseEventHandler<unknown>
     onCancel: MouseEventHandler<unknown>
     onConfirm: MouseEventHandler<unknown>
   }>
 }
 
-const UserConfirmationProviderComponent = (props: UserConfirmationProviderComponentProps) => {
+export function ConfirmationProviderComponent(props: ConfirmationProviderComponentProps) {
   const { children, defaultOptions = {}, component: Component } = props
   const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions })
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
 
-  const confirmFn = useCallback((options: UserConfirmationOptions = {}) => {
+  const confirmFn = useCallback((options: ConfirmationOptions = {}) => {
     return new Promise((resolve, reject) => {
       setOptions(buildOptions(defaultOptions, options))
       setResolveReject([resolve, reject])
@@ -115,9 +115,9 @@ const UserConfirmationProviderComponent = (props: UserConfirmationProviderCompon
 
   return (
     <Fragment>
-      <UserConfirmationContext.Provider value={confirmFn}>
+      <ConfirmationContext.Provider value={confirmFn}>
         {children}
-      </UserConfirmationContext.Provider>
+      </ConfirmationContext.Provider>
       <Component
         open={resolveReject.length === 2}
         options={options}
@@ -129,8 +129,8 @@ const UserConfirmationProviderComponent = (props: UserConfirmationProviderCompon
   )
 }
 
-UserConfirmationProviderComponent.defaultProps = {
+ConfirmationProviderComponent.defaultProps = {
   component: DialogConfirm,
 }
 
-export default UserConfirmationProviderComponent
+export default ConfirmationProviderComponent
