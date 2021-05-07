@@ -6,20 +6,23 @@
  * found in the root directory of this source tree.
  */
 
-import { useClientRect, useCombinedRefs, ComponentProp, useConfirmationContext } from '@aglyn/shared/ui/react'
+import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared/ui/react'
 import { copyJson } from '@aglyn/shared/util/helpers'
 import { forwardRef, Fragment, useCallback, useRef, useState } from 'react'
-import { ElementComponent as RenderElementComponent } from '@aglyn/website/feature/react-renderer'
+import {
+  ElementComponent as RenderElementComponent,
+  ElementComponentProps as RenderElementComponentProps,
+} from '@aglyn/website/feature/react-renderer'
+import { useSelectionContext } from '../contexts/selection'
 
 
-export interface ElementComponentProps extends ComponentProp {
-
+export interface ElementComponentProps extends RenderElementComponentProps {
+  [prop: string]: any
 }
 
 export const ElementComponent = forwardRef<any, ElementComponentProps>(
   function RefRenderFn(props, ref) {
     const {
-      component: Component,
       ...rest
     } = props
 
@@ -27,8 +30,8 @@ export const ElementComponent = forwardRef<any, ElementComponentProps>(
 
     const localRef = useRef(ref)
     const elemRef = useCombinedRefs(localRef, ref)
+    const { select } = useSelectionContext()
     const [entered, setEntered] = useState(false)
-    const [selected, setSelected] = useState(false)
     const [clientRect, setRect] = useState(null)
 
     const handleMouseEnter = useCallback((e) => {
@@ -44,41 +47,24 @@ export const ElementComponent = forwardRef<any, ElementComponentProps>(
     }, [])
 
     const handleClick = useCallback((e) => {
-      setSelected(prev => !prev)
-      confirm({
-        title: 'Success!',
-        description: 'You clicked an element!'
-      })
-    }, [])
+      select({ clientRect })
+    }, [clientRect])
 
     return (
-      <Fragment>
-        {(entered || selected) && (
-          <span
-            style={{
-              ...clientRect,
-              position: 'absolute',
-              outline: `2px solid #40d0f4`,
-              outlineOffset: -2,
-              pointerEvents: 'none',
-            }}
-          />
-        )}
-        <Component
-          {...rest}
-          ref={elemRef}
-          onClick={handleClick}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        />
-      </Fragment>
+      <RenderElementComponent
+        ref={elemRef}
+        {...rest}
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      />
     )
-  }
+  },
 )
 
 ElementComponent.displayName = 'ElementComponent'
 ElementComponent.defaultProps = {
-  component: RenderElementComponent,
+  elementComponent: ElementComponent,
 }
 
 export default ElementComponent

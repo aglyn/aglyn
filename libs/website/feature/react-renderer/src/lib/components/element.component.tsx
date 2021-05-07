@@ -16,6 +16,7 @@ import ElementsComponent from './elements.component'
 export interface ElementComponentProps {
   elementData: Website.ElementData
   elementComponent?: React.ComponentType<ElementComponentProps>
+  [prop: string]: any
 }
 
 export const ElementComponent = forwardRef<any, ElementComponentProps>(

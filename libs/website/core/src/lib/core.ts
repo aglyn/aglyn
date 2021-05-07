@@ -48,7 +48,7 @@ export interface Component<T = unknown> {
 export interface ElementData {
   $id: string
   component?: Component | string
-  children?: ElementData[]
+  children?: (ElementData | string)[]
   props: AnyProps
   temporary?: boolean
   parent?: string

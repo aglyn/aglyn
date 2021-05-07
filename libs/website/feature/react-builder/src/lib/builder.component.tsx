@@ -6,11 +6,13 @@
  * found in the root directory of this source tree.
  */
 
-import { WebsiteComponent } from '@aglyn/website/feature/react-renderer'
-import { forwardRef } from 'react'
+import { ComponentProp, ConfirmationProviderComponent, themes } from '@aglyn/shared/ui/react'
 import { Website } from '@aglyn/website/core'
+import { WebsiteComponent } from '@aglyn/website/feature/react-renderer'
+import { ThemeProvider } from '@material-ui/core/styles'
+import { forwardRef } from 'react'
 import { ElementComponent, ElementComponentProps } from './components/element.component'
-import { ConfirmationProviderComponent, ComponentProp } from '@aglyn/shared/ui/react'
+import SelectionProviderComponent from './contexts/selection'
 
 
 export interface BuilderComponentProps extends ComponentProp {
@@ -29,15 +31,19 @@ export const BuilderComponent = forwardRef<any, BuilderComponentProps>(
 
     return (
       <Component ref={ref} {...rest}>
-        <ConfirmationProviderComponent>
-          <WebsiteComponent
-            elements={elements}
-            elementComponent={elementComponent}
-          />
-        </ConfirmationProviderComponent>
+        <ThemeProvider theme={themes.console}>
+          <SelectionProviderComponent>
+            <ConfirmationProviderComponent>
+              <WebsiteComponent
+                elements={elements}
+                elementComponent={elementComponent}
+              />
+            </ConfirmationProviderComponent>
+          </SelectionProviderComponent>
+        </ThemeProvider>
       </Component>
     )
-  }
+  },
 )
 
 BuilderComponent.displayName = 'BuilderComponent'
