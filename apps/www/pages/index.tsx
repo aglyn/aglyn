@@ -1,99 +1,230 @@
-import React from 'react'
-import styled from '@emotion/styled'
+import Head from 'next/head'
 
-const StyledPage = styled.div`
-  .page {
-  }
-`
 
-export function Index() {
-  /*
-   * Replace the elements below with your own.
-   *
-   * Note: The corresponding styles are in the ./index.@emotion/styled file.
-   */
+const year = new Date().getFullYear()
+
+export default function Index() {
   return (
-    <StyledPage>
-      <h2>Resources &amp; Tools</h2>
-      <p>Thank you for using and showing some ♥ for Nx.</p>
-      <div className="flex github-star-container">
-        <a href="https://github.com/nrwl/nx" target="_blank" rel="noopener noreferrer">
-          {' '}
-          If you like Nx, please give it a star:
-          <div className="github-star-badge">
-            <img src="/star.svg" className="material-icons" alt="" />
-            Star
+    <div className="container">
+      <Head>
+        <title>Aglyn</title>
+        <meta
+          name="description"
+          content="Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations"
+        />
+      </Head>
+
+      <main>
+        <img src="/favicon.svg" alt="Aglyn Logo" className="icon-header" />
+        <img src="/brand/logo.svg" alt="Aglyn Logo" className="logo-header" />
+
+        <h1 className="title">
+          Welcome to <a href="https://aglyn.com">Aglyn.com!</a>
+        </h1>
+
+        <p className="description">
+          All details and information are <code>underway</code>
+        </p>
+
+        <div className="grid">
+
+          <div className="card">
+            <h3>Deploy &rarr;</h3>
+            {/* <p>Instantly deploy your Next.js site to a public URL with Vercel.</p> */}
           </div>
-        </a>
-      </div>
-      <p>Here are some links to help you get started.</p>
-      <ul className="resources">
-        <li className="col-span-2">
-          <a
-            className="resource flex"
-            href="https://egghead.io/playlists/scale-react-development-with-nx-4038"
-          >
-            Scale React Development with Nx (Course)
-          </a>
-        </li>
-        <li className="col-span-2">
-          <a
-            className="resource flex"
-            href="https://nx.dev/latest/react/tutorial/01-create-application"
-          >
-            Interactive tutorial
-          </a>
-        </li>
-        <li className="col-span-2">
-          <a className="resource flex" href="https://nx.app/">
-            <svg
-              width="36"
-              height="36"
-              viewBox="0 0 120 120"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M120 15V30C103.44 30 90 43.44 90 60C90 76.56 76.56 90 60 90C43.44 90 30 103.44 30 120H15C6.72 120 0 113.28 0 105V15C0 6.72 6.72 0 15 0H105C113.28 0 120 6.72 120 15Z"
-                fill="#0E2039"
-              />
-              <path
-                d="M120 30V105C120 113.28 113.28 120 105 120H30C30 103.44 43.44 90 60 90C76.56 90 90 76.56 90 60C90 43.44 103.44 30 120 30Z"
-                fill="white"
-              />
-            </svg>
-            <span className="gutter-left">Nx Cloud</span>
-          </a>
-        </li>
-      </ul>
-      <h2>Next Steps</h2>
-      <p>Here are some things you can do with Nx.</p>
-      <details open>
-        <summary>Add UI library</summary>
-        <pre>{`# Generate UI lib
-nx g @nrwl/react:lib ui
 
-# Add a component
-nx g @nrwl/react:component xyz --project ui`}</pre>
-      </details>
-      <details>
-        <summary>View dependency graph</summary>
-        <pre>{`nx dep-graph`}</pre>
-      </details>
-      <details>
-        <summary>Run affected commands</summary>
-        <pre>{`# see what's been affected by changes
-nx affected:dep-graph
+          <div className="card">
+            <h3>Example &rarr;</h3>
+            {/* <p>Discover and deploy boilerplate example Next.js projects.</p> */}
+          </div>
 
-# run tests for current changes
-nx affected:test
+          <div className="card">
+            <h3>Document &rarr;</h3>
+            {/* <p>Find in-depth information about Next.js features and API.</p> */}
+          </div>
 
-# run e2e tests for current changes
-nx affected:e2e
-`}</pre>
-      </details>
-    </StyledPage>
+          <div className="card">
+            <h3>Learn &rarr;</h3>
+            {/* <p>Learn about Next.js in an interactive course with quizzes!</p> */}
+          </div>
+
+        </div>
+      </main>
+
+      <footer>
+        <div>
+          <a href="https://aglyn.com">
+            <img src="/brand/logo.svg" alt="Aglyn Logo" className="logo" />
+          </a>
+        </div>
+        <br />
+        <div className="copy">
+          &copy; {year} Aglyn LLC.
+        </div>
+      </footer>
+
+      <style jsx>{`
+        .container {
+          min-height: 100vh;
+          padding: 0 0.5rem;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+
+        main {
+          padding: 5rem 0;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+        }
+
+        footer {
+          width: 100%;
+          height: 100px;
+          border-top: 1px solid #eaeaea;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex-direction: column;
+        }
+
+        footer img {
+          // margin-left: 0.5rem;
+        }
+
+        footer a {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+        }
+
+
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+
+        .title a {
+          color: #0070f3;
+          text-decoration: none;
+        }
+
+        .title a:hover,
+        .title a:focus,
+        .title a:active {
+          text-decoration: underline;
+        }
+
+        .title {
+          margin: 0;
+          line-height: 1.15;
+          font-size: 4rem;
+        }
+
+        .title,
+        .description {
+          text-align: center;
+        }
+
+        .description {
+          line-height: 1.5;
+          font-size: 1.5rem;
+        }
+
+        code {
+          background: #fafafa;
+          border-radius: 5px;
+          padding: 0.75rem;
+          font-size: 1.1rem;
+          font-family: Menlo, Monaco, Lucida Console, Liberation Mono,
+          DejaVu Sans Mono, Bitstream Vera Sans Mono, Courier New, monospace;
+        }
+
+        .grid {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-wrap: wrap;
+
+          max-width: 800px;
+          margin-top: 3rem;
+        }
+
+        .card {
+          margin: 1rem;
+          flex-basis: 45%;
+          padding: 1.5rem;
+          text-align: left;
+          color: inherit;
+          text-decoration: none;
+          border: 1px solid #eaeaea;
+          border-radius: 10px;
+          transition: color 0.15s ease, border-color 0.15s ease;
+        }
+
+        .card:hover,
+        .card:focus,
+        .card:active {
+          color: #0070f3;
+          border-color: #0070f3;
+        }
+
+        .card h3 {
+          margin: 0 0 1rem 0;
+          font-size: 1.5rem;
+        }
+
+        .card p {
+          margin: 0;
+          font-size: 1.25rem;
+          line-height: 1.5;
+        }
+
+        .icon-header {
+          height: 6em;
+          margin-bottom: 16px;
+        }
+
+        .logo-header {
+          height: 6em;
+          margin-bottom: 64px;
+        }
+
+        .logo {
+          height: 1em;
+        }
+
+        .copy {
+          color: #a1a1a1;
+          font-size: 12px !important;
+        }
+
+        @media (max-width: 600px) {
+          .grid {
+            width: 100%;
+            flex-direction: column;
+          }
+        }
+      `}</style>
+
+      <style jsx global>{`
+        html,
+        body {
+          padding: 0;
+          margin: 0;
+          font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
+          Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
+          sans-serif;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+      `}</style>
+    </div>
   )
 }
-
-export default Index

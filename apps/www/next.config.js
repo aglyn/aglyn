@@ -7,4 +7,5 @@ module.exports = withNx({
     // See: https://github.com/gregberge/svgr
     svgr: true,
   },
+  target: 'experimental-serverless-trace',
 })
