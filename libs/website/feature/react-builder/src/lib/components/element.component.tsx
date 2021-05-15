@@ -26,28 +26,29 @@ export const ElementComponent = forwardRef<any, ElementComponentProps>(
       ...rest
     } = props
 
-    const confirm = useConfirmationContext()
+    const { confirm } = useConfirmationContext()
 
     const localRef = useRef(ref)
     const elemRef = useCombinedRefs(localRef, ref)
     const { select } = useSelectionContext()
-    const [entered, setEntered] = useState(false)
+    const [entered, setEntered] = useState(null)
     const [clientRect, setRect] = useState(null)
 
     const handleMouseEnter = useCallback((e) => {
       const t = e.target
       console.log('is self', localRef.current)
       if (t && t === localRef.current) setEntered(t)
-      else setEntered(false)
+      else setEntered(null)
       setRect(copyJson(t?.getBoundingClientRect()))
     }, [])
 
     const handleMouseLeave = useCallback((e) => {
-      setEntered(false)
+      setEntered(null)
     }, [])
 
     const handleClick = useCallback((e) => {
       select({ clientRect })
+      confirm({ title: 'clicked' })
     }, [clientRect])
 
     return (
