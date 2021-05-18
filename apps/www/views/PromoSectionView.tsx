@@ -1,0 +1,98 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+import Box from '@material-ui/core/Box'
+import Container from '@material-ui/core/Container'
+import MuiLink from '@material-ui/core/Link'
+import Typography from '@material-ui/core/Typography'
+import React, { ElementType, forwardRef, ReactNode, HTMLAttributes } from 'react'
+import { createStyles, Theme, withStyles, WithStyles } from '@material-ui/core/styles'
+import clsx from 'clsx'
+import { GridItems } from '../../../libs/shared/ui/react/src/lib/components/grid-items/grid-items'
+import BackgroundImage from '../components/BackgroundImage'
+import Link, { LinkProps } from '../components/Link'
+
+
+export const PromoSectionViewStyles = (theme: Theme) => createStyles({
+  root: {},
+  promo: {
+    textAlign: 'center',
+    marginTop: theme.spacing(4),
+    marginBottom: theme.spacing(8),
+    borderRadius: theme.shape.borderRadius,
+    color: theme.palette.common.white,
+    backgroundColor: theme.palette.secondary.light,
+    padding: theme.spacing(4, 2),
+    [theme.breakpoints.up('sm')]: {
+      padding: theme.spacing(8, 4),
+    },
+    '& $h2': {
+      marginBottom: theme.spacing(4),
+    },
+    '& link': {},
+  },
+  h2: {},
+  link: {},
+})
+
+export interface PromoSectionViewProps extends HTMLAttributes<HTMLElement> {
+  component?: ElementType
+  backgroundUrl: string
+  heading: ReactNode
+  link: LinkProps
+}
+
+const PromoSectionView = forwardRef<any, PromoSectionViewProps & WithStyles<typeof PromoSectionViewStyles>>(
+  function RefRenderFn(props, ref) {
+    const {
+      children,
+      component: Component,
+      className: propClass,
+      classes,
+      link,
+      heading,
+      backgroundUrl,
+      ...rest
+    } = props
+    const className = clsx(classes.root, propClass)
+
+    return (
+      <Component
+        ref={ref}
+        className={className}
+        {...rest}
+      >
+        <BackgroundImage
+          className={classes.promo}
+          url={backgroundUrl}
+        >
+          <Typography
+            component="h2"
+            variant="h3"
+            children={heading}
+            className={classes.h2}
+          />
+          <Link
+            button
+            size="large"
+            variant={'contained' as any}
+            color="primary"
+            {...link}
+          />
+        </BackgroundImage>
+      </Component>
+    )
+  },
+)
+
+PromoSectionView.displayName = 'PromoSectionView'
+PromoSectionView.defaultProps = {
+  component: 'div',
+}
+
+export default withStyles(PromoSectionViewStyles, { name: 'PromoSectionView' })(PromoSectionView)

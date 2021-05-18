@@ -1,6 +1,6 @@
 {
-  "short_name": "Aglyn",
   "name": "Aglyn",
+  "short_name": "Aglyn",
   "display": "standalone",
   "start_url": "/",
   "theme_color": "#404c5c",

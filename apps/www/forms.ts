@@ -1,0 +1,268 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+import { ln } from '@aglyn/shared/util/helpers'
+
+
+export const validateRegex = (value: string, regex) => (new RegExp(regex)).test(value)
+export const fieldHasError = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.ERROR)
+export const fieldHasValid = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.VALID)
+export const formIsValid = (fields: Fields.FieldGroup) => Object.values(fields).some(field => fieldHasValid(field))
+export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT => {
+  const current = { ...field, value, errorMessage: null }
+
+  if (current.status === Fields.FieldStatus.NONE) {
+    current.status |= Fields.FieldStatus.TOUCHED
+  } else if (current.status & Fields.FieldStatus.VALID) {
+    current.status ^= Fields.FieldStatus.VALID
+  } else if (current.status & Fields.FieldStatus.ERROR) {
+    current.status ^= Fields.FieldStatus.ERROR
+  }
+
+  let isValid = true
+  const validators = current.validators ?? []
+
+  if (ln(validators)) {
+    let i = 0
+    while (i < ln(validators)) {
+      let { regex, errorMessage } = validators[i++]
+      if (!validateRegex(value, regex)) {
+        current.errorMessage = errorMessage
+        isValid = false
+        break
+      }
+    }
+  } else if (current.required) {
+    isValid = Boolean(value)
+    current.errorMessage = 'Field is required'
+  }
+  current.status |= isValid ? Fields.FieldStatus.VALID : Fields.FieldStatus.ERROR
+
+  return current
+}
+
+
+export namespace Fields {
+
+  export enum FieldStatus {
+    NONE,
+    TOUCHED = 1,
+    ERROR = 1 << 1,
+    VALID = 1 << 2,
+  }
+
+  export type Option = {
+    value: string,
+    label: string
+  }
+  export type GetOptions = (...args: any[]) => Option[] | Promise<Option[]>
+
+  export type Validator = {
+    regex: RegExp
+    errorMessage: string
+  }
+
+  export type FieldT = {
+    id: string
+    defaultValue?: any
+    value?: any
+    status?: FieldStatus
+    errorMessage?: string
+    required?: boolean
+    type?: string
+    label?: string
+    options?: Option[] | GetOptions
+    validators?: Validator[]
+  }
+
+  export type FieldGroup = {
+    [id: string]: FieldT
+  }
+
+  /*******************************
+   * Field definitions
+   *******************************/
+
+  export const emailField: FieldT = {
+    id: 'email',
+    label: 'Email',
+    type: 'text',
+    status: FieldStatus.NONE,
+    errorMessage: null,
+    required: true,
+    validators: [
+      {
+        regex: /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/,
+        errorMessage: 'Enter a valid email',
+      },
+    ],
+  }
+  export const firstNameField: FieldT = {
+    id: 'firstName',
+    label: 'First Name',
+    type: 'text',
+    status: FieldStatus.NONE,
+    errorMessage: null,
+    required: true,
+  }
+  export const lastNameField: FieldT = {
+    id: 'lastName',
+    label: 'Last Name',
+    type: 'text',
+    status: FieldStatus.NONE,
+    errorMessage: null,
+    required: true,
+  }
+  export const passwordField: FieldT = {
+    id: 'password',
+    label: 'Password',
+    type: 'password',
+    status: FieldStatus.NONE,
+    errorMessage: null,
+    required: true,
+    validators: [
+      {
+        regex: /^.{6,30}$/,
+        errorMessage: 'Must contain between 6 and 30 characters',
+      },
+      {
+        regex: /[A-Z]/,
+        errorMessage: 'Must contain a uppercase letter',
+      },
+      {
+        regex: /[a-z]/,
+        errorMessage: 'Must contain a lowercase letter',
+      },
+      {
+        regex: /\d/,
+        errorMessage: 'Must contain a number',
+      },
+      {
+        regex: /\W/,
+        errorMessage: 'Must contain a special character e.g., /,!,@,$',
+      },
+      {
+        regex: /^[^\s]*$/,
+        errorMessage: 'Not allowed to contain spaces',
+      },
+    ],
+  }
+  export const nameField: FieldT = {
+    id: 'name',
+    label: 'Name',
+    type: 'text',
+    status: FieldStatus.NONE,
+    errorMessage: null,
+    required: true,
+  }
+  export const commentsField: FieldT = {
+    id: 'comments',
+    label: 'Comments',
+    type: 'text',
+    status: FieldStatus.NONE,
+  }
+
+
+  /*******************************
+   * Form field groups
+   *******************************/
+
+  export const signUpForm: FieldGroup = {
+    [firstNameField.id]: firstNameField,
+    [lastNameField.id]: lastNameField,
+    [emailField.id]: emailField,
+    [passwordField.id]: emailField,
+  }
+  export const signInForm: FieldGroup = {
+    [emailField.id]: emailField,
+    [passwordField.id]: emailField,
+  }
+  export const permissionForm: FieldGroup = {
+    [nameField.id]: nameField,
+    [commentsField.id]: commentsField,
+  }
+  export const roleForm: FieldGroup = {
+    [nameField.id]: nameField,
+    [commentsField.id]: commentsField,
+  }
+
+}
+
+
+export namespace DdfForms {
+
+  export const ContactFormSchema = {
+    fields: [
+      {
+        component: 'text-field',
+        name: 'first-name',
+        label: 'First Name',
+        placeholder: 'Type your first name',
+        variant: 'outlined',
+        validate: [
+          { type: 'required', message: 'Please enter a first name' },
+          { type: 'min-length', threshold: 2, message: 'Please enter a longer first name' },
+        ],
+        isRequired: true,
+      },
+      {
+        component: 'text-field',
+        name: 'last-name',
+        label: 'Last Name',
+        placeholder: 'Type your first name',
+        variant: 'outlined',
+        validate: [
+          { type: 'min-length', threshold: 1, message: 'Please enter a longer last name' },
+          { type: 'required', message: 'Please enter a last name' },
+        ],
+        isRequired: true,
+      },
+      {
+        component: 'text-field',
+        name: 'company',
+        label: 'Company',
+        isRequired: true,
+        validate: [{ type: 'required', message: 'Please enter a company name' }],
+        placeholder: 'Type your company name',
+        variant: 'outlined',
+      },
+      {
+        component: 'text-field',
+        name: 'phone',
+        label: 'Phone',
+        placeholder: 'Type you phone number',
+        variant: 'outlined',
+      },
+      {
+        component: 'text-field',
+        name: 'email',
+        label: 'Email',
+        placeholder: 'Type your business email',
+        variant: 'outlined',
+        isRequired: true,
+        validate: [
+          { type: 'required', message: 'Please enter an email address' },
+          {
+            type: 'pattern',
+            pattern: '(?:[a-z0-9!#$%&\'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])',
+            message: 'Please enter a valid email address',
+          },
+        ],
+      },
+      {
+        component: 'textarea',
+        name: 'comments',
+        label: 'Comments',
+        helperText: 'Type a short description of your inquiry',
+        variant: 'outlined',
+        rows: 4
+      },
+    ],
+  }
+
+}

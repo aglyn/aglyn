@@ -1,0 +1,150 @@
+import { mapObject } from '@aglyn/shared/util/helpers'
+import React from 'react'
+import { makeStyles, Theme, createStyles, WithStyles, withStyles } from '@material-ui/core/styles'
+import { Button, Typography, Box } from '@material-ui/core'
+import AuthLayout from '../../layouts/AuthLayout'
+import Link from '../../components/Link'
+import { withAppContext } from '../../contexts/app-context'
+import { Fields, validateField, formIsValid, fieldHasError } from '../../forms'
+import FieldSet from '../../components/FieldSet'
+import { useRouter } from 'next/router'
+
+
+const styles = (theme: Theme) => createStyles({
+  form: { '& .MuiTextField-root': {} },
+  uppercase: { textTransform: 'uppercase' },
+  button: {
+    marginTop: theme.spacing(2),
+    marginBottom: theme.spacing(2),
+  },
+  bottom: {
+    lineHeight: 1.5,
+    marginTop: theme.spacing(4),
+  },
+})
+
+type Props = {}
+
+export default withStyles(styles, { name: 'Page:SignUp' })(
+  withAppContext<Props & WithStyles<typeof styles>>(
+    function SignUp(props) {
+      const { app, classes } = props
+      const { getCurrentUser, signUpUser } = app
+      const currentUser = getCurrentUser()
+      // console.log('getCurrentUser()', currentUser)
+      const router = useRouter()
+      if (currentUser) {
+        router.push('/')
+      }
+
+      const [submitting, setSubmitting] = React.useState(false)
+      const [formError, setFormError] = React.useState(null)
+      const [fields, setFields] = React.useState<Fields.FieldGroup>({
+        [Fields.firstNameField.id]: Fields.firstNameField,
+        [Fields.lastNameField.id]: Fields.lastNameField,
+        [Fields.emailField.id]: Fields.emailField,
+        [Fields.passwordField.id]: Fields.passwordField,
+      })
+
+      const handleUpdate = (name: string) => e => {
+        const value = e.target?.value
+        setFields(prev => ({ ...prev, [name]: validateField(prev[name], value) }))
+      }
+      const clearForm = () => {
+        setFields(prev => {
+          return mapObject(prev, (value) => {
+            value.value = ''
+            return value
+          }, { copy: true }) as any
+        })
+      }
+
+      const onSubmit = React.useCallback(async (e) => {
+        e.preventDefault()
+        setSubmitting(true)
+        setFormError(null)
+        const isValid = formIsValid(fields)
+
+        if (!isValid) {
+          setFormError('Form is invalid')
+          setSubmitting(false)
+          return
+        }
+
+        await signUpUser(
+          fields.email.value,
+          fields.password.value,
+          (user) => {
+            console.debug('Sign Up: ', user)
+            clearForm()
+            setSubmitting(false)
+          },
+          (error) => {
+            console.error('Form Error: ', error)
+            const { code, message } = error
+            setFormError(`(Code: ${code}) ${message}`)
+            clearForm()
+            setSubmitting(false)
+          },
+        )
+      }, [fields])
+
+      return (
+        <AuthLayout text="Create a New Account">
+          <form autoComplete="on" className={classes.form} onSubmit={onSubmit}>
+            <div>
+              <Typography
+                children="Fill in your details"
+                className={classes.uppercase}
+                variant="h5"
+                gutterBottom
+              />
+              <FieldSet fields={fields} loading={submitting} onUpdate={handleUpdate} />
+              {formError && (
+                <Box
+                  bgcolor={'error.light'}
+                  border={2}
+                  borderColor={'error.main'}
+                  borderRadius={3}
+                  color={'error.contrastText'}
+                  my={2}
+                  px={2}
+                  py={2}
+                >
+                  <Typography>
+                    <b>{'Error: '}</b>{formError}
+                  </Typography>
+                </Box>
+              )}
+              <Button
+                children={submitting ? 'Please wait...' : 'Continue'}
+                className={classes.button}
+                color="secondary"
+                disabled={Boolean(submitting)}
+                size="large"
+                type="submit"
+                variant="contained"
+                fullWidth
+              />
+            </div>
+          </form>
+          <Typography
+            align="center"
+            className={classes.bottom}
+            color="primary"
+            component="div"
+            variant="overline"
+          >
+            <b children={'Already have an account?'} />
+            <br />
+            <Link
+              children="Sign in instead"
+              color="secondary"
+              href="/auth/signin"
+            />
+          </Typography>
+        </AuthLayout>
+      )
+    }
+  )
+)

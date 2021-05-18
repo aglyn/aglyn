@@ -6,19 +6,18 @@
  * found in the root directory of this source tree.
  */
 
-import { ElementType, forwardRef } from 'react'
+import { ElementType, forwardRef, HTMLAttributes } from 'react'
 
 
-export interface ${NAME}Props {
-  children?: ReactNode
+export interface ${NAME}Props extends HTMLAttributes<HTMLElement> {
   component?: ElementType
 }
 
-export const ${NAME} = forwardRef<any, ${NAME}Props & {}>(
+export const ${NAME} = forwardRef<any, ${NAME}Props>(
   function RefRenderFn(props, ref) {
     const { 
       children,
-      component: Component, 
+      component: Component,
       ...rest
     } = props
 

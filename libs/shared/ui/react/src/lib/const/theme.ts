@@ -91,6 +91,7 @@ import { createMuiTheme, responsiveFontSizes, Theme, ThemeOptions } from '@mater
 declare module '@material-ui/core/styles/createPalette' {
   interface Palette {
     tertiary: Palette['primary']
+    quaternary: Palette['primary']
     brand: {
       primary: React.CSSProperties['color']
       secondary: React.CSSProperties['color']
@@ -100,8 +101,10 @@ declare module '@material-ui/core/styles/createPalette' {
       orange: React.CSSProperties['color']
     }
   }
+
   interface PaletteOptions {
     tertiary: PaletteOptions['primary']
+    quaternary: PaletteOptions['primary']
     brand: {
       primary: React.CSSProperties['color']
       secondary: React.CSSProperties['color']
@@ -118,8 +121,9 @@ const consoleOptions: ThemeOptions = {
   palette: {
     type: 'light',
     primary: { main: '#404c5c' },
-    secondary: { main: lightBlue['600'] } /* #039be5 */,
+    secondary: { main: lightBlue['A700'] } /* #039be5 */,
     tertiary: { main: purple['500'] } /* #9c27b0 */,
+    quaternary: { main: purple['A200'] } /* #E040FB */,
     brand: {
       primary: purple['500'],
       secondary: lightBlue['500'],
@@ -152,8 +156,8 @@ const builderOptions: ThemeOptions = {
   ...consoleOptions,
   palette: {
     ...consoleOptions.palette,
-    primary: { main: '#0091EA' },
-    secondary: { main: '#E040FB' },
+    primary: { main: lightBlue['A700'] } /* #0091EA */,
+    secondary: { main: purple['A200'] } /* #E040FB */,
     tertiary: { main: '#37474F' },
   },
 }

@@ -1,230 +1,265 @@
-import Head from 'next/head'
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+import { GridItems } from '@aglyn/shared/ui/react'
+import Box from '@material-ui/core/Box'
+import Container from '@material-ui/core/Container'
+import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
+import Typography from '@material-ui/core/Typography'
+import React from 'react'
+import BackgroundImage from '../components/BackgroundImage'
+import MainLayout from '../layouts/MainLayout'
+import Image from 'next/image'
+import PromoSectionView from '../views/PromoSectionView'
+import SiteFooterView from '../views/SiteFooterView'
 
 
-const year = new Date().getFullYear()
+const styles = (theme: Theme) => createStyles({
+  header: {
+    paddingTop: theme.mixins.toolbar.minHeight,
+    '& $h1': {
+      marginBottom: theme.spacing(4),
+    },
+    '& $h2': {
+      color: theme.palette.quaternary.main,
+    },
+  },
+  container: {
+    paddingTop: theme.spacing(4),
+    paddingBottom: theme.spacing(4),
+  },
 
-export default function Index() {
+  // KEEP EMPTY
+  h1: {},
+  h2: {},
+})
+
+interface Props extends WithStyles<typeof styles> {
+
+}
+
+function Index(props: Props) {
+  const { classes } = props
+
   return (
-    <div className="container">
-      <Head>
-        <title>Aglyn</title>
-        <meta
-          name="description"
-          content="Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations"
-        />
-      </Head>
-
+    <MainLayout
+      title={'Website Designer Platform for Your Business Goals | Aglyn'}
+      centerNavigationItems={[
+        {
+          children: 'Features',
+        },
+        {
+          children: 'Partners',
+          items: [],
+        },
+        {
+          children: 'Company',
+          items: [],
+        },
+        {
+          children: 'Get Access',
+          variant: 'contained',
+          color: 'secondary',
+        },
+      ]}
+      productName={'.com'}
+    >
+      <BackgroundImage
+        component={'header'}
+        url={'/backgrounds/patterns/abstract-wave-lines.svg'}
+        className={classes.header}
+      >
+        <Box py={6}>
+          <Container maxWidth={'lg'} className={classes.container}>
+            <GridItems
+              alignItems="center"
+              direction="row-reverse"
+              spacing={2}
+              items={[
+                {
+                  xs: 12, md: 5,
+                  children: (
+                    <Image
+                      src="/designer/website-designer-preview-collage.png"
+                      alt="website designer preview collage"
+                      layout="responsive"
+                      width="650"
+                      height="490"
+                    />
+                  ),
+                },
+                {
+                  xs: 12, md: 7,
+                  children: (
+                    <>
+                      <Typography
+                        variant={'h2'}
+                        component={'h1'}
+                        children={'Website Designer Platform for Your Business Goals'}
+                        className={classes.h1}
+                      />
+                      <Typography
+                        variant={'h4'}
+                        component={'h2'}
+                        children={'The essentials to keep your workflow simple'}
+                        className={classes.h2}
+                      />
+                    </>
+                  ),
+                },
+              ]}
+            />
+          </Container>
+        </Box>
+      </BackgroundImage>
       <main>
-        <img src="/favicon.svg" alt="Aglyn Logo" className="icon-header" />
-        <img src="/brand/logo.svg" alt="Aglyn Logo" className="logo-header" />
-
-        <h1 className="title">
-          Welcome to <a href="https://aglyn.com">Aglyn.com!</a>
-        </h1>
-
-        <p className="description">
-          All details and information are <code>underway</code>
-        </p>
-
-        <div className="grid">
-
-          <div className="card">
-            <h3>Deploy &rarr;</h3>
-            {/* <p>Instantly deploy your Next.js site to a public URL with Vercel.</p> */}
-          </div>
-
-          <div className="card">
-            <h3>Example &rarr;</h3>
-            {/* <p>Discover and deploy boilerplate example Next.js projects.</p> */}
-          </div>
-
-          <div className="card">
-            <h3>Document &rarr;</h3>
-            {/* <p>Find in-depth information about Next.js features and API.</p> */}
-          </div>
-
-          <div className="card">
-            <h3>Learn &rarr;</h3>
-            {/* <p>Learn about Next.js in an interactive course with quizzes!</p> */}
-          </div>
-
-        </div>
+        <Box component={'section'} bgcolor={'background.paper'}>
+          <Box component={Container} maxWidth={'lg'} py={12}>
+            <GridItems
+              alignItems="center"
+              direction="row"
+              justify="space-around"
+              spacing={2}
+              items={[
+                {
+                  xs: 12, md: 4,
+                  children: (
+                    <Image
+                      src="/designer/website-designer-element-categories.png"
+                      alt="website designer element category search"
+                      layout="responsive"
+                      width="520"
+                      height="620"
+                    />
+                  ),
+                },
+                {
+                  xs: 12, md: 7,
+                  children: (
+                    <>
+                      <Typography
+                        variant={'h4'}
+                        component={'h2'}
+                        children={'Build Your Pages How You Like'}
+                        className={classes.h1}
+                      />
+                      <Typography
+                        variant={'subtitle1'}
+                        component={'p'}
+                        children={'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'}
+                        className={classes.h2}
+                      />
+                    </>
+                  ),
+                },
+              ]}
+            />
+          </Box>
+        </Box>
+        <Box component={'section'}>
+          <Box component={Container} maxWidth={'lg'} py={12}>
+            <GridItems
+              alignItems="center"
+              direction="row-reverse"
+              justify="space-around"
+              spacing={2}
+              items={[
+                {
+                  xs: 12, md: 4,
+                  children: (
+                    <Image
+                      src="/designer/website-designer-custom-element-attributes.png"
+                      alt="website designer custom element attributes"
+                      layout="responsive"
+                      width="520"
+                      height="620"
+                    />
+                  ),
+                },
+                {
+                  xs: 12, md: 7,
+                  children: (
+                    <>
+                      <Typography
+                        variant={'h4'}
+                        component={'h2'}
+                        children={'Custom Elements & Attributes'}
+                        className={classes.h1}
+                      />
+                      <Typography
+                        variant={'subtitle1'}
+                        component={'p'}
+                        children={'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'}
+                        className={classes.h2}
+                      />
+                    </>
+                  ),
+                },
+              ]}
+            />
+          </Box>
+        </Box>
+        <Box component={'section'} bgcolor={'background.paper'}>
+          <Box component={Container} maxWidth={'lg'} py={12}>
+            <GridItems
+              alignItems="center"
+              direction="row"
+              justify="space-around"
+              spacing={2}
+              items={[
+                {
+                  xs: 12, md: 4,
+                  children: (
+                    <Image
+                      src="/designer/website-designer-functional-operations.png"
+                      alt="website designer functional operations"
+                      layout="responsive"
+                      width="940"
+                      height="1034"
+                    />
+                  ),
+                },
+                {
+                  xs: 12, md: 7,
+                  children: (
+                    <>
+                      <Typography
+                        variant={'h4'}
+                        component={'h2'}
+                        children={'Perform Operations & Calculate Output'}
+                        className={classes.h1}
+                      />
+                      <Typography
+                        variant={'subtitle1'}
+                        component={'p'}
+                        children={'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'}
+                        className={classes.h2}
+                      />
+                    </>
+                  ),
+                },
+              ]}
+            />
+          </Box>
+        </Box>
       </main>
-
-      <footer>
-        <div>
-          <a href="https://aglyn.com">
-            <img src="/brand/logo.svg" alt="Aglyn Logo" className="logo" />
-          </a>
-        </div>
-        <br />
-        <div className="copy">
-          &copy; {year} Aglyn LLC.
-        </div>
-      </footer>
-
-      <style jsx>{`
-        .container {
-          min-height: 100vh;
-          padding: 0 0.5rem;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-        }
-
-        main {
-          padding: 5rem 0;
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-        }
-
-        footer {
-          width: 100%;
-          height: 100px;
-          border-top: 1px solid #eaeaea;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          flex-direction: column;
-        }
-
-        footer img {
-          // margin-left: 0.5rem;
-        }
-
-        footer a {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-        }
-
-
-        a {
-          color: inherit;
-          text-decoration: none;
-        }
-
-        .title a {
-          color: #0070f3;
-          text-decoration: none;
-        }
-
-        .title a:hover,
-        .title a:focus,
-        .title a:active {
-          text-decoration: underline;
-        }
-
-        .title {
-          margin: 0;
-          line-height: 1.15;
-          font-size: 4rem;
-        }
-
-        .title,
-        .description {
-          text-align: center;
-        }
-
-        .description {
-          line-height: 1.5;
-          font-size: 1.5rem;
-        }
-
-        code {
-          background: #fafafa;
-          border-radius: 5px;
-          padding: 0.75rem;
-          font-size: 1.1rem;
-          font-family: Menlo, Monaco, Lucida Console, Liberation Mono,
-          DejaVu Sans Mono, Bitstream Vera Sans Mono, Courier New, monospace;
-        }
-
-        .grid {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-wrap: wrap;
-
-          max-width: 800px;
-          margin-top: 3rem;
-        }
-
-        .card {
-          margin: 1rem;
-          flex-basis: 45%;
-          padding: 1.5rem;
-          text-align: left;
-          color: inherit;
-          text-decoration: none;
-          border: 1px solid #eaeaea;
-          border-radius: 10px;
-          transition: color 0.15s ease, border-color 0.15s ease;
-        }
-
-        .card:hover,
-        .card:focus,
-        .card:active {
-          color: #0070f3;
-          border-color: #0070f3;
-        }
-
-        .card h3 {
-          margin: 0 0 1rem 0;
-          font-size: 1.5rem;
-        }
-
-        .card p {
-          margin: 0;
-          font-size: 1.25rem;
-          line-height: 1.5;
-        }
-
-        .icon-header {
-          height: 6em;
-          margin-bottom: 16px;
-        }
-
-        .logo-header {
-          height: 6em;
-          margin-bottom: 64px;
-        }
-
-        .logo {
-          height: 1em;
-        }
-
-        .copy {
-          color: #a1a1a1;
-          font-size: 12px !important;
-        }
-
-        @media (max-width: 600px) {
-          .grid {
-            width: 100%;
-            flex-direction: column;
-          }
-        }
-      `}</style>
-
-      <style jsx global>{`
-        html,
-        body {
-          padding: 0;
-          margin: 0;
-          font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto,
-          Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue,
-          sans-serif;
-        }
-
-        * {
-          box-sizing: border-box;
-        }
-      `}</style>
-    </div>
+      <SiteFooterView>
+        <PromoSectionView
+          backgroundUrl={'/backgrounds/patterns/abstract-wave-lines.svg'}
+          heading={'Get Access and Make Your New Website'}
+          link={{
+            as: '/get', href: '/get',
+            children: 'Get Your Access',
+          }}
+        />
+      </SiteFooterView>
+    </MainLayout>
   )
 }
+
+export default withStyles(styles, { name: 'Page:Index' })(Index)

@@ -12,6 +12,7 @@ import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@material-ui/cor
 import { createStyles, withStyles, WithStyles } from '@material-ui/core/styles'
 import clsx from 'clsx'
 
+
 const ITEM_HEIGHT = 48
 
 type State = {
@@ -70,28 +71,28 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
             context
               ? undefined
               : {
-                  style: {
-                    maxHeight: ITEM_HEIGHT * 4.5,
-                    minWidth: '20ch',
-                  },
-                }
+                style: {
+                  maxHeight: ITEM_HEIGHT * 4.5,
+                  minWidth: '20ch',
+                },
+              }
           }
           anchorEl={context ? undefined : state.anchorEl}
           anchorOrigin={
             context
               ? undefined
               : {
-                  vertical: 'bottom',
-                  horizontal: 'right',
-                }
+                vertical: 'bottom',
+                horizontal: 'right',
+              }
           }
           anchorPosition={
             !context || !state.mouseY
               ? undefined
               : {
-                  top: state.mouseY,
-                  left: state.mouseX,
-                }
+                top: state.mouseY,
+                left: state.mouseX,
+              }
           }
           anchorReference={context ? 'anchorPosition' : undefined}
           getContentAnchorEl={null}
@@ -100,9 +101,9 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
             context
               ? undefined
               : {
-                  vertical: 'top',
-                  horizontal: 'right',
-                }
+                vertical: 'top',
+                horizontal: 'right',
+              }
           }
           onClose={handleClose}
           {...MenuProps}
@@ -120,9 +121,12 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
         </MuiMenu>
       </div>
     )
-  })
+  }),
 )
 
 Menu.displayName = 'Menu'
+Menu.defaultProps = {
+  items: [],
+}
 
 export default Menu

@@ -19,20 +19,21 @@ export interface GridButtonsProps extends Omit<GridItemsProps, 'items'> {
   items: ButtonItem[]
 }
 
-export const GridButtons = forwardRef<any, GridButtonsProps>(function RefRenderFn(props, ref) {
-  const { items, ...rest } = props
-
-  return (
-    <GridItems
-      ref={ref}
-      items={items.map(({ GridItemProps, ...item }) => ({
-        children: <Button {...item} />,
-        ...GridItemProps,
-      }))}
-      {...rest}
-    />
-  )
-})
+export const GridButtons = forwardRef<any, GridButtonsProps>(
+  function RefRenderFn(props, ref) {
+    const { items, ...rest } = props
+    return (
+      <GridItems
+        ref={ref}
+        items={items.map(({ GridItemProps, ...item }) => ({
+          children: <Button {...item} />,
+          ...GridItemProps,
+        }))}
+        {...rest}
+      />
+    )
+  }
+)
 
 GridButtons.displayName = 'GridButtons'
 GridButtons.defaultProps = {
