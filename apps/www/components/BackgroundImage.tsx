@@ -33,7 +33,7 @@ const BackgroundImage = forwardRef<any, BackgroundImageProps & WithStyles<typeof
 
     return (
       <Box
-        ref={ref}
+        // innerRef={ref}
         className={clsx(classes.root, className)}
         component="div"
         style={{

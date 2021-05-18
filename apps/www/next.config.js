@@ -8,4 +8,9 @@ module.exports = withNx({
     svgr: true,
   },
   target: 'experimental-serverless-trace',
+  typescript: {
+    // Motivated by https://github.com/zeit/next.js/issues/7687
+    ignoreDevErrors: true,
+    ignoreBuildErrors: true,
+  },
 })
