@@ -24,11 +24,11 @@ const ${NAME} = forwardRef<any, ${NAME}Props & WithStyles<typeof ${NAME}Styles>>
     const { 
       children,
       component: Component,
-      className: propClass,
+      className: classNameProp,
       classes,
       ...rest
     } = props
-    const className = clsx(classes.root, propClass)
+    const className = clsx(classes.root, classNameProp)
 
     return (
       <Component 

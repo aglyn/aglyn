@@ -7,13 +7,13 @@
  */
 
 import { Id } from '@aglyn/shared/util/helpers'
-import admin from './admin'
+import fbAdmin from './fb-admin'
 
 
-export function createDocumentId() {
+export function createDocumentId(): string {
   return Id.nanoid(10)
 }
 
-export function createTimestamp() {
-  return admin.firestore.Timestamp.now()
+export function createTimestamp(): fbAdmin.firestore.Timestamp {
+  return fbAdmin.firestore.Timestamp.now()
 }

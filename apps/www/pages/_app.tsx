@@ -9,7 +9,7 @@
 import { CssBaseline } from '@material-ui/core'
 import { MuiThemeProvider } from '@material-ui/core/styles'
 import { themes } from '@aglyn/shared/ui/react'
-import React, { useEffect } from 'react'
+import React, { Fragment, StrictMode, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
 import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
@@ -38,7 +38,8 @@ const metaElements: MetaElementsConfig = [
 ]
 
 
-function _App({ Component, pageProps }: AppProps) {
+function _App(props: AppProps) {
+  const { Component, pageProps } = props
 
   useEffect(() => {
     // Remove the server-side injected CSS.
@@ -54,14 +55,16 @@ function _App({ Component, pageProps }: AppProps) {
     }
   }, [])
 
-  useOnRouteChangeComplete((asPath) => {
+  useOnRouteChangeComplete(() => {
     if (isProduction) {
       app.getAnalytics().logEvent('page_view')
     }
   })
 
+  const Wrapper = isProduction ? Fragment : StrictMode
+
   return (
-    <>
+    <Wrapper>
       <AppContextProvider value={app}>
         <CurrentUserProviderComponent>
           <Head>
@@ -79,7 +82,7 @@ function _App({ Component, pageProps }: AppProps) {
               <AppLoaderProviderComponent>
                 <div className="app">
                   <main>
-                      <Component {...pageProps} />
+                    <Component {...pageProps} />
                   </main>
                 </div>
                 <AppLoaderOverlayView />
@@ -88,7 +91,7 @@ function _App({ Component, pageProps }: AppProps) {
           </MuiThemeProvider>
         </CurrentUserProviderComponent>
       </AppContextProvider>
-    </>
+    </Wrapper>
   )
 }
 

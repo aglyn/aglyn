@@ -6,12 +6,12 @@
  * found in the root directory of this source tree.
  */
 
-import store from './store'
+import fbStore from './fb-store'
 import { createDocumentId, createTimestamp } from './tools'
 
 
 export async function saveFormSubmit(formId: string, fields: Record<string, any>) {
-  const docRef = store.collection('forms').doc(createDocumentId())
+  const docRef = fbStore.collection('forms').doc(createDocumentId())
   return await docRef.set({
     formId: formId,
     fields: { ...fields },

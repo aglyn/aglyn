@@ -13,7 +13,7 @@ import {
   ApiRequest,
   ApiResponse,
 } from '../types'
-import { verifyIdToken } from '../../firebase/admin'
+import { verifyIdToken } from '../../firebase/fb-admin'
 
 
 export const requireHeader = (

@@ -1,5 +1,5 @@
 import * as firebaseAdmin from 'firebase-admin'
-import serverApp from '../firebase/admin'
+import serverApp from '../firebase/fb-admin'
 
 
 export const getProfileData = async (username) => {

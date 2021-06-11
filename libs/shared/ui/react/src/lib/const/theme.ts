@@ -125,9 +125,9 @@ const consoleOptions: ThemeOptions = {
   palette: {
     type: 'light',
     primary: { main: '#404c5c' },
-    secondary: { main: lightBlue['A700'] } /* #039be5 */,
-    tertiary: { main: purple['500'] } /* #9c27b0 */,
-    quaternary: { main: purple['A200'] } /* #E040FB */,
+    secondary: { main: lightBlue['600'] /* '#039be5' */ },
+    tertiary: { main: purple['500'] /* '#9c27b0' */ },
+    quaternary: { main: purple.A200 /* '#e040fb' */ },
     brand: {
       primary: purple['500'],
       secondary: lightBlue['500'],
@@ -137,7 +137,7 @@ const consoleOptions: ThemeOptions = {
       orange: '#f2ab5d',
     },
     info: { main: cyan['300'] },
-    warning: { main: orange['A200'] },
+    warning: { main: orange.A200 },
     error: { main: red['600'] },
   },
   props: {

@@ -6,11 +6,9 @@
  * found in the root directory of this source tree.
  */
 
-import admin from './admin'
+import admin from './fb-admin'
 
 
-export const store = admin.firestore()
+export const fbStore = admin.firestore()
 
-
-
-export default store
+export default fbStore
