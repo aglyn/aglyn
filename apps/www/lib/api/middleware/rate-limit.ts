@@ -1,0 +1,74 @@
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+import LRUCache from 'lru-cache'
+import { Logger, Req, Res } from '../helpers'
+import { ApiMiddleware, NextFn } from '../tools/middleware'
+import { ApiRequest, ApiResponse } from '../types'
+
+
+export interface RateLimiter<K = string, V = any> {
+  getTokenCache: () => LRUCache<K, V>
+  checkLimit: (res: ApiResponse, token?: string, limit?: number) => Promise<void>
+}
+
+export interface RateLimiterOptions<K, V> extends LRUCache.Options<K, V> {
+  limit?: number
+  token?: string
+}
+
+export function createRateLimiter<K, V>(options?: RateLimiterOptions<K, V>): RateLimiter<K, V> {
+  const { limit: _limit, max: _max, maxAge: _maxAge, token: _token, ...opts } = options
+  const max = _max ?? 100 /* 100 users per second */
+  const maxAge = _maxAge ?? 60000 /* 60 seconds */
+  const limit = _limit ?? 10 /* 10 requests per minute */
+  const token = _token ?? 'CACHE_TOKEN' /* Key inside LRUCache */
+  const tokenCache = new LRUCache<K, V>({ max, maxAge, ...opts })
+  const getTokenCache = (): LRUCache<K, V> => {
+    return tokenCache
+  }
+  const checkLimit = (res: ApiResponse, cacheToken: string = token, maxLimit: number = limit): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+      const tokenCount = tokenCache.get(cacheToken as unknown as K) ?? [0] as unknown as V
+      if (tokenCount[0] === 0) {
+        tokenCache.set(cacheToken as unknown as K, tokenCount)
+      }
+      tokenCount[0] += 1
+      const currentUsage = tokenCount[0]
+      const isLimited = currentUsage >= maxLimit
+      res.setHeader('X-RateLimit-Limit', maxLimit)
+      res.setHeader('X-RateLimit-Remaining', isLimited ? 0 : maxLimit - currentUsage)
+      return isLimited ? reject() : resolve()
+    })
+  }
+
+  return {
+    getTokenCache,
+    checkLimit,
+  }
+}
+
+export function rateLimiterFactory<K, V>(options?: RateLimiterOptions<K, V>): ApiMiddleware {
+  const rateLimiter = createRateLimiter<K, V>(options)
+
+  return async (req: ApiRequest, res: ApiResponse, next: NextFn) => {
+    let fail
+    try {
+      await rateLimiter.checkLimit(res)
+    } catch (error) {
+      fail = true
+      const json = Res.Error.rateLimitCheck
+      Logger.traceError(json, error)
+      res.status(json.error.statusCode).json(json)
+    } finally {
+      if (!fail) {
+        await next()
+      }
+    }
+  }
+}

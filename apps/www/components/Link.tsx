@@ -58,7 +58,7 @@ export function InnerRefLink(props: LinkProps) {
     return <NextLink ref={innerRef} className={className} href={href} {...other} />
   }
 
-  if (button) {
+  if (button || other.disabled) {
     return (
       <MuiButton
         ref={innerRef}

@@ -31,6 +31,14 @@
       "tags": ["scope:app", "scope:app:console"],
       "implicitDependencies": ["console"]
     },
+    "www": {
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": []
+    },
+    "www-e2e": {
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": ["www"]
+    },
     "shared-data-mdi": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:data"],
       "implicitDependencies": []
@@ -54,13 +62,6 @@
     "website-feature-react-builder": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
-    },
-    "www": {
-      "tags": []
-    },
-    "www-e2e": {
-      "tags": [],
-      "implicitDependencies": ["www"]
     }
   }
 }

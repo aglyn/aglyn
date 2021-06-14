@@ -4,6 +4,7 @@
 /dist
 /tmp
 /out-tsc
+/.firebase
 
 # dependencies
 /node_modules
@@ -29,6 +30,15 @@
 !.idea/codeStyles
 !.idea/fileTemplates
 !.idea/file.template.settings.xml
+!.idea/dictionaries
+
+# Environment files
+.env
+.env.*
+!.env.example*
+
+# Log files
+*.log
 
 # misc
 /.sass-cache

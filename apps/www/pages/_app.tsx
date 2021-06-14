@@ -9,10 +9,11 @@
 import { CssBaseline } from '@material-ui/core'
 import { MuiThemeProvider } from '@material-ui/core/styles'
 import { themes } from '@aglyn/shared/ui/react'
-import React, { useEffect } from 'react'
+import React, { Fragment, StrictMode, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
 import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
+import { useOnRouteChangeComplete } from '../hooks/router-events'
 import { withAppController } from '../lib/aglyn-deprecated'
 import AppLoaderOverlayView from '../views/AppLoaderOverlayView'
 import { AppContextProvider } from '../contexts/app-context'
@@ -20,7 +21,8 @@ import { CurrentUserProviderComponent } from '../contexts/current-user-context'
 import { MetaElementsConfig } from './_document'
 
 
-const isProduction = process.env.NODE_ENV === 'production'
+const previewProduction = false
+const isProduction = process.env.NODE_ENV === 'production' || previewProduction
 const appOptions = {
   ...(isProduction
     ? {}
@@ -36,7 +38,8 @@ const metaElements: MetaElementsConfig = [
 ]
 
 
-function CustomApp({ Component, pageProps }: AppProps) {
+function _App(props: AppProps) {
+  const { Component, pageProps } = props
 
   useEffect(() => {
     // Remove the server-side injected CSS.
@@ -46,14 +49,22 @@ function CustomApp({ Component, pageProps }: AppProps) {
     }
   }, [])
 
-  useEffect(()=> {
+  useEffect(() => {
     if (isProduction) {
       app.getAnalytics()
     }
-  },[])
+  }, [])
+
+  useOnRouteChangeComplete(() => {
+    if (isProduction) {
+      app.getAnalytics().logEvent('page_view')
+    }
+  })
+
+  const Wrapper = isProduction ? Fragment : Fragment// StrictMode
 
   return (
-    <>
+    <Wrapper>
       <AppContextProvider value={app}>
         <CurrentUserProviderComponent>
           <Head>
@@ -66,22 +77,22 @@ function CustomApp({ Component, pageProps }: AppProps) {
             />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           </Head>
-          <div className="app">
-            <main>
-              <MuiThemeProvider theme={themes.console}>
-                <CssBaseline>
-                  <AppLoaderProviderComponent>
+          <MuiThemeProvider theme={themes.console}>
+            <CssBaseline>
+              <AppLoaderProviderComponent>
+                <div className="app">
+                  <main>
                     <Component {...pageProps} />
-                    <AppLoaderOverlayView />
-                  </AppLoaderProviderComponent>
-                </CssBaseline>
-              </MuiThemeProvider>
-            </main>
-          </div>
+                  </main>
+                </div>
+                <AppLoaderOverlayView />
+              </AppLoaderProviderComponent>
+            </CssBaseline>
+          </MuiThemeProvider>
         </CurrentUserProviderComponent>
       </AppContextProvider>
-    </>
+    </Wrapper>
   )
 }
 
-export default CustomApp
+export default _App

@@ -17,6 +17,7 @@ import clsx from 'clsx'
 import React, { ElementType, forwardRef, HTMLAttributes } from 'react'
 import BackgroundImage from '../components/BackgroundImage'
 import Link from '../components/Link'
+import { footerNavigation } from '../const'
 
 
 export const SiteFooterStyles = (theme: Theme) => createStyles({
@@ -49,9 +50,11 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
         {...rest}
       >
         <Box pt={4}>
-          <Container maxWidth="lg">
-            {children}
-          </Container>
+          {children && (
+            <Container maxWidth="lg">
+              {children}
+            </Container>
+          )}
           <Container maxWidth="lg">
             <GridItems
               spacing={2}
@@ -81,72 +84,26 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
                     </>
                   ),
                 },
-                {
-                  xs: 12, sm: 6, md: 3,
+                ...footerNavigation.map(({ items, ...item }, key) => ({
+                  xs: 12 as any, sm: 6 as any, md: 3 as any,
                   children: (
                     <>
-                      <Typography variant="overline"><b>Resources</b></Typography>
+                      <Typography variant="overline">
+                        <b children={item.children} />
+                      </Typography>
                       <Typography component="ul">
-                        <li>
-                          <Link
-                            href="/features"
-                            children="Features"
-                            className={classes.link}
-                          />
-                        </li>
-                        <li>
-                          <Link
-                            href="/get"
-                            children="Get access"
-                            className={classes.link}
-                          />
-                        </li>
+                        {items.map((item, key) => (
+                          <li key={key}>
+                            <Link
+                              {...item}
+                              className={classes.link}
+                            />
+                          </li>
+                        ))}
                       </Typography>
                     </>
                   ),
-                },
-                {
-                  xs: 12, sm: 6, md: 3,
-                  children: (
-                    <>
-                      <Typography variant="overline"><b>Company</b></Typography>
-                      <Typography component="ul">
-                        <li>
-                          <Link
-                            href="/contact"
-                            children="Contact"
-                            className={classes.link}
-                          />
-                        </li>
-                        <li>
-                          <Link
-                            href="/partners"
-                            children="Partners"
-                            className={classes.link}
-                          />
-                        </li>
-                      </Typography>
-                    </>
-                  ),
-                },
-                {
-                  xs: 12, sm: 6, md: 3,
-                  children: (
-                    <>
-                      <Typography variant="overline"><b>Legal</b></Typography>
-                      <Typography component="ul">
-                        <li>
-                          <Link
-                            href="/legal/privacy"
-                            children="Privacy"
-                            className={classes.link}
-                          />
-                        </li>
-
-                      </Typography>
-                    </>
-                  ),
-                },
+                })),
               ]}
             />
           </Container>

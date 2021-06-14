@@ -8,6 +8,7 @@
 
 import { _isArr, _isFn, _isNum, _isObj, _isStr, _isUndef, hasLn } from './guards'
 
+
 export function tools(): string {
   return 'tools'
 }
@@ -203,7 +204,7 @@ export function sortByProperty<T>(items: T[], firstPath: string, secondPath?: st
   const lgr = (a, b, p) => getDeepProperty(a, p) > getDeepProperty(b, p)
   const eq = (a, b, p) => getDeepProperty(a, p) === getDeepProperty(b, p)
   return items.sort((a, b) =>
-    lgr(a, b, firstPath) ? 1 : secondPath && eq(a, b, firstPath) ? (lgr(a, b, secondPath) ? 1 : -1) : -1
+    lgr(a, b, firstPath) ? 1 : secondPath && eq(a, b, firstPath) ? (lgr(a, b, secondPath) ? 1 : -1) : -1,
   )
 }
 
@@ -268,7 +269,7 @@ export function getAllObjectKeys<T extends Record<string, unknown>, K extends ke
  */
 export function reduceObject<T extends Record<string, unknown>, K extends keyof T>(
   target: T,
-  reducerCallback: (val: T[K], key?: K, original?: T) => T[K]
+  reducerCallback: (val: T[K], key?: K, original?: T) => T[K],
 ): T {
   if (_isUndef(reducerCallback)) {
     return target
@@ -296,11 +297,11 @@ export function reduceObject<T extends Record<string, unknown>, K extends keyof 
 export function map<K extends string, V, U>(
   target: { [key in K]: V },
   callbackFn: (value: V, key: K, obj: { [key in K]: V }) => U,
-  thisArg?: unknown
+  thisArg?: unknown,
 ): { [key in K]: U } {
   const res: Partial<{ [key in K]: U }> = {}
   for (const key in target) {
-    if (Object.prototype.hasOwnProperty.call(target, key)) {
+    if (!_isUndef(Object.prototype.hasOwnProperty.call(target, key))) {
       res[key] = callbackFn.call(thisArg, target[key], key, target)
     }
   }
@@ -308,6 +309,8 @@ export function map<K extends string, V, U>(
 }
 
 /**
+ * @deprecated Move to {@link map}
+ * @see {@link map}
  *
  * Map object literal for quick editing or build a keyed object literal from
  * an array of objects
@@ -330,14 +333,12 @@ export function map<K extends string, V, U>(
  * @export
  * @template T
  * @param {T|Array<object>|object} target
- * @param {<((val,key,index,arr) => (val|[key,val]))>} callbackfn
- * @param {<{copy: boolean, filter: boolean, advanced: boolean}>} [opt] (
+ * @param {MapObjectClbkFn} callbackfn
+ * @param {MapObjectOptions} [opt] (
  *  if !!filter - removes anything undefined,
  *  if !!advanced - the clbk should return a tuple of the new key and value [k,v]
  * )
  * @returns {object}
- * @deprecated Move to {@link map}
- * @see {@link map}
  */
 export function mapObject(target, callbackfn: MapObjectClbkFn, opt?: MapObjectOptions) {
   const { copy: cp = false, filter = false, advanced = false, forEach = false } = opt ?? {}
@@ -359,7 +360,7 @@ export type MapObjectClbkFn = (
   value: any,
   key?: string | number,
   index?: number,
-  array?: Array<any>
+  array?: Array<any>,
 ) => [key: string | number, value: any] | any | void
 export type MapObjectOptions = {
   copy?: boolean
@@ -384,7 +385,7 @@ export function filterObject<T>(target, predicate: FilterObjPredicate<T>) {
       }
       return null
     },
-    { advanced: true, filter: true }
+    { advanced: true, filter: true },
   )
 }
 type FilterObjPredicate<T> = {
@@ -418,11 +419,11 @@ export function updateObj<T, U>(target: T, ...source: U[]): T & U {
  * @param {{ copy: boolean }} [options]
  * @returns {T}
  */
-export function deleteProperty<T, K extends keyof T>(obj: Readonly<T>, key: K, options?: { copy: boolean }): T {
-  const opts = { copy: false, ...options }
-  const newObj = opts.copy ? copyObj(obj) : obj
-  delete newObj[key]
-  return newObj
+export function deleteProperty<T, K extends keyof T>(obj: T, key: K, options?: { copy: boolean }): Omit<T, K> {
+  const { copy = false } = options ?? {}
+  const _obj = copy ? { ...obj } : obj
+  delete _obj[key]
+  return _obj
 }
 
 /**
@@ -440,7 +441,7 @@ export function deleteProperty<T, K extends keyof T>(obj: Readonly<T>, key: K, o
 export function toArray<T, U, F extends (v: T, k: number) => U = undefined>(
   iterable: Iterable<T> | ArrayLike<T>,
   mapfn?: (v: T, k: number) => U,
-  thisArg?: any
+  thisArg?: any,
 ): F extends undefined ? Array<T> : Array<U> {
   return Array.from(iterable, mapfn, thisArg) as F extends undefined ? Array<T> : Array<U>
 }
@@ -460,7 +461,7 @@ export function toArray<T, U, F extends (v: T, k: number) => U = undefined>(
 export function copyArray<T, U, F extends (v: T, k: number) => U = undefined>(
   iterable: Iterable<T> | ArrayLike<T>,
   mapfn?: F,
-  thisArg?: any
+  thisArg?: any,
 ): F extends undefined ? Array<T> : Array<U> {
   return toArray(iterable, mapfn, thisArg)
 }
@@ -493,7 +494,7 @@ export function mutateArray<T>(
   index: number | any,
   array: Array<T>,
   items?: T | Array<T>,
-  options?: { replace?: boolean; copy?: boolean }
+  options?: { replace?: boolean; copy?: boolean },
 ): MutatedArrayResponse<T> {
   const { replace, copy } = { replace: true, copy: false, ...options }
   const _array = copy ? copyArray(array) : array
@@ -575,7 +576,7 @@ export function removeFromArray<T>(item: T, array: Array<T>): Array<T> {
 export function reorderArray<K extends number & keyof T, T extends Array<U>, U>(
   array: T,
   currentIndex: K | any,
-  newIndex: K | any
+  newIndex: K | any,
 ): T {
   const arr = mutateArray(currentIndex, array)
   return addAtIndex(newIndex, arr.items, arr.deleted).items as T
@@ -614,13 +615,14 @@ export function capitalize<T extends string>(val: T): T {
  * @export
  * @template T
  * @param {T} val
+ * @param separator
  * @returns {T}
  */
 export function capitalizeTitle<T extends string>(val: T, separator = ' '): T {
   return s(val)
-    .split(separator)
-    .map((i) => capitalize(i))
-    .join(separator) as T
+  .split(separator)
+  .map((i) => capitalize(i))
+  .join(separator) as T
 }
 
 /**
@@ -717,6 +719,7 @@ export function noop(...args: any[]): any {
   // Do nothing.
 }
 
+
 /**
  * Convince closure compiler that the wrapped function has no side-effects.
  *
@@ -732,6 +735,9 @@ export function noSideEffects<T>(fn: () => T): T {
   return ({ toString: fn }.toString() as unknown) as T
 }
 
+/**
+ * Immutable copy
+ */
 namespace Copy {
   const getType = <T>(obj: T) => (toString.call(obj) as string).slice(8, -1)
   const defaultAssign = <T, S>(target: T, source: S) => {
@@ -743,33 +749,35 @@ namespace Copy {
     return target as T & S
   }
   const objectAssign = Object.assign ?? defaultAssign
-  const getAllKeys =
-    typeof Object.getOwnPropertySymbols === 'function'
+  const getAllKeys = typeof Object.getOwnPropertySymbols === 'function'
       ? (obj) => Object.keys(obj).concat(Object.getOwnPropertySymbols(obj) as any)
       : (obj) => Object.keys(obj)
   type CopyParams<T, U, K, V, X> = T extends ReadonlyArray<U>
     ? ReadonlyArray<U>
     : T extends Map<K, V>
-    ? Map<K, V>
-    : T extends Set<X>
-    ? Set<X>
-    : T extends Record<string, unknown>
-    ? T
-    : any
+      ? Map<K, V>
+      : T extends Set<X>
+        ? Set<X>
+        : T extends Record<string, unknown>
+          ? T
+          : any
+
   /**
-   * Immutability Copy Cherry Pick
-   * @see {@link:https://github.com/kolodny/immutability-helper/blob/master/index.ts}
+   * Immutability Copy
+   * @see inspiration {@link https://github.com/kolodny/immutability-helper/blob/master/index.ts}
+   * @param {Copy.CopyParams<T, U, K, V, X>} value
+   * @returns {any}
    */
-  export function copy<T, U, K, V, X>(value: CopyParams<T, U, K, V, X>) {
+  export function copy<T, U, K, V, X>(value: CopyParams<T, U, K, V, X>): typeof value {
     return Array.isArray(value)
       ? objectAssign(value.constructor(value.length), value)
       : getType(value) === 'Map'
-      ? new Map(value as Map<K, V>)
-      : getType(value) === 'Set'
-      ? new Set(value as Set<X>)
-      : value && typeof value === 'object'
-      ? (objectAssign(Object.create(Object.getPrototypeOf(value)), value) as T)
-      : (value as T)
+        ? new Map(value as Map<K, V>)
+        : getType(value) === 'Set'
+          ? new Set(value as Set<X>)
+          : value && typeof value === 'object'
+            ? (objectAssign(Object.create(Object.getPrototypeOf(value)), value) as T)
+            : (value as T)
   }
 }
 export const copy = Copy.copy

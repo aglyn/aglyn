@@ -29,15 +29,14 @@ import Typography from '@material-ui/core/Typography'
 import clsx from 'clsx'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import React, { PropsWithChildren } from 'react'
+import React, { Fragment, PropsWithChildren } from 'react'
 import { Props as BreadcrumbsProps } from '../components/Breadcrumbs'
 import Copyright from '../components/Copyright'
 import Link, { LinkProps as LinkProps } from '../components/Link'
-import { APP } from '../const'
+import { APP, tailNavigation } from '../const'
 import { withCurrentUserCtx } from '../contexts/current-user-context'
 import { withAggregatedPageMeta } from '../lib/app-pages'
 import { getGravatarUrl } from '../lib/gravatar'
-import { footerItems } from '../lib/navigation-menus'
 
 
 export const styles = (theme: Theme) => createStyles({
@@ -225,7 +224,7 @@ export interface Props extends PropsWithChildren<{}> {
 
 const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
   withAggregatedPageMeta(
-    function RenderFn(props) {
+    function RefRenderFn(props) {
       const router = useRouter()
       const {
         classes,
@@ -279,10 +278,16 @@ const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
         />
       )
 
-      const buildMenu = (actionBuilder) => (item, key) => (
-        <Menu key={key} className={classes.menu} items={item.items}>
-          {actionBuilder(item, key)}
-        </Menu>
+      const buildNav = (actionBuilder) => (item, key) => (
+        _isArr(item.items) ? (
+          <Menu key={key} className={classes.menu} items={item.items}>
+            {actionBuilder(item, key)}
+          </Menu>
+        ) : (
+          <Fragment key={key}>
+            {actionBuilder(item, key)}
+          </Fragment>
+        )
       )
 
       return (
@@ -319,10 +324,10 @@ const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
                     </div>
                   </div>
                   <div className={classes.center}>
-                    {(centerNavigationItems ?? []).map(buildMenu(buildTextButton))}
+                    {(centerNavigationItems ?? []).map(buildNav(buildTextButton))}
                   </div>
                   <div className={classes.right}>
-                    {(quickActions ?? []).map(buildMenu(buildIconButton))}
+                    {(quickActions ?? []).map(buildNav(buildIconButton))}
                   </div>
                 </Toolbar>
               </Container>
@@ -397,7 +402,7 @@ const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
                 </div>
                 <div className={classes.right}>
                   <GridButtons
-                    items={footerNavItems}
+                    items={footerNavItems.map(i=>({size: 'small', ...i}))}
                     spacing={1}
                   />
                 </div>
@@ -414,9 +419,9 @@ const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
                     color="textSecondary"
                     variant="overline"
                   >
-                    <span children={`Version ${APP.PKG_VERSION}`} />
+                    <span children={`Version ${APP.VERSION}`} />
                     {' '}
-                    <span children={`(${APP.LIB_BUILD_ID})`} />
+                    <span children={`(${APP.BUILD_ID})`} />
                   </Typography>
                 </Box>
               </Box>
@@ -430,7 +435,7 @@ const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
 
 MainLayout.displayName = 'Layout:MainLayout'
 MainLayout.defaultProps = {
-  footerNavItems: footerItems.map(i => Object.assign(i, { size: 'small' })) as any,
+  footerNavItems: tailNavigation,
 }
 
 export default withStyles(styles, { name: 'Layout:MainLayout' })(MainLayout)

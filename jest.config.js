@@ -1,5 +1,6 @@
 module.exports = {
   projects: [
+    '<rootDir>/apps/www',
     '<rootDir>/apps/console',
     '<rootDir>/libs/shared/react-common',
     '<rootDir>/libs/shared/tools',
@@ -7,6 +8,5 @@ module.exports = {
     '<rootDir>/libs/shared/featured-mdi-icons',
     '<rootDir>/libs/website/feature-react',
     '<rootDir>/libs/website/feature/react-builder',
-    '<rootDir>/apps/www',
   ],
 }

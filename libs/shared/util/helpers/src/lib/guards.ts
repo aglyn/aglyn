@@ -67,9 +67,11 @@ export function _isSym(val: unknown): val is symbol {
 export function _isFn(val: unknown): val is Func {
   return typeof val === 'function'
 }
+
 export interface Func {
   (...args: unknown[]): unknown
 }
+
 /**
  * Shortcut for Array.isArray
  *
@@ -198,13 +200,13 @@ export function _isBuff(val: unknown): val is Buffer {
 export function _isPrim(val: unknown): val is Primitive {
   return Boolean(
     _isSym(val) ||
-      _isBig(val) ||
-      _isNumT(val) ||
-      _isObjT(val) ||
-      _isBool(val) ||
-      _isStr(val) ||
-      _isFn(val) ||
-      _isUndef(val)
+    _isBig(val) ||
+    _isNumT(val) ||
+    _isObjT(val) ||
+    _isBool(val) ||
+    _isStr(val) ||
+    _isFn(val) ||
+    _isUndef(val),
   )
 }
 export type Primitive = symbol | bigint | boolean | number | string | undefined
@@ -233,6 +235,10 @@ export function _ln<T>(val: Iterable<T> | ArrayLike<T> | number, of?: number, op
     }
   }
   return false
+}
+
+export function _hasKey(key: string|number, source: Record<string|number, any>): boolean {
+  return Object.prototype.hasOwnProperty.call(source, key)
 }
 
 /**
@@ -284,12 +290,12 @@ export function hasLn<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, 
     noOpt
       ? chkFunc(_isNumPos(len))
       : chkOpt(true, false, false, len === e) ||
-          chkOpt(false, true, false, len < l) ||
-          chkOpt(false, false, true, len > m) ||
-          chkOpt(false, true, true, and ? len < l && len > m : len < l || len > m) ||
-          chkOpt(true, true, false, and ? len === e && len < l : len === e || len < l) ||
-          chkOpt(true, false, true, and ? len === e && len > m : len === e || len > m) ||
-          chkOpt(true, true, true, and ? len === e && len < l && len > m : len === e || len < l || len > m)
+      chkOpt(false, true, false, len < l) ||
+      chkOpt(false, false, true, len > m) ||
+      chkOpt(false, true, true, and ? len < l && len > m : len < l || len > m) ||
+      chkOpt(true, true, false, and ? len === e && len < l : len === e || len < l) ||
+      chkOpt(true, false, true, and ? len === e && len > m : len === e || len > m) ||
+      chkOpt(true, true, true, and ? len === e && len < l && len > m : len === e || len < l || len > m),
   )
 }
 

@@ -9,6 +9,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 
+
 export type RouteProperties = {
   shallow: boolean
 }
@@ -32,6 +33,7 @@ export enum NextRouterEvent {
   ROUTE_CHANGE_ERROR = 'routeChangeError',
   BEFORE_HISTORY_CHANGE = 'beforeHistoryChange',
 }
+
 export interface EventCallbacks {
   [NextRouterEvent.BEFORE_HISTORY_CHANGE]: BeforeHistoryChangeCallback,
   [NextRouterEvent.HASH_CHANGE_START]: HashChangeStartCallback,
@@ -50,7 +52,7 @@ export const useRouterEvent = (events: EventParamType[]) => {
     return () => {
       events.map(([id, callback]) => router.events.off(id as string, callback))
     }
-  }, [])
+  }, [router.events])
 }
 export const useOnBeforeHistoryChange = (callback: EventCallbacks[NextRouterEvent.BEFORE_HISTORY_CHANGE]) => {
   useRouterEvent([[NextRouterEvent.BEFORE_HISTORY_CHANGE, callback]])

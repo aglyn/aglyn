@@ -1,7 +1,14 @@
 import { themes } from '@aglyn/shared/ui/react'
 import { ServerStyleSheets } from '@material-ui/core/styles'
 import { NextComponentType } from 'next'
-import NextDocument, { DocumentContext, DocumentInitialProps, Head, Html, Main, NextScript } from 'next/document'
+import NextDocument, {
+  DocumentContext,
+  DocumentInitialProps,
+  Head,
+  Html,
+  Main,
+  NextScript,
+} from 'next/document'
 import React from 'react'
 
 
@@ -78,13 +85,13 @@ class AppDocument<P = {}> extends NextDocument<P> {
     ctx.renderPage = () => originalRenderPage({
       // useful for wrapping the whole react tree
       enhanceApp: (App) => (props) => {
-        console.log('enhanceApp: App => props => {}', App, props)
+        // console.log('enhanceApp: App => props => {}', App, props)
         return sheets.collect(<App {...props} />)
       },
 
       // useful for wrapping in a per-page basis
       enhanceComponent: (Component: NextComponentType) => {
-        console.log('enhanceComponent: Component => {}',Component.displayName, Component)
+        // console.log('enhanceComponent: Component => {}',Component.displayName, Component)
         // console.log('component enhancement', Component)
         return Component
       },
@@ -110,42 +117,42 @@ class AppDocument<P = {}> extends NextDocument<P> {
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: css }}
           id="jss-server-side"
-        />
+        />,
       ],
     }
   }
 
   metaElements: MetaElementsConfig = [
-    ['theme-color', themes.console.palette.primary.main]
+    ['theme-color', themes.console.palette.primary.main],
   ]
   linkElements: LinkElementsConfig = [
     ['shortcut icon', '/favicon.ico'],
     ['manifest', '/manifest.json'],
-    ['stylesheet', 'https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap']
+    ['stylesheet', 'https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap'],
   ]
 
   static makeMetaElem = ([name, content, { ...rest }]: MetaElementsConfig[number]) => (
-    <meta key={name + content} content={content} name={name} {...rest}/>
+    <meta key={name + content} content={content} name={name} {...rest} />
   )
 
   static makeLinkElem = ([rel, href, { ...rest }]: LinkElementsConfig[number]) => (
-    <link key={href} href={href} rel={rel} {...rest}/>
+    <link key={href} href={href} rel={rel} {...rest} />
   )
 
   public render(): JSX.Element {
     return (
-      <React.StrictMode>
+      <>
         <Html lang="en">
           <Head>
             {this.linkElements.map(AppDocument.makeLinkElem)}
             {this.metaElements.map(AppDocument.makeMetaElem)}
           </Head>
           <body>
-            <Main />
-            <NextScript />
+          <Main />
+          <NextScript />
           </body>
         </Html>
-      </React.StrictMode>
+      </>
     )
   }
 }

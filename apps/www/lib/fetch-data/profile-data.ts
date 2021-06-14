@@ -1,7 +1,9 @@
-import { app } from '../firebase/server-app'
+import * as firebaseAdmin from 'firebase-admin'
+import serverApp from '../firebase/fb-admin'
+
 
 export const getProfileData = async (username) => {
-  const db = app.firestore()
+  const db = serverApp.firestore()
   const profileCollection = db.collection('profile')
   const profileDoc = await profileCollection.doc(username).get()
 
@@ -10,4 +12,10 @@ export const getProfileData = async (username) => {
   }
 
   return profileDoc.data()
+}
+
+export const verifyIdToken = (idToken: string) => {
+  return firebaseAdmin.auth().verifyIdToken(idToken).catch((error) => {
+    throw error
+  })
 }

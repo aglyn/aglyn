@@ -9,20 +9,26 @@
 import { GridItems } from '@aglyn/shared/ui/react'
 import TextField from '@data-driven-forms/mui-component-mapper/text-field'
 import Textarea from '@data-driven-forms/mui-component-mapper/textarea'
+import FormTemplateRenderProps
+  from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
 import componentTypes from '@data-driven-forms/react-form-renderer/component-types'
 import FormRenderer from '@data-driven-forms/react-form-renderer/form-renderer'
 import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
 import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
 import Grid from '@material-ui/core/Grid'
 import Box from '@material-ui/core/Box'
+import Alert from '@material-ui/lab/Alert'
+import AlertTitle from '@material-ui/lab/AlertTitle'
 import Button from '@material-ui/core/Button'
 import Container from '@material-ui/core/Container'
 import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
 import Typography from '@material-ui/core/Typography'
-import React, { Children, useState } from 'react'
+import LinearProgress from '@material-ui/core/LinearProgress'
+import React, { useCallback } from 'react'
 import { DdfForms } from '../forms'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
+import { mainNavigation, productNames } from '../const'
 
 
 const componentMapper = {
@@ -52,25 +58,45 @@ const styles = (theme: Theme) => createStyles({
   h2: {},
 })
 
-const asyncSubmit = (values, api) => {
-  return new Promise((resolve) =>
-    setTimeout(() => {
-      console.log('FormValues', values)
-      resolve('Yay')
-    }, 1500),
-  )
-}
+const FormTemplate = (props: FormTemplateRenderProps) => {
+  const { formFields, schema } = props
+  const { handleSubmit, getState } = useFormApi()
+  const { submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine } = getState()
 
-const FormTemplate = ({ formFields, schema }) => {
-  const { handleSubmit, onReset, onCancel, getState } = useFormApi()
-  const { submitting, valid, pristine } = getState()
+  if (submitFailed) {
+    return (
+      <>
+        <Box mt={2}>
+          <Alert severity="error">
+            <AlertTitle>Error — Form Submission Failed</AlertTitle>
+            Sorry, please try again later. If the issue persists please send a direct email to <em>info@aglyn.com</em>
+            <br /><br />
+            <small>Error details:</small>
+            <pre>{JSON.stringify(submitErrors, null, 2)}</pre>
+          </Alert>
+        </Box>
+      </>
+    )
+  }
 
-  console.log('form fields', formFields)
+  if (submitSucceeded) {
+    return (
+      <>
+        <Box mt={2}>
+          <Alert severity="success">
+            <AlertTitle>Success</AlertTitle>
+            We have received your submission. If you have any immediate questions, send them to <em>info@aglyn.com</em>
+          </Alert>
+        </Box>
+      </>
+    )
+  }
+
   return (
     <Grid
       container
       component={'form'}
-      style={{width:'100%'}}
+      style={{ width: '100%' }}
       onSubmit={handleSubmit}
       spacing={3}
     >
@@ -83,13 +109,18 @@ const FormTemplate = ({ formFields, schema }) => {
       <FormSpy>
         {() => (
           <Grid item xs={12} align="center">
+            {submitting && (
+              <Box mb={1}>
+                <LinearProgress color="secondary" />
+              </Box>
+            )}
             <Button
               disabled={submitting || !valid || pristine}
               type="submit"
               color="secondary"
               variant="contained"
             >
-              Continue
+              {submitting ? 'Please wait...' : 'Continue'}
             </Button>
           </Grid>
         )}
@@ -98,36 +129,27 @@ const FormTemplate = ({ formFields, schema }) => {
   )
 }
 
-interface Props extends WithStyles<typeof styles> {
-
-}
-
-function Contact(props: Props) {
+function Contact(props: WithStyles<typeof styles>) {
   const { classes } = props
-  const [values, setValues] = useState({})
+
+  const handleSubmit = useCallback(async (values) => {
+    return await fetch(`/api/h/f/${DdfForms.formIds.contact}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(values),
+    })
+    .then(res => res.json())
+    .then(res => res?.status !== 'success' ? res : undefined)
+  }, [])
 
   return (
     <MainLayout
       title={'Contact Us | Aglyn'}
-      centerNavigationItems={[
-        {
-          children: 'Features',
-        },
-        {
-          children: 'Partners',
-          items: [],
-        },
-        {
-          children: 'Company',
-          items: [],
-        },
-        {
-          children: 'Get Access',
-          variant: 'contained',
-          color: 'secondary',
-        },
-      ]}
-      productName={'.com'}
+      centerNavigationItems={mainNavigation}
+      productName={productNames.www}
       className={classes.root}
     >
       <main>
@@ -167,10 +189,7 @@ function Contact(props: Props) {
                         FormTemplate={FormTemplate}
                         componentMapper={componentMapper}
                         schema={DdfForms.ContactFormSchema}
-                        onSubmit={asyncSubmit}
-                        onCancel={() => console.log('Cancelling')}
-                        onReset={() => console.log('Resetting')}
-                        debug={({ values }) => setValues(values)}
+                        onSubmit={handleSubmit}
                       />
                     </>
                   ),

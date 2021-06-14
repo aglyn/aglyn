@@ -1,36 +1,55 @@
-import { _isUndef } from '@aglyn/common/tools/guards'
-import { Res, Logger } from 'lib/api'
-import { ApiHandler, ApiRequest, ApiResponse, ApiHandlerWithRequestProp, ApiRequestWithProp } from 'middleware/middleware-tools'
-import { verifyIdToken } from '../../lib/firebase/server-app'
+/**
+ * @license
+ * Copyright (c) 2021 Aglyn LLC
+ *
+ * Use of this source code is governed by an MIT-style license that can be
+ * found in the root directory of this source tree.
+ */
+
+import { _isUndef } from '@aglyn/shared/util/helpers'
+import { Res, Logger } from '../helpers'
+import {
+  ApiHandler,
+  ApiRequest,
+  ApiResponse,
+} from '../types'
+import { verifyIdToken } from '../../firebase/fb-admin'
+
 
 export const requireHeader = (
   name: string,
   key: keyof ApiRequest['headers'],
-  handler: ApiHandlerWithRequestProp<typeof name, ApiRequest['headers'][typeof key]>
+  handler: ApiHandler,
 ) => {
-  type MergedReq = ApiRequestWithProp<typeof name, ApiRequest['headers'][typeof key]>
   return async (req: ApiRequest, res: ApiResponse) => {
+    const newReq = req
+    let error
     try {
-      const newReq = req as MergedReq
       const header = req.headers[key]
       if (_isUndef(header)) {
         throw new Error(`Missing required header - (key: ${key})!`)
       }
       newReq[name] = header
-      return await handler(newReq, res)
-    } catch (error) {
-      const json = Res.Error.missingHeader
-      Logger.traceError(json, error)
-      return res.status(json.error.statusCode).json(json)
+      return
+    } catch (err) {
+      error = err
+    } finally {
+      if (error) {
+        await handler(newReq, res)
+      } else {
+        const json = Res.Error.missingHeader
+        Logger.traceError(json, error)
+        return res.status(json.error.statusCode).json(json)
+      }
     }
   }
 }
 
-export const withIdTokenHeader = (handler: ApiHandlerWithRequestProp<'idToken', string>) => {
+export const withIdTokenHeader = (handler) => {
   return requireHeader('idToken', 'id-token', handler)
 }
 
-export const withCsrfTokenHeader = (handler: ApiHandlerWithRequestProp<'csrfToken', string>) => {
+export const withCsrfTokenHeader = (handler) => {
   return requireHeader('csrfToken', 'csrf-token', handler)
 }
 

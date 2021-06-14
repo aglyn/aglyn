@@ -29,7 +29,7 @@ const styles = (theme: Theme) => createStyles({
   label: {marginTop: theme.spacing(2)},
 })
 
-export type Props = MuiBackdropProps & {
+export type Props = Partial<MuiBackdropProps> & {
 }
 
 const AppLoaderOverlayView = React.forwardRef<any, Props & WithAppLoaderProps & WithStyles<typeof styles>>(

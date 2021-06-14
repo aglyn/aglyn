@@ -6,7 +6,12 @@
  * found in the root directory of this source tree.
  */
 
-import { ln } from '@aglyn/shared/util/helpers'
+import { Schema as DdfSchema } from '@data-driven-forms/react-form-renderer'
+import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types'
+import validation from '@data-driven-forms/react-form-renderer/validation'
+import md5 from 'md5'
+import { _hasKey, _isStr, ln } from '@aglyn/shared/util/helpers'
+import { ValidationOptions } from '@data-driven-forms/react-form-renderer/validation/validation'
 
 
 export const validateRegex = (value: string, regex) => (new RegExp(regex)).test(value)
@@ -195,8 +200,10 @@ export namespace Fields {
 
 
 export namespace DdfForms {
+  export type Schema = DdfSchema
+  export const ValidatorType = validatorTypes
 
-  export const ContactFormSchema = {
+  export const ContactFormSchema: Schema = {
     fields: [
       {
         component: 'text-field',
@@ -260,9 +267,30 @@ export namespace DdfForms {
         label: 'Comments',
         helperText: 'Type a short description of your inquiry',
         variant: 'outlined',
-        rows: 4
+        rows: 4,
       },
     ],
   }
+
+  export const formIds = {
+    contact: md5('contact').toLowerCase().trim(),
+  }
+  const rawFormIdFromId = {
+    [formIds.contact]: 'contact',
+  }
+  const formSchemaFromId = {
+    [formIds.contact]: ContactFormSchema,
+  }
+
+  export function isValidFormId(id: unknown): id is string {
+    return _isStr(id) && _hasKey(id, rawFormIdFromId)
+  }
+  export function getFormSchemaFromId(id: string): Schema {
+    return formSchemaFromId[id]
+  }
+  export function checkRequiredValues(schema: Schema, options: ValidationOptions) {
+    return validation(schema, options)
+  }
+
 
 }

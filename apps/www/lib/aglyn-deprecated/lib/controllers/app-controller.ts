@@ -227,7 +227,7 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
     ...options
   }
 
-  console.debug('config', config)
+  // console.debug('config', config)
 
   const firebaseConfig = {
     apiKey: config.apiKey,
@@ -247,6 +247,7 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
   let existingApp = false
   let setAuth = false
   let setFirestore = false
+  let analytics: FbAnalytics = null
 
   const setupAuth = (auth: FbAuth): FbAuth => {
     setAuth = true
@@ -275,7 +276,10 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
   }
   const getAnalytics = (): FbAnalytics => {
     if (firebaseConfig.measurementId) {
-      return app?.analytics()
+      if (analytics) {
+        return analytics
+      }
+      return analytics = app?.analytics()
     }
     return null
   }
