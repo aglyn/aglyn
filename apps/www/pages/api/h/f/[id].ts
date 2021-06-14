@@ -21,7 +21,8 @@ import { saveFormSubmit } from '../../../../lib/firebase/form-submission'
  * @param {NextApiResponse} res
  */
 async function formHandler(req: NextApiRequest, res: NextApiResponse) {
-  const { query: { id, ...values } } = req
+  const { query: { id }, body: { ...values } } = req
+
   // Ensure Form ID exists
   if (!DdfForms.isValidFormId(id)) {
     return Res.Error.handleJsonError(res, Res.Error.notFound)

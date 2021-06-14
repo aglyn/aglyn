@@ -1,6 +1,21 @@
 # Aglyn
 
-## Command Summary
+## Firebase Summary
+
+### Emulation
+
+Set the environment variables for the hosts
+
+- `FIRESTORE_EMULATOR_HOST=localhost:8080`
+- `FIREBASE_AUTH_EMULATOR_HOST=localhost:9099`
+
+Next start up the firebase emulators by running the following command:
+
+- `firebase emulators:start --import=./.firebase --export-on-exit`
+
+------------------------------------------------------------
+
+## Nx Command Summary
 
 ### Development server
 
@@ -47,3 +62,6 @@ Libraries are shareable across libraries and applications. They can be imported 
 ### Visualize Dependency Tree
 
 Run `nx dep-graph` to see a diagram of the dependencies of your projects.
+
+
+------------------------------------------------------------

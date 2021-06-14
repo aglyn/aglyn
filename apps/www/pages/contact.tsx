@@ -17,11 +17,13 @@ import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
 import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
 import Grid from '@material-ui/core/Grid'
 import Box from '@material-ui/core/Box'
+import Alert from '@material-ui/lab/Alert'
+import AlertTitle from '@material-ui/lab/AlertTitle'
 import Button from '@material-ui/core/Button'
 import Container from '@material-ui/core/Container'
 import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
 import Typography from '@material-ui/core/Typography'
-import React, { Children, useCallback, useState } from 'react'
+import React, { useCallback } from 'react'
 import { DdfForms } from '../forms'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
@@ -54,31 +56,40 @@ const styles = (theme: Theme) => createStyles({
   h2: {},
 })
 
-const asyncSubmit = (values, api) => {
-  return new Promise((resolve) =>
-    setTimeout(() => {
-      console.log('FormValues', values)
-      resolve('Yay')
-    }, 1500),
-  )
-}
-
 const FormTemplate = (props: FormTemplateRenderProps) => {
   const { formFields, schema } = props
   const { handleSubmit, getState } = useFormApi()
-  const { submitting, submitSucceeded, valid, pristine } = getState()
+  const { submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine } = getState()
 
-  if (submitSucceeded) {
+  if (submitFailed) {
     return (
       <>
-        <Box>
-
+        <Box mt={2}>
+          <Alert severity="error">
+            <AlertTitle>Error — Form Submission Failed</AlertTitle>
+            Sorry, please try again later. If the issue persists please send a direct email to <em>info@aglyn.com</em>
+            <br /><br />
+            <small>Error details:</small>
+            <pre>{JSON.stringify(submitErrors, null, 2)}</pre>
+          </Alert>
         </Box>
       </>
     )
   }
 
-  console.log('form fields', formFields)
+  if (submitSucceeded) {
+    return (
+      <>
+        <Box mt={2}>
+          <Alert severity="success">
+            <AlertTitle>Success</AlertTitle>
+            We have received your submission. If you have any immediate questions, send them to <em>info@aglyn.com</em>
+          </Alert>
+        </Box>
+      </>
+    )
+  }
+
   return (
     <Grid
       container
@@ -111,15 +122,20 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
   )
 }
 
-interface Props extends WithStyles<typeof styles> {
-
-}
-
-function Contact(props: Props) {
+function Contact(props: WithStyles<typeof styles>) {
   const { classes } = props
 
-  const handleSubmit = useCallback((...args) => {
-    console.log('handle submit', ...args)
+  const handleSubmit = useCallback(async (values) => {
+    return await fetch(`/api/h/f/${DdfForms.formIds.contact}`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(values),
+    })
+    .then(res => res.json())
+    .then(res => res?.status !== 'success' ? res : undefined)
   }, [])
 
   return (
