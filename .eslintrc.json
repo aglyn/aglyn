@@ -42,7 +42,7 @@
               },
               {
                 "sourceTag": "scope:app:www",
-                "onlyDependOnLibsWithTags": []
+                "onlyDependOnLibsWithTags": ["*"]
               },
               {
                 "sourceTag": "*",

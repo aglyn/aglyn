@@ -124,6 +124,7 @@ class AppDocument<P = {}> extends NextDocument<P> {
 
   metaElements: MetaElementsConfig = [
     ['theme-color', themes.console.palette.primary.main],
+    ['X-UA-Compatible', 'IE=edge'],
   ]
   linkElements: LinkElementsConfig = [
     ['shortcut icon', '/favicon.ico'],
@@ -132,11 +133,11 @@ class AppDocument<P = {}> extends NextDocument<P> {
   ]
 
   static makeMetaElem = ([name, content, { ...rest }]: MetaElementsConfig[number]) => (
-    <meta key={name + content} content={content} name={name} {...rest} />
+    <meta key={name + content} name={name} content={content} {...rest} />
   )
 
   static makeLinkElem = ([rel, href, { ...rest }]: LinkElementsConfig[number]) => (
-    <link key={href} href={href} rel={rel} {...rest} />
+    <link key={href} rel={rel} href={href} {...rest} />
   )
 
   public render(): JSX.Element {
@@ -144,8 +145,8 @@ class AppDocument<P = {}> extends NextDocument<P> {
       <>
         <Html lang="en">
           <Head>
-            {this.linkElements.map(AppDocument.makeLinkElem)}
             {this.metaElements.map(AppDocument.makeMetaElem)}
+            {this.linkElements.map(AppDocument.makeLinkElem)}
           </Head>
           <body>
           <Main />

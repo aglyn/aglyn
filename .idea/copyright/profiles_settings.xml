@@ -1,5 +1,9 @@
 <component name="CopyrightManager">
   <settings default="aglyn_copyright_license_mit">
+    <module2copyright>
+      <element module="All" copyright="aglyn_copyright_license_mit" />
+      <element module="Project Files" copyright="aglyn_copyright_license_mit" />
+    </module2copyright>
     <LanguageOptions name="__TEMPLATE__">
       <option name="separateBefore" value="true" />
       <option name="lenBefore" value="1" />

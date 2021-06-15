@@ -2,6 +2,7 @@
   "name": "aglyn",
   "version": "1.0.0-alpha1",
   "license": "MIT",
+  "private": true,
   "scripts": {
     "nx": "nx",
     "start": "nx serve",
@@ -23,9 +24,9 @@
     "update": "nx migrate latest",
     "workspace-generator": "nx workspace-generator",
     "dep-graph": "nx dep-graph",
-    "help": "nx help"
+    "help": "nx help",
+    "firebase:emulate": "firebase emulators:start --import=./.firebase --export-on-exit"
   },
-  "private": true,
   "dependencies": {
     "@data-driven-forms/mui-component-mapper": "^3.8.2",
     "@data-driven-forms/react-form-renderer": "^3.8.2",

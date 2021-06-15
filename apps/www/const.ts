@@ -6,6 +6,9 @@ export const APP = {
   BUILD_ID: `${process.env.BUILD_ID}`,
   COMMIT_REF: `${process.env.COMMIT_REF}`,
   IS_PRODUCTION: process.env.NODE_ENV === 'production',
+
+  META_DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
+  META_TITLE: 'Aglyn',
 }
 
 export namespace Core {

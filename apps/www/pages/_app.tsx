@@ -6,7 +6,8 @@
  * found in the root directory of this source tree.
  */
 
-import { CssBaseline } from '@material-ui/core'
+import CssBaseline from '@material-ui/core/CssBaseline'
+import Slide from '@material-ui/core/Slide'
 import { MuiThemeProvider } from '@material-ui/core/styles'
 import { themes } from '@aglyn/shared/ui/react'
 import React, { Fragment, StrictMode, useEffect } from 'react'
@@ -19,9 +20,10 @@ import AppLoaderOverlayView from '../views/AppLoaderOverlayView'
 import { AppContextProvider } from '../contexts/app-context'
 import { CurrentUserProviderComponent } from '../contexts/current-user-context'
 import { MetaElementsConfig } from './_document'
+import { APP } from '../const'
 
 
-const previewProduction = false
+const previewProduction = true
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
 const appOptions = {
   ...(isProduction
@@ -55,12 +57,6 @@ function _App(props: AppProps) {
     }
   }, [])
 
-  useOnRouteChangeComplete(() => {
-    if (isProduction) {
-      app.getAnalytics().logEvent('page_view')
-    }
-  })
-
   const Wrapper = isProduction ? Fragment : Fragment// StrictMode
 
   return (
@@ -68,14 +64,8 @@ function _App(props: AppProps) {
       <AppContextProvider value={app}>
         <CurrentUserProviderComponent>
           <Head>
-            <title>Aglyn</title>
-            <link rel="shortcut icon" href="/favicon.ico" />
-            <link rel="manifest" href="/manifest.json" />
-            <meta
-              name="description"
-              content="Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations"
-            />
-            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title children={APP.META_TITLE}/>
+            <meta name="description" content={APP.META_DESCRIPTION} />
           </Head>
           <MuiThemeProvider theme={themes.console}>
             <CssBaseline>
