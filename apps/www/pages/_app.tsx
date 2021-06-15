@@ -23,7 +23,7 @@ import { MetaElementsConfig } from './_document'
 import { APP } from '../const'
 
 
-const previewProduction = true
+const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
 const appOptions = {
   ...(isProduction
