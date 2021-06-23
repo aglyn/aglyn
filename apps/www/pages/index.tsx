@@ -71,7 +71,6 @@ function Index(props: Props) {
                     <Image
                       src="/designer/website-designer-preview-collage.png"
                       alt="website designer preview collage"
-                      layout="responsive"
                       width="504"
                       height="380"
                     />
@@ -116,7 +115,6 @@ function Index(props: Props) {
                     <Image
                       src="/designer/website-designer-element-categories.png"
                       alt="website designer element category search"
-                      layout="responsive"
                       width="400"
                       height="478"
                     />
@@ -159,7 +157,6 @@ function Index(props: Props) {
                     <Image
                       src="/designer/website-designer-custom-element-attributes.png"
                       alt="website designer custom element attributes"
-                      layout="responsive"
                       width="400"
                       height="477"
                     />
@@ -202,7 +199,6 @@ function Index(props: Props) {
                     <Image
                       src="/designer/website-designer-functional-operations.png"
                       alt="website designer functional operations"
-                      layout="responsive"
                       width="400"
                       height="440"
                     />
