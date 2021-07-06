@@ -6,7 +6,8 @@
  * found in the root directory of this source tree.
  */
 
-import { ComponentProp, ConfirmationProviderComponent, themes } from '@aglyn/shared/ui/react'
+import { ComponentProp, ConfirmationProviderComponent } from '@aglyn/shared/ui/react'
+import { builder } from '@aglyn/shared/ui/themes'
 import { Website } from '@aglyn/website/core'
 import { WebsiteComponent } from '@aglyn/website/feature/react-renderer'
 import { ThemeProvider } from '@material-ui/core/styles'
@@ -34,21 +35,21 @@ export const BuilderComponent = forwardRef<any, BuilderComponentProps>(
 
     return (
       <NoSsr>
-      <ThemeProvider theme={themes.builder}>
-        <Component ref={ref} {...rest}>
-          <ConfirmationProviderComponent>
-            <SelectionProviderComponent>
-              <ElementDrawerProviderComponent>
-                <WebsiteComponent
-                  elements={elements}
-                  elementComponent={elementComponent}
-                />
-                <AppBarComponent />
-              </ElementDrawerProviderComponent>
-            </SelectionProviderComponent>
-          </ConfirmationProviderComponent>
-        </Component>
-      </ThemeProvider>
+        <ThemeProvider theme={builder}>
+          <Component ref={ref} {...rest}>
+            <ConfirmationProviderComponent>
+              <SelectionProviderComponent>
+                <ElementDrawerProviderComponent>
+                  <WebsiteComponent
+                    elements={elements}
+                    elementComponent={elementComponent}
+                  />
+                  <AppBarComponent />
+                </ElementDrawerProviderComponent>
+              </SelectionProviderComponent>
+            </ConfirmationProviderComponent>
+          </Component>
+        </ThemeProvider>
       </NoSsr>
     )
   },

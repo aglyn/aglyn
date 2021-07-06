@@ -9,7 +9,7 @@
 import CssBaseline from '@material-ui/core/CssBaseline'
 import Slide from '@material-ui/core/Slide'
 import { MuiThemeProvider } from '@material-ui/core/styles'
-import { themes } from '@aglyn/shared/ui/react'
+import { console } from '@aglyn/shared/ui/themes'
 import React, { Fragment, StrictMode, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
@@ -30,7 +30,7 @@ const appOptions = {
     ? {}
     : {
       authEmulator: 'http://localhost:9099/',
-      firestoreEmulator: { host: 'localhost', port: 8080 },
+      firestoreEmulator: {host: 'localhost', port: 8080},
     }),
 }
 const app = withAppController(appOptions)
@@ -41,7 +41,7 @@ const metaElements: MetaElementsConfig = [
 
 
 function _App(props: AppProps) {
-  const { Component, pageProps } = props
+  const {Component, pageProps} = props
 
   useEffect(() => {
     // Remove the server-side injected CSS.
@@ -64,10 +64,10 @@ function _App(props: AppProps) {
       <AppContextProvider value={app}>
         <CurrentUserProviderComponent>
           <Head>
-            <title children={APP.META_TITLE}/>
+            <title children={APP.META_TITLE} />
             <meta name="description" content={APP.META_DESCRIPTION} />
           </Head>
-          <MuiThemeProvider theme={themes.console}>
+          <MuiThemeProvider theme={console}>
             <CssBaseline>
               <AppLoaderProviderComponent>
                 <div className="app">

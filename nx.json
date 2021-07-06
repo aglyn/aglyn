@@ -47,6 +47,10 @@
       "tags": ["scope:lib", "scope:shared", "scope:shared:ui"],
       "implicitDependencies": []
     },
+    "shared-ui-themes": {
+      "tags": ["scope:lib", "scope:shared", "scope:shared:ui"],
+      "implicitDependencies": []
+    },
     "shared-util-helpers": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
       "implicitDependencies": []
@@ -62,6 +66,6 @@
     "website-feature-react-builder": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
-    }
+    },
   }
 }

@@ -8,7 +8,7 @@
 
 import CssBaseline from '@material-ui/core/CssBaseline'
 import { MuiThemeProvider } from '@material-ui/core/styles'
-import { themes } from '@aglyn/shared/ui/react'
+import { console } from '@aglyn/shared/ui/themes'
 import React, { Fragment, StrictMode, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
@@ -23,7 +23,7 @@ const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
 
 function _App(props: AppProps) {
-  const { Component, pageProps } = props
+  const {Component, pageProps} = props
 
   useEffect(() => {
     // Remove the server-side injected CSS.
@@ -41,13 +41,13 @@ function _App(props: AppProps) {
         <title children={APP.META_TITLE} />
         <meta name="description" content={APP.META_DESCRIPTION} />
       </Head>
-      <MuiThemeProvider theme={themes.console}>
+      <MuiThemeProvider theme={console}>
         <CssBaseline>
-            <div className="app">
-              <main>
-                <Component {...pageProps} />
-              </main>
-            </div>
+          <div className="app">
+            <main>
+              <Component {...pageProps} />
+            </main>
+          </div>
         </CssBaseline>
       </MuiThemeProvider>
     </Wrapper>

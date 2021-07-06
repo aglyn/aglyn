@@ -297,6 +297,27 @@
           }
         }
       }
+    },
+    "shared-ui-themes": {
+      "root": "libs/shared/ui/themes",
+      "sourceRoot": "libs/shared/ui/themes/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/shared/ui/themes/**/*.ts"]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/shared/ui/themes"],
+          "options": {
+            "jestConfig": "libs/shared/ui/themes/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      }
     }
   }
 }

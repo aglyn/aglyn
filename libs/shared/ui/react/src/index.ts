@@ -13,7 +13,6 @@ export * from './lib/components/svg-path-icon/svg-path-icon'
 export * from './lib/components/svg-path/svg-path'
 
 export * from './lib/const/svg-icons'
-export * from './lib/const/theme'
 
 export * from './lib/components/confirmation-provider/confirmation-provider.component'
 export * from './lib/contexts/confirmation.context'

@@ -1,4 +1,4 @@
-import { themes } from '@aglyn/shared/ui/react'
+import { console } from '@aglyn/shared/ui/themes'
 import { ServerStyleSheets } from '@material-ui/core/styles'
 import { NextComponentType } from 'next'
 import NextDocument, {
@@ -101,7 +101,7 @@ class AppDocument<P = {}> extends NextDocument<P> {
     let css = sheets.toString()
     // It might be undefined, e.g. after an error.
     if (css && process.env.NODE_ENV === 'production' && jssMinify.prefixer && jssMinify.cleanCSS) {
-      const result1 = await jssMinify.prefixer.process(css, { from: undefined })
+      const result1 = await jssMinify.prefixer.process(css, {from: undefined})
       css = result1.css
       css = jssMinify.cleanCSS.minify(css).styles
     }
@@ -115,7 +115,7 @@ class AppDocument<P = {}> extends NextDocument<P> {
         <style
           key="jss-server-side"
           // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: css }}
+          dangerouslySetInnerHTML={{__html: css}}
           id="jss-server-side"
         />,
       ],
@@ -123,7 +123,7 @@ class AppDocument<P = {}> extends NextDocument<P> {
   }
 
   metaElements: MetaElementsConfig = [
-    ['theme-color', themes.console.palette.primary.main],
+    ['theme-color', console.palette.primary.main],
     ['X-UA-Compatible', 'IE=edge'],
   ]
   linkElements: LinkElementsConfig = [
@@ -132,11 +132,11 @@ class AppDocument<P = {}> extends NextDocument<P> {
     ['stylesheet', 'https://fonts.googleapis.com/css?family=Raleway:300,400,500,700&display=swap'],
   ]
 
-  static makeMetaElem = ([name, content, { ...rest }]: MetaElementsConfig[number]) => (
+  static makeMetaElem = ([name, content, {...rest}]: MetaElementsConfig[number]) => (
     <meta key={name + content} name={name} content={content} {...rest} />
   )
 
-  static makeLinkElem = ([rel, href, { ...rest }]: LinkElementsConfig[number]) => (
+  static makeLinkElem = ([rel, href, {...rest}]: LinkElementsConfig[number]) => (
     <link key={href} rel={rel} href={href} {...rest} />
   )
 
