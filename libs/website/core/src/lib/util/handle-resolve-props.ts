@@ -15,11 +15,18 @@
  * limitations under the License.
  */
 
-import { deepMerge } from '@aglyn/shared/util/helpers'
+import { AnyProps, Component } from '../core-types'
+import { _isFn } from '@aglyn/shared/util/helpers'
+import { handlePropDefaults } from './handle-prop-defaults'
 
 
-export function handlePropDefaults(dataProps, defaultProps) {
-  return deepMerge(defaultProps, dataProps)
+export function handleResolveProps(
+  dataProps: AnyProps,
+  metadata: Component['metadata'],
+  thisArg?: any,
+) {
+  const {resolveProps, defaultProps} = metadata
+  const mergedProps = handlePropDefaults(dataProps, defaultProps)
+  const propsResolver = _isFn(resolveProps) ? resolveProps : (p) => p
+  return propsResolver.call(thisArg, mergedProps)
 }
-
-export default handlePropDefaults

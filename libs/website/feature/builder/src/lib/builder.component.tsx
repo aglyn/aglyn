@@ -17,7 +17,7 @@
 
 import { ComponentProp, ConfirmationProviderComponent } from '@aglyn/shared/ui/react'
 import { builder } from '@aglyn/shared/ui/themes'
-import { Website } from '@aglyn/website/core'
+import { ElementData } from '@aglyn/website/core'
 import { WebsiteComponent } from '@aglyn/website/feature/renderer'
 import { ThemeProvider } from '@material-ui/core/styles'
 import { forwardRef } from 'react'
@@ -32,7 +32,7 @@ import { SnackbarProvider } from 'notistack'
 
 
 export interface BuilderComponentProps extends ComponentProp {
-  elements?: Website.ElementData[]
+  elements?: ElementData[]
   elementComponent?: ElementComponentProps['component']
 }
 

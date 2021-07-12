@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { WebApp, webApp } from './core'
+import { initializeApp } from './core'
 
 
 describe('WebApp', () => {
   it('should work', () => {
-    expect(webApp).toBeInstanceOf(WebApp)
+    const name = 'TestWebApp'
+    expect(initializeApp({name})).toHaveProperty('name', name)
   })
 })

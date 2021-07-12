@@ -154,3 +154,9 @@ Other than `BREAKING CHANGE: <description>` may be provided and follow a convent
 to [git trailer format](https://git-scm.com/docs/git-interpret-trailers).
 
 ------------------------------------------------------------
+
+## License
+
+[Apache–2.0](./LICENSE)
+
+------------------------------------------------------------

@@ -1,9 +1,9 @@
 module.exports = {
-  displayName: 'website-feature-elements-material',
+  displayName: 'website-feature-plugin-material',
   preset: '../../../../../jest.preset.js',
   transform: {
     '^.+\\.[tj]sx?$': 'babel-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../../../coverage/libs/website/feature/elements/material',
+  coverageDirectory: '../../../../../coverage/libs/website/feature/plugin/material',
 }

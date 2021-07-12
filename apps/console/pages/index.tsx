@@ -18,7 +18,8 @@
 import React from 'react'
 import styled from '@emotion/styled'
 import { SvgPathIcon, GridButtons } from '@aglyn/shared/ui/react'
-import Website from '@aglyn/website/core'
+import { getApp } from '@aglyn/website/core'
+
 
 const StyledPage = styled.div`
   .page {
@@ -26,7 +27,7 @@ const StyledPage = styled.div`
 `
 
 export function Index() {
-  console.log('page:/index', Website.App.getInstance())
+  console.log('page:/index', getApp())
 
   /*
    * Replace the elements below with your own.

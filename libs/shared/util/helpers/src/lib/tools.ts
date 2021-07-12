@@ -75,10 +75,11 @@ export function not(...val: Parameters<typeof Boolean>): boolean {
  * Shortcut for JSON.stringify(...)
  *
  * @export
- * @param args
  * @return {string}
+ * @param data
  */
-export function JSONs(...args: Parameters<typeof JSON.stringify>): ReturnType<typeof JSON.stringify> {
+export function stringify(data: Parameters<typeof JSON.stringify>[0]): ReturnType<typeof JSON.stringify>
+export function stringify(...args: Parameters<typeof JSON.stringify>): ReturnType<typeof JSON.stringify> {
   return JSON.stringify(...args)
 }
 
@@ -86,10 +87,11 @@ export function JSONs(...args: Parameters<typeof JSON.stringify>): ReturnType<ty
  * Shortcut for JSON.parse(...)
  *
  * @export
- * @param args
  * @return {any}
+ * @param str
  */
-export function JSONp(...args: Parameters<typeof JSON.parse>): ReturnType<typeof JSON.parse> {
+export function string2Json(str: Parameters<typeof JSON.parse>[0]): ReturnType<typeof JSON.parse>
+export function string2Json(...args: Parameters<typeof JSON.parse>): ReturnType<typeof JSON.parse> {
   return JSON.parse(...args)
 }
 
@@ -316,7 +318,7 @@ export function reduceObject<T extends Record<string, unknown>, K extends keyof 
  */
 export function map<K extends string, V, U>(
   target: { [key in K]: V },
-  callbackFn: (value: V, key: K, obj: { [key in K]: V }) => U,
+  callbackFn: MapObjectCallback<K, V, U>,
   thisArg?: unknown,
 ): { [key in K]: U } {
   const res: Partial<{ [key in K]: U }> = {}
@@ -327,6 +329,7 @@ export function map<K extends string, V, U>(
   }
   return res as { [key in K]: U }
 }
+export type MapObjectCallback<K extends string, V, U> = (value: V, key: K, obj: { [key in K]: V }) => U
 
 /**
  * @deprecated Move to {@link map}

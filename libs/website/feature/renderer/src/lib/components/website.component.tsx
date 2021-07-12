@@ -16,14 +16,14 @@
  */
 
 import { forwardRef } from 'react'
-import { Website } from '@aglyn/website/core'
+import { ElementData } from '@aglyn/website/core'
 import ElementComponent, { ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
 import ElementsComponent from './elements.component'
 
 
 export interface WebsiteComponentProps extends ComponentProp {
-  elements?: Website.ElementData[]
+  elements?: ElementData[]
   elementComponent?: ElementComponentProps['elementComponent']
 }
 

@@ -41,7 +41,7 @@ import Button from '@material-ui/core/Button'
 import Box from '@material-ui/core/Box'
 import FormControl from '@material-ui/core/FormControl'
 import Typography from '@material-ui/core/Typography'
-import Website from '@aglyn/website/core'
+import { getComponents, getApp } from '@aglyn/website/core'
 import { ElementDrawerOptions } from '../contexts/element-drawer.context'
 
 
@@ -157,7 +157,7 @@ const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProps & Wit
       [onConfirm],
     )
 
-    const components = Website.App.getComponents({moduleId: 'react'})
+    const components = getComponents(getApp(), {moduleId: 'react'})
     const items = components.map((i) => ({
       id: i?.$id,
       title: i?.metadata?.title,

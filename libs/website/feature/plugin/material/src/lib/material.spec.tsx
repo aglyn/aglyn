@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
-export * from './lib/core'
-export * from './lib/core-types'
+import { render } from '@testing-library/react'
 
-export * from './lib/constants/flag'
-export * from './lib/constants/instance'
+import Material from './material'
 
-export * from './lib/util/handle-resolve-props'
-export * from './lib/util/handle-prop-defaults'
+describe('Material', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<Material />)
+    expect(baseElement).toBeTruthy()
+  })
+})

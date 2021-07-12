@@ -16,158 +16,103 @@
  */
 
 import EventEmitter from 'events'
-import DdfSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
-import { VERSION as version } from './version'
+import { logger } from './logger'
+import { EventFlag } from './constants/flag'
+import {
+  AppOptions,
+  AppsMap,
+  Component,
+  EventListener,
+  EventName, Module,
+  ModulesMap,
+  WebApp,
+} from './core-types'
 
 
-export const PRODUCTION = process.env.NODE_ENV === 'production'
-export const VERSION = version
-export const DEFAULT_ENTRY_NAME = '[DEFAULT]'
+const DEFAULT_ENTRY_NAME = '[DEFAULT]'
+const _apps: AppsMap = new Map()
 
-export namespace Flag {
-  export enum EventFlag {
-    INSTANCE_CREATED = 'website:app:created-instance',
-    SET_MODULE = 'website:app:set-module',
-    SET_COMPONENT = 'website:app:set-component',
+export function getApps(): WebApp[] {
+  return [..._apps.values()]
+}
+export function getApp(name: string = DEFAULT_ENTRY_NAME): WebApp {
+  const app = _apps.get(name)
+  if (app) {return _apps.get(name)}
+  throw new Error(`App does not exist ${name}`)
+}
+export function deleteApp(app: WebApp): void {
+  const name = app.name
+  if (_apps.has(name)) {_apps.delete(name)}
+}
+export function listenAppOnce<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
+  app.mitt.once(name, listener)
+}
+export function listenAppOn<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
+  app.mitt.on(name, listener)
+}
+export function listenAppOff<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
+  app.mitt.off(name, listener)
+}
+export function initializeApp(options: AppOptions = {}): WebApp {
+  const {name = DEFAULT_ENTRY_NAME} = options
+  const _name = String(name)
+  if (!(_name)) {throw new Error('Invalid name provided')}
+  if (_apps.has(_name)) {throw new Error(`App already exists with name ${_name}`)}
+  const _created: string = new Date().toUTCString()
+  const _mitt: EventEmitter = new EventEmitter()
+  const _modules: ModulesMap = new Map()
+  const app: WebApp = new class {
+    get mitt() { return _mitt },
+    get modules() { return _modules },
+    get created() { return _created },
+    get name() { return _name },
   }
-
-  export enum RestrictFlag {
-    LIMIT = 'limit',
-    DISALLOW = 'disallow',
-  }
+  _apps.set(_name, app)
+  return _apps.get(_name)
 }
-
-export const _emit: EventEmitter = new EventEmitter()
-export const _modules: ModuleMap = new Map()
-export const _apps: Map<string, WebApp> = new Map()
-
-export interface WebApp {
-  readonly CREATED?: string
+export function getModules(app: WebApp): Module[] {
+  return Array.from(app.modules.values())
 }
-
-export interface AppOptions {
-  id?: string
+export function getModule(app: WebApp, options: { $id: string }): Module {
+  const {$id} = options
+  return app.modules.get($id)
 }
-
-export function initializeApp(options?: AppOptions) {
-
+export function setModule(app: WebApp, props: { $id: string; declarations: Component[] }) {
+  const {$id, declarations} = props
+  const module = {$id, declarations}
+  app.modules.set($id, module)
+  app.mitt.emit(EventFlag.SET_MODULE, module)
+  logger.debug(`Set module value for ${$id}`)
 }
-
-export type AnyProps = Record<string, unknown>
-
-export interface Module {
-  $id?: string
-  declarations: Component[]
+export function getComponent(app: WebApp, props: { moduleId: string; componentId: string }) {
+  const {moduleId, componentId} = props
+  return app.modules.get(moduleId)?.declarations.find((m) => m.$id === componentId)
 }
-
-export type ModuleMap = Map<string, Module>
-
-export interface Component<T = unknown> {
+export function getComponents(app: WebApp, props: { moduleId: string; componentId?: string[] }) {
+  const {moduleId, componentId} = props
+  return componentId
+    ? componentId.map(i => getComponent(app, {moduleId, componentId: i}))
+    : app.modules.get(moduleId)?.declarations
+}
+export function setComponent(app: WebApp, props: {
+  moduleId: string
   $id: string
-  ctor: T
-  metadata: {
-    displayName?: string
-    description?: string
-    title?: string
-    subtitle?: string
-    icon?: any
-    propsSchema?: DdfSchema
-    defaultProps?: Partial<AnyProps>
-    resolveProps?: <T>(...args: T[]) => Partial<AnyProps> | void
-    disableActions?: boolean
-    disableBadge?: boolean
-    disableCopying?: boolean
-    disableDragging?: boolean
-    disableDropping?: boolean
-    disableEditing?: boolean
-    disableNesting?: boolean
-    disableOutline?: boolean
-    disableRemoving?: boolean
-    disableSelecting?: boolean
-    restrictChildren?: [type: Flag.RestrictFlag, ids: string[]]
-    restrictParents?: [type: Flag.RestrictFlag, ids: string[]]
+  ctor: Component['ctor']
+  metadata?: Component['metadata']
+}) {
+  const {moduleId, $id, ctor, metadata} = props
+  const module = app.modules.get(moduleId) ?? {$id: moduleId, declarations: []}
+  let component = module.declarations.find((i) => i.$id === $id)
+  if (!component) {
+    component = {$id, ctor, metadata}
+    module.declarations.push(component)
+  } else {
+    component.$id = $id
+    component.ctor = ctor
+    component.metadata = metadata
   }
+  app.modules.set(moduleId, module)
+  app.mitt.emit(EventFlag.SET_COMPONENT, module)
+  logger.debug(`Set component id = ${$id} for module id = ${moduleId}`)
+  return this
 }
-
-export interface ElementData {
-  $id: string
-  component?: Component | string
-  children?: (ElementData | string)[]
-  props: AnyProps
-  temporary?: boolean
-  parent?: string
-  name?: string
-  description?: string
-}
-
-export class WebApp {
-  public static readonly VERSION: string = VERSION
-  public static readonly PRODUCTION: boolean = PRODUCTION
-
-  public static event: EventEmitter = new EventEmitter()
-  public static modules: ModuleMap = new Map()
-  public readonly CREATED = new Date().toUTCString()
-  private static instance?: WebApp
-  private constructor() {/*empty*/}
-  public static getInstance(): WebApp {
-    if (this.instance instanceof this) {
-      return this.instance
-    }
-    this.instance = new this()
-    this.event.emit(Flag.EventFlag.INSTANCE_CREATED, this, this.instance)
-    return this.instance
-  }
-
-
-  public static init(): WebApp {
-    return this.getInstance()
-  }
-
-
-  public static setModule(props: { $id: string; declarations: Component[] }) {
-    const {$id, declarations} = props
-    const module = {$id, declarations}
-    this.modules.set($id, module)
-    this.event.emit(Flag.EventFlag.SET_MODULE, this, module)
-    return this
-  }
-
-
-  public static getComponent(props: { moduleId: string; componentId: string }) {
-    const {moduleId, componentId} = props
-    return this.modules.get(moduleId)?.declarations.find((m) => m.$id === componentId)
-  }
-
-
-  public static getComponents(props: { moduleId: string; componentId?: string[] }) {
-    const {moduleId, componentId} = props
-    return componentId
-      ? componentId.map(i => this.getComponent({moduleId, componentId: i}))
-      : this.modules.get(moduleId)?.declarations
-  }
-
-
-  public static setComponent(props: {
-    moduleId: string
-    $id: string
-    ctor: Component['ctor']
-    metadata?: Component['metadata']
-  }) {
-    const {moduleId, $id, ctor, metadata} = props
-    const module = this.modules.get(moduleId) ?? {$id: moduleId, declarations: []}
-    let component = module.declarations.find((i) => i.$id === $id)
-    if (!component) {
-      component = {$id, ctor, metadata}
-      module.declarations.push(component)
-    } else {
-      component.$id = $id
-      component.ctor = ctor
-      component.metadata = metadata
-    }
-    this.modules.set(moduleId, module)
-    this.event.emit(Flag.EventFlag.SET_COMPONENT, this, module)
-    return this
-  }
-}
-
-export const webApp = WebApp.getInstance()

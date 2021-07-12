@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import pkg from '../../../../../package.json'
+import { deepMerge } from '@aglyn/shared/util/helpers'
 
 
-export let VERSION = JSON.stringify(pkg.version ?? 'N/A')
-export function setVersion(version: string): void {
-  VERSION = version
+export function handlePropDefaults(dataProps, defaultProps) {
+  return deepMerge(defaultProps, dataProps)
 }

@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
-
-import Material from './material'
+import pkg from '../../../../../../package.json'
 
 
-describe('Material', () => {
-  it('should render successfully', () => {
-    const {baseElement} = render(<Material />)
-    expect(baseElement).toBeTruthy()
-  })
-})
+export let VERSION = JSON.stringify(pkg.version ?? 'N/A')
+export function setVersion(version: string): void {
+  VERSION = version
+}
+export const PRODUCTION = process.env.NODE_ENV === 'production'
+export const DEVELOPMENT = process.env.NODE_ENV !== 'production'

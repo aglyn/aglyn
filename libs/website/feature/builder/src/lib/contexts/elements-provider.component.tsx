@@ -17,12 +17,12 @@
 
 import ElementsContext from './elements.context'
 import { ReactNode, useState } from 'react'
-import Website from '@aglyn/website/core'
+import { ElementData } from '@aglyn/website/core'
 
 
 export interface ElementsProviderComponentProps {
   children?: ReactNode
-  elements?: Website.ElementData[]
+  elements?: ElementData[]
 }
 
 function ElementsProviderComponent(props: ElementsProviderComponentProps) {

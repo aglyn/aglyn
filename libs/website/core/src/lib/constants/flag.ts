@@ -15,11 +15,18 @@
  * limitations under the License.
  */
 
-export * from './lib/core'
-export * from './lib/core-types'
+enum EventFlag {
+  INSTANCE_CREATED = 'website:app:created-instance',
+  SET_MODULE = 'website:app:set-module',
+  SET_COMPONENT = 'website:app:set-component',
+}
 
-export * from './lib/constants/flag'
-export * from './lib/constants/instance'
+enum RestrictFlag {
+  LIMIT = 'limit',
+  DISALLOW = 'disallow',
+}
 
-export * from './lib/util/handle-resolve-props'
-export * from './lib/util/handle-prop-defaults'
+export {
+  EventFlag,
+  RestrictFlag
+}

@@ -47,6 +47,10 @@
       "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
       "implicitDependencies": []
     },
+    "shared-util-logger": {
+      "tags": ["scope:lib", "scope:shared", "scope:shared:util", "scope:logger"],
+      "implicitDependencies": []
+    },
     "website-core": {
       "tags": ["scope:lib", "scope:website", "scope:website:core"],
       "implicitDependencies": []
@@ -55,7 +59,7 @@
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
     },
-    "website-feature-elements-material": {
+    "website-feature-plugin-material": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
     },

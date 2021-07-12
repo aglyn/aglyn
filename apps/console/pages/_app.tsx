@@ -22,10 +22,10 @@ import React, { Fragment, StrictMode, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
 import { APP } from '../../www/const'
-import Website from '@aglyn/website/core'
+import { initializeApp } from '@aglyn/website/core'
 
 
-Website.App.init()
+initializeApp()
 
 
 const previewProduction = false

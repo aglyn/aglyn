@@ -16,16 +16,17 @@
  */
 
 import React, { useState } from 'react'
-import Website from '@aglyn/website/core'
+import { getApp, setComponent } from '@aglyn/website/core'
 import { BuilderComponent } from '@aglyn/website/feature/builder'
 import { samplePageData } from '../constants/sample-data'
 
-const Root = ({ children, innerRef, ...props }) => (
+
+const Root = ({children, innerRef, ...props}) => (
   <span ref={innerRef} {...props}>
     {children}
   </span>
 )
-Website.App.setComponent({
+setComponent(getApp(), {
   moduleId: 'react',
   $id: 'root',
   ctor: Root,
@@ -40,7 +41,7 @@ export interface BuilderProps {}
 export function Builder(props: BuilderProps) {
   const [elements, setElements] = useState(samplePageData)
 
-  console.log('page:/builder', Website.App.getInstance())
+  console.log('page:/builder', getApp())
   return <BuilderComponent elements={elements} />
 }
 

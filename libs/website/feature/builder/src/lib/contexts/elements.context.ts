@@ -16,11 +16,11 @@
  */
 
 import { createContext, useContext } from 'react'
-import { Website } from '@aglyn/website/core'
+import { ElementData } from '@aglyn/website/core'
 
 
 export interface ElementsContextType {
-  elements?: Website.ElementData[]
+  elements?: ElementData[]
 }
 
 export type UseElementsContextType = () => ElementsContextType

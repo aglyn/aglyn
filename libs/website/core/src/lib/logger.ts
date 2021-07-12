@@ -15,21 +15,6 @@
  * limitations under the License.
  */
 
-import { AnyProps } from '../lib/types'
-import Website from '@aglyn/website/core'
-import { _isFn } from '@aglyn/shared/util/helpers'
-import handlePropDefaults from './handle-prop-defaults'
+import { Logger } from '@aglyn/shared/util/logger'
 
-
-export function handleResolveProps(
-  dataProps: AnyProps,
-  metadata: Website.Component['metadata'],
-  thisArg?: any,
-) {
-  const {resolveProps, defaultProps} = metadata
-  const mergedProps = handlePropDefaults(dataProps, defaultProps)
-  const propsResolver = _isFn(resolveProps) ? resolveProps : (p) => p
-  return propsResolver.call(thisArg, mergedProps)
-}
-
-export default handleResolveProps
+export const logger = new Logger('@aglyn/website/core')
