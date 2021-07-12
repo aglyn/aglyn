@@ -1,15 +1,17 @@
 # Aglyn
 
-## Firebase Summary
+## Firebase
+
+Provides auth, data-store, analytics and more.
 
 ### Emulation
 
-Set the environment variables for the hosts
+1. Set the environment variables for the hosts:
 
 - `FIRESTORE_EMULATOR_HOST=localhost:8080`
 - `FIREBASE_AUTH_EMULATOR_HOST=localhost:9099`
 
-Next start up the firebase emulators by running the following command:
+2. Run command to start up the firebase emulators:
 
 - `firebase emulators:start --import=./.firebase --export-on-exit`
 
@@ -17,68 +19,57 @@ Next start up the firebase emulators by running the following command:
 
 ## Nx Command Summary
 
-### Building, Serving & Testing
+### Basic usage
 
-#### Serving for development
+#### Serving
 
-- Run `nx serve my-app` for a dev server. Navigate to http://localhost:4200/. The app will
-  automatically reload if you change any of the source files.
+- Run `nx serve <app-name>` for a dev server. Navigate to http://localhost:4200/. The app will
+  automatically reload if you change any of the source files. Use the `--prod` flag for a production
+  environment.
 
-#### Build commands
+#### Building
 
-- Run `nx build my-app` to build the project. The build artifacts will be stored in the `dist/`
-  directory. Use the `--prod` flag for a production build.
+- Run `nx build <app-name>` to build the project. The build artifacts will be stored in the `dist/`directory. Use the `--prod` flag for a production build.
 
-#### Version bump and changelog automation
+##### Unit testing
 
-###### Utilizes [SemVer](https://semver.org/) and [ConventionalCommits](https://www.conventionalcommits.org/en/v1.0.0/)
-
-- Run `nx run workspace:version --version=[major|minor|patch|prerelease] --preid=beta --dry-run` for
-  version bump and generation of CHANGELOG
-- Run `nx run <my-lib>:version [...options]` for independent project app or lib version and
-  generation of CHANGELOG
-
-> @See [`@jscutlery/semver`](https://github.com/jscutlery/semver) Nx plugin repository for full list of commands and options.
-
-#### Running Tests
-
-**Unit tests**
-
-- Run `nx test my-app` to execute the unit tests via [Jest](https://jestjs.io).
+- Run `nx test <app-name>` to execute the unit tests via [Jest](https://jestjs.io).
 - Run `nx affected:test` to execute the unit tests affected by a change.
 
-**End-to-end tests**
+##### End-to-end (e2e) testing
 
-- Run `ng e2e my-app` to execute the end-to-end tests via [Cypress](https://www.cypress.io).
+- Run `ng e2e <app-name>` to execute the end-to-end tests via [Cypress](https://www.cypress.io).
 - Run `nx affected:e2e` to execute the end-to-end tests affected by a change.
 
 ### Scaffolding
 
-**Nx Applications**
+#### Applications
 
-- Run `nx g @nrwl/react:app my-app` to generate an application.
+When using Nx monorepo, you can create multiple applications and libraries in the same workspace.
 
-> @See Nx documentation for other app plugins
+- Run `nx g @nrwl/react:app <app-name>` to generate an React application.
+- Run `nx g @nrwl/node:app <app-name>` to generate an Node.js application.
+- Run `nx g @nrwl/next:app <app-name>` to generate an Next.js application.
 
-When using Nx, you can create multiple applications and libraries in the same workspace.
+_**@See** Nx documentation for more app [community plugins](https://nx.dev/community#community-plugin-list) and commands_
 
-**Nx Libraries**
-
-- Run `nx g @nrwl/react:lib my-lib` to generate a library.
-
-> You can also use any of the plugins above to generate libraries as well.
+#### Libraries
 
 Libraries are shareable across libraries and applications. They can be imported from `@aglyn/mylib`.
 
-**Code for Nx App/Libs**
+- Run `nx g @nrwl/react:lib <lib-name>` to generate a React library
+- Run `nx g @nrwl/node:lib <lib-name>` to generate a Node.js library
+- Run `nx g @nrwl/next:lib <lib-name>` to generate a Next.js library
+
+_**@See** Nx documentation for more library [community plugins](https://nx.dev/community#community-plugin-list) and commands_
+
+#### App or library modules and components
 
 - Run `nx g @nrwl/react:component my-component --project=my-app` to generate a new component.
 
-### Visualize Dependency Tree
+### Updating
 
-- Run `nx dep-graph` to see a diagram of the dependencies of your projects.
-
-### Updating Nx
+#### Nx build framework
 
 1. Run `nx migrate latest` to pull the most recent version of Nx, it will generate a new files
    named `migrations.json` in the root directory. Double check the contents and make sure changes
@@ -87,15 +78,33 @@ Libraries are shareable across libraries and applications. They can be imported 
    command `nx migrate --run-migrations=migrations.json`
 3. If everything succeeded, stage the changes and remove the `migrations.json` file.
 
-More info detailed on the [Nx documentation](https://nx.dev/latest/react/core-concepts/updating-nx)
+_@See More info detailed on the [Nx documentation](https://nx.dev/latest/react/core-concepts/updating-nx)_
+
+#### Version and changelog
+
+Package version bump and changelog automation with [SemVer](https://semver.org/) and [ConventionalCommits](https://www.conventionalcommits.org/en/v1.0.0/)
+
+- Run `nx run workspace:version --version=[major|minor|patch|prerelease] --preid=beta --dry-run` for version bump and generation of CHANGELOG
+- Run `nx run <lib-name>:version [...options]` for independent project app or lib version and generation of CHANGELOG
+
+_**@See** [`@jscutlery/semver`](https://github.com/jscutlery/semver) Nx plugin repository for full list of commands and options._
+
+### Visualizing dependencies
+
+Nx can generate a dependency tree graph
+
+- Run `nx dep-graph` to see a diagram of the dependencies of your projects.
 
 ------------------------------------------------------------
 
-## Git 
+## Git
 
 ### Commit messages
 
-Follow guide for commit-lint: [ConventionalCommits](https://www.conventionalcommits.org)
+- Text template: [commit_template.txt](./commit_template.txt).
+- Lint documentation: [ConventionalCommits](https://www.conventionalcommits.org)
+
+#### Template
 
 ```markdown
 <type>[(optional-scope)]: <description>
@@ -105,14 +114,32 @@ Follow guide for commit-lint: [ConventionalCommits](https://www.conventionalcomm
 [optional footer(s)]
 ```
 
-The above commit contains the following structural elements, to communicate intent to the consumers
-of your library:
+#### Overview
 
-1. fix: a commit of the *type* `fix` patches a bug in your codebase (this correlates with [`PATCH`](http://semver.org/#summary) in Semantic Versioning).
-2. feat: a commit of the *type* `feat` introduces a new feature to the codebase (this correlates with [`MINOR`](http://semver.org/#summary) in Semantic Versioning).
-3. BREAKING CHANGE: a commit that has a footer `BREAKING CHANGE:`, or appends a `!` after the type/scope, introduces a breaking API change (correlating with [`MAJOR`](http://semver.org/#summary) in Semantic Versioning). A BREAKING CHANGE can be part of commits of any *type*.
-4. *types* other than `fix:` and `feat:` are allowed, for example [@commitlint/config-conventional](https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional) (based on the [the Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines)) recommends: 
-   - `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `fix:`, `feat:`, `style:`, `revert:` and others.
-5. *footers* other than `BREAKING CHANGE: <description>` may be provided and follow a convention similar to [git trailer format](https://git-scm.com/docs/git-interpret-trailers).
+For the purpose of communicating intent to the consumers of the library, the commit outlines the
+following structural elements:
+
+##### Types
+
+Other than `fix:` and `feat:` are allowed, for
+example [@commitlint/config-conventional](https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional) (
+based on
+the [the Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines))
+recommends: `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `perf:`, `test:`, `fix:`
+, `feat:`, `style:`, `revert:` and others.
+
+- **Fixing:** a commit of the *type* `fix` patches a bug in your codebase (this correlates
+  with [`PATCH`](http://semver.org/#summary) in Semantic Versioning).
+- **Feature:** a commit of the *type* `feat` introduces a new feature to the codebase (this
+  correlates with [`MINOR`](http://semver.org/#summary) in Semantic Versioning).
+- **BREAKING CHANGE:** a commit that has a footer `BREAKING CHANGE:`, or appends a `!` after the
+  type/scope, introduces a breaking API change (correlating
+  with [`MAJOR`](http://semver.org/#summary) in Semantic Versioning). A BREAKING CHANGE can be part
+  of commits of any *type*.
+
+##### Footers
+
+Other than `BREAKING CHANGE: <description>` may be provided and follow a convention similar
+to [git trailer format](https://git-scm.com/docs/git-interpret-trailers).
 
 ------------------------------------------------------------

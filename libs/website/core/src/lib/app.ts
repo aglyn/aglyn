@@ -9,10 +9,10 @@
 import { Component, ModuleMap } from './core'
 import EventEmitter from 'events'
 import { EventFlag } from './const/flags'
-import { version } from '../../../../../package.json'
+import pkg from '../../../../../package.json'
 
 
-const VERSION = JSON.stringify(version ?? 'N/A')
+const VERSION = JSON.stringify(pkg.version ?? 'N/A')
 const PRODUCTION = process.env.NODE_ENV === 'production'
 
 export class App {

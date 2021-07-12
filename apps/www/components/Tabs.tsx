@@ -5,8 +5,8 @@ import MuiTabs from '@material-ui/core/Tabs'
 import MuiTab from '@material-ui/core/Tab'
 import Typography from '@material-ui/core/Typography'
 import Box from '@material-ui/core/Box'
-import { Button } from '@material-ui/core'
 import { GridButtons, SvgPathIcon } from '@aglyn/shared/ui/react'
+
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -15,7 +15,7 @@ interface TabPanelProps {
 }
 
 function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props
+  const {children, value, index, ...other} = props
 
   return (
     <div
@@ -73,7 +73,7 @@ export default function Tabs() {
           <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconId="home" />} />
           <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconId="eye" />} />
           {/* <MuiTab label="Item Two" {...a11yProps(2)} />
-          <MuiTab label="Item Three" {...a11yProps(3)} /> */}
+           <MuiTab label="Item Three" {...a11yProps(3)} /> */}
         </MuiTabs>
       </AppBar>
       <TabPanel index={0} value={value}>
@@ -90,7 +90,7 @@ export default function Tabs() {
                   <div>Entries</div>
                 </div>
               ),
-            }
+            },
           ]}
           spacing={3}
         />

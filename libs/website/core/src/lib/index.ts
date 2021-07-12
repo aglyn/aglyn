@@ -1,5 +1,5 @@
 export * from './const/flags'
-// export * from './decorators/get-resolved-merged-props'
 export * from './utils/handle-resolve-props'
+export { default as handleResolveProps } from './utils/handle-resolve-props'
 export * from './core'
 export * from './app'

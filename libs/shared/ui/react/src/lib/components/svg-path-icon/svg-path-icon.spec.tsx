@@ -13,7 +13,7 @@ import SvgPathIcon from './svg-path-icon'
 
 describe('SvgPathIcon', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<SvgPathIcon />)
+    const { baseElement } = render(<SvgPathIcon iconId={'help'} />)
     expect(baseElement).toBeTruthy()
   })
 })

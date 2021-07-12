@@ -6,11 +6,11 @@
  * found in the root directory of this source tree.
  */
 
-import React from 'react'
+import { forwardRef, useMemo, memo } from 'react'
 import MuiSvgIcon, { SvgIconProps as MuiSvgIconProps } from '@material-ui/core/SvgIcon'
 import { getIcon, Icon, IconKeys } from '@aglyn/shared/data/mdi'
 import { _isStr } from '@aglyn/shared/util/helpers'
-import { SvgPathData, svgPathElement } from '../svg-path/svg-path'
+import { SvgPathData, svgPathElement } from './svg-path'
 
 
 export type IconId = IconKeys
@@ -23,11 +23,20 @@ export type Path = SvgPathData | JSX.Element
  * @param passProps
  */
 export function createSvgPathIcon(displayName: string, path: SvgPathIconProps['path'], passProps?: SvgPathIconProps) {
-  const CreateSvgPathIcon = React.forwardRef<any, SvgPathIconProps>(function RefRenderFn(props, ref) {
-    return <SvgPathIcon ref={ref} path={path} {...passProps} {...props} />
-  })
+  const CreateSvgPathIcon = forwardRef<any, SvgPathIconProps>(
+    function RefRenderFn(props, ref) {
+      return (
+        <SvgPathIcon
+          ref={ref}
+          path={path}
+          {...passProps}
+          {...props}
+        />
+      )
+    }
+  )
   CreateSvgPathIcon.displayName = `CreateSvgPathIcon(${displayName})`
-  return React.memo(CreateSvgPathIcon)
+  return memo(CreateSvgPathIcon)
 }
 
 /**
@@ -39,15 +48,15 @@ export function getMdiIconPathData(iconId: IconKeys, failover?: Icon): string {
   return getIcon(iconId, failover)?.['path']
 }
 
-export interface SvgPathIconProps extends Omit<MuiSvgIconProps, 'iconId' | 'path'> {
+export interface SvgPathIconProps extends Partial<Omit<MuiSvgIconProps, 'path'>> {
   iconId?: IconKeys
   path?: Path
 }
 
-export const SvgPathIcon = React.forwardRef<any, SvgPathIconProps>(
+const SvgPathIcon = forwardRef<any, SvgPathIconProps>(
   function RefRenderFn(props, ref) {
-    const { iconId, path, children, ...rest } = props
-    const pathElem = React.useMemo(() => {
+    const {iconId, path, children, ...rest} = props
+    const pathElem = useMemo(() => {
       const data = iconId || !path ? getMdiIconPathData(iconId) : _isStr(path) ? path : null
       return !_isStr(data) ? path : svgPathElement(data as SvgPathData)
     }, [iconId, path])

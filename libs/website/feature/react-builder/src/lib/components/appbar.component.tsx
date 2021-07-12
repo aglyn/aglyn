@@ -17,7 +17,7 @@ import { SvgPathIcon } from '@aglyn/shared/ui/react'
 import { useElementDrawerContext } from '../contexts/element-drawer.context'
 
 
-export const styles = () => createStyles({
+export const styles = createStyles({
   root: {
     top: 'auto',
     bottom: 0,
@@ -39,7 +39,7 @@ export interface AppBarComponentProps extends Partial<AppBarProps> {
 
 }
 
-export const AppBarComponent = forwardRef<any, AppBarComponentProps & WithStyles<typeof styles>>(
+const AppBarComponent = forwardRef<any, AppBarComponentProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
     const {
       classes,
@@ -47,16 +47,19 @@ export const AppBarComponent = forwardRef<any, AppBarComponentProps & WithStyles
       ...rest
     } = props
 
-    const { elementDrawer } = useElementDrawerContext()
-    const handleFabClick = useCallback( async () => {
-      await elementDrawer({ title: 'Add New Element' })
-        .then(res => {
-          console.log('res', res)
-        })
-        .catch(error => {
-          console.log('errror', error)
-        })
+    const {elementDrawer} = useElementDrawerContext()
+    const handleFabClick = useCallback(async () => {
 
+      const choice = await elementDrawer({title: 'Add New Elements'})
+      .then(res => {
+        console.log('res', res)
+        return res
+      })
+      .catch(error => {
+        console.log('errror', error)
+      })
+
+      console.warn('async choice', choice)
     }, [elementDrawer])
 
 
@@ -96,4 +99,4 @@ export const AppBarComponent = forwardRef<any, AppBarComponentProps & WithStyles
 AppBarComponent.displayName = 'AppBarComponent'
 AppBarComponent.defaultProps = {}
 
-export default withStyles(styles, { name: 'AppBarComponent' })(AppBarComponent)
+export default withStyles(styles, {name: 'AppBarComponent'})(AppBarComponent)

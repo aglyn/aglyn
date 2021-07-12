@@ -8,7 +8,14 @@
 
 import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
 import clsx from 'clsx'
-import { forwardRef, useCallback, Fragment, MouseEventHandler, SyntheticEvent } from 'react'
+import {
+  forwardRef,
+  useCallback,
+  Fragment,
+  MouseEventHandler,
+  SyntheticEvent,
+  MouseEvent,
+} from 'react'
 import IconButton from '@material-ui/core/IconButton'
 import {
   GridList,
@@ -34,12 +41,12 @@ export const styles = (theme: Theme) => createStyles({
   label: {},
   icon: {},
   root: {
-    '& $title': { fontSize: theme.typography.pxToRem(20) },
+    '& $title': {fontSize: theme.typography.pxToRem(20)},
     '&>$paper': {
       margin: '0 auto',
       height: '100%',
       maxHeight: '100vh',
-      [theme.breakpoints.up('sm')]: { height: theme.breakpoints.values.sm },
+      [theme.breakpoints.up('sm')]: {height: theme.breakpoints.values.sm},
     },
   },
   paper: {
@@ -52,8 +59,8 @@ export const styles = (theme: Theme) => createStyles({
     // padding: theme.spacing(2, 2, 2, 2),
     overflow: 'auto',
   },
-  closeButton: { marginRight: theme.spacing(2) },
-  deleteButton: { color: theme.palette.error.main },
+  closeButton: {marginRight: theme.spacing(2)},
+  deleteButton: {color: theme.palette.error.main},
   gridList: {
     padding: theme.spacing(2, 2, 2, 2),
     overflowX: 'hidden',
@@ -61,8 +68,8 @@ export const styles = (theme: Theme) => createStyles({
   gridListItem: {},
   card: {
     color: theme.palette.text.primary,
-    '& $label': { textTransform: 'uppercase' },
-    '& $icon': { color: theme.palette.text.secondary },
+    '& $label': {textTransform: 'uppercase'},
+    '& $icon': {color: theme.palette.text.secondary},
   },
   cardContent: {
     width: '100%',
@@ -91,41 +98,43 @@ export const styles = (theme: Theme) => createStyles({
 export interface ElementDrawerComponentProps extends Partial<NavbarDrawerProps> {
   options: ElementDrawerOptions
   onCancel: MouseEventHandler<unknown>
-  onConfirm: (event: SyntheticEvent<any>, item: any) => void
+  onConfirm: {
+    bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void;
+  }['bivarianceHack']
 }
 
-export const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProps & WithStyles<typeof styles>>(
+const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
     const {
       classes,
       className,
       options,
       onConfirm,
-      // onClose,
+      onClose,
       ...rest
     } = props
 
-    const { title } = options
+    const {title} = options
     console.log('props', props)
 
 
-    const drawerState: any = { type: 'browse-site-components' }
+    const drawerState: any = {type: 'browse-site-components'}
     const selectedElementProps: any = {}
     const propsSchema: any = {}
     const handleElementSave = useCallback(() => {
 
     }, [])
     const handleDrawerClose = useCallback((e) => {
-      // onClose(e, null)
-    }, [])
+      onClose(e, null)
+    }, [onClose])
     const handleDeleteButtonClick = useCallback(() => {
 
     }, [])
     const handleItemClick = useCallback((e, item) => {
       console.log('handleItemClick', item)
       onConfirm(e, item)
-    }, [])
-    const components = Website.App.getComponents({ moduleId: 'react' })
+    }, [onConfirm])
+    const components = Website.App.getComponents({moduleId: 'react'})
     const items = components.map(i => ({
       id: i?.$id,
       title: i?.metadata?.title,
@@ -138,13 +147,19 @@ export const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProp
           item={item}
           label={item.title}
           onActionClick={handleItemClick}
-          preview={_isStr(item.icon) ? (
-            <Box
-              component={SvgPathIcon}
-              fontSize={'4.17em'}
-              iconId={item.icon}
-            />
-          ) : <Fragment>{item.icon}</Fragment>}
+          preview={
+            (_isStr(item.icon) ? (
+              <Box
+                fontSize={'4.17em'}
+                component={SvgPathIcon}
+                {...{iconId: item.icon}}
+              />
+            ) : (
+              <Fragment>
+                {item.icon}
+              </Fragment>
+            )) as unknown as any
+          }
         />
       )
     }, [handleItemClick])
@@ -153,7 +168,7 @@ export const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProp
       <NavbarDrawer
         ref={ref}
         className={clsx(classes.root, className)}
-        AppBarProps={{ color: 'primary' }}
+        AppBarProps={{color: 'primary'}}
         anchor="bottom"
         appBarLeft={(
           <Fragment>
@@ -175,9 +190,11 @@ export const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProp
         appBarRight={
           {
             'edit-element-traits': (
-              <Button color="inherit" onClick={handleDrawerClose}>
-                Cancel
-              </Button>
+              <Button
+                color="inherit"
+                onClick={handleDrawerClose}
+                children="Cancel"
+              />
             ),
           }[drawerState?.type]
         }
@@ -193,10 +210,10 @@ export const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProp
           {
             'browse-site-components': (
               <GridList
-                GridContainerProps={{ spacing: 2 }}
-                GridItemProps={{ xs: 6, sm: 4 }}
-                ListWrapperProps={{ className: classes.gridList }}
-                classes={{ itemContent: classes.cardContent }}
+                GridContainerProps={{spacing: 2}}
+                GridItemProps={{xs: 6, sm: 4}}
+                ListWrapperProps={{className: classes.gridList}}
+                classes={{itemContent: classes.cardContent}}
                 renderItemContent={renderItemContent}
                 items={items}
               />
@@ -235,4 +252,4 @@ export const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProp
 ElementDrawerComponent.displayName = 'ElementDrawerComponent'
 ElementDrawerComponent.defaultProps = {}
 
-export default withStyles(styles, { name: 'ElementDrawerComponent' })(ElementDrawerComponent)
+export default withStyles(styles, {name: 'ElementDrawerComponent'})(ElementDrawerComponent)

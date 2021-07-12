@@ -6,9 +6,9 @@
  * found in the root directory of this source tree.
  */
 
-import React, { forwardRef } from 'react'
+import { Fragment, forwardRef } from 'react'
 import Website from '@aglyn/website/core'
-import { ElementComponent, ElementComponentProps } from './element.component'
+import ElementComponent, { ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
 
 
@@ -17,7 +17,7 @@ export interface ElementsComponentProps extends ComponentProp {
   children?: Website.ElementData[]
 }
 
-export const ElementsComponent = forwardRef<any, ElementsComponentProps>(
+const ElementsComponent = forwardRef<any, ElementsComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       component: Component,
@@ -41,7 +41,7 @@ export const ElementsComponent = forwardRef<any, ElementsComponentProps>(
 
 ElementsComponent.displayName = 'ElementsComponent'
 ElementsComponent.defaultProps = {
-  component: React.Fragment,
+  component: Fragment,
   elementComponent: ElementComponent,
   children: [],
 }

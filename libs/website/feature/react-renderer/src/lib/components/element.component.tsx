@@ -6,7 +6,7 @@
  * found in the root directory of this source tree.
  */
 
-import React, { forwardRef } from 'react'
+import { ComponentType, forwardRef } from 'react'
 import Website, { handleResolveProps } from '@aglyn/website/core'
 import { _isArr, _isArrEmpty, _isStr, yes } from '@aglyn/shared/util/helpers'
 import * as ReactIs from 'react-is'
@@ -15,11 +15,11 @@ import ElementsComponent from './elements.component'
 
 export interface ElementComponentProps {
   elementData: Website.ElementData
-  elementComponent?: React.ComponentType<ElementComponentProps>
+  elementComponent?: ComponentType<ElementComponentProps>
   [prop: string]: any
 }
 
-export const ElementComponent = forwardRef<any, ElementComponentProps>(
+const ElementComponent = forwardRef<any, ElementComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       elementData: data,

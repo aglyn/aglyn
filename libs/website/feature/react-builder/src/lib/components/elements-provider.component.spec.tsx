@@ -8,11 +8,12 @@
 
 import React from 'react'
 import { render } from '@testing-library/react'
-import GridList from './grid-list'
+import ElementsProviderComponent from './elements-provider.component'
 
-describe('GridList', () => {
+
+describe('ElementsProviderComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<GridList />)
+    const { baseElement } = render(<ElementsProviderComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

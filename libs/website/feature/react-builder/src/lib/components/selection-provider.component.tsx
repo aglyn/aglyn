@@ -28,7 +28,7 @@ export interface SelectionProviderComponentProps {
   }>
 }
 
-export function SelectionProviderComponent(props: SelectionProviderComponentProps) {
+function SelectionProviderComponent(props: SelectionProviderComponentProps) {
   const { children, defaultOptions = {}, component: Component } = props
   const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions })
   const [resolveReject, setResolveReject] = useState([])

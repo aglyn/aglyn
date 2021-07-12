@@ -8,7 +8,7 @@
 
 import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared/ui/react'
 import { copyJson } from '@aglyn/shared/util/helpers'
-import { forwardRef, Fragment, useCallback, useRef, useState } from 'react'
+import { forwardRef, useCallback, useRef, useState } from 'react'
 import {
   ElementComponent as RenderElementComponent,
   ElementComponentProps as RenderElementComponentProps,
@@ -20,7 +20,7 @@ export interface ElementComponentProps extends RenderElementComponentProps {
   [prop: string]: any
 }
 
-export const ElementComponent = forwardRef<any, ElementComponentProps>(
+const ElementComponent = forwardRef<any, ElementComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       ...rest

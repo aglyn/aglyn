@@ -21,7 +21,6 @@ export interface ElementDrawerOptions {
   dialogProps?: Partial<DialogProps>
   title?: DialogTitleProps['children']
   description?: DialogContentTextProps['children']
-
 }
 
 export type ElementDrawerFn = (options?: ElementDrawerOptions) => Promise<unknown>

@@ -1,3 +1,6 @@
 export * from './lib/components/element.component'
+export { default as ElementComponent } from './lib/components/element.component'
 export * from './lib/components/elements.component'
+export { default as ElementsComponent } from './lib/components/elements.component'
 export * from './lib/components/website.component'
+export { default as WebsiteComponent } from './lib/components/website.component'

@@ -45,7 +45,7 @@ export const styles = (theme: Theme) => createStyles({
   },
 })
 
-export const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<typeof styles>>(
+const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
     const {
       open,

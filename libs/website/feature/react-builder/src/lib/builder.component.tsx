@@ -12,11 +12,13 @@ import { Website } from '@aglyn/website/core'
 import { WebsiteComponent } from '@aglyn/website/feature/react-renderer'
 import { ThemeProvider } from '@material-ui/core/styles'
 import { forwardRef } from 'react'
-import { ElementComponent, ElementComponentProps } from './components/element.component'
+import ElementComponent, { ElementComponentProps } from './components/element.component'
 import AppBarComponent from './components/appbar.component'
 import ElementDrawerProviderComponent from './components/element-drawer-provider.component'
 import SelectionProviderComponent from './components/selection-provider.component'
 import NoSsr from '@material-ui/core/NoSsr'
+import ElementsProviderComponent from './components/elements-provider.component'
+import ElementsContext from './contexts/elements.context'
 
 
 export interface BuilderComponentProps extends ComponentProp {
@@ -37,22 +39,28 @@ export const BuilderComponent = forwardRef<any, BuilderComponentProps>(
       <NoSsr>
         <ThemeProvider theme={builder}>
           <Component ref={ref} {...rest}>
-            <ConfirmationProviderComponent>
-              <SelectionProviderComponent>
-                <ElementDrawerProviderComponent>
-                  <WebsiteComponent
-                    elements={elements}
-                    elementComponent={elementComponent}
-                  />
-                  <AppBarComponent />
-                </ElementDrawerProviderComponent>
-              </SelectionProviderComponent>
-            </ConfirmationProviderComponent>
+            <ElementsProviderComponent elements={elements}>
+              <ConfirmationProviderComponent>
+                <SelectionProviderComponent>
+                  <ElementDrawerProviderComponent>
+                    <ElementsContext.Consumer>
+                      {({elements}) => (
+                        <WebsiteComponent
+                          elements={elements}
+                          elementComponent={elementComponent}
+                        />
+                      )}
+                    </ElementsContext.Consumer>
+                    <AppBarComponent />
+                  </ElementDrawerProviderComponent>
+                </SelectionProviderComponent>
+              </ConfirmationProviderComponent>
+            </ElementsProviderComponent>
           </Component>
         </ThemeProvider>
       </NoSsr>
     )
-  },
+  }
 )
 
 BuilderComponent.displayName = 'BuilderComponent'

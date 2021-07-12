@@ -6,15 +6,15 @@
  * found in the root directory of this source tree.
  */
 
-import {
+import ElementDrawerContext, {
   buildOptions,
   DEFAULT_OPTIONS,
-  ElementDrawerContext,
   ElementDrawerOptions,
 } from '../contexts/element-drawer.context'
 import {
   ElementType,
   Fragment,
+  MouseEvent,
   MouseEventHandler,
   ReactNode,
   useCallback,
@@ -29,50 +29,53 @@ export interface ElementDrawerProviderComponentProps {
   component: ElementType<{
     open: boolean
     options: ElementDrawerOptions
-    onClose: MouseEventHandler<unknown>
-    onCancel: MouseEventHandler<unknown>
-    onConfirm: MouseEventHandler<unknown>
+    onClose: {
+      bivarianceHack<T>(event: MouseEvent<T>, reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton' | 'resolved'): void;
+    }['bivarianceHack']
+    onCancel: {
+      bivarianceHack<T>(event: MouseEvent<T>, reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton'): void;
+    }['bivarianceHack']
+    onConfirm: {
+      bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void;
+    }['bivarianceHack']
   }>
 }
 
-export function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentProps) {
-  const { children, defaultOptions = {}, component: Component } = props
-  const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions })
+function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentProps) {
+  const {children, defaultOptions = {}, component: Component} = props
+  const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
+  const open = Boolean(resolveReject.length === 2)
 
   const elementDrawer = useCallback((options: ElementDrawerOptions = {}) => {
     return new Promise((resolve, reject) => {
       setOptions(buildOptions(defaultOptions, options))
       setResolveReject([resolve, reject])
-      console.log('set resolve')
     })
   }, [defaultOptions])
 
-  const handleClose = useCallback((...args) => {
-    console.log('handle close', args)
-    // setResolveReject([])
+  const handleClose = useCallback((e, reason) => {
+    setResolveReject([])
   }, [])
 
-  const handleCancel = useCallback((...args) => {
-    console.log('handle cnacel', ...args)
+  const handleCancel = useCallback((e, reason) => {
     reject()
-    handleClose()
+    handleClose(e, reason)
   }, [reject, handleClose])
 
-  const handleConfirm = useCallback((...args) => {
-    console.log('handle confirm', args)
-    resolve()
-    // handleClose()
-  }, [resolve, handleClose])
+  const handleConfirm = useCallback((e, item) => {
+    resolve({option: item})
+    handleClose(e, 'resolved')
+  }, [resolve, handleClose, resolveReject])
 
   return (
     <Fragment>
-      <ElementDrawerContext.Provider value={{ elementDrawer }}>
+      <ElementDrawerContext.Provider value={{elementDrawer}}>
         {children}
       </ElementDrawerContext.Provider>
       <Component
-        open={resolveReject.length === 2}
+        open={open}
         options={options}
         onClose={handleClose}
         onCancel={handleCancel}

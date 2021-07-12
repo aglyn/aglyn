@@ -6,11 +6,11 @@
  * found in the root directory of this source tree.
  */
 
-import React, { forwardRef } from 'react'
+import { forwardRef } from 'react'
 import { Website } from '@aglyn/website/core'
-import { ElementComponent, ElementComponentProps } from './element.component'
+import ElementComponent, { ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
-import { ElementsComponent } from './elements.component'
+import ElementsComponent from './elements.component'
 
 
 export interface WebsiteComponentProps extends ComponentProp {
@@ -18,7 +18,7 @@ export interface WebsiteComponentProps extends ComponentProp {
   elementComponent?: ElementComponentProps['elementComponent']
 }
 
-export const WebsiteComponent = forwardRef<any, WebsiteComponentProps>(
+const WebsiteComponent = forwardRef<any, WebsiteComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       component: Component,
@@ -34,7 +34,7 @@ export const WebsiteComponent = forwardRef<any, WebsiteComponentProps>(
         />
       </Component>
     )
-  }
+  },
 )
 
 WebsiteComponent.displayName = 'WebsiteComponent'

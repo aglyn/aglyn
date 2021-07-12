@@ -8,11 +8,11 @@
 
 import React from 'react'
 import { render } from '@testing-library/react'
-import GridList from './grid-list'
+import CardIconListItem from './card-icon-list-item'
 
-describe('GridList', () => {
+describe('CardIconListItem', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<GridList />)
+    const { baseElement } = render(<CardIconListItem />)
     expect(baseElement).toBeTruthy()
   })
 })

@@ -1,8 +1,13 @@
 {
   "name": "aglyn",
-  "version": "1.0.0-alpha1",
+  "version": "1.0.0-alpha.0",
   "license": "MIT",
   "private": true,
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/core.git"
+  },
   "scripts": {
     "nx": "nx",
     "start": "nx serve",
