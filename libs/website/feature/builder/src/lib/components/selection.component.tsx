@@ -1,9 +1,18 @@
 /**
  * @license
- * Copyright (c) 2021 Aglyn LLC
+ * Copyright 2021 Aglyn LLC
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the root directory of this source tree.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
@@ -13,6 +22,7 @@ import Button, { ButtonProps } from '@material-ui/core/Button'
 import Dialog, { DialogProps } from '@material-ui/core/Dialog'
 import DialogContentText, { DialogContentTextProps } from '@material-ui/core/DialogContentText'
 import DialogTitle, { DialogTitleProps } from '@material-ui/core/DialogTitle'
+
 
 export interface SelectionComponentOptions {
   cancellationText?: ButtonProps['children']
@@ -47,8 +57,8 @@ export const styles = (theme: Theme) =>
 
 const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
-    const { open, options, onCancel, onConfirm, onClose, classes, className, ...rest } = props
-    const { title, clientRect } = options
+    const {open, options, onCancel, onConfirm, onClose, classes, className, ...rest} = props
+    const {title, clientRect} = options
     return (
       open && (
         <div
@@ -61,7 +71,7 @@ const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<
         ></div>
       )
     )
-  }
+  },
 )
 
 SelectionComponent.displayName = 'SelectionComponent'
@@ -71,4 +81,4 @@ SelectionComponent.defaultProps = {
   },
 }
 
-export default withStyles(styles, { name: 'SelectionComponent' })(SelectionComponent)
+export default withStyles(styles, {name: 'SelectionComponent'})(SelectionComponent)

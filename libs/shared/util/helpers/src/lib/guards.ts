@@ -1,9 +1,18 @@
 /**
  * @license
- * Copyright (c) 2021 Aglyn LLC and its affiliates
+ * Copyright 2021 Aglyn LLC
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the root directory of this source tree.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 /**
@@ -237,7 +246,7 @@ export function _ln<T>(val: Iterable<T> | ArrayLike<T> | number, of?: number, op
   return false
 }
 
-export function _hasKey(key: string|number, source: Record<string|number, any>): boolean {
+export function _hasKey(key: string | number, source: Record<string | number, any>): boolean {
   return Object.prototype.hasOwnProperty.call(source, key)
 }
 
@@ -265,8 +274,8 @@ export function _hasKey(key: string|number, source: Record<string|number, any>):
 export function hasLn<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, opts?: HasLenOpt<U>): boolean
 export function hasLn<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, equalTo: number): boolean
 export function hasLn<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, opts: any): boolean {
-  const _opts = !opts || _isObj(opts) ? { ...opts } : { equalTo: opts }
-  const { equalTo, lessThan, moreThan, and, also } = _opts ?? {}
+  const _opts = !opts || _isObj(opts) ? {...opts} : {equalTo: opts}
+  const {equalTo, lessThan, moreThan, and, also} = _opts ?? {}
   const v = _isNum(val) ? Number(val) : ((val as unknown) as Iterable<T> | ArrayLike<T>)
   const len: number = _isNum(v) ? v : (v as any).length
   const e = equalTo

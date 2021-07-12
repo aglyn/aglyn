@@ -1,9 +1,18 @@
 /**
  * @license
- * Copyright (c) 2021 Aglyn LLC and its affiliates
+ * Copyright 2021 Aglyn LLC
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the root directory of this source tree.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import { _isArr, _isFn, _isNum, _isObj, _isStr, _isUndef, hasLn } from './guards'
@@ -250,7 +259,7 @@ export function copyJson<T>(json: T): T {
  * @returns
  */
 export function arrayToObjectLiteral(arr: [any, any][]) {
-  return Object.assign({}, ...arr.map(([key, val]) => ({ [key]: val })))
+  return Object.assign({}, ...arr.map(([key, val]) => ({[key]: val})))
 }
 
 /**
@@ -352,7 +361,7 @@ export function map<K extends string, V, U>(
  * @returns {object}
  */
 export function mapObject(target, callbackfn: MapObjectClbkFn, opt?: MapObjectOptions) {
-  const { copy: cp = false, filter = false, advanced = false, forEach = false } = opt ?? {}
+  const {copy: cp = false, filter = false, advanced = false, forEach = false} = opt ?? {}
   const data = cp ? copy(target) : target
   const entries = Object.entries(data) ?? []
   const handler = ([key, value], index, array) =>
@@ -396,7 +405,7 @@ export function filterObject<T>(target, predicate: FilterObjPredicate<T>) {
       }
       return null
     },
-    { advanced: true, filter: true },
+    {advanced: true, filter: true},
   )
 }
 type FilterObjPredicate<T> = {
@@ -431,8 +440,8 @@ export function updateObj<T, U>(target: T, ...source: U[]): T & U {
  * @returns {T}
  */
 export function deleteProperty<T, K extends keyof T>(obj: T, key: K, options?: { copy: boolean }): Omit<T, K> {
-  const { copy = false } = options ?? {}
-  const _obj = copy ? { ...obj } : obj
+  const {copy = false} = options ?? {}
+  const _obj = copy ? {...obj} : obj
   delete _obj[key]
   return _obj
 }
@@ -507,13 +516,13 @@ export function mutateArray<T>(
   items?: T | Array<T>,
   options?: { replace?: boolean; copy?: boolean },
 ): MutatedArrayResponse<T> {
-  const { replace, copy } = { replace: true, copy: false, ...options }
+  const {replace, copy} = {replace: true, copy: false, ...options}
   const _array = copy ? copyArray(array) : array
   const _items = safeArray(items, items ? [items] : [])
   const deleteCount = replace ? ln(_items) : 0
   const deleted = _array.splice(index, deleteCount, ..._items)
 
-  return { items: _array, deleted, added: _items }
+  return {items: _array, deleted, added: _items}
 }
 
 type MutatedArrayResponse<T> = Record<'items' | 'deleted' | 'added', Array<T>>
@@ -529,7 +538,7 @@ type MutatedArrayResponse<T> = Record<'items' | 'deleted' | 'added', Array<T>>
  * @returns {MutatedArrayResponse<T>}
  */
 export function addAtIndex<T>(index: number, array: Array<T>, items: T | Array<T>): MutatedArrayResponse<T> {
-  return mutateArray(index, array, items, { replace: false })
+  return mutateArray(index, array, items, {replace: false})
 }
 
 /**
@@ -645,7 +654,7 @@ export function capitalizeTitle<T extends string>(val: T, separator = ' '): T {
  * @returns
  */
 export function numeronym(str: string, opt?: NumeronymOpts) {
-  const { kind, short } = opt ?? {}
+  const {kind, short} = opt ?? {}
   const builder = {
     [NumeronymKind.n19s]: () => {
       const v = String(str)
@@ -743,7 +752,7 @@ export function noop(...args: any[]): any {
  * @see https://github.com/angular/angular/blob/master/packages/core/src/util/closure.ts
  */
 export function noSideEffects<T>(fn: () => T): T {
-  return ({ toString: fn }.toString() as unknown) as T
+  return ({toString: fn}.toString() as unknown) as T
 }
 
 /**
@@ -761,8 +770,8 @@ namespace Copy {
   }
   const objectAssign = Object.assign ?? defaultAssign
   const getAllKeys = typeof Object.getOwnPropertySymbols === 'function'
-      ? (obj) => Object.keys(obj).concat(Object.getOwnPropertySymbols(obj) as any)
-      : (obj) => Object.keys(obj)
+    ? (obj) => Object.keys(obj).concat(Object.getOwnPropertySymbols(obj) as any)
+    : (obj) => Object.keys(obj)
   type CopyParams<T, U, K, V, X> = T extends ReadonlyArray<U>
     ? ReadonlyArray<U>
     : T extends Map<K, V>

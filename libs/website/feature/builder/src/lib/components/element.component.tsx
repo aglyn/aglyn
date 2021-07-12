@@ -1,9 +1,18 @@
 /**
  * @license
- * Copyright (c) 2021 Aglyn LLC
+ * Copyright 2021 Aglyn LLC
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the root directory of this source tree.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared/ui/react'
@@ -15,18 +24,19 @@ import {
 } from '@aglyn/website/feature/renderer'
 import { useSelectionContext } from '../contexts/selection.context'
 
+
 export interface ElementComponentProps extends RenderElementComponentProps {
   [prop: string]: any
 }
 
 const ElementComponent = forwardRef<any, ElementComponentProps>(function RefRenderFn(props, ref) {
-  const { ...rest } = props
+  const {...rest} = props
 
-  const { confirm } = useConfirmationContext()
+  const {confirm} = useConfirmationContext()
 
   const localRef = useRef(ref)
   const elemRef = useCombinedRefs(localRef, ref)
-  const { select } = useSelectionContext()
+  const {select} = useSelectionContext()
   const [entered, setEntered] = useState(null)
   const [clientRect, setRect] = useState(null)
 
@@ -44,10 +54,10 @@ const ElementComponent = forwardRef<any, ElementComponentProps>(function RefRend
 
   const handleClick = useCallback(
     (e) => {
-      select({ clientRect })
-      confirm({ title: 'clicked' })
+      select({clientRect})
+      confirm({title: 'clicked'})
     },
-    [clientRect]
+    [clientRect],
   )
 
   return (

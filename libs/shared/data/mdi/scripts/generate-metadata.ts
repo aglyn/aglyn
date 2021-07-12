@@ -1,9 +1,18 @@
 /**
  * @license
- * Copyright (c) 2021 Aglyn LLC
+ * Copyright 2021 Aglyn LLC
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the root directory of this source tree.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import util from '@mdi/util'
@@ -12,38 +21,33 @@ import { Normal } from '../common/data-type'
 import path from 'path'
 import fs from 'fs'
 
+
 type FileInfo = { out: string; exportName: string; data: Record<string, unknown> }
 
 type Icons = {
   iconIds: string[]
-  byIconId: Normal.Lookup<
-    {
-      path: string
-      name: string
-      alias: { [alias: string]: true }
-    },
-    string
-  >
+  byIconId: Normal.Lookup<{
+    path: string
+    name: string
+    alias: { [alias: string]: true }
+  },
+    string>
 }
 type Authors = {
   authorIds: string[]
-  byAuthorId: Normal.Lookup<
-    {
-      name: string
-      icon: { [iconId: string]: true }
-    },
-    string
-  >
+  byAuthorId: Normal.Lookup<{
+    name: string
+    icon: { [iconId: string]: true }
+  },
+    string>
 }
 type Tags = {
   tagIds: string[]
-  byTagId: Normal.Lookup<
-    {
-      name: string
-      icon: { [iconId: string]: true }
-    },
-    string
-  >
+  byTagId: Normal.Lookup<{
+    name: string
+    icon: { [iconId: string]: true }
+  },
+    string>
 }
 
 const outDir = path.join(__dirname, '../json/')
@@ -52,19 +56,19 @@ const meta = util.getMeta(true)
 const iconIds: string[] = []
 const authorIds: string[] = []
 const tagIds: string[] = []
-const icons: Icons = { iconIds, byIconId: {} }
-const authors: Authors = { authorIds, byAuthorId: {} }
-const tags: Tags = { tagIds, byTagId: {} }
+const icons: Icons = {iconIds, byIconId: {}}
+const authors: Authors = {authorIds, byAuthorId: {}}
+const tags: Tags = {tagIds, byTagId: {}}
 function configureIcon(iconMeta) {
-  const { name, path, aliases = [] } = iconMeta
+  const {name, path, aliases = []} = iconMeta
   const iconId = paramCase(name)
   iconIds.push(iconId)
-  icons.byIconId[iconId] = { path, name: capitalCase(iconId), alias: {} }
+  icons.byIconId[iconId] = {path, name: capitalCase(iconId), alias: {}}
   aliases.forEach((aliasId) => (icons.byIconId[iconId].alias[aliasId] = true))
   return iconId
 }
 function configureTags(iconId, iconMeta) {
-  const { tags: iconTags = [] } = iconMeta
+  const {tags: iconTags = []} = iconMeta
   iconTags.forEach((tagName) => {
     const tagId = paramCase(tagName)
     // Ensure tagId is present in allIds
@@ -82,7 +86,7 @@ function configureTags(iconId, iconMeta) {
   })
 }
 function configureAuthors(iconId, iconMeta) {
-  const { author } = iconMeta
+  const {author} = iconMeta
   const authorId = paramCase(author)
   if (!(authorIds.indexOf(authorId) >= 0)) {
     authorIds.push(authorId)
@@ -99,7 +103,7 @@ function configureAuthors(iconId, iconMeta) {
 }
 
 function generateFile(fileInfo: FileInfo, minify = false): void {
-  const { data, out } = fileInfo
+  const {data, out} = fileInfo
   const min = Boolean(minify)
   const contents = JSON.stringify(data, null, min ? null : 2)
   const filename = `${out}${min ? '.min' : ''}.json`
@@ -113,16 +117,16 @@ function generateFile(fileInfo: FileInfo, minify = false): void {
   })
 }
 
-;(function () {
+;(function() {
   meta.forEach((iconMeta) => {
     const iconId = configureIcon(iconMeta)
     configureTags(iconId, iconMeta)
     configureAuthors(iconId, iconMeta)
   })
   const filesInfo = [
-    { out: 'icons', exportName: 'icons', data: icons },
-    { out: 'authors', exportName: 'authors', data: authors },
-    { out: 'tags', exportName: 'tags', data: tags },
+    {out: 'icons', exportName: 'icons', data: icons},
+    {out: 'authors', exportName: 'authors', data: authors},
+    {out: 'tags', exportName: 'tags', data: tags},
   ]
   filesInfo.forEach((data) => {
     generateFile(data)

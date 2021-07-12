@@ -1,8 +1,8 @@
 <component name="CopyrightManager">
-  <settings default="aglyn_copyright_license_mit">
+  <settings default="aglyn_copyright_apache_2-0">
     <module2copyright>
-      <element module="All" copyright="aglyn_copyright_license_mit" />
-      <element module="Project Files" copyright="aglyn_copyright_license_mit" />
+      <element module="All" copyright="aglyn_copyright_apache_2-0" />
+      <element module="Project Files" copyright="aglyn_copyright_apache_2-0" />
     </module2copyright>
     <LanguageOptions name="ActionScript">
       <option name="fileTypeOverride" value="3" />

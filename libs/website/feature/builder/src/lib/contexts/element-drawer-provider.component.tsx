@@ -1,9 +1,18 @@
 /**
  * @license
- * Copyright (c) 2021 Aglyn LLC
+ * Copyright 2021 Aglyn LLC
  *
- * Use of this source code is governed by an MIT-style license that can be
- * found in the root directory of this source tree.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 import ElementDrawerContext, {
@@ -22,6 +31,7 @@ import {
 } from 'react'
 import ElementDrawerComponent from '../components/element-drawer.component'
 
+
 export interface ElementDrawerProviderComponentProps {
   defaultOptions?: ElementDrawerOptions
   children?: ReactNode
@@ -31,13 +41,13 @@ export interface ElementDrawerProviderComponentProps {
     onClose: {
       bivarianceHack<T>(
         event: MouseEvent<T>,
-        reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton' | 'resolved'
+        reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton' | 'resolved',
       ): void
     }['bivarianceHack']
     onCancel: {
       bivarianceHack<T>(
         event: MouseEvent<T>,
-        reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton'
+        reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton',
       ): void
     }['bivarianceHack']
     onConfirm: {
@@ -47,8 +57,8 @@ export interface ElementDrawerProviderComponentProps {
 }
 
 function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentProps) {
-  const { children, defaultOptions = {}, component: Component } = props
-  const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions })
+  const {children, defaultOptions = {}, component: Component} = props
+  const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
   const open = Boolean(resolveReject.length === 2)
@@ -60,7 +70,7 @@ function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentPro
         setResolveReject([resolve, reject])
       })
     },
-    [defaultOptions]
+    [defaultOptions],
   )
 
   const handleClose = useCallback((e, reason) => {
@@ -69,23 +79,23 @@ function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentPro
 
   const handleCancel = useCallback(
     (e, reason) => {
-      reject({ reason })
+      reject({reason})
       handleClose(e, reason)
     },
-    [reject, handleClose]
+    [reject, handleClose],
   )
 
   const handleConfirm = useCallback(
     (e, item) => {
-      resolve({ option: item })
+      resolve({option: item})
       handleClose(e, 'resolved')
     },
-    [resolve, handleClose, resolveReject]
+    [resolve, handleClose, resolveReject],
   )
 
   return (
     <Fragment>
-      <ElementDrawerContext.Provider value={{ elementDrawer }}>
+      <ElementDrawerContext.Provider value={{elementDrawer}}>
         {children}
       </ElementDrawerContext.Provider>
       <Component
