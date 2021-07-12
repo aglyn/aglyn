@@ -55,6 +55,10 @@
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
     },
+    "website-feature-elements-material": {
+      "tags": ["scope:lib", "scope:website", "scope:website:feature"],
+      "implicitDependencies": []
+    },
     "website-feature-renderer": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []

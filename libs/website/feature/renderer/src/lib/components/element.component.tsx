@@ -7,38 +7,37 @@
  */
 
 import { ComponentType, forwardRef } from 'react'
-import Website, { handleResolveProps } from '@aglyn/website/core'
+import Website, { AnyProps, handleResolveProps } from '@aglyn/website/core'
 import { _isArr, _isArrEmpty, _isStr, yes } from '@aglyn/shared/util/helpers'
 import * as ReactIs from 'react-is'
 import ElementsComponent from './elements.component'
 
-export interface ElementComponentProps {
+
+export interface ElementComponentProps extends AnyProps {
   elementData: Website.ElementData
   elementComponent?: ComponentType<ElementComponentProps>
-  [prop: string]: any
 }
 
 const ElementComponent = forwardRef<any, ElementComponentProps>(function RefRenderFn(props, ref) {
-  const { elementData: data, elementComponent, ...rest } = props
-
+  const {elementData: data, elementComponent, ...rest} = props
   const component = !_isStr(data?.component)
     ? (data?.component as Website.Component)
-    : Website.App.getComponent({ moduleId: 'react', componentId: data?.component })
-  const { ctor, metadata = {} } = component ?? {}
+    : Website.App.getComponent({moduleId: 'react', componentId: data?.component})
+  const {ctor, metadata = {}} = component ?? {}
   const resolvedProps = handleResolveProps(data?.props, metadata, component)
-  const { children: content = null, ...ctorProps } = resolvedProps
+  const {children: content = null, ...ctorProps} = resolvedProps
   const ComponentCtor = ReactIs.isValidElementType(ctor) ? ctor : 'div'
   const haveChildren = yes(!_isArr(data?.children) || _isArrEmpty(data?.children))
 
   return (
     <ComponentCtor innerRef={ref} {...ctorProps} {...rest}>
-      {haveChildren ? (
-        content
-      ) : (
+      {!haveChildren ? (
         <ElementsComponent
           elementComponent={elementComponent}
           children={data?.children as Website.ElementData[]}
         />
+      ) : (
+        content
       )}
     </ComponentCtor>
   )

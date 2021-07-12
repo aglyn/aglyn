@@ -9,5 +9,6 @@ module.exports = {
     '<rootDir>/libs/website/feature-react',
     '<rootDir>/libs/website/feature/react-builder',
     '<rootDir>/libs/shared/ui/themes',
+    '<rootDir>/libs/website/feature/elements/material',
   ],
 }

@@ -21,6 +21,7 @@ import ElementsProviderComponent from './contexts/elements-provider.component'
 import ElementsContext from './contexts/elements.context'
 import { SnackbarProvider } from 'notistack'
 
+
 export interface BuilderComponentProps extends ComponentProp {
   elements?: Website.ElementData[]
   elementComponent?: ElementComponentProps['component']
@@ -28,9 +29,9 @@ export interface BuilderComponentProps extends ComponentProp {
 
 export const BuilderComponent = forwardRef<any, BuilderComponentProps>(function RefRenderFn(
   props,
-  ref
+  ref,
 ) {
-  const { component: Component, elementComponent, elements, ...rest } = props
+  const {component: Component, elementComponent, elements, ...rest} = props
 
   return (
     <NoSsr>
@@ -42,10 +43,14 @@ export const BuilderComponent = forwardRef<any, BuilderComponentProps>(function 
                 <SelectionProviderComponent>
                   <ElementDrawerProviderComponent>
                     <ElementsContext.Consumer>
-                      {({ elements }) => (
-                        <WebsiteComponent elements={elements} elementComponent={elementComponent} />
+                      {({elements}) => (
+                        <WebsiteComponent
+                          elements={elements}
+                          elementComponent={elementComponent}
+                        />
                       )}
                     </ElementsContext.Consumer>
+
                     <AppBarComponent />
                   </ElementDrawerProviderComponent>
                 </SelectionProviderComponent>

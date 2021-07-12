@@ -22,6 +22,9 @@
       "@aglyn/shared/util/helpers": ["libs/shared/util/helpers/src/index.ts"],
       "@aglyn/website/core": ["libs/website/core/src/index.ts"],
       "@aglyn/website/feature/builder": ["libs/website/feature/builder/src/index.ts"],
+      "@aglyn/website/feature/elements/material": [
+        "libs/website/feature/elements/material/src/index.ts"
+      ],
       "@aglyn/website/feature/renderer": ["libs/website/feature/renderer/src/index.ts"]
     }
   },

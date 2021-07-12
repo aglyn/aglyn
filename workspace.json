@@ -227,6 +227,27 @@
         }
       }
     },
+    "website-feature-elements-material": {
+      "root": "libs/website/feature/elements/material",
+      "sourceRoot": "libs/website/feature/elements/material/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/website/feature/elements/material/**/*.{ts,tsx,js,jsx}"]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/website/feature/elements/material"],
+          "options": {
+            "jestConfig": "libs/website/feature/elements/material/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      }
+    },
     "website-feature-renderer": {
       "root": "libs/website/feature/renderer",
       "sourceRoot": "libs/website/feature/renderer/src",

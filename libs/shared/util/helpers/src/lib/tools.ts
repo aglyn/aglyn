@@ -52,6 +52,17 @@ export function yes(...val: Parameters<typeof Boolean>): boolean {
 }
 
 /**
+ * Shortcut for !(...)
+ *
+ * @export
+ * @param {*} val
+ * @returns {boolean}
+ */
+export function not(...val: Parameters<typeof Boolean>): boolean {
+  return !yes(...val)
+}
+
+/**
  * Shortcut for JSON.stringify(...)
  *
  * @export
@@ -274,8 +285,8 @@ export function reduceObject<T extends Record<string, unknown>, K extends keyof 
   if (_isUndef(reducerCallback)) {
     return target
   }
-  const _target: T = copyObj(target)
-  const original: T = copyObj(target)
+  const _target: T = copyObj(target) as T
+  const original: T = copyObj(target) as T
 
   return getAllObjectKeys(_target).reduce((result, key) => {
     result[key as string] = reducerCallback(_target[key] as T[K], key as K, original)
