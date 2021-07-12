@@ -11,33 +11,25 @@ import Website from '@aglyn/website/core'
 import ElementComponent, { ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
 
-
 export interface ElementsComponentProps extends ComponentProp {
   elementComponent?: ElementComponentProps['elementComponent']
   children?: Website.ElementData[]
 }
 
-const ElementsComponent = forwardRef<any, ElementsComponentProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      component: Component,
-      elementComponent: ElementComponent,
-      children,
-      ...rest
-    } = props
-    return (
-      <Component ref={ref} {...rest}>
-        {children.map((data, i) => (
-          <ElementComponent
-            key={data?.$id ?? i}
-            elementData={data}
-            elementComponent={ElementComponent}
-          />
-        ))}
-      </Component>
-    )
-  }
-)
+const ElementsComponent = forwardRef<any, ElementsComponentProps>(function RefRenderFn(props, ref) {
+  const { component: Component, elementComponent: ElementComponent, children, ...rest } = props
+  return (
+    <Component ref={ref} {...rest}>
+      {children.map((data, i) => (
+        <ElementComponent
+          key={data?.$id ?? i}
+          elementData={data}
+          elementComponent={ElementComponent}
+        />
+      ))}
+    </Component>
+  )
+})
 
 ElementsComponent.displayName = 'ElementsComponent'
 ElementsComponent.defaultProps = {

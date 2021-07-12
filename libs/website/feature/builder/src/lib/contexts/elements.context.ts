@@ -9,7 +9,6 @@
 import { createContext, useContext } from 'react'
 import { Website } from '@aglyn/website/core'
 
-
 export interface ElementsContextType {
   elements?: Website.ElementData[]
 }

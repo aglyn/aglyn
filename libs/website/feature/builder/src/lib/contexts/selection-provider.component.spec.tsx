@@ -8,12 +8,11 @@
 
 import React from 'react'
 import { render } from '@testing-library/react'
-import ElementsProviderComponent from './elements-provider.component'
+import SelectionProviderComponent from './selection-provider.component'
 
-
-describe('ElementsProviderComponent', () => {
+describe('SelectionProviderComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<ElementsProviderComponent />)
+    const { baseElement } = render(<SelectionProviderComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

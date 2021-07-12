@@ -18,11 +18,11 @@
     "paths": {
       "@aglyn/shared/data/mdi": ["libs/shared/data/mdi/src/index.ts"],
       "@aglyn/shared/ui/react": ["libs/shared/ui/react/src/index.ts"],
+      "@aglyn/shared/ui/themes": ["libs/shared/ui/themes/src/index.ts"],
       "@aglyn/shared/util/helpers": ["libs/shared/util/helpers/src/index.ts"],
       "@aglyn/website/core": ["libs/website/core/src/index.ts"],
-      "@aglyn/website/feature/react-renderer": ["libs/website/feature/react-renderer/src/index.ts"],
-      "@aglyn/website/feature/react-builder": ["libs/website/feature/react-builder/src/index.ts"],
-      "@aglyn/shared/ui/themes": ["libs/shared/ui/themes/src/index.ts"]
+      "@aglyn/website/feature/builder": ["libs/website/feature/builder/src/index.ts"],
+      "@aglyn/website/feature/renderer": ["libs/website/feature/renderer/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

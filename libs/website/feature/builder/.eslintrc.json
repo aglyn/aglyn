@@ -5,7 +5,7 @@
     {
       "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
       "parserOptions": {
-        "project": ["libs/website/feature-react/tsconfig.*?.json"]
+        "project": ["libs/website/feature/builder/tsconfig.*?.json"]
       },
       "rules": {}
     },

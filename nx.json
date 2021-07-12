@@ -31,14 +31,6 @@
       "tags": ["scope:app", "scope:app:console"],
       "implicitDependencies": ["console"]
     },
-    "www": {
-      "tags": ["scope:app", "scope:app:www"],
-      "implicitDependencies": []
-    },
-    "www-e2e": {
-      "tags": ["scope:app", "scope:app:www"],
-      "implicitDependencies": ["www"]
-    },
     "shared-data-mdi": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:data"],
       "implicitDependencies": []
@@ -59,13 +51,21 @@
       "tags": ["scope:lib", "scope:website", "scope:website:core"],
       "implicitDependencies": []
     },
-    "website-feature-react-renderer": {
+    "website-feature-builder": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
     },
-    "website-feature-react-builder": {
+    "website-feature-renderer": {
       "tags": ["scope:lib", "scope:website", "scope:website:feature"],
       "implicitDependencies": []
+    },
+    "www": {
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": []
+    },
+    "www-e2e": {
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": ["www"]
     }
   }
 }

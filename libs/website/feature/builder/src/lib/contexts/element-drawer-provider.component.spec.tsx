@@ -10,7 +10,6 @@ import React from 'react'
 import { render } from '@testing-library/react'
 import ElementDrawerProviderComponent from './element-drawer-provider.component'
 
-
 describe('ElementDrawerProviderComponent', () => {
   it('should render successfully', () => {
     const { baseElement } = render(<ElementDrawerProviderComponent />)

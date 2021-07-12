@@ -12,7 +12,6 @@ import { DialogProps } from '@material-ui/core/Dialog'
 import { DialogTitleProps } from '@material-ui/core/DialogTitle'
 import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
 
-
 export interface ElementDrawerOptions {
   cancellationText?: ButtonProps['children']
   selectionText?: ButtonProps['children']
@@ -21,6 +20,7 @@ export interface ElementDrawerOptions {
   dialogProps?: Partial<DialogProps>
   title?: DialogTitleProps['children']
   description?: DialogContentTextProps['children']
+  type?: 'browse-site-components' | 'edit-element-traits'
 }
 
 export type ElementDrawerFn = (options?: ElementDrawerOptions) => Promise<unknown>
@@ -39,7 +39,7 @@ export const DEFAULT_OPTIONS: ElementDrawerOptions = {
   dialogProps: {},
   selectionButtonProps: {},
   cancellationButtonProps: {},
-
+  type: 'browse-site-components',
 }
 
 export const buildOptions = (defaultOptions, options) => {

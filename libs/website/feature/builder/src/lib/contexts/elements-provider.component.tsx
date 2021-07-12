@@ -6,10 +6,9 @@
  * found in the root directory of this source tree.
  */
 
-import ElementsContext from '../contexts/elements.context'
+import ElementsContext from './elements.context'
 import { ReactNode, useState } from 'react'
 import Website from '@aglyn/website/core'
-
 
 export interface ElementsProviderComponentProps {
   children?: ReactNode
@@ -18,16 +17,12 @@ export interface ElementsProviderComponentProps {
 
 function ElementsProviderComponent(props: ElementsProviderComponentProps) {
   const { children, elements } = props
-  const [ctx, setCtx] = useState({elements})
+  const [ctx, setCtx] = useState({ elements })
 
-  return (
-    <ElementsContext.Provider value={ctx}>
-      {children}
-    </ElementsContext.Provider>
-  )
+  return <ElementsContext.Provider value={ctx}>{children}</ElementsContext.Provider>
 }
 
 ElementsProviderComponent.defaultProps = {
-  elements: []
+  elements: [],
 }
 export default ElementsProviderComponent

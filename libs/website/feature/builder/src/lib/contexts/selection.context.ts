@@ -12,7 +12,6 @@ import { DialogProps } from '@material-ui/core/Dialog'
 import { DialogTitleProps } from '@material-ui/core/DialogTitle'
 import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
 
-
 export interface SelectionOptions {
   cancellationText?: ButtonProps['children']
   selectionText?: ButtonProps['children']
@@ -38,7 +37,7 @@ export const DEFAULT_OPTIONS: SelectionOptions = {
   dialogProps: {},
   selectionButtonProps: {},
   cancellationButtonProps: {},
-  clientRect: null
+  clientRect: null,
 }
 
 export const buildOptions = (defaultOptions, options) => {

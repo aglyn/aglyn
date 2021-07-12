@@ -10,7 +10,7 @@ import ElementDrawerContext, {
   buildOptions,
   DEFAULT_OPTIONS,
   ElementDrawerOptions,
-} from '../contexts/element-drawer.context'
+} from './element-drawer.context'
 import {
   ElementType,
   Fragment,
@@ -20,8 +20,7 @@ import {
   useCallback,
   useState,
 } from 'react'
-import ElementDrawerComponent from './element-drawer.component'
-
+import ElementDrawerComponent from '../components/element-drawer.component'
 
 export interface ElementDrawerProviderComponentProps {
   defaultOptions?: ElementDrawerOptions
@@ -30,48 +29,63 @@ export interface ElementDrawerProviderComponentProps {
     open: boolean
     options: ElementDrawerOptions
     onClose: {
-      bivarianceHack<T>(event: MouseEvent<T>, reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton' | 'resolved'): void;
+      bivarianceHack<T>(
+        event: MouseEvent<T>,
+        reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton' | 'resolved'
+      ): void
     }['bivarianceHack']
     onCancel: {
-      bivarianceHack<T>(event: MouseEvent<T>, reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton'): void;
+      bivarianceHack<T>(
+        event: MouseEvent<T>,
+        reason: 'backdropClick' | 'escapeKeyDown' | 'closeButton'
+      ): void
     }['bivarianceHack']
     onConfirm: {
-      bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void;
+      bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void
     }['bivarianceHack']
   }>
 }
 
 function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentProps) {
-  const {children, defaultOptions = {}, component: Component} = props
-  const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
+  const { children, defaultOptions = {}, component: Component } = props
+  const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions })
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
   const open = Boolean(resolveReject.length === 2)
 
-  const elementDrawer = useCallback((options: ElementDrawerOptions = {}) => {
-    return new Promise((resolve, reject) => {
-      setOptions(buildOptions(defaultOptions, options))
-      setResolveReject([resolve, reject])
-    })
-  }, [defaultOptions])
+  const elementDrawer = useCallback(
+    (options: ElementDrawerOptions = {}) => {
+      return new Promise((resolve, reject) => {
+        setOptions(buildOptions(defaultOptions, options))
+        setResolveReject([resolve, reject])
+      })
+    },
+    [defaultOptions]
+  )
 
   const handleClose = useCallback((e, reason) => {
     setResolveReject([])
   }, [])
 
-  const handleCancel = useCallback((e, reason) => {
-    reject()
-    handleClose(e, reason)
-  }, [reject, handleClose])
+  const handleCancel = useCallback(
+    (e, reason) => {
+      reject({ reason })
+      handleClose(e, reason)
+    },
+    [reject, handleClose]
+  )
 
-  const handleConfirm = useCallback((e, item) => {
-    resolve({option: item})
-    handleClose(e, 'resolved')
-  }, [resolve, handleClose, resolveReject])
+  const handleConfirm = useCallback(
+    (e, item) => {
+      resolve({ option: item })
+      handleClose(e, 'resolved')
+    },
+    [resolve, handleClose, resolveReject]
+  )
 
   return (
     <Fragment>
-      <ElementDrawerContext.Provider value={{elementDrawer}}>
+      <ElementDrawerContext.Provider value={{ elementDrawer }}>
         {children}
       </ElementDrawerContext.Provider>
       <Component

@@ -12,30 +12,19 @@ import ElementComponent, { ElementComponentProps } from './element.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
 import ElementsComponent from './elements.component'
 
-
 export interface WebsiteComponentProps extends ComponentProp {
   elements?: Website.ElementData[]
   elementComponent?: ElementComponentProps['elementComponent']
 }
 
-const WebsiteComponent = forwardRef<any, WebsiteComponentProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      component: Component,
-      elementComponent,
-      elements,
-      ...rest
-    } = props
-    return (
-      <Component ref={ref} {...rest}>
-        <ElementsComponent
-          children={elements}
-          elementComponent={elementComponent}
-        />
-      </Component>
-    )
-  },
-)
+const WebsiteComponent = forwardRef<any, WebsiteComponentProps>(function RefRenderFn(props, ref) {
+  const { component: Component, elementComponent, elements, ...rest } = props
+  return (
+    <Component ref={ref} {...rest}>
+      <ElementsComponent children={elements} elementComponent={elementComponent} />
+    </Component>
+  )
+})
 
 WebsiteComponent.displayName = 'WebsiteComponent'
 WebsiteComponent.defaultProps = {

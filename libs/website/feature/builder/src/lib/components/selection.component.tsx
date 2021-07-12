@@ -14,7 +14,6 @@ import Dialog, { DialogProps } from '@material-ui/core/Dialog'
 import DialogContentText, { DialogContentTextProps } from '@material-ui/core/DialogContentText'
 import DialogTitle, { DialogTitleProps } from '@material-ui/core/DialogTitle'
 
-
 export interface SelectionComponentOptions {
   cancellationText?: ButtonProps['children']
   confirmationText?: ButtonProps['children']
@@ -34,46 +33,35 @@ export interface SelectionComponentProps extends HTMLAttributes<HTMLDivElement> 
   onClose?: ButtonProps['onClick']
 }
 
-export const styles = (theme: Theme) => createStyles({
-  root: {
-    outlineWidth: 2,
-    outlineOffset: -2,
-    outlineColor: theme.palette.secondary.main,
-    outlineStyle: 'solid',
-    pointerEvents: 'none',
-    position: 'absolute',
-  },
-})
+export const styles = (theme: Theme) =>
+  createStyles({
+    root: {
+      outlineWidth: 2,
+      outlineOffset: -2,
+      outlineColor: theme.palette.secondary.main,
+      outlineStyle: 'solid',
+      pointerEvents: 'none',
+      position: 'absolute',
+    },
+  })
 
 const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
-    const {
-      open,
-      options,
-      onCancel,
-      onConfirm,
-      onClose,
-      classes,
-      className,
-      ...rest
-    } = props
-    const {
-      title,
-      clientRect,
-    } = options
-    return open && (
-      <div
-        ref={ref}
-        {...rest}
-        className={clsx(classes.root, className)}
-        style={{
-          ...clientRect,
-        }}
-      >
-
-      </div>
+    const { open, options, onCancel, onConfirm, onClose, classes, className, ...rest } = props
+    const { title, clientRect } = options
+    return (
+      open && (
+        <div
+          ref={ref}
+          {...rest}
+          className={clsx(classes.root, className)}
+          style={{
+            ...clientRect,
+          }}
+        ></div>
+      )
     )
-  },
+  }
 )
 
 SelectionComponent.displayName = 'SelectionComponent'
