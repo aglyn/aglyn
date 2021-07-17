@@ -16,17 +16,8 @@
  */
 
 import { Conditional } from '@aglyn/shared/ui/react'
-import { _isBool, _ln, _isFn, Id } from '@aglyn/shared/util/helpers'
-import {
-  useRouterEvent,
-  NextRouterEvent,
-  useOnRouteChangeComplete,
-  useOnRouteChangeError,
-  useOnRouteChangeStart,
-} from '../hooks/router-events'
-import React, { useState } from 'react'
-import { createContext, useContext, useRef, useEffect } from 'react'
-import { useRouter } from 'next/router'
+import { _ln, Uid } from '@aglyn/shared/util/helpers'
+import React, { createContext, useContext, useState } from 'react'
 
 import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '../hoc/with-consumer'
 
@@ -55,10 +46,10 @@ export const {
 } = AppLoader
 
 export const useAppLoader = () => useContext(AppLoader)
-const createQueueId = () => Id.nanoid(5)
+const createQueueId = () => Uid.nanoid(5)
 
 export function AppLoaderProviderComponent(props: React.PropsWithChildren<unknown>) {
-  const { children } = props
+  const {children} = props
   const [state, setState] = useState<AppLoaderContextType>({
     queues: [],
     isLoading: false,

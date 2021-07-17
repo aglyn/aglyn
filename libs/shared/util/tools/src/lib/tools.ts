@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isArr, _isFn, _isNum, _isObj, _isStr, _isUndef, hasLn } from '@aglyn/shared/util/guards'
+import { _isArr, _isFn, _isNum, _isObj, _isStr, _isUndef } from '@aglyn/shared/util/guards'
 
 
 export function tools(): string {
@@ -103,7 +103,11 @@ export function string2Json(...args: Parameters<typeof JSON.parse>): ReturnType<
  * @param thisArg
  * @returns {T[]}
  */
-export function sortBy<T>(target: T[], callbackFn: (item: T, target: T[]) => string | number, thisArg?: any) {
+export function sortBy<T>(
+  target: T[],
+  callbackFn: (item: T, target: T[]) => string | number,
+  thisArg?: ThisType<unknown>,
+) {
   return target.slice().sort((a, b) => {
     const propA = callbackFn.call(thisArg, a, target) // callbackFn(a)
     const propB = callbackFn.call(thisArg, b, target) // prop(b)
@@ -319,11 +323,11 @@ export function reduceObject<T extends Record<string, unknown>, K extends keyof 
 export function map<K extends string, V, U>(
   target: { [key in K]: V },
   callbackFn: MapObjectCallback<K, V, U>,
-  thisArg?: unknown,
+  thisArg?: ThisType<unknown>,
 ): { [key in K]: U } {
   const res: Partial<{ [key in K]: U }> = {}
   for (const key in target) {
-    if (!_isUndef(Object.prototype.hasOwnProperty.call(target, key))) {
+    if (Object.prototype.hasOwnProperty.call(target, key)) {
       res[key] = callbackFn.call(thisArg, target[key], key, target)
     }
   }
@@ -625,11 +629,9 @@ export function trim<T>(val: T): string {
  * @param {T} val
  * @returns {T}
  */
-export function capitalize<T extends string>(val: T): T {
-  if (!_isStr(val) || !hasLn(val)) {
-    return val
-  }
-  return (s(val).charAt(0).toUpperCase() + s(val).slice(1)) as T
+export function capitalize<T extends string>(val: T): Capitalize<T> {
+  const str = s(val)
+  return `${str.charAt(0).toUpperCase()}${val.slice(1)}` as Capitalize<T>
 }
 
 /**
@@ -650,6 +652,13 @@ export function capitalizeTitle<T extends string>(val: T, separator = ' '): T {
 
 /**
  * Create a numeronym string from the provided string of characters
+ *
+ * e.g.
+ * ```typescript
+ * const intl = 'Internationalization'
+ * numeronym(intl, {kind: NumeronymKind.n19s})
+ * // result: I18n
+ * ```
  *
  * @export
  * @param {string} str

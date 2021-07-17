@@ -21,10 +21,17 @@ import { ErrorFactory, ErrorMap } from '@aglyn/shared/util/error'
 
 export const DEFAULT_ENTRY_NAME = '[DEFAULT]'
 
-export enum EventFlag {
-  INSTANCE_CREATED = 'website:app:created-instance',
-  SET_MODULE = 'website:app:set-module',
-  SET_COMPONENT = 'website:app:set-component',
+export enum RestrictFlag {
+  LIMIT = 'limit',
+  DISALLOW = 'disallow',
+}
+
+export enum AppEventFlag {
+  CREATED_APP = 'app:webapp:created-app-instance',
+  BEFORE_DELETE_APP = 'app:webapp:deleting-app-instance',
+  DELETED_APP = 'app:webapp:deleted-app-instance',
+  SET_EXTENSION = 'app:webapp:app:set-extension',
+  SET_COMPONENT = 'app:webapp:set-component',
 }
 
 export enum AppErrorFlag {
@@ -33,25 +40,22 @@ export enum AppErrorFlag {
   DUPLICATE_APP = 'app:error:duplicate-app',
   APP_DELETED = 'app:error:app-deleted',
   INVALID_APP_ARG = 'app:error:invalid-app-argument',
-  INVALID_LOG_ARG = 'app:error:invalid-log-argument'
+  INVALID_LOG_ARG = 'app:error:invalid-log-argument',
+  NO_APP_EXTENSION = 'app:error:no-app-extension',
 }
 
 const ERRORS: ErrorMap<AppErrorFlag> = {
-  [AppErrorFlag.NO_APP]: 'No Web App \'{$appName}\' has been created - call Web initializeApp()',
+  [AppErrorFlag.NO_APP]: 'No WebApp \'{$appName}\' has been created - call Web initializeApp()',
   [AppErrorFlag.BAD_APP_NAME]: 'Illegal App name: \'{$appName}\'',
-  [AppErrorFlag.DUPLICATE_APP]: 'Web App named \'{$appName}\' already exists',
-  [AppErrorFlag.APP_DELETED]: 'Web App named \'{$appName}\' already deleted',
-  [AppErrorFlag.INVALID_APP_ARG]: 'WebApp.{$appName}() takes either no argument or a ' + 'Firebase App instance.',
+  [AppErrorFlag.DUPLICATE_APP]: 'WebApp named \'{$appName}\' already exists',
+  [AppErrorFlag.APP_DELETED]: 'WebApp named \'{$appName}\' already deleted',
+  [AppErrorFlag.INVALID_APP_ARG]: 'WebApp.{$appName}() takes either no argument or a WebApp instance.',
   [AppErrorFlag.INVALID_LOG_ARG]: 'First argument to `onLog` must be null or a function.',
+  [AppErrorFlag.NO_APP_EXTENSION]: 'No AppExtension \'{$extensionId}\' has been created on WebApp \'{$appName}\'',
 }
 
-export const ERROR_FACTORY = new ErrorFactory<AppErrorFlag, ErrorParams>(
+export const APP_API_ERROR = new ErrorFactory<AppErrorFlag, ErrorParams>(
   'api',
   'WebApp',
   ERRORS,
 )
-
-export enum RestrictFlag {
-  LIMIT = 'limit',
-  DISALLOW = 'disallow',
-}

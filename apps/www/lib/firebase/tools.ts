@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { Id } from '@aglyn/shared/util/helpers'
+import { Uid } from '@aglyn/shared/util/helpers'
 import fbAdmin from './fb-admin'
 
 
 export function createDocumentId(): string {
-  return Id.nanoid(10)
+  return Uid.nanoid(10)
 }
 
 export function createTimestamp(): fbAdmin.firestore.Timestamp {

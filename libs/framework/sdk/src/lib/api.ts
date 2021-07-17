@@ -15,53 +15,41 @@
  * limitations under the License.
  */
 
-import EventEmitter from 'events'
+
 import { logger } from './logger'
 import {
   AppComponent,
-  AppExt,
-  AppExtMap,
+  AppEvent,
+  AppEventHandler,
+  AppExtension,
   AppOptions,
-  EventListener,
-  EventName,
+  ComponentMetadata,
+  ExtensionConfig,
   WebApp,
 } from './types'
-import { AppErrorFlag, DEFAULT_ENTRY_NAME, ERROR_FACTORY, EventFlag } from './constants'
+import { APP_API_ERROR, AppErrorFlag, AppEventFlag, DEFAULT_ENTRY_NAME } from './constants'
 import { _apps } from './internal'
 import { LogCallback, Logger, LogLevelString, LogOptions } from '@aglyn/shared/feature/logger'
-import { _isFn } from '@aglyn/shared/util/guards'
+import { _isFn, _isNull, _isStrEmpty } from '@aglyn/shared/util/guards'
+import { trim } from '@aglyn/shared/util/tools'
+import { WithPartial } from '@aglyn/shared/util/types'
+import { WebAppModel } from './models/web-app.model'
+import { AppExtensionModel } from './models/app-extension.model'
 
 
 export function initializeApp(options: AppOptions = {}): WebApp {
   const {name = DEFAULT_ENTRY_NAME} = options
-  const _name = String(name)
-  if (!_name) {
-    throw ERROR_FACTORY.create(AppErrorFlag.BAD_APP_NAME, {appName: _name})
+  const _name = trim(name)
+  if (_isStrEmpty(_name)) {
+    throw APP_API_ERROR.create(AppErrorFlag.BAD_APP_NAME, {appName: _name})
   }
   if (_apps.has(_name)) {
-    throw ERROR_FACTORY.create(AppErrorFlag.DUPLICATE_APP, {appName: _name})
+    throw APP_API_ERROR.create(AppErrorFlag.DUPLICATE_APP, {appName: _name})
   }
-  const _created: string = new Date().toUTCString()
-  const _mitt: EventEmitter = new EventEmitter()
-  const _extensions: AppExtMap = new Map()
-  const app: WebApp = new (class {
-    get mitt() {
-      return _mitt
-    }
-    get extensions() {
-      return _extensions
-    }
-    get created() {
-      return _created
-    }
-    get name() {
-      return _name
-    }
-    get options() {
-      return options
-    }
-  })()
+  const app: WebApp = new WebAppModel(options)
   _apps.set(_name, app)
+  app.event.emit(AppEventFlag.CREATED_APP, app)
+  logger.debug(`Created app instance ${_name}`)
   return app
 }
 
@@ -72,28 +60,33 @@ export function getApps(): WebApp[] {
 export function getApp(name: string = DEFAULT_ENTRY_NAME): WebApp {
   const app = _apps.get(name)
   if (!app) {
-    throw ERROR_FACTORY.create(AppErrorFlag.DUPLICATE_APP, {appName: name})
+    throw APP_API_ERROR.create(AppErrorFlag.DUPLICATE_APP, {appName: name})
   }
   return _apps.get(name)
 }
 
 export function deleteApp(app: WebApp): void {
-  const name = app.name
+  const name = app.getName()
   if (_apps.has(name)) {
+    app.event.emit(AppEventFlag.BEFORE_DELETE_APP, _apps.get(name))
     _apps.delete(name)
+    app.event.emit(AppEventFlag.DELETED_APP, name)
+    logger.debug(`Deleted app ${name}`)
   }
 }
 
-export function _appListenOnce<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
-  app.mitt.once(name, listener)
+export function _validateApp(app: WebApp): void {
+  if (!(app as WebApp)) {
+    throw APP_API_ERROR.create(AppErrorFlag.INVALID_APP_ARG, {appName: app?.getName?.()})
+  }
 }
 
-export function _appListenOn<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
-  app.mitt.on(name, listener)
+export function _appListenOn(app: WebApp, name: AppEvent, listener: AppEventHandler) {
+  app.event.on(name, listener)
 }
 
-export function _appListenOff<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
-  app.mitt.off(name, listener)
+export function _appListenOff(app: WebApp, name: AppEvent, listener: AppEventHandler) {
+  app.event.off(name, listener)
 }
 
 /**
@@ -103,8 +96,8 @@ export function _appListenOff<T>(app: WebApp, name: EventName, listener: EventLi
  * @param options
  */
 export function onLog(callbackFn: LogCallback | null, options?: LogOptions): void {
-  if (callbackFn !== null && !_isFn(callbackFn)) {
-    throw ERROR_FACTORY.create(AppErrorFlag.INVALID_LOG_ARG)
+  if (!_isNull(callbackFn) && !_isFn(callbackFn)) {
+    throw APP_API_ERROR.create(AppErrorFlag.INVALID_LOG_ARG)
   }
   Logger.setUserLogHandler(callbackFn, options)
 }
@@ -120,57 +113,48 @@ export function setLogLevel(logLevel: LogLevelString): void {
   Logger.setLogLevel(logLevel)
 }
 
-export function getExtensions(app: WebApp): AppExt[] {
-  return [...app.extensions.values()]
+export function addExtension(app: WebApp, config: ExtensionConfig): void {
+  const _extension: AppExtension = new AppExtensionModel(app, config)
+  app.extension.set(_extension.getId(), _extension)
+  app.event.emit(AppEventFlag.SET_EXTENSION, _extension)
+  logger.debug(`Set module value for ${_extension.getId()}`)
 }
 
-export function getExtension(app: WebApp, options: { $id: string }): AppExt {
+export function getExtension(app: WebApp, options: { $id: string }): AppExtension {
   const {$id} = options
-  return app.extensions.get($id)
+  return app.extension.get($id)
 }
 
-export function setExtension(app: WebApp, props: { $id: string; components: AppComponent[] }) {
-  const {$id, components} = props
-  const extension = {$id, components}
-  app.extensions.set($id, extension)
-  app.mitt.emit(EventFlag.SET_MODULE, extension)
-  logger.debug(`Set module value for ${$id}`)
+export function getExtensions(app: WebApp): AppExtension[] {
+  return [...app.extension.values()]
 }
 
-export function getComponent(app: WebApp, props: { moduleId: string; componentId: string }) {
-  const {moduleId, componentId} = props
-  return app.extensions.get(moduleId)?.components.find((m) => m.$id === componentId)
+export function getComponent(app: WebApp, extId: string, options: { $id: string }) {
+  const {$id} = options
+  return app.extension.get(extId)?.component.find((m) => m.$id === $id)
 }
 
-export function getComponents(app: WebApp, props: { moduleId: string; componentId?: string[] }) {
-  const {moduleId, componentId} = props
-  return componentId
-    ? componentId.map((i) => getComponent(app, {moduleId, componentId: i}))
-    : app.extensions.get(moduleId)?.components
+export function getComponents(app: WebApp, extId: string, props: { componentIds?: string[] }) {
+  const {componentIds} = props
+  return componentIds
+    ? componentIds.map(($id) => getComponent(app, {extId, $id}))
+    : [...app.extension.get(extId)?.component.values()]
 }
 
-export function setComponent(
+export function addComponent(
   app: WebApp,
-  props: {
-    moduleId: string
-    $id: string
-    ctor: AppComponent['ctor']
-    metadata?: AppComponent['metadata']
-  },
+  extId: string,
+  component: WithPartial<AppComponent, 'metadata'>,
 ) {
-  const {moduleId, $id, ctor, metadata} = props
-  const extension = app.extensions.get(moduleId) ?? {$id: moduleId, components: []}
-  let component = extension.components.find((i) => i.$id === $id)
-  if (!component) {
-    component = {$id, ctor, metadata}
-    extension.components.push(component)
-  } else {
-    component.$id = $id
-    component.ctor = ctor
-    component.metadata = metadata
+  const extension = app.extension?.get(extId)
+  if (!extension) {
+    throw APP_API_ERROR.create(AppErrorFlag.NO_APP_EXTENSION, {
+      appName: app.getName(), extensionId: extId,
+    })
   }
-  app.extensions.set(moduleId, extension)
-  app.mitt.emit(EventFlag.SET_COMPONENT, extension)
-  logger.debug(`Set component id = ${$id} for module id = ${moduleId}`)
+  if (!(component.metadata)) component.metadata = {}
+  extension.component.push(component as AppComponent)
+  app.event.emit(AppEventFlag.SET_COMPONENT, component)
+  logger.debug(`Set component id = ${$id} for extension id = ${extId}`)
   return this
 }

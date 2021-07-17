@@ -25,7 +25,7 @@ export type Dictionary<T = unknown> = Record<string, T>
 export type EmptyObj<K extends keyof any = never> = Record<K, never>
 
 /** Type safe object "{}" record */
-export type AnyObj = Record<string | number | symbol, unknown>
+export type AnyObj = Record<PropertyKey, unknown>
 
 /** Make object properties writeable */
 export type Mutable<T> = {
@@ -38,6 +38,11 @@ export type MutableDeep<T> = {
     : MutableDeep<T[P]>
 }
 
+/** Make specific keys optional */
+export type WithRequired<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
+/** Make specific keys required */
+export type WithPartial<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
+
 /** Extract keys from T whose types are required and exclude those which are optional  */
 export type TheRequiredKeys<T, K extends keyof T = keyof T> = {
   [P in K]-?: (Pick<T, P> extends AnyObj
@@ -45,7 +50,7 @@ export type TheRequiredKeys<T, K extends keyof T = keyof T> = {
 }[K]
 /** Extract keys from T whose types are optional and exclude those which are required */
 export type TheOptionalKeys<T, K extends keyof T = keyof T> = {
-  [P in K]-?: (AnyObj extends Pick<T, P>
+  [P in K]-?: (Pick<T, P> extends AnyObj
     ? P : never)
 }[K]
 

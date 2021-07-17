@@ -20,6 +20,8 @@
  */
 export const instances: Logger[] = []
 
+export type LogLevelString = 'debug' | 'verbose' | 'info' | 'warn' | 'error' | 'silent'
+
 /**
  * The JS SDK supports 5 log levels and also allows a user the ability to
  * silence the logs altogether.
@@ -40,10 +42,8 @@ export enum LogLevel {
   SILENT,
 }
 
-export type LogLevelString = 'debug' | 'verbose' | 'info' | 'warn' | 'error' | 'silent'
-
 export namespace LogLevel {
-  export function fromString(str: LogLevelString): LogLevel {
+  export function fromStr(str: LogLevelString): LogLevel {
     switch (str) {
       case 'debug':
         return LogLevel.DEBUG
@@ -61,7 +61,7 @@ export namespace LogLevel {
         return LogLevel.VERBOSE
     }
   }
-  export function toString(str: LogLevel): LogLevelString {
+  export function toStr(str: LogLevel): LogLevelString {
     switch (str) {
       case LogLevel.DEBUG:
         return 'debug'
@@ -118,7 +118,7 @@ export class Logger {
 
   // Workaround for setter/getter having to be the same type.
   setLogLevel(val: LogLevel | LogLevelString): void {
-    this._logLevel = typeof val === 'string' ? LogLevel.fromString(val) : val
+    this._logLevel = typeof val === 'string' ? LogLevel.fromStr(val) : val
   }
 
   /**
@@ -184,35 +184,35 @@ export namespace Logger {
     for (const instance of instances) {
       let customLogLevel: LogLevel | null = null
       if (options && options.level) {
-        customLogLevel = LogLevel.fromString(options.level)
+        customLogLevel = LogLevel.fromStr(options.level)
       }
       if (logCallback === null) {
         instance.userLogHandler = null
       } else {
         instance.userLogHandler = (instance: Logger, level: LogLevel, ...args: unknown[]) => {
           const message = args
-            .map((arg) => {
-              if (arg == null) {
+          .map((arg) => {
+            if (arg == null) {
+              return null
+            } else if (typeof arg === 'string') {
+              return arg
+            } else if (typeof arg === 'number' || typeof arg === 'boolean') {
+              return arg.toString()
+            } else if (arg instanceof Error) {
+              return arg.message
+            } else {
+              try {
+                return JSON.stringify(arg)
+              } catch (ignored) {
                 return null
-              } else if (typeof arg === 'string') {
-                return arg
-              } else if (typeof arg === 'number' || typeof arg === 'boolean') {
-                return arg.toString()
-              } else if (arg instanceof Error) {
-                return arg.message
-              } else {
-                try {
-                  return JSON.stringify(arg)
-                } catch (ignored) {
-                  return null
-                }
               }
-            })
-            .filter((arg) => arg)
-            .join(' ')
+            }
+          })
+          .filter((arg) => arg)
+          .join(' ')
           if (level >= (customLogLevel ?? instance.logLevel)) {
             logCallback({
-              level: LogLevel.toString(level),
+              level: LogLevel.toStr(level),
               message,
               args,
               type: instance.name,

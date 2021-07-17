@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { AnyObj } from '@aglyn/shared/util/types'
+
 
 /**
  * Is literal type 'boolean'
@@ -246,7 +248,13 @@ export function _ln<T>(val: Iterable<T> | ArrayLike<T> | number, of?: number, op
   return false
 }
 
-export function _hasKey(key: string | number, source: Record<string | number, any>): boolean {
+/**
+ * Check if property exists
+ * @param {string | number} key
+ * @param {Record<string | number, any>} source
+ * @returns {boolean}
+ */
+export function _hasKey<T extends AnyObj>(key: string | number | symbol, source: T): boolean {
   return Object.prototype.hasOwnProperty.call(source, key)
 }
 

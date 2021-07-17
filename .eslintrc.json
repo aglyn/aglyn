@@ -21,27 +21,32 @@
                 "onlyDependOnLibsWithTags": ["scope:lib"]
               },
               {
-                "sourceTag": "scope:shared",
-                "onlyDependOnLibsWithTags": ["scope:shared"]
+                "sourceTag": "scope:lib:shared",
+                "onlyDependOnLibsWithTags": ["scope:lib:shared"]
               },
               {
-                "sourceTag": "scope:shared:util",
-                "onlyDependOnLibsWithTags": ["scope:shared:util"]
+                "sourceTag": "scope:lib:shared:util",
+                "onlyDependOnLibsWithTags": ["scope:lib:shared:util"]
               },
               {
-                "sourceTag": "scope:framework",
-                "onlyDependOnLibsWithTags": ["scope:framework", "scope:shared"]
+                "sourceTag": "scope:lib:framework",
+                "onlyDependOnLibsWithTags": ["scope:lib:framework", "scope:lib:shared"]
               },
               {
-                "sourceTag": "scope:framework:core",
-                "onlyDependOnLibsWithTags": ["scope:framework:core", "scope:shared:util"]
-              },
-              {
-                "sourceTag": "scope:framework:feature",
+                "sourceTag": "scope:lib:framework:core",
                 "onlyDependOnLibsWithTags": [
-                  "scope:framework:feature",
-                  "scope:shared",
-                  "scope:framework:core"
+                  "scope:lib:framework:core",
+                  "scope:lib:shared:util",
+                  "scope:lib:logger",
+                  "scope:lib:timestemp"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:framework:feature",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:framework:feature",
+                  "scope:lib:shared",
+                  "scope:lib:framework:core"
                 ]
               },
               {
