@@ -18,30 +18,32 @@
 import type EventEmitter from 'events'
 import type DdfSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
 import { RestrictFlag } from './constants/flag'
+import { AnyProps } from '@aglyn/shared/util/types'
 
-export type AnyProps = Record<string, unknown>
+
 export type AppsMap = Map<string, WebApp>
-export type ModulesMap = Map<string, Module>
+export type AppExtMap = Map<string, AppExt>
 export type EventListener<T = unknown> = (...args: T[]) => void
 export type EventName = string | symbol
 
 export interface WebApp {
   readonly mitt: EventEmitter
-  readonly modules: ModulesMap
+  readonly extensions: AppExtMap
   readonly created: string
   readonly name: string
+  readonly options: AppOptions
 }
 
 export interface AppOptions {
   name?: string
 }
 
-export interface Module {
+export interface AppExt {
   $id?: string
-  declarations: Component[]
+  components: AppComponent[]
 }
 
-export interface Component<T = unknown> {
+export interface AppComponent<T = unknown> {
   $id: string
   ctor: T
   metadata: {
@@ -70,7 +72,7 @@ export interface Component<T = unknown> {
 
 export interface ElementData {
   $id: string
-  component?: Component | string
+  component?: AppComponent | string
   children?: (ElementData | string)[]
   props: AnyProps
   temporary?: boolean

@@ -15,11 +15,4 @@
  * limitations under the License.
  */
 
-import { Timestamp } from './timestamp'
-
-
-describe('Timestamp', () => {
-  it('should work', () => {
-    expect(Timestamp.now()).toBeInstanceOf(Timestamp)
-  })
-})
+export * from './lib/types'

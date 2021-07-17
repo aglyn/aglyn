@@ -28,7 +28,8 @@
       "@aglyn/shared/ui/themes": ["libs/shared/ui/themes/src/index.ts"],
       "@aglyn/shared/util/guards": ["libs/shared/util/guards/src/index.ts"],
       "@aglyn/shared/util/helpers": ["libs/shared/util/helpers/src/index.ts"],
-      "@aglyn/shared/util/tools": ["libs/shared/util/tools/src/index.ts"]
+      "@aglyn/shared/util/tools": ["libs/shared/util/tools/src/index.ts"],
+      "@aglyn/shared/util/types": ["libs/shared/util/types/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

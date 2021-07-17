@@ -9,9 +9,5 @@
     {
       "path": "./tsconfig.spec.json"
     }
-  ],
-  "compilerOptions": {
-    "lib": ["es2019", "dom"],
-    "esModuleInterop": true
-  }
+  ]
 }

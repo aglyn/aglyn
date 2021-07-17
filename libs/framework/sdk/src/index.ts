@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-export * from './lib/core'
-export * from './lib/core-types'
+export * from './lib/api'
+export * from './lib/types'
 
 export * from './lib/constants/flag'
 export * from './lib/constants/instance'

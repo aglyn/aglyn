@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-import { AnyProps, Component } from '../core-types'
+import { AppComponent } from '../types'
 import { _isFn } from '@aglyn/shared/util/helpers'
 import { handlePropDefaults } from './handle-prop-defaults'
+import { AnyProps } from '@aglyn/shared/util/types'
+
 
 export function handleResolveProps(
   dataProps: AnyProps,
-  metadata: Component['metadata'],
-  thisArg?: any
+  metadata: AppComponent['metadata'],
+  thisArg?: any,
 ) {
-  const { resolveProps, defaultProps } = metadata
+  const {resolveProps, defaultProps} = metadata
   const mergedProps = handlePropDefaults(dataProps, defaultProps)
   const propsResolver = _isFn(resolveProps) ? resolveProps : (p) => p
   return propsResolver.call(thisArg, mergedProps)

@@ -14,12 +14,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { initializeApp } from './core'
-
-describe('WebApp', () => {
-  it('should work', () => {
-    const name = 'TestWebApp'
-    expect(initializeApp({ name })).toHaveProperty('name', name)
-  })
-})

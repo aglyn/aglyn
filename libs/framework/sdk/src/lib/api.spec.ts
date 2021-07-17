@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { Timestamp } from './timestamp'
+import { initializeApp } from './api'
 
 
-describe('Timestamp', () => {
+describe('WebApp', () => {
   it('should work', () => {
-    expect(Timestamp.now()).toBeInstanceOf(Timestamp)
+    const name = 'TestWebApp'
+    expect(initializeApp({name})).toHaveProperty('name', name)
   })
 })

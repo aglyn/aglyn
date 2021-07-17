@@ -68,14 +68,20 @@
       "implicitDependencies": []
     },
     "shared-util-guards": {
-      "tags": []
+      "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
+      "implicitDependencies": []
     },
     "shared-util-helpers": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
       "implicitDependencies": []
     },
     "shared-util-tools": {
-      "tags": []
+      "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
+      "implicitDependencies": []
+    },
+    "shared-util-types": {
+      "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
+      "implicitDependencies": []
     },
     "www": {
       "tags": ["scope:app", "scope:app:www"],

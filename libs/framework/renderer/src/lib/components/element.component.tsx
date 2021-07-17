@@ -17,16 +17,17 @@
 
 import { ComponentType, forwardRef } from 'react'
 import {
-  AnyProps,
-  Component,
+  AppComponent,
   ElementData,
-  getComponent,
   getApp,
+  getComponent,
   handleResolveProps,
 } from '@aglyn/framework/sdk'
 import { _isArr, _isArrEmpty, _isStr, yes } from '@aglyn/shared/util/helpers'
 import * as ReactIs from 'react-is'
 import ElementsComponent from './elements.component'
+import { AnyProps } from '@aglyn/shared/util/types'
+
 
 export interface ElementComponentProps extends AnyProps {
   elementData: ElementData
@@ -34,13 +35,13 @@ export interface ElementComponentProps extends AnyProps {
 }
 
 const ElementComponent = forwardRef<any, ElementComponentProps>(function RefRenderFn(props, ref) {
-  const { elementData: data, elementComponent, ...rest } = props
+  const {elementData: data, elementComponent, ...rest} = props
   const component = !_isStr(data?.component)
-    ? (data?.component as Component)
-    : getComponent(getApp(), { moduleId: 'react', componentId: data?.component })
-  const { ctor, metadata = {} } = component ?? {}
+    ? (data?.component as AppComponent)
+    : getComponent(getApp(), {moduleId: 'react', componentId: data?.component})
+  const {ctor, metadata = {}} = component ?? {}
   const resolvedProps = handleResolveProps(data?.props, metadata, component)
-  const { children: content = null, ...ctorProps } = resolvedProps
+  const {children: content = null, ...ctorProps} = resolvedProps
   const ComponentCtor = ReactIs.isValidElementType(ctor) ? ctor : 'div'
   const haveChildren = yes(!_isArr(data?.children) || _isArrEmpty(data?.children))
 
