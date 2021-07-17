@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import pkg from '../../../../../../package.json'
+import pkg from '../../../../../package.json'
 import { _isStr, _isStrEmpty } from '@aglyn/shared/util/helpers'
+
 
 export let SDK_VERSION = JSON.stringify(pkg.version ?? 'N/A')
 export const PRODUCTION = process.env.NODE_ENV === 'production'

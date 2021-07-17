@@ -14,5 +14,6 @@ module.exports = {
     '<rootDir>/libs/shared/timestamp',
     '<rootDir>/libs/shared/util/guards',
     '<rootDir>/libs/shared/util/tools',
+    '<rootDir>/libs/shared/util/error',
   ],
 }

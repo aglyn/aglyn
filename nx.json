@@ -67,6 +67,10 @@
       "tags": ["scope:lib", "scope:shared", "scope:shared:ui"],
       "implicitDependencies": []
     },
+    "shared-util-error": {
+      "tags": ["scope:lib", "scope:shared", "scope:shared:util", "scope:error"],
+      "implicitDependencies": []
+    },
     "shared-util-guards": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
       "implicitDependencies": []

@@ -17,8 +17,8 @@
 
 import type EventEmitter from 'events'
 import type DdfSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
-import { RestrictFlag } from './constants/flag'
 import { AnyProps } from '@aglyn/shared/util/types'
+import { AppErrorFlag, RestrictFlag } from './constants'
 
 
 export type AppsMap = Map<string, WebApp>
@@ -46,28 +46,30 @@ export interface AppExt {
 export interface AppComponent<T = unknown> {
   $id: string
   ctor: T
-  metadata: {
-    displayName?: string
-    description?: string
-    title?: string
-    subtitle?: string
-    icon?: any
-    propsSchema?: DdfSchema
-    defaultProps?: Partial<AnyProps>
-    resolveProps?: <T>(...args: T[]) => Partial<AnyProps> | void
-    disableActions?: boolean
-    disableBadge?: boolean
-    disableCopying?: boolean
-    disableDragging?: boolean
-    disableDropping?: boolean
-    disableEditing?: boolean
-    disableNesting?: boolean
-    disableOutline?: boolean
-    disableRemoving?: boolean
-    disableSelecting?: boolean
-    restrictChildren?: [type: RestrictFlag, ids: string[]]
-    restrictParents?: [type: RestrictFlag, ids: string[]]
-  }
+  metadata: ComponentMetadata
+}
+
+export interface ComponentMetadata {
+  displayName?: string
+  description?: string
+  title?: string
+  subtitle?: string
+  icon?: any
+  propsSchema?: DdfSchema
+  defaultProps?: AnyProps
+  resolveProps?: <T>(...args: T[]) => AnyProps | void
+  disableActions?: boolean
+  disableBadge?: boolean
+  disableCopying?: boolean
+  disableDragging?: boolean
+  disableDropping?: boolean
+  disableEditing?: boolean
+  disableNesting?: boolean
+  disableOutline?: boolean
+  disableRemoving?: boolean
+  disableSelecting?: boolean
+  restrictChildren?: [type: RestrictFlag, ids: string[]]
+  restrictParents?: [type: RestrictFlag, ids: string[]]
 }
 
 export interface ElementData {
@@ -79,4 +81,12 @@ export interface ElementData {
   parent?: string
   name?: string
   description?: string
+}
+
+export interface ErrorParams {
+  [AppErrorFlag.NO_APP]: { appName: string };
+  [AppErrorFlag.BAD_APP_NAME]: { appName: string };
+  [AppErrorFlag.DUPLICATE_APP]: { appName: string };
+  [AppErrorFlag.APP_DELETED]: { appName: string };
+  [AppErrorFlag.INVALID_APP_ARG]: { appName: string };
 }

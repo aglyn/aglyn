@@ -296,6 +296,27 @@
         }
       }
     },
+    "shared-util-error": {
+      "root": "libs/shared/util/error",
+      "sourceRoot": "libs/shared/util/error/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/shared/util/error/**/*.ts"]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/shared/util/error"],
+          "options": {
+            "jestConfig": "libs/shared/util/error/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      }
+    },
     "shared-util-guards": {
       "root": "libs/shared/util/guards",
       "sourceRoot": "libs/shared/util/guards/src",

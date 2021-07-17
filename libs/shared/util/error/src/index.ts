@@ -15,15 +15,4 @@
  * limitations under the License.
  */
 
-enum EventFlag {
-  INSTANCE_CREATED = 'website:app:created-instance',
-  SET_MODULE = 'website:app:set-module',
-  SET_COMPONENT = 'website:app:set-component',
-}
-
-enum RestrictFlag {
-  LIMIT = 'limit',
-  DISALLOW = 'disallow',
-}
-
-export { EventFlag, RestrictFlag }
+export * from './lib/error'

@@ -77,6 +77,8 @@
       <option name="UNION_TYPES_WRAP" value="0" />
       <option name="SPACES_WITHIN_IMPORTS" value="true" />
       <option name="ALIGN_UNION_TYPES" value="true" />
+      <option name="INDENT_CHAINED_CALLS" value="false" />
+      <option name="USE_CHAINED_CALLS_GROUP_INDENTS" value="true" />
       <option name="BLANK_LINES_AROUND_FUNCTION" value="0" />
     </TypeScriptCodeStyleSettings>
     <codeStyleSettings language="CSS">
@@ -188,6 +190,7 @@
       <option name="KEEP_SIMPLE_METHODS_IN_ONE_LINE" value="true" />
       <option name="ARRAY_INITIALIZER_LBRACE_ON_NEXT_LINE" value="true" />
       <option name="ARRAY_INITIALIZER_RBRACE_ON_NEXT_LINE" value="true" />
+      <option name="WRAP_COMMENTS" value="true" />
       <indentOptions>
         <option name="INDENT_SIZE" value="2" />
         <option name="CONTINUATION_INDENT_SIZE" value="2" />

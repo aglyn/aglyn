@@ -17,30 +17,29 @@
 
 import EventEmitter from 'events'
 import { logger } from './logger'
-import { EventFlag } from './constants/flag'
 import {
   AppComponent,
   AppExt,
+  AppExtMap,
   AppOptions,
-  AppsMap,
   EventListener,
   EventName,
-  AppExtMap,
   WebApp,
 } from './types'
+import { AppErrorFlag, DEFAULT_ENTRY_NAME, ERROR_FACTORY, EventFlag } from './constants'
+import { _apps } from './internal'
+import { LogCallback, Logger, LogLevelString, LogOptions } from '@aglyn/shared/feature/logger'
+import { _isFn } from '@aglyn/shared/util/guards'
 
-
-const DEFAULT_ENTRY_NAME = '[DEFAULT]'
-const _apps: AppsMap = new Map()
 
 export function initializeApp(options: AppOptions = {}): WebApp {
   const {name = DEFAULT_ENTRY_NAME} = options
   const _name = String(name)
   if (!_name) {
-    throw new Error('Invalid name provided')
+    throw ERROR_FACTORY.create(AppErrorFlag.BAD_APP_NAME, {appName: _name})
   }
   if (_apps.has(_name)) {
-    throw new Error(`App already exists with name ${_name}`)
+    throw ERROR_FACTORY.create(AppErrorFlag.DUPLICATE_APP, {appName: _name})
   }
   const _created: string = new Date().toUTCString()
   const _mitt: EventEmitter = new EventEmitter()
@@ -66,28 +65,16 @@ export function initializeApp(options: AppOptions = {}): WebApp {
   return app
 }
 
-export function listenAppOnce<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
-  app.mitt.once(name, listener)
-}
-
-export function listenAppOn<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
-  app.mitt.on(name, listener)
-}
-
-export function listenAppOff<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
-  app.mitt.off(name, listener)
-}
-
 export function getApps(): WebApp[] {
   return [..._apps.values()]
 }
 
 export function getApp(name: string = DEFAULT_ENTRY_NAME): WebApp {
   const app = _apps.get(name)
-  if (app) {
-    return _apps.get(name)
+  if (!app) {
+    throw ERROR_FACTORY.create(AppErrorFlag.DUPLICATE_APP, {appName: name})
   }
-  throw new Error(`App does not exist ${name}`)
+  return _apps.get(name)
 }
 
 export function deleteApp(app: WebApp): void {
@@ -97,8 +84,44 @@ export function deleteApp(app: WebApp): void {
   }
 }
 
+export function _appListenOnce<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
+  app.mitt.once(name, listener)
+}
+
+export function _appListenOn<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
+  app.mitt.on(name, listener)
+}
+
+export function _appListenOff<T>(app: WebApp, name: EventName, listener: EventListener<T>) {
+  app.mitt.off(name, listener)
+}
+
+/**
+ * Sets log handler for all SDKs components
+ * @param callbackFn - An optional custom log handler that executes user code whenever
+ *   the SDK makes a logging call.
+ * @param options
+ */
+export function onLog(callbackFn: LogCallback | null, options?: LogOptions): void {
+  if (callbackFn !== null && !_isFn(callbackFn)) {
+    throw ERROR_FACTORY.create(AppErrorFlag.INVALID_LOG_ARG)
+  }
+  Logger.setUserLogHandler(callbackFn, options)
+}
+
+/**
+ * Sets log level for all SDK components
+ *
+ * All of the log types above the current log level are captured (i.e. if
+ * you set the log level to `info`, errors are logged, but `debug` and
+ * `verbose` logs are not).
+ */
+export function setLogLevel(logLevel: LogLevelString): void {
+  Logger.setLogLevel(logLevel)
+}
+
 export function getExtensions(app: WebApp): AppExt[] {
-  return Array.from(app.extensions.values())
+  return [...app.extensions.values()]
 }
 
 export function getExtension(app: WebApp, options: { $id: string }): AppExt {

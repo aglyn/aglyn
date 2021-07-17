@@ -21,13 +21,19 @@ import { handlePropDefaults } from './handle-prop-defaults'
 import { AnyProps } from '@aglyn/shared/util/types'
 
 
+/**
+ * Merges properties of a resolving function with currents
+ * @param {AnyProps} props
+ * @param {AppComponent["metadata"]} metadata
+ * @param {ThisType<unknown>} thisArg
+ * @returns {any}
+ */
 export function handleResolveProps(
-  dataProps: AnyProps,
-  metadata: AppComponent['metadata'],
-  thisArg?: any,
+  props: AnyProps,
+  metadata: Pick<AppComponent['metadata'], 'resolveProps'|'defaultProps'>,
+  thisArg?: ThisType<unknown>,
 ) {
-  const {resolveProps, defaultProps} = metadata
-  const mergedProps = handlePropDefaults(dataProps, defaultProps)
-  const propsResolver = _isFn(resolveProps) ? resolveProps : (p) => p
-  return propsResolver.call(thisArg, mergedProps)
+  const {resolveProps, defaultProps={}} = metadata
+  const mergedProps = handlePropDefaults(props, defaultProps)
+  return _isFn(resolveProps) ? resolveProps.call(thisArg, mergedProps) : mergedProps
 }

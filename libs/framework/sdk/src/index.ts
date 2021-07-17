@@ -17,9 +17,9 @@
 
 export * from './lib/api'
 export * from './lib/types'
-
-export * from './lib/constants/flag'
-export * from './lib/constants/instance'
+export * from './lib/version'
 
 export * from './lib/util/handle-resolve-props'
 export * from './lib/util/handle-prop-defaults'
+
+export { RestrictFlag, EventFlag } from './lib/constants'
