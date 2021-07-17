@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import React from 'react'
+import { render } from '@testing-library/react'
+
+import SelectionComponent from './selection.component'
+
+describe('SelectionComponent', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<SelectionComponent open />)
+    expect(baseElement).toBeTruthy()
+  })
+})

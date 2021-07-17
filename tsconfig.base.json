@@ -17,17 +17,18 @@
     "strictBindCallApply": true,
     "baseUrl": ".",
     "paths": {
+      "@aglyn/framework/builder": ["libs/framework/builder/src/index.ts"],
+      "@aglyn/framework/plugins/material": ["libs/framework/plugins/material/src/index.ts"],
+      "@aglyn/framework/renderer": ["libs/framework/renderer/src/index.ts"],
+      "@aglyn/framework/sdk": ["libs/framework/sdk/src/index.ts"],
       "@aglyn/shared/data/mdi": ["libs/shared/data/mdi/src/index.ts"],
+      "@aglyn/shared/feature/logger": ["libs/shared/feature/logger/src/index.ts"],
+      "@aglyn/shared/feature/timestamp": ["libs/shared/feature/timestamp/src/index.ts"],
       "@aglyn/shared/ui/react": ["libs/shared/ui/react/src/index.ts"],
       "@aglyn/shared/ui/themes": ["libs/shared/ui/themes/src/index.ts"],
+      "@aglyn/shared/util/guards": ["libs/shared/util/guards/src/index.ts"],
       "@aglyn/shared/util/helpers": ["libs/shared/util/helpers/src/index.ts"],
-      "@aglyn/shared/util/logger": ["libs/shared/util/logger/src/index.ts"],
-      "@aglyn/website/core": ["libs/website/core/src/index.ts"],
-      "@aglyn/website/feature/builder": ["libs/website/feature/builder/src/index.ts"],
-      "@aglyn/website/feature/plugin/material": [
-        "libs/website/feature/plugin/material/src/index.ts"
-      ],
-      "@aglyn/website/feature/renderer": ["libs/website/feature/renderer/src/index.ts"]
+      "@aglyn/shared/util/tools": ["libs/shared/util/tools/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

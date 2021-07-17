@@ -22,17 +22,15 @@ import React, { Fragment, StrictMode, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
 import { APP } from '../../www/const'
-import { initializeApp } from '@aglyn/website/core'
-
+import { initializeApp } from '@aglyn/framework/sdk'
 
 initializeApp()
-
 
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
 
 function _App(props: AppProps) {
-  const {Component, pageProps} = props
+  const { Component, pageProps } = props
 
   useEffect(() => {
     // Remove the server-side injected CSS.
@@ -42,7 +40,7 @@ function _App(props: AppProps) {
     }
   }, [])
 
-  const Wrapper = isProduction ? Fragment : Fragment// StrictMode
+  const Wrapper = isProduction ? Fragment : Fragment // StrictMode
 
   return (
     <Wrapper>

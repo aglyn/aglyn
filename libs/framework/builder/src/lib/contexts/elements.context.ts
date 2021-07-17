@@ -15,7 +15,18 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import { createContext, useContext } from 'react'
+import { ElementData } from '@aglyn/website/core'
+
+export interface ElementsContextType {
+  elements?: ElementData[]
+}
+
+export type UseElementsContextType = () => ElementsContextType
+
+export const ElementsContext = createContext<ElementsContextType>(null)
+export const useElementsContext: UseElementsContextType = () => {
+  return useContext(ElementsContext)
+}
+
+export default ElementsContext

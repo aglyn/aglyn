@@ -31,8 +31,32 @@
       "tags": ["scope:app", "scope:app:console"],
       "implicitDependencies": ["console"]
     },
+    "framework-builder": {
+      "tags": ["scope:lib", "scope:framework", "scope:framework:feature"],
+      "implicitDependencies": []
+    },
+    "framework-plugins-material": {
+      "tags": ["scope:lib", "scope:framework", "scope:framework:feature"],
+      "implicitDependencies": []
+    },
+    "framework-renderer": {
+      "tags": ["scope:lib", "scope:framework", "scope:framework:feature"],
+      "implicitDependencies": []
+    },
+    "framework-sdk": {
+      "tags": ["scope:lib", "scope:framework", "scope:framework:core"],
+      "implicitDependencies": []
+    },
     "shared-data-mdi": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:data"],
+      "implicitDependencies": []
+    },
+    "shared-feature-logger": {
+      "tags": ["scope:lib", "scope:shared", "scope:shared:feature", "scope:logger"],
+      "implicitDependencies": []
+    },
+    "shared-feature-timestamp": {
+      "tags": ["scope:lib", "scope:shared", "scope:shared:feature"],
       "implicitDependencies": []
     },
     "shared-ui-react": {
@@ -43,29 +67,15 @@
       "tags": ["scope:lib", "scope:shared", "scope:shared:ui"],
       "implicitDependencies": []
     },
+    "shared-util-guards": {
+      "tags": []
+    },
     "shared-util-helpers": {
       "tags": ["scope:lib", "scope:shared", "scope:shared:util"],
       "implicitDependencies": []
     },
-    "shared-util-logger": {
-      "tags": ["scope:lib", "scope:shared", "scope:shared:util", "scope:logger"],
-      "implicitDependencies": []
-    },
-    "website-core": {
-      "tags": ["scope:lib", "scope:website", "scope:website:core"],
-      "implicitDependencies": []
-    },
-    "website-feature-builder": {
-      "tags": ["scope:lib", "scope:website", "scope:website:feature"],
-      "implicitDependencies": []
-    },
-    "website-feature-plugin-material": {
-      "tags": ["scope:lib", "scope:website", "scope:website:feature"],
-      "implicitDependencies": []
-    },
-    "website-feature-renderer": {
-      "tags": ["scope:lib", "scope:website", "scope:website:feature"],
-      "implicitDependencies": []
+    "shared-util-tools": {
+      "tags": []
     },
     "www": {
       "tags": ["scope:app", "scope:app:www"],

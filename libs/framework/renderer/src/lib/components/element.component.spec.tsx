@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import { render } from '@testing-library/react'
+
+import ElementComponent from './element.component'
+
+describe('ElementComponent', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<ElementComponent elementData={null} />)
+    expect(baseElement).toBeTruthy()
+  })
+})

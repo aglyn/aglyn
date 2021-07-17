@@ -15,7 +15,17 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import { AnyProps, Component } from '../core-types'
+import { _isFn } from '@aglyn/shared/util/helpers'
+import { handlePropDefaults } from './handle-prop-defaults'
+
+export function handleResolveProps(
+  dataProps: AnyProps,
+  metadata: Component['metadata'],
+  thisArg?: any
+) {
+  const { resolveProps, defaultProps } = metadata
+  const mergedProps = handlePropDefaults(dataProps, defaultProps)
+  const propsResolver = _isFn(resolveProps) ? resolveProps : (p) => p
+  return propsResolver.call(thisArg, mergedProps)
+}

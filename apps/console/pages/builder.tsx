@@ -16,12 +16,11 @@
  */
 
 import React, { useState } from 'react'
-import { getApp, setComponent } from '@aglyn/website/core'
-import { BuilderComponent } from '@aglyn/website/feature/builder'
+import { getApp, setComponent } from '@aglyn/framework/sdk'
+import { BuilderComponent } from '@aglyn/framework/builder'
 import { samplePageData } from '../constants/sample-data'
 
-
-const Root = ({children, innerRef, ...props}) => (
+const Root = ({ children, innerRef, ...props }) => (
   <span ref={innerRef} {...props}>
     {children}
   </span>

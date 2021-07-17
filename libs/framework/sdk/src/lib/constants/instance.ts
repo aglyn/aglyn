@@ -15,7 +15,16 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import pkg from '../../../../../../package.json'
+import { _isStr, _isStrEmpty } from '@aglyn/shared/util/helpers'
+
+export let SDK_VERSION = JSON.stringify(pkg.version ?? 'N/A')
+export const PRODUCTION = process.env.NODE_ENV === 'production'
+export const DEVELOPMENT = process.env.NODE_ENV !== 'production'
+
+export function setVersion(version: string): void {
+  if (!_isStr(version) || _isStrEmpty(version)) {
+    throw new Error('invalid version')
+  }
+  SDK_VERSION = version
+}

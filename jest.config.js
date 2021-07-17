@@ -11,5 +11,8 @@ module.exports = {
     '<rootDir>/libs/shared/ui/themes',
     '<rootDir>/libs/website/feature/elements/material',
     '<rootDir>/libs/shared/util/logger',
+    '<rootDir>/libs/shared/timestamp',
+    '<rootDir>/libs/shared/util/guards',
+    '<rootDir>/libs/shared/util/tools',
   ],
 }

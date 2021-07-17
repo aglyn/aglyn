@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+enum EventFlag {
+  INSTANCE_CREATED = 'website:app:created-instance',
+  SET_MODULE = 'website:app:set-module',
+  SET_COMPONENT = 'website:app:set-component',
+}
+
+enum RestrictFlag {
+  LIMIT = 'limit',
+  DISALLOW = 'disallow',
+}
+
+export { EventFlag, RestrictFlag }

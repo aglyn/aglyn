@@ -15,7 +15,23 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import ElementsContext from './elements.context'
+import { ReactNode, useState } from 'react'
+import { ElementData } from '@aglyn/framework/sdk'
+
+export interface ElementsProviderComponentProps {
+  children?: ReactNode
+  elements?: ElementData[]
+}
+
+function ElementsProviderComponent(props: ElementsProviderComponentProps) {
+  const { children, elements } = props
+  const [ctx, setCtx] = useState({ elements })
+
+  return <ElementsContext.Provider value={ctx}>{children}</ElementsContext.Provider>
+}
+
+ElementsProviderComponent.defaultProps = {
+  elements: [],
+}
+export default ElementsProviderComponent

@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import { initializeApp } from './core'
+
+describe('WebApp', () => {
+  it('should work', () => {
+    const name = 'TestWebApp'
+    expect(initializeApp({ name })).toHaveProperty('name', name)
+  })
+})

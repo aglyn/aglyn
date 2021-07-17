@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-export * from './lib/deep'
-export * from './lib/external'
-export * from '../../guards/src/lib/guards'
-export * from '../../tools/src/lib/tools'
+import { deepMerge } from '@aglyn/shared/util/helpers'
+
+export function handlePropDefaults(dataProps, defaultProps) {
+  return deepMerge(defaultProps, dataProps)
+}

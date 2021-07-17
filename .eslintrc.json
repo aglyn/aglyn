@@ -29,19 +29,19 @@
                 "onlyDependOnLibsWithTags": ["scope:shared:util"]
               },
               {
-                "sourceTag": "scope:website",
-                "onlyDependOnLibsWithTags": ["scope:website", "scope:shared"]
+                "sourceTag": "scope:framework",
+                "onlyDependOnLibsWithTags": ["scope:framework", "scope:shared"]
               },
               {
-                "sourceTag": "scope:website:core",
-                "onlyDependOnLibsWithTags": ["scope:website:core", "scope:shared:util"]
+                "sourceTag": "scope:framework:core",
+                "onlyDependOnLibsWithTags": ["scope:framework:core", "scope:shared:util"]
               },
               {
-                "sourceTag": "scope:website:feature",
+                "sourceTag": "scope:framework:feature",
                 "onlyDependOnLibsWithTags": [
-                  "scope:website:feature",
+                  "scope:framework:feature",
                   "scope:shared",
-                  "scope:website:core"
+                  "scope:framework:core"
                 ]
               },
               {
