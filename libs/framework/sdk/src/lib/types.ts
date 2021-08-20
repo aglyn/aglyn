@@ -34,7 +34,7 @@ import { Emitter } from 'mitt'
 import { Timestamp } from '@aglyn/shared/feature/timestamp'
 import { NsErrorFactory } from '@aglyn/shared/util/errors'
 import { Logger } from '@aglyn/shared/feature/logger'
-import { AglynComponentOptions } from './extensions/components-type.extension'
+import { AglynComponent, AglynComponentOptions } from './extensions/components-type.extension'
 
 
 export type Payload<T = any> = { payload: T }
@@ -84,7 +84,7 @@ export type AglynModuleTriggerParams = {
   [AglynModuleTriggerFlag.COMMAND_TRIGGER]: PayloadData<{ commandId: string }>
   [AglynModuleTriggerFlag.EXTENSION_COMPONENT_GET]: PayloadData<{ componentId: string }>
   [AglynModuleTriggerFlag.EXTENSION_COMPONENTS_GET]: undefined
-  [AglynModuleTriggerFlag.EXTENSION_COMPONENT_REGISTER]: PayloadData<{ componentId: string, component: unknown, options?: Partial<AglynComponentOptions> }>
+  [AglynModuleTriggerFlag.EXTENSION_COMPONENT_REGISTER]: PayloadData<{ componentId: string, component: AglynComponent, options?: Partial<AglynComponentOptions> }>
   [AglynModuleTriggerFlag.EXTENSION_COMPONENT_UNREGISTER]: PayloadData<{ componentId: string }>
 }
 export type AglynCommandParams = {
@@ -141,7 +141,7 @@ export interface AglynApp extends AglynBaseModel,
 
   readonly deleted?: boolean
   readonly event: AglynEmitter
-  readonly logger: AglynLogger
+  readonly log: AglynLogger
   readonly commands: AglynCommandController
   readonly extensions: AglynExtensionController
 

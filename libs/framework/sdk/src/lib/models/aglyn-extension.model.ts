@@ -14,13 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {
-  AglynApp,
-  AglynExtension,
-  AglynExtensionConfig,
-  AglynModuleController,
-} from './types'
-import { AglynSymbol } from './constants'
+
+import { AglynExtension, AglynExtensionConfig, AglynSymbol } from '@aglyn/framework/sdk'
 import { LifecycleFlag } from '@aglyn/shared/util/types'
 
 
@@ -29,11 +24,11 @@ export abstract class AglynExtensionModel implements AglynExtension {
   protected static __$ID__: string = null
   static #__TAG__ = 'AglynExtension'
   #lifecycle?: LifecycleFlag = null
-  context?: any
+  context?: any = null
   protected getContext() { return this.context }
   protected setContext(value) { this.context = value }
-  public get current() { return this.#lifecycle }
-  public set current(value) {
+  public get lifecycle() { return this.#lifecycle }
+  public set lifecycle(value) {
     if (value in LifecycleFlag) {
       this.#lifecycle = value
     }

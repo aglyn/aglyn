@@ -29,20 +29,20 @@ export interface LifecycleObserver {
   /**
    * Should be invoked once immediately after instantiation
    */
-  onInit?<T, U>(...args: T[]): U
+  onInit?(...args: unknown[]): unknown
   /**
    * Should be invoked once as last step before garbage collection
    */
-  onDestroy?<T, U>(...args: T[]): U
+  onDestroy?(...args: unknown[]): unknown
 }
 
 export interface LoadableObserver extends LifecycleObserver {
   /**
    * Should be invoked each time the object is loaded
    */
-  onLoad?<T, U>(...args: T[]): U
+  onLoad?(...args: unknown[]): unknown
   /**
    * Should be invoked each time the object is unloaded
    */
-  onUnload?<T, U>(...args: T[]): U
+  onUnload?(...args: unknown[]): unknown
 }

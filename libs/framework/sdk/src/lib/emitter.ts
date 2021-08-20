@@ -18,4 +18,4 @@
 import { AglynEmitter } from '@aglyn/framework/sdk'
 import { Mitt } from '@aglyn/shared/util/helpers'
 
-export const event: AglynEmitter = Mitt()
+export const emitter: AglynEmitter = Mitt()

@@ -20,6 +20,7 @@ import { AglynSymbol, RestrictFlag } from '../constants'
 import { AnyProps } from '@aglyn/shared/util/types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import { FormSchema } from '@aglyn/shared/ui/react'
+import { AglynExtensionModel } from '../models/aglyn-extension.model'
 
 
 export interface AglynComponentOptions {
@@ -76,9 +77,20 @@ export type RegistryEvery<P> = P extends { variant: infer X }
   : RegistryEntries
 export type ComponentsRegistry = Map<string, AglynComponent>
 
-namespace PayloadParams {
+export namespace PayloadParams {
   export type Set = PayloadData<{ component: AglynComponent }>
   export type Get = PayloadData<{ componentId: string }>
   export type GetAll = PayloadData<{ variant: 'entries' | 'keys' | 'values' }>
   export type Delete = PayloadData<{ componentId: string }>
+}
+
+export interface AglynComponentsExtension extends AglynExtensionModel {
+  context: ComponentsRegistry
+  entries: () => [id: string, component: AglynComponent][]
+  keys: () => string[]
+  values: () => AglynComponent[]
+  getAll: (options?: PayloadParams.GetAll) => RegistryEvery<typeof options>
+  get: (payload: PayloadParams.Get) => AglynComponent
+  set: (payload: PayloadParams.Set) => this
+  delete: (payload: PayloadParams.Delete) => this
 }

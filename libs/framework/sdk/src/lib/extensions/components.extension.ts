@@ -17,11 +17,17 @@
 
 import { AglynApp } from '../types'
 import { AglynModuleTriggerFlag } from '../constants'
-import { AglynExtensionModel } from '../models'
-import { AglynComponent, ComponentsRegistry } from './components-type.extension'
+import {
+  AglynComponent,
+  AglynComponentsExtension,
+  ComponentsRegistry,
+  PayloadParams,
+  RegistryEvery,
+} from './components-type.extension'
+import { AglynExtensionModel } from '../models/aglyn-extension.model'
 
 
-const extension = new (class extends AglynExtensionModel {
+const extension = new (class extends AglynExtensionModel implements AglynComponentsExtension {
   protected static override __$ID__ = 'components'
   public override context: ComponentsRegistry = new Map()
   constructor() {
@@ -36,7 +42,7 @@ const extension = new (class extends AglynExtensionModel {
   public values = (): AglynComponent[] => {
     return [...this.context.values()]
   }
-  public getAll = (options?: { variant: 'entries' | 'keys' | 'values' }) => {
+  public getAll = (options?: PayloadParams.GetAll): RegistryEvery<typeof options> => {
     const {variant} = {...options}
     switch (variant) {
       case 'values':
@@ -46,16 +52,16 @@ const extension = new (class extends AglynExtensionModel {
     }
     return this.entries()
   }
-  public get = (payload) => {
+  public get = (payload: PayloadParams.Get): AglynComponent => {
     const {componentId} = payload
     return this.context.get(componentId)
   }
-  public set = (payload) => {
+  public set = (payload: PayloadParams.Set): this => {
     const {component} = payload
-    this.context.set(component.$id, component)
+    this.context.set(component?.$id, component)
     return this
   }
-  public delete = (payload) => {
+  public delete = (payload: PayloadParams.Delete): this => {
     const {componentId} = payload
     this.getContext().delete(componentId)
     return this

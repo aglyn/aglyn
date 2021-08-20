@@ -34,9 +34,8 @@ import Button from '@material-ui/core/Button'
 import Box from '@material-ui/core/Box'
 import FormControl from '@material-ui/core/FormControl'
 import Typography from '@material-ui/core/Typography'
-import { getApp, getExtension } from '@aglyn/framework/sdk'
+import { getApp, getExtension, AglynComponentsExtension } from '@aglyn/framework/sdk'
 import { ElementDrawerOptions } from '../contexts/element-drawer.context'
-import { ComponentsExtensionController } from '../../../../sdk/src/lib/extensions/components-type.extension'
 
 
 export const styles = (theme: Theme) =>
@@ -114,8 +113,8 @@ export interface ElementDrawerComponentProps extends Partial<NavbarDrawerProps> 
 
 const app = getApp()
 const componentsExtension = getExtension(app, {
-  extensionId: 'components'
-}) as unknown as ComponentsExtensionController
+  extensionId: 'components',
+}) as unknown as AglynComponentsExtension
 
 const ElementDrawerComponent = forwardRef<any,
   ElementDrawerComponentProps & WithStyles<typeof styles>>(function RefRenderFn(props, ref) {
@@ -157,8 +156,7 @@ const ElementDrawerComponent = forwardRef<any,
     [onConfirm],
   )
 
-  const componentEntries = componentsExtension.entries()
-  const components = getExtension(, { extensionId})getComponents(getApp(), {moduleId: 'react'})
+  const components = componentsExtension.getAll()
   const items = components.map((i) => ({
     id: i?.$id,
     title: i?.options?.title,

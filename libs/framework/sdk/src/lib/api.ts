@@ -36,10 +36,10 @@ import { _apps, _modules } from './internal'
 import { LogCallback, Logger, LogLevelString, LogOptions } from '@aglyn/shared/feature/logger'
 import { _isFnT, _isNull, _isStrEmpty } from '@aglyn/shared/util/guards'
 import { trim } from '@aglyn/shared/util/tools'
-import { AglynAppImpl } from './controllers'
-import { event } from './event'
+import { emitter } from './emitter'
 import { Mutable } from '@aglyn/shared/util/types'
 import { isAppModule, isCommand, isExtension } from './util/aglyn-is'
+import { AglynAppController } from './controllers/aglyn-app.controller'
 
 
 export function registerModules(app: AglynApp, ...modules: any[]) {
@@ -80,7 +80,7 @@ export function initializeApp(appOptions: AglynAppOptions = {}): AglynApp {
   if (_apps.has(name)) {
     throw AGLYN_APP_ERROR.create(AglynErrorEventFlag.DUPLICATE_APP, {appName: name})
   }
-  const app: AglynApp = AglynAppImpl(options, event, logger)
+  const app: AglynApp = new AglynAppController({options, emitter, logger})
   _apps.set(name, app)
   app.onInit?.()
 
@@ -106,12 +106,12 @@ export function deleteApp(app: AglynApp): void {
   _validateAppArg(app)
   const name = app.getName()
   logger.debug(AglynAppEventFlag.BEFORE_DELETE_APP, {app})
-  event.emit(AglynAppEventFlag.BEFORE_DELETE_APP, {app})
+  emitter.emit(AglynAppEventFlag.BEFORE_DELETE_APP, {app})
   app.onDestroy?.()
   _apps.delete(name)
   ;(app as Mutable<AglynApp>)['deleted'] = true
   logger.debug(AglynAppEventFlag.APP_DELETED, {appName: name})
-  event.emit(AglynAppEventFlag.APP_DELETED, {appName: name})
+  emitter.emit(AglynAppEventFlag.APP_DELETED, {appName: name})
 }
 
 export function _validateAppArg(app: AglynApp): void {
@@ -125,12 +125,12 @@ export function _validateAppArg(app: AglynApp): void {
 
 export function _getExtensionController(app: AglynApp): AglynExtensionController {
   _validateAppArg(app)
-  return AglynAppImpl.extensionController.get(app.getName())
+  return AglynAppController.extensionControllers.get(app.getName())
 }
 
 export function _getCommandController(app: AglynApp): AglynCommandController {
   _validateAppArg(app)
-  return AglynAppImpl.commandController.get(app.getName())
+  return AglynAppController.commandControllers.get(app.getName())
 }
 
 /**
