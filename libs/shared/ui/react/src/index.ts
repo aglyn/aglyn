@@ -44,7 +44,9 @@ export { default as SvgPath } from './lib/components/svg-path-icon/svg-path'
 export * from './lib/components/svg-path-icon/svg-path-icon'
 export { default as SvgPathIcon } from './lib/components/svg-path-icon/svg-path-icon'
 export * from './lib/components/confirmation-provider/confirmation-provider.component'
-export { default as ConfirmationProviderComponent } from './lib/components/confirmation-provider/confirmation-provider.component'
+export {
+  default as ConfirmationProviderComponent,
+} from './lib/components/confirmation-provider/confirmation-provider.component'
 
 export * from './lib/contexts/confirmation.context'
 export { default as ConfirmationContext } from './lib/contexts/confirmation.context'
@@ -81,3 +83,6 @@ export * from './lib/const/svg-icons'
 export * from './lib/shared-types/props'
 
 export * from './lib/ddf-form'
+
+export * from './lib/hoc/with-hoc'
+export * from './lib/hoc/with-context'

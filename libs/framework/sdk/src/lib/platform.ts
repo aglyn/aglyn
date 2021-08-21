@@ -14,13 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { PlatformIdentifier } from '@aglyn/shared/util/helpers'
 
-export * from 'change-case'
-export * as ChangeCase from 'change-case'
-export { default as deepEqual } from 'deep-equal'
-export { default as deepMerge, all as deepMergeAll, Options as DeepMergeOptions } from 'deepmerge'
-export { default as Flat } from 'flat'
-export * from 'fuse.js'
-export * as Uid from 'nanoid'
-export * from 'mitt'
-export { default as Mitt } from 'mitt'
+
+export const AGLYN_PLATFORM = PlatformIdentifier

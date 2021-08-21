@@ -18,7 +18,7 @@
 import { FbUser } from '../lib/aglyn-deprecated'
 import React, { createContext, useContext, useEffect, useState } from 'react'
 
-import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '../hoc/with-consumer'
+import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '@aglyn/shared/ui/react'
 import { withAppContext } from './app-context'
 
 

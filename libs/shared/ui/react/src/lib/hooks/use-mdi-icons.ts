@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { useCallback, useState, useMemo } from 'react'
-
-import Fuse from 'fuse.js'
+import { useCallback, useMemo, useState } from 'react'
 
 import { Icons, icons as mdiIcons } from '@aglyn/shared/data/mdi'
 
-import { _isArr } from '@aglyn/shared/util/helpers'
+import { _isArr } from '@aglyn/shared/util/guards'
+import { SearchFuzzy } from '@aglyn/shared/util/helpers'
+
 
 export type MdiIcon = {
   id: string
@@ -46,13 +46,13 @@ export function useMemoizedMdiIcons(iconIds?: string[]): (MdiIcon | null)[] {
         return !icon
           ? null
           : {
-              id,
-              name: icon.name,
-              path: icon.path,
-              aliases: Object.keys(icon.alias).filter((i) => icon.alias[i] === true),
-            }
+            id,
+            name: icon.name,
+            path: icon.path,
+            aliases: Object.keys(icon.alias).filter((i) => icon.alias[i] === true),
+          }
       }),
-    [ids]
+    [ids],
   )
 }
 
@@ -60,9 +60,9 @@ const defaultKeys = ['id', 'name', 'aliases']
 
 export function useMdiIcons(initialQuery?: string, opts?: FilterOpts): UseMdiIconsReturn {
   const allIcons = useMemoizedMdiIcons()
-  const options = { keys: opts?.keys ?? defaultKeys }
-  const fuse = new Fuse(allIcons, options)
-  const searchItems = (query: string) => fuse.search(query ?? '').map((i) => i.item)
+  const options = {keys: opts?.keys ?? defaultKeys}
+  const fuzzy = new SearchFuzzy(allIcons, options)
+  const searchItems = (query: string) => fuzzy.search(query ?? '').map((i) => i.item)
   const [query, setQuery] = useState(initialQuery ?? '')
   const filteredIcons = useMemo<MdiIcon[]>(() => {
     return query ? searchItems(query) : allIcons
@@ -71,7 +71,7 @@ export function useMdiIcons(initialQuery?: string, opts?: FilterOpts): UseMdiIco
   const applyFilter: ApplyFilterFn = useCallback((query: string) => setQuery(query), [])
   const clearFilter: ClearFilterFn = useCallback(() => setQuery(''), [])
 
-  return useMemo(() => [filteredIcons, { applyFilter, clearFilter }, mdiIcons], [filteredIcons])
+  return useMemo(() => [filteredIcons, {applyFilter, clearFilter}, mdiIcons], [filteredIcons])
 }
 
 export default useMdiIcons

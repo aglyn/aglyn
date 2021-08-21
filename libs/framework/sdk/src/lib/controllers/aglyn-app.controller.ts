@@ -35,6 +35,8 @@ import { AglynBaseModel } from '../models/aglyn-base.model'
 import { _commandControllers, _extensionControllers } from '../internal'
 import { AGLYN_LOGGER } from '../logger'
 import { AGLYN_EMITTER } from '../emitter'
+import { AGLYN_PLATFORM } from '../platform'
+import { SDK_VERSION } from '../version'
 
 
 const TAG = 'AglynApp'
@@ -43,6 +45,8 @@ export class AglynAppController extends AglynBaseModel implements AglynAppInstan
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly [TypeOf]: number | symbol = APP_TYPE
+  public static readonly platform = AGLYN_PLATFORM
+  public static readonly version = SDK_VERSION
   public readonly AglynAppCommandController = AglynCommandController
   public readonly AglynAppExtensionController = AglynExtensionController
   readonly #options: AglynAppOptions = null

@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-import { Conditional } from '@aglyn/shared/ui/react'
-import { _ln, Uid } from '@aglyn/shared/util/helpers'
+import {
+  ComponentWithInjectedProp,
+  InjectedContextProp,
+  withContext,
+} from '@aglyn/shared/ui/react'
+import { _ln, createUid } from '@aglyn/shared/util/helpers'
 import React, { createContext, useContext, useState } from 'react'
-
-import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '../hoc/with-consumer'
+import { Conditional, ConditionalNonDist } from '@aglyn/shared/util/types'
 
 
 export type QueueId = string
 export type Queues = QueueId[]
 export type TupledDequeueFn = [QueueId, DequeueLoading]
-export type QueueResponse<Tuple extends boolean = null> = Conditional<Tuple, true, TupledDequeueFn, DequeueLoading>
+export type QueueResponse<Tuple = false> = ConditionalNonDist<Tuple, true, TupledDequeueFn, DequeueLoading>
 
 export type DequeueLoading = () => void /* Should be called to dequeue/end loading event  */
-export type EnqueueLoading = (asTuple?: boolean) => QueueResponse<typeof asTuple>
+export type EnqueueLoading = <T extends boolean>(asTuple?: T) => QueueResponse<T>
 
 export type AppLoaderContextType = {
   queues: Queues
@@ -46,14 +49,14 @@ export const {
 } = AppLoader
 
 export const useAppLoader = () => useContext(AppLoader)
-const createQueueId = () => Uid.nanoid(5)
+const createQueueId = () => createUid(5)
 
 export function AppLoaderProviderComponent(props: React.PropsWithChildren<unknown>) {
   const {children} = props
   const [state, setState] = useState<AppLoaderContextType>({
     queues: [],
     isLoading: false,
-    queueLoading: (asTuple?: boolean) => {
+    queueLoading: <T extends boolean>(asTuple?: T): QueueResponse<T> => {
       const queueId = createQueueId()
       const enqueue = () => {
         // Queue by appending the queueId to queue array
@@ -73,7 +76,7 @@ export function AppLoaderProviderComponent(props: React.PropsWithChildren<unknow
         })
       }
       enqueue()
-      return asTuple ? [queueId, dequeue] : dequeue
+      return (asTuple === true ? [queueId, dequeue] : dequeue) as QueueResponse<T>
     },
     checkLoading: () => Boolean(state.queues.length),
   })

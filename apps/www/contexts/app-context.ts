@@ -18,7 +18,7 @@
 import { AppController } from '../lib/aglyn-deprecated'
 import { createContext, useContext } from 'react'
 
-import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '../hoc/with-consumer'
+import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '@aglyn/shared/ui/react'
 
 
 export const AppContext = createContext<AppController>(null)

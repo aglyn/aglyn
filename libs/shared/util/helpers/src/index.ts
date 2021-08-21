@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-export * from './lib/external'
+export * from './vendor/change-case'
+export * from './vendor/deep-equal'
+export * from './vendor/deep-merge'
+export * from './vendor/flatten-object'
+export * from './vendor/mitt-emitter'
+export * from './vendor/platform-identifier'
+export * from './vendor/search-fuzzy'
+export * from './vendor/unique-identification'
 
 // TODO: Replace dependents with direct lib import and remove below re-exports
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries

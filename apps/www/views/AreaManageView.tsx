@@ -16,9 +16,8 @@
  */
 
 import React from 'react'
-import {_isArr, _isObj } from '@aglyn/common/tools/guards'
-import { s, mapObject } from '@aglyn/common/tools/utils'
-import { createUid } from '@aglyn/common/tools/uid'
+import { mapObject, s } from '@aglyn/shared/util/tools'
+import { createUid } from '@aglyn/shared/util/helpers'
 import WidgetCard from '../components/WidgetCard'
 import ConsoleLayout from '../layouts/ConsoleLayout'
 import DataTable, { Props as DataTableProps } from '../components/DataTable'
@@ -31,6 +30,7 @@ import { useAppLoader } from '../contexts/app-loader-context'
 import DrawerFormView from './DrawerFormView'
 import { Fields } from 'forms'
 import { useRouter } from 'next/router'
+
 
 const pageLen = 25
 
@@ -61,15 +61,15 @@ export default withAppContext<Props>(function AreaManageView(props) {
     onSaveError,
   } = props
   const router = useRouter()
-  const { enqueueSnackbar } = useSnackbar()
-  const { queueLoading, isLoading } = useAppLoader()
+  const {enqueueSnackbar} = useSnackbar()
+  const {queueLoading, isLoading} = useAppLoader()
   const [loadingDocuments, setLoadingDocuments] = React.useState(false)
   const [error, setError] = React.useState<any>(null)
   const [documents, setDocuments] = React.useState<{ [id: string]: any }>(null)
   const [formOpen, setFormOpen] = React.useState(false)
   const [activeDocument, setActiveDocument] = React.useState<{ type: 'updating' | 'creating', data: any }>(null)
   const query = app.getCollectionRef(collectionId)
-  const rows = Object.entries(documents ?? {}).map(([id, v]) => ({ id, ...v }))
+  const rows = Object.entries(documents ?? {}).map(([id, v]) => ({id, ...v}))
   const openForm = () => setFormOpen(true)
   const closeForm = () => setFormOpen(false)
   const clearActiveDocument = () => setActiveDocument(null)
@@ -100,16 +100,16 @@ export default withAppContext<Props>(function AreaManageView(props) {
 
   // Update field on active document
   const handleFieldUpdate = (fieldId: string) => (
-    event: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>
+    event: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>,
   ) => {
     const value = event.target.value
-    setActiveDocument(prev => ({ ...prev, data: { ...prev.data, [fieldId]: value } }))
+    setActiveDocument(prev => ({...prev, data: {...prev.data, [fieldId]: value}}))
   }
 
   // Open create form
   const handleCreateDocumentFormOpen = async () => {
     const dequeueLoader = queueLoading()
-    setActiveDocument({ type: 'creating', data: { id: createUid() } })
+    setActiveDocument({type: 'creating', data: {id: createUid()}})
     openForm()
     dequeueLoader()
   }
@@ -118,20 +118,20 @@ export default withAppContext<Props>(function AreaManageView(props) {
   const setRemoteDocument = React.useCallback(async () => {
     console.debug('Saving active document', activeDocument)
     const dequeueLoader = queueLoading()
-    const { type, data } = activeDocument
-    const { id: dataId, ...allExceptId } = data
+    const {type, data} = activeDocument
+    const {id: dataId, ...allExceptId} = data
     const id = dataId ?? createUid()
     await query.doc(id).set(allExceptId)
-      .then((res) => {
-        const actionMsg = type === 'creating' ? 'Created' : 'Updated'
-        enqueueSnackbar(`${actionMsg} successfully`, { variant: 'success' })
-        onSaveSuccess && onSaveSuccess(activeDocument)
-      })
-      .catch((error) => {
-        setError(error.message)
-        enqueueSnackbar(error?.message, { variant: 'error' })
-        onSaveError && onSaveError(error)
-      })
+    .then((res) => {
+      const actionMsg = type === 'creating' ? 'Created' : 'Updated'
+      enqueueSnackbar(`${actionMsg} successfully`, {variant: 'success'})
+      onSaveSuccess && onSaveSuccess(activeDocument)
+    })
+    .catch((error) => {
+      setError(error.message)
+      enqueueSnackbar(error?.message, {variant: 'error'})
+      onSaveError && onSaveError(error)
+    })
     handleCloseForm()
     dequeueLoader()
   }, [query, activeDocument])
@@ -163,22 +163,21 @@ export default withAppContext<Props>(function AreaManageView(props) {
     const cancelListener = query.onSnapshot((querySnapshot) => {
       setLoadingDocuments(true)
       setDocuments(prev => {
-        const items = { ...prev }
+        const items = {...prev}
         querySnapshot.docChanges().forEach(change => {
           if (change.type === 'removed') {
             console.debug('Removed document update: ', change.doc.data())
             delete items[change.doc.id]
-          }
-          else {
+          } else {
             console.debug('Updated document update: ', change.doc.data())
-            items[change.doc.id] = { id: change.doc.id, ...change.doc.data() }
+            items[change.doc.id] = {id: change.doc.id, ...change.doc.data()}
           }
         })
         return items
       })
       setLoadingDocuments(false)
     }, (error) => {
-      enqueueSnackbar(error?.message, { variant: 'error' })
+      enqueueSnackbar(error?.message, {variant: 'error'})
     })
     return () => {
       cancelListener()
@@ -190,13 +189,12 @@ export default withAppContext<Props>(function AreaManageView(props) {
     if (documentId && documents) {
       const document = documents[documentId]
       if (document) {
-        setActiveDocument({ type: 'updating', data: document })
+        setActiveDocument({type: 'updating', data: document})
         setError(null)
-      }
-      else {
+      } else {
         setError('Item does not exist!')
         setActiveDocument(null)
-        enqueueSnackbar('Error loading item', { variant: 'error' })
+        enqueueSnackbar('Error loading item', {variant: 'error'})
       }
     }
   }, [documentId, documents])
@@ -207,7 +205,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
         items={[
           {
             xs: 12, md: 3,
-            children: (<AreaManageNavigationListWidgetView />)
+            children: (<AreaManageNavigationListWidgetView />),
           },
           {
             xs: 12, md: 9,
@@ -228,7 +226,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
                         onClick={handleCreateDocumentFormOpen}
                       />
                     </React.Fragment>
-                  )
+                  ),
                 }}
               >
                 <DataTable
@@ -241,14 +239,14 @@ export default withAppContext<Props>(function AreaManageView(props) {
                   rows={rows}
                 />
               </WidgetCard>
-            )
+            ),
           },
         ]}
       />
 
       <DrawerFormView
         error={error || Boolean(documentId && !activeDocument)}
-        fields={mapObject(fields, (v) => ({...v, value: activeDocument?.data[v.id] ?? v.value}), { copy: true })}
+        fields={mapObject(fields, (v) => ({...v, value: activeDocument?.data[v.id] ?? v.value}), {copy: true})}
         id={activeDocument?.data?.id}
         label={documentName.singular}
         loading={isLoading}

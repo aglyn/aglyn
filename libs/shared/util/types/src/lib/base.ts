@@ -15,10 +15,14 @@
  * limitations under the License.
  */
 
-/** Any type of object record with string index types */
+/**
+ * Any type of object record with string index types
+ */
 export type AnyProps = Record<string, unknown>
 
-/** Dictionary collection with string index types (optionally specify value by setting T) */
+/**
+ * Dictionary collection with string index types (optionally specify value by setting T)
+ */
 export type Dictionary<T = unknown> = Record<string, T>
 
 /** Dictionary collection optionally specify values to T */
@@ -29,6 +33,27 @@ export type AnyObj<K extends PropertyKey = PropertyKey> = Record<K, unknown>
 
 /** Record with only readonly properties */
 export type ReadonlyRecord<K extends keyof any, T> = Readonly<Record<K, T>>
+
+/** Response value, Promise or Promise-Like value  */
+export type ValueOrPromise<T> = T extends Promise<unknown> ? T : T | PromiseLike<T>
+
+/** Allows conditional typing ype alias */
+export type Conditional<LEFT, RIGHT, TRUE, FALSE = never> = LEFT extends RIGHT ? TRUE : FALSE
+
+/** Allows conditional non-distributive typing type alias @see https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types */
+export type ConditionalNonDist<LEFT, RIGHT, TRUE, FALSE = never> = [LEFT] extends [RIGHT] ? TRUE : FALSE
+
+/** If X extends true then Y */
+export type IF<X, Y> = Conditional<X, true, Y>
+
+/** Plain old dictionary of key(K)-value(T) pairs with string signatures */
+export type KV<T = unknown, K extends string = string> = Record<K, T>
+
+/** The index signature type of T */
+export type KeyOf<T> = keyof T
+
+/** The index value type of T  */
+export type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
 
 /** From T, make all top level keys mutable (removes readonly) */
 export type Mutable<T> = {
@@ -108,6 +133,3 @@ export interface StringLike {
 export interface Serializable {
   toJSON(): any
 }
-
-/** Response value, Promise or Promise-Like value  */
-export type ValueOrPromise<T> = T extends Promise<unknown> ? T : T | PromiseLike<T>

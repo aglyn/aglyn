@@ -16,18 +16,19 @@
  */
 
 import React from 'react'
-import { _isArr, _isStr } from '@aglyn/common/tools/guards'
-import { mapObject } from '@aglyn/common/tools/utils'
+import { _isStr } from '@aglyn/shared/util/guards'
+import { mapObject } from '@aglyn/shared/util/tools'
 import IconButton from '@material-ui/core/IconButton'
 import NavbarDrawer from '@aglyn/common/components/NavbarDrawer'
 import FieldSet from '../components/FieldSet'
-import { makeStyles, Theme, createStyles, fade } from '@material-ui/core/styles'
+import { createStyles, fade, makeStyles, Theme } from '@material-ui/core/styles'
 import SvgPathIcon from '@aglyn/common/components/SvgPathIcon'
 import Container from '@material-ui/core/Container'
 import Typography from '@material-ui/core/Typography'
 import { Box, Button } from '@material-ui/core'
 import LinearProgress from '@material-ui/core/LinearProgress'
 import { Fields } from 'forms'
+
 
 const useStyles = makeStyles<Theme, Props>((theme) => createStyles({
   closeButton: {marginRight: theme.spacing(2)},
@@ -110,7 +111,7 @@ export default function DrawerFormView(props: Props) {
       <div className={classes.wrapper}>
         {loading && (
           <React.Fragment>
-            <LinearProgress classes={{ root: classes.loadingBar }} color="secondary" />
+            <LinearProgress classes={{root: classes.loadingBar}} color="secondary" />
           </React.Fragment>
         )}
 
@@ -141,7 +142,7 @@ export default function DrawerFormView(props: Props) {
                   px={1}
                 >
                   <pre>
-                    {JSON.stringify(mapObject(fields, f => f.value ?? '', { copy: true }), null, 2)}
+                    {JSON.stringify(mapObject(fields, f => f.value ?? '', {copy: true}), null, 2)}
                   </pre>
                 </Box>
               </Box>

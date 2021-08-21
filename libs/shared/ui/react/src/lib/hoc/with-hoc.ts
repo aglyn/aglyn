@@ -17,8 +17,8 @@
 
 import { ComponentType, createElement } from 'react'
 
-import { _isFn } from '@aglyn/common/tools/guards'
-import { getDisplayName } from '@aglyn/common/utils/getDisplayName'
+import { getDisplayName } from '@aglyn/shared/util/tools'
+import { _isFnT } from '@aglyn/shared/util/guards'
 
 
 /** Merge props for WithHoc utility functions */
@@ -40,8 +40,8 @@ export type WithHocFnBuilder = {
 export const withHocFnBuilder: WithHocFnBuilder = <P, T>(value: T | ((props: P) => T), defaultProp: string) => {
   return function withHocFn(Component: WithHocComponent<P, typeof prop, T>, prop = defaultProp): ComponentType<P> {
     function DecoratedComponent(props: P) {
-      const _value = _isFn(value) ? value(props) : value
-      const newProps = { ...props, [prop]: _value }
+      const _value = _isFnT(value) ? value(props) : value
+      const newProps = {...props, [prop]: _value}
       return createElement(Component, newProps)
     }
     DecoratedComponent.displayName = `WithHocFn(${getDisplayName(Component)})`
