@@ -1,1 +1,5 @@
-export * as SearchFuzzy from 'fuse.js'
+import SearchFuzzy from 'fuse.js'
+
+export {
+  SearchFuzzy
+}

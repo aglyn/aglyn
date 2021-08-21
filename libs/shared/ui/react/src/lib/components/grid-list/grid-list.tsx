@@ -111,7 +111,7 @@ export interface GridListProps extends Partial<VirtuosoGridProps> {
   ListWrapperProps?: HTMLProps<HTMLDivElement>
 }
 
-const GridList = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<typeof gridListStyles>>(
+const GridListRaw = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<typeof gridListStyles>>(
   function RefRenderFn(props, ref) {
     const {
       classes,
@@ -176,9 +176,12 @@ const GridList = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<typeo
   },
 )
 
-GridList.displayName = 'GridList'
-GridList.defaultProps = {
+GridListRaw.displayName = 'GridListRaw'
+GridListRaw.defaultProps = {
   renderItemContent: (item) => item,
 }
 
-export default withStyles(gridListStyles, {name: 'GridList'})(GridList)
+export const GridList = withStyles(gridListStyles, {name: 'GridList'})(GridListRaw)
+GridList.displayName = 'GridList'
+
+export default GridList

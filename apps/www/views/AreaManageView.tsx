@@ -16,19 +16,19 @@
  */
 
 import React from 'react'
-import { mapObject, s } from '@aglyn/shared/util/tools'
+import { _s, mapObject } from '@aglyn/shared/util/tools'
 import { createUid } from '@aglyn/shared/util/helpers'
 import WidgetCard from '../components/WidgetCard'
 import ConsoleLayout from '../layouts/ConsoleLayout'
 import DataTable, { Props as DataTableProps } from '../components/DataTable'
 import IconButton from '@material-ui/core/IconButton'
-import SvgPathIcon from '@aglyn/common/components/SvgPathIcon'
+import { SvgPathIcon } from '@aglyn/shared/ui/react'
 import AreaManageNavigationListWidgetView from './AreaManageNavigationListWidgetView'
 import { withAppContext } from '../contexts/app-context'
 import { useSnackbar } from 'notistack'
 import { useAppLoader } from '../contexts/app-loader-context'
 import DrawerFormView from './DrawerFormView'
-import { Fields } from 'forms'
+import { Fields } from '../forms'
 import { useRouter } from 'next/router'
 
 
@@ -80,7 +80,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
   }
   // Handle table data row click
   const handleRowClick = (p) => {
-    handleDocumentOpen(s(p.row.id))
+    handleDocumentOpen(_s(p.row.id))
   }
   // Close Document
   const removeDocumentIdFromUrl = React.useCallback(async () => {

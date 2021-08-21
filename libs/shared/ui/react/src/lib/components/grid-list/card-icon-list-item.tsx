@@ -73,7 +73,7 @@ export interface CardIconListItemProps extends Partial<Omit<MuiCardProps, 'class
   }['bivarianceHack']
 }
 
-const CardIconListItem = forwardRef<any, CardIconListItemProps & WithStyles<typeof styles>>(
+const CardIconListItemRaw = forwardRef<any, CardIconListItemProps & WithStyles<typeof cardIconListItemStyles>>(
   function RefRenderFn(props, ref) {
     const {
       classes,
@@ -120,7 +120,12 @@ const CardIconListItem = forwardRef<any, CardIconListItemProps & WithStyles<type
   }
 )
 
-CardIconListItem.displayName = 'CardIconListItem'
-CardIconListItem.defaultProps = {}
+CardIconListItemRaw.displayName = 'CardIconListItemRaw'
+CardIconListItemRaw.defaultProps = {}
 
-export default withStyles(cardIconListItemStyles, {name: 'CardIconListItem'})(CardIconListItem)
+export const CardIconListItem = withStyles(cardIconListItemStyles, {name: 'CardIconListItem'})(
+  CardIconListItemRaw
+)
+CardIconListItem.displayName = 'CardIconListItem'
+
+export default CardIconListItem

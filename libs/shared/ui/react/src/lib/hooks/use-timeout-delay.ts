@@ -66,7 +66,7 @@ type HandlerParams = {
  * @param {Options} options
  * @return {TimeoutReturn}
  */
-export default function useTimeoutDelay(callback: Handler, options?: Options): TimeoutReturn {
+export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutReturn {
   const [state] = useState<Options>(() => (_isObj(options) ? options : {}))
   const [mounted, setMounted] = useState(false)
   const savedCallback = useRef(null)
@@ -184,3 +184,5 @@ export default function useTimeoutDelay(callback: Handler, options?: Options): T
 
   return [start, clear]
 }
+
+export default useTimeoutDelay

@@ -14,7 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { PlatformIdentifier } from '@aglyn/shared/util/helpers'
+import { PlatformIdentification } from '@aglyn/shared/util/helpers'
+import { AglynPlatform } from './types'
 
 
-export const AGLYN_PLATFORM = PlatformIdentifier
+export const AGLYN_PLATFORM: AglynPlatform = PlatformIdentification

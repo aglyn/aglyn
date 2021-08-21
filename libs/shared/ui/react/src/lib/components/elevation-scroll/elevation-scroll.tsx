@@ -34,6 +34,7 @@ export function ElevationScroll(props: ElevationScrollProps) {
 
   return cloneElement(children, { elevation: trigger ? 4 : 0 })
 }
+
 ElevationScroll.displayName = 'ElevationScroll'
 
 export default ElevationScroll

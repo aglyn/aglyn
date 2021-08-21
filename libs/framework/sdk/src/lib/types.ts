@@ -48,11 +48,14 @@ import {
   TypeOf,
 } from './aglyn-symbol'
 import { AglynErrorEventFlag } from './error'
+import { Platform } from '@aglyn/shared/util/helpers'
 
 
 export type Payload<T = any> = { payload: T }
 export type PayloadData<T extends Dictionary = any> = T
 
+export type AglynPlatform = Platform
+export type AglynVersion = string
 export type AglynAppsMap = Map<string, AglynAppInstance>
 export type AglynExtensionsControllersMap = Map<string, AglynExtensionControllerInstance>
 export type AglynCommandsControllersMap = Map<string, AglynCommandControllerInstance>

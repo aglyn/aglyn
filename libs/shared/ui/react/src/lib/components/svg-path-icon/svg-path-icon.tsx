@@ -62,7 +62,7 @@ export interface SvgPathIconProps extends Partial<Omit<MuiSvgIconProps, 'path'>>
   path?: Path
 }
 
-const SvgPathIcon = forwardRef<any, SvgPathIconProps>(
+export const SvgPathIcon = forwardRef<any, SvgPathIconProps>(
   function RefRenderFn(props, ref) {
     const {iconId, path, children, ...rest} = props
     const pathElem = useMemo(() => {

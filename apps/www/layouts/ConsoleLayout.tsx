@@ -25,7 +25,7 @@ import React from 'react'
 import Breadcrumbs from '../components/Breadcrumbs'
 import { withCurrentUserCtx } from '../contexts/current-user-context'
 import { withAggregatedPageMeta } from '../lib/app-pages'
-import { getGravatarUrl } from '../lib/gravatar'
+import { getGravatarUrl } from '@aglyn/shared/util/helpers'
 import { tabItems } from '../lib/navigation-menus'
 import MainLayout, { Props as MainLayoutProps, styles as mainStyles } from './MainLayout'
 

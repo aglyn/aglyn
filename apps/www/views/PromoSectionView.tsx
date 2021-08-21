@@ -15,14 +15,10 @@
  * limitations under the License.
  */
 
-import Box from '@material-ui/core/Box'
-import Container from '@material-ui/core/Container'
-import MuiLink from '@material-ui/core/Link'
 import Typography from '@material-ui/core/Typography'
-import React, { ElementType, forwardRef, ReactNode, HTMLAttributes } from 'react'
+import React, { ElementType, forwardRef, HTMLAttributes, ReactNode } from 'react'
 import { createStyles, Theme, withStyles, WithStyles } from '@material-ui/core/styles'
 import clsx from 'clsx'
-import { GridItems } from '../../../libs/shared/ui/react/src/lib/components/grid-items/grid-items'
 import BackgroundImage from '../components/BackgroundImage'
 import Link, { LinkProps } from '../components/Link'
 
@@ -89,7 +85,7 @@ const PromoSectionView = forwardRef<any, PromoSectionViewProps & WithStyles<type
           <Link
             button
             size="large"
-            variant={'contained' as any}
+            variant="contained"
             color="primary"
             {...link}
           />
@@ -104,4 +100,4 @@ PromoSectionView.defaultProps = {
   component: 'div',
 }
 
-export default withStyles(PromoSectionViewStyles, { name: 'PromoSectionView' })(PromoSectionView)
+export default withStyles(PromoSectionViewStyles, {name: 'PromoSectionView'})(PromoSectionView)

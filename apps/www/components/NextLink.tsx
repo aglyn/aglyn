@@ -33,7 +33,7 @@ const NextLink = React.forwardRef<HTMLAnchorElement, NextLinkProps>(
       shallow,
       prefetch,
       locale,
-      ...other
+      ...rest
     } = props
 
     return (
@@ -47,7 +47,7 @@ const NextLink = React.forwardRef<HTMLAnchorElement, NextLinkProps>(
         scroll={scroll}
         shallow={shallow}
       >
-        <a ref={ref} {...other}>
+        <a ref={ref} {...rest}>
           {children}
         </a>
       </Link>

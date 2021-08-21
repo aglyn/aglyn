@@ -15,32 +15,46 @@
  * limitations under the License.
  */
 
-import React from 'react'
+import { forwardRef } from 'react'
 import clsx from 'clsx'
 import { useRouter } from 'next/router'
 import MuiLink, { LinkProps as MuiLinkProps } from '@material-ui/core/Link'
 import MuiButton, { ButtonProps as MuiButtonProps } from '@material-ui/core/Button'
 import NextLink, { NextLinkProps } from './NextLink'
+import { InnerRefProps } from '@aglyn/shared/ui/react'
 
 
 export type NextOnly = NextLinkProps
-export type NextAndMuiLink = MuiLinkProps & NextLinkProps
-export type NextAndMuiButton = MuiButtonProps & NextLinkProps
+export type NextAndMuiLinkProps = MuiLinkProps & NextLinkProps
+export type NextAndMuiButtonProps = MuiButtonProps & NextLinkProps
+
+type MergedProps<T> = [T] extends [any]
+  ? T extends { naked: true, button?: false }
+    ? T & NextOnly
+    : T extends { naked?: false, button: true }
+      ? NextAndMuiButtonProps
+      : T & NextAndMuiLinkProps
+  : never
+
+type MergedPropsWithInnerRef<T> = [T] extends [any]
+  ? T extends { naked?: false, button: true }
+    ? T & InnerRefProps<HTMLButtonElement>
+    : T & InnerRefProps<HTMLAnchorElement>
+  : never
+
+type LinkRefType<T> = [T] extends [any]
+  ? T extends { naked?: false, button: true }
+    ? HTMLButtonElement
+    : HTMLAnchorElement
+  : never
 
 export interface BaseProps {
   activeClassName?: string
-  innerRef?: React.Ref<HTMLAnchorElement>
   naked?: boolean
   button?: boolean
 }
 
-export type LinkProps = BaseProps & (
-    BaseProps['naked'] extends true
-      ? NextOnly
-      : BaseProps['button'] extends true
-        ? NextAndMuiButton /*& {variant?: MuiButtonProps['variant']}*/
-        : NextAndMuiLink
-  )
+export interface LinkProps extends MergedProps<BaseProps> {}
 
 /**
  * A styled version of the Next.js Link component: https://nextjs.org/docs/#with-link
@@ -48,7 +62,7 @@ export type LinkProps = BaseProps & (
  * @param {LinkProps} props
  * @return {JSX.Element}
  */
-export function InnerRefLink(props: LinkProps) {
+export function InnerRefLink(props: MergedPropsWithInnerRef<LinkProps>) {
   const {
     href,
     activeClassName = 'active',
@@ -61,7 +75,7 @@ export function InnerRefLink(props: LinkProps) {
 
   const router = useRouter()
   const pathname = typeof href === 'object' ? href['pathname'] : href
-  const className = clsx(classNameProps, { [activeClassName]: router.pathname === pathname && activeClassName })
+  const className = clsx(classNameProps, {[activeClassName]: router.pathname === pathname && activeClassName})
 
   if (naked) {
     return <NextLink ref={innerRef} className={className} href={href} {...other} />
@@ -90,10 +104,16 @@ export function InnerRefLink(props: LinkProps) {
   )
 }
 
-const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
-  function LinkRefRenderFn(props, ref) {
-    return (<InnerRefLink {...props} innerRef={ref} />)
-  },
-)
+InnerRefLink.displayName = 'InnerRefLink'
+
+const Link = (function <T extends LinkProps>() {
+  return forwardRef<LinkRefType<T>, T>(
+    function LinkRefRenderFn(props, ref) {
+      return (<InnerRefLink {...props} innerRef={ref} />)
+    },
+  )
+})()
+
+Link.displayName = 'Link'
 
 export default Link

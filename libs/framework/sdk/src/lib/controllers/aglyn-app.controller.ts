@@ -24,6 +24,8 @@ import {
   AglynEffectType,
   AglynExtensionControllerInstance,
   AglynModuleTriggerFlag,
+  AglynPlatform,
+  AglynVersion,
   APP_TYPE,
   DEFAULT_ENTRY_NAME,
   TypeOf,
@@ -45,8 +47,8 @@ export class AglynAppController extends AglynBaseModel implements AglynAppInstan
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly [TypeOf]: number | symbol = APP_TYPE
-  public static readonly platform = AGLYN_PLATFORM
-  public static readonly version = SDK_VERSION
+  public static readonly platform: AglynPlatform = AGLYN_PLATFORM
+  public static readonly version: AglynVersion = SDK_VERSION
   public readonly AglynAppCommandController = AglynCommandController
   public readonly AglynAppExtensionController = AglynExtensionController
   readonly #options: AglynAppOptions = null

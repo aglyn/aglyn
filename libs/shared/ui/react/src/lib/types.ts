@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
-import { ElementType } from 'react'
+import { ElementType, Ref } from 'react'
 
 
 export type InferElementTypeProps<T> = T extends ElementType<infer P> ? P : never
-export type ComponentProp<T extends ElementType = any> = { component?: T } //& InferElementTypeProps<T>
+
+export interface ComponentProp<T extends ElementType = any> {
+  component?: T
+} //& InferElementTypeProps<T>
+
+export interface InnerRefProps<T> {
+  innerRef?: Ref<T>
+}

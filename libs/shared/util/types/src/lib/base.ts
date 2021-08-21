@@ -15,9 +15,16 @@
  * limitations under the License.
  */
 
-/**
- * Any type of object record with string index types
- */
+/** A index signature for a object key  */
+export type PKey = PropertyKey
+
+/** A index signature for a mapped object */
+export type MapKey = string | symbol
+
+/** @alias MapKey */
+export type MKey = MapKey
+
+/** Any type of object record with string index types */
 export type AnyProps = Record<string, unknown>
 
 /**
