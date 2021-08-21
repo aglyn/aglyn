@@ -17,11 +17,12 @@
 
 import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
 import clsx from 'clsx'
-import { forwardRef, HTMLAttributes } from 'react'
-import Button, { ButtonProps } from '@material-ui/core/Button'
-import Dialog, { DialogProps } from '@material-ui/core/Dialog'
-import DialogContentText, { DialogContentTextProps } from '@material-ui/core/DialogContentText'
-import DialogTitle, { DialogTitleProps } from '@material-ui/core/DialogTitle'
+import { forwardRef, Fragment, HTMLAttributes } from 'react'
+import { ButtonProps } from '@material-ui/core/Button'
+import { DialogProps } from '@material-ui/core/Dialog'
+import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
+import { DialogTitleProps } from '@material-ui/core/DialogTitle'
+
 
 export interface SelectionComponentOptions {
   cancellationText?: ButtonProps['children']
@@ -56,21 +57,35 @@ export const styles = (theme: Theme) =>
 
 const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
-    const { open, options, onCancel, onConfirm, onClose, classes, className, ...rest } = props
-    const { title, clientRect } = options
+    const {
+      open,
+      options,
+      onCancel,
+      onConfirm,
+      onClose,
+      classes,
+      className,
+      children,
+      ...rest
+    } = props
+    const {title, clientRect} = options
     return (
-      open && (
-        <div
-          ref={ref}
-          {...rest}
-          className={clsx(classes.root, className)}
-          style={{
-            ...clientRect,
-          }}
-        ></div>
-      )
+      <Fragment>
+        {open ? (
+          <div
+            ref={ref}
+            {...rest}
+            className={clsx(classes.root, className)}
+            style={{
+              ...clientRect,
+            }}
+          >
+            {children}
+          </div>
+        ) : null}
+      </Fragment>
     )
-  }
+  },
 )
 
 SelectionComponent.displayName = 'SelectionComponent'
@@ -80,4 +95,4 @@ SelectionComponent.defaultProps = {
   },
 }
 
-export default withStyles(styles, { name: 'SelectionComponent' })(SelectionComponent)
+export default withStyles(styles, {name: 'SelectionComponent'})(SelectionComponent)

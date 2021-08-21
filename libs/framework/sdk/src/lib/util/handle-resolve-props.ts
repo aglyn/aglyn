@@ -18,7 +18,7 @@
 import { _isFnT } from '@aglyn/shared/util/helpers'
 import { handlePropDefaults } from './handle-prop-defaults'
 import { AnyProps } from '@aglyn/shared/util/types'
-import { AglynComponent } from '../extensions/components-type.extension'
+import { AglynComponent } from '../models/extensions/components-types.extension'
 
 
 /**

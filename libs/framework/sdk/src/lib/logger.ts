@@ -19,4 +19,4 @@ import { Logger } from '@aglyn/shared/feature/logger'
 import { AglynLogger } from './types'
 
 
-export const logger: AglynLogger = new Logger('@aglyn/website/core')
+export const AGLYN_LOGGER: AglynLogger = new Logger('@aglyn/website/core')

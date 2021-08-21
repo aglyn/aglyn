@@ -34,7 +34,7 @@ import Button from '@material-ui/core/Button'
 import Box from '@material-ui/core/Box'
 import FormControl from '@material-ui/core/FormControl'
 import Typography from '@material-ui/core/Typography'
-import { getApp, getExtension, AglynComponentsExtension } from '@aglyn/framework/sdk'
+import { AglynComponent, getAllComponents, getApp } from '@aglyn/framework/sdk'
 import { ElementDrawerOptions } from '../contexts/element-drawer.context'
 
 
@@ -108,157 +108,162 @@ export interface ElementDrawerComponentProps extends Partial<NavbarDrawerProps> 
   onDelete?: {
     bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void
   }['bivarianceHack']
+
+  elements: { id: string, title: string, icon: unknown }[]
 }
 
+const ElementDrawerComponent = forwardRef<any, ElementDrawerComponentProps & WithStyles<typeof styles>>(
+  function RefRenderFn(props, ref) {
+    const {
+      classes,
+      className,
+      options,
+      onConfirm,
+      onClose,
+      onCancel,
+      onDelete,
+      elements,
+      ...rest
+    } = props
 
-const app = getApp()
-const componentsExtension = getExtension(app, {
-  extensionId: 'components',
-}) as unknown as AglynComponentsExtension
+    const {title, type = 'browse-site-components'} = options
 
-const ElementDrawerComponent = forwardRef<any,
-  ElementDrawerComponentProps & WithStyles<typeof styles>>(function RefRenderFn(props, ref) {
-  const {classes, className, options, onConfirm, onClose, onCancel, onDelete, ...rest} = props
+    const selectedElementProps: any = {}
+    const propsSchema: any = {}
+    const handleElementSave = useCallback(
+      (values) => {
+        onConfirm(null, {type: 'save', data: values})
+      },
+      [onConfirm],
+    )
+    const handleDrawerClose = useCallback(
+      (e, reason) => {
+        onClose(e, reason)
+      },
+      [onClose],
+    )
+    const handleDrawerCancel = useCallback(
+      (e) => {
+        onCancel(e, 'canceled')
+      },
+      [onCancel],
+    )
+    const handleDeleteButtonClick = useCallback(
+      (e) => {
+        onDelete(e, {type: 'delete'})
+      },
+      [onDelete],
+    )
+    const handleItemClick = useCallback(
+      (e, item) => {
+        onConfirm(e, {type: 'selection', data: item})
+      },
+      [onConfirm],
+    )
 
-  const {title, type = 'browse-site-components'} = options
-  console.log('props', props)
+    const items = elements.map((element) => ({
+      id: element?.id,
+      title: element?.title,
+      icon: element?.icon,
+    }))
 
-  const selectedElementProps: any = {}
-  const propsSchema: any = {}
-  const handleElementSave = useCallback(
-    (values) => {
-      onConfirm(null, {type: 'save', data: values})
-    },
-    [onConfirm],
-  )
-  const handleDrawerClose = useCallback(
-    (e, reason) => {
-      onClose(e, reason)
-    },
-    [onClose],
-  )
-  const handleDrawerCancel = useCallback(
-    (e) => {
-      onCancel(e, 'canceled')
-    },
-    [onCancel],
-  )
-  const handleDeleteButtonClick = useCallback(
-    (e) => {
-      onDelete(e, {type: 'delete'})
-    },
-    [onDelete],
-  )
-  const handleItemClick = useCallback(
-    (e, item) => {
-      onConfirm(e, {type: 'selection', data: item})
-    },
-    [onConfirm],
-  )
-
-  const components = componentsExtension.getAll()
-  const items = components.map((i) => ({
-    id: i?.$id,
-    title: i?.options?.title,
-    icon: i?.options?.icon,
-  }))
-
-  const appBarLeft = (
-    <Fragment>
-      <IconButton
-        children={<SvgPathIcon iconId="close" />}
-        className={classes.closeButton}
-        color="inherit"
-        edge="start"
-        onClick={handleDrawerCancel}
-      />
-      <Typography children={title} className={classes.title} color="inherit" variant="h6" />
-    </Fragment>
-  )
-
-  const appBarRight = {
-    'edit-element-traits': (
-      <Button color="inherit" onClick={handleDrawerCancel} children="Cancel" />
-    ),
-  }
-
-  const renderItemContent = useCallback(
-    (item) => {
-      return (
-        <CardIconListItem
-          item={item}
-          label={item.title}
-          onActionClick={handleItemClick}
-          preview={
-            (_isStrT(item.icon) ? (
-              <Box fontSize={'4.17em'} component={SvgPathIcon} {...{iconId: item.icon}} />
-            ) : (
-              <Fragment>{item.icon}</Fragment>
-            )) as unknown as any
-          }
+    const appBarLeft = (
+      <Fragment>
+        <IconButton
+          children={<SvgPathIcon iconId="close" />}
+          className={classes.closeButton}
+          color="inherit"
+          edge="start"
+          onClick={handleDrawerCancel}
         />
-      )
-    },
-    [handleItemClick],
-  )
+        <Typography children={title} className={classes.title} color="inherit" variant="h6" />
+      </Fragment>
+    )
 
-  const views = {
-    'browse-site-components': (
-      <GridList
-        GridContainerProps={{spacing: 2}}
-        GridItemProps={{xs: 6, sm: 4}}
-        ListWrapperProps={{className: classes.gridList}}
-        classes={{itemContent: classes.cardContent}}
-        renderItemContent={renderItemContent}
-        items={items}
-      />
-    ),
-    'edit-element-traits': (
-      <Box px={[2, 3]} py={4} width={1}>
-        <FormRenderer
-          FormTemplate={GridFormTemplate}
-          componentMapper={componentMapper}
-          initialValues={selectedElementProps}
-          onCancel={handleDrawerClose}
-          onSubmit={handleElementSave}
-          schema={propsSchema}
+    const appBarRight = {
+      'edit-element-traits': (
+        <Button color="inherit" onClick={handleDrawerCancel} children="Cancel" />
+      ),
+    }
+
+    const renderItemContent = useCallback(
+      (item) => {
+        return (
+          <CardIconListItem
+            item={item}
+            label={item.title}
+            onActionClick={handleItemClick}
+            preview={
+              (_isStrT(item.icon) ? (
+                <Box fontSize={'4.17em'} component={SvgPathIcon} {...{iconId: item.icon}} />
+              ) : (
+                <Fragment>{item.icon}</Fragment>
+              )) as unknown as any
+            }
+          />
+        )
+      },
+      [handleItemClick],
+    )
+
+    const views = {
+      'browse-site-components': (
+        <GridList
+          GridContainerProps={{spacing: 2}}
+          GridItemProps={{xs: 6, sm: 4}}
+          ListWrapperProps={{className: classes.gridList}}
+          classes={{itemContent: classes.cardContent}}
+          renderItemContent={renderItemContent}
+          items={items}
         />
+      ),
+      'edit-element-traits': (
+        <Box px={[2, 3]} py={4} width={1}>
+          <FormRenderer
+            FormTemplate={GridFormTemplate}
+            componentMapper={componentMapper}
+            initialValues={selectedElementProps}
+            onCancel={handleDrawerClose}
+            onSubmit={handleElementSave}
+            schema={propsSchema}
+          />
 
-        <FormControl margin="none" fullWidth>
-          <Button
-            className={classes.deleteButton}
-            component={Box}
-            onClick={handleDeleteButtonClick}
-            mt={2}
-            fullWidth
-          >
-            Delete Element
-          </Button>
-        </FormControl>
-      </Box>
-    ),
+          <FormControl margin="none" fullWidth>
+            <Button
+              className={classes.deleteButton}
+              component={Box}
+              onClick={handleDeleteButtonClick}
+              mt={2}
+              fullWidth
+            >
+              Delete Element
+            </Button>
+          </FormControl>
+        </Box>
+      ),
+    }
+
+    return (
+      <NavbarDrawer
+        ref={ref}
+        className={clsx(classes.root, className)}
+        AppBarProps={{color: 'primary'}}
+        anchor="bottom"
+        appBarLeft={appBarLeft}
+        appBarRight={appBarRight[type]}
+        classes={{
+          paper: classes.paper,
+          content: classes.content,
+        }}
+        variant="temporary"
+        onClose={handleDrawerCancel}
+        {...rest}
+      >
+        {views[type]}
+      </NavbarDrawer>
+    )
   }
-
-  return (
-    <NavbarDrawer
-      ref={ref}
-      className={clsx(classes.root, className)}
-      AppBarProps={{color: 'primary'}}
-      anchor="bottom"
-      appBarLeft={appBarLeft}
-      appBarRight={appBarRight[type]}
-      classes={{
-        paper: classes.paper,
-        content: classes.content,
-      }}
-      variant="temporary"
-      onClose={handleDrawerCancel}
-      {...rest}
-    >
-      {views[type]}
-    </NavbarDrawer>
-  )
-})
+)
 
 ElementDrawerComponent.displayName = 'ElementDrawerComponent'
 ElementDrawerComponent.defaultProps = {}

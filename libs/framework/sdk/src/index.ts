@@ -15,13 +15,17 @@
  * limitations under the License.
  */
 
+export * from './lib/aglyn-symbol'
 export * from './lib/api'
+export * from './lib/constants'
 export * from './lib/types'
 export * from './lib/version'
+export * from './lib/error'
 
 export * from './lib/util/handle-resolve-props'
 export * from './lib/util/handle-prop-defaults'
 
-export * from './lib/constants'
-export * from './lib/aglyn-symbol'
-export * from './lib/extensions/components-type.extension'
+export * from './lib/models/aglyn-extension.model'
+
+export * from './lib/models/extensions/components-types.extension'
+export * from './lib/models/extensions/components-api.extension'

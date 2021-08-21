@@ -87,9 +87,7 @@ export function _isFnT(val: unknown): val is (...args: unknown[]) => unknown {
  */
 export function _isCtor(val: unknown): val is new (...args: unknown[]) => unknown {
   if (typeof val !== 'function') {return false}
-  const ctor = val as new (...args: unknown[]) => unknown
-  try { new ctor() } catch (e) { return false }
-  return true
+  return Boolean(val.prototype.constructor)
 }
 /**
  * Shortcut for Array.isArray

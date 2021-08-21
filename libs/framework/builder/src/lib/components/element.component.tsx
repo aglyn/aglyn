@@ -18,57 +18,52 @@
 import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared/ui/react'
 import { copyJson } from '@aglyn/shared/util/helpers'
 import { forwardRef, useCallback, useRef, useState } from 'react'
-import {
-  ElementComponent as RenderElementComponent,
-  ElementComponentProps as RenderElementComponentProps,
-} from '@aglyn/framework/renderer'
+import { ElementRendererComponent, ElementRendererComponentProps } from '@aglyn/framework/renderer'
 import { useSelectionContext } from '../contexts/selection.context'
 
-export interface ElementComponentProps extends RenderElementComponentProps {
+
+export interface ElementComponentProps extends ElementRendererComponentProps {
   [prop: string]: any
 }
 
-const ElementComponent = forwardRef<any, ElementComponentProps>(function RefRenderFn(props, ref) {
-  const { ...rest } = props
+const ElementComponent = forwardRef<any, ElementComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {...rest} = props
+    const {confirm} = useConfirmationContext()
+    const localRef = useRef(ref)
+    const elemRef = useCombinedRefs(localRef, ref)
+    const {select} = useSelectionContext()
+    const [entered, setEntered] = useState(null)
+    const [clientRect, setRect] = useState(null)
 
-  const { confirm } = useConfirmationContext()
+    const handleMouseEnter = useCallback((e) => {
+      const t = e.target
+      console.log('is self', localRef.current)
+      if (t && t === localRef.current) setEntered(t)
+      else setEntered(null)
+      setRect(copyJson(t?.getBoundingClientRect()))
+    }, [])
 
-  const localRef = useRef(ref)
-  const elemRef = useCombinedRefs(localRef, ref)
-  const { select } = useSelectionContext()
-  const [entered, setEntered] = useState(null)
-  const [clientRect, setRect] = useState(null)
+    const handleMouseLeave = useCallback((e) => {
+      setEntered(null)
+    }, [])
 
-  const handleMouseEnter = useCallback((e) => {
-    const t = e.target
-    console.log('is self', localRef.current)
-    if (t && t === localRef.current) setEntered(t)
-    else setEntered(null)
-    setRect(copyJson(t?.getBoundingClientRect()))
-  }, [])
+    const handleClick = useCallback((e) => {
+      select({clientRect})
+      confirm({title: 'clicked'})
+    }, [clientRect])
 
-  const handleMouseLeave = useCallback((e) => {
-    setEntered(null)
-  }, [])
-
-  const handleClick = useCallback(
-    (e) => {
-      select({ clientRect })
-      confirm({ title: 'clicked' })
-    },
-    [clientRect]
-  )
-
-  return (
-    <RenderElementComponent
-      ref={elemRef}
-      {...rest}
-      onClick={handleClick}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    />
-  )
-})
+    return (
+      <ElementRendererComponent
+        ref={elemRef}
+        {...rest}
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      />
+    )
+  },
+)
 
 ElementComponent.displayName = 'ElementComponent'
 ElementComponent.defaultProps = {

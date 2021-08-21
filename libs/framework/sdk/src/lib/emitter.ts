@@ -18,4 +18,4 @@
 import { AglynEmitter } from '@aglyn/framework/sdk'
 import { EmitterFn } from '@aglyn/shared/feature/emitter'
 
-export const emitter: AglynEmitter = EmitterFn()
+export const AGLYN_EMITTER: AglynEmitter = EmitterFn()

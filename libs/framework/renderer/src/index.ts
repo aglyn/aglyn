@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-export * from './lib/components/element.component'
-export { default as ElementComponent } from './lib/components/element.component'
-export * from './lib/components/elements.component'
-export { default as ElementsComponent } from './lib/components/elements.component'
-export * from './lib/components/website.component'
-export { default as WebsiteComponent } from './lib/components/website.component'
+export * from './lib/components/element-renderer.component'
+export { default as ElementRendererComponent } from './lib/components/element-renderer.component'
+export * from './lib/components/elements-renderer.component'
+export { default as ElementsRendererComponent } from './lib/components/elements-renderer.component'
+export * from './lib/components/website-renderer.component'
+export { default as WebsiteRendererComponent } from './lib/components/website-renderer.component'

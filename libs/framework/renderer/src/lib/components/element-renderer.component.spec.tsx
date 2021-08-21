@@ -17,11 +17,11 @@
 
 import { render } from '@testing-library/react'
 
-import WebsiteComponent from './website.component'
+import ElementRendererComponent from './element-renderer.component'
 
-describe('WebsiteComponent', () => {
+describe('ElementRendererComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<WebsiteComponent />)
+    const { baseElement } = render(<ElementRendererComponent elementData={null} />)
     expect(baseElement).toBeTruthy()
   })
 })

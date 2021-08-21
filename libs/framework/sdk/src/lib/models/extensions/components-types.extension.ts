@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import { AglynType, AglynUniqueId, PayloadData } from '../types'
-import { RestrictFlag } from '../constants'
+import { AglynExtensionInstance, AglynType, AglynUniqueId, PayloadData } from '../../types'
+import { RestrictFlag } from '../../constants'
 import { AnyProps } from '@aglyn/shared/util/types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import { FormSchema } from '@aglyn/shared/ui/react'
-import { AglynExtensionModel } from '../models/aglyn-extension.model'
-import { EXTENSION_TYPE, MODULE_TYPE } from '../aglyn-symbol'
+import { EXTENSION_TYPE, MODULE_TYPE } from '../../aglyn-symbol'
 
 
 export interface AglynComponentOptions {
@@ -32,7 +31,7 @@ export interface AglynComponentOptions {
   icon: unknown
   propsSchema: FormSchema
   defaultProps: AnyProps
-  resolveProps: <T>(...args: T[]) => AnyProps | void
+  resolveProps: <T>(...args: T[]) => AnyProps
   disableActions: boolean
   disableBadge: boolean
   disableCopying: boolean
@@ -69,29 +68,19 @@ export type RegistryEntries = RegistryEntry[]
 export type RegistryKeys = ComponentId[]
 export type RegistryValue = AglynComponent
 export type RegistryValues = RegistryValue[]
-export type RegistryEvery<P> = P extends { variant: infer X }
-  ? X extends 'keys'
-    ? RegistryKeys
-    : X extends 'values'
-      ? RegistryValues
-      : RegistryEntries
-  : RegistryEntries
 export type ComponentsRegistry = Map<string, AglynComponent>
 
 export namespace PayloadParams {
-  export type Set = PayloadData<{ component: AglynComponent }>
+  export type Register = PayloadData<{ component: AglynComponent }>
   export type Get = PayloadData<{ componentId: string }>
-  export type GetAll = PayloadData<{ variant: 'entries' | 'keys' | 'values' }>
   export type Delete = PayloadData<{ componentId: string }>
 }
 
-export interface AglynComponentsExtension extends AglynExtensionModel {
-  context: ComponentsRegistry
-  entries: () => [id: string, component: AglynComponent][]
-  keys: () => string[]
-  values: () => AglynComponent[]
-  getAll: (options?: PayloadParams.GetAll) => RegistryEvery<typeof options>
-  get: (payload: PayloadParams.Get) => AglynComponent
-  set: (payload: PayloadParams.Set) => this
-  delete: (payload: PayloadParams.Delete) => this
+export interface AglynComponentsExtension extends AglynExtensionInstance {
+  getAllComponentsValues(): RegistryValues
+  getAllComponentsKeys(): RegistryKeys
+  getAllComponents(): RegistryEntries
+  getComponent(payload: PayloadParams.Get): AglynComponent
+  registerComponent(payload: PayloadParams.Register): this
+  deleteComponent(payload: PayloadParams.Delete): this
 }

@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 import {
-  AglynApp,
+  AglynAppInstance,
   AglynAppModule,
   AglynCommandHandler,
-  AglynExtension,
+  AglynExtensionInstance,
   APP_TYPE,
   COMMAND_TYPE,
   EXTENSION_TYPE,
-  MODULE_TYPE, TypeKind,
+  MODULE_TYPE,
+  TypeKind,
   TypeOf,
 } from '@aglyn/framework/sdk'
 import { _isFnT, _isObj } from '@aglyn/shared/util/guards'
@@ -59,7 +60,7 @@ export function kindOf(object: unknown) {
   return undefined
 }
 
-export function isApp<T>(object: unknown): object is AglynApp {
+export function isApp<T>(object: unknown): object is AglynAppInstance {
   return typeOf(object) === APP_TYPE
 }
 export function isAppModule<T>(object: unknown): object is AglynAppModule {
@@ -68,6 +69,6 @@ export function isAppModule<T>(object: unknown): object is AglynAppModule {
 export function isCommand<T>(object: unknown): object is AglynCommandHandler {
   return kindOf(object) === COMMAND_TYPE
 }
-export function isExtension<T>(object: unknown): object is AglynExtension {
+export function isExtension<T>(object: unknown): object is AglynExtensionInstance {
   return kindOf(object) === EXTENSION_TYPE
 }

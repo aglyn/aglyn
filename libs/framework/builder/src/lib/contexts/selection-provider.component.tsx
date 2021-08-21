@@ -42,15 +42,12 @@ function SelectionProviderComponent(props: SelectionProviderComponentProps) {
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
 
-  const select = useCallback(
-    (options: SelectionOptions = {}) => {
-      return new Promise((resolve, reject) => {
-        setOptions(buildOptions(defaultOptions, options))
-        setResolveReject([resolve, reject])
-      })
-    },
-    [defaultOptions]
-  )
+  const select = useCallback((options: SelectionOptions = {}) => {
+    return new Promise((resolve, reject) => {
+      setOptions(buildOptions(defaultOptions, options))
+      setResolveReject([resolve, reject])
+    })
+  }, [defaultOptions])
 
   const handleClose = useCallback(() => {
     setResolveReject([])
@@ -68,7 +65,9 @@ function SelectionProviderComponent(props: SelectionProviderComponentProps) {
 
   return (
     <Fragment>
-      <SelectionContext.Provider value={{ select }}>{children}</SelectionContext.Provider>
+      <SelectionContext.Provider value={{ select }}>
+        {children}
+      </SelectionContext.Provider>
       <Component
         open={resolveReject.length === 2}
         options={options}

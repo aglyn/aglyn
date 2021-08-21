@@ -15,34 +15,40 @@
  * limitations under the License.
  */
 
-import React, { useState } from 'react'
-import { getApp } from '@aglyn/framework/sdk'
-// import { BuilderComponent } from '@aglyn/framework/builder'
+import React, { useMemo, useState } from 'react'
+import { aglynComponent, getAllComponents, getApp, registerComponent } from '@aglyn/framework/sdk'
+import { BuilderComponent } from '@aglyn/framework/builder'
 import { samplePageData } from '../constants/sample-data'
 
-const Root = ({ children, innerRef, ...props }) => (
-  <span ref={innerRef} {...props}>
-    {children}
-  </span>
+
+const Root = aglynComponent('root', {
+  title: 'Root element',
+  icon: 'block',
+})(
+  ({children, innerRef, ...props}) => (
+    <span ref={innerRef} {...props}>{children}</span>
+  ),
 )
-// setComponent(getApp(), {
-//   moduleId: 'react',
-//   $id: 'root',
-//   ctor: Root,
-//   metadata: {
-//     title: 'Root element',
-//     icon: 'block',
-//   },
-// })
+
+registerComponent(getApp(), {component: Root})
 
 export interface BuilderProps {}
 
 export function Builder(props: BuilderProps) {
   const [elements, setElements] = useState(samplePageData)
+  const elementComponents = useMemo(() => {
+    return getAllComponents(getApp()).map(([, element]) => ({
+      id: element?.$id,
+      title: element?.options?.title,
+      icon: element?.options?.icon,
+    }))
+  }, [])
 
-  console.log('page:/builder', getApp())
-  return null
-  // return <BuilderComponent elements={elements} />
+  console.log('page:/builder app', getApp())
+  return <BuilderComponent
+    elements={elements}
+    elementComponents={elementComponents}
+  />
 }
 
 export default Builder

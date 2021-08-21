@@ -15,47 +15,78 @@
  * limitations under the License.
  */
 
-import { AglynExtension, AglynExtensionConfig } from '@aglyn/framework/sdk'
+import {
+  AglynAppInstance,
+  AglynExtensionInstance,
+  AglynExtensionOptions,
+} from '@aglyn/framework/sdk'
 import { LifecycleFlag } from '@aglyn/shared/util/types'
 import { EXTENSION_TYPE, MODULE_TYPE, TypeKind, TypeOf } from '../aglyn-symbol'
+import { getStaticField } from '@aglyn/shared/util/tools'
+import { AglynBaseModel } from './aglyn-base.model'
 
 
-const TAG = 'AglynExtension'
+const TAG = 'AglynExtensionModel'
 
-export abstract class AglynExtensionModel implements AglynExtension {
+export abstract class AglynExtensionModel<T = any> extends AglynBaseModel implements AglynExtensionInstance {
 
-  public static readonly [TypeOf] = MODULE_TYPE
-  public static readonly [TypeKind] = EXTENSION_TYPE
-  protected static __$ID__: string = null
-  public context?: any = null
-  public readonly config: AglynExtensionConfig = {autoload: true}
-  public [Symbol.toStringTag] = TAG
+  public static readonly [Symbol.toStringTag]: string = TAG
+  public static readonly [TypeOf]: number | symbol = MODULE_TYPE
+  public static readonly [TypeKind]: number | symbol = EXTENSION_TYPE
+  public static readonly $id: string = null
+  readonly #options: AglynExtensionOptions = null
+  protected app: AglynAppInstance
+  protected context?: T = null
   #lifecycle?: LifecycleFlag = null
-  public get [TypeOf]() {return AglynExtensionModel[TypeOf]}
-  public get [TypeKind]() {return AglynExtensionModel[TypeKind]}
-  public get lifecycle() { return this.#lifecycle }
+  public get $id() {
+    return getStaticField('$id', this)
+  }
+  public get [TypeOf]() {
+    return getStaticField(TypeOf, this)
+  }
+  public get [TypeKind]() {
+    return getStaticField(TypeKind, this)
+  }
+  public get lifecycle() {
+    return this.#lifecycle
+  }
   public set lifecycle(value) {
-    if (value in LifecycleFlag) {
-      this.#lifecycle = value
-    }
+    this.#lifecycle = value
   }
-  public get $id() { return AglynExtensionModel.__$ID__ }
-  protected constructor() {
 
+  protected constructor(app: AglynAppInstance, options: AglynExtensionOptions) {
+    super()
+    this.#options = {...options}
+    this.app = app
+    this.initialize()
   }
-  protected getContext() { return this.context }
-  protected setContext(value) { this.context = value }
-  public toString() {
-    const pfx = TAG
-    const extensionId = AglynExtensionModel.__$ID__ ?? 'NONE'
-    return `${pfx}(id: '${extensionId}')`
+  private initialize = () => {
+    this.setErrorFactory(this.app.getErrorFactory())
+    this.setEmitter(this.app.getEmitter())
+    this.setLogger(this.app.getLogger())
   }
-  public toJSON() {
+  public getName = (): string => {
+    return this.$id
+  }
+  public getOptions = (): AglynExtensionOptions => {
+    return this.#options
+  }
+  public getContext = (): T => {
+    return this.context
+  }
+  public setContext = (value: T): this => {
+    this.context = value
+    return this
+  }
+  public toString = (): string => {
+    return `${TAG}(name: '${this.$id}')`
+  }
+  public toJSON = () => {
     return {
-      [TypeOf]: AglynExtensionModel[TypeOf],
-      [TypeKind]: AglynExtensionModel[TypeKind],
-      $id: AglynExtensionModel.__$ID__,
+      ...super.toJSON(),
+      name: this.$id,
+      [TypeOf]: getStaticField(TypeOf, this),
+      [TypeKind]: getStaticField(TypeKind, this),
     }
   }
-
 }

@@ -95,6 +95,8 @@ export type Implements<K1 extends string, K2 extends string, T extends (...args:
 /** Field property setters */
 export type ImplementsOn<K extends string, T extends (...args: unknown[]) => void> = Implements<'on', K, T>
 
+// export type Constructor
+export type BasicConstructor<T = unknown> = new (...args: T[]) => {}
 
 /** Implements a toString method */
 export interface StringLike {

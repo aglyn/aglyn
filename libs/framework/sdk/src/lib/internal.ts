@@ -14,13 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { AglynAppsMap } from './types'
+import { AglynAppsMap, AglynCommandsControllersMap, AglynExtensionsControllersMap } from './types'
 
 
 export const _apps: AglynAppsMap = new Map()
+export const _extensionControllers: AglynExtensionsControllersMap = new Map()
+export const _commandControllers: AglynCommandsControllersMap = new Map()
 export const _modules = {
   extensions: [
-    async () => await import('./extensions/components.extension'),
+    () => require('./models/extensions/components.extension').default,
   ],
   commands: [],
 }

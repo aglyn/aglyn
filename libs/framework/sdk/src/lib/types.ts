@@ -20,20 +20,24 @@ import {
   Implements,
   LifecycleFlag,
   LifecycleObserver,
+  LoadableObserver,
   Serializable,
   StringLike,
 } from '@aglyn/shared/util/types'
 import {
   AglynAppEventFlag,
   AglynCommandFlag,
-  AglynErrorEventFlag,
+  AglynExtension,
   AglynModuleTriggerFlag,
 } from './constants'
 import { Emitter } from 'mitt'
 import { Timestamp } from '@aglyn/shared/feature/timestamp'
 import { NsErrorFactory } from '@aglyn/shared/util/errors'
 import { Logger } from '@aglyn/shared/feature/logger'
-import { AglynComponent, AglynComponentOptions } from './extensions/components-type.extension'
+import {
+  AglynComponent,
+  AglynComponentOptions,
+} from './models/extensions/components-types.extension'
 import {
   APP_TYPE,
   COMMAND_TYPE,
@@ -43,14 +47,17 @@ import {
   TypeKind,
   TypeOf,
 } from './aglyn-symbol'
+import { AglynErrorEventFlag } from './error'
 
 
 export type Payload<T = any> = { payload: T }
 export type PayloadData<T extends Dictionary = any> = T
 
-export type AglynAppsMap = Map<string, AglynApp>
+export type AglynAppsMap = Map<string, AglynAppInstance>
+export type AglynExtensionsControllersMap = Map<string, AglynExtensionControllerInstance>
+export type AglynCommandsControllersMap = Map<string, AglynCommandControllerInstance>
+export type AglynExtensionMap = Map<string, AglynExtensionInstance>
 export type AglynAppModule<T extends AglynUniqueId = any> = T
-export type AglynExtensionMap = Map<string, AglynExtension>
 export type AglynEmitterParams = AglynAppEventParams & AglynModuleTriggerParams
 export type AglynEmitter = Emitter<AglynEmitterParams>
 export type AglynError = NsErrorFactory<AglynErrorEventFlag, AglynErrorEventParams>
@@ -63,30 +70,30 @@ export type AglynErrorEventParams = {
   [AglynErrorEventFlag.DUPLICATE_APP]: PayloadData<{ appName: string }>
   [AglynErrorEventFlag.APP_DELETED]: PayloadData<{ appName: string }>
   [AglynErrorEventFlag.INVALID_APP_ARG]: PayloadData<{ appName: string }>
-  [AglynErrorEventFlag.NO_APP_EXTENSION]: PayloadData<{ extensionId: string }>
+  [AglynErrorEventFlag.NO_APP_EXTENSION]: PayloadData<{ name: string }>
   [AglynErrorEventFlag.INVALID_LOG_ARG]: undefined
   [AglynErrorEventFlag.NO_MODULE]: undefined
   [AglynErrorEventFlag.INVALID_MODULE_ARG]: PayloadData<{ moduleName: string, appName: string }>
 }
 export type AglynAppEventParams = {
-  [AglynAppEventFlag.APP_CREATED]: PayloadData<{ app: AglynApp }>
-  [AglynAppEventFlag.BEFORE_DELETE_APP]: PayloadData<{ app: AglynApp }>
+  [AglynAppEventFlag.APP_CREATED]: PayloadData<{ app: AglynAppInstance }>
+  [AglynAppEventFlag.BEFORE_DELETE_APP]: PayloadData<{ app: AglynAppInstance }>
   [AglynAppEventFlag.APP_LOADED]: PayloadData<{ appName: string }>
   [AglynAppEventFlag.APP_UNLOADED]: PayloadData<{ appName: string }>
   [AglynAppEventFlag.APP_DELETED]: PayloadData<{ appName: string }>
-  [AglynAppEventFlag.REGISTERED_EXTENSION]: PayloadData<{ extension: AglynExtension }>
-  [AglynAppEventFlag.UNREGISTERED_EXTENSION]: PayloadData<{ extensionId: string }>
-  [AglynAppEventFlag.LOADED_EXTENSION]: PayloadData<{ extensionId: string }>
-  [AglynAppEventFlag.UNLOADED_EXTENSION]: PayloadData<{ extensionId: string }>
+  [AglynAppEventFlag.REGISTERED_EXTENSION]: PayloadData<{ extension: AglynExtensionInstance }>
+  [AglynAppEventFlag.UNREGISTERED_EXTENSION]: PayloadData<{ name: string }>
+  [AglynAppEventFlag.LOADED_EXTENSION]: PayloadData<{ name: string }>
+  [AglynAppEventFlag.UNLOADED_EXTENSION]: PayloadData<{ name: string }>
   [AglynAppEventFlag.REGISTERED_COMMAND]: PayloadData<{ commandId: string }>
   [AglynAppEventFlag.UNREGISTERED_COMMAND]: PayloadData<{ commandId: string }>
   [AglynAppEventFlag.TRIGGERED_COMMAND]: PayloadData<{ commandId: string }>
 }
 export type AglynModuleTriggerParams = {
-  [AglynModuleTriggerFlag.EXTENSION_REGISTER]: PayloadData<{ extension: AglynExtension }>
-  [AglynModuleTriggerFlag.EXTENSION_UNREGISTER]: PayloadData<{ extensionId: string }>
-  [AglynModuleTriggerFlag.EXTENSION_LOAD]: PayloadData<{ extensionId: string }>
-  [AglynModuleTriggerFlag.EXTENSION_UNLOAD]: PayloadData<{ extensionId: string }>
+  [AglynModuleTriggerFlag.EXTENSION_REGISTER]: PayloadData<{ extension: AglynExtensionInstance }>
+  [AglynModuleTriggerFlag.EXTENSION_UNREGISTER]: PayloadData<{ name: string }>
+  [AglynModuleTriggerFlag.EXTENSION_LOAD]: PayloadData<{ name: string }>
+  [AglynModuleTriggerFlag.EXTENSION_UNLOAD]: PayloadData<{ name: string }>
   [AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER]: PayloadData<{ handler: AglynCommandHandler }>
   [AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER]: PayloadData<{ handler: AglynCommandHandler }>
   [AglynModuleTriggerFlag.COMMAND_TRIGGER]: PayloadData<{ commandId: string }>
@@ -96,7 +103,7 @@ export type AglynModuleTriggerParams = {
   [AglynModuleTriggerFlag.EXTENSION_COMPONENT_UNREGISTER]: PayloadData<{ componentId: string }>
 }
 export type AglynCommandParams = {
-  [P in string | '*' | AglynCommandFlag]: PayloadData<{ app: AglynApp }>
+  [P in string | '*' | AglynCommandFlag]: PayloadData<{ app: AglynAppInstance }>
 }
 
 export type AglynUniqueId<T extends boolean = false> = T extends boolean
@@ -121,18 +128,6 @@ export type AglynRegisters<K extends string, T1 extends any, T2 extends any = T1
   Implements<'register', K, (...data: T1[]) => void> &
   Implements<'unregister', K, (...data: (T2)[]) => void>
 
-export interface AglynBaseModel extends StringLike, Serializable {
-
-}
-
-export interface AglynAppOptions extends AglynNamed {
-
-}
-
-export interface AglynExtensionConfig extends AglynUniqueId {
-  autoload?: boolean
-}
-
 export interface AglynType<T extends TAG_TYPE,
   U extends TAG_TYPE = never> {
   readonly [TypeOf]?: T
@@ -143,28 +138,37 @@ export interface AglynEffectType<T, U = unknown> extends Payload<U> {
   type: T
 }
 
-export interface AglynApp extends AglynBaseModel,
-  LifecycleObserver,
+export type AglynAppOptions = AglynNamed & {
+  extensions?: Record<AglynExtension, boolean>
+}
+export type AglynExtensionOptions = {
+  autoload?: boolean
+}
+
+export interface AglynBaseModelInstance extends StringLike, Serializable, LifecycleObserver {
+  getCreatedAt(): Timestamp
+  getErrorFactory(): AglynError
+  setErrorFactory(value: AglynError): this
+  getEmitter(): AglynEmitter
+  setEmitter(value: AglynEmitter): this
+  getLogger(): AglynLogger
+  setLogger(value: AglynLogger): this
+}
+
+export interface AglynAppInstance extends AglynBaseModelInstance,
   AglynType<typeof APP_TYPE> {
 
-  readonly deleted?: boolean
-  readonly event: AglynEmitter
-  readonly log: AglynLogger
-  readonly commands: AglynCommandController
-  readonly extensions: AglynExtensionController
-
-  effect(data: AglynEffectType<AglynModuleTriggerFlag>): void
-  getCreatedAt(): Timestamp
   getName(): string
   getOptions(): AglynAppOptions
+  getDeleted(): boolean
+  setDeleted(deleted: boolean): void
+  getCommandsController(): AglynCommandControllerInstance
+  getExtensionsController(): AglynExtensionControllerInstance
+
+  effect(data: AglynEffectType<AglynModuleTriggerFlag>): void
 }
 
-export interface AglynModuleController extends AglynBaseModel,
-  LifecycleObserver {
-
-}
-
-export interface AglynCommandController extends AglynModuleController,
+export interface AglynCommandControllerInstance extends AglynBaseModelInstance,
   AglynRegisters<'action',
     AglynModuleTriggerParams[AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER],
     AglynModuleTriggerParams[AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER]> {
@@ -177,21 +181,23 @@ export interface AglynCommandHandler extends AglynUniqueId,
   (data: AglynCommandParams['*']): void
 }
 
-export interface AglynExtensionController extends AglynModuleController,
+export interface AglynExtensionControllerInstance extends AglynBaseModelInstance,
   AglynRegisters<'extension',
     AglynModuleTriggerParams[AglynModuleTriggerFlag.EXTENSION_REGISTER],
     AglynModuleTriggerParams[AglynModuleTriggerFlag.EXTENSION_UNREGISTER]>,
   AglynLoads<'extension', AglynAppModule> {
 
-  getExtension(id: string): AglynExtension
-  getExtensions(): AglynExtension[]
-  unloadExtensions(): void
+  getExtensionByName(name: string): AglynExtensionInstance
+  getAllExtensions(): AglynExtensionInstance[]
+  unloadAllExtensions(): void
 }
 
-export interface AglynExtension extends AglynBaseModel,
-  LifecycleObserver,
-  AglynUniqueId,
+export interface AglynExtensionInstance<T = any> extends AglynBaseModelInstance,
+  LoadableObserver,
   AglynType<typeof MODULE_TYPE, typeof EXTENSION_TYPE> {
   readonly lifecycle?: LifecycleFlag | null
-  readonly config?: AglynExtensionConfig
+  getName(): string
+  getOptions(): AglynExtensionOptions
+  getContext(): T
+  setContext(value: T): this
 }

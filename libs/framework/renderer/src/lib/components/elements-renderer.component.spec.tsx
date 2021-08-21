@@ -17,11 +17,11 @@
 
 import { render } from '@testing-library/react'
 
-import ElementsComponent from './elements.component'
+import ElementsRendererComponent from './elements-renderer.component'
 
-describe('ElementsComponent', () => {
+describe('ElementsRendererComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<ElementsComponent />)
+    const { baseElement } = render(<ElementsRendererComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

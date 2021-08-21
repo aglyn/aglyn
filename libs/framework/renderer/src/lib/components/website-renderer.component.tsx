@@ -15,37 +15,32 @@
  * limitations under the License.
  */
 
-import { forwardRef, Fragment } from 'react'
+import { forwardRef, memo } from 'react'
 import { AglynComponentData } from '@aglyn/framework/sdk'
-import ElementComponent, { ElementComponentProps } from './element.component'
+import ElementComponent, { ElementRendererComponentProps } from './element-renderer.component'
 import { ComponentProp } from '@aglyn/shared/ui/react'
+import ElementsComponent from './elements-renderer.component'
 
 
-export interface ElementsComponentProps extends ComponentProp {
-  elementComponent?: ElementComponentProps['elementComponent']
-  children?: AglynComponentData[]
+export interface WebsiteComponentProps extends ComponentProp {
+  elements?: AglynComponentData[]
+  elementComponent?: ElementRendererComponentProps['elementComponent']
 }
 
-const ElementsComponent = forwardRef<any, ElementsComponentProps>(function RefRenderFn(props, ref) {
-  const {component: Component, elementComponent: ElementComponent, children, ...rest} = props
+const WebsiteRendererComponent = forwardRef<any, WebsiteComponentProps>(function RefRenderFn(props, ref) {
+  const {component: Component, elementComponent, elements, ...rest} = props
   return (
     <Component ref={ref} {...rest}>
-      {children.map((data, i) => (
-        <ElementComponent
-          key={data?.$id ?? i}
-          elementData={data}
-          elementComponent={ElementComponent}
-        />
-      ))}
+      <ElementsComponent children={elements} elementComponent={elementComponent} />
     </Component>
   )
 })
 
-ElementsComponent.displayName = 'ElementsComponent'
-ElementsComponent.defaultProps = {
-  component: Fragment,
+WebsiteRendererComponent.displayName = 'WebsiteComponent'
+WebsiteRendererComponent.defaultProps = {
+  component: 'div',
   elementComponent: ElementComponent,
-  children: [],
+  elements: [],
 }
 
-export default ElementsComponent
+export default memo(WebsiteRendererComponent)

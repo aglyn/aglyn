@@ -46,8 +46,8 @@ export enum Hex {
 
 const useSym = Boolean(_isFnT(Symbol) && Symbol.for)
 
-export const TypeOf = '@aglyn.typeof'
-export const TypeKind = '@aglyn.kind'
+export const TypeOf = 'ßßtypeof'
+export const TypeKind = 'ßßkind'
 
 export const APP_TYPE: TAG_TYPE = useSym ? Symbol.for('aglyn.app') : Hex.x60103
 export const MODULE_TYPE: TAG_TYPE = useSym ? Symbol.for('aglyn.module') : Hex.x60106

@@ -21,14 +21,18 @@ import { Fragment, useEffect } from 'react'
 import { AppProps } from 'next/app'
 import Head from 'next/head'
 import { APP } from '../../www/const'
-import { initializeApp } from '@aglyn/framework/sdk'
+import { AglynExtension, initializeApp } from '@aglyn/framework/sdk'
 import { consoleTheme } from '@aglyn/shared/ui/themes'
 
 
 try {
-  initializeApp()
+  initializeApp({
+    extensions: {
+      [AglynExtension.COMPONENTS]: true
+    }
+  })
 } catch (e) {
-  console.log(e, 'initialize aglyn app')
+  console.error(e, 'initialize aglyn app')
 }
 
 const previewProduction = false

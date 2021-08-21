@@ -16,10 +16,10 @@
  */
 
 import { createContext, useContext } from 'react'
-import { ElementData } from '@aglyn/website/core'
+import { AglynComponentData } from '@aglyn/framework/sdk'
 
 export interface ElementsContextType {
-  elements?: ElementData[]
+  elements?: AglynComponentData[]
 }
 
 export type UseElementsContextType = () => ElementsContextType

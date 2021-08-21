@@ -45,7 +45,7 @@ export function ln<T>(val: Iterable<T> | ArrayLike<T>): number {
  * @param {*} val
  * @returns {string}
  */
-export function s(...val: Parameters<typeof String>): string {
+export function _s(...val: Parameters<typeof String>): string {
   return String(val)
 }
 
@@ -318,17 +318,23 @@ export function reduceObject<T extends Record<string, unknown>, K extends keyof 
  * @param target
  * @param callbackFn
  * @param thisArg
+ * @param options
  * @returns {{[key in K]: U}}
  */
-export function map<K extends string, V, U>(
+export function remap<K extends string, V, U>(
   target: { [key in K]: V },
   callbackFn: MapObjectCallback<K, V, U>,
+  options?: { deleteUndefined?: boolean },
   thisArg?: ThisType<unknown>,
 ): { [key in K]: U } {
+  const {deleteUndefined} = options ?? {}
   const res: Partial<{ [key in K]: U }> = {}
   for (const key in target) {
     if (Object.prototype.hasOwnProperty.call(target, key)) {
       res[key] = callbackFn.call(thisArg, target[key], key, target)
+      if (deleteUndefined && res[key] === undefined) {
+        delete res[key]
+      }
     }
   }
   return res as { [key in K]: U }
@@ -336,7 +342,7 @@ export function map<K extends string, V, U>(
 export type MapObjectCallback<K extends string, V, U> = (value: V, key: K, obj: { [key in K]: V }) => U
 
 /**
- * @deprecated Move to {@link map}
+ * @deprecated Move to {@link remap}
  * @see {@link map}
  *
  * Map object literal for quick editing or build a keyed object literal from
@@ -618,7 +624,7 @@ export function reorderArray<K extends number & keyof T, T extends Array<U>, U>(
  * @returns {string}
  */
 export function trim<T>(val: T): string {
-  return s(val).trim()
+  return _s(val).trim()
 }
 
 /**
@@ -630,7 +636,7 @@ export function trim<T>(val: T): string {
  * @returns {T}
  */
 export function capitalize<T extends string>(val: T): Capitalize<T> {
-  const str = s(val)
+  const str = _s(val)
   return `${str.charAt(0).toUpperCase()}${val.slice(1)}` as Capitalize<T>
 }
 
@@ -644,7 +650,7 @@ export function capitalize<T extends string>(val: T): Capitalize<T> {
  * @returns {T}
  */
 export function capitalizeTitle<T extends string>(val: T, separator = ' '): T {
-  return s(val)
+  return _s(val)
   .split(separator)
   .map((i) => capitalize(i))
   .join(separator) as T
@@ -765,6 +771,31 @@ export function noop<T>(..._: T[]): void {
  */
 export function noSideEffects<T>(fn: () => T): T {
   return ({toString: fn}.toString() as unknown) as T
+}
+
+/**
+ * Return a static property of the
+ * @param {keyof any} field
+ * @param thisArg
+ * @returns {any}
+ */
+export function getStaticField<T>(field: keyof any, thisArg: T): any {
+  return Object.getPrototypeOf(thisArg).constructor[field]
+}
+
+/**
+ * Apply multiple base constructors to the derived constructor
+ * @param derivedCtor
+ * @param {any[]} baseCtor
+ */
+export function applyMixins(derivedCtor: any, ...baseCtor: { prototype: any }[]) {
+  baseCtor.forEach((baseCtor) => {
+    const proto = baseCtor.prototype
+    Object.getOwnPropertyNames(proto).forEach((name) => {
+      const descriptor = Object.getOwnPropertyDescriptor(proto, name) ?? Object.create(null)
+      Object.defineProperty(derivedCtor.prototype, name, descriptor)
+    })
+  })
 }
 
 /**

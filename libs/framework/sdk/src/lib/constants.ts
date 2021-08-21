@@ -15,9 +15,6 @@
  * limitations under the License.
  */
 
-import { AglynError } from './types'
-import { ErrorTagMessages, NsErrorFactory } from '@aglyn/shared/util/errors'
-
 
 export const DEFAULT_ENTRY_NAME = '[DEFAULT]'
 
@@ -42,18 +39,6 @@ export enum AglynAppEventFlag {
   SET_COMPONENT = 'event:set-component',
 }
 
-export enum AglynErrorEventFlag {
-  NO_APP = 'error:no-app',
-  BAD_APP_NAME = 'error:bad-app-name',
-  DUPLICATE_APP = 'error:duplicate-app',
-  APP_DELETED = 'error:app-deleted',
-  INVALID_APP_ARG = 'error:invalid-app-argument',
-  INVALID_LOG_ARG = 'error:invalid-log-argument',
-  NO_APP_EXTENSION = 'error:no-app-extension',
-  NO_MODULE = 'error:no-module',
-  INVALID_MODULE_ARG = 'error:invalid-module-argument',
-}
-
 export enum AglynModuleTriggerFlag {
   COMMAND_ACTION_REGISTER = 'module:command:register',
   COMMAND_ACTION_UNREGISTER = 'module:command:unregister',
@@ -74,16 +59,6 @@ export enum AglynCommandFlag {
   ANY = '*',
 }
 
-const AGLYN_APP_SDK_ERROR_MSG: ErrorTagMessages<AglynErrorEventFlag> = {
-  [AglynErrorEventFlag.NO_APP]: 'No AglynApp \'{$appName}\' has been created - call Web initializeApp()',
-  [AglynErrorEventFlag.BAD_APP_NAME]: 'Illegal App name: \'{$appName}\'',
-  [AglynErrorEventFlag.DUPLICATE_APP]: 'AglynApp named \'{$appName}\' already exists',
-  [AglynErrorEventFlag.APP_DELETED]: 'AglynApp named \'{$appName}\' already deleted',
-  [AglynErrorEventFlag.INVALID_APP_ARG]: 'AglynApp.{$appName}() takes either no argument or a AglynApp instance.',
-  [AglynErrorEventFlag.INVALID_LOG_ARG]: 'First argument to \'onLog\' must be null or a function.',
-  [AglynErrorEventFlag.NO_APP_EXTENSION]: 'No AppExtension \'{$extensionId}\' has been created on AglynApp \'{$appName}\'',
-  [AglynErrorEventFlag.NO_MODULE]: 'No module has been provided for loading',
-  [AglynErrorEventFlag.INVALID_MODULE_ARG]: 'An invalid AppModule \'{$moduleName}\' has been provided on AglynApp \'{$appName}\'',
+export enum AglynExtension {
+  COMPONENTS = 'components'
 }
-
-export const AGLYN_APP_ERROR: AglynError = new NsErrorFactory('sdk', 'AglynApp', AGLYN_APP_SDK_ERROR_MSG)

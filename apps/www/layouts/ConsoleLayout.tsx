@@ -16,7 +16,7 @@
  */
 
 import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared/ui/react'
-import { _isStrT, copy, s } from '@aglyn/shared/util/helpers'
+import { _isStrT, _s, copy } from '@aglyn/shared/util/helpers'
 import Container from '@material-ui/core/Container'
 import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
 import Typography from '@material-ui/core/Typography'
@@ -80,7 +80,7 @@ const ConsoleLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
       const breadcrumbItems = (breadcrumbItemsProp ?? copy(pageAncestors))
       .concat(overrideMeta ?? pageMeta)
       .map((item: any) => ({
-        href: s(item?.id),
+        href: _s(item?.id),
         children: item?.name.plural,
       }))
       const quickActionMenus = [
@@ -130,7 +130,7 @@ const ConsoleLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
                   <SvgPathIcon
                     color="secondary"
                     fontSize="inherit"
-                    {...(_isStrT(header.icon) ? { iconId: header.icon } : header.icon)}
+                    {...(_isStrT(header.icon) ? {iconId: header.icon} : header.icon)}
                     className={clsx(classes.icon, _isStrT(header.icon) ? null : header.icon.className)}
                   />
                 ) : null}
@@ -167,4 +167,4 @@ const ConsoleLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
 ConsoleLayout.displayName = 'Layout:ConsoleLayout'
 ConsoleLayout.defaultProps = {}
 
-export default withStyles(styles, { name: 'Layout:MainLayout' })(ConsoleLayout)
+export default withStyles(styles, {name: 'Layout:MainLayout'})(ConsoleLayout)

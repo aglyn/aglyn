@@ -16,79 +16,82 @@
  */
 
 import {
-  AglynApp,
   AglynAppEventFlag,
-  AglynCommandController,
+  AglynAppInstance,
+  AglynCommandControllerInstance,
   AglynCommander,
-  AglynEmitter,
-  AglynLogger,
   AglynModuleTriggerFlag,
   AglynModuleTriggerParams,
 } from '@aglyn/framework/sdk'
 import { Mitt } from '@aglyn/shared/util/helpers'
+import { AglynBaseModel } from '../models/aglyn-base.model'
 
 
 const TAG = 'AglynCommandController'
 
-export class AglynAppCommandController implements AglynCommandController {
+export class AglynCommandController extends AglynBaseModel implements AglynCommandControllerInstance {
 
-  public [Symbol.toStringTag] = TAG
-  protected app: AglynApp
-  protected appEvent: AglynEmitter
-  protected appLogger: AglynLogger
-  protected commander: AglynCommander = Mitt()
-  constructor(props: {
-    app: AglynApp
-  }) {
+  public static readonly [Symbol.toStringTag]: string = TAG
+  protected app: AglynAppInstance
+  #commander: AglynCommander = Mitt()
+
+  constructor(props: { app: AglynAppInstance }) {
+    super()
     const {app} = props
     this.app = app
-    this.appEvent = app.event
-    this.appLogger = app.log
+    this.initialize()
   }
-
-  registerAction = (
+  private initialize = () => {
+    this.setErrorFactory(this.app.getErrorFactory())
+    this.setEmitter(this.app.getEmitter())
+    this.setLogger(this.app.getLogger())
+  }
+  public toString = (): string => {
+    return `${TAG}(app: '${this.app.getName()}')`
+  }
+  public toJSON = () => {
+    return {
+      ...super.toJSON(),
+      commands: [...this.#commander.all.values()],
+    }
+  }
+  public onInit = (): void => {
+    this.getEmitter().on(AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER, this.registerAction)
+    this.getEmitter().on(AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction)
+    this.getEmitter().on(AglynModuleTriggerFlag.COMMAND_TRIGGER, this.executeCommand)
+  }
+  public onDestroy = (): void => {
+    this.getEmitter().off(AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER, this.registerAction)
+    this.getEmitter().off(AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction)
+    this.getEmitter().off(AglynModuleTriggerFlag.COMMAND_TRIGGER, this.executeCommand)
+  }
+  public getCommander = (): AglynCommander => {
+    return this.#commander
+  }
+  public registerAction = (
     data: AglynModuleTriggerParams[AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER],
   ): void => {
     const {handler} = data
     const commandId = handler?.$id
-    this.commander.on(commandId, handler)
-    this.appLogger.debug(AglynAppEventFlag.REGISTERED_COMMAND, {commandId})
-    this.appEvent.emit(AglynAppEventFlag.REGISTERED_COMMAND, {commandId})
+    this.#commander.on(commandId, handler)
+    this.getLogger().debug(AglynAppEventFlag.REGISTERED_COMMAND, {commandId})
+    this.getEmitter().emit(AglynAppEventFlag.REGISTERED_COMMAND, {commandId})
   }
-  unregisterAction = (
+  public unregisterAction = (
     data: AglynModuleTriggerParams[AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER],
   ): void => {
     const {handler} = data
     const commandId = handler?.$id
-    this.commander.off(commandId, handler)
-    this.appLogger.debug(AglynAppEventFlag.UNREGISTERED_COMMAND, {commandId})
-    this.appEvent.emit(AglynAppEventFlag.UNREGISTERED_COMMAND, {commandId})
+    this.#commander.off(commandId, handler)
+    this.getLogger().debug(AglynAppEventFlag.UNREGISTERED_COMMAND, {commandId})
+    this.getEmitter().emit(AglynAppEventFlag.UNREGISTERED_COMMAND, {commandId})
   }
-  executeCommand = (
+  public executeCommand = (
     data: AglynModuleTriggerParams[AglynModuleTriggerFlag.COMMAND_TRIGGER],
   ): void => {
     const {commandId} = data
-    this.commander.emit(commandId, {app: this.app})
-    this.appLogger.debug(AglynAppEventFlag.TRIGGERED_COMMAND, {commandId})
-    this.appEvent.emit(AglynAppEventFlag.TRIGGERED_COMMAND, {commandId})
-  }
-  toString = () => {
-    return `${TAG}(app: '${this.app.getName()}')`
-  }
-
-  toJSON = () => {
-    return {
-      commands: [...this.commander.all.values()],
-    }
-  }
-  onInit = () => {
-    this.appEvent.on(AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER, this.registerAction)
-    this.appEvent.on(AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction)
-    this.appEvent.on(AglynModuleTriggerFlag.COMMAND_TRIGGER, this.executeCommand)
-  }
-  onDestroy = () => {
-    this.appEvent.off(AglynModuleTriggerFlag.COMMAND_ACTION_REGISTER, this.registerAction)
-    this.appEvent.off(AglynModuleTriggerFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction)
-    this.appEvent.off(AglynModuleTriggerFlag.COMMAND_TRIGGER, this.executeCommand)
+    this.#commander.emit(commandId, {app: this.app})
+    this.getLogger().debug(AglynAppEventFlag.TRIGGERED_COMMAND, {commandId})
+    this.getEmitter().emit(AglynAppEventFlag.TRIGGERED_COMMAND, {commandId})
   }
 }
