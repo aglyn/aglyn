@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-export * from './console'
-export { default as consoleTheme } from './console'
+import './mui-overrides'
+
 
 export * from './builder'
-export { default as builderTheme } from './builder'
+export * from './console'

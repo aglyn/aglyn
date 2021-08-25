@@ -55,7 +55,7 @@ export const BuilderComponent = forwardRef<any, BuilderComponentProps>(
                 <ConfirmationProviderComponent>
                   <SelectionProviderComponent>
                     <ElementDrawerProviderComponent elements={elementComponents}>
-                      <PanZoom>
+                      <PanZoom disabled>
                         <ElementsContext.Consumer>
                           {({elements}) => (
                             <CanvasRendererComponent

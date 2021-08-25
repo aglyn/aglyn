@@ -15,5 +15,9 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+export * from './builder.options'
+export * from './builder.overrides'
+export * from './builder.palette'
+export * from './builder.props'
+export * from './builder.theme'
+export * from './builder.typography'

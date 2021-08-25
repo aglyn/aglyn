@@ -98,17 +98,10 @@ export const styles = (theme: Theme) =>
 
 export interface ElementDrawerComponentProps extends Partial<NavbarDrawerProps> {
   options?: ElementDrawerOptions
-  onCancel?: {
-    bivarianceHack<T>(event: MouseEvent<T>, reason: 'canceled'): void
-  }['bivarianceHack']
-  onConfirm?: {
-    bivarianceHack<T>(event: null | MouseEvent<T>, data: unknown): void
-  }['bivarianceHack']
-  onDelete?: {
-    bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void
-  }['bivarianceHack']
-
   elements?: { id: string, title: string, icon: unknown }[]
+  onCancel?: { bivarianceHack<T>(event: MouseEvent<T>, reason: 'canceled'): void }['bivarianceHack']
+  onConfirm?: { bivarianceHack<T>(event: null | MouseEvent<T>, data: unknown): void }['bivarianceHack']
+  onDelete?: { bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void }['bivarianceHack']
 }
 
 const ComponentDrawerComponent = forwardRef<any, ElementDrawerComponentProps & WithStyles<typeof styles>>(

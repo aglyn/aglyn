@@ -16,15 +16,16 @@
  */
 
 import { forwardRef, MouseEvent, ReactNode, useCallback } from 'react'
-import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
+import { createStyles, WithStyles, withStyles } from '@material-ui/core/styles'
 import clsx from 'clsx'
 import Card, { CardProps as MuiCardProps } from '@material-ui/core/Card'
 import CardActionArea from '@material-ui/core/CardActionArea'
 import Typography from '@material-ui/core/Typography'
 import { Item } from './grid-list'
+import { BuilderTheme } from '@aglyn/shared/ui/themes'
 
 
-export const cardIconListItemStyles = (theme: Theme) => createStyles({
+export const cardIconListItemStyles = (theme: BuilderTheme) => createStyles({
   selected: {},
   root: {
     '&$selected $actionArea': {

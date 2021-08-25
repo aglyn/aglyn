@@ -15,5 +15,12 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { ThemeOptions } from '../types'
+import { consoleProps } from '../console/console.props'
+import '../mui-overrides'
+
+
+export const builderProps: ThemeOptions['props'] = {
+  ...consoleProps,
+}
+export default builderProps

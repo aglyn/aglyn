@@ -15,5 +15,9 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+export * from './console.options'
+export * from './console.overrides'
+export * from './console.palette'
+export * from './console.props'
+export * from './console.theme'
+export * from './console.typography'

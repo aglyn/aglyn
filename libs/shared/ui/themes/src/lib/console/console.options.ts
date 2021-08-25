@@ -15,5 +15,18 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { ThemeOptions } from '../types'
+import { consolePalette } from './console.palette'
+import { consoleTypography } from './console.typography'
+import { consoleProps } from './console.props'
+import { consoleOverrides } from './console.overrides'
+import '../mui-overrides'
+
+
+export const consoleOptions: ThemeOptions = {
+  palette: consolePalette.LIGHT,
+  typography: consoleTypography,
+  props: consoleProps,
+  overrides: consoleOverrides,
+}
+export default consoleOptions

@@ -24,13 +24,10 @@ import { ElementType, Fragment, ReactNode, useCallback, useState } from 'react'
 import ElementDrawerComponent, { ElementDrawerComponentProps } from '../components/component-drawer.component'
 
 
-export interface ElementDrawerProviderComponentProps {
+export interface ElementDrawerProviderComponentProps extends Partial<ElementDrawerComponentProps> {
   defaultOptions?: ElementDrawerOptions
   children?: ReactNode
-  component: ElementType<ElementDrawerComponentProps & {
-    open: boolean
-  }>
-  elements: ElementDrawerComponentProps['elements']
+  component: ElementType<ElementDrawerComponentProps>
 }
 
 function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentProps) {
@@ -38,7 +35,7 @@ function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentPro
     children,
     defaultOptions = {},
     component: Component,
-    elements,
+    ...rest
   } = props
   const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
   const [resolveReject, setResolveReject] = useState([])
@@ -56,21 +53,15 @@ function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentPro
     setResolveReject([])
   }, [])
 
-  const handleCancel = useCallback(
-    (e, reason) => {
-      reject({reason})
-      handleClose(e, reason)
-    },
-    [reject, handleClose],
-  )
+  const handleCancel = useCallback((e, reason) => {
+    reject({reason})
+    handleClose(e, reason)
+  }, [reject, handleClose])
 
-  const handleConfirm = useCallback(
-    (e, item) => {
-      resolve({option: item})
-      handleClose(e, 'resolved')
-    },
-    [resolve, handleClose, resolveReject],
-  )
+  const handleConfirm = useCallback((e, item) => {
+    resolve({option: item})
+    handleClose(e, 'resolved')
+  }, [resolve, handleClose, resolveReject])
 
   return (
     <Fragment>
@@ -83,12 +74,12 @@ function ElementDrawerProviderComponent(props: ElementDrawerProviderComponentPro
         onClose={handleClose}
         onCancel={handleCancel}
         onConfirm={handleConfirm}
-        elements={elements}
+        {...rest}
       />
     </Fragment>
   )
 }
-
+ElementDrawerProviderComponent.displayName = 'ElementDrawerProviderComponent'
 ElementDrawerProviderComponent.defaultProps = {
   component: ElementDrawerComponent,
 }

@@ -15,5 +15,13 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { ThemeOptions } from '@material-ui/core/styles'
+import '../mui-overrides'
+
+
+export const consoleProps: ThemeOptions['props'] = {
+  MuiIconButton: {
+    // color: 'inherit', // Default color to inherit
+  },
+}
+export default consoleProps

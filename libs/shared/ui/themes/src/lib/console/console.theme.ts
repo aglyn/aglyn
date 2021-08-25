@@ -15,5 +15,11 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { Theme } from '../types'
+import { createTheme } from '../util/create-theme'
+import { consoleOptions } from './console.options'
+import '../mui-overrides'
+
+
+export const consoleTheme: Theme = createTheme(consoleOptions)
+export default consoleTheme

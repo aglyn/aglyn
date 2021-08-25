@@ -33,6 +33,7 @@ export type UseSelectionType = () => SelectionContextType
 
 export const DEFAULT_OPTIONS: SelectionOptions = {
   clientRect: null,
+  elementData: null
 }
 
 export const buildOptions = (defaultOptions, options) => {

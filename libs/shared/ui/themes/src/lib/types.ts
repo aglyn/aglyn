@@ -15,5 +15,4 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+export type { Theme, ThemeOptions } from '@material-ui/core/styles'

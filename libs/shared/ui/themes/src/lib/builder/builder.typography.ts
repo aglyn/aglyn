@@ -15,5 +15,12 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { ThemeOptions } from '../types'
+import { consoleTypography } from '../console/console.typography'
+import '../mui-overrides'
+
+
+export const builderTypography: ThemeOptions['typography'] = {
+  ...consoleTypography,
+}
+export default builderTypography

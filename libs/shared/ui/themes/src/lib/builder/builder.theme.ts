@@ -15,5 +15,11 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { Theme } from '../types'
+import { createTheme } from '../util/create-theme'
+import { builderOptions } from './builder.options'
+import '../mui-overrides'
+
+
+export const builderTheme: Theme = createTheme(builderOptions)
+export default builderTheme

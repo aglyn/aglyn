@@ -32,7 +32,8 @@ declare module '@material-ui/core/styles/createPalette' {
 
 export {}
 
-/** START EXAMPLE – MODULE AUGMENTATION ↓
+/**
+ * START EXAMPLE – MODULE AUGMENTATION ↓
  * ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄
  * ```typescript
  * // Add new property ↓

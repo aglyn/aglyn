@@ -15,5 +15,17 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { ThemeOptions } from '../types'
+import '../mui-overrides'
+
+
+export const consoleOverrides: ThemeOptions['overrides'] = {
+  MuiAvatar: {
+    root: {
+      width: 32,
+      height: 32,
+    },
+  },
+  MuiIconButton: {root: {padding: 8}},
+}
+export default consoleOverrides

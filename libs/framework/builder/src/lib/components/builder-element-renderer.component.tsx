@@ -28,7 +28,7 @@ export interface BuilderElementRendererComponentProps extends ElementRendererCom
 
 const BuilderElementRendererComponent = forwardRef<any, BuilderElementRendererComponentProps>(
   function RefRenderFn(props, ref) {
-    const { elementData, elementRendererComponent, ...rest} = props
+    const {elementData, elementRendererComponent, ...rest} = props
     const {confirm} = useConfirmationContext()
     const localRef = useRef(ref)
     const elemRef = useCombinedRefs(localRef, ref)
@@ -48,9 +48,8 @@ const BuilderElementRendererComponent = forwardRef<any, BuilderElementRendererCo
       setEntered(null)
     }, [])
 
-    const handleClick = useCallback((e, ...args) => {
+    const handleClick = useCallback((e) => {
       e.stopPropagation()
-      console.log('e click', elementData)
       select({clientRect, elementData})
       confirm({title: 'clicked'})
     }, [clientRect, elementData])

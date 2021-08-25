@@ -15,5 +15,15 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+import { ThemeOptions } from '../types'
+import { consolePalette } from '../console/console.palette'
+import '../mui-overrides'
+
+
+export const builderPalette: ThemeOptions['palette'] = {
+  ...consolePalette.LIGHT,
+  primary: {main: '#0091ea'},
+  secondary: {main: '#e040fb'},
+  tertiary: {main: '#37474f'},
+}
+export default builderPalette
