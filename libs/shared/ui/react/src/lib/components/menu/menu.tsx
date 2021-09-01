@@ -92,8 +92,8 @@ export const Menu = forwardRef<any, MenuProps>(
             context
               ? undefined
               : {
-                vertical: 'bottom',
-                horizontal: 'right',
+                vertical: 'top',
+                horizontal: 'left',
               }
           }
           anchorPosition={
@@ -105,7 +105,7 @@ export const Menu = forwardRef<any, MenuProps>(
               }
           }
           anchorReference={context ? 'anchorPosition' : undefined}
-          getContentAnchorEl={null}
+          // getContentAnchorEl={null}
           open={open}
           transformOrigin={
             context

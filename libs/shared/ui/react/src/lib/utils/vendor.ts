@@ -15,13 +15,5 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
 
-import { ElementRendererComponent } from './element-renderer.component'
-
-describe('ElementRendererComponent', () => {
-  it('should render successfully', () => {
-    const { baseElement } = render(<ElementRendererComponent elementData={null} />)
-    expect(baseElement).toBeTruthy()
-  })
-})
+export * as ReactIs from 'react-is'

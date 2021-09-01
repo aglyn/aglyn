@@ -23,5 +23,5 @@
  * @returns {string}
  */
 export function getDisplayName(fn, fallback = 'Component'): string {
-  return fn?.displayName ?? fn?.name ?? fallback
+  return fn?.displayName || fn?.name || fallback
 }

@@ -15,14 +15,17 @@
  * limitations under the License.
  */
 
+import { AglynComponentData } from '@aglyn/framework/sdk'
 import ElementsContext, { ElementsContextType } from './elements-context'
 import { ReactNode, useState } from 'react'
 
-type Elements = ElementsContextType['elements']
 export interface ElementsContextProviderProps {
   children?: ReactNode
-  elements?: Elements
-  onUpdateElements?: (prevElements: Elements, newElements: Elements) => void
+  elements?: AglynComponentData[]
+  onUpdateElements?: (
+    newElements: AglynComponentData[],
+    prevElements: AglynComponentData[]
+  ) => void
 }
 
 function ElementsContextProvider(props: ElementsContextProviderProps) {
@@ -32,7 +35,7 @@ function ElementsContextProvider(props: ElementsContextProviderProps) {
     updateElements: (elements) => {
       setElement(prev => {
         const prevElements = Array.from(prev.elements)
-        onUpdateElements?.call(null, prevElements, elements)
+        onUpdateElements?.call(null, elements, prevElements)
         return {...prev, elements}
       })
     }

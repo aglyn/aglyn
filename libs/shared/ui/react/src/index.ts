@@ -58,3 +58,4 @@ export * from './lib/higher-order/with-context'
 
 export * from './lib/utils/make-link-elements'
 export * from './lib/utils/make-meta-elements'
+export * from './lib/utils/vendor'

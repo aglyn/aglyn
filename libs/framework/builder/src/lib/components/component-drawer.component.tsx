@@ -73,7 +73,7 @@ const StyledNavbarDrawer = styled(NavbarDrawer, {
 
 export interface ElementDrawerComponentProps extends Partial<NavbarDrawerProps> {
   options?: ElementDrawerOptions
-  elements?: { id: string, title: string, icon: unknown }[]
+  elementComponents?: { id: string, title: string, icon: unknown }[]
   onCancel?: { bivarianceHack<T>(event: MouseEvent<T>, reason: 'canceled'): void }['bivarianceHack']
   onConfirm?: { bivarianceHack<T>(event: null | MouseEvent<T>, data: unknown): void }['bivarianceHack']
   onDelete?: { bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void }['bivarianceHack']
@@ -88,7 +88,7 @@ export const ComponentDrawerComponent = forwardRef<any, ElementDrawerComponentPr
       onClose,
       onCancel,
       onDelete,
-      elements,
+      elementComponents,
       ...rest
     } = props
 
@@ -112,7 +112,7 @@ export const ComponentDrawerComponent = forwardRef<any, ElementDrawerComponentPr
       onConfirm?.call(null, e, {type: 'selection', data: item})
     }, [onConfirm])
 
-    const items = (elements ?? []).map((element) => ({
+    const items = (elementComponents ?? []).map((element) => ({
       id: element?.id,
       title: element?.title,
       icon: element?.icon,
@@ -209,7 +209,7 @@ export const ComponentDrawerComponent = forwardRef<any, ElementDrawerComponentPr
 
 ComponentDrawerComponent.displayName = 'ComponentDrawerComponent'
 ComponentDrawerComponent.defaultProps = {
-  elements: [],
+  elementComponents: [],
 }
 
 export default ComponentDrawerComponent

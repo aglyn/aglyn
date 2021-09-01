@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  aglynComponent,
+  aglynComponent, AglynComponentData,
   getAllComponents,
   getApp,
   registerComponent,
@@ -34,10 +34,12 @@ const Root = aglynComponent('root', {
 
 registerComponent(getApp(), Root)
 
-export interface BuilderProps {}
+function Builder(props) {
+  if (typeof document !== 'undefined') {
+    console.log('page:/builder app', getApp())
+  }
 
-export function Builder(props: BuilderProps) {
-  const [elements, setElements] = useState(samplePageData)
+  const [elements, setElements] = useState<AglynComponentData[]>(samplePageData)
   const elementComponents = useMemo(() => {
     return getAllComponents(getApp()).map(([, element]) => ({
       id: element?.$id,
@@ -46,17 +48,20 @@ export function Builder(props: BuilderProps) {
     }))
   }, [])
 
-  useEffect(() => {
-    console.log('page:/builder app', getApp())
-  }, [])
+  const handleUpdateElements = useCallback((elements: AglynComponentData[]) => {
+    setElements(elements)
+  }, []);
 
 
   return (
     <BuilderComponent
       elements={elements}
+      onUpdateElements={handleUpdateElements}
       elementComponents={elementComponents}
     />
   )
 }
+
+Builder.displayName = 'Page-Builder'
 
 export default Builder

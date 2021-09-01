@@ -27,7 +27,7 @@ import {
   consoleTheme,
   createEmotionCache,
   EmotionCache,
-  ThemeProvider,
+  withThemeProvider,
 } from '@aglyn/shared/ui/themes'
 import CssBaseline from '@material-ui/core/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
@@ -35,16 +35,9 @@ import Head from 'next/head'
 import { Fragment, useEffect } from 'react'
 import { APP } from '../../www/const'
 
+
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()
-
-// // Configure JSS
-// const jss = JSS.create({
-//   plugins: [...jssPreset().plugins, jssRtl()],
-//   insertionPoint: process.browser ? document.getElementById('insertion-point-jss') : null,
-// })
-
-
 const metaElements: MakeMetaElementsConfig = [
   ['viewport', 'width=device-width, initial-scale=1'],
   ['description', APP.META_DESCRIPTION],
@@ -61,6 +54,33 @@ try {
 catch (e) {
   console.error(e, 'initialize aglyn app')
 }
+
+const AppWrapper = withThemeProvider(consoleTheme)(function AppWrapper(props) {
+  const {children} = props
+  const Wrapper = isProduction ? Fragment : Fragment // StrictMode
+
+  useEffect(() => {
+    // Remove the server-side injected CSS.
+    const jssStyles = document.querySelector('#jss-server-side')
+    if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
+  }, [])
+
+  return (
+    <Wrapper>
+      <Head>
+        <title>{APP.META_TITLE}</title>
+        {makeMetaElements(metaElements)}
+        {makeLinkElements(linkElements)}
+      </Head>
+      <CssBaseline/>
+      <div className="app">
+        <main>
+          {children}
+        </main>
+      </div>
+    </Wrapper>
+  )
+})
 
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
@@ -102,42 +122,17 @@ export interface _AppProps extends NextAppProps {
  * @returns {JSX.Element}
  */
 function _App(props: _AppProps) {
-  const {Component, emotionCache, pageProps} = props
-
-  useEffect(() => {
-    // Remove the server-side injected CSS.
-    const jssStyles = document.querySelector('#jss-server-side')
-    if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
-  }, [])
-
-  const Wrapper = isProduction ? Fragment : Fragment // StrictMode
+  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
 
   return (
-    <Wrapper>
-      <CacheProvider value={emotionCache}>
-        <Head>
-          <title>{APP.META_TITLE}</title>
-          {makeMetaElements(metaElements)}
-          {makeLinkElements(linkElements)}
-        </Head>
-        {/*<StylesProvider jss={jss}>*/}
-        <ThemeProvider theme={consoleTheme}>
-          <CssBaseline/>
-          <div className="app">
-            <main>
-              <Component {...pageProps} />
-            </main>
-          </div>
-        </ThemeProvider>
-        {/*</StylesProvider>*/}
-      </CacheProvider>
-    </Wrapper>
+    <CacheProvider value={emotionCache}>
+      <AppWrapper>
+        <Component {...pageProps} />
+      </AppWrapper>
+    </CacheProvider>
   )
 }
 _App.displayName = '_App'
-_App.defaultProps = {
-  emotionCache: clientSideEmotionCache,
-}
 _App.getInitialProps = async ({ctx, Component}) => {
   let pageProps = {}
 
@@ -147,7 +142,7 @@ _App.getInitialProps = async ({ctx, Component}) => {
 
   return {
     pageProps: {
-      userLanguage: ctx.query.userLanguage || 'en',
+      lang: ctx.query.lang || 'en',
       ...pageProps,
     },
   }

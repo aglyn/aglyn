@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-import { forwardRef, Fragment, memo } from 'react'
 import { AglynComponentData } from '@aglyn/framework/sdk'
-import _ElementComponent, { ElementRendererComponentProps } from './element-renderer.component'
 import { OverrideableComponentProps } from '@aglyn/shared/ui/react'
+import { forwardRef, Fragment } from 'react'
+import {
+  ElementRendererComponent,
+  ElementRendererComponentProps,
+} from './element-renderer.component'
 
 
 export interface ElementsComponentProps extends OverrideableComponentProps {
@@ -26,26 +29,28 @@ export interface ElementsComponentProps extends OverrideableComponentProps {
   children?: AglynComponentData[]
 }
 
-const ElementsRendererComponent = forwardRef<any, ElementsComponentProps>(function RefRenderFn(props, ref) {
-  const {
-    component: Component,
-    elementRendererComponent,
-    children,
-    ...rest
-  } = props
-  const ElementRendererComponent = elementRendererComponent ?? _ElementComponent
-  return (
-    <Component ref={ref} {...rest}>
-      {children.map((data, i) => (
-        <ElementRendererComponent
-          key={data?.$id ?? i}
-          elementData={data}
-          elementRendererComponent={ElementRendererComponent}
-        />
-      ))}
-    </Component>
-  )
-})
+export const ElementsRendererComponent = forwardRef<any, ElementsComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      component: Component,
+      elementRendererComponent,
+      children,
+      ...rest
+    } = props
+    const ElementRendererComponentProp = elementRendererComponent || ElementRendererComponent
+    return (
+      <Component ref={ref} {...rest}>
+        {children.map((data, i) => (
+          <ElementRendererComponentProp
+            key={data?.$id ?? i}
+            elementData={data}
+            elementRendererComponent={ElementRendererComponentProp}
+          />
+        ))}
+      </Component>
+    )
+  },
+)
 
 ElementsRendererComponent.displayName = 'ElementsComponent'
 ElementsRendererComponent.defaultProps = {
@@ -53,4 +58,4 @@ ElementsRendererComponent.defaultProps = {
   children: [],
 }
 
-export default memo(ElementsRendererComponent)
+export default ElementsRendererComponent

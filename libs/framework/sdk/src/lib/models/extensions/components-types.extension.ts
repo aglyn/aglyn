@@ -110,6 +110,7 @@ export interface AglynComponentOptions<P = any> {
   disableSelecting?: boolean
   disableRef?: boolean
   innerRef?: boolean
+  disableStyled?: boolean
   restrictChildren?: [type: RestrictFlag, cIds: ComponentId[]]
   restrictParents?: [type: RestrictFlag, cIds: ComponentId[]]
 }

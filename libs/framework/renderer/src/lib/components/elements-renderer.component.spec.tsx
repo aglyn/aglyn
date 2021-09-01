@@ -17,7 +17,7 @@
 
 import { render } from '@testing-library/react'
 
-import ElementsRendererComponent from './elements-renderer.component'
+import { ElementsRendererComponent } from './elements-renderer.component'
 
 describe('ElementsRendererComponent', () => {
   it('should render successfully', () => {

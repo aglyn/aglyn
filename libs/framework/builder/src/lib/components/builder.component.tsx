@@ -15,25 +15,23 @@
  * limitations under the License.
  */
 
-import { CanvasRendererComponent } from '@aglyn/framework/renderer'
 import { AglynComponentData } from '@aglyn/framework/sdk'
 import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared/ui/react'
-import { builderTheme, ThemeProvider } from '@aglyn/shared/ui/themes'
+import { builderTheme, withThemeProvider } from '@aglyn/shared/ui/themes'
 import NoSsr from '@material-ui/core/NoSsr'
-// import { SnackbarProvider } from 'notistack'
 import { forwardRef, Fragment } from 'react'
-import { PanZoom } from 'react-easy-panzoom'
 import ElementDrawerContextProvider, { ElementDrawerContextProviderProps } from '../contexts/element-drawer-context.provider'
-import ElementsContext from '../contexts/elements-context'
-import ElementsContextProvider from '../contexts/elements-context-provider'
+import ElementsContextProvider, { ElementsContextProviderProps } from '../contexts/elements-context-provider'
 import SelectionContextProvider from '../contexts/selection-context-provider'
-import AppBarComponent from './appbar.component'
-import BuilderElementRendererComponent from './builder-element-renderer.component'
+import { AppbarComponent } from './appbar.component'
+import { BuilderCanvasRendererComponent } from './builder-canvas-renderer.component'
 
 
 export interface BuilderComponentProps extends OverrideableComponentProps {
+  noSsr?: boolean
   elements?: AglynComponentData[]
-  elementComponents: ElementDrawerContextProviderProps['elements']
+  onUpdateElements?: ElementsContextProviderProps['onUpdateElements']
+  elementComponents: ElementDrawerContextProviderProps['elementComponents']
 }
 
 export const BuilderComponent = forwardRef<any, BuilderComponentProps>(
@@ -41,41 +39,33 @@ export const BuilderComponent = forwardRef<any, BuilderComponentProps>(
     const {
       component: Component,
       elements,
+      onUpdateElements,
       elementComponents,
+      noSsr,
       ...rest
     } = props
-
-    const Wrapper = true ? NoSsr : Fragment
+    const Wrapper = noSsr ? NoSsr : Fragment
 
     return (
       <Wrapper>
-        <ThemeProvider theme={builderTheme}>
-          <Component ref={ref} id="aglyn:builder" {...rest}>
-            <ElementsContextProvider elements={elements}>
-              {/*<SnackbarProvider maxSnack={3}>*/}
-                <ConfirmationProviderComponent>
-                  <SelectionContextProvider>
-                    <ElementDrawerContextProvider elements={elementComponents}>
-                      <PanZoom disabled>
-                        <ElementsContext.Consumer>
-                          {({elements}) => (
-                            <CanvasRendererComponent
-                              id="aglyn:canvas"
-                              elements={elements}
-                              elementRendererComponent={BuilderElementRendererComponent}
-                            />
-                          )}
-                        </ElementsContext.Consumer>
-                      </PanZoom>
+        <Component ref={ref} id="aglyn:builder" {...rest}>
+          <ElementsContextProvider
+            elements={elements}
+            onUpdateElements={onUpdateElements}
+          >
+            {/*<SnackbarProvider maxSnack={3}>*/}
+            <ConfirmationProviderComponent>
+              <SelectionContextProvider>
+                <ElementDrawerContextProvider elementComponents={elementComponents}>
+                  <BuilderCanvasRendererComponent/>
 
-                      <AppBarComponent id="aglyn:toolbar"/>
-                    </ElementDrawerContextProvider>
-                  </SelectionContextProvider>
-                </ConfirmationProviderComponent>
-              {/*</SnackbarProvider>*/}
-            </ElementsContextProvider>
-          </Component>
-        </ThemeProvider>
+                  <AppbarComponent id="aglyn:toolbar"/>
+                </ElementDrawerContextProvider>
+              </SelectionContextProvider>
+            </ConfirmationProviderComponent>
+            {/*</SnackbarProvider>*/}
+          </ElementsContextProvider>
+        </Component>
       </Wrapper>
     )
   },
@@ -87,4 +77,4 @@ BuilderComponent.defaultProps = {
   elements: [],
 }
 
-export default BuilderComponent
+export default withThemeProvider(builderTheme)(BuilderComponent)

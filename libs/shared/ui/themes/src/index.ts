@@ -18,6 +18,9 @@
 export * from './lib/themes'
 export * from './lib/mui'
 export * from './lib/emotion'
+
+export * from './lib/hocs/with-theme-provider'
+
 export * from './lib/util/create-responsive-theme'
 export * from './lib/util/generate-utility-classes'
 export * from './lib/util/use-font-family'

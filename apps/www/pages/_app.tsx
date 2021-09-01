@@ -26,16 +26,12 @@ import {
   consoleTheme,
   createEmotionCache,
   EmotionCache,
-  StylesProvider,
   ThemeProvider,
-  JSS,
-  jssPreset,
-  jssRtl,
 } from '@aglyn/shared/ui/themes'
 import CssBaseline from '@material-ui/core/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
-import { Fragment, StrictMode, useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import { APP } from '../const'
 import { AppContextProvider } from '../contexts/app-context'
 import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
@@ -55,7 +51,7 @@ if (typeof window !== 'undefined') {
       ...(isProduction ? {} : {
         authEmulator: 'http://localhost:9099/',
         firestoreEmulator: {host: 'localhost', port: 8080},
-      })
+      }),
     }
     app = withAppController.withAppController(appOptions)
   })
@@ -171,7 +167,7 @@ _App.getInitialProps = async ({ctx, Component}) => {
 
   return {
     pageProps: {
-      userLanguage: ctx.query.userLanguage || 'en',
+      lang: ctx.query.lang || 'en',
       ...pageProps,
     },
   }

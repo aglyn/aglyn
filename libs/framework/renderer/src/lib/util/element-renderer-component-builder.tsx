@@ -25,7 +25,7 @@ import {
   TYPE_KIND,
   TYPE_OF,
 } from '@aglyn/framework/sdk'
-import { getDisplayName } from '@aglyn/shared/util/tools'
+import { styled } from '@aglyn/shared/ui/themes'
 import { Component, Ref } from 'react'
 
 
@@ -36,8 +36,10 @@ export function elementRendererComponentBuilder<P = any>(
   options: AglynComponentOptions<P>,
 ): ComponentBuilder<P> {
   return function(element: AglynComponentElementType<P>): AglynComponent<P> {
-    const Element = element
-    const displayName = `AglynComponent[id: ${componentId}, displayName: ${getDisplayName(element)}]`
+    const displayName = `AglynComponent($id: ${componentId})`
+    const Element = options?.disableStyled
+      ? element
+      : styled(element as any, {name: displayName})({})
 
     return class AglynComponent extends Component<P> {
       static readonly [TYPE_OF] = MODULE_TYPE

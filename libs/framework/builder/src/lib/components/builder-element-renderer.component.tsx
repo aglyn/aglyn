@@ -16,7 +16,6 @@
  */
 
 import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared/ui/react'
-import { copy } from '@aglyn/shared/util/helpers'
 import { forwardRef, useCallback, useRef, useState } from 'react'
 import { ElementRendererComponent, ElementRendererComponentProps } from '@aglyn/framework/renderer'
 import { useSelectionContext } from '../contexts/selection-context'
@@ -26,9 +25,13 @@ export interface BuilderElementRendererComponentProps extends ElementRendererCom
   [prop: string]: any
 }
 
-const BuilderElementRendererComponent = forwardRef<any, BuilderElementRendererComponentProps>(
+export const BuilderElementRendererComponent = forwardRef<any, BuilderElementRendererComponentProps>(
   function RefRenderFn(props, ref) {
-    const {elementData, elementRendererComponent, ...rest} = props
+    const {
+      elementData,
+      elementRendererComponent,
+      ...rest
+    } = props
     const {confirm} = useConfirmationContext()
     const localRef = useRef(ref)
     const elemRef = useCombinedRefs(localRef, ref)
@@ -56,7 +59,7 @@ const BuilderElementRendererComponent = forwardRef<any, BuilderElementRendererCo
     return (
       <ElementRendererComponent
         ref={elemRef}
-        elementRendererComponent={elementRendererComponent}
+        elementRendererComponent={elementRendererComponent ?? BuilderElementRendererComponent}
         elementData={elementData}
         data-aglyn-element-component={elementData?.component}
         data-aglyn-element-id={elementData?.$id}
@@ -71,7 +74,6 @@ const BuilderElementRendererComponent = forwardRef<any, BuilderElementRendererCo
 
 BuilderElementRendererComponent.displayName = 'BuilderElementRendererComponent'
 BuilderElementRendererComponent.defaultProps = {
-  elementRendererComponent: BuilderElementRendererComponent,
 }
 
 export default BuilderElementRendererComponent

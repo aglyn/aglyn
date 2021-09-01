@@ -41,22 +41,6 @@ import { Children } from 'react'
 
 
 const isProduction = Boolean(process.env.NODE_ENV === 'production')
-
-const jssMinify = {
-  prefixer: null,
-  cleanCSS: null,
-}
-if (isProduction) {
-  /* eslint-disable @typescript-eslint/no-var-requires  */
-  const postcss = require('postcss')
-  const autoprefixer = require('autoprefixer')
-  const CleanCSS = require('clean-css')
-  /* eslint-enable @typescript-eslint/no-var-requires */
-
-  jssMinify.prefixer = postcss([autoprefixer])
-  jssMinify.cleanCSS = new CleanCSS()
-}
-
 const preconnectElements: MakeLinkElementsConfig = [
   ['preconnect', 'https://www.googletagmanager.com'],
   ['preconnect', 'https://www.google-analytics.com'],
@@ -80,7 +64,7 @@ const linkElements: MakeLinkElementsConfig = [
   ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
 ]
 
-export type LangParam = { userLanguage?: string }
+export type LangParam = { lang?: string }
 export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
 
 export interface _DocumentProps extends LangParam {}
@@ -132,58 +116,43 @@ class _Document<P extends _DocumentProps> extends Document<P> {
    * @returns {InitPropsResponse}
    */
   static async getInitialProps(ctx: DocumentContext): InitPropsResponse {
-
-    // Render app and page and get the context of the page with collected side effects.
-    // const styledComponentsSheet = new ServerStyleSheet()
     const originalRenderPage = ctx.renderPage
-
     const cache: EmotionCache = createEmotionCache()
     const {extractCriticalToChunks} = createEmotionServer(cache)
 
-    // try {
-      ctx.renderPage = () =>
-        originalRenderPage({
-          enhanceApp: (App: any) => (props) => //(<App emotionCache={cache} {...props} />),/*(
-            // styledComponentsSheet.collectStyles(
-              // materialSheets.collect(
-              (<App emotionCache={cache} {...props} />),
-              // )
-            // ),
-        })
+    ctx.renderPage = () =>
+      originalRenderPage({
+        enhanceApp: (App: any) => (props) => (
+          <App emotionCache={cache} {...props} />
+        ),
+      })
 
-      const initialProps = await NextDocument.getInitialProps(ctx)
-      const emotionStyles = extractCriticalToChunks(initialProps.html)
-      const emotionStyleTags = emotionStyles.styles.map((style) => (
-        <style
-          key={style.key}
-          data-emotion={`${style.key} ${style.ids.join(' ')}`}
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{__html: style.css}}
-        />
-      ))
+    const initialProps = await NextDocument.getInitialProps(ctx)
+    const emotionStyles = extractCriticalToChunks(initialProps.html)
+    const emotionStyleTags = emotionStyles.styles.map((style) => (
+      <style
+        key={style.key}
+        data-emotion={`${style.key} ${style.ids.join(' ')}`}
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{__html: style.css}}
+      />
+    ))
 
-      return {
-        ...initialProps,
-        userLanguage: ctx.query.userLanguage as string ?? 'en',
-        // Styles fragment is rendered after the app and page rendering finish.
-        styles: [
-          // styledComponentsSheet.getStyleElement(),
-          ...Children.toArray(initialProps.styles),
-          ...emotionStyleTags,
-        ],
-      }
-    // }
-    // finally {
-    //   styledComponentsSheet.seal()
-    // }
+    return {
+      ...initialProps,
+      lang: ctx.query.lang as string ?? 'en',
+      // Styles fragment is rendered after the app and page rendering finish.
+      styles: [
+        ...Children.toArray(initialProps.styles),
+        ...emotionStyleTags,
+      ],
+    }
   }
 
   public render(): JSX.Element {
-    const {
-      userLanguage,
-    } = this.props
+    const { lang } = this.props
     return (
-      <Html lang={userLanguage}>
+      <Html lang={lang}>
         <Head>
           <meta charSet="utf-8"/>
           {makeLinkElements(preconnectElements)}

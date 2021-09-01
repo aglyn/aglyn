@@ -17,11 +17,12 @@
 
 import { render } from '@testing-library/react'
 
-import { ElementRendererComponent } from './element-renderer.component'
+import BuilderCanvasRendererComponent from './builder-canvas-renderer.component'
 
-describe('ElementRendererComponent', () => {
+
+describe('BuilderCanvasRendererComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<ElementRendererComponent elementData={null} />)
+    const {baseElement} = render(<BuilderCanvasRendererComponent/>)
     expect(baseElement).toBeTruthy()
   })
 })
