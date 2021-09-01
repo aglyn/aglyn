@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { createStyles, alpha, Theme, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
+import { createStyles, alpha, Theme, WithStyles, withStyles, styled } from '@aglyn/shared/ui/themes'
 import MuiBackdrop, { BackdropProps as MuiBackdropProps } from '@material-ui/core/Backdrop'
 import CircularProgress from '@material-ui/core/CircularProgress'
 import LinearProgress from '@material-ui/core/LinearProgress'
@@ -27,37 +27,36 @@ import { withAppLoader, WithAppLoaderProps } from '../contexts/app-loader-contex
 import { NextRouterEvent } from '../hooks/router-events'
 
 
-const styles = (theme: Theme) => createStyles({
-  root: {
-    backgroundColor: alpha(theme.palette.common.white, 0.48),
-    color: theme.palette.getContrastText(alpha(theme.palette.common.white, 0.36)),
-    zIndex: 9999999,
-    flexDirection: 'column',
-    backdropFilter: 'blur(5px)',
-  },
-  loadingBar: {
-    position: 'absolute',
-    top: 0, left: 0,
-    backgroundColor: alpha(theme.palette.primary.main, 0.86),
-    width: '100%',
-  },
-  loadingCircle: {},
-  label: {marginTop: theme.spacing(2)},
-})
+const LoadingBackdrop = styled(MuiBackdrop, {
+  name: 'LoadingBackdrop'
+})(({theme})=>({
+  backgroundColor: alpha(theme.palette.common.white, 0.48),
+  color: theme.palette.getContrastText(alpha(theme.palette.common.white, 0.36)),
+  zIndex: 9999999,
+  flexDirection: 'column',
+  backdropFilter: 'blur(5px)',
+}))
 
-export type Props = Partial<MuiBackdropProps> & {}
+const LoadingProgressBar = styled(LinearProgress, {
+  name: 'LoadingProgressBar'
+})(({theme})=>({
+  position: 'absolute',
+  top: 0, left: 0,
+  backgroundColor: alpha(theme.palette.primary.main, 0.86),
+  width: '100%',
+}))
 
-const AppLoaderOverlayView = React.forwardRef<any, Props & WithAppLoaderProps & WithStyles<typeof styles>>(
+export interface AppLoaderOverlayProps extends Partial<MuiBackdropProps>, WithAppLoaderProps {}
+
+const AppLoaderOverlayView = React.forwardRef<any, AppLoaderOverlayProps>(
   function RefRenderFn(props, ref) {
     const {
       classes,
       open,
-      className,
       appLoader,
       ...rest
     } = props
     const isOpen = Boolean(open || appLoader.isLoading)
-    const _className = clsx(classes.root, className)
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     useEffect(() => {
@@ -78,29 +77,26 @@ const AppLoaderOverlayView = React.forwardRef<any, Props & WithAppLoaderProps & 
     }, [])
 
     return (
-      <MuiBackdrop
+      <LoadingBackdrop
         ref={ref}
-        className={_className}
         open={isOpen || loading}
         mountOnEnter
         unmountOnExit
         {...rest}
       >
-        <LinearProgress className={classes.loadingBar} color="secondary"/>
-        <CircularProgress className={classes.loadingCircle} color="secondary"/>
+        <LoadingProgressBar color="secondary"/>
+        <CircularProgress color="secondary"/>
         <Typography
           children="Loading..."
-          className={classes.label}
           component="div"
           variant="overline"
+          sx={{mt:2}}
         />
-      </MuiBackdrop>
+      </LoadingBackdrop>
     )
   },
 )
 
 AppLoaderOverlayView.displayName = 'AppLoaderOverlayView'
 
-export default withStyles(styles, {name: 'AppLoaderOverlayView'})(
-  withAppLoader(AppLoaderOverlayView),
-)
+export default withAppLoader(AppLoaderOverlayView)

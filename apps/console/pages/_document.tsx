@@ -195,7 +195,7 @@ export default class _Document<P extends _DocumentProps> extends NextDocument<P>
     ['icon', '/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
     ['alternate icon', '/images/favicons/favicon.png', {type: 'image/png'}],
     ['manifest', '/_pwa/manifest.json'],
-    ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway&display=swap'],
+    ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
   ]
 
   /**

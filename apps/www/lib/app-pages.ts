@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import React from 'react'
+import React, { ComponentType } from 'react'
 import { Normalized } from './aglyn-deprecated'
 import { NextRouter, Router, useRouter } from 'next/router'
 
@@ -320,17 +320,16 @@ export const getAggregatedPageMeta = (router: NextRouter): AggregatedPageMeta =>
 
 const WithN = 'aggregatedPageMeta'
 type WithN = typeof WithN
-export type WithPageMetaProps<P, N extends string = WithN> = P & { [K in N]: AggregatedPageMeta }
-export type WithPageMetaComponent<P, N extends string = WithN> = React.ComponentType<WithPageMetaProps<P, N>>
+export type WithPageMetaProps<P> = P & Record<WithN, AggregatedPageMeta>
+export type WithPageMetaComponent<P> = React.ComponentType<WithPageMetaProps<P>>
 
-export const withAggregatedPageMeta = <P>(
-  Component: WithPageMetaComponent<P, typeof prop>,
-  prop = WithN
-): React.ComponentType<P> => {
+export function withAggregatedPageMeta<P>(
+  Component: ComponentType<P & Partial<Record<WithN, AggregatedPageMeta>>>,
+): React.ComponentType<Omit<P, WithN>> {
   return function WithAggregatedPageMeta(props: P) {
     const router = useRouter()
     const aggregatedPageMeta = getAggregatedPageMeta(router)
-    const newProps = { ...props, [prop]: aggregatedPageMeta }
+    const newProps = { ...props, [WithN]: aggregatedPageMeta }
     return React.createElement(Component, newProps)
   }
 }

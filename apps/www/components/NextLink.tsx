@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
-import React from 'react'
+import { PartialPick } from '@aglyn/shared/util/types'
 import Link, { LinkProps } from 'next/link'
+import React from 'react'
 
 
-export type NextLinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> & LinkProps;
+export interface NextLinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>,
+  PartialPick<LinkProps, 'as'> {
+  hrefAs?: LinkProps['as']
+}
 
 const NextLink = React.forwardRef<HTMLAnchorElement, NextLinkProps>(
   function RefRenderFn(props, ref) {
     const {
-      as,
+      hrefAs,
       children,
       href,
       replace,
@@ -33,12 +37,14 @@ const NextLink = React.forwardRef<HTMLAnchorElement, NextLinkProps>(
       shallow,
       prefetch,
       locale,
+      as,
+      component:_,
       ...rest
-    } = props
+    }: NextLinkProps & {component?:any} = props
 
     return (
       <Link
-        as={as}
+        as={as ?? hrefAs}
         href={href}
         locale={locale}
         passHref={passHref}
@@ -52,9 +58,9 @@ const NextLink = React.forwardRef<HTMLAnchorElement, NextLinkProps>(
         </a>
       </Link>
     )
-  }
+  },
 )
 
-NextLink.displayName = 'NextComposedLink'
+NextLink.displayName = 'NextLink'
 
 export default NextLink

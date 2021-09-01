@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AglynIcon } from '@aglyn/shared/ui/react'
+import { AglynSvgLogo } from '@aglyn/shared/ui/react'
 import { Theme, createStyles, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
 import Box, { BoxProps } from '@material-ui/core/Box'
 import Container from '@material-ui/core/Container'
@@ -84,7 +84,7 @@ const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
           <Container maxWidth="lg">
             <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
               <div>
-                <AglynIcon className={classes.logo}/>
+                <AglynSvgLogo className={classes.logo}/>
                 <Typography
                   children={text}
                   variant="h2"

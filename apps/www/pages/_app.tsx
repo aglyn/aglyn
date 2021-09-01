@@ -26,15 +26,16 @@ import {
   consoleTheme,
   createEmotionCache,
   EmotionCache,
+  StylesProvider,
+  ThemeProvider,
   JSS,
   jssPreset,
   jssRtl,
-  ThemeProvider,
 } from '@aglyn/shared/ui/themes'
 import CssBaseline from '@material-ui/core/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
-import { Fragment, useEffect } from 'react'
+import { Fragment, StrictMode, useEffect } from 'react'
 import { APP } from '../const'
 import { AppContextProvider } from '../contexts/app-context'
 import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
@@ -43,40 +44,22 @@ import * as AppController from '../lib/aglyn-deprecated'
 import AppLoaderOverlayView from '../views/AppLoaderOverlayView'
 
 
-declare function require(
-  moduleNames: string[],
-  onLoad: (...args: any[]) => void,
-): void
-
-
+declare function require(moduleNames: string[], onLoad: (...args: any[]) => void): void
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
-const appOptions = {
-  ...(isProduction
-    ? {}
-    : {
-      authEmulator: 'http://localhost:9099/',
-      firestoreEmulator: {host: 'localhost', port: 8080},
-    }),
-}
 
 let app
 if (typeof window !== 'undefined') {
   require(['../lib/aglyn-deprecated'], (withAppController: typeof AppController) => {
+    const appOptions = {
+      ...(isProduction ? {} : {
+        authEmulator: 'http://localhost:9099/',
+        firestoreEmulator: {host: 'localhost', port: 8080},
+      })
+    }
     app = withAppController.withAppController(appOptions)
   })
 }
-
-
-// Client-side cache, shared for the whole session of the user in the browser.
-const clientSideEmotionCache = createEmotionCache()
-
-// // Configure JSS
-// const jss = JSS.create({
-//   plugins: [...jssPreset().plugins, jssRtl()],
-//   insertionPoint: process.browser ? document.getElementById('insertion-point-jss') : null,
-// })
-
 
 const metaElements: MakeMetaElementsConfig = [
   ['viewport', 'width=device-width, initial-scale=1'],
@@ -87,6 +70,53 @@ const linkElements: MakeLinkElementsConfig = []
 export interface _AppProps extends NextAppProps {
   emotionCache?: EmotionCache
 }
+
+function AppWrapper(props) {
+  const {children} = props
+
+  useEffect(() => {
+    // Remove the server-side injected CSS.
+    // const jssStyles = document.querySelector('#jss-server-side')
+    // if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
+  }, [])
+
+  useEffect(() => {
+    if (isProduction) {
+      app.getAnalytics()
+    }
+  }, [])
+
+  const Wrapper = isProduction ? Fragment : Fragment
+
+  return (
+    <Wrapper>
+      <Head>
+        <title>{APP.META_TITLE}</title>
+        {makeMetaElements(metaElements)}
+        {makeLinkElements(linkElements)}
+      </Head>
+      <AppContextProvider value={app}>
+        <CurrentUserProviderComponent>
+          <ThemeProvider theme={consoleTheme}>
+            <CssBaseline/>
+            <div className="app">
+              <AppLoaderProviderComponent>
+                <main>
+                  {children}
+                </main>
+
+                <AppLoaderOverlayView/>
+              </AppLoaderProviderComponent>
+            </div>
+          </ThemeProvider>
+        </CurrentUserProviderComponent>
+      </AppContextProvider>
+    </Wrapper>
+  )
+}
+
+// Client-side cache, shared for the whole session of the user in the browser.
+const clientSideEmotionCache = createEmotionCache()
 
 /**
  *
@@ -121,56 +151,17 @@ export interface _AppProps extends NextAppProps {
  * @returns {JSX.Element}
  */
 function _App(props: _AppProps) {
-  const {Component, emotionCache, pageProps} = props
-
-  useEffect(() => {
-    // Remove the server-side injected CSS.
-    const jssStyles = document.querySelector('#jss-server-side')
-    if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
-  }, [])
-
-  useEffect(() => {
-    if (isProduction) {
-      app.getAnalytics()
-    }
-  }, [])
-
-  const Wrapper = isProduction ? Fragment : Fragment// StrictMode
+  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
 
   return (
-    <Wrapper>
-      <CacheProvider value={emotionCache}>
-        <Head>
-          <title>{APP.META_TITLE}</title>
-          {makeMetaElements(metaElements)}
-          {makeLinkElements(linkElements)}
-        </Head>
-        <AppContextProvider value={app}>
-          <CurrentUserProviderComponent>
-            {/*<StylesProvider jss={jss}>*/}
-            <ThemeProvider theme={consoleTheme}>
-              <CssBaseline/>
-              <div className="app">
-                <AppLoaderProviderComponent>
-                  <main>
-                    <Component {...pageProps} />
-                  </main>
-
-                  <AppLoaderOverlayView/>
-                </AppLoaderProviderComponent>
-              </div>
-            </ThemeProvider>
-            {/*</StylesProvider>*/}
-          </CurrentUserProviderComponent>
-        </AppContextProvider>
-      </CacheProvider>
-    </Wrapper>
+    <CacheProvider value={emotionCache}>
+      <AppWrapper>
+        <Component {...pageProps} />
+      </AppWrapper>
+    </CacheProvider>
   )
 }
 _App.displayName = '_App'
-_App.defaultProps = {
-  emotionCache: clientSideEmotionCache,
-}
 _App.getInitialProps = async ({ctx, Component}) => {
   let pageProps = {}
 

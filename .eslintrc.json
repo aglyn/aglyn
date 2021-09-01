@@ -97,20 +97,15 @@
         "@typescript-eslint/no-namespace": "off",
         "@typescript-eslint/no-unused-vars": "warn",
         "@typescript-eslint/no-var-requires": "off",
+        "no-fallthrough": "off",
         "react/no-children-prop": "off",
-        "no-fallthrough": "off"
+        "react-hooks/rules-of-hooks": "off"
       }
     },
     {
       "files": ["*.js", "*.jsx"],
       "extends": ["plugin:@nrwl/nx/javascript"],
       "rules": {}
-    },
-    {
-      "files": ["*.ts"],
-      "rules": {
-        "react-hooks/rules-of-hooks": "off"
-      }
     },
     {
       "files": ["*.tsx"],

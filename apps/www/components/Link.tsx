@@ -15,34 +15,33 @@
  * limitations under the License.
  */
 
-import { forwardRef } from 'react'
+import MuiButton, { ButtonProps as MuiButtonProps } from '@material-ui/core/Button'
+import MuiLink, { LinkProps as MuiLinkProps } from '@material-ui/core/Link'
 import clsx from 'clsx'
 import { useRouter } from 'next/router'
-import MuiLink, { LinkProps as MuiLinkProps } from '@material-ui/core/Link'
-import MuiButton, { ButtonProps as MuiButtonProps } from '@material-ui/core/Button'
+import { forwardRef } from 'react'
 import NextLink, { NextLinkProps } from './NextLink'
-import { InnerRefProp } from '@aglyn/shared/ui/react'
 
 
-export type NextOnly = NextLinkProps
-export type NextAndMuiLinkProps = MuiLinkProps & NextLinkProps
-export type NextAndMuiButtonProps = MuiButtonProps & NextLinkProps
+export type NextOnly = Omit<NextLinkProps, 'as'>
+export type NextAndMuiLinkProps = MuiLinkProps & NextOnly
+export type NextAndMuiButtonProps = MuiButtonProps & NextOnly
 
-type MergedProps<T> = [T] extends [any]
+type MergedProps<T> = T extends any
   ? T extends { naked: true, button?: false }
-    ? T & NextOnly
+    ? NextOnly & T
     : T extends { naked?: false, button: true }
       ? NextAndMuiButtonProps
-      : T & NextAndMuiLinkProps
+      : NextAndMuiLinkProps & T
   : never
 
-type MergedPropsWithInnerRef<T> = [T] extends [any]
-  ? T extends { naked?: false, button: true }
-    ? T & InnerRefProp<HTMLButtonElement>
-    : T & InnerRefProp<HTMLAnchorElement>
-  : never
+// type MergedPropsWithInnerRef<T> = [T] extends [any]
+//   ? T extends { naked?: false, button: true }
+//     ? T & InnerRefProp<HTMLButtonElement>
+//     : T & InnerRefProp<HTMLAnchorElement>
+//   : never
 
-type LinkRefType<T> = [T] extends [any]
+type LinkRefType<T> = T extends any
   ? T extends { naked?: false, button: true }
     ? HTMLButtonElement
     : HTMLAnchorElement
@@ -62,57 +61,55 @@ export interface LinkProps extends MergedProps<BaseProps> {}
  * @param {LinkProps} props
  * @return {JSX.Element}
  */
-export function InnerRefLink(props: MergedPropsWithInnerRef<LinkProps>) {
-  const {
-    href,
-    activeClassName = 'active',
-    className: classNameProps,
-    innerRef,
-    naked,
-    button,
-    ...other
-  } = props
+const Link = forwardRef<LinkRefType<LinkProps>, LinkProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      href,
+      activeClassName = 'active',
+      className: classNameProps,
+      naked,
+      button,
+      ...other
+    }: LinkProps & { component?: any } = props
 
-  const router = useRouter()
-  const pathname = typeof href === 'object' ? href['pathname'] : href
-  const className = clsx(classNameProps, {[activeClassName]: router.pathname === pathname && activeClassName})
+    const router = useRouter()
+    const pathname = typeof href === 'object' ? href['pathname'] : href
+    const className = clsx(classNameProps, {[activeClassName]: router.pathname === pathname && activeClassName})
 
-  if (naked) {
-    return <NextLink ref={innerRef} className={className} href={href} {...other} />
-  }
+    if (naked) {
+      return (
+        <NextLink
+          ref={ref as any}
+          className={className}
+          href={href}
+          {...other}
+        />
+      )
+    }
 
-  if (button || other['disabled']) {
+    if (button || other['disabled']) {
+      return (
+        <MuiButton
+          ref={ref}
+          className={className}
+          component={NextLink}
+          href={href as string}
+          {...other as unknown}
+        />
+      )
+    }
+
     return (
-      <MuiButton
-        ref={innerRef}
+      <MuiLink
+        ref={ref}
         className={className}
         component={NextLink}
         href={href as string}
-        {...other as unknown}
+        {...other}
       />
     )
-  }
-
-  return (
-    <MuiLink
-      ref={innerRef}
-      className={className}
-      component={NextLink}
-      href={href as string}
-      {...other}
-    />
-  )
-}
-
-InnerRefLink.displayName = 'InnerRefLink'
-
-const Link = (function <T extends LinkProps>() {
-  return forwardRef<LinkRefType<T>, T>(
-    function LinkRefRenderFn(props, ref) {
-      return (<InnerRefLink {...props} innerRef={ref} />)
-    },
-  )
-})()
+  },
+)
 
 Link.displayName = 'Link'
 

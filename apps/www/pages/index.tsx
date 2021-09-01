@@ -29,46 +29,31 @@ import PromoSectionView from '../views/PromoSectionView'
 import SiteFooterView from '../views/SiteFooterView'
 
 
-const styles = (theme: Theme) => createStyles({
-  header: {
-    paddingTop: theme.mixins.toolbar.minHeight,
-    '& $h1': {
-      marginBottom: theme.spacing(4),
-    },
-    '& $h2': {
-      color: theme.palette.quaternary.main,
-    },
-  },
-  container: {
-    paddingTop: theme.spacing(4),
-    paddingBottom: theme.spacing(4),
-  },
-
-  // KEEP EMPTY
-  h1: {},
-  h2: {},
-})
-
-interface Props extends WithStyles<typeof styles> {
+interface Props {
 
 }
 
+const TITLE = 'Build websites for your business goals'
+
 function Index(props: Props) {
-  const {classes} = props
+  const {} = props
 
   return (
     <MainLayout
-      title={'Website Designer Platform for Your Business Goals | Aglyn'}
+      title={TITLE + ' | Aglyn'}
       centerNavigationItems={mainNavigation}
       productName={productNames.www}
     >
       <BackgroundImage
         component={'header'}
         url={'/images/backgrounds/patterns/abstract-wave-lines.svg'}
-        className={classes.header}
+        sx={{ pt: '56px' }}
       >
         <Box py={6}>
-          <Container maxWidth={'lg'} className={classes.container}>
+          <Container
+            maxWidth={'lg'}
+            sx={{py:4}}
+          >
             <GridItems
               alignItems="center"
               direction="row-reverse"
@@ -92,15 +77,15 @@ function Index(props: Props) {
                     <>
                       <Typography
                         variant={'h2'}
-                        component={'h1'}
-                        children={'Website Designer Platform for Your Business Goals'}
-                        className={classes.h1}
+                        component={'h2'}
+                        children={TITLE}
+                        sx={{mb:4}}
                       />
                       <Typography
                         variant={'h4'}
-                        component={'h2'}
+                        component={'h3'}
                         children={'The essentials to keep your workflow simple'}
-                        className={classes.h2}
+                        color="quaternary.main"
                       />
                     </>
                   ),
@@ -116,7 +101,7 @@ function Index(props: Props) {
             <GridItems
               alignItems="center"
               direction="row"
-              justify="space-around"
+              justifyContent="space-around"
               spacing={2}
               items={[
                 {
@@ -138,13 +123,13 @@ function Index(props: Props) {
                         variant={'h4'}
                         component={'h2'}
                         children={'Build Your Pages How You Like'}
-                        className={classes.h1}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
                         children={'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'}
-                        className={classes.h2}
+                        color="text.secondary"
                       />
                     </>
                   ),
@@ -158,7 +143,7 @@ function Index(props: Props) {
             <GridItems
               alignItems="center"
               direction="row-reverse"
-              justify="space-around"
+              justifyContent="space-around"
               spacing={2}
               items={[
                 {
@@ -180,13 +165,13 @@ function Index(props: Props) {
                         variant={'h4'}
                         component={'h2'}
                         children={'Custom Elements & Attributes'}
-                        className={classes.h1}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
                         children={'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'}
-                        className={classes.h2}
+                        color="text.secondary"
                       />
                     </>
                   ),
@@ -200,7 +185,7 @@ function Index(props: Props) {
             <GridItems
               alignItems="center"
               direction="row"
-              justify="space-around"
+              justifyContent="space-around"
               spacing={2}
               items={[
                 {
@@ -222,13 +207,13 @@ function Index(props: Props) {
                         variant={'h4'}
                         component={'h2'}
                         children={'Perform Operations & Calculate Output'}
-                        className={classes.h1}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
                         children={'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'}
-                        className={classes.h2}
+                        color="text.secondary"
                       />
                     </>
                   ),
@@ -243,7 +228,7 @@ function Index(props: Props) {
           backgroundUrl={'/images/backgrounds/patterns/abstract-wave-lines.svg'}
           heading={'Get Access and Make Your New Website'}
           link={{
-            as: '/contact', href: '/contact',
+            hrefAs: '/contact', href: '/contact',
             children: 'Get Your Access',
           }}
         />
@@ -252,4 +237,6 @@ function Index(props: Props) {
   )
 }
 
-export default withStyles(styles, {name: 'Page:Index'})(Index)
+Index.displayName = 'Page-Index'
+
+export default Index

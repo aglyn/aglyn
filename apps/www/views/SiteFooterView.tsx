@@ -16,47 +16,35 @@
  */
 
 import { GridItems } from '@aglyn/shared/ui/react'
-import { createStyles, Theme, withStyles, WithStyles } from '@aglyn/shared/ui/themes'
 import Box from '@material-ui/core/Box'
 import Container from '@material-ui/core/Container'
 import MuiLink from '@material-ui/core/Link'
 import Typography from '@material-ui/core/Typography'
-import clsx from 'clsx'
-import React, { ElementType, forwardRef, HTMLAttributes } from 'react'
+import { ElementType, forwardRef, HTMLAttributes } from 'react'
 import Link from '../components/Link'
 import { footerNavigation } from '../const'
 
-
-export const SiteFooterStyles = (theme: Theme) => createStyles({
-  root: {
-    background: 'none',
-  },
-  /* LEAVE EMPTY */
-  link: {},
-})
 
 export interface SiteFooterViewProps extends HTMLAttributes<HTMLElement> {
   component?: ElementType
 }
 
-const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof SiteFooterStyles>>(
+const SiteFooterView = forwardRef<any, SiteFooterViewProps>(
   function RefRenderFn(props, ref) {
     const {
-            children,
-            component: Component,
-            className: propClass,
-            classes,
-            ...rest
-          } = props
-    const className = clsx(classes.root, propClass)
+      children,
+      className: propClass,
+      ...rest
+    } = props
 
     return (
-      <Component
+      <Box
         ref={ref}
-        className={className}
+        component={'footer'}
+        sx={{background: 'none'}}
         {...rest}
       >
-        <Box pt={4}>
+        <Box sx={{pt:4}}>
           {children && (
             <Container maxWidth="lg">
               {children}
@@ -65,14 +53,14 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
           <Container maxWidth="lg">
             <GridItems
               spacing={2}
-              justify="space-between"
+              justifyContent="space-between"
               items={[
                 {
                   xs: 12, sm: 6, md: 3,
                   children: (
                     <>
                       <img
-                        src="/images/brand/logo.svg"
+                        src="/images/brand/aglyn-logo.svg"
                         width={150}
                         height={'auto'}
                         alt="aglyn logo"
@@ -105,10 +93,7 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
                       <Typography component="ul">
                         {items.map((item, key) => (
                           <li key={key}>
-                            <Link
-                              {...item}
-                              className={classes.link}
-                            />
+                            <Link {...item} />
                           </li>
                         ))}
                       </Typography>
@@ -119,14 +104,11 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
             />
           </Container>
         </Box>
-      </Component>
+      </Box>
     )
   },
 )
 
 SiteFooterView.displayName = 'SiteFooterView'
-SiteFooterView.defaultProps = {
-  component: 'footer',
-}
 
-export default withStyles(SiteFooterStyles, {name: 'SiteFooterView'})(SiteFooterView)
+export default SiteFooterView

@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
-import { forwardRef, memo, useMemo } from 'react'
-import MuiSvgIcon, { SvgIconProps as MuiSvgIconProps } from '@material-ui/core/SvgIcon'
 import { getIcon, Icon, IconKeys } from '@aglyn/shared/data/mdi'
 import { _isStrT } from '@aglyn/shared/util/helpers'
+import MuiSvgIcon, { SvgIconProps as MuiSvgIconProps } from '@material-ui/core/SvgIcon'
+import { createSvgIcon } from '@material-ui/core/utils'
+import { forwardRef, useMemo } from 'react'
 import { SvgPathData, svgPathElement } from './svg-path'
+
+
+export { createSvgIcon }
 
 
 export type IconId = IconKeys
@@ -45,7 +49,7 @@ export function createSvgPathIcon(displayName: string, path: SvgPathIconProps['p
     },
   )
   CreateSvgPathIcon.displayName = `CreateSvgPathIcon(${displayName})`
-  return memo(CreateSvgPathIcon)
+  return CreateSvgPathIcon
 }
 
 /**

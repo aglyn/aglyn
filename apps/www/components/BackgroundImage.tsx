@@ -15,47 +15,34 @@
  * limitations under the License.
  */
 
-import { Theme, createStyles, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
-import Box, { BoxProps } from '@material-ui/core/Box'
-import clsx from 'clsx'
-import { forwardRef } from 'react'
+import { styled } from '@aglyn/shared/ui/themes'
+import { HTMLAttributes } from 'react'
 
 
-const styles = (theme: Theme) => createStyles({
-  root: {
-    backgroundColor: 'inherit',
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'bottom center',
-    backgroundSize: 'cover',
-    backgroundAttachment: (props: any) => props?.parallax ? 'fixed' : undefined,
-  },
-})
-
-export interface BackgroundImageProps extends BoxProps {
+export interface BackgroundImageProps extends HTMLAttributes<HTMLDivElement> {
   url: string
   parallax?: boolean
 }
 
-const BackgroundImage = forwardRef<any, BackgroundImageProps & WithStyles<typeof styles>>(
-  function RefRenderFn(props, ref) {
-    const {children, parallax, url, className, classes, ...rest} = props
-
-    return (
-      <Box
-        // innerRef={ref}
-        className={clsx(classes.root, className)}
-        component="div"
-        style={{
-          backgroundImage: `url(${url})`,
-        }}
-        {...rest}
-      >
-        {children}
-      </Box>
-    )
-  },
-)
+const BackgroundImage = styled(({url, parallax, ...rest}: BackgroundImageProps)=>(
+  <div
+    style={{
+      backgroundImage: `url(${url})`,
+      backgroundAttachment: parallax ? 'fixed' : undefined
+    }}
+    {...rest}
+  />
+), {
+  name: 'BackgroundImage',
+  slot: 'Root',
+})<BackgroundImageProps>(({
+  backgroundColor: 'inherit',
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'bottom center',
+  backgroundSize: 'cover',
+  backgroundImage: null
+}))
 
 BackgroundImage.displayName = 'BackgroundImage'
 
-export default withStyles(styles, {name: 'BackgroundImage'})(BackgroundImage)
+export default BackgroundImage

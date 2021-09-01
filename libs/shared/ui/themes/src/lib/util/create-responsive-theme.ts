@@ -18,7 +18,6 @@
 import {
   createTheme,
   responsiveFontSizes,
-  ResponsiveFontSizesOptions,
   Theme,
   ThemeOptions,
 } from '../mui'
@@ -26,7 +25,7 @@ import {
 
 export type CreateResponsiveThemeOptions = {
   themeOptions?: ThemeOptions
-  responsiveFontSizesOptions?: ResponsiveFontSizesOptions
+  responsiveFontSizesOptions?: any
 }
 
 /**

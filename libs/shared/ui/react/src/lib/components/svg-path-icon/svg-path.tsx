@@ -15,24 +15,30 @@
  * limitations under the License.
  */
 
-import React from 'react'
+import { forwardRef, SVGAttributes, useMemo } from 'react'
+import { PropsWithInnerRef } from '../../types'
 
-export const svgPathElement = (d: SvgPathData, passProps?: SvgPathProps) => {
-  return <SvgPath d={d} {...passProps} />
-}
-export const useSvgPathElement = (d: SvgPathData, passProps?: SvgPathProps) => {
-  return React.useMemo(() => svgPathElement(d, passProps), [d, passProps])
-}
 
 export type SvgPathData = SvgPathProps['d']
-
+export type SvgPassProps = PropsWithInnerRef<SvgPathProps, SVGPathElement>
 /* eslint-disable-next-line */
-export interface SvgPathProps extends React.SVGAttributes<SVGPathElement> {}
+export interface SvgPathProps extends SVGAttributes<SVGPathElement> {}
 
-export const SvgPath = React.forwardRef<SVGPathElement, SvgPathProps>(function RefRenderFn(props, ref) {
-  return <path ref={ref} {...props} />
-})
+export const SvgPath = forwardRef<SVGPathElement, SvgPathProps>(
+  function RefRenderFn(props, ref) {
+    return <path ref={ref} {...props} />
+  }
+)
 
 SvgPath.displayName = 'SvgPath'
 
 export default SvgPath
+
+export function svgPathElement(d: SvgPathData, passProps?: SvgPassProps) {
+  const {innerRef, ...rest} = {...passProps}
+  return (<SvgPath d={d} ref={innerRef} {...rest} />)
+}
+
+export function useSvgPathElement(d: SvgPathData, passProps?: SvgPassProps) {
+  return useMemo(() => svgPathElement(d, passProps), [d, passProps])
+}

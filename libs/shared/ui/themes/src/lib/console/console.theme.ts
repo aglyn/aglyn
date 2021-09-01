@@ -21,10 +21,10 @@ import consoleOptions, { consoleOptionsDark } from './console.options'
 
 
 export const consoleTheme: Theme = createResponsiveTheme({
-  themeOptions: consoleOptions,
+  themeOptions: {...consoleOptions},
 })
 export const consoleThemeDark: Theme = createResponsiveTheme({
-  themeOptions: consoleOptionsDark,
+  themeOptions: {...consoleOptionsDark},
 })
 export const getConsoleTheme = (mode: 'light' | 'dark' = 'light') => {
   const theme = {

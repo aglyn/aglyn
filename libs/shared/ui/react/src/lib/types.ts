@@ -38,9 +38,10 @@ export type OverrideComponentPropPlusOverrideProps<T extends OverrideComponentPr
 
 export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P & OverrideComponentPropPlusOverrideProps<T>
 
-export type InnerRefProp<T = unknown> = {
+export type InnerRefProp<T = any> = {
   innerRef?: Ref<T>
 }
+export type PropsWithInnerRef<P, T> = InnerRefProp<T> & P
 
 
 /**

@@ -26,7 +26,10 @@ import Breadcrumbs from '../components/Breadcrumbs'
 import { withCurrentUserCtx } from '../contexts/current-user-context'
 import { withAggregatedPageMeta } from '../lib/app-pages'
 import { tabItems } from '../lib/navigation-menus'
-import MainLayout, { Props as MainLayoutProps, styles as mainStyles } from './MainLayout'
+import MainLayout, {
+  MainLayoutProps as MainLayoutProps,
+  mainLayoutStyles as mainStyles,
+} from './MainLayout'
 
 
 const getHeader = (first, second) => (<span><b>{first}:</b> {second}</span>)
@@ -159,7 +162,7 @@ const ConsoleLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
           </main>
         </MainLayout>
       )
-    }, 'aggregatedPageMeta',
+    },
   ),
 )
 

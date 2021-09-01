@@ -27,6 +27,7 @@ import {
   EmotionCache,
   getConsoleMetaThemeColor,
 } from '@aglyn/shared/ui/themes'
+import Document from 'next/document'
 import NextDocument, {
   DocumentContext,
   DocumentInitialProps,
@@ -36,24 +37,49 @@ import NextDocument, {
   NextScript,
 } from 'next/document'
 import { Children } from 'react'
+// import { ServerStyleSheet } from 'styled-components'
 
 
 const isProduction = Boolean(process.env.NODE_ENV === 'production')
 
-// const jssMinify = {
-//   prefixer: null,
-//   cleanCSS: null,
-// }
-// if (isProduction) {
-//   /* eslint-disable @typescript-eslint/no-var-requires  */
-//   const postcss = require('postcss')
-//   const autoprefixer = require('autoprefixer')
-//   const CleanCSS = require('clean-css')
-//   /* eslint-enable @typescript-eslint/no-var-requires */
-//
-//   jssMinify.prefixer = postcss([autoprefixer])
-//   jssMinify.cleanCSS = new CleanCSS()
-// }
+const jssMinify = {
+  prefixer: null,
+  cleanCSS: null,
+}
+if (isProduction) {
+  /* eslint-disable @typescript-eslint/no-var-requires  */
+  const postcss = require('postcss')
+  const autoprefixer = require('autoprefixer')
+  const CleanCSS = require('clean-css')
+  /* eslint-enable @typescript-eslint/no-var-requires */
+
+  jssMinify.prefixer = postcss([autoprefixer])
+  jssMinify.cleanCSS = new CleanCSS()
+}
+
+const preconnectElements: MakeLinkElementsConfig = [
+  ['preconnect', 'https://www.googletagmanager.com'],
+  ['preconnect', 'https://www.google-analytics.com'],
+  ['preconnect', 'https://adservice.google.com'],
+  ['preconnect', 'https://static.doubleclick.net'],
+  ['preconnect', 'https://googleads.g.doubleclick.net'],
+  ['preconnect', 'https://fonts.googleapis.com'],
+  ['preconnect', 'https://fonts.gstatic.com', {crossOrigin: 'anonymous'}],
+]
+const metaElements: MakeMetaElementsConfig = [
+  [undefined, 'en-us', {httpEquiv: 'content-language'}],
+  [undefined, 'IE=edge', {httpEquiv: 'X-UA-Compatible'}],
+  ['theme-color', getConsoleMetaThemeColor('light'), {media: '(prefers-color-scheme: light)'}],
+  ['theme-color', getConsoleMetaThemeColor('dark'), {media: '(prefers-color-scheme: dark)'}],
+]
+const linkElements: MakeLinkElementsConfig = [
+  ['shortcut icon', '/images/favicons/favicon.ico'],
+  ['icon', '/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
+  ['alternate icon', '/images/favicons/favicon.png', {type: 'image/png'}],
+  ['manifest', '/_pwa/manifest.json'],
+  ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
+]
+
 export type LangParam = { userLanguage?: string }
 export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
 
@@ -92,9 +118,9 @@ export interface _DocumentProps extends LangParam {}
  * @extends {NextDocument<P>}
  * @template P
  */
-export default class _Document<P extends _DocumentProps> extends NextDocument<P> {
+class _Document<P extends _DocumentProps> extends Document<P> {
 
-  public static displayName = '_Document'
+  static displayName = '_Document'
 
   /**
    * Returns the context object with the addition of `renderPage`
@@ -108,23 +134,21 @@ export default class _Document<P extends _DocumentProps> extends NextDocument<P>
   static async getInitialProps(ctx: DocumentContext): InitPropsResponse {
 
     // Render app and page and get the context of the page with collected side effects.
-    // const materialSheets = new ServerStyleSheets()
     // const styledComponentsSheet = new ServerStyleSheet()
     const originalRenderPage = ctx.renderPage
 
     const cache: EmotionCache = createEmotionCache()
     const {extractCriticalToChunks} = createEmotionServer(cache)
 
-    try {
+    // try {
       ctx.renderPage = () =>
         originalRenderPage({
-          enhanceApp: (App: any) => (props) => <App emotionCache={cache} {...props} />,/*(
-           // styledComponentsSheet.collectStyles(
-           // materialSheets.collect(
-           //   (<App emotionCache={cache} {...props} />),
-           // )
-           // )
-           ),*/
+          enhanceApp: (App: any) => (props) => //(<App emotionCache={cache} {...props} />),/*(
+            // styledComponentsSheet.collectStyles(
+              // materialSheets.collect(
+              (<App emotionCache={cache} {...props} />),
+              // )
+            // ),
         })
 
       const initialProps = await NextDocument.getInitialProps(ctx)
@@ -138,78 +162,37 @@ export default class _Document<P extends _DocumentProps> extends NextDocument<P>
         />
       ))
 
-      // let css = materialSheets.toString()
-      // // It might be undefined, e.g. after an error.
-      // if (css && process.env.NODE_ENV === 'production') {
-      //   const result1 = await jssMinify.prefixer.process(css, {from: undefined})
-      //   css = result1.css
-      //   css = jssMinify.cleanCSS.minify(css).styles
-      // }
-
-      // All the URLs should have a leading /.
-      // This is missing in the Next.js static export.
-      let url = ctx.req?.url
-      if (url && url[url.length - 1] !== '/') {
-        url += '/'
-      }
-
       return {
         ...initialProps,
         userLanguage: ctx.query.userLanguage as string ?? 'en',
         // Styles fragment is rendered after the app and page rendering finish.
         styles: [
           // styledComponentsSheet.getStyleElement(),
-          ...emotionStyleTags,
-          // <style
-          //   key="jss-server-side"
-          //   id="jss-server-side"
-          //   // eslint-disable-next-line react/no-danger
-          //   dangerouslySetInnerHTML={{__html: css}}
-          // />,
-          // <style id="insertion-point-jss" key="insertion-point-jss"/>,
           ...Children.toArray(initialProps.styles),
+          ...emotionStyleTags,
         ],
       }
-    }
-    finally {
-      // styledComponentsSheet.seal()
-    }
+    // }
+    // finally {
+    //   styledComponentsSheet.seal()
+    // }
   }
-  preconnectElements: MakeLinkElementsConfig = [
-    ['preconnect', 'https://www.googletagmanager.com'],
-    ['preconnect', 'https://adservice.google.com'],
-    ['preconnect', 'https://www.google-analytics.com'],
-    ['preconnect', 'https://static.doubleclick.net'],
-    ['preconnect', 'https://googleads.g.doubleclick.net'],
-    ['preconnect', 'https://fonts.googleapis.com'],
-    ['preconnect', 'https://fonts.gstatic.com', {crossOrigin: 'anonymous'}],
-  ]
-  metaElements: MakeMetaElementsConfig = [
-    [undefined, 'en-us', {httpEquiv: 'content-language'}],
-    [undefined, 'IE=edge', {httpEquiv: 'X-UA-Compatible'}],
-    ['theme-color', getConsoleMetaThemeColor('light'), {media: '(prefers-color-scheme: light)'}],
-    ['theme-color', getConsoleMetaThemeColor('dark'), {media: '(prefers-color-scheme: dark)'}],
-  ]
-  linkElements: MakeLinkElementsConfig = [
-    ['shortcut icon', '/images/favicons/favicon.ico'],
-    ['icon', '/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
-    ['alternate icon', '/images/favicons/favicon.png', {type: 'image/png'}],
-    ['manifest', '/_pwa/manifest.json'],
-    ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway&display=swap'],
-  ]
 
-  /**
-   *
-   * @returns {JSX.Element}
-   */
   public render(): JSX.Element {
+    const {
+      userLanguage,
+    } = this.props
     return (
-      <Html lang={this.props.userLanguage}>
+      <Html lang={userLanguage}>
         <Head>
           <meta charSet="utf-8"/>
-          {makeLinkElements(this.preconnectElements)}
-          {makeMetaElements(this.metaElements)}
-          {makeLinkElements(this.linkElements)}
+          {makeLinkElements(preconnectElements)}
+          {makeMetaElements(metaElements)}
+          {makeLinkElements(linkElements)}
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
+          />
         </Head>
         <body>
           <Main/>
@@ -219,3 +202,5 @@ export default class _Document<P extends _DocumentProps> extends NextDocument<P>
     )
   }
 }
+
+export default _Document

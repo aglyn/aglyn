@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
+import { ComponentWithInjectedProp, withContext } from '@aglyn/shared/ui/react'
+import { ComponentType, createContext, useContext, useEffect, useState } from 'react'
 import { FbUser } from '../lib/aglyn-deprecated'
-import React, { createContext, useContext, useEffect, useState } from 'react'
-
-import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '@aglyn/shared/ui/react'
 import { withAppContext } from './app-context'
 
 
@@ -46,7 +45,7 @@ export const CurrentUserProviderComponent = withAppContext<Props>(
   function CurrentUserProviderComponent(props) {
     const {children, app} = props
     const currentUser = app?.getCurrentUser()
-    const [ctxState, setCtxState] = useState(()=>({
+    const [ctxState, setCtxState] = useState(() => ({
       currentUser,
       loading: true,
       error: null,
@@ -71,7 +70,9 @@ export const CurrentUserProviderComponent = withAppContext<Props>(
         },
       )
       // Unsubscribe auth listener on unmount
-      return () => { unsubscribe() }
+      return () => {
+        if (unsubscribe) unsubscribe()
+      }
     }, [])
 
     return (
@@ -85,7 +86,6 @@ export const CurrentUserProviderComponent = withAppContext<Props>(
 const WithN = 'currentUserContext'
 type WithN = typeof WithN
 export type CurrentUserContextConsumer = typeof CurrentUserContextConsumer
-export type WithCurrentUserContextProps = InjectedContextProp<CurrentUserContextConsumer, WithN>
 
 /**
  * Current user context consumer HOC
@@ -94,6 +94,8 @@ export type WithCurrentUserContextProps = InjectedContextProp<CurrentUserContext
  * @param {ComponentWithInjectedProp<P, CurrentUserContextConsumer, WithN>} Component
  * @return {*}
  */
-export function withCurrentUserCtx<P>(Component: ComponentWithInjectedProp<P, CurrentUserContextConsumer, WithN>) {
+export function withCurrentUserCtx<P>(
+  Component: ComponentType<P & Partial<Record<WithN, CurrentUserContext>>>,
+): ComponentType<Omit<P, WithN>> {
   return withContext(CurrentUserContextConsumer, WithN)(Component)
 }
