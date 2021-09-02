@@ -151,7 +151,6 @@
       <option name="XML_KEEP_LINE_BREAKS_IN_TEXT" value="false" />
     </XML>
     <yaml>
-      <option name="ALIGN_VALUES_PROPERTIES" value="2" />
       <option name="SEQUENCE_ON_NEW_LINE" value="true" />
     </yaml>
     <codeStyleSettings language="CSS">

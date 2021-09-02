@@ -15,12 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  createTheme,
-  responsiveFontSizes,
-  Theme,
-  ThemeOptions,
-} from '../mui'
+import { createTheme, responsiveFontSizes, Theme, ThemeOptions } from '../../vendor/mui'
 
 
 export type CreateResponsiveThemeOptions = {
@@ -81,7 +76,7 @@ export function createResponsiveTheme(options: CreateResponsiveThemeOptions): Th
   theme = responsiveFontSizes(theme, {
     // Override to include `xs` and `xl` - default: ['sm', 'md', 'lg']
     breakpoints: ['xs', 'sm', 'md', 'lg', 'xl'],
-    ...responsiveFontSizesOptions
+    ...responsiveFontSizesOptions,
   })
 
   return theme

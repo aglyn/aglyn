@@ -15,16 +15,21 @@
  * limitations under the License.
  */
 
+import { ThemeOptions } from '../../vendor/mui'
 
-export * from './vendor/mui'
-export * from './vendor/emotion'
 
-export * from './lib/builder-theme'
-export * from './lib/console-theme'
-
-export * from './lib/hocs/with-emotion-styles-cache-client'
-export * from './lib/hocs/with-theme'
-
-export * from './lib/util/create-responsive-theme'
-export * from './lib/util/generate-utility-classes'
-export * from './lib/util/use-font-family'
+export const consoleOverrides: ThemeOptions['components'] = {
+  MuiAvatar: {
+    styleOverrides: {
+      root: {
+        width: 32,
+        height: 32,
+      },
+    },
+  },
+  MuiIconButton: {
+    // color: 'inherit', // Default color to inherit
+    styleOverrides: {root: {padding: 8}},
+  },
+}
+export default consoleOverrides

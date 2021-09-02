@@ -27,6 +27,7 @@ import {
   EmotionCache,
   getConsoleMetaThemeColor,
 } from '@aglyn/shared/ui/themes'
+import crypto from 'crypto'
 import Document from 'next/document'
 import NextDocument, {
   DocumentContext,
@@ -57,12 +58,17 @@ const metaElements: MakeMetaElementsConfig = [
   ['theme-color', getConsoleMetaThemeColor('dark'), {media: '(prefers-color-scheme: dark)'}],
 ]
 const linkElements: MakeLinkElementsConfig = [
-  ['shortcut icon', '/images/favicons/favicon.ico'],
-  ['icon', '/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
-  ['alternate icon', '/images/favicons/favicon.png', {type: 'image/png'}],
-  ['manifest', '/_pwa/manifest.json'],
+  ['shortcut icon', '/_static/images/favicons/favicon.ico'],
+  ['icon', '/_static/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
+  ['alternate icon', '/_static/images/favicons/favicon.png', {type: 'image/png'}],
+  ['manifest', '/_static/_pwa/manifest.json'],
   ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
 ]
+const cspHashOf = (text) => {
+  const hash = crypto.createHash('sha256')
+  hash.update(text)
+  return `'sha256-${hash.digest('base64')}'`
+}
 
 export type LangParam = { lang?: string }
 export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
@@ -151,10 +157,21 @@ class _Document<P extends _DocumentProps> extends Document<P> {
 
   public render(): JSX.Element {
     const {lang} = this.props
+
+    let csp = `default-src 'self'; script-src 'self' ${cspHashOf(
+      NextScript.getInlineScriptSource(this.props),
+    )}`
+    if (isProduction) {
+      csp = `default-src \'self\' aglyn.com *.aglyn.com' ${cspHashOf(
+        NextScript.getInlineScriptSource(this.props),
+      )}`
+    }
+
     return (
       <Html lang={lang}>
         <Head>
           <meta charSet="utf-8"/>
+          {/*<meta httpEquiv="Content-Security-Policy" content={csp}/>*/}
           {makeLinkElements(preconnectElements)}
           {makeMetaElements(metaElements)}
           {makeLinkElements(linkElements)}

@@ -22,7 +22,7 @@ import {
 } from '@aglyn/framework/renderer'
 import { AglynComponent, AglynComponentData } from '@aglyn/framework/sdk'
 import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared/ui/react'
-import { builderTheme, withThemeProvider } from '@aglyn/shared/ui/themes'
+import { builderTheme, consoleTheme, withTheme } from '@aglyn/shared/ui/themes'
 import NoSsr from '@material-ui/core/NoSsr'
 import { forwardRef, Fragment } from 'react'
 import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
@@ -85,6 +85,6 @@ BuilderComponentRaw.defaultProps = {
   elements: [],
 }
 
-export const BuilderComponent = withThemeProvider(builderTheme)(BuilderComponentRaw)
+export const BuilderComponent = withTheme({theme: builderTheme})(BuilderComponentRaw)
 
 export default BuilderComponent

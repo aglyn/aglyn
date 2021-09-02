@@ -27,7 +27,7 @@ import {
   consoleTheme,
   createEmotionCache,
   EmotionCache,
-  withThemeProvider,
+  withTheme,
 } from '@aglyn/shared/ui/themes'
 import CssBaseline from '@material-ui/core/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
@@ -55,7 +55,7 @@ catch (e) {
   console.error(e, 'initialize aglyn app')
 }
 
-const AppWrapper = withThemeProvider(consoleTheme)(function AppWrapper(props) {
+const AppWrapper = withTheme({theme:consoleTheme})(function AppWrapper(props) {
   const {children} = props
   const Wrapper = isProduction ? Fragment : Fragment // StrictMode
 

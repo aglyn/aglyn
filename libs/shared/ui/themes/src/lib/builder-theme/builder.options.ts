@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
+import { ThemeOptions } from '../../vendor/mui'
+import { builderOverrides } from './builder.overrides'
+import { builderPalette } from './builder.palette'
+import { builderTypography } from './builder.typography'
 
-export * from './vendor/mui'
-export * from './vendor/emotion'
 
-export * from './lib/builder-theme'
-export * from './lib/console-theme'
-
-export * from './lib/hocs/with-emotion-styles-cache-client'
-export * from './lib/hocs/with-theme'
-
-export * from './lib/util/create-responsive-theme'
-export * from './lib/util/generate-utility-classes'
-export * from './lib/util/use-font-family'
+export const builderOptions: ThemeOptions = {
+  palette: builderPalette.LIGHT,
+  typography: builderTypography,
+  components: builderOverrides,
+}
+export const builderOptionsDark: ThemeOptions = {
+  palette: builderPalette.DARK,
+  typography: builderTypography,
+  components: builderOverrides,
+}
+export default builderOptions

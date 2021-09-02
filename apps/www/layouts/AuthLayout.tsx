@@ -16,7 +16,7 @@
  */
 
 import { AglynSvgLogo } from '@aglyn/shared/ui/react'
-import { Theme, createStyles, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
+import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
 import Box, { BoxProps } from '@material-ui/core/Box'
 import Container from '@material-ui/core/Container'
 import Slide from '@material-ui/core/Slide'
@@ -76,7 +76,7 @@ const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
         className={clsx(classes.root, className)}
         display="flex"
         height="100vh"
-        url={'/images/backgrounds/patterns/abstract-wave-lines.svg'}
+        url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
         fixed
         {...rest}
       >

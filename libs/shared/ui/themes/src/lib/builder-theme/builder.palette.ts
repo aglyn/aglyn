@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
+import { PaletteOptions } from '../../vendor/mui'
+import { ConsolePalette, consolePalette } from '../console-theme/console.palette'
 
-export * from './vendor/mui'
-export * from './vendor/emotion'
 
-export * from './lib/builder-theme'
-export * from './lib/console-theme'
-
-export * from './lib/hocs/with-emotion-styles-cache-client'
-export * from './lib/hocs/with-theme'
-
-export * from './lib/util/create-responsive-theme'
-export * from './lib/util/generate-utility-classes'
-export * from './lib/util/use-font-family'
+export const builderPalette: Record<Uppercase<ConsolePalette.ColorVariant>, PaletteOptions> = {
+  LIGHT: {
+    ...consolePalette.LIGHT,
+    primary: {main: '#0091EA'},
+    secondary: {main: '#E040FB'},
+    tertiary: {main: '#37474F'},
+  },
+  DARK: {
+    ...consolePalette.DARK,
+    primary: {main: '#37474F'},
+    secondary: {main: '#E040FB'},
+    tertiary: {main: '#0091EA'},
+  },
+}
+export default builderPalette

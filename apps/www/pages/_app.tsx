@@ -26,7 +26,7 @@ import {
   consoleTheme,
   createEmotionCache,
   EmotionCache,
-  ThemeProvider,
+  withTheme,
 } from '@aglyn/shared/ui/themes'
 import CssBaseline from '@material-ui/core/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
@@ -67,7 +67,7 @@ export interface _AppProps extends NextAppProps {
   emotionCache?: EmotionCache
 }
 
-function AppWrapper(props) {
+const AppWrapper = withTheme({theme: consoleTheme})(function AppWrapper(props) {
   const {children} = props
 
   useEffect(() => {
@@ -93,23 +93,21 @@ function AppWrapper(props) {
       </Head>
       <AppContextProvider value={app}>
         <CurrentUserProviderComponent>
-          <ThemeProvider theme={consoleTheme}>
-            <CssBaseline/>
-            <div className="app">
-              <AppLoaderProviderComponent>
-                <main>
-                  {children}
-                </main>
+          <CssBaseline/>
+          <div className="app">
+            <AppLoaderProviderComponent>
+              <main>
+                {children}
+              </main>
 
-                <AppLoaderOverlayView/>
-              </AppLoaderProviderComponent>
-            </div>
-          </ThemeProvider>
+              <AppLoaderOverlayView/>
+            </AppLoaderProviderComponent>
+          </div>
         </CurrentUserProviderComponent>
       </AppContextProvider>
     </Wrapper>
   )
-}
+})
 
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()

@@ -22,6 +22,7 @@ import MuiLink from '@material-ui/core/Link'
 import Typography from '@material-ui/core/Typography'
 import { ElementType, forwardRef, HTMLAttributes } from 'react'
 import { footerNavigation } from '../const'
+import NextImage from 'next/image'
 
 
 export interface SiteFooterViewProps extends HTMLAttributes<HTMLElement> {
@@ -58,11 +59,11 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps>(
                   xs: 12, sm: 6, md: 3,
                   children: (
                     <>
-                      <img
-                        src="/images/brand/aglyn-logo.svg"
-                        width={150}
-                        height={'auto'}
-                        alt="aglyn logo"
+                      <NextImage
+                        src="/_static/images/brand/aglyn-logo.svg"
+                        width={135}
+                        height={48}
+                        alt="aglyn"
                       />
                       <br/>
                       <br/>
