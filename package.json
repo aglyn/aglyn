@@ -32,7 +32,8 @@
     "help": "nx help",
     "firebase:emulate": "firebase emulators:start --import=./.firebase --export-on-exit",
     "cz": "cz",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "vercel:build:app:www": "npx nx build www --prod --verbose --outputPath=./dist/apps/www"
   },
   "dependencies": {
     "@data-driven-forms/mui-component-mapper": "^3.11.4",
