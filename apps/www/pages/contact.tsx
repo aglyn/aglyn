@@ -21,14 +21,14 @@ import FormTemplateRenderProps
 import FormRenderer from '@data-driven-forms/react-form-renderer/form-renderer'
 import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
 import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
-import Box from '@material-ui/core/Box'
-import Button from '@material-ui/core/Button'
-import Container from '@material-ui/core/Container'
-import Grid from '@material-ui/core/Grid'
-import LinearProgress from '@material-ui/core/LinearProgress'
-import Typography from '@material-ui/core/Typography'
-import Alert from '@material-ui/lab/Alert'
-import AlertTitle from '@material-ui/lab/AlertTitle'
+import Alert from '@mui/lab/Alert'
+import AlertTitle from '@mui/lab/AlertTitle'
+import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import Container from '@mui/material/Container'
+import Grid from '@mui/material/Grid'
+import LinearProgress from '@mui/material/LinearProgress'
+import Typography from '@mui/material/Typography'
 import React, { useCallback } from 'react'
 import { mainNavigation, productNames } from '../const'
 import { DdfForms } from '../forms'
@@ -87,7 +87,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
       {/*})}*/}
       <FormSpy>
         {() => (
-          <Grid item xs={12} align="center">
+          <Grid item xs={12} sx={{textAlign: 'center'}}>
             {submitting && (
               <Box mb={1}>
                 <LinearProgress color="secondary"/>

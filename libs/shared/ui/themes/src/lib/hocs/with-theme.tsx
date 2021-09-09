@@ -16,42 +16,31 @@
  */
 
 import { getDisplayName } from '@aglyn/shared/util/tools'
-import { Component as ReactComponent, ComponentType } from 'react'
+import CssBaseline from '@mui/material/CssBaseline'
+import { ComponentType } from 'react'
 import { Theme, ThemeProvider } from '../../vendor/mui'
 
 
-export type InjectableThemeProps = {
-  theme?: Theme
-}
-
 export type WithThemeOptions = {
   theme: Theme
+  cssBaseline?: boolean
 }
 
 export function withTheme(options: WithThemeOptions) {
-  const {theme} = options
+  const {theme, cssBaseline} = {...options}
   return function <P>(Component: ComponentType<P>) {
     const displayName = `WithTheme(${getDisplayName(Component)})`
 
-    return class WithTheme extends ReactComponent<P & InjectableThemeProps> {
-      public static displayName: string = displayName
-      public static WrappedComponent: ComponentType<P> = Component
-      public static defaultTheme: Theme = theme
-      public injectedTheme?: Theme = null
-
-      constructor(props) {
-        super(props)
-        this.injectedTheme = props.theme || null
-      }
-      public render(): React.ReactNode {
-        const {theme, ...rest} = this.props
-        return (
-          <ThemeProvider theme={theme || WithTheme.defaultTheme}>
-            <Component {...rest as P}/>
-          </ThemeProvider>
-        )
-      }
+    function WithTheme(props: P) {
+      return (
+        <ThemeProvider theme={theme}>
+          {cssBaseline ? <CssBaseline/> : null}
+          <Component {...props}/>
+        </ThemeProvider>
+      )
     }
+    WithTheme.displayName = displayName
+    return WithTheme
   }
 }
 export default withTheme

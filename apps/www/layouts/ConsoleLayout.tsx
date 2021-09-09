@@ -19,8 +19,8 @@ import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn
 import { styled } from '@aglyn/shared/ui/themes'
 import { _isStrT } from '@aglyn/shared/util/guards'
 import { _s, copy } from '@aglyn/shared/util/tools'
-import Container from '@material-ui/core/Container'
-import Typography from '@material-ui/core/Typography'
+import Container from '@mui/material/Container'
+import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
 import React from 'react'
 import Breadcrumbs from '../components/Breadcrumbs'
@@ -134,7 +134,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
                 {...(_isStrT(header.icon) ? {iconId: header.icon} : header.icon)}
                 className={clsx(
                   // classes.icon,
-                  _isStrT(header.icon) ? null : header.icon.className
+                  _isStrT(header.icon) ? null : header.icon.className,
                 )}
               />
             ) : null}

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { forwardRef, ReactNode } from 'react'
-import MuiTextField, { TextFieldProps as MuiTextFieldProps } from '@material-ui/core/TextField'
 import useFieldApi, { UseFieldApiConfig } from '@data-driven-forms/react-form-renderer/use-field-api'
+import MuiTextField, { TextFieldProps as MuiTextFieldProps } from '@mui/material/TextField'
+import { forwardRef, ReactNode } from 'react'
 import { withGridItem } from '../field-hocs'
 import { validationMessage } from '../utils'
 
@@ -32,7 +32,7 @@ export type FieldTextareaProps = MuiTextFieldProps & UseFieldApiConfig & {
 
 
 const FieldTextarea = forwardRef<any, FieldTextareaProps>(
-  function  RefRenderFn(props, ref) {
+  function RefRenderFn(props, ref) {
     const {
       input,
       isReadOnly,
@@ -57,7 +57,7 @@ const FieldTextarea = forwardRef<any, FieldTextareaProps>(
         disabled={isDisabled}
         error={Boolean(invalidMessage)}
         helperText={helpText}
-        inputProps={{ readOnly: isReadOnly, ...inputProps }}
+        inputProps={{readOnly: isReadOnly, ...inputProps}}
         label={label}
         placeholder={placeholder}
         required={isRequired}
@@ -66,7 +66,7 @@ const FieldTextarea = forwardRef<any, FieldTextareaProps>(
         {...rest}
       />
     )
-  }
+  },
 )
 
 FieldTextarea.displayName = 'FieldTextarea'

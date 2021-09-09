@@ -17,13 +17,13 @@
 
 import { OverrideableComponentProps } from '@aglyn/shared/ui/react'
 import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
-import LinearProgress, { LinearProgressProps as MuiLinearProgressProps } from '@material-ui/core/LinearProgress'
 import {
   DataGrid,
   DataGridProps as MuiDataGridProps,
   GridOverlay,
   GridOverlayProps,
 } from '@material-ui/data-grid'
+import LinearProgress, { LinearProgressProps as MuiLinearProgressProps } from '@mui/material/LinearProgress'
 import clsx from 'clsx'
 import { forwardRef, HTMLAttributes } from 'react'
 

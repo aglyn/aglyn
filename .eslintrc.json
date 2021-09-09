@@ -6,85 +6,87 @@
     {
       "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
       "rules": {
-        "@nrwl/nx/enforce-module-boundaries": ["error", {
-          "enforceBuildableLibDependency": true,
-          "allow": [],
-          "depConstraints": [
-            {
-              "sourceTag": "scope:app",
-              "onlyDependOnLibsWithTags": [
-                "scope:app",
-                "scope:lib"
-              ]
-            },
-            {
-              "sourceTag": "scope:app:www",
-              "onlyDependOnLibsWithTags": [
-                "*"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:shared",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:shared"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:shared:util",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:shared:util"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:shared:feature",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:shared:feature"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:framework",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:framework",
-                "scope:lib:shared"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:framework:sdk",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:framework:sdk",
-                "scope:lib:shared:util",
-                "scope:lib:shared:feature"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:framework:feature",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:framework:feature",
-                "scope:lib:framework:sdk",
-                "scope:lib:shared"
-              ]
-            },
-            {
-              "sourceTag": "scope:lib:framework:plugin",
-              "onlyDependOnLibsWithTags": [
-                "scope:lib:framework:plugin",
-                "scope:lib"
-              ]
-            },
-            {
-              "sourceTag": "*",
-              "onlyDependOnLibsWithTags": [
-                "*"
-              ]
-            }
-          ]
-        }]
+        "@nrwl/nx/enforce-module-boundaries": [
+          "error", {
+            "enforceBuildableLibDependency": true,
+            "allow": [],
+            "depConstraints": [
+              {
+                "sourceTag": "scope:app",
+                "onlyDependOnLibsWithTags": [
+                  "scope:app",
+                  "scope:lib"
+                ]
+              },
+              {
+                "sourceTag": "scope:app:www",
+                "onlyDependOnLibsWithTags": [
+                  "*"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:shared",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:shared:util",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:shared:util"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:shared:feature",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:shared:feature"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:framework",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:framework",
+                  "scope:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:framework:sdk",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:framework:sdk",
+                  "scope:lib:shared:util",
+                  "scope:lib:shared:feature"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:framework:feature",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:framework:feature",
+                  "scope:lib:framework:sdk",
+                  "scope:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:framework:plugin",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:framework:plugin",
+                  "scope:lib"
+                ]
+              },
+              {
+                "sourceTag": "*",
+                "onlyDependOnLibsWithTags": [
+                  "*"
+                ]
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -110,16 +112,14 @@
     {
       "files": ["*.tsx"],
       "rules": {
-        "no-restricted-imports": ["error", {
-          "patterns": [
-            "@material-ui/*/*/*",
-            "@material-ui/core/styles",
-            "@material-ui/core/styles/*",
-            "@material-ui/styles",
-            "@material-ui/styles/*",
-            "!@material-ui/core/test-utils/*"
-          ]
-        }]
+        "no-restricted-imports": [
+          "error", {
+            "patterns": [
+              "@mui/*/*/*",
+              "!@mui/material/test-utils/*"
+            ]
+          }
+        ]
       }
     }
   ]

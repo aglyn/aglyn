@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { SvgPathIcon } from '@aglyn/shared/ui/react'
-import { AppLink } from '@aglyn/shared/ui/react'
-import { generateUtilityClasses, createStyles, makeStyles, styled, Theme } from '@aglyn/shared/ui/themes'
+import { AppLink, SvgPathIcon } from '@aglyn/shared/ui/react'
+import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
 import {
   Collapse,
   IconButton,
@@ -25,7 +24,7 @@ import {
   ListItemButton,
   ListItemText,
   ListSubheader,
-} from '@material-ui/core'
+} from '@mui/material'
 import clsx from 'clsx'
 import React, { forwardRef } from 'react'
 import WidgetCard, { Props as WidgetCardProps } from '../components/WidgetCard'
@@ -42,7 +41,7 @@ const classKeys = generateUtilityClasses('AreaManageNavigationListWidgetView', [
 ])
 
 const StyledListItem = styled(ListItemButton, {
-  name: 'ListItem'
+  name: 'ListItem',
 })(({theme}) => ({
   position: 'relative',
   [`&.${classKeys.active}`]: {
@@ -72,8 +71,8 @@ const StyledListItem = styled(ListItemButton, {
     },
   },
   [`&.${classKeys.nested}`]: {
-    paddingLeft: theme.spacing(4)
-  }
+    paddingLeft: theme.spacing(4),
+  },
 }))
 
 export interface AreaManageNavigationListWidgetViewProps extends Partial<WidgetCardProps> {
@@ -196,11 +195,11 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<any, AreaManageNavigati
         </List>
       </WidgetCard>
     )
-  }
+  },
 )
 
 AreaManageNavigationListWidgetViewRaw.displayName = 'AreaManageNavigationListWidgetView'
 export const AreaManageNavigationListWidgetView = withAggregatedPageMeta(
-  AreaManageNavigationListWidgetViewRaw
+  AreaManageNavigationListWidgetViewRaw,
 )
 export default AreaManageNavigationListWidgetView

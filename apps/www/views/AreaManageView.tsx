@@ -18,7 +18,7 @@
 import { SvgPathIcon } from '@aglyn/shared/ui/react'
 import { createUid } from '@aglyn/shared/util/helpers'
 import { _s, remap } from '@aglyn/shared/util/tools'
-import IconButton from '@material-ui/core/IconButton'
+import IconButton from '@mui/material/IconButton'
 import { useRouter } from 'next/router'
 import { useSnackbar } from 'notistack'
 import { ChangeEvent, Fragment, useCallback, useEffect, useState } from 'react'

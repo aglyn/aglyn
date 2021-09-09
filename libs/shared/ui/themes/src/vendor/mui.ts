@@ -69,13 +69,13 @@ import {
   TypographyVariantsOptions,
   useTheme,
   useThemeProps,
-} from '@material-ui/core/styles'
-// import { Components } from '@material-ui/core/styles/components'
-// import { Mixins, MixinsOptions } from '@material-ui/core/styles/createMixins'
-// import { Typography, TypographyOptions } from '@material-ui/core/styles/createTypography'
-// import { ResponsiveFontSizesOptions } from '@material-ui/core/styles/responsiveFontSizes'
-// import { Shadows } from '@material-ui/core/styles/shadows'
-// import { ZIndex, ZIndexOptions } from '@material-ui/core/styles/zIndex'
+} from '@mui/material/styles'
+// import { Components } from '@mui/material/styles/components'
+// import { Mixins, MixinsOptions } from '@mui/material/styles/createMixins'
+// import { Typography, TypographyOptions } from '@mui/material/styles/createTypography'
+// import { ResponsiveFontSizesOptions } from '@mui/material/styles/responsiveFontSizes'
+// import { Shadows } from '@mui/material/styles/shadows'
+// import { ZIndex, ZIndexOptions } from '@mui/material/styles/zIndex'
 import {
   BaseCreateCSSProperties,
   BaseCSSProperties,
@@ -104,21 +104,21 @@ import {
   WithTheme,
   withThemeCreator,
   WithThemeCreatorOption,
-} from '@material-ui/styles'
-import { ClassKeyInferable } from '@material-ui/styles/withStyles'
-import { ShapeOptions, Spacing, SpacingOptions } from '@material-ui/system'
+} from '@mui/styles'
+import { ClassKeyInferable } from '@mui/styles/withStyles'
+import { ShapeOptions, Spacing, SpacingOptions } from '@mui/system'
 
 
 export * as JSS from 'jss'
 export { default as jssRtl } from 'jss-rtl'
 
-declare module '@material-ui/core/styles' {
+declare module '@mui/material/styles' {
   /**
    * START EXAMPLE – MODULE AUGMENTATION ↓
    * ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄
    * ```typescript
    * // Add new property ↓
-   * declare module '@material-ui/core/styles' {
+   * declare module '@mui/material/styles' {
    *   interface Theme {
    *     status: {
    *       danger: React.CSSProperties['color'],
@@ -137,7 +137,7 @@ declare module '@material-ui/core/styles' {
    * })
    *
    * // Add to existing property (e.g., palette, typography) ↓
-   * declare module "@material-ui/core/styles" {
+   * declare module "@mui/material/styles" {
    *   interface Palette {
    *     neutral: Palette['primary']
    *   }
@@ -197,7 +197,7 @@ declare module '@material-ui/core/styles' {
     > = P & WithStyles<StylesType, IncludeTheme>
 }
 
-declare module '@material-ui/styles' {
+declare module '@mui/styles' {
   interface DefaultTheme extends Theme {}
 }
 

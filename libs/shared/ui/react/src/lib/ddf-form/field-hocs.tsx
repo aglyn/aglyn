@@ -17,7 +17,7 @@
 
 import { styled } from '@aglyn/shared/ui/themes'
 import { getDisplayName } from '@aglyn/shared/util/tools'
-import MuiGrid, { GridProps as MuiGridProps } from '@material-ui/core/Grid'
+import MuiGrid, { GridProps as MuiGridProps } from '@mui/material/Grid'
 import {
   ComponentType,
   forwardRef,

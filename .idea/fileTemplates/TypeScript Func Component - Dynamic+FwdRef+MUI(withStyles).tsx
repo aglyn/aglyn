@@ -7,7 +7,7 @@
  */
 
 import { ElementType, forwardRef, ReactNode, HTMLAttributes } from 'react'
-import { createStyles, Theme, withStyles, WithStyles } from '@material-ui/core/styles'
+import { createStyles, Theme, withStyles, WithStyles } from '@mui/material/styles'
 import clsx from 'clsx'
 
 
@@ -21,7 +21,7 @@ export interface ${NAME}Props<C extends React.ElementType = any> extends WithSty
 
 export const Unstyled${NAME} = forwardRef<any, ${NAME}Props>(
   function RefRenderFn(props, ref) {
-    const { 
+    const {
       children,
       component: Component,
       className: prop_className,
@@ -31,9 +31,9 @@ export const Unstyled${NAME} = forwardRef<any, ${NAME}Props>(
     const className = clsx(classes.root, classNameProp)
 
     return (
-      <Component 
+      <Component
         ref={ref}
-        className={className} 
+        className={className}
         {...rest}
       >
         {children}
@@ -42,8 +42,8 @@ export const Unstyled${NAME} = forwardRef<any, ${NAME}Props>(
   }
 )
 
-const ${NAME} = withStyles(${NAME}Styles, { 
-  name: '${NAME}' 
+const ${NAME} = withStyles(${NAME}Styles, {
+  name: '${NAME}'
 })(Unstyled${NAME})
 ${NAME}.displayName = '${NAME}'
 ${NAME}.defaultProps = {

@@ -17,8 +17,8 @@
 
 import { _isObj } from '@aglyn/shared/util/guards'
 import { Conditional } from '@aglyn/shared/util/types'
-import MuiButton, { ButtonProps as MuiButtonProps } from '@material-ui/core/Button'
-import MuiLink, { LinkProps as MuiLinkProps } from '@material-ui/core/Link'
+import MuiButton, { ButtonProps as MuiButtonProps } from '@mui/material/Button'
+import MuiLink, { LinkProps as MuiLinkProps } from '@mui/material/Link'
 import clsx from 'clsx'
 import { useRouter } from 'next/router'
 import { ElementType, forwardRef } from 'react'

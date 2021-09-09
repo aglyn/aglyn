@@ -25,20 +25,20 @@ import {
   SvgPathIcon,
 } from '@aglyn/shared/ui/react'
 import { darken, styled } from '@aglyn/shared/ui/themes'
-import { _isArr, _isObj } from '@aglyn/shared/util/guards'
-import AppBar from '@material-ui/core/AppBar'
-import Avatar from '@material-ui/core/Avatar'
-import Box from '@material-ui/core/Box'
-import { cyan, purple } from '@material-ui/core/colors'
-import Container from '@material-ui/core/Container'
-import IconButton, { IconButtonProps } from '@material-ui/core/IconButton'
-import Tab, { TabProps } from '@material-ui/core/Tab'
-import Tabs from '@material-ui/core/Tabs'
-import Toolbar from '@material-ui/core/Toolbar'
-import Typography from '@material-ui/core/Typography'
+import { _isArr, _isArrEmpty, _isObj } from '@aglyn/shared/util/guards'
+import AppBar, {AppBarProps} from '@mui/material/AppBar'
+import Avatar from '@mui/material/Avatar'
+import Box from '@mui/material/Box'
+import { cyan, purple } from '@mui/material/colors'
+import Container from '@mui/material/Container'
+import IconButton, { IconButtonProps } from '@mui/material/IconButton'
+import Tab, { TabProps } from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
+import Toolbar from '@mui/material/Toolbar'
+import Typography from '@mui/material/Typography'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import { Fragment, ReactNode } from 'react'
+import { ElementType, Fragment, ReactNode } from 'react'
 import { Breadcrumbs, BreadcrumbsProps } from '../components/Breadcrumbs'
 import Copyright from '../components/Copyright'
 import { APP, tailNavigation } from '../const'
@@ -57,9 +57,9 @@ const StyledLogo = styled(AglynSvgLogo, {
   [theme.breakpoints.up('md')]: {fontSize: theme.typography.pxToRem(60)},
 }))
 
-const StyledAppBar = styled(AppBar, {
-  name: 'AppBar',
-})(({theme}) => ({
+const InnerAppBarTop = styled(AppBar, {
+  name: 'InnerAppBarTop',
+})<AppBarProps<ElementType>>(({theme}) => ({
   '&:after': {
     content: '" "',
     left: 0,
@@ -70,6 +70,14 @@ const StyledAppBar = styled(AppBar, {
     position: 'absolute',
     backgroundColor: theme.palette.divider,
   },
+}))
+
+const TabBarTitle = styled('div', {
+  name: 'TabBarTitle',
+})(({theme}) => ({
+  ...theme.typography.h6,
+  paddingRight: theme.spacing(2),
+  fontWeight: theme.typography.fontWeightLight,
 }))
 
 const StyledLeft = styled('div', {
@@ -236,12 +244,12 @@ export interface MainLayoutProps {
   navTabItems?: (TabProps & AppLinkProps<'text'> & { iconId: string })[]
   quickActionMenus?: QuickActionsMenuItem[]
   productName?: string
-  footerNavItems: GridButtonsProps['items']
+  footerNavItems?: GridButtonsProps['items']
   aggregatedPageMeta: AggregatedPageMeta
   currentUserContext: CurrentUserContextType
 }
 
-const MainLayout = function RefRenderFn(props: MainLayoutProps) {
+function MainLayoutRaw(props: MainLayoutProps) {
   const router = useRouter()
   const {
     children,
@@ -269,12 +277,11 @@ const MainLayout = function RefRenderFn(props: MainLayoutProps) {
     return currentHref.length > prevHref.length ? current : prev
   }).href ?? '' : ''
 
-  const buildIconButton = ({avatar, iconId, children, ...item}, i) => (
+  const buildIconButton = ({avatar, iconId, children, ...rest}, i) => (
     <IconButton
-      key={item.id ?? item.href ?? i}
+      key={rest.id ?? rest['href'] ?? i}
       color="inherit"
-      sx={{p: avatar ? 0.5 : undefined}}
-      {...item}
+      {...rest}
     >
       {avatar
         ? (<StyledAvatar {...avatar}/>)
@@ -313,12 +320,17 @@ const MainLayout = function RefRenderFn(props: MainLayoutProps) {
         <title>{`${title ?? 'Web App'}`}</title>
       </Head>
       <AppBar
-        // component="header"
-        color="transparent"
+        component="header"
         elevation={3}
+        color="transparent"
         position="fixed"
       >
-        <StyledAppBar color="primary" elevation={0} position="relative">
+        <InnerAppBarTop
+          component={'div'}
+          elevation={0}
+          color="primary"
+          position="relative"
+        >
           <Container maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
             <Toolbar>
               <StyledLeft>
@@ -339,9 +351,9 @@ const MainLayout = function RefRenderFn(props: MainLayoutProps) {
               </StyledRight>
             </Toolbar>
           </Container>
-        </StyledAppBar>
-        {(tabBarTitle || _isArr(navTabItems)) ? (
-          <AppBar color="primary" elevation={0} position="static">
+        </InnerAppBarTop>
+        {(tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems))) ? (
+          <AppBar component="div" color="primary" elevation={0} position="static">
             <Container maxWidth={NAVIGATION_MAX_WIDTH}>
               <StyledTabs
                 aria-label="area navigation"
@@ -352,15 +364,7 @@ const MainLayout = function RefRenderFn(props: MainLayoutProps) {
                 variant="scrollable"
               >
                 {tabBarTitle && (
-                  <Typography
-                    children={tabBarTitle}
-                    component="div"
-                    variant="h6"
-                    sx={{
-                      pr: 2,
-                      fontWeight: 'fontWeightLight',
-                    }}
-                  />
+                  <TabBarTitle children={tabBarTitle}/>
                 )}
                 {navTabItems && navTabItems.map(({iconId, ...item}, i) => (
                   <StyledTab
@@ -406,10 +410,13 @@ const MainLayout = function RefRenderFn(props: MainLayoutProps) {
             </StyledLeft>
             <StyledRight>
               <GridButtons
-                items={footerNavItems.map(i => ({
-                  size: 'small', component: AppLink, linkType: 'button', ...i,
-                }))}
                 spacing={1}
+                items={footerNavItems.map(i => ({
+                  size: 'small',
+                  component: AppLink,
+                  linkType: 'button',
+                  ...i,
+                }))}
               />
             </StyledRight>
 
@@ -437,13 +444,16 @@ const MainLayout = function RefRenderFn(props: MainLayoutProps) {
   )
 }
 
-MainLayout.displayName = 'MainLayout'
-MainLayout.defaultProps = {
+MainLayoutRaw.displayName = 'MainLayout'
+MainLayoutRaw.defaultProps = {
   footerNavItems: tailNavigation as any,
   aggregatedPageMeta: {} as any,
   currentUserContext: {} as any,
 }
 
-export default withCurrentUserContext(withAggregatedPageMeta(
-  MainLayout,
-))
+export const MainLayout = withCurrentUserContext(
+  withAggregatedPageMeta(
+    MainLayoutRaw,
+  ),
+)
+export default MainLayout

@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import { NavbarDrawer, SvgPathIcon, NavbarDrawerProps } from '@aglyn/shared/ui/react'
-import { createStyles, alpha, makeStyles, Theme, withStyles, WithStyles, ExtendPropsOfWithStyles } from '@aglyn/shared/ui/themes'
+import { NavbarDrawer, NavbarDrawerProps, SvgPathIcon } from '@aglyn/shared/ui/react'
+import { alpha, createStyles, ExtendPropsOfWithStyles, withStyles } from '@aglyn/shared/ui/themes'
 import { _isStrT } from '@aglyn/shared/util/guards'
 import { remap } from '@aglyn/shared/util/tools'
-import { Box, Button } from '@material-ui/core'
-import Container from '@material-ui/core/Container'
-import IconButton from '@material-ui/core/IconButton'
-import LinearProgress from '@material-ui/core/LinearProgress'
-import Typography from '@material-ui/core/Typography'
+import { Box, Button } from '@mui/material'
+import Container from '@mui/material/Container'
+import IconButton from '@mui/material/IconButton'
+import LinearProgress from '@mui/material/LinearProgress'
+import Typography from '@mui/material/Typography'
 import React, { forwardRef } from 'react'
 import FieldSet from '../components/FieldSet'
 import { Fields } from '../forms'
@@ -44,7 +44,7 @@ export const drawerFormViewStyles = (theme) => createStyles({
 
 export type FormVariant = 'creating' | 'updating'
 
-export interface DrawerFormViewProps extends ExtendPropsOfWithStyles<Partial<NavbarDrawerProps>, typeof drawerFormViewStyles>  {
+export interface DrawerFormViewProps extends ExtendPropsOfWithStyles<Partial<NavbarDrawerProps>, typeof drawerFormViewStyles> {
   id: string,
   fields: Fields.FieldGroup
   label: string
@@ -156,7 +156,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
 
       </NavbarDrawer>
     )
-  }
+  },
 )
 
-export default withStyles(drawerFormViewStyles, {name:'DrawerFormView'})(DrawerFormView)
+export default withStyles(drawerFormViewStyles, {name: 'DrawerFormView'})(DrawerFormView)

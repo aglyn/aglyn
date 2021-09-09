@@ -16,20 +16,28 @@
  */
 
 import { AppLink, GridItems } from '@aglyn/shared/ui/react'
-import Box from '@material-ui/core/Box'
-import Container from '@material-ui/core/Container'
-import MuiLink from '@material-ui/core/Link'
-import Typography from '@material-ui/core/Typography'
+import { styled } from '@aglyn/shared/ui/themes'
+import Box from '@mui/material/Box'
+import Container from '@mui/material/Container'
+import MuiLink from '@mui/material/Link'
+import Typography from '@mui/material/Typography'
+import NextImage from 'next/image'
 import { ElementType, forwardRef, HTMLAttributes } from 'react'
 import { footerNavigation } from '../const'
-import NextImage from 'next/image'
 
 
-export interface SiteFooterViewProps extends HTMLAttributes<HTMLElement> {
+const FooterElement = styled('footer', {
+  name: 'FooterElement',
+})({
+  background: 'none',
+})
+
+
+export interface SiteFooterViewProps extends HTMLAttributes<HTMLDivElement> {
   component?: ElementType
 }
 
-const SiteFooterView = forwardRef<any, SiteFooterViewProps>(
+const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
   function RefRenderFn(props, ref) {
     const {
       children,
@@ -38,10 +46,8 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps>(
     } = props
 
     return (
-      <Box
+      <FooterElement
         ref={ref}
-        component={'footer'}
-        sx={{background: 'none'}}
         {...rest}
       >
         <Box sx={{pt: 4}}>
@@ -104,11 +110,11 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps>(
             />
           </Container>
         </Box>
-      </Box>
+      </FooterElement>
     )
   },
 )
 
 SiteFooterView.displayName = 'SiteFooterView'
-
+export { SiteFooterView }
 export default SiteFooterView

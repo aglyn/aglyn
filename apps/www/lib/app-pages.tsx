@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-import React, { ComponentType } from 'react'
-import { Normalized } from './aglyn-deprecated'
+import { getDisplayName } from '@aglyn/shared/util/tools'
 import { NextRouter, Router, useRouter } from 'next/router'
+import { ComponentType, forwardRef, HTMLAttributes } from 'react'
+import { Normalized } from './aglyn-deprecated'
+
 
 type ID = string // The slug of the page excluding parent
 type Paths = ID[] // The paths to be used to join with a `/`
@@ -90,10 +92,11 @@ export function buildPagePath(page: PageMeta): ID {
 }
 export function addArea(meta: PageMetaWithoutId): PageMeta {
   const path = buildPagePath(meta)
-  const area = areas.set(path, { ...meta, id: path }).get(path)
+  const area = areas.set(path, {...meta, id: path}).get(path)
   const parent = getAreaParent(area)
   if (parent) {
-    // (parent.areas ??= []).push(area.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2 bug
+    // (parent.areas ??= []).push(area.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2
+    // bug
     parent.areas.push(area.id)
     areas.set(parent.id, parent)
   }
@@ -101,21 +104,23 @@ export function addArea(meta: PageMetaWithoutId): PageMeta {
 }
 export function addPage(meta: PageMetaWithoutId, pathname?: string): PageMeta {
   const path = pathname ?? buildPagePath(meta)
-  const page = pages.set(path, { ...meta, id: path }).get(path)
+  const page = pages.set(path, {...meta, id: path}).get(path)
   const parent = getPageParent(page)
   if (parent) {
-    // (parent.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2 bug
+    // (parent.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2
+    // bug
     (parent.pages ?? (parent.pages = [])).push(page.id)
     pages.set(parent.id, parent)
-  } else if (page.area) {
+  }
+  else if (page.area) {
     const area = getArea(page.area);
-    // (area.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2 bug
+    // (area.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2
+    // bug
     (area.pages ?? (parent.pages = [])).push(page.id)
     areas.set(area.id, area)
   }
   return page
 }
-
 
 
 export const ROOT_META: PageMeta = {
@@ -129,7 +134,7 @@ export const ROOT_META: PageMeta = {
     default: 'Dashboard',
     singular: 'Dashboard',
     plural: 'App',
-    long: 'App Dashboard'
+    long: 'App Dashboard',
   },
 }
 areas.set(ROOT_META.id, ROOT_META)
@@ -147,7 +152,7 @@ const manageArea = addArea({
     default: 'Manage',
     singular: 'Manage',
     plural: 'Manage',
-    long: 'App Management'
+    long: 'App Management',
   },
 })
 
@@ -291,7 +296,7 @@ export type AggregatedPageMeta = AggregatedRouterProps & {
 }
 
 export const getAggregatedPageMeta = (router: NextRouter): AggregatedPageMeta => {
-  const { pathname, asPath, basePath, route, query } = router
+  const {pathname, asPath, basePath, route, query} = router
   const pageMeta = getPage(pathname)
   const overrideMeta = pageMeta?.dynamic ? getPage(pageMeta.parent) : null
   const areaMeta = getPageArea(overrideMeta ?? pageMeta)
@@ -299,7 +304,7 @@ export const getAggregatedPageMeta = (router: NextRouter): AggregatedPageMeta =>
   const areaPages = getAreaPages(areaMeta?.id)
   const denormalizedAreaPages = getAreaPages(areaMeta?.id).map(i => ({
     ...i,
-    pages: (i.pages ?? []).map(i => getPage(i))
+    pages: (i.pages ?? []).map(i => getPage(i)),
   }))
   // console.log('pathname', pathname)
 
@@ -321,15 +326,25 @@ export const getAggregatedPageMeta = (router: NextRouter): AggregatedPageMeta =>
 const WithN = 'aggregatedPageMeta'
 type WithN = typeof WithN
 export type WithPageMetaProps<P> = P & Record<WithN, AggregatedPageMeta>
-export type WithPageMetaComponent<P> = React.ComponentType<WithPageMetaProps<P>>
+export type WithPageMetaComponent<P> = ComponentType<WithPageMetaProps<P>>
 
 export function withAggregatedPageMeta<P>(
-  Component: ComponentType<P & Partial<Record<WithN, AggregatedPageMeta>>>,
-): React.ComponentType<Omit<P, WithN>> {
-  return function WithAggregatedPageMeta(props: P) {
-    const router = useRouter()
-    const aggregatedPageMeta = getAggregatedPageMeta(router)
-    const newProps = { ...props, [WithN]: aggregatedPageMeta }
-    return React.createElement(Component, newProps)
-  }
+  Component: ComponentType<P & { aggregatedPageMeta?: AggregatedPageMeta }>,
+) {
+  const displayName = `WithAggregatedPageMeta(${getDisplayName(Component)})`
+  const WithAggregatedPageMeta = forwardRef<any, Omit<P, 'aggregatedPageMeta'>>(
+    function RefRenderFn(props, ref) {
+      const router = useRouter()
+      const aggregatedPageMeta = getAggregatedPageMeta(router)
+      return (
+        <Component
+          ref={ref}
+          aggregatedPageMeta={aggregatedPageMeta} 
+          {...props as P}
+        />
+      )
+    },
+  )
+  WithAggregatedPageMeta.displayName = displayName
+  return WithAggregatedPageMeta
 }

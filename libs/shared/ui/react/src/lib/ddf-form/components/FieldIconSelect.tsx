@@ -26,12 +26,12 @@ import {
 import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
 
 import useFieldApi from '@data-driven-forms/react-form-renderer/use-field-api'
-import Button from '@material-ui/core/Button'
-import ButtonBase from '@material-ui/core/ButtonBase'
-import Collapse from '@material-ui/core/Collapse'
-import Grid from '@material-ui/core/Grid'
-import MuiTextField from '@material-ui/core/TextField'
-import Typography from '@material-ui/core/Typography'
+import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
+import Collapse from '@mui/material/Collapse'
+import Grid from '@mui/material/Grid'
+import MuiTextField from '@mui/material/TextField'
+import Typography from '@mui/material/Typography'
 
 import clsx from 'clsx'
 import { forwardRef, Fragment, HTMLProps, useCallback, useState } from 'react'

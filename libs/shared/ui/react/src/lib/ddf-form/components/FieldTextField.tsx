@@ -17,7 +17,7 @@
 
 import { forwardRef, ReactNode } from 'react'
 
-import MuiTextField, { TextFieldProps as MuiTextFieldProps } from '@material-ui/core/TextField'
+import MuiTextField, { TextFieldProps as MuiTextFieldProps } from '@mui/material/TextField'
 
 import useFieldApi, { UseFieldApiConfig } from '@data-driven-forms/react-form-renderer/use-field-api'
 

@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { withStyles, WithStyles, Theme, createStyles } from '@aglyn/shared/ui/themes'
-import MuiDialog, { DialogProps as MuiDialogProps } from '@material-ui/core/Dialog'
-import MuiDialogActions, { DialogActionsProps as MuiDialogActionsProps } from '@material-ui/core/DialogActions'
-import MuiDialogContent from '@material-ui/core/DialogContent'
-import MuiDialogTitle, { DialogTitleProps as MuiDialogTitleProps } from '@material-ui/core/DialogTitle'
+import { createStyles, Theme, withStyles, WithStyles } from '@aglyn/shared/ui/themes'
+import MuiDialog, { DialogProps as MuiDialogProps } from '@mui/material/Dialog'
+import MuiDialogActions, { DialogActionsProps as MuiDialogActionsProps } from '@mui/material/DialogActions'
+import MuiDialogContent from '@mui/material/DialogContent'
+import MuiDialogTitle, { DialogTitleProps as MuiDialogTitleProps } from '@mui/material/DialogTitle'
 import React from 'react'
 
 

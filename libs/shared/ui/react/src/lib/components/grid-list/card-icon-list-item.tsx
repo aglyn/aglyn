@@ -16,9 +16,9 @@
  */
 
 import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
-import Card, { CardProps as MuiCardProps } from '@material-ui/core/Card'
-import CardActionArea from '@material-ui/core/CardActionArea'
-import Typography from '@material-ui/core/Typography'
+import Card, { CardProps as MuiCardProps } from '@mui/material/Card'
+import CardActionArea from '@mui/material/CardActionArea'
+import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
 import { forwardRef, MouseEvent, ReactNode, useCallback } from 'react'
 import { Item } from './grid-list'

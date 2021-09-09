@@ -18,7 +18,7 @@
 import { AppLink } from '@aglyn/shared/ui/react'
 import { createStyles, Theme, withStyles, WithStyles } from '@aglyn/shared/ui/themes'
 import { remap } from '@aglyn/shared/util/tools'
-import { Box, Button, Typography } from '@material-ui/core'
+import { Box, Button, Typography } from '@mui/material'
 import { useRouter } from 'next/router'
 import React, { useCallback, useState } from 'react'
 import FieldSet from '../../components/FieldSet'

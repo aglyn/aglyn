@@ -15,34 +15,50 @@
  * limitations under the License.
  */
 
+import { OverrideableComponentProps } from '@aglyn/shared/ui/react'
 import { styled } from '@aglyn/shared/ui/themes'
-import { HTMLAttributes } from 'react'
+import { forwardRef, HTMLAttributes } from 'react'
 
 
-export interface BackgroundImageProps extends HTMLAttributes<HTMLDivElement> {
-  url: string
-  parallax?: boolean
-}
-
-const BackgroundImage = styled(({url, parallax, ...rest}: BackgroundImageProps)=>(
-  <div
-    style={{
-      backgroundImage: `url(${url})`,
-      backgroundAttachment: parallax ? 'fixed' : undefined
-    }}
-    {...rest}
-  />
-), {
-  name: 'BackgroundImage',
-  slot: 'Root',
-})<BackgroundImageProps>(({
+const BackgroundImageRoot = styled('div', {
+  name: 'BackgroundImage'
+})(({
   backgroundColor: 'inherit',
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'bottom center',
   backgroundSize: 'cover',
-  backgroundImage: null
+  backgroundImage: null,
 }))
+
+type BaseProps = HTMLAttributes<HTMLDivElement>
+export interface BackgroundImageProps extends BaseProps, OverrideableComponentProps {
+  url: string
+  parallax?: boolean
+}
+
+const BackgroundImage = forwardRef<HTMLDivElement, BackgroundImageProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      url,
+      parallax,
+      style,
+      ...rest
+    } = props
+    return (
+      <BackgroundImageRoot
+        ref={ref}
+        {...rest}
+        style={{
+          ...style,
+          backgroundImage: `url(${url})`,
+          backgroundAttachment: parallax ? 'fixed' : undefined,
+        }}
+      />
+    )
+  },
+)
 
 BackgroundImage.displayName = 'BackgroundImage'
 
+export { BackgroundImage }
 export default BackgroundImage

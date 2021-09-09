@@ -29,7 +29,7 @@ import {
   EmotionCache,
   withTheme,
 } from '@aglyn/shared/ui/themes'
-import CssBaseline from '@material-ui/core/CssBaseline'
+import CssBaseline from '@mui/material/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
 import { Fragment, useEffect } from 'react'

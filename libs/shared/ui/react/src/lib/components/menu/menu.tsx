@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import MuiMenu, { MenuProps as MuiMenuProps } from '@material-ui/core/Menu'
-import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@material-ui/core/MenuItem'
+import MuiMenu, { MenuProps as MuiMenuProps } from '@mui/material/Menu'
+import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@mui/material/MenuItem'
 import React, {
   Children,
   cloneElement,

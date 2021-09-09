@@ -16,10 +16,10 @@
  */
 
 import { styled } from '@aglyn/shared/ui/themes'
-import { ButtonProps } from '@material-ui/core/Button'
-import { DialogProps } from '@material-ui/core/Dialog'
-import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
-import { DialogTitleProps } from '@material-ui/core/DialogTitle'
+import { ButtonProps } from '@mui/material/Button'
+import { DialogProps } from '@mui/material/Dialog'
+import { DialogContentTextProps } from '@mui/material/DialogContentText'
+import { DialogTitleProps } from '@mui/material/DialogTitle'
 import { forwardRef, Fragment, HTMLAttributes } from 'react'
 
 
@@ -43,8 +43,8 @@ export interface SelectionComponentProps extends HTMLAttributes<HTMLDivElement> 
 }
 
 const SelectionRoot = styled('div', {
-  name: 'SelectionComponent'
-})(({theme})=> ({
+  name: 'SelectionComponent',
+})(({theme}) => ({
   outlineWidth: 2,
   outlineOffset: -2,
   outlineColor: theme.palette.secondary.main,

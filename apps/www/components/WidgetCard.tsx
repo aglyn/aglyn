@@ -18,10 +18,10 @@
 import React from 'react'
 import { createStyles, WithStyles, withStyles, Theme } from '@aglyn/shared/ui/themes'
 import clsx from 'clsx'
-import Card, { CardProps } from '@material-ui/core/Card'
-import CardHeader, { CardHeaderProps } from '@material-ui/core/CardHeader'
-import CardActions, { CardActionsProps } from '@material-ui/core/CardActions'
-import CardContent, { CardContentProps } from '@material-ui/core/CardContent'
+import Card, { CardProps } from '@mui/material/Card'
+import CardHeader, { CardHeaderProps } from '@mui/material/CardHeader'
+import CardActions, { CardActionsProps } from '@mui/material/CardActions'
+import CardContent, { CardContentProps } from '@mui/material/CardContent'
 import ErrorBoundary from './ErrorBoundary'
 
 const styles = (theme: Theme) => createStyles({

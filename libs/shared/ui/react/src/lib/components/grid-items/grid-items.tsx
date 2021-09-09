@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import MuiGrid, { GridProps as MuiGridProps } from '@material-ui/core/Grid'
+import MuiGrid, { GridProps as MuiGridProps } from '@mui/material/Grid'
 import React, { forwardRef } from 'react'
 
 /* eslint-disable-next-line */

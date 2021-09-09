@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-import { styled, withStyles } from '@aglyn/shared/ui/themes'
+import { styled } from '@aglyn/shared/ui/themes'
 import useFieldApi, { UseFieldApiConfig } from '@data-driven-forms/react-form-renderer/use-field-api'
-import MuiFormControl, { FormControlProps as MuiFormControlProps } from '@material-ui/core/FormControl'
-import MuiFormHelperText from '@material-ui/core/FormHelperText'
-import MuiInputLabel from '@material-ui/core/InputLabel'
-import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@material-ui/core/MenuItem'
-import MuiSelect, { SelectProps as MuiSelectProps } from '@material-ui/core/Select'
+import MuiFormControl, { FormControlProps as MuiFormControlProps } from '@mui/material/FormControl'
+import MuiFormHelperText from '@mui/material/FormHelperText'
+import MuiInputLabel from '@mui/material/InputLabel'
+import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@mui/material/MenuItem'
+import MuiSelect, { SelectProps as MuiSelectProps } from '@mui/material/Select'
 import { forwardRef, ReactNode } from 'react'
 import { withGridItem } from '../field-hocs'
 import { validationMessage } from '../utils'
 
+
 const SelectFormControl = styled(MuiFormControl, {
-  name: 'SelectFormControl'
+  name: 'SelectFormControl',
 })({
   width: '100%',
   display: 'flex',

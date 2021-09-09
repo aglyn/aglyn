@@ -16,9 +16,9 @@
  */
 
 import { GridItems } from '@aglyn/shared/ui/react'
-import Box from '@material-ui/core/Box'
-import Container from '@material-ui/core/Container'
-import Typography from '@material-ui/core/Typography'
+import Box from '@mui/material/Box'
+import Container from '@mui/material/Container'
+import Typography from '@mui/material/Typography'
 import Image from 'next/image'
 import React from 'react'
 import BackgroundImage from '../components/BackgroundImage'
@@ -46,7 +46,6 @@ function Index(props: Props) {
       <BackgroundImage
         component={'header'}
         url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
-        sx={{pt: '56px'}}
       >
         <Box py={6}>
           <Container
@@ -76,13 +75,12 @@ function Index(props: Props) {
                     <>
                       <Typography
                         variant={'h2'}
-                        component={'h2'}
                         children={TITLE}
                         sx={{mb: 4}}
                       />
                       <Typography
                         variant={'h4'}
-                        component={'h3'}
+                        variantMapping={{'h4': 'h3'}}
                         children={'The essentials to keep your workflow simple'}
                         color="quaternary.main"
                       />
@@ -227,7 +225,8 @@ function Index(props: Props) {
           backgroundUrl={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
           heading={'Get Access and Make Your New Website'}
           link={{
-            hrefAs: '/contact', href: '/contact',
+            hrefAs: '/contact',
+            href: '/contact',
             children: 'Get Your Access',
           }}
         />
@@ -236,6 +235,6 @@ function Index(props: Props) {
   )
 }
 
-Index.displayName = 'Page-Index'
+Index.displayName = 'Index'
 
 export default Index

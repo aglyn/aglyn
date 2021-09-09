@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+import Typography, { TypographyProps } from '@mui/material/Typography'
 import React from 'react'
-import Typography, { TypographyProps } from '@material-ui/core/Typography'
-import { currentYear, APP } from '../const'
+import { APP, currentYear } from '../const'
+
 
 function Copyright(props: Props) {
   return (
@@ -29,6 +30,6 @@ function Copyright(props: Props) {
 
 Copyright.displayName = 'Copyright'
 
-export interface Props extends TypographyProps { }
+export interface Props extends TypographyProps {}
 
 export default Copyright

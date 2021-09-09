@@ -17,14 +17,13 @@
 
 import { AppLink, AppLinkProps } from '@aglyn/shared/ui/react'
 import { styled } from '@aglyn/shared/ui/themes'
-import Box from '@material-ui/core/Box'
-import Typography from '@material-ui/core/Typography'
-import React, { ElementType, forwardRef, HTMLAttributes, ReactNode } from 'react'
-import BackgroundImage from '../components/BackgroundImage'
+import Typography from '@mui/material/Typography'
+import React, { forwardRef, ReactNode } from 'react'
+import { BackgroundImage, BackgroundImageProps } from '../components/BackgroundImage'
 
 
-const StyledPromoBackgroundImage = styled(BackgroundImage, {
-  name: 'PromoBackgroundImage',
+const StyledBackgroundImage = styled(BackgroundImage, {
+  name: 'BackgroundImage',
 })(({theme}) => ({
   textAlign: 'center',
   marginTop: theme.spacing(4),
@@ -38,8 +37,7 @@ const StyledPromoBackgroundImage = styled(BackgroundImage, {
   },
 }))
 
-export interface PromoSectionViewProps extends HTMLAttributes<HTMLElement> {
-  component?: ElementType
+export interface PromoSectionViewProps extends BackgroundImageProps {
   backgroundUrl: string
   heading: ReactNode
   link: AppLinkProps<'button'>
@@ -57,27 +55,30 @@ const PromoSectionView = forwardRef<any, PromoSectionViewProps>(
     } = props
 
     return (
-      <Box ref={ref} {...rest}>
-        <StyledPromoBackgroundImage url={backgroundUrl} parallax>
-          <Typography
-            component="h2"
-            variant="h3"
-            children={heading}
-            sx={{mb: 4}}
-          />
-          <AppLink
-            size="large"
-            variant="contained"
-            color="primary"
-            linkType="button"
-            {...link}
-          />
-        </StyledPromoBackgroundImage>
-      </Box>
+      <StyledBackgroundImage
+        ref={ref}
+        url={backgroundUrl}
+        parallax
+        {...rest}
+      >
+        <Typography
+          variant="h3"
+          variantMapping={{'h3': 'h2'}}
+          children={heading}
+          gutterBottom
+        />
+        <AppLink
+          size="large"
+          variant="contained"
+          color="primary"
+          linkType="button"
+          {...link}
+        />
+      </StyledBackgroundImage>
     )
   },
 )
 
 PromoSectionView.displayName = 'PromoSectionView'
-
+export { PromoSectionView }
 export default PromoSectionView

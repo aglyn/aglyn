@@ -28,10 +28,9 @@ import {
   EmotionCache,
   withTheme,
 } from '@aglyn/shared/ui/themes'
-import CssBaseline from '@material-ui/core/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
-import { Fragment, useEffect } from 'react'
+import { Fragment, PropsWithChildren, useEffect } from 'react'
 import { APP } from '../const'
 import { AppContextProvider } from '../contexts/app-context'
 import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
@@ -63,7 +62,7 @@ const metaElements: MakeMetaElementsConfig = [
 ]
 const linkElements: MakeLinkElementsConfig = []
 
-function AppWrapperRaw(props) {
+function AppWrapperRaw(props: PropsWithChildren<{}>) {
   const {children} = props
 
   useEffect(() => {
@@ -87,10 +86,9 @@ function AppWrapperRaw(props) {
         {makeMetaElements(metaElements)}
         {makeLinkElements(linkElements)}
       </Head>
-      <AppContextProvider value={app}>
-        <CurrentUserProviderComponent>
-          <CssBaseline/>
-          <div className="app">
+      <div className="app">
+        <AppContextProvider value={app}>
+          <CurrentUserProviderComponent>
             <AppLoaderProviderComponent>
               <main>
                 {children}
@@ -98,14 +96,17 @@ function AppWrapperRaw(props) {
 
               <AppLoaderOverlayView/>
             </AppLoaderProviderComponent>
-          </div>
-        </CurrentUserProviderComponent>
-      </AppContextProvider>
+          </CurrentUserProviderComponent>
+        </AppContextProvider>
+      </div>
     </Wrapper>
   )
 }
 AppWrapperRaw.displayName = 'AppWrapper'
-const AppWrapper = withTheme({theme: consoleTheme})(AppWrapperRaw)
+const AppWrapper = withTheme({
+  theme: consoleTheme,
+  cssBaseline: true
+})(AppWrapperRaw)
 
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()

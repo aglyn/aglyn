@@ -15,23 +15,25 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import MuiTextField, { OutlinedTextFieldProps as MuiTextFieldProps } from '@material-ui/core/TextField'
-import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@material-ui/core/MenuItem'
+import MuiTextField, { OutlinedTextFieldProps as MuiTextFieldProps } from '@mui/material/TextField'
+import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@mui/material/MenuItem'
 
-function FieldSelect(props: Props) {
-  const { items = [], ...rest } = props
+
+export interface FieldSelectProps extends MuiTextFieldProps {
+  items: Array<MuiMenuItemProps>
+}
+
+function FieldSelect(props: FieldSelectProps) {
+  const {items = [], ...rest} = props
   return (
     <MuiTextField select {...rest}>
-      {items.map((item, key) => (<MuiMenuItem key={key} {...item as any} />))}
+      {items.map((item, key) => (
+        <MuiMenuItem key={key} {...item as any} />)
+      )}
     </MuiTextField>
   )
 }
 
 FieldSelect.displayName = 'FieldSelect'
-
-export interface Props extends MuiTextFieldProps {
-  items: Array<MuiMenuItemProps>
-}
-
+export { FieldSelect }
 export default FieldSelect

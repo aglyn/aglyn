@@ -19,8 +19,8 @@ import { AppLink, AppLinkProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/sha
 import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
 import { _ln } from '@aglyn/shared/util/guards'
 import { yes } from '@aglyn/shared/util/tools'
-import MuiBreadcrumbs, { BreadcrumbsProps as MuiBreadcrumbsProps } from '@material-ui/core/Breadcrumbs'
-import Typography from '@material-ui/core/Typography'
+import MuiBreadcrumbs, { BreadcrumbsProps as MuiBreadcrumbsProps } from '@mui/material/Breadcrumbs'
+import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
 import React, { forwardRef, useMemo } from 'react'
 
