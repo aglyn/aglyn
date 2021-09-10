@@ -55,7 +55,7 @@ const AppLoaderOverlayView = React.forwardRef<any, AppLoaderOverlayProps>(
       appLoader,
       ...rest
     } = props
-    const isOpen = Boolean(open || appLoader.isLoading)
+    const isOpen = Boolean(open || appLoader?.isLoading)
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     useEffect(() => {

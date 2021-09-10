@@ -22,6 +22,7 @@ import {
 } from '@aglyn/shared/ui/react'
 import { _ln } from '@aglyn/shared/util/guards'
 import { createUid } from '@aglyn/shared/util/helpers'
+import { noopFactory } from '@aglyn/shared/util/tools'
 import { ConditionalNonDist } from '@aglyn/shared/util/types'
 import { createContext, PropsWithChildren, useContext, useState } from 'react'
 
@@ -41,7 +42,16 @@ export type AppLoaderContextType = {
   checkLoading: () => boolean // TODO: Which works best?
 }
 
-export const AppLoader = createContext<AppLoaderContextType>(null)
+export const APP_LOADER_CONTEXT_DEFAULT_VALUE: AppLoaderContextType = {
+  queues: [],
+  isLoading: false,
+  queueLoading: noopFactory() as any,
+  checkLoading: noopFactory() as any,
+}
+
+export const AppLoader = createContext<AppLoaderContextType>(
+  APP_LOADER_CONTEXT_DEFAULT_VALUE,
+)
 AppLoader.displayName = 'AppLoader'
 
 export const {
