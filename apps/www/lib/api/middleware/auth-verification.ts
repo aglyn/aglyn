@@ -15,14 +15,10 @@
  * limitations under the License.
  */
 
-import { _isUndT } from '@aglyn/shared/util/helpers'
-import { Res, Logger } from '../helpers'
-import {
-  ApiHandler,
-  ApiRequest,
-  ApiResponse,
-} from '../types'
-import { verifyIdToken } from '../../firebase/fb-admin'
+import { _isUndT } from '@aglyn/shared/util/guards'
+import { verifyIdToken } from '../../fetch-data/profile-data'
+import { Logger, Res } from '../helpers'
+import { ApiHandler, ApiRequest, ApiResponse } from '../types'
 
 
 export const requireHeader = (
@@ -40,12 +36,15 @@ export const requireHeader = (
       }
       newReq[name] = header
       return
-    } catch (err) {
+    }
+    catch (err) {
       error = err
-    } finally {
+    }
+    finally {
       if (error) {
         await handler(newReq, res)
-      } else {
+      }
+      else {
         const json = Res.Error.missingHeader
         Logger.traceError(json, error)
         return res.status(json.error.statusCode).json(json)
@@ -67,7 +66,8 @@ export const requireIdToken = (handler: ApiHandler) => {
     try {
       await verifyIdToken(req.idToken)
       return await handler(req, res)
-    } catch (error) {
+    }
+    catch (error) {
       const json = Res.Error.idTokenCheck
       Logger.traceError(json)
       return res.status(json.error.statusCode).json(json)
@@ -82,7 +82,8 @@ export const requireCsrfToken = (handler: ApiHandler) => {
         throw new Error('CSRF mismatch. Possible break-in attempt!')
       }
       return await handler(req, res)
-    } catch (error) {
+    }
+    catch (error) {
       const json = Res.Error.csrfTokenCheck
       Logger.traceError(json, error)
       return res.status(json.error.statusCode).json(json)

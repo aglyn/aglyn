@@ -57,6 +57,7 @@ export const samplePageData = [
         $id: 'root1',
         component: 'root',
         props: {
+          sx: {fontWeight: 'fontWeightBold'},
           children: 'hello',
         },
       },

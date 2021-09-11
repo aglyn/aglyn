@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+import { _isStrEmpty, _isStrT } from '@aglyn/shared/util/guards'
 import pkg from '../../../../../package.json'
-import { _isStrEmpty, _isStrT } from '@aglyn/shared/util/helpers'
 
 
 export let SDK_VERSION = String(pkg.version ?? 'N/A')

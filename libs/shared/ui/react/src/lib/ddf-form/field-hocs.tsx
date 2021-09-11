@@ -15,10 +15,16 @@
  * limitations under the License.
  */
 
-import { ComponentType, ForwardRefExoticComponent, PropsWithoutRef, RefAttributes, forwardRef } from 'react'
-import MuiGrid, { GridProps as MuiGridProps } from '@material-ui/core/Grid'
-import { styled } from '@material-ui/core/styles'
-import {getDisplayName} from '@aglyn/shared/util/helpers'
+import { styled } from '@aglyn/shared/ui/themes'
+import { getDisplayName } from '@aglyn/shared/util/tools'
+import MuiGrid, { GridProps as MuiGridProps } from '@mui/material/Grid'
+import {
+  ComponentType,
+  forwardRef,
+  ForwardRefExoticComponent,
+  PropsWithoutRef,
+  RefAttributes,
+} from 'react'
 
 
 const FieldGridItem = styled(MuiGrid)({position: 'relative'}, {name: 'FieldGridItem'})
@@ -30,14 +36,14 @@ export type WithGridItemProps = {
 export function withGridItem<P>(WrappedComponent: ComponentType<P>): ForwardRefExoticComponent<PropsWithoutRef<P & WithGridItemProps> & RefAttributes<any>> {
   const WithFieldGrid = forwardRef<any, P & WithGridItemProps>(
     function RefRenderFn(props, ref) {
-      const { FormFieldGridProps, ...rest } = props
+      const {FormFieldGridProps, ...rest} = props
 
       return (
         <FieldGridItem ref={ref} xs={12} item {...FormFieldGridProps}>
           <WrappedComponent {...rest as P}/>
         </FieldGridItem>
       )
-    }
+    },
   )
   WithFieldGrid.displayName = `WithFieldGrid(${getDisplayName(WrappedComponent)})`
   return WithFieldGrid

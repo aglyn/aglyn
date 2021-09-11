@@ -15,26 +15,26 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import { _s, mapObject } from '@aglyn/shared/util/tools'
-import { createUid } from '@aglyn/shared/util/helpers'
-import WidgetCard from '../components/WidgetCard'
-import ConsoleLayout from '../layouts/ConsoleLayout'
-import DataTable, { Props as DataTableProps } from '../components/DataTable'
-import IconButton from '@material-ui/core/IconButton'
 import { SvgPathIcon } from '@aglyn/shared/ui/react'
-import AreaManageNavigationListWidgetView from './AreaManageNavigationListWidgetView'
-import { withAppContext } from '../contexts/app-context'
-import { useSnackbar } from 'notistack'
-import { useAppLoader } from '../contexts/app-loader-context'
-import DrawerFormView from './DrawerFormView'
-import { Fields } from '../forms'
+import { createUid } from '@aglyn/shared/util/helpers'
+import { _s, remap } from '@aglyn/shared/util/tools'
+import IconButton from '@mui/material/IconButton'
 import { useRouter } from 'next/router'
+import { useSnackbar } from 'notistack'
+import { ChangeEvent, Fragment, useCallback, useEffect, useState } from 'react'
+import DataTable, { DataTableProps } from '../components/DataTable'
+import WidgetCard from '../components/WidgetCard'
+import { AppContextType, withAppContext } from '../contexts/app-context'
+import { useAppLoader } from '../contexts/app-loader-context'
+import { Fields } from '../forms'
+import ConsoleLayout from '../layouts/ConsoleLayout'
+import AreaManageNavigationListWidgetView from './AreaManageNavigationListWidgetView'
+import DrawerFormView from './DrawerFormView'
 
 
 const pageLen = 25
 
-type Props = {
+export interface AreaManageViewProps {
   collectionId: string
   documentName: {
     singular: string
@@ -46,10 +46,11 @@ type Props = {
 
   onSaveSuccess?: (document: any) => void
   onSaveError?: (error: any) => void
+  app: AppContextType
 }
 
 
-export default withAppContext<Props>(function AreaManageView(props) {
+function AreaManageViewRaw(props: AreaManageViewProps) {
   const {
     app,
     columns,
@@ -63,11 +64,11 @@ export default withAppContext<Props>(function AreaManageView(props) {
   const router = useRouter()
   const {enqueueSnackbar} = useSnackbar()
   const {queueLoading, isLoading} = useAppLoader()
-  const [loadingDocuments, setLoadingDocuments] = React.useState(false)
-  const [error, setError] = React.useState<any>(null)
-  const [documents, setDocuments] = React.useState<{ [id: string]: any }>(null)
-  const [formOpen, setFormOpen] = React.useState(false)
-  const [activeDocument, setActiveDocument] = React.useState<{ type: 'updating' | 'creating', data: any }>(null)
+  const [loadingDocuments, setLoadingDocuments] = useState(false)
+  const [error, setError] = useState<any>(null)
+  const [documents, setDocuments] = useState<{ [id: string]: any }>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [activeDocument, setActiveDocument] = useState<{ type: 'updating' | 'creating', data: any }>(null)
   const query = app.getCollectionRef(collectionId)
   const rows = Object.entries(documents ?? {}).map(([id, v]) => ({id, ...v}))
   const openForm = () => setFormOpen(true)
@@ -83,7 +84,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
     handleDocumentOpen(_s(p.row.id))
   }
   // Close Document
-  const removeDocumentIdFromUrl = React.useCallback(async () => {
+  const removeDocumentIdFromUrl = useCallback(async () => {
     if (documentId) {
       await router.push(router.asPath.replace(`/${documentId}`, ''))
     }
@@ -100,7 +101,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
 
   // Update field on active document
   const handleFieldUpdate = (fieldId: string) => (
-    event: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>,
+    event: ChangeEvent<HTMLTextAreaElement | HTMLInputElement>,
   ) => {
     const value = event.target.value
     setActiveDocument(prev => ({...prev, data: {...prev.data, [fieldId]: value}}))
@@ -115,7 +116,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
   }
 
   // Update/set remote document with active document
-  const setRemoteDocument = React.useCallback(async () => {
+  const setRemoteDocument = useCallback(async () => {
     console.debug('Saving active document', activeDocument)
     const dequeueLoader = queueLoading()
     const {type, data} = activeDocument
@@ -159,7 +160,7 @@ export default withAppContext<Props>(function AreaManageView(props) {
   // }, [])
 
   // Listen for realtime updates
-  React.useEffect(() => {
+  useEffect(() => {
     const cancelListener = query.onSnapshot((querySnapshot) => {
       setLoadingDocuments(true)
       setDocuments(prev => {
@@ -168,7 +169,8 @@ export default withAppContext<Props>(function AreaManageView(props) {
           if (change.type === 'removed') {
             console.debug('Removed document update: ', change.doc.data())
             delete items[change.doc.id]
-          } else {
+          }
+          else {
             console.debug('Updated document update: ', change.doc.data())
             items[change.doc.id] = {id: change.doc.id, ...change.doc.data()}
           }
@@ -185,13 +187,14 @@ export default withAppContext<Props>(function AreaManageView(props) {
   }, [])
 
   // Setup the active document
-  React.useEffect(() => {
+  useEffect(() => {
     if (documentId && documents) {
       const document = documents[documentId]
       if (document) {
         setActiveDocument({type: 'updating', data: document})
         setError(null)
-      } else {
+      }
+      else {
         setError('Item does not exist!')
         setActiveDocument(null)
         enqueueSnackbar('Error loading item', {variant: 'error'})
@@ -199,13 +202,17 @@ export default withAppContext<Props>(function AreaManageView(props) {
     }
   }, [documentId, documents])
 
+  const mappedFields = remap(fields, (value => ({
+    ...value, value: activeDocument?.data[value.id] ?? value.value,
+  })))
+
   return (
-    <React.Fragment>
+    <Fragment>
       <ConsoleLayout
         items={[
           {
             xs: 12, md: 3,
-            children: (<AreaManageNavigationListWidgetView />),
+            children: (<AreaManageNavigationListWidgetView/>),
           },
           {
             xs: 12, md: 9,
@@ -214,18 +221,18 @@ export default withAppContext<Props>(function AreaManageView(props) {
                 header={{
                   title: `All ${documentName.plural}`,
                   action: (
-                    <React.Fragment>
+                    <Fragment>
                       <IconButton
-                        children={<SvgPathIcon iconId="filter-variant" />}
+                        children={<SvgPathIcon iconId="filter-variant"/>}
                         title="Filter list"
                         disabled
                       />
                       <IconButton
-                        children={<SvgPathIcon iconId="plus" />}
+                        children={<SvgPathIcon iconId="plus"/>}
                         title="Add item"
                         onClick={handleCreateDocumentFormOpen}
                       />
-                    </React.Fragment>
+                    </Fragment>
                   ),
                 }}
               >
@@ -246,16 +253,22 @@ export default withAppContext<Props>(function AreaManageView(props) {
 
       <DrawerFormView
         error={error || Boolean(documentId && !activeDocument)}
-        fields={mapObject(fields, (v) => ({...v, value: activeDocument?.data[v.id] ?? v.value}), {copy: true})}
+        fields={mappedFields}
         id={activeDocument?.data?.id}
         label={documentName.singular}
         loading={isLoading}
         open={Boolean(documentId || formOpen)}
-        variant={activeDocument?.type}
+        formVariant={activeDocument?.type}
         onClose={handleCloseForm}
         onSave={setRemoteDocument}
         onUpdate={handleFieldUpdate}
       />
-    </React.Fragment>
+    </Fragment>
   )
-}, 'app')
+}
+
+AreaManageViewRaw.displayName = 'AreaManageView'
+AreaManageViewRaw.defaultProps = {}
+
+export const AreaManageView = withAppContext(AreaManageViewRaw)
+export default AreaManageView

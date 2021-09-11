@@ -15,42 +15,114 @@
  * limitations under the License.
  */
 
-import CssBaseline from '@material-ui/core/CssBaseline'
-import { MuiThemeProvider } from '@material-ui/core/styles'
-import { consoleTheme } from '@aglyn/shared/ui/themes'
-import { Fragment, useEffect } from 'react'
-import type { AppProps } from 'next/app'
+import {
+  makeLinkElements,
+  MakeLinkElementsConfig,
+  makeMetaElements,
+  MakeMetaElementsConfig,
+} from '@aglyn/shared/ui/react'
+import {
+  CacheProvider,
+  consoleTheme,
+  createEmotionCache,
+  EmotionCache,
+  withTheme,
+} from '@aglyn/shared/ui/themes'
+import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
-import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
-import AppLoaderOverlayView from '../views/AppLoaderOverlayView'
-import { AppContextProvider } from '../contexts/app-context'
-import { CurrentUserProviderComponent } from '../contexts/current-user-context'
+import { Fragment, PropsWithChildren, useEffect } from 'react'
 import { APP } from '../const'
+import { AppContextProvider } from '../contexts/app-context'
+import { AppLoaderProviderComponent } from '../contexts/app-loader-context'
+import { CurrentUserProviderComponent } from '../contexts/current-user-context'
 import * as AppController from '../lib/aglyn-deprecated'
+import AppLoaderOverlayView from '../views/AppLoaderOverlayView'
 
 
-declare function require(
-  moduleNames: string[],
-  onLoad: (...args: any[]) => void,
-): void
-
-
+declare function require(moduleNames: string[], onLoad: (...args: any[]) => void): void
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
-const appOptions = {
-  ...(isProduction
-    ? {}
-    : {
-      authEmulator: 'http://localhost:9099/',
-      firestoreEmulator: {host: 'localhost', port: 8080},
-    }),
-}
 
 let app
 if (typeof window !== 'undefined') {
   require(['../lib/aglyn-deprecated'], (withAppController: typeof AppController) => {
+    const appOptions = {
+      ...(isProduction ? {} : {
+        authEmulator: 'http://localhost:9099/',
+        firestoreEmulator: {host: 'localhost', port: 8080},
+      }),
+    }
     app = withAppController.withAppController(appOptions)
   })
+}
+
+const metaElements: MakeMetaElementsConfig = [
+  ['viewport', 'width=device-width, initial-scale=1'],
+  ['description', APP.META_DESCRIPTION],
+]
+const linkElements: MakeLinkElementsConfig = []
+
+function AppWrapperRaw(props) {
+  const {children} = props
+
+  useEffect(() => {
+    // Remove the server-side injected CSS.
+    // const jssStyles = document.querySelector('#jss-server-side')
+    // if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
+  }, [])
+
+  useEffect(() => {
+    if (isProduction) {
+      app.getAnalytics()
+    }
+  }, [])
+
+  const Wrapper = isProduction ? Fragment : Fragment
+
+  return (
+    <Wrapper>
+      <Head>
+        <title>{APP.META_TITLE}</title>
+        {makeMetaElements(metaElements)}
+        {makeLinkElements(linkElements)}
+      </Head>
+      <div className="app">
+        <AppContextProvider value={app}>
+          <CurrentUserProviderComponent>
+            <AppLoaderProviderComponent>
+              <main>
+                {children}
+              </main>
+
+              <AppLoaderOverlayView/>
+            </AppLoaderProviderComponent>
+          </CurrentUserProviderComponent>
+        </AppContextProvider>
+      </div>
+      {isProduction ? /* HubSpot Embed Code */ (
+        <script
+          type="text/javascript"
+          id="hs-script-loader"
+          async
+          defer
+          src="//js.hs-scripts.com/20566719.js"
+        />
+      ) : null}
+
+    </Wrapper>
+  )
+}
+AppWrapperRaw.displayName = 'AppWrapper'
+const AppWrapper = withTheme({
+  theme: consoleTheme,
+  cssBaseline: true,
+})(AppWrapperRaw)
+
+// Client-side cache, shared for the whole session of the user in the browser.
+const clientSideEmotionCache = createEmotionCache()
+
+export interface _AppProps extends NextAppProps {
+  emotionCache?: EmotionCache
 }
 
 /**
@@ -85,49 +157,58 @@ if (typeof window !== 'undefined') {
  * @param {AppProps} props
  * @returns {JSX.Element}
  */
-function _App(props: AppProps): JSX.Element {
-  const {Component, pageProps} = props
-
-  useEffect(() => {
-    // Remove the server-side injected CSS.
-    const jssStyles = document.querySelector('#jss-server-side')
-    if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
-  }, [])
-
-  useEffect(() => {
-    if (isProduction) {
-      app.getAnalytics()
-    }
-  }, [])
-
-  const Wrapper = isProduction ? Fragment : Fragment// StrictMode
+function _App(props: _AppProps) {
+  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
 
   return (
-    <>
-      <Head>
-        <title>{APP.META_TITLE}</title>
-        <meta name="description" content={APP.META_DESCRIPTION} />
-      </Head>
-      <Wrapper>
-        <AppContextProvider value={app}>
-          <CurrentUserProviderComponent>
-            <MuiThemeProvider theme={consoleTheme}>
-              <CssBaseline>
-                <AppLoaderProviderComponent>
-                  <div className="app">
-                    <main>
-                      <Component {...pageProps} />
-                    </main>
-                  </div>
-                  <AppLoaderOverlayView />
-                </AppLoaderProviderComponent>
-              </CssBaseline>
-            </MuiThemeProvider>
-          </CurrentUserProviderComponent>
-        </AppContextProvider>
-      </Wrapper>
-    </>
+    <CacheProvider value={emotionCache}>
+      <AppWrapper>
+        <Component {...pageProps} />
+      </AppWrapper>
+    </CacheProvider>
   )
 }
 _App.displayName = '_App'
+_App.getInitialProps = async ({ctx, Component}) => {
+  let pageProps = {}
+
+  if (Component.getInitialProps) {
+    pageProps = await Component.getInitialProps(ctx)
+  }
+
+  return {
+    pageProps: {
+      lang: ctx.query.lang || 'en',
+      ...pageProps,
+    },
+  }
+}
 export default _App
+
+
+if (process.browser) {
+  console.log(
+    `%c
+       d8888          888                         888      888       .d8888b.
+      d88888          888                         888      888      d88P  Y88b
+     d88P888          888                         888      888      888    888
+    d88P 888  .d88b.  888 888  888 88888b.        888      888      888
+   d88P  888 d88P"88b 888 888  888 888 "88b       888      888      888
+  d88P   888 888  888 888 888  888 888  888       888      888      888    888
+ d8888888888 Y88b 888 888 Y88b 888 888  888       888      888      Y88b  d88P
+d88P     888  "Y88888 888  "Y88888 888  888       88888888 88888888  "Y8888P"
+                  888          888
+             Y8b d88P     Y8b d88P
+              "Y88P"       "Y88P"
+
+                            Copyright (c) 2021 Aglyn LLC. All Rights Reserved.
+
+Hello there, Friend! 👋
+
+For detailed information please visit 'https://aglyn.com' or you may send an
+email to 'info@aglyn.com'.
+– Aglyn Engineering Team
+`,
+    'font-family:monospace;color:#E040FB;font-size:12px;',
+  )
+}

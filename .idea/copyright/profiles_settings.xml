@@ -16,6 +16,10 @@
       <option name="lenBefore" value="1" />
       <option name="filler" value="*" />
     </LanguageOptions>
+    <LanguageOptions name="DTD">
+      <option name="fileTypeOverride" value="3" />
+      <option name="filler" value="~" />
+    </LanguageOptions>
     <LanguageOptions name="ECMAScript 6">
       <option name="fileTypeOverride" value="3" />
       <option name="separateBefore" value="true" />
@@ -24,6 +28,15 @@
     </LanguageOptions>
     <LanguageOptions name="HTML">
       <option name="fileTypeOverride" value="3" />
+      <option name="filler" value="~" />
+    </LanguageOptions>
+    <LanguageOptions name="JSP">
+      <option name="fileTypeOverride" value="3" />
+      <option name="filler" value="~" />
+    </LanguageOptions>
+    <LanguageOptions name="JSPX">
+      <option name="fileTypeOverride" value="3" />
+      <option name="filler" value="~" />
     </LanguageOptions>
     <LanguageOptions name="JSX Harmony">
       <option name="fileTypeOverride" value="3" />
@@ -46,7 +59,9 @@
     <LanguageOptions name="Properties">
       <option name="fileTypeOverride" value="3" />
       <option name="separateBefore" value="true" />
+      <option name="separateAfter" value="true" />
       <option name="lenBefore" value="1" />
+      <option name="lenAfter" value="1" />
       <option name="filler" value="*" />
     </LanguageOptions>
     <LanguageOptions name="SCSS">
@@ -55,10 +70,29 @@
       <option name="lenBefore" value="1" />
       <option name="filler" value="*" />
     </LanguageOptions>
+    <LanguageOptions name="SPI">
+      <option name="fileTypeOverride" value="3" />
+      <option name="separateBefore" value="true" />
+      <option name="separateAfter" value="true" />
+      <option name="lenBefore" value="1" />
+      <option name="lenAfter" value="1" />
+      <option name="box" value="true" />
+      <option name="filler" value="*" />
+    </LanguageOptions>
     <LanguageOptions name="Sass">
       <option name="fileTypeOverride" value="3" />
       <option name="separateBefore" value="true" />
       <option name="separateAfter" value="true" />
+      <option name="lenBefore" value="1" />
+      <option name="lenAfter" value="1" />
+      <option name="filler" value="*" />
+    </LanguageOptions>
+    <LanguageOptions name="Shell Script">
+      <option name="fileTypeOverride" value="3" />
+      <option name="separateBefore" value="true" />
+      <option name="separateAfter" value="true" />
+      <option name="lenBefore" value="1" />
+      <option name="lenAfter" value="1" />
       <option name="filler" value="*" />
     </LanguageOptions>
     <LanguageOptions name="TypeScript">
@@ -72,6 +106,14 @@
       <option name="separateBefore" value="true" />
       <option name="lenBefore" value="1" />
       <option name="filler" value="*" />
+    </LanguageOptions>
+    <LanguageOptions name="XHTML">
+      <option name="fileTypeOverride" value="3" />
+      <option name="filler" value="~" />
+    </LanguageOptions>
+    <LanguageOptions name="XML">
+      <option name="fileTypeOverride" value="3" />
+      <option name="filler" value="~" />
     </LanguageOptions>
     <LanguageOptions name="__TEMPLATE__">
       <option name="separateBefore" value="true" />

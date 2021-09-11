@@ -17,7 +17,7 @@
 
 import { forwardRef, ReactNode } from 'react'
 
-import MuiTextField, { TextFieldProps as MuiTextFieldProps } from '@material-ui/core/TextField'
+import MuiTextField, { TextFieldProps as MuiTextFieldProps } from '@mui/material/TextField'
 
 import useFieldApi, { UseFieldApiConfig } from '@data-driven-forms/react-form-renderer/use-field-api'
 
@@ -25,7 +25,7 @@ import { withGridItem } from '../field-hocs'
 import { validationMessage } from '../utils'
 
 
-export type Props = MuiTextFieldProps & UseFieldApiConfig & {
+export type FieldTextFieldProps = MuiTextFieldProps & UseFieldApiConfig & {
   isReadOnly?: boolean
   isDisabled?: boolean
   isRequired?: boolean
@@ -34,7 +34,7 @@ export type Props = MuiTextFieldProps & UseFieldApiConfig & {
 }
 
 
-const FieldSelect = forwardRef<any, Props>(
+const FieldTextField = forwardRef<any, FieldTextFieldProps>(
   function  RefRenderFn(props, ref) {
     const {
       input,
@@ -71,6 +71,6 @@ const FieldSelect = forwardRef<any, Props>(
   }
 )
 
-FieldSelect.displayName = 'FieldSelect'
+FieldTextField.displayName = 'FieldTextField'
 
-export default withGridItem(FieldSelect)
+export default withGridItem(FieldTextField)

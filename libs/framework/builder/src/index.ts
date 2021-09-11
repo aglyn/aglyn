@@ -15,7 +15,4 @@
  * limitations under the License.
  */
 
-export * from './lib/components/builder-element-renderer.component'
-export { default as ElementComponent } from './lib/components/builder-element-renderer.component'
 export * from './lib/components/builder.component'
-export { default as BuilderComponent } from './lib/components/builder.component'

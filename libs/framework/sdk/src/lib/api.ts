@@ -25,7 +25,7 @@ import {
   AglynExtensionInstance,
 } from './types'
 import { DEFAULT_ENTRY_NAME } from './constants'
-import { _apps, _commandControllers, _extensionControllers, _modules } from './internal'
+import { _apps, _commandControllers, _extensionControllers, _modules } from './_internal'
 import { LogCallback, Logger, LogLevelString, LogOptions } from '@aglyn/shared/feature/logger'
 import { _isCtor, _isFnT, _isNull, _isStrEmpty } from '@aglyn/shared/util/guards'
 import { trim } from '@aglyn/shared/util/tools'
@@ -35,7 +35,7 @@ import {
   AglynModuleEventFlag,
   AglynModuleEventPayload,
 } from './emitter'
-import { Mutable } from '@aglyn/shared/util/types'
+import { MutableShallow } from '@aglyn/shared/util/types'
 import { isAppModule, isExtension } from './util/aglyn-is'
 import { AglynAppController } from './controllers/aglyn-app.controller'
 import { AGLYN_ERROR, AglynErrorEventFlag } from './error'
@@ -96,7 +96,7 @@ export function deleteApp(app: AglynAppInstance): void {
   AGLYN_EMITTER.emit(AglynAppEventFlag.BEFORE_DELETE_APP, {app})
   app.onDestroy?.()
   _apps.delete(name)
-  ;(app as Mutable<AglynAppInstance>)['deleted'] = true
+  ;(app as MutableShallow<AglynAppInstance>)['deleted'] = true
   AGLYN_LOGGER.debug(AglynAppEventFlag.APP_DELETED, {appName: name})
   AGLYN_EMITTER.emit(AglynAppEventFlag.APP_DELETED, {appName: name})
 }

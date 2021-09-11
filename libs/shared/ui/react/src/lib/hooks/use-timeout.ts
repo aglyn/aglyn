@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+import { _isFnT } from '@aglyn/shared/util/guards'
 import { useEffect, useRef } from 'react'
-import { _isFnT } from '@aglyn/shared/util/helpers'
 
 
 export function useTimeout(callback: TimerHandler, delay: number, ...args: any[]): void {

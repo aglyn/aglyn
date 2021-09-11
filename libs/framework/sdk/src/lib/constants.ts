@@ -18,7 +18,7 @@
 
 export const DEFAULT_ENTRY_NAME = '[DEFAULT]'
 
-export enum RestrictFlag {
+export const enum RestrictFlag {
   LIMIT = 'limit',
   DISALLOW = 'disallow',
 }

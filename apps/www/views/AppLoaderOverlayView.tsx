@@ -15,51 +15,47 @@
  * limitations under the License.
  */
 
-import { _isFnT } from '@aglyn/shared/util/helpers'
-import MuiBackdrop, { BackdropProps as MuiBackdropProps } from '@material-ui/core/Backdrop'
-import CircularProgress from '@material-ui/core/CircularProgress'
-import LinearProgress from '@material-ui/core/LinearProgress'
-import Slide, { SlideProps} from '@material-ui/core/Slide'
-import Typography from '@material-ui/core/Typography'
-import { createStyles, fade, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
-import clsx from 'clsx'
+import { alpha, styled } from '@aglyn/shared/ui/themes'
+import MuiBackdrop, { BackdropProps as MuiBackdropProps } from '@mui/material/Backdrop'
+import CircularProgress from '@mui/material/CircularProgress'
+import LinearProgress from '@mui/material/LinearProgress'
+import Typography from '@mui/material/Typography'
 import { useRouter } from 'next/router'
-import { QueueResponse, withAppLoader, WithAppLoaderProps } from '../contexts/app-loader-context'
 import React, { useEffect, useState } from 'react'
+import { withAppLoader, WithAppLoaderProps } from '../contexts/app-loader-context'
 import { NextRouterEvent } from '../hooks/router-events'
 
-const styles = (theme: Theme) => createStyles({
-  root: {
-    backgroundColor: fade(theme.palette.common.white, 0.48),
-    color: theme.palette.getContrastText(fade(theme.palette.common.white, 0.36)),
-    zIndex: 9999999,
-    flexDirection: 'column',
-    backdropFilter: 'blur(5px)'
-  },
-  loadingBar: {
-    position: 'absolute',
-    top: 0, left: 0,
-    backgroundColor: fade(theme.palette.primary.main, 0.86),
-    width: '100%',
-  },
-  loadingCircle: {},
-  label: {marginTop: theme.spacing(2)},
-})
 
-export type Props = Partial<MuiBackdropProps> & {
-}
+const LoadingBackdrop = styled(MuiBackdrop, {
+  name: 'LoadingBackdrop',
+})(({theme}) => ({
+  backgroundColor: alpha(theme.palette.common.white, 0.48),
+  color: theme.palette.getContrastText(alpha(theme.palette.common.white, 0.36)),
+  zIndex: 9999999,
+  flexDirection: 'column',
+  backdropFilter: 'blur(5px)',
+}))
 
-const AppLoaderOverlayView = React.forwardRef<any, Props & WithAppLoaderProps & WithStyles<typeof styles>>(
+const LoadingProgressBar = styled(LinearProgress, {
+  name: 'LoadingProgressBar',
+})(({theme}) => ({
+  position: 'absolute',
+  top: 0, left: 0,
+  backgroundColor: alpha(theme.palette.primary.main, 0.86),
+  width: '100%',
+}))
+
+export interface AppLoaderOverlayProps extends Partial<MuiBackdropProps>, WithAppLoaderProps {}
+
+const AppLoaderOverlayView = React.forwardRef<any, AppLoaderOverlayProps>(
   function RefRenderFn(props, ref) {
     const {
       classes,
       open,
-      className,
       appLoader,
       ...rest
     } = props
-    const isOpen = Boolean(open || appLoader.isLoading)
-    const _className = clsx(classes.root, className)
+    const isOpen = Boolean(open || appLoader?.isLoading)
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     useEffect(() => {
@@ -80,29 +76,26 @@ const AppLoaderOverlayView = React.forwardRef<any, Props & WithAppLoaderProps & 
     }, [])
 
     return (
-      <MuiBackdrop
+      <LoadingBackdrop
         ref={ref}
-        className={_className}
         open={isOpen || loading}
         mountOnEnter
         unmountOnExit
         {...rest}
       >
-        <LinearProgress className={classes.loadingBar} color="secondary" />
-        <CircularProgress className={classes.loadingCircle} color="secondary" />
+        <LoadingProgressBar color="secondary"/>
+        <CircularProgress color="secondary"/>
         <Typography
           children="Loading..."
-          className={classes.label}
           component="div"
           variant="overline"
+          sx={{mt: 2}}
         />
-      </MuiBackdrop>
+      </LoadingBackdrop>
     )
-  }
+  },
 )
 
 AppLoaderOverlayView.displayName = 'AppLoaderOverlayView'
 
-export default withStyles(styles, { name: 'AppLoaderOverlayView' })(
-  withAppLoader(AppLoaderOverlayView)
-)
+export default withAppLoader(AppLoaderOverlayView)

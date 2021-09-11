@@ -17,11 +17,11 @@
 
 import { AppController } from '../lib/aglyn-deprecated'
 import { createContext, useContext } from 'react'
+import { ComponentWithInjectedProp, withContext } from '@aglyn/shared/ui/react'
 
-import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '@aglyn/shared/ui/react'
+export type AppContextType = AppController
 
-
-export const AppContext = createContext<AppController>(null)
+export const AppContext = createContext<AppContextType>(null)
 AppContext.displayName = 'AppContext'
 
 export const {
@@ -30,20 +30,19 @@ export const {
   Consumer: AppContextConsumer,
 } = AppContext
 
-export const useAppContext = () => useContext(AppContext)
-
-const WithN = 'app'
-type WithN = typeof WithN
 export type AppContextConsumer = typeof AppContextConsumer
-export type WithAppContextProps = InjectedContextProp<AppContextConsumer, WithN>
 
 /**
  * App context HOC
  * @export
  * @template P
- * @param {ComponentWithInjectedProp<P, AppContextConsumer, WithN>} Component
+ * @param {ComponentWithInjectedProp<P, AppContextType, 'app'>} Component
  * @return {*}
  */
-export function withAppContext<P>(Component: ComponentWithInjectedProp<P, AppContextConsumer, WithN>) {
-  return withContext(AppContextConsumer, WithN)(Component)
+export function withAppContext<P>(
+  Component: ComponentWithInjectedProp<P, AppContextConsumer, 'app'>
+) {
+  return withContext(AppContextConsumer, 'app')(Component)
 }
+
+export const useAppContext = () => useContext(AppContext)

@@ -15,42 +15,41 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import { _isStr } from '@aglyn/shared/util/guards'
-import { mapObject } from '@aglyn/shared/util/tools'
-import IconButton from '@material-ui/core/IconButton'
-import NavbarDrawer from '@aglyn/common/components/NavbarDrawer'
+import { NavbarDrawer, NavbarDrawerProps, SvgPathIcon } from '@aglyn/shared/ui/react'
+import { alpha, createStyles, ExtendPropsOfWithStyles, withStyles } from '@aglyn/shared/ui/themes'
+import { _isStrT } from '@aglyn/shared/util/guards'
+import { remap } from '@aglyn/shared/util/tools'
+import { Box, Button } from '@mui/material'
+import Container from '@mui/material/Container'
+import IconButton from '@mui/material/IconButton'
+import LinearProgress from '@mui/material/LinearProgress'
+import Typography from '@mui/material/Typography'
+import React, { forwardRef } from 'react'
 import FieldSet from '../components/FieldSet'
-import { createStyles, fade, makeStyles, Theme } from '@material-ui/core/styles'
-import SvgPathIcon from '@aglyn/common/components/SvgPathIcon'
-import Container from '@material-ui/core/Container'
-import Typography from '@material-ui/core/Typography'
-import { Box, Button } from '@material-ui/core'
-import LinearProgress from '@material-ui/core/LinearProgress'
-import { Fields } from 'forms'
+import { Fields } from '../forms'
 
 
-const useStyles = makeStyles<Theme, Props>((theme) => createStyles({
+export const drawerFormViewStyles = (theme) => createStyles({
   closeButton: {marginRight: theme.spacing(2)},
   pt2: {paddingTop: theme.spacing(2)},
   wrapper: {position: 'relative'},
   loadingBar: {
     position: 'absolute',
-    backgroundColor: fade(theme.palette.primary.main, 0.86),
+    backgroundColor: alpha(theme.palette.primary.main, 0.86),
     top: 0,
     left: 0,
     width: '100%',
   },
-}))
+})
 
-export type Variant = 'creating' | 'updating'
+export type FormVariant = 'creating' | 'updating'
 
-type Props = {
+export interface DrawerFormViewProps extends ExtendPropsOfWithStyles<Partial<NavbarDrawerProps>, typeof drawerFormViewStyles> {
   id: string,
   fields: Fields.FieldGroup
   label: string
   open: boolean
-  variant: Variant,
+  formVariant: FormVariant,
 
   loading?: boolean
   error?: string | boolean
@@ -59,98 +58,105 @@ type Props = {
   onUpdate: (fieldId: string) => React.ChangeEventHandler<HTMLTextAreaElement | HTMLInputElement>
 }
 
-export default function DrawerFormView(props: Props) {
-  const classes = useStyles(props)
-  const {
-    id,
-    fields,
-    open,
-    loading,
-    error,
-    variant = 'creating',
-    label,
-    onClose,
-    onSave,
-    onUpdate,
-  } = props
+const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      id,
+      fields,
+      open,
+      loading,
+      error,
+      formVariant = 'creating',
+      label,
+      onClose,
+      onSave,
+      onUpdate,
+      classes,
+      ...rest
+    } = props
 
-  const isCreating = variant === 'creating'
-  const actionLabel = isCreating ? 'Create' : 'Update'
+    const isCreating = formVariant === 'creating'
+    const actionLabel = isCreating ? 'Create' : 'Update'
 
-  return (
-    <NavbarDrawer
-      appBarLeft={
-        <React.Fragment>
-          <IconButton
-            children={<SvgPathIcon iconId="close" />}
-            className={classes.closeButton}
-            color="default"
-            edge="start"
-            onClick={onClose}
-          />
-          <Typography
-            children={`${actionLabel} ${label}`}
-            color="inherit"
-            component="div"
-            variant="h6"
-          />
-        </React.Fragment>
-      }
-      appBarRight={
-        <Button
-          children={actionLabel}
-          color="secondary"
-          disabled={loading}
-          variant="contained"
-          onClick={onSave}
-        />
-      }
-      open={open}
-      onClose={onClose}
-    >
-      <div className={classes.wrapper}>
-        {loading && (
+    return (
+      <NavbarDrawer
+        ref={ref}
+        appBarLeft={
           <React.Fragment>
-            <LinearProgress classes={{root: classes.loadingBar}} color="secondary" />
+            <IconButton
+              children={<SvgPathIcon iconId="close"/>}
+              className={classes.closeButton}
+              color="default"
+              edge="start"
+              onClick={onClose}
+            />
+            <Typography
+              children={`${actionLabel} ${label}`}
+              color="inherit"
+              component="div"
+              variant="h6"
+            />
           </React.Fragment>
-        )}
-
-
-        <Container>
-          <br />
-          {error && (_isStr(error) ? error : 'Error loading...')}
-          {!error && (
+        }
+        appBarRight={
+          <Button
+            children={actionLabel}
+            color="secondary"
+            disabled={loading}
+            variant="contained"
+            onClick={onSave}
+          />
+        }
+        open={open}
+        onClose={onClose}
+        {...rest}
+      >
+        <div className={classes.wrapper}>
+          {loading && (
             <React.Fragment>
-              <Typography
-                children={'Unique ID'}
-                variant="subtitle2"
-              />
-              <Typography
-                children={id ?? '(none)'}
-                variant="subtitle1"
-              />
-              <FieldSet fields={fields} loading={loading} onUpdate={onUpdate} />
-              <Box mt={2}>
-                <Typography
-                  children={'JSON Output'}
-                  variant="subtitle2"
-                />
-                <Box
-                  bgcolor="background.default"
-                  mt={1}
-                  overflow="scroll"
-                  px={1}
-                >
-                  <pre>
-                    {JSON.stringify(mapObject(fields, f => f.value ?? '', {copy: true}), null, 2)}
-                  </pre>
-                </Box>
-              </Box>
+              <LinearProgress classes={{root: classes.loadingBar}} color="secondary"/>
             </React.Fragment>
           )}
-        </Container>
-      </div>
 
-    </NavbarDrawer>
-  )
-}
+
+          <Container>
+            <br/>
+            {error && (_isStrT(error) ? error : 'Error loading...')}
+            {!error && (
+              <React.Fragment>
+                <Typography
+                  children={'Unique ID'}
+                  variant="subtitle2"
+                />
+                <Typography
+                  children={id ?? '(none)'}
+                  variant="subtitle1"
+                />
+                <FieldSet fields={fields} loading={loading} onUpdate={onUpdate}/>
+                <Box mt={2}>
+                  <Typography
+                    children={'JSON Output'}
+                    variant="subtitle2"
+                  />
+                  <Box
+                    bgcolor="background.default"
+                    mt={1}
+                    overflow="scroll"
+                    px={1}
+                  >
+                  <pre>
+                    {JSON.stringify(remap(fields, f => f.value ?? ''), null, 2)}
+                  </pre>
+                  </Box>
+                </Box>
+              </React.Fragment>
+            )}
+          </Container>
+        </div>
+
+      </NavbarDrawer>
+    )
+  },
+)
+
+export default withStyles(drawerFormViewStyles, {name: 'DrawerFormView'})(DrawerFormView)

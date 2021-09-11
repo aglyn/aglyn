@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { getDisplayName } from '@aglyn/shared/util/helpers'
+import { getDisplayName } from '@aglyn/shared/util/tools'
 import { ComponentType, Consumer, createElement } from 'react'
 
 
@@ -47,15 +47,16 @@ export type ComponentWithInjectedProp<P,
  * @template Key
  * @param {Consumer<any>} consumer
  * @param {Key} [prop]
- * @returns {*}  {(component: ComponentWithInjectedProp<P, typeof consumer, Key>) => React.ComponentType<Omit<P, typeof prop>>}
+ * @returns {*}  {(component: ComponentWithInjectedProp<P, typeof consumer, Key>) =>
+ *   React.ComponentType<Omit<P, typeof prop>>}
  */
-export function withContext<P = {}, Key extends string = 'ctx'>(
-  consumer: Consumer<any>, prop?: Key,
-): (component: ComponentWithInjectedProp<P, typeof consumer, Key>) => ComponentType<Omit<P, typeof prop>> {
+export function withContext<T, Key extends string = 'ctx'>(
+  consumer: Consumer<T>, prop?: Key,
+): <P>(component: ComponentType<P & Partial<Record<Key, T>>>) => ComponentType<Omit<P, Key>> {
 
-  return function(component: ComponentWithInjectedProp<P, typeof consumer, Key>): ComponentType<Omit<P, typeof prop>> {
+  return function <P>(component: ComponentType<P & Record<Key, T>>): ComponentType<Omit<P, Key>> {
     function WithContext(props) {
-      const getProps = (ctx: ConsumerContextType<typeof consumer>) => ({ ...props, [prop ?? injectedProp]: ctx })
+      const getProps = (ctx: ConsumerContextType<typeof consumer>) => ({...props, [prop ?? injectedProp]: ctx})
       const children = (ctx) => createElement(component, getProps(ctx))
       return createElement(consumer, null, children)
     }

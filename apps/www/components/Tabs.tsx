@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import { fade, makeStyles, Theme } from '@material-ui/core/styles'
-import AppBar from '@material-ui/core/AppBar'
-import MuiTabs from '@material-ui/core/Tabs'
-import MuiTab from '@material-ui/core/Tab'
-import Typography from '@material-ui/core/Typography'
-import Box from '@material-ui/core/Box'
 import { GridButtons, SvgPathIcon } from '@aglyn/shared/ui/react'
+import { makeStyles, Theme } from '@aglyn/shared/ui/themes'
+import AppBar from '@mui/material/AppBar'
+import Box from '@mui/material/Box'
+import MuiTab from '@mui/material/Tab'
+import MuiTabs from '@mui/material/Tabs'
+import Typography from '@mui/material/Typography'
+import React from 'react'
 
 
 interface TabPanelProps {
@@ -62,7 +62,7 @@ const useStyles = makeStyles((theme: Theme) => ({
   root: {
     flexGrow: 1,
     // backgroundColor: theme.palette.background.paper,
-    backgroundColor: fade(theme.palette.primary.light, 0.12),
+    backgroundColor: alpha(theme.palette.primary.light, 0.12),
     borderBottom: `1px solid ${theme.palette.divider}`,
   },
 }))
@@ -87,8 +87,8 @@ export default function Tabs() {
           variant="scrollable"
           onChange={handleChange}
         >
-          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconId="home" />} />
-          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconId="eye" />} />
+          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconId="home"/>}/>
+          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconId="eye"/>}/>
           {/* <MuiTab label="Item Two" {...a11yProps(2)} />
            <MuiTab label="Item Three" {...a11yProps(3)} /> */}
         </MuiTabs>
@@ -103,7 +103,7 @@ export default function Tabs() {
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="file-document-multiple" /></div>
+                  <div><SvgPathIcon fontSize="large" iconId="file-document-multiple"/></div>
                   <div>Entries</div>
                 </div>
               ),
@@ -122,7 +122,7 @@ export default function Tabs() {
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="variable" /></div>
+                  <div><SvgPathIcon fontSize="large" iconId="variable"/></div>
                   <div>Fields</div>
                 </div>
               ),
@@ -134,7 +134,7 @@ export default function Tabs() {
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="check-network" /></div>
+                  <div><SvgPathIcon fontSize="large" iconId="check-network"/></div>
                   <div>Rules</div>
                 </div>
               ),
@@ -146,7 +146,7 @@ export default function Tabs() {
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="chart-sankey-variant" /></div>
+                  <div><SvgPathIcon fontSize="large" iconId="chart-sankey-variant"/></div>
                   <div>Workflows</div>
                 </div>
               ),

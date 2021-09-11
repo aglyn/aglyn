@@ -15,9 +15,19 @@
  * limitations under the License.
  */
 
-import { consoleTheme } from '@aglyn/shared/ui/themes'
-import { ServerStyleSheets } from '@material-ui/core/styles'
-import { NextComponentType } from 'next'
+import {
+  makeLinkElements,
+  MakeLinkElementsConfig,
+  makeMetaElements,
+  MakeMetaElementsConfig,
+} from '@aglyn/shared/ui/react'
+import {
+  createEmotionCache,
+  createEmotionServer,
+  EmotionCache,
+  getConsoleMetaThemeColor,
+} from '@aglyn/shared/ui/themes'
+import Document from 'next/document'
 import NextDocument, {
   DocumentContext,
   DocumentInitialProps,
@@ -26,33 +36,38 @@ import NextDocument, {
   Main,
   NextScript,
 } from 'next/document'
-import { Children, LinkHTMLAttributes, MetaHTMLAttributes } from 'react'
-import { AnyProps } from '@aglyn/shared/util/types'
+import { Children } from 'react'
+// import { ServerStyleSheet } from 'styled-components'
 
 
 const isProduction = Boolean(process.env.NODE_ENV === 'production')
+const preconnectElements: MakeLinkElementsConfig = [
+  ['preconnect', 'https://www.googletagmanager.com'],
+  ['preconnect', 'https://www.google-analytics.com'],
+  ['preconnect', 'https://adservice.google.com'],
+  ['preconnect', 'https://static.doubleclick.net'],
+  ['preconnect', 'https://googleads.g.doubleclick.net'],
+  ['preconnect', 'https://fonts.googleapis.com'],
+  ['preconnect', 'https://fonts.gstatic.com', {crossOrigin: 'anonymous'}],
+]
+const metaElements: MakeMetaElementsConfig = [
+  [undefined, 'en-us', {httpEquiv: 'content-language'}],
+  [undefined, 'IE=edge', {httpEquiv: 'X-UA-Compatible'}],
+  ['theme-color', getConsoleMetaThemeColor('light'), {media: '(prefers-color-scheme: light)'}],
+  ['theme-color', getConsoleMetaThemeColor('dark'), {media: '(prefers-color-scheme: dark)'}],
+]
+const linkElements: MakeLinkElementsConfig = [
+  ['shortcut icon', '/_static/images/favicons/favicon.ico'],
+  ['icon', '/_static/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
+  ['alternate icon', '/_static/images/favicons/favicon.png', {type: 'image/png'}],
+  ['manifest', '/_static/_pwa/manifest.json'],
+  ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
+]
 
-const jssMinify = {
-  prefixer: null,
-  cleanCSS: null,
-}
-if (isProduction) {
-  /* eslint-disable @typescript-eslint/no-var-requires  */
-  const postcss = require('postcss')
-  const autoprefixer = require('autoprefixer')
-  const CleanCSS = require('clean-css')
-  /* eslint-enable @typescript-eslint/no-var-requires */
+export type LangParam = { lang?: string }
+export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
 
-  jssMinify.prefixer = postcss([autoprefixer])
-  jssMinify.cleanCSS = new CleanCSS()
-}
-
-export type InitPropsResponse = Promise<DocumentInitialProps>
-
-export type MetaElemProps = MetaHTMLAttributes<HTMLMetaElement>
-export type LinkElemProps = LinkHTMLAttributes<HTMLLinkElement>
-export type MetaElementsConfig = [name: MetaElemProps['name'], content: MetaElemProps['content'], other?: MetaElemProps][]
-export type LinkElementsConfig = [rel: LinkElemProps['rel'], href: LinkElemProps['href'], other?: LinkElemProps][]
+export interface _DocumentProps extends LangParam {}
 
 /**
  * Document component handles the initial `document` markup and
@@ -87,7 +102,9 @@ export type LinkElementsConfig = [rel: LinkElemProps['rel'], href: LinkElemProps
  * @extends {NextDocument<P>}
  * @template P
  */
-export default class _Document<P = AnyProps> extends NextDocument<P> {
+class _Document<P extends _DocumentProps> extends Document<P> {
+
+  static displayName = '_Document'
 
   /**
    * Returns the context object with the addition of `renderPage`
@@ -99,85 +116,60 @@ export default class _Document<P = AnyProps> extends NextDocument<P> {
    * @returns {InitPropsResponse}
    */
   static async getInitialProps(ctx: DocumentContext): InitPropsResponse {
-    // Render app and page and get the context of the page with collected side effects.
-    const sheets = new ServerStyleSheets()
     const originalRenderPage = ctx.renderPage
-    ctx.renderPage = () => originalRenderPage({
-      // useful for wrapping the whole react tree
-      enhanceApp: (App) => (props) => {
-        // console.log('enhanceApp: App => props => {}', App, props)
-        return sheets.collect(<App {...props} />)
-      },
+    const cache: EmotionCache = createEmotionCache()
+    const {extractCriticalToChunks} = createEmotionServer(cache)
 
-      // useful for wrapping in a per-page basis
-      enhanceComponent: (Component: NextComponentType) => {
-        // console.log('enhanceComponent: Component => {}',Component.displayName, Component)
-        // console.log('component enhancement', Component)
-        return Component
-      },
-    })
-    const initialProps = await super.getInitialProps(ctx)
-    // Minify css
-    let css = sheets.toString()
-    // It might be undefined, e.g. after an error.
-    if (css && process.env.NODE_ENV === 'production' && jssMinify.prefixer && jssMinify.cleanCSS) {
-      const result1 = await jssMinify.prefixer.process(css, {from: undefined})
-      css = result1.css
-      css = jssMinify.cleanCSS.minify(css).styles
-    }
+    ctx.renderPage = () =>
+      originalRenderPage({
+        enhanceApp: (App: any) => (props) => (
+          <App emotionCache={cache} {...props} />
+        ),
+      })
+
+    const initialProps = await NextDocument.getInitialProps(ctx)
+    const emotionStyles = extractCriticalToChunks(initialProps.html)
+    const emotionStyleTags = emotionStyles.styles.map((style) => (
+      <style
+        key={style.key}
+        data-emotion={`${style.key} ${style.ids.join(' ')}`}
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{__html: style.css}}
+      />
+    ))
 
     return {
       ...initialProps,
+      lang: ctx.query.lang as string ?? 'en',
       // Styles fragment is rendered after the app and page rendering finish.
       styles: [
         ...Children.toArray(initialProps.styles),
-        // sheets.getStyleElement() // LEAVE FOR REFERENCE IN CASE OF ISSUE BELOW
-        <style
-          key="jss-server-side"
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{__html: css}}
-          id="jss-server-side"
-        />,
+        ...emotionStyleTags,
       ],
     }
   }
 
-  metaElements: MetaElementsConfig = [
-    ['theme-color', consoleTheme.palette.primary.main],
-    ['X-UA-Compatible', 'IE=edge'],
-  ]
-  linkElements: LinkElementsConfig = [
-    ['shortcut icon', '/favicon.ico'],
-    ['manifest', '/manifest.json'],
-    ['preconnect', 'https://fonts.googleapis.com'],
-    ['preconnect', 'https://fonts.gstatic.com', {crossOrigin: 'anonymous'}],
-    ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway&display=swap'],
-  ]
-
-  makeMetaElem = ([name, content, {...rest}]: MetaElementsConfig[number]) => (
-    <meta key={name + content} name={name} content={content} {...rest} />
-  )
-
-  makeLinkElem = ([rel, href, {...rest}]: LinkElementsConfig[number]) => (
-    <link key={href} rel={rel} href={href} {...rest} />
-  )
-
-  /**
-   *
-   * @returns {JSX.Element}
-   */
   public render(): JSX.Element {
+    const { lang } = this.props
     return (
-      <Html lang="en">
+      <Html lang={lang}>
         <Head>
-          {this.metaElements.map(this.makeMetaElem)}
-          {this.linkElements.map(this.makeLinkElem)}
+          <meta charSet="utf-8"/>
+          {makeLinkElements(preconnectElements)}
+          {makeMetaElements(metaElements)}
+          {makeLinkElements(linkElements)}
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
+          />
         </Head>
         <body>
-          <Main />
-          <NextScript />
+          <Main/>
+          <NextScript/>
         </body>
       </Html>
     )
   }
 }
+
+export default _Document

@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
+import Button, { ButtonProps } from '@mui/material/Button'
+import Dialog, { DialogProps } from '@mui/material/Dialog'
+import DialogActions from '@mui/material/DialogActions'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText, { DialogContentTextProps } from '@mui/material/DialogContentText'
+import DialogTitle, { DialogTitleProps } from '@mui/material/DialogTitle'
 import { forwardRef } from 'react'
-import Button, { ButtonProps } from '@material-ui/core/Button'
-import Dialog, { DialogProps } from '@material-ui/core/Dialog'
-import DialogActions from '@material-ui/core/DialogActions'
-import DialogContent from '@material-ui/core/DialogContent'
-import DialogContentText, { DialogContentTextProps } from '@material-ui/core/DialogContentText'
-import DialogTitle, { DialogTitleProps } from '@material-ui/core/DialogTitle'
 
 
 export interface DialogConfirmOptions {
@@ -42,7 +42,7 @@ export interface DialogConfirmProps extends DialogProps {
 
 export const DialogConfirm = forwardRef<any, DialogConfirmProps>(
   function RefRenderFn(props, ref) {
-    const { open, options, onCancel, onConfirm, onClose, ...rest } = props
+    const {open, options, onCancel, onConfirm, onClose, ...rest} = props
     const {
       title,
       description,

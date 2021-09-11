@@ -22,7 +22,7 @@ import {
   SelectionOptions,
 } from './selection-context'
 import { ElementType, Fragment, MouseEventHandler, ReactNode, useCallback, useState } from 'react'
-import SelectionComponent from '../components/selection.component'
+import { SelectionComponent } from '../components/selection.component'
 
 
 export interface SelectionContextProviderProps {
@@ -37,7 +37,7 @@ export interface SelectionContextProviderProps {
   }>
 }
 
-function SelectionContextProvider(props: SelectionContextProviderProps) {
+export function SelectionContextProvider(props: SelectionContextProviderProps) {
   const {children, defaultOptions = {}, component: Component} = props
   const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
   const [resolveReject, setResolveReject] = useState([])
@@ -80,7 +80,7 @@ function SelectionContextProvider(props: SelectionContextProviderProps) {
     </Fragment>
   )
 }
-
+SelectionContextProvider.displayName = 'SelectionContextProvider'
 SelectionContextProvider.defaultProps = {
   component: SelectionComponent,
 }

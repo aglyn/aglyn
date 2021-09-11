@@ -7,8 +7,7 @@
       "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
       "rules": {
         "@nrwl/nx/enforce-module-boundaries": [
-          "error",
-          {
+          "error", {
             "enforceBuildableLibDependency": true,
             "allow": [],
             "depConstraints": [
@@ -100,13 +99,8 @@
         "@typescript-eslint/no-namespace": "off",
         "@typescript-eslint/no-unused-vars": "warn",
         "@typescript-eslint/no-var-requires": "off",
+        "no-fallthrough": "off",
         "react/no-children-prop": "off",
-        "no-fallthrough": "off"
-      }
-    },
-    {
-      "files": ["*.ts"],
-      "rules": {
         "react-hooks/rules-of-hooks": "off"
       }
     },
@@ -114,6 +108,19 @@
       "files": ["*.js", "*.jsx"],
       "extends": ["plugin:@nrwl/nx/javascript"],
       "rules": {}
+    },
+    {
+      "files": ["*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error", {
+            "patterns": [
+              "@mui/*/*/*",
+              "!@mui/material/test-utils/*"
+            ]
+          }
+        ]
+      }
     }
   ]
 }

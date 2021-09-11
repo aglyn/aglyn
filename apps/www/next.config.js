@@ -5,7 +5,11 @@ const pkg = require('../../package.json')
 
 // MARK – GLOBALS
 const isProduction = Boolean(process.env.NODE_ENV === 'production')
-console.log('JSON.stringify(process.env.NODE_ENV)',JSON.stringify(process.env.NODE_ENV))
+const securityPolicy = isProduction
+  ? 'default-src \'self\' aglyn.com *.aglyn.com'
+  : 'default-src \'self\''
+
+console.log('JSON.stringify(process.env.NODE_ENV)', JSON.stringify(process.env.NODE_ENV))
 
 /**
  * @type {import('@nrwl/next/plugins/with-nx').WithNxOptions}
@@ -26,6 +30,12 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: isProduction,
   },
+  // headers: [
+  //   {
+  //     key: 'Content-Security-Policy',
+  //     value: securityPolicy,
+  //   },
+  // ],
   webpack: (config, options) => {
     const { webpack, buildId } = options
     config.plugins.push(

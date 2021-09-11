@@ -39,7 +39,7 @@ import {
 } from './symbol'
 import { AglynError } from './error'
 import { Platform } from '@aglyn/shared/util/helpers'
-import { AglynEmitter, AglynModuleEventPayload, AglynModuleEventFlag } from './emitter'
+import { AglynEmitter, AglynModuleEventFlag, AglynModuleEventPayload } from './emitter'
 
 
 export type Payload<T = any> = { payload: T }

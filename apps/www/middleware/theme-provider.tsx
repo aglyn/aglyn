@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import React from 'react'
 import {
   Theme,
   ThemeProvider as MuiThemeProvider,
-  ThemeProviderProps as MuiThemeProviderProps
-} from '@material-ui/core/styles'
+  ThemeProviderProps as MuiThemeProviderProps,
+} from '@aglyn/shared/ui/themes'
+import React from 'react'
 import { NextAppMiddleware } from '../lib/next-app'
 
 
@@ -35,7 +35,7 @@ import { NextAppMiddleware } from '../lib/next-app'
  * @returns {ThemeProviderElement<T>}
  */
 export function ThemeProviderComponent<T>(props: Props): ThemeProviderElement<T> {
-  const { theme, children, selector, ...rest } = props
+  const {theme, children, selector, ...rest} = props
 
   React.useEffect(() => {
     function removeSsrStyles() {
@@ -54,7 +54,7 @@ export function ThemeProviderComponent<T>(props: Props): ThemeProviderElement<T>
   )
 }
 ThemeProviderComponent.defaultProps = {
-  selector: '#jss-server-side'
+  selector: '#jss-server-side',
 }
 ThemeProviderComponent.displayName = 'ThemeProviderComponent'
 
@@ -64,5 +64,5 @@ export type ThemeProviderMiddleware<T = Theme, P = Props> = (theme: T) => NextAp
 
 export const themeProvider: ThemeProviderMiddleware<any, any> = (theme) => ({
   name: 'themeProviderSsr',
-  Component: props => <ThemeProviderComponent {...props} theme={theme} />
+  Component: props => <ThemeProviderComponent {...props} theme={theme}/>,
 })

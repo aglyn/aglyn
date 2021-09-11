@@ -16,8 +16,16 @@
  */
 
 export * from './lib/components/element-renderer.component'
-export { default as ElementRendererComponent } from './lib/components/element-renderer.component'
 export * from './lib/components/elements-renderer.component'
-export { default as ElementsRendererComponent } from './lib/components/elements-renderer.component'
 export * from './lib/components/canvas-renderer.component'
-export { default as CanvasRendererComponent } from './lib/components/canvas-renderer.component'
+
+export * from './lib/contexts/element-components-context'
+export * from './lib/contexts/element-components-context-provider'
+export * from './lib/contexts/elements-context-provider'
+export * from './lib/contexts/elements-context'
+
+export * from './lib/util/create-element-data-id'
+export * from './lib/util/create-element-data'
+export * from './lib/util/create-element-component'
+export * from './lib/util/handle-element-prop-defaults'
+export * from './lib/util/handle-element-resolve-props'

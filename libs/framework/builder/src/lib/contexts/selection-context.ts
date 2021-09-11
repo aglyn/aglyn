@@ -45,6 +45,8 @@ export const buildOptions = (defaultOptions, options) => {
 }
 
 export const SelectionContext = createContext<SelectionContextType>(null)
+SelectionContext.displayName = 'SelectionContext'
+
 export const useSelectionContext: UseSelectionType = () => {
   return useContext(SelectionContext)
 }

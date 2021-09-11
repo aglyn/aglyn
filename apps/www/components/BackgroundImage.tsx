@@ -15,47 +15,50 @@
  * limitations under the License.
  */
 
-import { forwardRef, useEffect, useState } from 'react'
-import Box, { BoxProps } from '@material-ui/core/Box'
-import { Theme, createStyles, WithStyles, withStyles } from '@material-ui/core/styles'
-import clsx from 'clsx'
+import { OverrideableComponentProps } from '@aglyn/shared/ui/react'
+import { styled } from '@aglyn/shared/ui/themes'
+import { forwardRef, HTMLAttributes } from 'react'
 
 
-const styles = (theme: Theme) => createStyles({
-  root: {
-    backgroundColor: 'inherit',
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'bottom center',
-    backgroundSize: 'cover',
-    backgroundAttachment: (props: any) => props?.parallax ? 'fixed' : undefined,
-  },
-})
+const BackgroundImageRoot = styled('div', {
+  name: 'BackgroundImage'
+})(({
+  backgroundColor: 'inherit',
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'bottom center',
+  backgroundSize: 'cover',
+  backgroundImage: null,
+}))
 
-export interface BackgroundImageProps extends BoxProps {
+type BaseProps = HTMLAttributes<HTMLDivElement>
+export interface BackgroundImageProps extends BaseProps, OverrideableComponentProps {
   url: string
   parallax?: boolean
 }
 
-const BackgroundImage = forwardRef<any, BackgroundImageProps & WithStyles<typeof styles>>(
+const BackgroundImage = forwardRef<HTMLDivElement, BackgroundImageProps>(
   function RefRenderFn(props, ref) {
-    const { children, parallax, url, className, classes, ...rest } = props
-
+    const {
+      url,
+      parallax,
+      style,
+      ...rest
+    } = props
     return (
-      <Box
-        // innerRef={ref}
-        className={clsx(classes.root, className)}
-        component="div"
-        style={{
-          backgroundImage: `url(${url})`,
-        }}
+      <BackgroundImageRoot
+        ref={ref}
         {...rest}
-      >
-        {children}
-      </Box>
+        style={{
+          ...style,
+          backgroundImage: `url(${url})`,
+          backgroundAttachment: parallax ? 'fixed' : undefined,
+        }}
+      />
     )
   },
 )
 
 BackgroundImage.displayName = 'BackgroundImage'
 
-export default withStyles(styles, { name: 'BackgroundImage' })(BackgroundImage)
+export { BackgroundImage }
+export default BackgroundImage

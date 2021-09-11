@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
+import { _isFnT } from '@aglyn/shared/util/guards'
 import { MutableRefObject, Ref, useCallback } from 'react'
-
-import { _isFnT } from '@aglyn/shared/util/helpers'
 
 
 /**

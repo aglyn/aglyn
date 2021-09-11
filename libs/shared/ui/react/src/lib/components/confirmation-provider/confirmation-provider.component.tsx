@@ -75,7 +75,7 @@ export function ConfirmationProviderComponent(props: ConfirmationProviderCompone
     </Fragment>
   )
 }
-
+ConfirmationProviderComponent.displayName = 'ConfirmationProviderComponent'
 ConfirmationProviderComponent.defaultProps = {
   component: DialogConfirm,
 }

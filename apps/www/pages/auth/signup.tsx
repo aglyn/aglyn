@@ -15,21 +15,21 @@
  * limitations under the License.
  */
 
-import { mapObject } from '@aglyn/shared/util/helpers'
-import React from 'react'
-import { makeStyles, Theme, createStyles, WithStyles, withStyles } from '@material-ui/core/styles'
-import { Button, Typography, Box } from '@material-ui/core'
-import AuthLayout from '../../layouts/AuthLayout'
-import Link from '../../components/Link'
-import { withAppContext } from '../../contexts/app-context'
-import { Fields, validateField, formIsValid, fieldHasError } from '../../forms'
-import FieldSet from '../../components/FieldSet'
+import { AppLink } from '@aglyn/shared/ui/react'
+import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
+import { remap } from '@aglyn/shared/util/tools'
+import { Box, Button, Typography } from '@mui/material'
 import { useRouter } from 'next/router'
+import React from 'react'
+import FieldSet from '../../components/FieldSet'
+import { withAppContext } from '../../contexts/app-context'
+import { Fields, formIsValid, validateField } from '../../forms'
+import AuthLayout from '../../layouts/AuthLayout'
 
 
 const styles = (theme: Theme) => createStyles({
-  form: { '& .MuiTextField-root': {} },
-  uppercase: { textTransform: 'uppercase' },
+  form: {'& .MuiTextField-root': {}},
+  uppercase: {textTransform: 'uppercase'},
   button: {
     marginTop: theme.spacing(2),
     marginBottom: theme.spacing(2),
@@ -42,10 +42,10 @@ const styles = (theme: Theme) => createStyles({
 
 type Props = {}
 
-export default withStyles(styles, { name: 'Page:SignUp' })(
+export default withStyles(styles, {name: 'Page:SignUp'})(
   withAppContext<Props & WithStyles<typeof styles>>(
     function SignUp(props) {
-      const { app, classes } = props
+      const {app, classes} = props
       const currentUser = app?.getCurrentUser()
       // console.log('app?.getCurrentUser()', currentUser)
       const router = useRouter()
@@ -64,14 +64,14 @@ export default withStyles(styles, { name: 'Page:SignUp' })(
 
       const handleUpdate = (name: string) => e => {
         const value = e.target?.value
-        setFields(prev => ({ ...prev, [name]: validateField(prev[name], value) }))
+        setFields(prev => ({...prev, [name]: validateField(prev[name], value)}))
       }
       const clearForm = () => {
         setFields(prev => {
-          return mapObject(prev, (value) => {
+          return remap(prev, (value) => {
             value.value = ''
             return value
-          }, { copy: true }) as any
+          })
         })
       }
 
@@ -97,7 +97,7 @@ export default withStyles(styles, { name: 'Page:SignUp' })(
           },
           (error) => {
             console.error('Form Error: ', error)
-            const { code, message } = error
+            const {code, message} = error
             setFormError(`(Code: ${code}) ${message}`)
             clearForm()
             setSubmitting(false)
@@ -115,7 +115,7 @@ export default withStyles(styles, { name: 'Page:SignUp' })(
                 variant="h5"
                 gutterBottom
               />
-              <FieldSet fields={fields} loading={submitting} onUpdate={handleUpdate} />
+              <FieldSet fields={fields} loading={submitting} onUpdate={handleUpdate}/>
               {formError && (
                 <Box
                   bgcolor={'error.light'}
@@ -151,9 +151,9 @@ export default withStyles(styles, { name: 'Page:SignUp' })(
             component="div"
             variant="overline"
           >
-            <b children={'Already have an account?'} />
-            <br />
-            <Link
+            <b children={'Already have an account?'}/>
+            <br/>
+            <AppLink
               children="Sign in instead"
               color="secondary"
               href="/auth/signin"
@@ -161,6 +161,6 @@ export default withStyles(styles, { name: 'Page:SignUp' })(
           </Typography>
         </AuthLayout>
       )
-    }
-  )
+    },
+  ),
 )

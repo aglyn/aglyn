@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-import { ComponentType, ElementType, forwardRef, memo } from 'react'
-import {
-  AglynComponent,
-  AglynComponentData,
-  getApp,
-  getComponent,
-  handleResolveProps,
-} from '@aglyn/framework/sdk'
-import { _isArr, _isArrEmpty, _isStrT, _s, yes } from '@aglyn/shared/util/helpers'
-import * as ReactIs from 'react-is'
-import ElementsComponent from './elements-renderer.component'
+import { AglynComponentData, getApp, getComponent } from '@aglyn/framework/sdk'
+import { ReactIs } from '@aglyn/shared/ui/react'
+import { _isArr, _isArrEmpty } from '@aglyn/shared/util/guards'
+import { _s, yes } from '@aglyn/shared/util/tools'
 import { AnyProps } from '@aglyn/shared/util/types'
+import { ComponentType, ElementType, forwardRef } from 'react'
+import { handleElementResolveProps } from '../util/handle-element-resolve-props'
+import { ElementsRendererComponent } from './elements-renderer.component'
 
 
 export interface ElementRendererComponentProps extends AnyProps {
@@ -34,24 +30,32 @@ export interface ElementRendererComponentProps extends AnyProps {
   elementRendererComponent?: ComponentType<ElementRendererComponentProps>
 }
 
-const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
+export const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
   function RefRenderFn(props, ref) {
-    const {elementData: data, elementRendererComponent, ...rest} = props
-    const component = getComponent(getApp(), {componentId: _s(data?.component)})
+    const {
+      elementData,
+      elementRendererComponent: elementRendererComponentProp,
+      ...rest
+    } = props
+    const elementRendererComponent = elementRendererComponentProp || ElementRendererComponent
+
+    // TODO: move to context consumer
+    const component = getComponent(getApp(), {componentId: _s(elementData?.component)})
     const ctor = component
     const options = component?.options
-    const resolvedProps = handleResolveProps(data?.props, options, ctor)
+    const resolvedProps = handleElementResolveProps(elementData?.props, options, ctor)
     const {children: content = null, ...ctorProps} = resolvedProps
     const ComponentCtor = (ReactIs.isValidElementType(ctor) ? ctor : 'div') as ElementType
-    const haveChildren = yes(!_isArr(data?.children) || _isArrEmpty(data?.children))
-    const refProps = options?.disableRef ? {} : {innerRef: ref}
+    const haveChildren = yes(!_isArr(elementData?.children) || _isArrEmpty(elementData?.children))
+    const refProps = options?.disableRef ? {}
+      : options?.innerRef ? {innerRef: ref} : {ref: ref}
 
     return (
       <ComponentCtor {...refProps} {...ctorProps} {...rest}>
         {!haveChildren ? (
-          <ElementsComponent
+          <ElementsRendererComponent
             elementRendererComponent={elementRendererComponent}
-            children={data?.children as AglynComponentData[]}
+            children={elementData?.children}
           />
         ) : (
           content
@@ -62,8 +66,5 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
 )
 
 ElementRendererComponent.displayName = 'ElementRendererComponent'
-ElementRendererComponent.defaultProps = {
-  elementRendererComponent: ElementRendererComponent,
-}
 
-export default memo(ElementRendererComponent)
+export default ElementRendererComponent

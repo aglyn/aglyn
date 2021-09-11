@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+import { _isFnT } from '@aglyn/shared/util/guards'
 import { DependencyList, EffectCallback, useEffect, useRef } from 'react'
-import { _isFnT } from '@aglyn/shared/util/helpers'
 
 
 export function useEffectPostMount(callback: EffectCallback, deps?: DependencyList): void {

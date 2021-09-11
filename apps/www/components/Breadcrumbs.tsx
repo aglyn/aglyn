@@ -15,86 +15,129 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import { withStyles, WithStyles, Theme, createStyles } from '@material-ui/core/styles'
-import MuiBreadcrumb, { BreadcrumbsProps as MuiBreadcrumbsProps } from '@material-ui/core/Breadcrumbs'
-import Link, { LinkProps as LinkProps } from './Link'
+import { AppLink, AppLinkProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared/ui/react'
+import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
+import { _ln } from '@aglyn/shared/util/guards'
+import { yes } from '@aglyn/shared/util/tools'
+import MuiBreadcrumbs, { BreadcrumbsProps as MuiBreadcrumbsProps } from '@mui/material/Breadcrumbs'
+import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
-import { SvgPathIcon, SvgPathIconProps } from '@aglyn/shared/ui/react'
-import Typography from '@material-ui/core/Typography'
+import React, { forwardRef, useMemo } from 'react'
 
 
-const styles = (theme: Theme) => createStyles({
-  root: {
-    display: 'flex',
-    alignItems: 'center',
-    minHeight: theme.spacing(4),
-  },
-  item: {
+const classKeys = generateUtilityClasses('AglynBreadcrumbs', [
+  'item',
+  'disabled',
+  'last',
+  'centered',
+  'icon',
+])
+
+const StyledBreadcrumbs = styled(MuiBreadcrumbs, {
+  name: 'Breadcrumbs',
+})(({theme}) => ({
+  display: 'flex',
+  alignItems: 'center',
+  minHeight: theme.spacing(4),
+  [`& .${classKeys.item}`]: {
     display: 'flex',
     cursor: 'pointer',
   },
-  disabled: { cursor: 'default' },
-  last: {
+  [`& .${classKeys.disabled}`]: {
+    cursor: 'default',
+  },
+  [`& .${classKeys.last}`]: {
     opacity: 0.68,
     textDecoration: 'none',
   },
-  centered: { alignItems: 'center' },
-  icon: {
+  [`& .${classKeys.centered}`]: {
+    alignItems: 'center',
+  },
+  [`& .${classKeys.icon}`]: {
     marginRight: theme.spacing(0.5),
     width: 20,
     height: 20,
   },
-})
+}))
 
-export type ItemProps = LinkProps & { icon?: SvgPathIconProps, disabled?: boolean }
-export type Props = MuiBreadcrumbsProps & {
+export interface ItemProps extends AppLinkProps<'text'> {
+  icon?: SvgPathIconProps,
+  disabled?: boolean
+}
+
+export interface BreadcrumbsProps extends MuiBreadcrumbsProps {
   items: ItemProps[]
   centerIcons?: boolean
 }
 
-const Breadcrumbs = React.forwardRef<any, Props & WithStyles<typeof styles>>(
+export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
   function RefRenderFn(props, ref) {
-    const { classes, className, centerIcons, children, items, ...rest } = props
+    const {
+      centerIcons,
+      children,
+      items,
+      ...rest
+    } = props
 
-    const Item = React.useMemo(() => (
-      React.forwardRef<any, ItemProps & { isLast: boolean }>(
+    const MemoedItem = useMemo(() => {
+      const Component = forwardRef<any, ItemProps & { isLast: boolean }>(
         function RefRenderFn(itemProps, ref) {
-          const { icon, className, isLast, disabled, ...item } = itemProps
-          const itemClass = clsx(classes.item, {
-            [classes.centered]: Boolean(centerIcons),
-            [classes.disabled]: Boolean(disabled || isLast),
-            [classes.last]: Boolean(isLast),
+          const {
+            icon,
+            className,
+            isLast,
+            disabled,
+            ...item
+          } = itemProps
+          const isDisabled = yes(disabled || isLast)
+          const itemClass = clsx(classKeys.item, {
+            [classKeys.disabled]: isDisabled,
+            [classKeys.centered]: Boolean(centerIcons),
+            [classKeys.last]: Boolean(isLast),
           }, className)
 
-          const ItemComponent = isLast ? Typography : Link
+          const ItemComponent = isLast ? Typography : AppLink
 
           return (
-            <ItemComponent ref={ref} className={itemClass} {...item}>
-              {!icon ? undefined : <SvgPathIcon className={classes.icon} {...icon} />}
+            <ItemComponent
+              ref={ref as any}
+              className={itemClass}
+              {...item}
+            >
+              {icon ? (
+                <SvgPathIcon
+                  className={classKeys.icon}
+                  {...icon}
+                />
+              ) : null}
               {item.children}
             </ItemComponent>
           )
         },
       )
-    ), [classes, centerIcons])
+      Component.displayName = 'BreadcrumbItem'
+      return Component
+    }, [centerIcons])
 
     return (
-      <MuiBreadcrumb
+      <StyledBreadcrumbs
         ref={ref}
         aria-label="breadcrumb"
-        className={clsx(classes.root, className)}
         {...rest}
       >
-        {items.map((item, key) => (
-          <Item {...item} key={key} isLast={key === items.length - 1} />
+        {items.map(({...item}, key) => (
+          <MemoedItem
+            key={item.id || item['key'] || key}
+            isLast={_ln(key, items.length - 1)}
+            {...item}
+          />
         ))}
         {children}
-      </MuiBreadcrumb>
+      </StyledBreadcrumbs>
     )
   },
 )
 
 Breadcrumbs.displayName = 'Breadcrumbs'
 
-export default withStyles(styles, { name: 'Breadcrumbs' })(Breadcrumbs)
+export default Breadcrumbs

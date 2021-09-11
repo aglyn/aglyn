@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
+import { _hasKey, _isStrT } from '@aglyn/shared/util/guards'
+import { len } from '@aglyn/shared/util/tools'
 import { Schema as DdfSchema } from '@data-driven-forms/react-form-renderer'
-import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types'
 import validation from '@data-driven-forms/react-form-renderer/validation'
-import md5 from 'md5'
-import { _hasKey, _isStrT, ln } from '@aglyn/shared/util/helpers'
 import { ValidationOptions } from '@data-driven-forms/react-form-renderer/validation/validation'
+import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types'
+import md5 from 'md5'
 
 
 export const validateRegex = (value: string, regex) => (new RegExp(regex)).test(value)
@@ -28,7 +29,7 @@ export const fieldHasError = (field: Fields.FieldT) => Boolean(field.status & Fi
 export const fieldHasValid = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.VALID)
 export const formIsValid = (fields: Fields.FieldGroup) => Object.values(fields).some(field => fieldHasValid(field))
 export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT => {
-  const current = { ...field, value, errorMessage: null }
+  const current = {...field, value, errorMessage: null}
 
   if (current.status === Fields.FieldStatus.NONE) {
     current.status |= Fields.FieldStatus.TOUCHED
@@ -41,10 +42,10 @@ export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT =
   let isValid = true
   const validators = current.validators ?? []
 
-  if (ln(validators)) {
+  if (len(validators)) {
     let i = 0
-    while (i < ln(validators)) {
-      let { regex, errorMessage } = validators[i++]
+    while (i < len(validators)) {
+      let {regex, errorMessage} = validators[i++]
       if (!validateRegex(value, regex)) {
         current.errorMessage = errorMessage
         isValid = false
@@ -221,8 +222,8 @@ export namespace DdfForms {
         placeholder: 'Type your first name',
         variant: 'outlined',
         validate: [
-          { type: 'required', message: 'Please enter a first name' },
-          { type: 'min-length', threshold: 2, message: 'Please enter a longer first name' },
+          {type: 'required', message: 'Please enter a first name'},
+          {type: 'min-length', threshold: 2, message: 'Please enter a longer first name'},
         ],
         isRequired: true,
       },
@@ -233,8 +234,8 @@ export namespace DdfForms {
         placeholder: 'Type your first name',
         variant: 'outlined',
         validate: [
-          { type: 'min-length', threshold: 1, message: 'Please enter a longer last name' },
-          { type: 'required', message: 'Please enter a last name' },
+          {type: 'min-length', threshold: 1, message: 'Please enter a longer last name'},
+          {type: 'required', message: 'Please enter a last name'},
         ],
         isRequired: true,
       },
@@ -243,7 +244,7 @@ export namespace DdfForms {
         name: 'company',
         label: 'Company',
         isRequired: true,
-        validate: [{ type: 'required', message: 'Please enter a company name' }],
+        validate: [{type: 'required', message: 'Please enter a company name'}],
         placeholder: 'Type your company name',
         variant: 'outlined',
       },
@@ -262,7 +263,7 @@ export namespace DdfForms {
         variant: 'outlined',
         isRequired: true,
         validate: [
-          { type: 'required', message: 'Please enter an email address' },
+          {type: 'required', message: 'Please enter an email address'},
           {
             type: 'pattern',
             pattern: '(?:[a-z0-9!#$%&\'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])',

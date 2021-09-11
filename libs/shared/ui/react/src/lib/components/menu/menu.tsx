@@ -15,11 +15,16 @@
  * limitations under the License.
  */
 
-import React, { HTMLProps, Children, MouseEvent, useState, forwardRef, cloneElement } from 'react'
-import MuiMenu, { MenuProps as MuiMenuProps } from '@material-ui/core/Menu'
-import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@material-ui/core/MenuItem'
-import { createStyles, withStyles, WithStyles } from '@material-ui/core/styles'
-import clsx from 'clsx'
+import MuiMenu, { MenuProps as MuiMenuProps } from '@mui/material/Menu'
+import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@mui/material/MenuItem'
+import React, {
+  Children,
+  cloneElement,
+  forwardRef,
+  HTMLAttributes,
+  MouseEvent,
+  useState,
+} from 'react'
 
 
 const ITEM_HEIGHT = 48
@@ -35,20 +40,16 @@ const initialState: State = {
   mouseY: null,
 }
 
-const styles = createStyles<'root' | string, MenuProps>({
-  root: { cursor: (props) => (props.context ? 'context-menu' : undefined) },
-})
-
 /* eslint-disable-next-line */
-export interface MenuProps extends HTMLProps<HTMLDivElement> {
+export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
   items: Array<MuiMenuItemProps>
   context?: boolean
   MenuProps?: Partial<MuiMenuProps>
 }
 
-export const Menu = withStyles(styles, { name: 'Menu' })(
-  forwardRef<any, MenuProps & WithStyles<typeof styles>>(function Menu(props, ref) {
-    const { classes, children, items, context, className, MenuProps, ...rest } = props
+export const Menu = forwardRef<any, MenuProps>(
+  function RefRenderFn(props, ref) {
+    const {children, items, context, className, MenuProps, ...rest} = props
 
     const [state, setState] = useState<State>(initialState)
     const handleClick = (event: MouseEvent<HTMLElement>) => {
@@ -64,14 +65,14 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
     const handleClose = () => setState(initialState)
     const open = Boolean(state.anchorEl || state.mouseY)
     const child = Children.only(children)
-    const cloned = cloneElement(child as any, { onClick: handleClick })
+    const cloned = cloneElement(child as any, {onClick: handleClick})
 
     return (
       <div
         ref={ref}
-        className={clsx(classes.root, className)}
         onContextMenu={handleClick}
-        {...(context ? { onContextMenu: handleClick } : {})}
+        style={{cursor: context ? 'context-menu' : undefined}}
+        {...(context ? {onContextMenu: handleClick} : {})}
         {...rest}
       >
         {cloned}
@@ -91,8 +92,8 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
             context
               ? undefined
               : {
-                vertical: 'bottom',
-                horizontal: 'right',
+                vertical: 'top',
+                horizontal: 'left',
               }
           }
           anchorPosition={
@@ -104,7 +105,7 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
               }
           }
           anchorReference={context ? 'anchorPosition' : undefined}
-          getContentAnchorEl={null}
+          // getContentAnchorEl={null}
           open={open}
           transformOrigin={
             context
@@ -119,7 +120,7 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
         >
           {items.map((item: any, key) => (
             <MuiMenuItem
-              key={key}
+              key={item?.id ?? item?.key ?? key}
               {...item}
               // onClick={(e) => {
               //   handleClose()
@@ -130,7 +131,7 @@ export const Menu = withStyles(styles, { name: 'Menu' })(
         </MuiMenu>
       </div>
     )
-  }),
+  },
 )
 
 Menu.displayName = 'Menu'

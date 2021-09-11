@@ -15,51 +15,73 @@
  * limitations under the License.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { BuilderComponent } from '@aglyn/framework/builder'
+import { createElementComponent } from '@aglyn/framework/renderer'
 import {
-  aglynComponent,
-  getAllComponents,
+  AglynComponentData,
+  getAllComponentsValues,
   getApp,
-  getComponent,
   registerComponent,
 } from '@aglyn/framework/sdk'
-import { BuilderComponent } from '@aglyn/framework/builder'
+import { useCallback, useMemo, useState } from 'react'
 import { samplePageData } from '../constants/sample-data'
 
 
-const Root = aglynComponent('root', {
+registerComponent(getApp(), createElementComponent('root', {
   displayName: 'Root Element',
   title: 'Root element',
   icon: 'block',
-})(({children, innerRef, ...props}) => (
-  <span ref={innerRef} {...props}>{children}</span>
-))
+})('span'))
 
-registerComponent(getApp(), {component: Root})
+registerComponent(getApp(), createElementComponent('root1', {
+  displayName: 'Root Element',
+  title: 'Root element',
+  icon: 'block',
+})('span'))
 
-export interface BuilderProps {}
+registerComponent(getApp(), createElementComponent('root2', {
+  displayName: 'Root Element',
+  title: 'Root element',
+  icon: 'block',
+})('span'))
 
-export function Builder(props: BuilderProps) {
-  const [elements, setElements] = useState(samplePageData)
-  const elementComponents = useMemo(() => {
-    return getAllComponents(getApp()).map(([, element]) => ({
-      id: element?.$id,
-      title: element?.options?.title,
-      icon: element?.options?.icon,
-    }))
-  }, [])
+registerComponent(getApp(), createElementComponent('root3', {
+  displayName: 'Root Element',
+  title: 'Root element',
+  icon: 'block',
+})('span'))
 
-  useEffect(() => {
+registerComponent(getApp(), createElementComponent('root4', {
+  displayName: 'Root Element',
+  title: 'Root element',
+  icon: 'block',
+})('span'))
+
+function Builder(props) {
+  if (typeof document !== 'undefined') {
     console.log('page:/builder app', getApp())
+  }
+
+  const [elements, setElements] = useState<AglynComponentData[]>(samplePageData)
+  const elementComponents = useMemo(() => (
+    getAllComponentsValues(getApp())
+  ), [])
+
+  const handleUpdateElements = useCallback((elements: AglynComponentData[], prevElements) => {
+    console.log('handleUpdateElements', elements, prevElements)
+    setElements(elements)
   }, [])
 
 
   return (
     <BuilderComponent
       elements={elements}
+      onUpdateElements={handleUpdateElements}
       elementComponents={elementComponents}
     />
   )
 }
+
+Builder.displayName = 'Page-Builder'
 
 export default Builder

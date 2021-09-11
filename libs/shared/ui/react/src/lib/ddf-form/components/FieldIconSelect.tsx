@@ -15,23 +15,29 @@
  * limitations under the License.
  */
 
-import {forwardRef, Fragment, HTMLProps, useCallback, useState} from 'react'
+import {
+  SvgPathIcon,
+  GridList,
+  CardIconListItem,
+  useMdiIcons,
+  MdiIcon,
+} from '@aglyn/shared/ui/react'
 
-import clsx from 'clsx'
-
-import {createStyles, Theme, WithStyles, withStyles} from '@material-ui/core/styles'
-import MuiTextField from '@material-ui/core/TextField'
-import ButtonBase from '@material-ui/core/ButtonBase'
-import Button from '@material-ui/core/Button'
-import Collapse from '@material-ui/core/Collapse'
-import Grid from '@material-ui/core/Grid'
-import Typography from '@material-ui/core/Typography'
+import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared/ui/themes'
 
 import useFieldApi from '@data-driven-forms/react-form-renderer/use-field-api'
-import { SvgPathIcon, GridList, CardIconListItem, useMdiIcons, MdiIcon } from '@aglyn/shared/ui/react'
+import Button from '@mui/material/Button'
+import ButtonBase from '@mui/material/ButtonBase'
+import Collapse from '@mui/material/Collapse'
+import Grid from '@mui/material/Grid'
+import MuiTextField from '@mui/material/TextField'
+import Typography from '@mui/material/Typography'
 
-import {withGridItem} from '../field-hocs'
-import {validationMessage} from '../utils'
+import clsx from 'clsx'
+import { forwardRef, Fragment, HTMLProps, useCallback, useState } from 'react'
+
+import { withGridItem } from '../field-hocs'
+import { validationMessage } from '../utils'
 
 
 const styles = (theme: Theme) => createStyles({
@@ -90,7 +96,7 @@ const FieldIconSelect = forwardRef<any, Props & WithStyles<typeof styles>>(
     const value = input.value
     const [open, setOpen] = useState(false)
     const [selected, setSelected] = useState(value)
-    const [icons, { applyFilter }, allIcons] = useMdiIcons()
+    const [icons, {applyFilter}, allIcons] = useMdiIcons()
     const selectedIsSame = value === selected
 
     const handleButtonClick = useCallback(() => {
@@ -141,12 +147,18 @@ const FieldIconSelect = forwardRef<any, Props & WithStyles<typeof styles>>(
                 disableRipple
               >
                 <span>Choose icon: <b>{(allIcons.byIconId[value] ?? {}).name ?? '(none)'}</b></span>
-                <SvgPathIcon className={classes.icon} iconId={open ? 'chevron-up' : 'chevron-down'}/>
+                <SvgPathIcon
+                  className={classes.icon}
+                  iconId={open ? 'chevron-up' : 'chevron-down'}
+                />
               </ButtonBase>
             </Grid>
           </Grid>
           <Grid xs={12} item>
-            <Collapse classes={{ wrapperInner: classes.collapseInner, wrapper: classes.collapse }} in={open}>
+            <Collapse
+              classes={{wrapperInner: classes.collapseInner, wrapper: classes.collapse}}
+              in={open}
+            >
 
 
               <Grid alignItems="center" spacing={2} container>
@@ -164,18 +176,18 @@ const FieldIconSelect = forwardRef<any, Props & WithStyles<typeof styles>>(
                   </Typography>
 
                   {/* <MuiTextField
-                        ref={ref}
-                        {...input}
-                        disabled={isDisabled}
-                        error={Boolean(invalidMessage)}
-                        helperText={helpText}
-                        inputProps={{ readOnly: isReadOnly, ...inputProps }}
-                        label={label}
-                        placeholder={placeholder}
-                        required={isRequired}
-                        fullWidth
-                        {...rest}
-                      /> */}
+                   ref={ref}
+                   {...input}
+                   disabled={isDisabled}
+                   error={Boolean(invalidMessage)}
+                   helperText={helpText}
+                   inputProps={{ readOnly: isReadOnly, ...inputProps }}
+                   label={label}
+                   placeholder={placeholder}
+                   required={isRequired}
+                   fullWidth
+                   {...rest}
+                   /> */}
                 </Grid>
                 <Grid item>
                   <Button
@@ -190,9 +202,9 @@ const FieldIconSelect = forwardRef<any, Props & WithStyles<typeof styles>>(
 
               <div className={classes.gridListWrapper}>
                 <GridList
-                  GridContainerProps={{ spacing: 2 }}
+                  GridContainerProps={{spacing: 2}}
                   GridItemProps={{xs: 6, sm: 3}}
-                  ListWrapperProps={{ className: classes.gridList }}
+                  ListWrapperProps={{className: classes.gridList}}
                   items={icons}
                   renderItemContent={renderItemContent}
                   {...GridListProps}
@@ -203,11 +215,11 @@ const FieldIconSelect = forwardRef<any, Props & WithStyles<typeof styles>>(
         </Grid>
       </Fragment>
     )
-  }
+  },
 )
 
 FieldIconSelect.displayName = 'FieldIconSelect'
 
 export default withGridItem(
-  withStyles(styles, { name: 'FieldIconSelect'})(FieldIconSelect)
+  withStyles(styles, {name: 'FieldIconSelect'})(FieldIconSelect),
 )

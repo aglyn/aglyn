@@ -31,6 +31,9 @@ export * from './lib/components/svg-path-icon/svg-path'
 export * from './lib/components/svg-path-icon/svg-path-icon'
 export * from './lib/components/confirmation-provider/confirmation-provider.component'
 
+export * from './lib/components/app-link'
+export * from './lib/components/next-link'
+
 export * from './lib/contexts/confirmation.context'
 
 export * from './lib/hooks/use-client-rect'
@@ -55,3 +58,7 @@ export * from './lib/ddf-form'
 
 export * from './lib/higher-order/with-hoc'
 export * from './lib/higher-order/with-context'
+
+export * from './lib/utils/make-link-elements'
+export * from './lib/utils/make-meta-elements'
+export * from './lib/utils/vendor'

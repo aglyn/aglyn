@@ -15,5 +15,16 @@
  * limitations under the License.
  */
 
-export * from './lib/themes'
-export * from './lib/types'
+
+export * from './vendor/mui'
+export * from './vendor/emotion'
+
+export * from './lib/builder-theme'
+export * from './lib/console-theme'
+
+export * from './lib/hocs/with-emotion-styles-cache-client'
+export * from './lib/hocs/with-theme'
+
+export * from './lib/util/create-responsive-theme'
+export * from './lib/util/generate-utility-classes'
+export * from './lib/util/use-font-family'

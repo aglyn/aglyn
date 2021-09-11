@@ -16,155 +16,155 @@
  */
 
 import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared/ui/react'
-import { _isStrT, _s, copy } from '@aglyn/shared/util/helpers'
-import Container from '@material-ui/core/Container'
-import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
-import Typography from '@material-ui/core/Typography'
+import { styled } from '@aglyn/shared/ui/themes'
+import { _isStrT } from '@aglyn/shared/util/guards'
+import { _s, copy } from '@aglyn/shared/util/tools'
+import Container from '@mui/material/Container'
+import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
 import React from 'react'
 import Breadcrumbs from '../components/Breadcrumbs'
-import { withCurrentUserCtx } from '../contexts/current-user-context'
-import { withAggregatedPageMeta } from '../lib/app-pages'
-import { getGravatarUrl } from '@aglyn/shared/util/helpers'
+import { CurrentUserContextType, withCurrentUserContext } from '../contexts/current-user-context'
+import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
 import { tabItems } from '../lib/navigation-menus'
-import MainLayout, { Props as MainLayoutProps, styles as mainStyles } from './MainLayout'
+import MainLayout, { MainLayoutProps as MainLayoutProps } from './MainLayout'
 
-
-const getHeader = (first, second) => (<span><b>{first}:</b> {second}</span>)
-
-const styles = (theme: Theme) => createStyles({
-  ...mainStyles(theme),
-})
 
 export const CONTENT_MAX_WIDTH = 'lg'
+const getHeader = (first, second) => (<span><b>{first}:</b> {second}</span>)
 
-export interface Props extends MainLayoutProps {
+const StyledNavBarSpacer = styled('div', {
+  name: 'NavBarSpacer',
+})({
+  display: 'flex',
+  width: '100%',
+  height: 96,
+})
+
+export interface ConsoleLayoutProps extends MainLayoutProps {
   ContentGridItemsProps?: GridItemsProps
   items?: GridItemsProps['items']
   header?: {
     icon?: SvgPathIconProps['iconId'] | SvgPathIconProps
     children?: React.ReactNode
   }
+  aggregatedPageMeta: AggregatedPageMeta
+  currentUserContext: CurrentUserContextType
 }
 
-const ConsoleLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
-  withAggregatedPageMeta(
-    function RenderFn(props) {
-      const {
-        classes,
-        header: headerProp,
-        aggregatedPageMeta,
-        title: titleProp,
-        items,
-        breadcrumbItems: breadcrumbItemsProp,
-        ContentGridItemsProps,
-        children,
-        currentUserContext,
-        ...rest
-      } = props
-      const {
-        pageMeta,
-        overrideMeta,
-        pageAncestors,
-      } = aggregatedPageMeta
-      const title = titleProp ?? (overrideMeta ?? pageMeta)?.title
-      const [rootArea, mainArea, subArea] = pageAncestors
-      const header = {
-        icon: mainArea?.icon,
-        children: getHeader(
-          mainArea ? mainArea.name.default : rootArea?.name.default,
-          subArea ? subArea.name.plural : (overrideMeta ?? pageMeta)?.name.default,
-        ),
-        ...headerProp,
-      }
-      const breadcrumbItems = (breadcrumbItemsProp ?? copy(pageAncestors))
-      .concat(overrideMeta ?? pageMeta)
-      .map((item: any) => ({
-        href: _s(item?.id),
-        children: item?.name.plural,
-      }))
-      const quickActionMenus = [
+function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
+  const {
+    header: headerProp,
+    aggregatedPageMeta,
+    title: titleProp,
+    items,
+    breadcrumbItems: breadcrumbItemsProp,
+    ContentGridItemsProps,
+    children,
+    currentUserContext,
+    ...rest
+  } = props
+  const {
+    pageMeta,
+    overrideMeta,
+    pageAncestors,
+  } = aggregatedPageMeta
+  const title = titleProp ?? (overrideMeta ?? pageMeta)?.title
+  const [rootArea, mainArea, subArea] = pageAncestors
+  const header = {
+    icon: mainArea?.icon,
+    children: getHeader(
+      mainArea ? mainArea.name.default : rootArea?.name.default,
+      subArea ? subArea.name.plural : (overrideMeta ?? pageMeta)?.name.default,
+    ),
+    ...headerProp,
+  }
+  const breadcrumbItems = (breadcrumbItemsProp ?? copy(pageAncestors) as any[])
+  .concat(overrideMeta ?? pageMeta)
+  .map((item: any) => ({
+    href: _s(item?.id),
+    children: item?.name.plural,
+  }))
+  const quickActionMenus: MainLayoutProps['quickActionMenus'] = [
+    {
+      iconId: 'cog-outline',
+      // alt: '',
+      items: [
         {
-          iconId: 'cog-outline',
-          alt: '',
-          items: [
-            {
-              dense: true,
-              children: 'Change Theme',
-            },
-          ],
+          dense: true,
+          children: 'Change Theme',
         },
+      ],
+    },
+    {
+      title: 'User Account',
+      // avatar: {
+      //   alt: currentUserContext.currentUser?.displayName,
+      //   src: getGravatarUrl(currentUserContext.currentUser?.email),
+      // },
+      items: [
         {
-          title: 'User Account',
-          avatar: {
-            alt: currentUserContext.currentUser?.displayName,
-            src: getGravatarUrl(currentUserContext.currentUser?.email),
-          },
-          items: [
-            {
-              dense: true,
-              children: 'Account Settings',
-              href: '/settings/account',
-            },
-          ],
+          dense: true,
+          children: 'Account Settings',
+          href: '/settings/account',
         },
-      ]
+      ],
+    },
+  ]
 
-      return (
-        <MainLayout
-          navTabItems={tabItems}
-          title={title}
-          productName={'console'}
-          quickActionMenus={quickActionMenus}
-          {...rest}
-        >
-          <header className={classes.header}>
-            <div className={classes.navBarSpacer} />
-            <Container maxWidth={CONTENT_MAX_WIDTH}>
-              <Typography
-                className={classes.heading}
-                component="h1"
-                variant="h4"
-              >
-                {header?.icon ? (
-                  <SvgPathIcon
-                    color="secondary"
-                    fontSize="inherit"
-                    {...(_isStrT(header.icon) ? {iconId: header.icon} : header.icon)}
-                    className={clsx(classes.icon, _isStrT(header.icon) ? null : header.icon.className)}
-                  />
-                ) : null}
-                {header?.children ?? title}
-              </Typography>
-              <Breadcrumbs
-                classes={{
-                  root: classes.breadcrumbs,
-                  item: classes.item,
-                  last: classes.last,
-                }}
-                items={breadcrumbItems}
+  return (
+    <MainLayout
+      navTabItems={tabItems}
+      title={title}
+      productName={'console'}
+      quickActionMenus={quickActionMenus}
+      {...rest}
+    >
+      <header>
+        <StyledNavBarSpacer/>
+        <Container maxWidth={CONTENT_MAX_WIDTH}>
+          <Typography
+            component="h1"
+            variant="h4"
+          >
+            {header?.icon ? (
+              <SvgPathIcon
+                color="secondary"
+                fontSize="inherit"
+                {...(_isStrT(header.icon) ? {iconId: header.icon} : header.icon)}
+                className={clsx(
+                  // classes.icon,
+                  _isStrT(header.icon) ? null : header.icon.className,
+                )}
               />
-            </Container>
-          </header>
-          <main className={classes.content}>
-            <Container maxWidth={CONTENT_MAX_WIDTH}>
-              {items || ContentGridItemsProps ? (
-                <GridItems
-                  items={items}
-                  spacing={3}
-                  {...ContentGridItemsProps}
-                />
-              ) : null}
-              {children}
-            </Container>
-          </main>
-        </MainLayout>
-      )
-    }, 'aggregatedPageMeta',
-  ),
-)
+            ) : null}
+            {header?.children ?? title}
+          </Typography>
+          <Breadcrumbs
+            items={breadcrumbItems}
+          />
+        </Container>
+      </header>
+      <main /*className={classes.content}*/>
+        <Container maxWidth={CONTENT_MAX_WIDTH}>
+          {items || ContentGridItemsProps ? (
+            <GridItems
+              items={items}
+              spacing={3}
+              {...ContentGridItemsProps}
+            />
+          ) : null}
+          {children}
+        </Container>
+      </main>
+    </MainLayout>
+  )
+}
 
-ConsoleLayout.displayName = 'Layout:ConsoleLayout'
-ConsoleLayout.defaultProps = {}
+ConsoleLayoutRaw.displayName = 'ConsoleLayout'
+ConsoleLayoutRaw.defaultProps = {}
 
-export default withStyles(styles, {name: 'Layout:MainLayout'})(ConsoleLayout)
+export const ConsoleLayout = withCurrentUserContext(withAggregatedPageMeta(
+  ConsoleLayoutRaw,
+))
+export default ConsoleLayout

@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { len } from '@aglyn/shared/util/tools'
 import { AnyObj } from '@aglyn/shared/util/types'
 
 
@@ -235,22 +236,35 @@ export type PrimitiveBasic = number | string | boolean
  * Checks if the parameter has length greater than 0 or second parameter
  * @export
  * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @param {number} [of] evaluation number if you want to check it against
+ * @param leftValue
+ * @param rightValue
  * @param {('>'|'<'|'=')} [operator]
  * @return {*}  {boolean}
  */
-export function _ln<T>(val: Iterable<T> | ArrayLike<T> | number, of?: number, operator?: '>' | '<' | '='): boolean {
-  if (val) {
-    const ln = _isNum(val) ? val : val['length']
-    const base = _isNum(of) ? of : 0
+export function _ln<T>(
+  leftValue: Iterable<T> | ArrayLike<T> | number,
+  rightValue: number = 0,
+  operator: '>' | '<' | '=' | '==' | '===' | '<=' | '>=' = '===',
+): boolean {
+  if (leftValue) {
+    const left = _isNum(leftValue) ? leftValue : len(leftValue)
+    const right = _isNum(rightValue) ? rightValue : len(rightValue)
     switch (operator) {
-      case '<':
-        return ln < base
       case '=':
-        return ln === base
+      case '===':
+        return left === right
+      case '==':
+        // noinspection EqualityComparisonWithCoercionJS
+        return left == right
+      case '<':
+        return left < right
+      case '<=':
+        return left <= right
+      case '>=':
+        return left >= right
+      case '>':
       default:
-        return ln > base
+        return left > right
     }
   }
   return false
@@ -377,33 +391,28 @@ export function isPromiseLike<T>(
   return typeof (value as PromiseLike<T>).then === 'function'
 }
 
-export namespace EqualityIs {
 
-  type EqualityOperator = 'strict' | 'loose'
+export enum Equality {
+  STRICT,
+  LOOSE,
+  DEFAULT = STRICT,
+}
 
-  export enum Equality {
-    STRICT,
-    LOOSE,
-    DEFAULT = STRICT,
-  }
-
-
-  export function sameType<T, U extends T>(
-    value: T,
-    ...possibilities: U[]
-  ): value is U
-  export function sameType<T, U extends T>(
-    value: T,
-    possibilities: U[],
-    options?: { equality?: EqualityOperator },
-  ): value is U {
-    const {equality = Equality.DEFAULT} = {...options}
-    return possibilities.some((possibility) => {
-      if (equality === 'loose') {
-        return possibility == value
-      }
-      return possibility === value
-    })
-  }
-
+export function equalityIsSameType<T, U extends T>(
+  value: T,
+  ...possibilities: U[]
+): value is U
+export function equalityIsSameType<T, U extends T>(
+  value: T,
+  possibilities: U[],
+  options?: { equality?: 'strict' | 'loose' },
+): value is U {
+  const {equality = Equality.DEFAULT} = {...options}
+  return possibilities.some((possibility) => {
+    if (equality === 'loose') {
+      // noinspection EqualityComparisonWithCoercionJS
+      return possibility == value
+    }
+    return possibility === value
+  })
 }

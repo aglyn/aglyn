@@ -15,50 +15,42 @@
  * limitations under the License.
  */
 
-import { GridItems } from '@aglyn/shared/ui/react'
-import { _isArr, ln } from '@aglyn/shared/util/helpers'
-import Box from '@material-ui/core/Box'
-import Container from '@material-ui/core/Container'
-import MuiLink from '@material-ui/core/Link'
-import { createStyles, Theme, withStyles, WithStyles } from '@material-ui/core/styles'
-import Typography from '@material-ui/core/Typography'
-import clsx from 'clsx'
-import React, { ElementType, forwardRef, HTMLAttributes } from 'react'
-import BackgroundImage from '../components/BackgroundImage'
-import Link from '../components/Link'
+import { AppLink, GridItems } from '@aglyn/shared/ui/react'
+import { styled } from '@aglyn/shared/ui/themes'
+import Box from '@mui/material/Box'
+import Container from '@mui/material/Container'
+import MuiLink from '@mui/material/Link'
+import Typography from '@mui/material/Typography'
+import NextImage from 'next/image'
+import { ElementType, forwardRef, HTMLAttributes } from 'react'
 import { footerNavigation } from '../const'
 
 
-export const SiteFooterStyles = (theme: Theme) => createStyles({
-  root: {
-    background: 'none',
-  },
-  /* LEAVE EMPTY */
-  link: {},
+const FooterElement = styled('footer', {
+  name: 'FooterElement',
+})({
+  background: 'none',
 })
 
-export interface SiteFooterViewProps extends HTMLAttributes<HTMLElement> {
+
+export interface SiteFooterViewProps extends HTMLAttributes<HTMLDivElement> {
   component?: ElementType
 }
 
-const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof SiteFooterStyles>>(
+const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
   function RefRenderFn(props, ref) {
     const {
       children,
-      component: Component,
       className: propClass,
-      classes,
       ...rest
     } = props
-    const className = clsx(classes.root, propClass)
 
     return (
-      <Component
+      <FooterElement
         ref={ref}
-        className={className}
         {...rest}
       >
-        <Box pt={4}>
+        <Box sx={{pt: 4}}>
           {children && (
             <Container maxWidth="lg">
               {children}
@@ -67,46 +59,47 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
           <Container maxWidth="lg">
             <GridItems
               spacing={2}
-              justify="space-between"
+              justifyContent="space-between"
               items={[
                 {
                   xs: 12, sm: 6, md: 3,
                   children: (
                     <>
-                      <img
-                        src="/brand/logo.svg"
-                        width={150}
-                        height={'auto'}
-                        alt="aglyn logo"
+                      <NextImage
+                        src="/_static/images/brand/aglyn-logo.svg"
+                        width={135}
+                        height={48}
+                        alt="aglyn"
                       />
-                      <br />
-                      <br />
+                      <br/>
+                      <br/>
                       <Box fontSize={16}><strong>Mailing Address</strong></Box>
-                      125 JOHNSTON LN<br />
-                      JARRELL, TX, 76537-0029<br />
-                      UNITED STATES<br />
-                      <br />
+                      125 JOHNSTON LN
+                      <br/>
+                      JARRELL, TX, 76537-0029
+                      <br/>
+                      UNITED STATES
+                      <br/>
+                      <br/>
                       Email: <MuiLink
                       href="mailto:info@aglyn.com"
                       children={'info@aglyn.com'}
-                    /><br />
+                    />
+                      <br/>
                     </>
                   ),
                 },
-                ...footerNavigation.map(({ items, ...item }, key) => ({
+                ...footerNavigation.map(({items, ...item}, key) => ({
                   xs: 12 as any, sm: 6 as any, md: 3 as any,
                   children: (
                     <>
                       <Typography variant="overline">
-                        <b children={item.children} />
+                        <b children={item.children}/>
                       </Typography>
                       <Typography component="ul">
                         {items.map((item, key) => (
                           <li key={key}>
-                            <Link
-                              {...item}
-                              className={classes.link}
-                            />
+                            <AppLink {...item} />
                           </li>
                         ))}
                       </Typography>
@@ -117,14 +110,11 @@ const SiteFooterView = forwardRef<any, SiteFooterViewProps & WithStyles<typeof S
             />
           </Container>
         </Box>
-      </Component>
+      </FooterElement>
     )
   },
 )
 
 SiteFooterView.displayName = 'SiteFooterView'
-SiteFooterView.defaultProps = {
-  component: 'footer',
-}
-
-export default withStyles(SiteFooterStyles, { name: 'SiteFooterView' })(SiteFooterView)
+export { SiteFooterView }
+export default SiteFooterView

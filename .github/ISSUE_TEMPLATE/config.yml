@@ -1,8 +1,26 @@
 blank_issues_enabled: false
 contact_links:
-  - name: GitHub Community Support
-    url: https://github.community/
-    about: Please ask and answer questions here.
-  - name: GitHub Security Bug Bounty
-    url: https://bounty.github.com/
-    about: Please report security vulnerabilities here.
+
+  - name: "Aglyn Official Website"
+    url: "https://aglyn.com/?aglyn_ref=git-repo-issue"
+    about: "Visit the official Aglyn website."
+
+  - name: "Aglyn Organization Contact"
+    url: "https://aglyn.com/contact?aglyn_ref=git-repo-issue"
+    about: "Get in touch with Aglyn organization."
+
+  - name: "Aglyn Legal"
+    url: "https://aglyn.com/legal/privacy?aglyn_ref=git-repo-issue"
+    about: "View the Aglyn website privacy policy."
+
+  - name: "Aglyn GitHub Organization"
+    url: "https://github.com/aglyn?aglyn_ref=git-repo-issue"
+    about: "View the Aglyn website privacy policy."
+
+  - name: "GitHub Community Support"
+    url: "https://github.community/"
+    about: "Please ask and answer all other questions here."
+
+  - name: "GitHub Security Bug Bounty"
+    url: "https://bounty.github.com/"
+    about: "Please report security vulnerabilities here."

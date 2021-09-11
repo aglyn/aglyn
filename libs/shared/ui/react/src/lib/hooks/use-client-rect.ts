@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
-import { RefObject, useRef, useState, useCallback } from 'react'
+import { Ref, RefObject, useRef, useState, useCallback } from 'react'
 
-export function useDynamicClientRect(): [() => ClientRect, RefObject<any>] {
+
+export type UseDynamicClientRect = [() => DOMRect, RefObject<any>]
+
+export function useDynamicClientRect(): UseDynamicClientRect {
   const ref = useRef(null)
 
   const getClientRect = useCallback(() => {
@@ -29,9 +32,10 @@ export function useDynamicClientRect(): [() => ClientRect, RefObject<any>] {
   return [getClientRect, ref]
 }
 
-export type UseClientRectCallback = (args: { clientRect: ClientRect; node: Node }) => void
+export type UseClientRectCallback = (args: { clientRect: DOMRect; node: Node }) => void
+export type UseClientRect<T> = [DOMRect, Ref<T>, RefObject<T>]
 
-export function useClientRect(callback?: UseClientRectCallback, initialRect: ClientRect = null) {
+export function useClientRect<T>(callback?: UseClientRectCallback, initialRect: DOMRect = null): UseClientRect<T> {
   const [clientRect, setRect] = useState(initialRect)
   const nodeRef = useRef()
 

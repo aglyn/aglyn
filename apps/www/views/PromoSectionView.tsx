@@ -15,89 +15,70 @@
  * limitations under the License.
  */
 
-import Typography from '@material-ui/core/Typography'
-import React, { ElementType, forwardRef, HTMLAttributes, ReactNode } from 'react'
-import { createStyles, Theme, withStyles, WithStyles } from '@material-ui/core/styles'
-import clsx from 'clsx'
-import BackgroundImage from '../components/BackgroundImage'
-import Link, { LinkProps } from '../components/Link'
+import { AppLink, AppLinkProps } from '@aglyn/shared/ui/react'
+import { styled } from '@aglyn/shared/ui/themes'
+import Typography from '@mui/material/Typography'
+import React, { forwardRef, ReactNode } from 'react'
+import { BackgroundImage, BackgroundImageProps } from '../components/BackgroundImage'
 
 
-export const PromoSectionViewStyles = (theme: Theme) => createStyles({
-  root: {},
-  promo: {
-    textAlign: 'center',
-    marginTop: theme.spacing(4),
-    marginBottom: theme.spacing(8),
-    borderRadius: theme.shape.borderRadius,
-    color: theme.palette.common.white,
-    backgroundColor: theme.palette.secondary.light,
-    padding: theme.spacing(4, 2),
-    [theme.breakpoints.up('sm')]: {
-      padding: theme.spacing(8, 4),
-    },
-    '& $h2': {
-      marginBottom: theme.spacing(4),
-    },
-    '& link': {},
+const StyledBackgroundImage = styled(BackgroundImage, {
+  name: 'BackgroundImage',
+})(({theme}) => ({
+  textAlign: 'center',
+  marginTop: theme.spacing(4),
+  marginBottom: theme.spacing(8),
+  borderRadius: theme.shape.borderRadius,
+  color: theme.palette.common.white,
+  backgroundColor: theme.palette.secondary.light,
+  padding: theme.spacing(4, 2),
+  [theme.breakpoints.up('sm')]: {
+    padding: theme.spacing(8, 4),
   },
-  h2: {},
-  link: {},
-})
+}))
 
-export interface PromoSectionViewProps extends HTMLAttributes<HTMLElement> {
-  component?: ElementType
+export interface PromoSectionViewProps extends BackgroundImageProps {
   backgroundUrl: string
   heading: ReactNode
-  link: LinkProps
+  link: AppLinkProps<'button'>
 }
 
-const PromoSectionView = forwardRef<any, PromoSectionViewProps & WithStyles<typeof PromoSectionViewStyles>>(
+const PromoSectionView = forwardRef<any, PromoSectionViewProps>(
   function RefRenderFn(props, ref) {
     const {
       children,
-      component: Component,
       className: propClass,
-      classes,
       link,
       heading,
       backgroundUrl,
       ...rest
     } = props
-    const className = clsx(classes.root, propClass)
 
     return (
-      <Component
+      <StyledBackgroundImage
         ref={ref}
-        className={className}
+        url={backgroundUrl}
+        parallax
         {...rest}
       >
-        <BackgroundImage
-          className={classes.promo}
-          url={backgroundUrl}
-        >
-          <Typography
-            component="h2"
-            variant="h3"
-            children={heading}
-            className={classes.h2}
-          />
-          <Link
-            button
-            size="large"
-            variant="contained"
-            color="primary"
-            {...link}
-          />
-        </BackgroundImage>
-      </Component>
+        <Typography
+          variant="h3"
+          variantMapping={{'h3': 'h2'}}
+          children={heading}
+          gutterBottom
+        />
+        <AppLink
+          size="large"
+          variant="contained"
+          color="primary"
+          linkType="button"
+          {...link}
+        />
+      </StyledBackgroundImage>
     )
   },
 )
 
 PromoSectionView.displayName = 'PromoSectionView'
-PromoSectionView.defaultProps = {
-  component: 'div',
-}
-
-export default withStyles(PromoSectionViewStyles, {name: 'PromoSectionView'})(PromoSectionView)
+export { PromoSectionView }
+export default PromoSectionView

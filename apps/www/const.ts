@@ -82,6 +82,7 @@ export const footerNavigation = [
         children: 'Features (coming soon)',
         href: '/features',
         disabled: true,
+        'aria-disabled': true,
       },
     ],
   },

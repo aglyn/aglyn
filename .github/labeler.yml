@@ -1,0 +1,54 @@
+# Add 'Monorepo Libs' label to any monorepo apps' file changes
+'Monorepo Libs':
+  - libs/*
+  - libs/**/*
+
+# Add 'Monorepo Apps' label to any monorepo apps' file changes
+'Monorepo Apps':
+  - apps/*
+  - apps/**/*
+
+# Add 'App: WWW' label to any app->www file changes
+'App: WWW':
+  - apps/www/*
+  - apps/www/**/*
+
+# Add 'App: Console' label to any app->console file changes
+'App: Console':
+  - apps/console/*
+  - apps/console/**/*
+
+# Add 'Framework Libraries' label to any framework libs file changes
+'Framework Libraries':
+  - libs/framework/*
+  - libs/framework/**/*
+
+# Add 'Library: SDK' label to any framework sdk lib file changes
+'Library: SDK':
+  - libs/framework/sdk/*
+  - libs/framework/sdk/**/*
+
+# Add 'Library: Renderer' label to any framework sdk lib file changes
+'Library: Renderer':
+  - libs/framework/renderer/*
+  - libs/framework/renderer/**/*
+
+# Add 'Library: Plugin' label to any framework plugin lib file changes
+'Library: Plugin':
+  - libs/framework/sdk/*
+  - libs/framework/sdk/**/*
+
+# Add 'dependencies' label to any change to npm or yarn related stuff
+'dependencies':
+  - package.json
+  - yarn.lock
+
+# Add 'tsconfig' label to any change to tsconfig configuration files
+'tsconfig':
+  - tsconfig.json
+  - tsconfig.*.json
+
+  # Add 'jest-config' label to any change to jestconfig configuration files
+'jest-config':
+  - tsconfig.json
+  - tsconfig.*.json

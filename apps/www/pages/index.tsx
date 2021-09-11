@@ -16,59 +16,42 @@
  */
 
 import { GridItems } from '@aglyn/shared/ui/react'
-import Box from '@material-ui/core/Box'
-import Container from '@material-ui/core/Container'
-import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
-import Typography from '@material-ui/core/Typography'
+import Box from '@mui/material/Box'
+import Container from '@mui/material/Container'
+import Typography from '@mui/material/Typography'
+import Image from 'next/image'
 import React from 'react'
 import BackgroundImage from '../components/BackgroundImage'
+import { mainNavigation, productNames } from '../const'
 import MainLayout from '../layouts/MainLayout'
-import Image from 'next/image'
 import PromoSectionView from '../views/PromoSectionView'
 import SiteFooterView from '../views/SiteFooterView'
-import { mainNavigation, productNames } from '../const'
 
 
-const styles = (theme: Theme) => createStyles({
-  header: {
-    paddingTop: theme.mixins.toolbar.minHeight,
-    '& $h1': {
-      marginBottom: theme.spacing(4),
-    },
-    '& $h2': {
-      color: theme.palette.quaternary.main,
-    },
-  },
-  container: {
-    paddingTop: theme.spacing(4),
-    paddingBottom: theme.spacing(4),
-  },
-
-  // KEEP EMPTY
-  h1: {},
-  h2: {},
-})
-
-interface Props extends WithStyles<typeof styles> {
+interface Props {
 
 }
 
+const TITLE = 'Build websites for your business goals'
+
 function Index(props: Props) {
-  const {classes} = props
+  const {} = props
 
   return (
     <MainLayout
-      title={'Website Designer Platform for Your Business Goals | Aglyn'}
+      title={TITLE + ' | Aglyn'}
       centerNavigationItems={mainNavigation}
       productName={productNames.www}
     >
       <BackgroundImage
         component={'header'}
-        url={'/backgrounds/patterns/abstract-wave-lines.svg'}
-        className={classes.header}
+        url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
       >
         <Box py={6}>
-          <Container maxWidth={'lg'} className={classes.container}>
+          <Container
+            maxWidth={'lg'}
+            sx={{py: 4}}
+          >
             <GridItems
               alignItems="center"
               direction="row-reverse"
@@ -78,7 +61,7 @@ function Index(props: Props) {
                   xs: 12, md: 5,
                   children: (
                     <Image
-                      src="/designer/website-designer-preview-collage.png"
+                      src="/_static/images/designer/website-designer-preview-collage.png"
                       alt="website designer preview collage"
                       width="504"
                       height="380"
@@ -92,15 +75,14 @@ function Index(props: Props) {
                     <>
                       <Typography
                         variant={'h2'}
-                        component={'h1'}
-                        children={'Website Designer Platform for Your Business Goals'}
-                        className={classes.h1}
+                        children={TITLE}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'h4'}
-                        component={'h2'}
+                        variantMapping={{'h4': 'h3'}}
                         children={'The essentials to keep your workflow simple'}
-                        className={classes.h2}
+                        color="quaternary.main"
                       />
                     </>
                   ),
@@ -116,14 +98,14 @@ function Index(props: Props) {
             <GridItems
               alignItems="center"
               direction="row"
-              justify="space-around"
+              justifyContent="space-around"
               spacing={2}
               items={[
                 {
                   xs: 12, md: 4,
                   children: (
                     <Image
-                      src="/designer/website-designer-element-categories.png"
+                      src="/_static/images/designer/website-designer-element-categories.png"
                       alt="website designer element category search"
                       width="400"
                       height="478"
@@ -138,13 +120,13 @@ function Index(props: Props) {
                         variant={'h4'}
                         component={'h2'}
                         children={'Build Your Pages How You Like'}
-                        className={classes.h1}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
                         children={'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'}
-                        className={classes.h2}
+                        color="text.secondary"
                       />
                     </>
                   ),
@@ -158,14 +140,14 @@ function Index(props: Props) {
             <GridItems
               alignItems="center"
               direction="row-reverse"
-              justify="space-around"
+              justifyContent="space-around"
               spacing={2}
               items={[
                 {
                   xs: 12, md: 4,
                   children: (
                     <Image
-                      src="/designer/website-designer-custom-element-attributes.png"
+                      src="/_static/images/designer/website-designer-custom-element-attributes.png"
                       alt="website designer custom element attributes"
                       width="400"
                       height="477"
@@ -180,13 +162,13 @@ function Index(props: Props) {
                         variant={'h4'}
                         component={'h2'}
                         children={'Custom Elements & Attributes'}
-                        className={classes.h1}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
                         children={'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'}
-                        className={classes.h2}
+                        color="text.secondary"
                       />
                     </>
                   ),
@@ -200,14 +182,14 @@ function Index(props: Props) {
             <GridItems
               alignItems="center"
               direction="row"
-              justify="space-around"
+              justifyContent="space-around"
               spacing={2}
               items={[
                 {
                   xs: 12, md: 4,
                   children: (
                     <Image
-                      src="/designer/website-designer-functional-operations.png"
+                      src="/_static/images/designer/website-designer-functional-operations.png"
                       alt="website designer functional operations"
                       width="400"
                       height="440"
@@ -222,13 +204,13 @@ function Index(props: Props) {
                         variant={'h4'}
                         component={'h2'}
                         children={'Perform Operations & Calculate Output'}
-                        className={classes.h1}
+                        sx={{mb: 4}}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
                         children={'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'}
-                        className={classes.h2}
+                        color="text.secondary"
                       />
                     </>
                   ),
@@ -240,10 +222,11 @@ function Index(props: Props) {
       </main>
       <SiteFooterView>
         <PromoSectionView
-          backgroundUrl={'/backgrounds/patterns/abstract-wave-lines.svg'}
+          backgroundUrl={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
           heading={'Get Access and Make Your New Website'}
           link={{
-            as: '/contact', href: '/contact',
+            hrefAs: '/contact',
+            href: '/contact',
             children: 'Get Your Access',
           }}
         />
@@ -252,4 +235,6 @@ function Index(props: Props) {
   )
 }
 
-export default withStyles(styles, {name: 'Page:Index'})(Index)
+Index.displayName = 'Index'
+
+export default Index

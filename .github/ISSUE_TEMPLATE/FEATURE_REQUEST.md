@@ -1,8 +1,8 @@
 ---
-name: Reuest Feature
-about: Suggest a new feature
+name: "Request Feature"
+about: "Suggest a new feature"
 name: "[🙏Feature]: "
-labels: feature
+labels: [feature, request]
 
 ---
 

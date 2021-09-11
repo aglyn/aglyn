@@ -15,69 +15,73 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import WidgetCard, { Props as WidgetCardProps } from '../components/WidgetCard'
-import { withAggregatedPageMeta } from '../lib/app-pages'
-import { Collapse, IconButton, List, ListItem, ListItemText, ListSubheader } from '@material-ui/core'
-import { makeStyles, Theme, createStyles } from '@material-ui/core/styles'
-import SvgPathIcon from '@aglyn/common/components/SvgPathIcon'
-import Link from 'components/Link'
+import { AppLink, SvgPathIcon } from '@aglyn/shared/ui/react'
+import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
+import {
+  Collapse,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
+  ListSubheader,
+} from '@mui/material'
 import clsx from 'clsx'
+import React, { forwardRef } from 'react'
+import WidgetCard, { Props as WidgetCardProps } from '../components/WidgetCard'
+import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
 
 
-const useStyles = makeStyles<Theme, Props>((theme) => createStyles({
-  subheader: {fontWeight: theme.typography.fontWeightMedium},
-  listItem: {
-    position: 'relative',
-    '&$active': {
-      '&:before': {
-        content: '" "',
-        display: 'block',
-        position: 'absolute',
-        width: 5,
-        height: 5,
-        borderRadius: '50%',
-        left: theme.spacing(0.75),
-        top: 'calc(50% - 2.5px)',
-        background: theme.palette.secondary.main
-      },
+const classKeys = generateUtilityClasses('AreaManageNavigationListWidgetView', [
+  'listItem',
+  'active',
+  'open',
+  'childActive',
+  'collapse',
+  'nested',
+])
+
+const StyledListItem = styled(ListItemButton, {
+  name: 'ListItem',
+})(({theme}) => ({
+  position: 'relative',
+  [`&.${classKeys.active}`]: {
+    '&:before': {
+      content: '" "',
+      display: 'block',
+      position: 'absolute',
+      width: 5,
+      height: 5,
+      borderRadius: '50%',
+      left: theme.spacing(0.75),
+      top: 'calc(50% - 2.5px)',
+      background: theme.palette.secondary.main,
     },
-    '&$childActive': {
-      '&:after': {
-        content: '" "',
-        display: 'block',
-        position: 'absolute',
-        width: 3,
-        height: '100%',
-        borderRadius: '3px 0 0 3px',
-        right: 0,
-        top: 0,
-        background: theme.palette.secondary.main
-      },
+  },
+  [`&.${classKeys.childActive}`]: {
+    '&:after': {
+      content: '" "',
+      display: 'block',
+      position: 'absolute',
+      width: 3,
+      height: '100%',
+      borderRadius: '3px 0 0 3px',
+      right: 0,
+      top: 0,
+      background: theme.palette.secondary.main,
     },
-    '&$nested': {paddingLeft: theme.spacing(4)},
   },
-  collapse: {},
-  primary: {},
-  preTitle: {
-    display: 'block',
-    lineHeight: 1,
-    marginBottom: theme.spacing(1.5)
+  [`&.${classKeys.nested}`]: {
+    paddingLeft: theme.spacing(4),
   },
-  active: {},
-  childActive: {},
-  nested: {},
-  open: {},
 }))
 
-export type Props = Partial<WidgetCardProps> & {
-
+export interface AreaManageNavigationListWidgetViewProps extends Partial<WidgetCardProps> {
+  aggregatedPageMeta: AggregatedPageMeta
 }
 
-export default withAggregatedPageMeta<Props>(
-  function AreaManageNavigationListWidgetView(props) {
-    const classes = useStyles(props)
-    const { aggregatedPageMeta, ...rest } = props
+const AreaManageNavigationListWidgetViewRaw = forwardRef<any, AreaManageNavigationListWidgetViewProps>(
+  function RefRenderFn(props, ref) {
+    const {aggregatedPageMeta, ...rest} = props
     const {
       pathname,
       pageMeta,
@@ -86,13 +90,13 @@ export default withAggregatedPageMeta<Props>(
       denormalizedAreaPages,
     } = aggregatedPageMeta
     const [activeCollapse, setActiveCollapse] = React.useState(
-      subArea?.id ?? pageMeta?.dynamic ? pageMeta?.parent : pageMeta?.id
+      subArea?.id ?? pageMeta?.dynamic ? pageMeta?.parent : pageMeta?.id,
     )
     const openAreaCollapse = (id) => (e) => {
       e.preventDefault()
       e.stopPropagation()
       setActiveCollapse(
-        prev => prev === id ? null : id
+        prev => prev === id ? null : id,
       )
     }
     const isOpen = React.useCallback((item) => {
@@ -110,38 +114,34 @@ export default withAggregatedPageMeta<Props>(
     }, [pathname, pageMeta])
 
     const getClass = (itemClass, item, topLvl = true) => clsx(itemClass, {
-      [classes.active]: isActive(item),
-      [classes.open]: isOpen(item),
-      [classes.childActive]: isChildActive(item) && topLvl,
-      [classes.nested]: !topLvl,
+      [classKeys.active]: isActive(item),
+      [classKeys.open]: isOpen(item),
+      [classKeys.childActive]: isChildActive(item) && topLvl,
+      [classKeys.nested]: !topLvl,
     })
 
     return (
-      <WidgetCard {...rest}>
+      <WidgetCard ref={ref} {...rest}>
         <List
           subheader={(
             <ListSubheader
               children={'Manage Navigation'}
-              className={classes.subheader}
+              sx={{fontWeight: 'fontWeightMedium'}}
             />
           )}
           disablePadding
         >
           {denormalizedAreaPages.map((item, key, arr) => (
             <React.Fragment key={key}>
-              <ListItem
-                className={getClass(classes.listItem, item)}
+              <StyledListItem
+                className={getClass(classKeys.listItem, item)}
                 color="inherit"
-                component={Link}
-                href={item?.id}
                 selected={isActive(item)}
-                button
+                component={AppLink}
+                linkType="button"
                 dense
               >
-                <ListItemText
-                  children={item?.name.long}
-                  classes={{ primary: classes.primary }}
-                />
+                <ListItemText children={item?.name.long}/>
                 {item?.pages?.length ? (
                   <IconButton
                     disabled={
@@ -164,28 +164,28 @@ export default withAggregatedPageMeta<Props>(
                     />
                   </IconButton>
                 ) : null}
-              </ListItem>
+              </StyledListItem>
               {item?.pages?.length ? (
                 <Collapse
-                  className={getClass(classes.collapse, item)}
+                  className={getClass(classKeys.collapse, item)}
                   in={isOpen(item) || isActive(item) || isChildActive(item)}
                   timeout="auto"
                   unmountOnExit
                 >
                   <List component="div" disablePadding>
                     {item.pages.map((item, key, arr) => (
-                      <ListItem
+                      <StyledListItem
                         key={key}
-                        className={getClass(classes.listItem, item, false)}
+                        className={getClass(classKeys.listItem, item, false)}
                         color="inherit"
-                        component={Link}
                         href={item?.id}
                         selected={isActive(item)}
-                        button
+                        component={AppLink}
+                        linkType="button"
                         dense
                       >
-                        <ListItemText primary={item?.name.long} />
-                      </ListItem>
+                        <ListItemText primary={item?.name.long}/>
+                      </StyledListItem>
                     ))}
                   </List>
                 </Collapse>
@@ -195,5 +195,11 @@ export default withAggregatedPageMeta<Props>(
         </List>
       </WidgetCard>
     )
-  }
+  },
 )
+
+AreaManageNavigationListWidgetViewRaw.displayName = 'AreaManageNavigationListWidgetView'
+export const AreaManageNavigationListWidgetView = withAggregatedPageMeta(
+  AreaManageNavigationListWidgetViewRaw,
+)
+export default AreaManageNavigationListWidgetView

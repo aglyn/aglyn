@@ -22,9 +22,8 @@ import {
   AglynCommandHandler,
   AglynExtensionInstance,
   PayloadData,
-  PayloadParams,
 } from './types'
-import { Dictionary, IndexOf } from '@aglyn/shared/util/types'
+import { Dictionary } from '@aglyn/shared/util/types'
 
 
 export enum AglynAppEventFlag {

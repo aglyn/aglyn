@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
+import { ButtonProps } from '@mui/material/Button'
+import { DialogProps } from '@mui/material/Dialog'
+import { DialogContentTextProps } from '@mui/material/DialogContentText'
+import { DialogTitleProps } from '@mui/material/DialogTitle'
 import { createContext, useContext } from 'react'
-import { ButtonProps } from '@material-ui/core/Button'
-import { DialogProps } from '@material-ui/core/Dialog'
-import { DialogTitleProps } from '@material-ui/core/DialogTitle'
-import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
 
 
 export interface ConfirmationOptions {
@@ -75,6 +75,7 @@ export const buildOptions = (defaultOptions, options) => {
 }
 
 export const ConfirmationContext = createContext<ConfirmationContextType>(null)
+ConfirmationContext.displayName = 'ConfirmationContext'
 export const useConfirmationContext: UseConfirmationType = () => {
   return useContext(ConfirmationContext)
 }

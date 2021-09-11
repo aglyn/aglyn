@@ -16,198 +16,206 @@
  */
 
 import {
-  AglynIcon,
+  AglynSvgLogo,
+  AppLink,
+  AppLinkProps,
   GridButtons,
   GridButtonsProps,
   Menu,
   SvgPathIcon,
 } from '@aglyn/shared/ui/react'
-import { _isArr } from '@aglyn/shared/util/helpers'
-import AppBar from '@material-ui/core/AppBar'
-import Avatar from '@material-ui/core/Avatar'
-import Box from '@material-ui/core/Box'
-import Button from '@material-ui/core/Button'
-import { cyan, purple } from '@material-ui/core/colors'
-import Container from '@material-ui/core/Container'
-import IconButton, { IconButtonProps } from '@material-ui/core/IconButton'
-import { createStyles, darken, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
-import Tab, { TabProps } from '@material-ui/core/Tab'
-import Tabs from '@material-ui/core/Tabs'
-import Toolbar from '@material-ui/core/Toolbar'
-import Typography from '@material-ui/core/Typography'
-import clsx from 'clsx'
+import { darken, styled } from '@aglyn/shared/ui/themes'
+import { _isArr, _isArrEmpty, _isObj } from '@aglyn/shared/util/guards'
+import AppBar, {AppBarProps} from '@mui/material/AppBar'
+import Avatar from '@mui/material/Avatar'
+import Box from '@mui/material/Box'
+import { cyan, purple } from '@mui/material/colors'
+import Container from '@mui/material/Container'
+import IconButton, { IconButtonProps } from '@mui/material/IconButton'
+import Tab, { TabProps } from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
+import Toolbar from '@mui/material/Toolbar'
+import Typography from '@mui/material/Typography'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import React, { Fragment, PropsWithChildren } from 'react'
-import { Props as BreadcrumbsProps } from '../components/Breadcrumbs'
+import { ElementType, Fragment, ReactNode } from 'react'
+import { Breadcrumbs, BreadcrumbsProps } from '../components/Breadcrumbs'
 import Copyright from '../components/Copyright'
-import Link, { LinkProps as LinkProps } from '../components/Link'
 import { APP, tailNavigation } from '../const'
-import { withCurrentUserCtx } from '../contexts/current-user-context'
-import { withAggregatedPageMeta } from '../lib/app-pages'
+import { CurrentUserContextType, withCurrentUserContext } from '../contexts/current-user-context'
+import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
 
 
-export const styles = (theme: Theme) => createStyles({
-  navBar: {},
-  navBarSpacer: {
-    display: 'flex',
+const StyledLogo = styled(AglynSvgLogo, {
+  name: 'AglynSvgLogo',
+})(({theme}) => ({
+  // color: '#36ca94', // Hulu
+  color: theme.palette.secondary.light,
+  lineHeight: '22px',
+  fontSize: theme.typography.pxToRem(50),
+  height: 'auto',
+  [theme.breakpoints.up('md')]: {fontSize: theme.typography.pxToRem(60)},
+}))
+
+const InnerAppBarTop = styled(AppBar, {
+  name: 'InnerAppBarTop',
+})<AppBarProps<ElementType>>(({theme}) => ({
+  '&:after': {
+    content: '" "',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1,
     width: '100%',
-    height: 96,
+    position: 'absolute',
+    backgroundColor: theme.palette.divider,
   },
-  appBar: {
-    '&:after': {
-      content: '" "',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      height: 1,
-      width: '100%',
-      position: 'absolute',
-      backgroundColor: theme.palette.divider,
-    },
-    '& $menu': {
-      padding: theme.spacing(0.5, 0.25),
-      '&:last-child': {paddingLeft: theme.spacing(0.75)},
-    },
-  },
-  left: {
-    flexGrow: 1,
-    display: 'flex',
-  },
-  center: {
-    display: 'flex',
-    flexGrow: 1,
-    flexBasis: '72%',
-  },
-  right: {display: 'flex'},
-  logoWrapper: {
-    height: 36,
-    flex: '0 0 auto',
-    margin: theme.spacing(0.75, 0),
-    display: 'flex',
-    alignItems: 'center',
-    '& a': {
-      display: 'flex',
-      alignItems: 'center',
-      '& $logo': {
-        display: 'flex',
-        alignItems: 'center',
-        '& $icon': {
-          // color: '#36ca94', // Hulu
-          color: theme.palette.secondary.light,
-          lineHeight: '22px',
-          fontSize: theme.typography.pxToRem(50),
-          height: 'auto',
-          [theme.breakpoints.up('md')]: {fontSize: theme.typography.pxToRem(60)},
-        },
-      },
-      '& $product': {
-        color: theme.palette.common.white,
-        paddingLeft: theme.spacing(0.75),
-        fontWeight: theme.typography.fontWeightLight,
-        paddingBottom: 2,
-        display: 'flex',
-        alignItems: 'center',
-        lineHeight: '22px',
-        fontSize: theme.typography.pxToRem(20),
-        [theme.breakpoints.up('md')]: {
-          lineHeight: '24px',
-          fontSize: theme.typography.pxToRem(22),
-        },
-      },
-    },
-  },
-  logo: {},
-  product: {},
-  tabBar: {},
-  tabBarTitle: {
-    paddingRight: theme.spacing(2),
-    fontWeight: theme.typography.fontWeightLight,
-  },
-  tabs: {
-    '& $flexContainer': {alignItems: 'center'},
-    '& $tabIndicator': {
-      height: 3,
-      backgroundColor: 'unset',
-      '&:after': {
-        borderRadius: '3px 3px 0 0',
-        content: '" "',
-        display: 'block',
-        position: 'absolute',
-        left: 0, top: 0, right: 0,
-        margin: '0 auto',
-        width: '80%',
-        height: '100%',
-        backgroundColor: theme.palette.secondary.light,
-      },
-    },
-  },
-  tabIndicator: {},
-  tab: {
-    '& $wrapper': {
-      flexDirection: 'row',
-      '& > *:first-child': {
-        marginBottom: 0,
-        marginRight: theme.spacing(1),
-      },
-    },
-    '& $icon': {},
-    '&$labelIcon': {
-      minHeight: 46,
-      minWidth: 'auto',
-      paddingLeft: 0,
-      paddingRight: 0,
-      marginLeft: theme.spacing(4),
-      '&:first-child': {marginLeft: theme.spacing(0)},
-    },
-  },
-  avatarButton: {
-    padding: theme.spacing(0.5),
-    '& $avatar': {backgroundColor: cyan[600]},
-  },
-  avatar: {},
-  header: {
-    paddingTop: theme.spacing(8),
-    paddingBottom: theme.spacing(10),
-    background: purple['600'],
-    color: theme.palette.getContrastText(purple['600']),
-  },
-  heading: {
-    letterSpacing: '-0.04em',
-    fontWeight: theme.typography.fontWeightRegular,
-    display: 'inline-flex',
-    alignItems: 'center',
-    '& $icon': {
-      marginRight: theme.spacing(1),
-      color: theme.palette.secondary.main,
-    },
-  },
-  breadcrumbs: {
-    marginTop: theme.spacing(1),
-    color: darken(theme.palette.getContrastText(purple['600']), 0.12),
-    '& $item': {
-      color: 'inherit',
-      '&$last': {
-        color: theme.palette.getContrastText(purple['600']),
-        fontWeight: theme.typography.fontWeightMedium,
-      },
-    },
-  },
-  content: {marginTop: theme.spacing(-6)},
-  footer: {},
-  main: {},
+}))
 
-  // NESTED PROPERTIES TO KEEP EMPTY
-  menu: {}, // Keep Empty
-  icon: {}, // Keep Empty
-  iconBtn: {}, // Keep Empty
-  button: {}, // Keep Empty
-  wrapper: {}, // Keep Empty
-  labelIcon: {}, // Keep Empty
-  item: {}, // Keep Empty
-  last: {}, // Keep Empty
-  flexContainer: {}, // Keep Empty
+const TabBarTitle = styled('div', {
+  name: 'TabBarTitle',
+})(({theme}) => ({
+  ...theme.typography.h6,
+  paddingRight: theme.spacing(2),
+  fontWeight: theme.typography.fontWeightLight,
+}))
+
+const StyledLeft = styled('div', {
+  name: 'Left',
+})({
+  flexGrow: 1,
+  display: 'flex',
 })
+
+const StyledCenter = styled('div', {
+  name: 'Center',
+})({
+  display: 'flex',
+  flexGrow: 1,
+  flexBasis: '72%',
+})
+
+const StyledRight = styled('div', {
+  name: 'Right',
+})({
+  display: 'flex',
+})
+
+const StyledLogoWrapper = styled('div', {
+  name: 'StyledLogoWrapper',
+})(({theme}) => ({
+  height: 36,
+  flex: '0 0 auto',
+  margin: theme.spacing(0.75, 0),
+  display: 'flex',
+  alignItems: 'center',
+  '& a': {
+    display: 'flex',
+    alignItems: 'center',
+  },
+}))
+
+const StyledLogoInner = styled('span', {
+  name: 'LogoInner',
+})({
+  display: 'flex',
+  alignItems: 'center',
+})
+
+const StyledProductName = styled('span', {
+  name: 'ProductName',
+})(({theme}) => ({
+  color: theme.palette.common.white,
+  paddingLeft: theme.spacing(0.75),
+  fontWeight: theme.typography.fontWeightLight,
+  paddingBottom: 2,
+  display: 'flex',
+  alignItems: 'center',
+  lineHeight: '22px',
+  fontSize: theme.typography.pxToRem(20),
+  [theme.breakpoints.up('md')]: {
+    lineHeight: '24px',
+    fontSize: theme.typography.pxToRem(22),
+  },
+}))
+
+const StyledTabs = styled(Tabs, {
+  name: 'Tabs',
+})(({theme}) => ({
+  '& .Mui-flexContainer': {
+    alignItems: 'center',
+  },
+  '& .Mui-indicator': {
+    height: 3,
+    backgroundColor: 'unset',
+    '&:after': {
+      borderRadius: '3px 3px 0 0',
+      content: '" "',
+      display: 'block',
+      position: 'absolute',
+      left: 0, top: 0, right: 0,
+      margin: '0 auto',
+      width: '80%',
+      height: '100%',
+      backgroundColor: theme.palette.secondary.light,
+    },
+  },
+}))
+
+const StyledTab = styled(Tab, {
+  name: 'Tab',
+})(({theme}) => ({
+  flexDirection: 'row',
+  '& > *:first-child': {
+    marginBottom: 0,
+    marginRight: theme.spacing(1),
+  },
+  '& .Mui-labelIcon': {
+    minHeight: 46,
+    minWidth: 'auto',
+    paddingLeft: 0,
+    paddingRight: 0,
+    marginLeft: theme.spacing(4),
+    '&:first-child': {
+      marginLeft: theme.spacing(0),
+    },
+  },
+}))
+
+const StyledAvatar = styled(Avatar, {
+  name: 'Avatar',
+})({
+  backgroundColor: cyan[600],
+})
+
+const StyledContent = styled('main', {
+  name: 'Content',
+})(({theme}) => ({
+  // marginTop: theme.spacing(-6),
+  marginTop: theme.mixins.toolbar.minHeight,
+}))
+
+const StyledMenu = styled(Menu, {
+  name: 'Menu',
+})(({theme}) => ({
+  padding: theme.spacing(0.5, 0.25),
+  '&:last-child': {paddingLeft: theme.spacing(0.75)},
+}))
+
+const StyledBreadcrumbs = styled(Breadcrumbs, {
+  name: 'Breadcrumbs',
+})(({theme}) => ({
+  marginTop: theme.spacing(1),
+  color: darken(theme.palette.getContrastText(purple['600']), 0.12),
+
+  ['& .AglynBreadcrumbs-item']: {
+    color: 'inherit',
+    ['&.AglynBreadcrumbs-last']: {
+      color: theme.palette.getContrastText(purple['600']),
+      fontWeight: theme.typography.fontWeightMedium,
+    },
+  },
+}))
 
 function a11yProps(index) {
   return {
@@ -219,229 +227,233 @@ function a11yProps(index) {
 export const NAVIGATION_MAX_WIDTH = 'lg'
 export const FOOTER_MAX_WIDTH = 'lg'
 
-export interface Props extends PropsWithChildren<{}> {
+export interface QuickActionsMenuItem extends IconButtonProps {
+  iconId?: string,
+  avatar?: any
+  dense?: boolean
+  href?: any
+  items?: QuickActionsMenuItem[]
+}
+
+export interface MainLayoutProps {
+  children?: ReactNode | undefined
   title?: string
   tabBarTitle?: string
   centerNavigationItems?: Array<any>
   breadcrumbItems?: BreadcrumbsProps['items']
-  navTabItems?: (TabProps & LinkProps & { iconId: string })[]
-  quickActionMenus?: (IconButtonProps & { iconId: string })[]
+  navTabItems?: (TabProps & AppLinkProps<'text'> & { iconId: string })[]
+  quickActionMenus?: QuickActionsMenuItem[]
   productName?: string
   footerNavItems?: GridButtonsProps['items']
+  aggregatedPageMeta: AggregatedPageMeta
+  currentUserContext: CurrentUserContextType
 }
 
-const MainLayout = withCurrentUserCtx<Props & WithStyles<typeof styles>>(
-  withAggregatedPageMeta(
-    function RefRenderFn(props) {
-      const router = useRouter()
-      const {
-        classes,
-        children,
-        title,
-        centerNavigationItems,
-        currentUserContext,
-        tabBarTitle,
-        aggregatedPageMeta,
-        navTabItems,
-        productName,
-        footerNavItems,
-        quickActionMenus: quickActions,
-      } = props
-      const {
-        pageMeta,
-        overrideMeta,
-        pageAncestors,
-      } = aggregatedPageMeta
-      const tabValue = !navTabItems ? '' : navTabItems
-      .filter(i => router.asPath.includes(i.href))
-      .reduce((prev, current) =>
-        current.href.length > prev.href.length ? current : prev,
-      ).href ?? ''
+function MainLayoutRaw(props: MainLayoutProps) {
+  const router = useRouter()
+  const {
+    children,
+    title,
+    centerNavigationItems,
+    currentUserContext,
+    tabBarTitle,
+    aggregatedPageMeta,
+    navTabItems,
+    productName,
+    footerNavItems,
+    quickActionMenus: quickActions,
+  } = props
+  const {
+    pageMeta,
+    overrideMeta,
+    pageAncestors,
+  } = aggregatedPageMeta
+  const tabValue = navTabItems ? navTabItems
+  .filter(i => router.asPath.includes(i.href))
+  .reduce((prev, current) => {
+    const currentHref = (_isObj(current.href) ? current.href.path : current.href) as string
+    const prevHref = (_isObj(prev.href) ? prev.href.path : prev.href) as string
 
-      const buildIconButton = ({avatar, iconId, children, ...item}, i) => (
-        <IconButton
-          key={item.id ?? item.href ?? i}
-          className={clsx(classes.iconBtn, {[classes.avatarButton]: Boolean(avatar)})}
-          color="inherit"
-          {...item}
+    return currentHref.length > prevHref.length ? current : prev
+  }).href ?? '' : ''
+
+  const buildIconButton = ({avatar, iconId, children, ...rest}, i) => (
+    <IconButton
+      key={rest.id ?? rest['href'] ?? i}
+      color="inherit"
+      {...rest}
+    >
+      {avatar
+        ? (<StyledAvatar {...avatar}/>)
+        : iconId && (<SvgPathIcon iconId={iconId}/>)
+      }
+      {children}
+    </IconButton>
+  )
+
+  const buildTextButton = (item, key) => (
+    <AppLink
+      key={key}
+      linkType="button"
+      color="inherit"
+      sx={{p: item?.avatar ? 0.5 : undefined}}
+      {...item}
+    />
+  )
+
+  // eslint-disable-next-line react/display-name
+  const buildNav = (id, actionBuilder) => (item, key) => (
+    _isArr(item.items) ? (
+      <StyledMenu key={id + key} items={item.items}>
+        {actionBuilder(item, key)}
+      </StyledMenu>
+    ) : (
+      <Fragment key={id + key}>
+        {actionBuilder(item, key)}
+      </Fragment>
+    )
+  )
+
+  return (
+    <Fragment>
+      <Head>
+        <title>{`${title ?? 'Web App'}`}</title>
+      </Head>
+      <AppBar
+        component="header"
+        elevation={3}
+        color="transparent"
+        position="fixed"
+      >
+        <InnerAppBarTop
+          component={'div'}
+          elevation={0}
+          color="primary"
+          position="relative"
         >
-          {avatar
-            ? (<Avatar {...avatar} className={classes.avatar} />)
-            : iconId && (<SvgPathIcon className={classes.icon} iconId={iconId} />)
-          }
-          {children}
-        </IconButton>
-      )
-
-      const buildTextButton = (item, key) => (
-        <Button
-          key={key}
-          color="inherit"
-          {...item}
-          className={
-            clsx(classes.button, {
-              [classes.avatarButton]: Boolean(item.avatar),
-            }, item.className)
-          }
-        />
-      )
-
-      // eslint-disable-next-line react/display-name
-      const buildNav = (actionBuilder) => (item, key) => (
-        _isArr(item.items) ? (
-          <Menu key={key} className={classes.menu} items={item.items}>
-            {actionBuilder(item, key)}
-          </Menu>
-        ) : (
-          <Fragment key={key}>
-            {actionBuilder(item, key)}
-          </Fragment>
-        )
-      )
-
-      return (
-        <React.Fragment>
-          <Head>
-            <title>{`${title}` ?? 'Web App'}</title>
-          </Head>
-          <AppBar
-            // component="header"
-            className={classes.navBar}
-            color="transparent"
-            elevation={3}
-            position="fixed"
-          >
-            <AppBar className={classes.appBar} color="primary" elevation={0} position="relative">
-              <Container maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
-                <Toolbar>
-                  <div className={classes.left}>
-                    <div className={classes.logoWrapper}>
-                      <Link as="/" color="inherit" href="/" underline="none">
-                        <span className={classes.logo}>
-                          <AglynIcon
-                            className={classes.icon}
-                            color="inherit"
-                          />
-                        </span>
-                        {productName && (
-                          <span className={classes.product}>{` ${productName}`}</span>
-                        )}
-                      </Link>
-                    </div>
-                  </div>
-                  <div className={classes.center}>
-                    {(centerNavigationItems ?? []).map(buildNav(buildTextButton))}
-                  </div>
-                  <div className={classes.right}>
-                    {(quickActions ?? []).map(buildNav(buildIconButton))}
-                  </div>
-                </Toolbar>
-              </Container>
-            </AppBar>
-            {(tabBarTitle || _isArr(navTabItems)) && (
-              <AppBar className={classes.tabBar} color="primary" elevation={0} position="static">
-                <Container maxWidth={NAVIGATION_MAX_WIDTH}>
-                  <Tabs
-                    aria-label="area navigation"
-                    className={classes.tabs}
-                    classes={{
-                      flexContainer: classes.flexContainer,
-                      indicator: classes.tabIndicator,
-                    }}
-                    indicatorColor="secondary"
-                    scrollButtons="auto"
-                    textColor="inherit"
-                    value={tabValue}
-                    variant="scrollable"
-                  >
-                    {tabBarTitle && (
-                      <Typography
-                        children={tabBarTitle}
-                        className={classes.tabBarTitle}
-                        component="div"
-                        variant="h6"
-                      />
-                    )}
-                    {navTabItems && navTabItems.map(({iconId, ...item}, i) => (
-                      <Tab
-                        key={item.id ?? item.href ?? i}
-                        classes={{
-                          root: classes.tab,
-                          wrapper: classes.wrapper,
-                          labelIcon: classes.labelIcon,
-                        }}
-                        // disableRipple
-                        color="inherit"
-                        component={Link}
-                        href={item.href ?? ''}
-                        icon={<SvgPathIcon className={classes.icon} iconId={iconId} />}
-                        label={item.label}
-                        underline="none"
-                        value={item.href ?? i}
-                        wrapped
-                        {...a11yProps(i)}
-                        {...item}
-                      />
-                    ))}
-                  </Tabs>
-                </Container>
-              </AppBar>
-            )}
-          </AppBar>
-          <main className={classes.main}>
-            {children}
-          </main>
-          <footer className={classes.footer}>
-            <Container maxWidth={FOOTER_MAX_WIDTH}>
-              <Box
-                alignItems="center"
-                borderColor="divider"
-                borderTop={1}
-                display="flex"
-                flexWrap="wrap"
-                mt={6}
-                pb={1}
-                pt={2}
+          <Container maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
+            <Toolbar>
+              <StyledLeft>
+                <StyledLogoWrapper>
+                  <AppLink hrefAs="/" color="inherit" href="/" underline="none">
+                    <StyledLogoInner>
+                      <StyledLogo color="inherit"/>
+                    </StyledLogoInner>
+                    {productName ? (<StyledProductName children={` ${productName}`}/>) : null}
+                  </AppLink>
+                </StyledLogoWrapper>
+              </StyledLeft>
+              <StyledCenter>
+                {(centerNavigationItems ?? []).map(buildNav('cni', buildTextButton))}
+              </StyledCenter>
+              <StyledRight>
+                {(quickActions ?? []).map(buildNav('qa', buildIconButton))}
+              </StyledRight>
+            </Toolbar>
+          </Container>
+        </InnerAppBarTop>
+        {(tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems))) ? (
+          <AppBar component="div" color="primary" elevation={0} position="static">
+            <Container maxWidth={NAVIGATION_MAX_WIDTH}>
+              <StyledTabs
+                aria-label="area navigation"
+                indicatorColor="secondary"
+                scrollButtons="auto"
+                textColor="inherit"
+                value={tabValue}
+                variant="scrollable"
               >
-                <div className={classes.left}>
-                  <Copyright />
-                </div>
-                <div className={classes.right}>
-                  <GridButtons
-                    items={footerNavItems.map(i => ({size: 'small', ...i}))}
-                    spacing={1}
+                {tabBarTitle && (
+                  <TabBarTitle children={tabBarTitle}/>
+                )}
+                {navTabItems && navTabItems.map(({iconId, ...item}, i) => (
+                  <StyledTab
+                    key={item.id ?? item['key'] ?? i}
+                    // disableRipple
+                    color="inherit"
+                    component={AppLink}
+                    href={item.href ?? ''}
+                    icon={<SvgPathIcon iconId={iconId}/>}
+                    label={item.label}
+                    underline="none"
+                    value={item.href ?? i}
+                    wrapped
+                    {...a11yProps(i)}
+                    {...item}
                   />
-                </div>
-
-                <Box
-                  alignItems="space-around"
-                  display="flex"
-                  flex="1 1 auto"
-                  flexBasis="100%"
-                  justifyContent="center"
-                >
-                  <Typography
-                    align="center"
-                    color="textSecondary"
-                    variant="overline"
-                  >
-                    <span>{`Version ${APP.VERSION}`}</span>
-                    {' '}
-                    <span>{`(${APP.BUILD_ID})`}</span>
-                  </Typography>
-                </Box>
-              </Box>
+                ))}
+              </StyledTabs>
             </Container>
-          </footer>
-        </React.Fragment>
-      )
-    }, 'aggregatedPageMeta',
+          </AppBar>
+        ) : null}
+      </AppBar>
+      <StyledContent>
+        {children}
+      </StyledContent>
+      <footer>
+        <Container maxWidth={FOOTER_MAX_WIDTH}>
+          <Box
+            component={'div'}
+            sx={{
+              mt: 6,
+              pb: 1,
+              pt: 2,
+              borderTop: 1,
+              display: 'flex',
+              flexWrap: 'wrap',
+              borderColor: 'divider',
+              alignItems: 'center',
+            }}
+          >
+            <StyledLeft>
+              <Copyright/>
+            </StyledLeft>
+            <StyledRight>
+              <GridButtons
+                spacing={1}
+                items={footerNavItems.map(i => ({
+                  size: 'small',
+                  component: AppLink,
+                  linkType: 'button',
+                  ...i,
+                }))}
+              />
+            </StyledRight>
+
+            <Box
+              alignItems="space-around"
+              display="flex"
+              flex="1 1 auto"
+              flexBasis="100%"
+              justifyContent="center"
+            >
+              <Typography
+                align="center"
+                color="textSecondary"
+                variant="overline"
+              >
+                <span>{`Version ${APP.VERSION}`}</span>
+                {' '}
+                <span>{`(${APP.BUILD_ID})`}</span>
+              </Typography>
+            </Box>
+          </Box>
+        </Container>
+      </footer>
+    </Fragment>
+  )
+}
+
+MainLayoutRaw.displayName = 'MainLayout'
+MainLayoutRaw.defaultProps = {
+  footerNavItems: tailNavigation as any,
+  aggregatedPageMeta: {} as any,
+  currentUserContext: {} as any,
+}
+
+export const MainLayout = withCurrentUserContext(
+  withAggregatedPageMeta(
+    MainLayoutRaw,
   ),
 )
-
-MainLayout.displayName = 'Layout:MainLayout'
-MainLayout.defaultProps = {
-  footerNavItems: tailNavigation,
-}
-
-export default withStyles(styles, {name: 'Layout:MainLayout'})(MainLayout)
+export default MainLayout

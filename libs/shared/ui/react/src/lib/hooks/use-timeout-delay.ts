@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+import { _isArr, _isFnT, _isNum, _isNumPos, _isObj } from '@aglyn/shared/util/guards'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { _isArr, _isFnT, _isNum, _isNumPos, _isObj } from '@aglyn/shared/util/helpers'
 
 
 interface Options {
@@ -98,7 +98,8 @@ export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutRe
       if (false) {
         console.error('Can\'t start timeout or interval when unmounted')
         return
-      } else if (ref.current.timeoutRef) {
+      }
+      else if (ref.current.timeoutRef) {
         console.warn('Can\'t start timeout or interval when one is already running', ref.current.timeoutRef)
       }
 

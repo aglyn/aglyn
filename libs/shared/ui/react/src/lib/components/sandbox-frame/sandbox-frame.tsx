@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import { jssPreset, StylesProvider, useTheme } from '@aglyn/shared/ui/themes'
+
+import { create, Jss, JssOptions } from 'jss'
+import rtl from 'jss-rtl'
 import React, {
   Children,
   Fragment,
@@ -28,12 +32,8 @@ import React, {
 } from 'react'
 import ReactFrameComponent, { FrameComponentProps } from 'react-frame-component'
 
-import { jssPreset, StylesProvider, useTheme } from '@material-ui/core/styles'
-
-import { create, Jss, JssOptions } from 'jss'
-import rtl from 'jss-rtl'
-
 import useCombinedRefs from '../../hooks/use-combined-refs'
+
 
 export type SandboxFrameDocument = HTMLIFrameElement['contentDocument']
 export type SandboxFrameWindow = HTMLIFrameElement['contentWindow']
@@ -58,7 +58,7 @@ export interface SandboxFrameProps extends Omit<FrameComponentProps, 'contentDid
  */
 export const SandboxFrame = forwardRef<HTMLIFrameElement, SandboxFrameProps>(function RefRenderFn(props, ref) {
   const theme = useTheme()
-  const { children, title, onContentDidMount, onContentDidUpdate, jssPlugins, baseStyles, ...rest } = props
+  const {children, title, onContentDidMount, onContentDidUpdate, jssPlugins, baseStyles, ...rest} = props
   // Current frame state
   const [state, setState]: any = useState<State>({
     ready: false,
@@ -77,12 +77,12 @@ export const SandboxFrame = forwardRef<HTMLIFrameElement, SandboxFrameProps>(fun
         <style
           ref={styleRef}
           // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: baseStyles }}
+          dangerouslySetInnerHTML={{__html: baseStyles}}
           id={'sandbox-frame-jss'}
         />
       </Fragment>
     ),
-    [title, baseStyles]
+    [title, baseStyles],
   )
   const handleContentDidMount = useCallback(() => {
     const instance = frameRef.current

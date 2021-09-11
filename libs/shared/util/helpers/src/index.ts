@@ -25,9 +25,3 @@ export * from './vendor/mitt-emitter'
 export * from './vendor/platform-identification'
 export * from './vendor/search-fuzzy'
 export * from './vendor/unique-identification'
-
-// TODO: Replace dependents with direct lib import and remove below re-exports
-// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-export * from '../../guards/src/lib/guards'
-// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-export * from '../../tools/src/lib/tools'

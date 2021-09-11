@@ -15,70 +15,31 @@
  * limitations under the License.
  */
 
-import { forwardRef, HTMLProps, ReactNode, useCallback, useMemo } from 'react'
-
-import {
-  createStyles,
-  decomposeColor,
-  recomposeColor,
-  styled,
-  withStyles,
-  WithStyles,
-} from '@material-ui/core/styles'
-import Grid, { GridProps as MuiGridProps } from '@material-ui/core/Grid'
-import Card from '@material-ui/core/Card'
-
+import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
+import Card from '@mui/material/Card'
+import Grid, { GridProps as MuiGridProps } from '@mui/material/Grid'
 import clsx from 'clsx'
+import { forwardRef, HTMLAttributes, HTMLProps, ReactNode, useCallback, useMemo } from 'react'
 import { VirtuosoGrid, VirtuosoGridHandle, VirtuosoGridProps } from 'react-virtuoso'
 
 
-/**
- * TODO: Remove when upgraded to @material-ui/core v5+
- * Returns a number whose value is limited to the given range.
- * @param {number} value The value to be clamped
- * @param {number} min The lower boundary of the output range
- * @param {number} max The upper boundary of the output range
- * @returns {number} A number in the range [min, max]
- */
-function clamp(value, min = 0, max = 1) {
-  if (process.env.NODE_ENV !== 'production') {
-    if (value < min || value > max) {
-      console.error(`Material-UI: The value provided ${value} is out of range [${min}, ${max}].`)
-    }
-  }
+const classKey = generateUtilityClasses('AglynGridList', [
+  'itemWrapper',
+  'itemContent',
+  'gridContainer',
+  'gridItem',
+])
 
-  return Math.min(Math.max(min, value), max)
-}
-/**
- * TODO: Remove when upgraded to @material-ui/core v5+
- * Set the absolute transparency of a color.
- * Any existing alpha values are overwritten.
- * @param {string} color - CSS color, i.e. one of: #nnn, #nnnnnn, rgb(), rgba(), hsl(), hsla(), color()
- * @param {number} value - value to set the alpha channel to in the range 0 - 1
- * @returns {string} A CSS color string. Hex input values are returned as rgb
- */
-export function alpha(color, value) {
-  color = decomposeColor(color)
-  value = clamp(value)
-
-  if (color.type === 'rgb' || color.type === 'hsl') {
-    color.type += 'a'
-  }
-  if (color.type === 'color') {
-    color.values[3] = `/${value}`
-  } else {
-    color.values[3] = value
-  }
-
-  return recomposeColor(color)
-}
-
-const ItemWrapper = styled('div')({
+const ItemWrapper = styled('div', {
+  name: 'ItemWrapper',
+})({
   height: 0,
   position: 'relative',
   paddingTop: `${(3 / 4) * 100}%`, // 16:9
 })
-const ItemContent = styled(Card)({
+const ItemContent = styled(Card, {
+  name: 'ItemContent',
+})({
   position: 'absolute',
   left: 0,
   top: 0,
@@ -90,32 +51,23 @@ const ItemContent = styled(Card)({
   justifyContent: 'space-evenly',
 })
 
-export const gridListStyles = createStyles({
-  root: {},
-  listRoot: {},
-  itemWrapper: {},
-  itemContent: {},
-})
-
 export interface Item {
-  id: string
+  id: string | number | symbol
   [prop: string]: any
 }
 
 /* eslint-disable-next-line */
 export interface GridListProps extends Partial<VirtuosoGridProps> {
-  items?: { id: string | number | symbol }[]
+  items?: Item[]
   renderItemContent?: (item: GridListProps['items'][number], index: number, items: GridListProps['items']) => ReactNode
   GridContainerProps?: MuiGridProps
   GridItemProps?: MuiGridProps
   ListWrapperProps?: HTMLProps<HTMLDivElement>
 }
 
-const GridListRaw = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<typeof gridListStyles>>(
+export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
   function RefRenderFn(props, ref) {
     const {
-      classes,
-      className,
       items,
       renderItemContent,
       ListWrapperProps,
@@ -127,30 +79,61 @@ const GridListRaw = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<ty
 
     const GridContainer = useMemo(() => forwardRef<any, MuiGridProps>(
       function RefRenderFn(props, ref) {
+        const {className: gridClassName, ...restGridProps} = GridContainerProps
+        const {className, ...rest} = props
+        const elemClassName = clsx(classKey.gridContainer, gridClassName, className)
         return (
-          <div {...ListWrapperProps} className={clsx(classes.listRoot, ListWrapperProps?.className)}>
-            <Grid ref={ref} container {...GridContainerProps} {...props} />
+          <div {...ListWrapperProps}>
+            <Grid
+              ref={ref}
+              container
+              className={elemClassName}
+              {...restGridProps}
+              {...rest}
+            />
           </div>
         )
-      }
-    ), [ListWrapperProps, GridContainerProps, classes])
+      },
+    ), [ListWrapperProps, GridContainerProps])
 
-    const GridItem = useMemo(() => forwardRef<any, MuiGridProps>(
-      function RefRenderFn(itemProps, ref) {
-        return <Grid ref={ref} item {...GridItemProps} {...itemProps} />
-      }
-    ), [GridItemProps])
+    const GridItem = useMemo(() => {
+      const Component = forwardRef<any, MuiGridProps>(
+        function RefRenderFn(itemProps, ref) {
+          const {className: gridClassName, ...restGridProps} = GridItemProps
+          const {className, ...rest} = itemProps
+          const elemClassName = clsx(classKey.gridItem, gridClassName, className)
+          return (
+            <Grid
+              ref={ref}
+              item
+              className={elemClassName}
+              {...restGridProps}
+              {...rest}
+            />
+          )
+        },
+      )
+      Component.displayName = 'GridItem'
+      return Component
+    }, [GridItemProps])
 
-    const MemoizedItemContent = useMemo(() => forwardRef<any, MuiGridProps>(
-      function RefRenderFn(props, ref) {
-        const {children, ...restProps} = props
-        return (
-          <ItemWrapper ref={ref} className={classes.itemWrapper} {...restProps}>
-            <ItemContent className={classes.itemContent}>{children}</ItemContent>
-          </ItemWrapper>
-        )
-      }
-    ), [classes])
+    const MemoizedItemContent = useMemo(() => {
+      const Component = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
+        function RefRenderFn(props, ref) {
+          const {children, className, ...rest} = props
+          const elemClassName = clsx(classKey.itemWrapper, className)
+          return (
+            <ItemWrapper ref={ref} className={elemClassName} {...rest}>
+              <ItemContent className={classKey.itemContent}>
+                {children}
+              </ItemContent>
+            </ItemWrapper>
+          )
+        },
+      )
+      Component.displayName = 'MemoizedItemContent'
+      return Component
+    }, [classKey])
 
     const itemContent = useCallback((index) => (
       <MemoizedItemContent>
@@ -161,7 +144,6 @@ const GridListRaw = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<ty
     return (
       <VirtuosoGrid
         ref={ref}
-        className={clsx(classes.root, className)}
         computeItemKey={computeItemKey}
         itemContent={itemContent}
         totalCount={items.length}
@@ -176,12 +158,9 @@ const GridListRaw = forwardRef<VirtuosoGridHandle, GridListProps & WithStyles<ty
   },
 )
 
-GridListRaw.displayName = 'GridListRaw'
-GridListRaw.defaultProps = {
+GridList.displayName = 'GridList'
+GridList.defaultProps = {
   renderItemContent: (item) => item,
 }
-
-export const GridList = withStyles(gridListStyles, {name: 'GridList'})(GridListRaw)
-GridList.displayName = 'GridList'
 
 export default GridList

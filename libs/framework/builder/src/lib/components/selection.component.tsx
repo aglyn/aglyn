@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import { createStyles, Theme, WithStyles, withStyles } from '@material-ui/core/styles'
-import clsx from 'clsx'
+import { styled } from '@aglyn/shared/ui/themes'
+import { ButtonProps } from '@mui/material/Button'
+import { DialogProps } from '@mui/material/Dialog'
+import { DialogContentTextProps } from '@mui/material/DialogContentText'
+import { DialogTitleProps } from '@mui/material/DialogTitle'
 import { forwardRef, Fragment, HTMLAttributes } from 'react'
-import { ButtonProps } from '@material-ui/core/Button'
-import { DialogProps } from '@material-ui/core/Dialog'
-import { DialogContentTextProps } from '@material-ui/core/DialogContentText'
-import { DialogTitleProps } from '@material-ui/core/DialogTitle'
 
 
 export interface SelectionComponentOptions {
@@ -43,19 +42,18 @@ export interface SelectionComponentProps extends HTMLAttributes<HTMLDivElement> 
   onClose?: ButtonProps['onClick']
 }
 
-export const styles = (theme: Theme) =>
-  createStyles({
-    root: {
-      outlineWidth: 2,
-      outlineOffset: -2,
-      outlineColor: theme.palette.secondary.main,
-      outlineStyle: 'solid',
-      pointerEvents: 'none',
-      position: 'absolute',
-    },
-  })
+const SelectionRoot = styled('div', {
+  name: 'SelectionComponent',
+})(({theme}) => ({
+  outlineWidth: 2,
+  outlineOffset: -2,
+  outlineColor: theme.palette.secondary.main,
+  outlineStyle: 'solid',
+  pointerEvents: 'none',
+  position: 'absolute',
+}))
 
-const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<typeof styles>>(
+export const SelectionComponent = forwardRef<any, SelectionComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       open,
@@ -63,25 +61,17 @@ const SelectionComponent = forwardRef<any, SelectionComponentProps & WithStyles<
       onCancel,
       onConfirm,
       onClose,
-      classes,
-      className,
       children,
       ...rest
     } = props
     const {title, clientRect} = options
+    console.log('selection client rect', {...clientRect})
     return (
       <Fragment>
         {open ? (
-          <div
-            ref={ref}
-            {...rest}
-            className={clsx(classes.root, className)}
-            style={{
-              ...clientRect,
-            }}
-          >
+          <SelectionRoot ref={ref} {...rest} style={{...clientRect}}>
             {children}
-          </div>
+          </SelectionRoot>
         ) : null}
       </Fragment>
     )
@@ -95,4 +85,4 @@ SelectionComponent.defaultProps = {
   },
 }
 
-export default withStyles(styles, {name: 'SelectionComponent'})(SelectionComponent)
+export default SelectionComponent
