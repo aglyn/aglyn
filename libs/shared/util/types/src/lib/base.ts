@@ -69,13 +69,13 @@ export type KeyValueMap<K extends PKey = PKey, T = unknown> = Record<K, T>
 export type Dictionary<T = unknown> = KeyValueMap<string, T>
 
 /** Dictionary collection optionally specify values to T */
-export type EmptyObj<K extends keyof any = PropertyKey> = Record<K, never>
+export type EmptyObj<K extends keyof any = keyof any> = Record<K, never>
 
 /** Type safe object "{}" record (optionally specify index type) */
-export type AnyObj<K extends PropertyKey = PropertyKey> = Record<K, unknown>
+export type AnyObj<K extends keyof any = keyof any> = Record<K, unknown>
 
 /** Record with only readonly properties */
-export type ReadonlyRecord<K extends keyof any, T> = Readonly<Record<K, T>>
+export type ReadonlyRecord<K extends keyof any, T> = { [P in K]: T }
 
 /** Response value, Promise or Promise-Like value  */
 export type ValueOrPromise<T> = T extends Promise<unknown> ? T : T | PromiseLike<T>
@@ -177,11 +177,11 @@ export type BasicConstructor<T = unknown> = new (...args: T[]) => {}
 
 /** Implements a toString method */
 export interface StringLike {
-  toString(): string
+  toString?(): string
   [Symbol.toStringTag]?: string
 }
 
 /** Implements a toJSON method */
 export interface Serializable {
-  toJSON(): any
+  toJSON?(): any
 }

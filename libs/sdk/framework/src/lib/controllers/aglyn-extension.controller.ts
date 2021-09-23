@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { equalityIsSameType } from '@aglyn/shared/util/guards'
+import { _isEqualitySameType } from '@aglyn/shared/util/guards'
 import { getStaticField } from '@aglyn/shared/util/tools'
 import { LifecycleFlag, MutableShallow } from '@aglyn/shared/util/types'
 import { AglynAppEventFlag, AglynModuleEventFlag, AglynModuleEventPayload } from '../emitter'
@@ -78,7 +78,7 @@ export class AglynExtensionController
     const {name} = data
     const extension = this.extensions.get(name) as MutableShallow<AglynExtensionInstance>
     if (extension) {
-      const isLoaded = equalityIsSameType(
+      const isLoaded = _isEqualitySameType(
         extension.lifecycle,
         LifecycleFlag.INITIALIZED,
         LifecycleFlag.LOADING,

@@ -15,21 +15,13 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
-
-
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Is literal type 'number'
  *
  * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * @param {*} val
+ * @returns {val is number}
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function _isNumT(val: unknown): val is number {
+  return typeof val === 'number'
 }

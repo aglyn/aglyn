@@ -15,21 +15,16 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
-
-
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Generates a value into a **_JSON_** parsing representation of a value
  *
+ * @see {@link serializeToJson}
+ * @see {@link JSON.parse}
  * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * @return {any}
+ * @param str
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function unserializeFromJson(str: Parameters<typeof JSON.parse>[0]): ReturnType<typeof JSON.parse>
+export function unserializeFromJson(...args: Parameters<typeof JSON.parse>): ReturnType<typeof JSON.parse> {
+  return JSON.parse(...args)
 }

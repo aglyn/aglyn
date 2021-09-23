@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
+import { _isArr } from './_is-arr'
+import { _isNull } from './_is-null'
+import { _isObjT } from './_is-obj-t'
 
 
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Is actually a dictionary object (e.g. key:value), but not
+ * an array or null
  *
  * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * @param {*} val
+ * @param array
+ * @returns {val is Object}
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function _isObj(val: unknown, array = false): val is Record<string, unknown> {
+  return !_isNull(val) && _isObjT(val) && (!array ? !_isArr(val) : true)
 }

@@ -20,7 +20,7 @@ import {
   InjectedContextProp,
   withContext,
 } from '@aglyn/shared/ui/react'
-import { _ln } from '@aglyn/shared/util/guards'
+import { _isLength } from '@aglyn/shared/util/guards'
 import { createUid } from '@aglyn/shared/util/helpers'
 import { noop } from '@aglyn/shared/util/tools'
 import { ConditionalNonDist } from '@aglyn/shared/util/types'
@@ -86,7 +86,7 @@ export function AppLoaderProviderComponent(props: AppLoaderProviderComponentProp
         setState(prevState => {
           const queues = prevState.queues.filter(i => i !== queueId)
           return {
-            ...prevState, queues, isLoading: _ln(queues, 0, '>'),
+            ...prevState, queues, isLoading: _isLength(queues, 0, '>'),
           }
         })
       }

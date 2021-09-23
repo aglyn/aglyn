@@ -15,21 +15,13 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
-
 
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
- *
- * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * Check if property exists
+ * @param {string | number} key
+ * @param {Record<string | number, any>} source
+ * @returns {boolean}
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function _hasProperty<T extends unknown>(key: keyof T | keyof any, source: T): boolean {
+  return Object.prototype.hasOwnProperty.call(source, key)
 }

@@ -17,7 +17,7 @@
 
 import { AppLink, AppLinkProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared/ui/react'
 import { generateUtilityClasses, styled } from '@aglyn/shared/ui/themes'
-import { _ln } from '@aglyn/shared/util/guards'
+import { _isLength } from '@aglyn/shared/util/guards'
 import { yes } from '@aglyn/shared/util/tools'
 import MuiBreadcrumbs, { BreadcrumbsProps as MuiBreadcrumbsProps } from '@mui/material/Breadcrumbs'
 import Typography from '@mui/material/Typography'
@@ -128,7 +128,7 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
         {items.map(({...item}, key) => (
           <MemoedItem
             key={item.id || item['key'] || key}
-            isLast={_ln(key, items.length - 1)}
+            isLast={_isLength(key, items.length - 1)}
             {...item}
           />
         ))}

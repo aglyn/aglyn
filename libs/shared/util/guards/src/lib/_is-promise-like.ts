@@ -15,21 +15,16 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
-
-
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Check whether a value is a Promise-like instance.
+ * Recognizes both native promises and third-party promise libraries.
  *
- * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * @param value - The value to check.
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function _isPromiseLike<T>(
+  value: T | PromiseLike<T> | undefined,
+): value is PromiseLike<T> {
+  if (!value) return false
+  if (typeof value !== 'object' && typeof value !== 'function') return false
+  return typeof (value as PromiseLike<T>).then === 'function'
 }

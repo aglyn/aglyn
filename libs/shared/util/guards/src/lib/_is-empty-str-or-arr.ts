@@ -15,21 +15,17 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
+import { _isArrEmpty } from './_is-arr-empty'
+import { _isStrEmpty } from './_is-str-empty'
 
 
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Is type empty array or empty string
  *
  * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * @param {*} val
+ * @returns {(val is '' | [])}
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function _isEmptyStrOrArr(val: unknown): val is '' | [] {
+  return _isStrEmpty(val) || _isArrEmpty(val)
 }

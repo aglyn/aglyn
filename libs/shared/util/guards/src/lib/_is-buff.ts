@@ -15,21 +15,23 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared/util/guards'
+import { _isFnT } from './_is-fn-t'
+import { _isObjT } from './_is-obj-t'
 
 
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Is type Buffer
  *
  * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
+ * @param {*} val
+ * @returns {val is Buffer}
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function _isBuff(val: unknown): val is Buffer {
+  return (
+    _isObjT(val) &&
+    _isObjT(val.constructor) &&
+    'isBuffer' in val.constructor &&
+    _isFnT((val.constructor as any).isBuffer) &&
+    (val.constructor as any).isBuffer(val)
+  )
 }

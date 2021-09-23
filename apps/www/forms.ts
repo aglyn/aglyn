@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _hasKey, _isStrT } from '@aglyn/shared/util/guards'
+import { _hasProperty, _isStrT } from '@aglyn/shared/util/guards'
 import { length } from '@aglyn/shared/util/tools'
 import { Schema as DdfSchema } from '@data-driven-forms/react-form-renderer'
 import validation from '@data-driven-forms/react-form-renderer/validation'
@@ -296,7 +296,7 @@ export namespace DdfForms {
   }
 
   export function isValidFormId(id: unknown): id is string {
-    return _isStrT(id) && _hasKey(id, rawFormIdFromId)
+    return _isStrT(id) && _hasProperty(id, rawFormIdFromId)
   }
   export function getFormSchemaFromId(id: string): Schema {
     return formSchemaFromId[id]

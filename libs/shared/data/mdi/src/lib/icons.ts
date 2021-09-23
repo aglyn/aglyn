@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { _hasKey } from '@aglyn/shared/util/guards'
-import { Normal } from '../types'
+import { _hasProperty } from '@aglyn/shared/util/guards'
 import json from '../../generated/icons.min.json'
+import { Normal } from '../types'
 
 
 export type IconsJson = typeof json
@@ -53,7 +53,7 @@ export function getIcon<K extends IconId>(id: K, failover: IconData = defaultFai
   if (!icon) {
     for (let iconId of icons.iconIds) {
       // Search aliases
-      if (_hasKey(id, icons.byIconId[iconId]?.alias ?? {})) {
+      if (_hasProperty(id, icons.byIconId[iconId]?.alias ?? {})) {
         icon = icons.byIconId[iconId]
         break
       }

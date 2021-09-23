@@ -16,13 +16,12 @@
  */
 
 /**
- * Shortcut for JSON.parse(...)
+ * Is literal type 'bigint'
  *
  * @export
- * @return {any}
- * @param str
+ * @param {*} val
+ * @returns {val is bigint}
  */
-export function jsonP(str: Parameters<typeof JSON.parse>[0]): ReturnType<typeof JSON.parse>
-export function jsonP(...args: Parameters<typeof JSON.parse>): ReturnType<typeof JSON.parse> {
-  return JSON.parse(...args)
+export function _isBig(val: unknown): val is bigint {
+  return typeof val === 'bigint'
 }

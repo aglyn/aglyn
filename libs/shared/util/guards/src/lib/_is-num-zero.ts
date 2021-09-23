@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-import { _isBool, _isNumT } from './guards'
+import { _isNum } from './_is-num'
 
 
-describe('Guards:_isBool', () => {
-  it('should work', () => {
-    expect(_isBool(true)).toEqual(true)
-  })
-})
-
-describe('_isNumT', () => {
-  it('should work', () => {
-    expect(_isNumT(1)).toEqual(true)
-  })
-})
+/**
+ * Checks if the value is a number equal to zero(0)
+ *
+ * @export
+ * @param {*} val
+ * @returns {val is 0}
+ */
+export function _isNumZero(val: unknown): val is 0 {
+  return _isNum(val) && Number(val) === 0
+}

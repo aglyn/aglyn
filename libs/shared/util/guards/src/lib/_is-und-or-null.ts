@@ -15,14 +15,17 @@
  * limitations under the License.
  */
 
+import { _isNull } from './_is-null'
+import { _isUndT } from './_is-und-t'
+
+
 /**
- * Shortcut for JSON.stringify(...)
+ * Is literal type null or undefined
  *
  * @export
- * @return {string}
- * @param data
+ * @param {*} val
+ * @returns {(val is null | undefined)}
  */
-export function jsonS(data: Parameters<typeof JSON.stringify>[0]): ReturnType<typeof JSON.stringify>
-export function jsonS(...args: Parameters<typeof JSON.stringify>): ReturnType<typeof JSON.stringify> {
-  return JSON.stringify(...args)
+export function _isUndOrNull(val: unknown): val is null | undefined {
+  return _isNull(val) || _isUndT(val)
 }
