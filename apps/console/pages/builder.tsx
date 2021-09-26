@@ -17,11 +17,13 @@
 
 import { BuilderComponent } from '@aglyn/ui-builder'
 import {
+  getApp,
+} from '@aglyn/data-framework'
+import {
   AglynComponentData,
   getAllComponentsValues,
-  getApp,
   registerComponent,
-} from '@aglyn/data-framework'
+} from '@aglyn/data-components'
 import { createElementComponent } from '@aglyn/ui-renderer'
 import { useCallback, useMemo, useState } from 'react'
 import { samplePageData } from '../constants/sample-data'

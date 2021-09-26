@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
-import { createStyles, Theme, withStyles, WithStyles } from '@aglyn/shared-ui-themes'
+import { createStyles, Theme, withStyles, WithStyles } from '@aglyn/shared-feature-themes'
 import MuiDialog, { DialogProps as MuiDialogProps } from '@mui/material/Dialog'
-import MuiDialogActions, { DialogActionsProps as MuiDialogActionsProps } from '@mui/material/DialogActions'
+import MuiDialogActions, {
+  DialogActionsProps as MuiDialogActionsProps,
+} from '@mui/material/DialogActions'
 import MuiDialogContent from '@mui/material/DialogContent'
 import MuiDialogTitle, { DialogTitleProps as MuiDialogTitleProps } from '@mui/material/DialogTitle'
 import React from 'react'
 
-
-const styles = (theme: Theme) => createStyles({
-  root: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: theme.palette.background.paper,
-  },
-  paper: {
-    width: '80%',
-    maxHeight: 435,
-  },
-})
+const styles = (theme: Theme) =>
+  createStyles({
+    root: {
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: theme.palette.background.paper,
+    },
+    paper: {
+      width: '80%',
+      maxHeight: 435,
+    },
+  })
 
 export type Props = MuiDialogProps & {
   dividers?: boolean
@@ -44,25 +46,18 @@ export type Props = MuiDialogProps & {
 
 const PopupDialog = React.forwardRef<typeof MuiDialog, Props & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
-    const {
-      children,
-      header,
-      actions,
-      dividers,
-      disableDialogContent,
-      ...rest
-    } = props
+    const { children, header, actions, dividers, disableDialogContent, ...rest } = props
 
     return (
       <MuiDialog ref={ref} aria-labelledby="popup-dialog-title" maxWidth="xs" {...rest}>
         {header ? <MuiDialogTitle id="popup-dialog-title" {...header} /> : null}
-        {disableDialogContent ? children : <MuiDialogContent dividers={dividers}/>}
+        {disableDialogContent ? children : <MuiDialogContent dividers={dividers} />}
         {actions ? <MuiDialogActions {...actions} /> : null}
       </MuiDialog>
     )
-  },
+  }
 )
 
 PopupDialog.displayName = 'PopupDialog'
 
-export default withStyles(styles, {name: 'PopupDialog'})(PopupDialog)
+export default withStyles(styles, { name: 'PopupDialog' })(PopupDialog)

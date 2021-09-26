@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared-ui-react'
-import { styled } from '@aglyn/shared-ui-themes'
+import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared-ui-jsx'
+import { styled } from '@aglyn/shared-feature-themes'
 import { _isStrT } from '@aglyn/shared-util-guards'
 import { _s, copy } from '@aglyn/shared-util-tools'
 import Container from '@mui/material/Container'
@@ -31,7 +31,11 @@ import MainLayout, { MainLayoutProps as MainLayoutProps } from './MainLayout'
 
 
 export const CONTENT_MAX_WIDTH = 'lg'
-const getHeader = (first, second) => (<span><b>{first}:</b> {second}</span>)
+const getHeader = (first, second) => (
+  <span>
+    <b>{first}:</b> {second}
+  </span>
+)
 
 const StyledNavBarSpacer = styled('div', {
   name: 'NavBarSpacer',
@@ -64,11 +68,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     currentUserContext,
     ...rest
   } = props
-  const {
-    pageMeta,
-    overrideMeta,
-    pageAncestors,
-  } = aggregatedPageMeta
+  const {pageMeta, overrideMeta, pageAncestors} = aggregatedPageMeta
   const title = titleProp ?? (overrideMeta ?? pageMeta)?.title
   const [rootArea, mainArea, subArea] = pageAncestors
   const header = {
@@ -79,7 +79,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     ),
     ...headerProp,
   }
-  const breadcrumbItems = (breadcrumbItemsProp ?? copy(pageAncestors) as any[])
+  const breadcrumbItems = (breadcrumbItemsProp ?? (copy(pageAncestors) as any[]))
   .concat(overrideMeta ?? pageMeta)
   .map((item: any) => ({
     href: _s(item?.id),
@@ -100,7 +100,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
       title: 'User Account',
       // avatar: {
       //   alt: currentUserContext.currentUser?.displayName,
-      //   src: getGravatarUrl(currentUserContext.currentUser?.email),
+      //   src: gravatarUrlFromEmail(currentUserContext.currentUser?.email),
       // },
       items: [
         {
@@ -123,10 +123,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
       <header>
         <StyledNavBarSpacer/>
         <Container maxWidth={CONTENT_MAX_WIDTH}>
-          <Typography
-            component="h1"
-            variant="h4"
-          >
+          <Typography component="h1" variant="h4">
             {header?.icon ? (
               <SvgPathIcon
                 color="secondary"
@@ -140,19 +137,13 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
             ) : null}
             {header?.children ?? title}
           </Typography>
-          <Breadcrumbs
-            items={breadcrumbItems}
-          />
+          <Breadcrumbs items={breadcrumbItems}/>
         </Container>
       </header>
       <main /*className={classes.content}*/>
         <Container maxWidth={CONTENT_MAX_WIDTH}>
           {items || ContentGridItemsProps ? (
-            <GridItems
-              items={items}
-              spacing={3}
-              {...ContentGridItemsProps}
-            />
+            <GridItems items={items} spacing={3} {...ContentGridItemsProps} />
           ) : null}
           {children}
         </Container>
@@ -164,7 +155,5 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
 ConsoleLayoutRaw.displayName = 'ConsoleLayout'
 ConsoleLayoutRaw.defaultProps = {}
 
-export const ConsoleLayout = withCurrentUserContext(withAggregatedPageMeta(
-  ConsoleLayoutRaw,
-))
+export const ConsoleLayout = withCurrentUserContext(withAggregatedPageMeta(ConsoleLayoutRaw))
 export default ConsoleLayout

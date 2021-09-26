@@ -16,7 +16,7 @@
  */
 
 import { ElementRendererComponent, ElementRendererComponentProps } from '@aglyn/ui-renderer'
-import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared-ui-react'
+import { useCombinedRefs, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { forwardRef, useCallback, useRef, useState } from 'react'
 import { useSelectionContext } from '../contexts/selection-context'
 

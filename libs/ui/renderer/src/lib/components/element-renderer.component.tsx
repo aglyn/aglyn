@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { AglynComponentData, getApp, getComponent } from '@aglyn/data-framework'
-import { ReactIs } from '@aglyn/shared-ui-react'
-import { _s, yes } from '@aglyn/shared-util-tools'
+import { AglynComponentData, getComponent } from '@aglyn/data-components'
+import { getApp } from '@aglyn/data-framework'
+import { AnyProps } from '@aglyn/shared-data-types'
+import { ReactIs } from '@aglyn/shared-ui-jsx'
 import { _isArr, _isArrEmpty } from '@aglyn/shared-util-guards'
-import { AnyProps } from '@aglyn/shared-util-types'
+import { _s, yes } from '@aglyn/shared-util-tools'
 import { ComponentType, ElementType, forwardRef } from 'react'
 import { handleElementResolveProps } from '../util/handle-element-resolve-props'
 import { ElementsRendererComponent } from './elements-renderer.component'

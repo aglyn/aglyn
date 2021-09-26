@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-import { OverrideableComponentProps } from '@aglyn/shared-ui-react'
-import { styled } from '@aglyn/shared-ui-themes'
+import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
+import { styled } from '@aglyn/shared-feature-themes'
 import { forwardRef, HTMLAttributes } from 'react'
-
 
 const BackgroundImageRoot = styled('div', {
   name: 'BackgroundImage',
-})(({
+})({
   backgroundColor: 'inherit',
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'bottom center',
   backgroundSize: 'cover',
   backgroundImage: null,
-}))
+})
 
 type BaseProps = HTMLAttributes<HTMLDivElement>
 
@@ -37,27 +36,23 @@ export interface BackgroundImageProps extends BaseProps, OverrideableComponentPr
   parallax?: boolean
 }
 
-const BackgroundImage = forwardRef<HTMLDivElement, BackgroundImageProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      url,
-      parallax,
-      style,
-      ...rest
-    } = props
-    return (
-      <BackgroundImageRoot
-        ref={ref}
-        {...rest}
-        style={{
-          ...style,
-          backgroundImage: `url(${url})`,
-          backgroundAttachment: parallax ? 'fixed' : undefined,
-        }}
-      />
-    )
-  },
-)
+const BackgroundImage = forwardRef<HTMLDivElement, BackgroundImageProps>(function RefRenderFn(
+  props,
+  ref
+) {
+  const { url, parallax, style, ...rest } = props
+  return (
+    <BackgroundImageRoot
+      ref={ref}
+      {...rest}
+      style={{
+        ...style,
+        backgroundImage: `url(${url})`,
+        backgroundAttachment: parallax ? 'fixed' : undefined,
+      }}
+    />
+  )
+})
 
 BackgroundImage.displayName = 'BackgroundImage'
 

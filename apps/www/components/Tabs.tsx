@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-import { GridButtons, SvgPathIcon } from '@aglyn/shared-ui-react'
-import { makeStyles, Theme } from '@aglyn/shared-ui-themes'
+import { GridButtons, SvgPathIcon } from '@aglyn/shared-ui-jsx'
+import { makeStyles, Theme } from '@aglyn/shared-feature-themes'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import MuiTab from '@mui/material/Tab'
 import MuiTabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 import React from 'react'
-
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -32,7 +31,7 @@ interface TabPanelProps {
 }
 
 function TabPanel(props: TabPanelProps) {
-  const {children, value, index, ...other} = props
+  const { children, value, index, ...other } = props
 
   return (
     <div
@@ -87,8 +86,8 @@ export default function Tabs() {
           variant="scrollable"
           onChange={handleChange}
         >
-          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconId="home"/>}/>
-          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconId="eye"/>}/>
+          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconId="home" />} />
+          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconId="eye" />} />
           {/* <MuiTab label="Item Two" {...a11yProps(2)} />
            <MuiTab label="Item Three" {...a11yProps(3)} /> */}
         </MuiTabs>
@@ -98,12 +97,15 @@ export default function Tabs() {
           items={[
             {
               component: Box,
-              height: 100, width: 100,
+              height: 100,
+              width: 100,
               variant: 'contained',
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="file-document-multiple"/></div>
+                  <div>
+                    <SvgPathIcon fontSize="large" iconId="file-document-multiple" />
+                  </div>
                   <div>Entries</div>
                 </div>
               ),
@@ -117,36 +119,45 @@ export default function Tabs() {
           items={[
             {
               component: Box,
-              height: 100, width: 100,
+              height: 100,
+              width: 100,
               variant: 'contained',
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="variable"/></div>
+                  <div>
+                    <SvgPathIcon fontSize="large" iconId="variable" />
+                  </div>
                   <div>Fields</div>
                 </div>
               ),
             },
             {
               component: Box,
-              height: 100, width: 100,
+              height: 100,
+              width: 100,
               variant: 'contained',
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="check-network"/></div>
+                  <div>
+                    <SvgPathIcon fontSize="large" iconId="check-network" />
+                  </div>
                   <div>Rules</div>
                 </div>
               ),
             },
             {
               component: Box,
-              height: 100, width: 100,
+              height: 100,
+              width: 100,
               variant: 'contained',
               color: 'secondary',
               children: (
                 <div align="center">
-                  <div><SvgPathIcon fontSize="large" iconId="chart-sankey-variant"/></div>
+                  <div>
+                    <SvgPathIcon fontSize="large" iconId="chart-sankey-variant" />
+                  </div>
                   <div>Workflows</div>
                 </div>
               ),

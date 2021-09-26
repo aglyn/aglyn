@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { componentMapper, GridItems } from '@aglyn/shared-ui-react'
-import FormTemplateRenderProps
-  from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
+import { componentMapper, GridItems } from '@aglyn/shared-ui-jsx'
+import FormTemplateRenderProps from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
 import FormRenderer from '@data-driven-forms/react-form-renderer/form-renderer'
 import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
 import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
@@ -35,11 +34,10 @@ import { DdfForms } from '../forms'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
 
-
 const FormTemplate = (props: FormTemplateRenderProps) => {
-  const {formFields, schema} = props
-  const {handleSubmit, getState} = useFormApi()
-  const {submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine} = getState()
+  const { formFields, schema } = props
+  const { handleSubmit, getState } = useFormApi()
+  const { submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine } = getState()
 
   if (submitFailed) {
     return (
@@ -47,9 +45,10 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         <Box mt={2}>
           <Alert severity="error">
             <AlertTitle>Error — Form Submission Failed</AlertTitle>
-            Sorry, please try again later. If the issue persists please send a direct email to <em>info@aglyn.com</em>
-            <br/>
-            <br/>
+            Sorry, please try again later. If the issue persists please send a direct email to{' '}
+            <em>info@aglyn.com</em>
+            <br />
+            <br />
             <small>Error details:</small>
             <pre>{JSON.stringify(submitErrors, null, 2)}</pre>
           </Alert>
@@ -64,7 +63,8 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         <Box mt={2}>
           <Alert severity="success">
             <AlertTitle>Success</AlertTitle>
-            We have received your submission. If you have any immediate questions, send them to <em>info@aglyn.com</em>
+            We have received your submission. If you have any immediate questions, send them to{' '}
+            <em>info@aglyn.com</em>
           </Alert>
         </Box>
       </>
@@ -75,7 +75,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
     <Grid
       container
       component={'form'}
-      style={{width: '100%'}}
+      style={{ width: '100%' }}
       onSubmit={handleSubmit}
       spacing={3}
     >
@@ -87,10 +87,10 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
       {/*})}*/}
       <FormSpy>
         {() => (
-          <Grid item xs={12} sx={{textAlign: 'center'}}>
+          <Grid item xs={12} sx={{ textAlign: 'center' }}>
             {submitting && (
               <Box mb={1}>
-                <LinearProgress color="secondary"/>
+                <LinearProgress color="secondary" />
               </Box>
             )}
             <Button
@@ -115,13 +115,13 @@ function Contact(props) {
     return await fetch(`/api/h/f/${DdfForms.formIds.contact}`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(values),
     })
-    .then(res => res.json())
-    .then(res => res?.status !== 'success' ? res : undefined)
+      .then((res) => res.json())
+      .then((res) => (res?.status !== 'success' ? res : undefined))
   }, [])
 
   return (
@@ -130,22 +130,20 @@ function Contact(props) {
       centerNavigationItems={mainNavigation}
       productName={productNames.www}
       sx={{
-        pt: theme => theme.mixins.toolbar.minHeight,
+        pt: (theme) => theme.mixins.toolbar.minHeight,
       }}
     >
       <main>
         <Box py={12} bgcolor={'background.paper'}>
-          <Container
-            maxWidth={'lg'}
-            sx={{py: 4}}
-          >
+          <Container maxWidth={'lg'} sx={{ py: 4 }}>
             <GridItems
               alignItems="center"
               direction="column"
               spacing={2}
               items={[
                 {
-                  xs: 12, md: 8,
+                  xs: 12,
+                  md: 8,
                   children: (
                     <>
                       <Typography
@@ -160,7 +158,9 @@ function Contact(props) {
                       <Typography
                         variant={'h4'}
                         component={'h2'}
-                        children={'Looking for more information or need support? Complete the form below.'}
+                        children={
+                          'Looking for more information or need support? Complete the form below.'
+                        }
                         align="center"
                         sx={{
                           color: 'secondary.main',
@@ -171,7 +171,8 @@ function Contact(props) {
                   ),
                 },
                 {
-                  xs: 12, md: 9,
+                  xs: 12,
+                  md: 9,
                   children: (
                     <Container maxWidth="sm">
                       <FormRenderer
@@ -188,7 +189,7 @@ function Contact(props) {
           </Container>
         </Box>
       </main>
-      <SiteFooterView/>
+      <SiteFooterView />
     </MainLayout>
   )
 }

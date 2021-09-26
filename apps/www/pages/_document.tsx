@@ -16,17 +16,17 @@
  */
 
 import {
-  makeLinkElements,
-  MakeLinkElementsConfig,
-  makeMetaElements,
-  MakeMetaElementsConfig,
-} from '@aglyn/shared-ui-react'
-import {
   createEmotionCache,
   createEmotionServer,
   EmotionCache,
   getConsoleMetaThemeColor,
-} from '@aglyn/shared-ui-themes'
+} from '@aglyn/shared-feature-themes'
+import {
+  makeLinkElements,
+  MakeLinkElementsConfig,
+  makeMetaElements,
+  MakeMetaElementsConfig,
+} from '@aglyn/shared-ui-jsx'
 import Document from 'next/document'
 import NextDocument, {
   DocumentContext,
@@ -36,7 +36,7 @@ import NextDocument, {
   Main,
   NextScript,
 } from 'next/document'
-import { Children } from 'react'
+import { Children } from 'react' // import { ServerStyleSheet } from 'styled-components'
 // import { ServerStyleSheet } from 'styled-components'
 
 

@@ -16,7 +16,7 @@
  */
 
 import React from 'react'
-import { createStyles, WithStyles, withStyles, Theme } from '@aglyn/shared-ui-themes'
+import { createStyles, WithStyles, withStyles, Theme } from '@aglyn/shared-feature-themes'
 import clsx from 'clsx'
 import Card, { CardProps } from '@mui/material/Card'
 import CardHeader, { CardHeaderProps } from '@mui/material/CardHeader'

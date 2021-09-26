@@ -18,7 +18,7 @@
 import { EmitterFn } from '@aglyn/shared-util-emitter'
 import { Emitter } from 'mitt'
 import { AglynAppInstance, AglynCommandHandler, AglynExtensionInstance, PayloadData } from './types'
-import { Dictionary } from '@aglyn/shared-util-types'
+import { Dictionary } from '@aglyn/shared-data-types'
 
 export enum AglynAppEventFlag {
   APP_CREATED = 'event:app-created',

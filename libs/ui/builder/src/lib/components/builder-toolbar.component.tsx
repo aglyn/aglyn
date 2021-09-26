@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { SvgPathIcon } from '@aglyn/shared-ui-react'
-import { styled } from '@aglyn/shared-ui-themes'
+import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
+import { styled } from '@aglyn/shared-feature-themes'
 import { createElementData, useElementsContext } from '@aglyn/ui-renderer'
 import AppBar, { AppBarProps } from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
@@ -25,7 +25,6 @@ import IconButton from '@mui/material/IconButton'
 import Toolbar from '@mui/material/Toolbar'
 import { forwardRef, useCallback } from 'react'
 import { useElementDrawerContext } from '../contexts/element-drawer-context'
-
 
 const StyledFab = styled(Fab, {
   name: 'FabButton',
@@ -49,33 +48,33 @@ export interface BuilderToolbarComponentProps extends Partial<AppBarProps> {}
 
 export const BuilderToolbarComponent = forwardRef<any, BuilderToolbarComponentProps>(
   function RefRenderFn(props, ref) {
-    const {className, ...rest} = props
+    const { className, ...rest } = props
 
-    const {elementDrawer} = useElementDrawerContext()
-    const {elements, updateElements} = useElementsContext()
+    const { elementDrawer } = useElementDrawerContext()
+    const { elements, updateElements } = useElementsContext()
     const handleFabClick = useCallback(async () => {
       const option = await elementDrawer({
         title: 'Add New Elements',
       })
-      .then((res: any) => {
-        if (res?.option?.type === 'selection') {
-          return res?.option?.data
-        }
-      })
-      .then((data: any) => {
-        if (data) {
-          const {id: componentId} = data
-          const prevElements = Array.from(elements)
-          const newElements = [...elements, createElementData(componentId)]
-          console.log('prev newElement', newElements, prevElements)
-          updateElements && updateElements(newElements, prevElements)
-        }
-      })
-      .catch((error) => {
-        if (error instanceof Error) {
-          console.log('errror', error)
-        }
-      })
+        .then((res: any) => {
+          if (res?.option?.type === 'selection') {
+            return res?.option?.data
+          }
+        })
+        .then((data: any) => {
+          if (data) {
+            const { id: componentId } = data
+            const prevElements = Array.from(elements)
+            const newElements = [...elements, createElementData(componentId)]
+            console.log('prev newElement', newElements, prevElements)
+            updateElements && updateElements(newElements, prevElements)
+          }
+        })
+        .catch((error) => {
+          if (error instanceof Error) {
+            console.log('errror', error)
+          }
+        })
 
       console.warn('async choice', option)
     }, [elementDrawer, elements, updateElements])
@@ -84,22 +83,22 @@ export const BuilderToolbarComponent = forwardRef<any, BuilderToolbarComponentPr
       <StyledAppBar ref={ref} position="fixed" color="primary" {...rest}>
         <Toolbar>
           <IconButton edge="start" color="inherit" aria-label="open drawer">
-            <SvgPathIcon iconId={'menu'}/>
+            <SvgPathIcon iconId={'menu'} />
           </IconButton>
           <StyledFab color="secondary" aria-label="add" onClick={handleFabClick}>
-            <SvgPathIcon iconId={'plus'}/>
+            <SvgPathIcon iconId={'plus'} />
           </StyledFab>
-          <Box sx={{flexGrow: 1}}/>
+          <Box sx={{ flexGrow: 1 }} />
           <IconButton color="inherit">
-            <SvgPathIcon iconId={'search'}/>
+            <SvgPathIcon iconId={'search'} />
           </IconButton>
           <IconButton edge="end" color="inherit">
-            <SvgPathIcon iconId={'more'}/>
+            <SvgPathIcon iconId={'more'} />
           </IconButton>
         </Toolbar>
       </StyledAppBar>
     )
-  },
+  }
 )
 
 BuilderToolbarComponent.displayName = 'BuilderToolbarComponent'

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { createUid } from '@aglyn/shared-util-helpers'
+import { createUid } from '@aglyn/shared-util-vendor'
 
 export const ELEMENT_ID_LENGTH = 10
 

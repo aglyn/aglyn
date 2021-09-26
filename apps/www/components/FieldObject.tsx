@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { SvgPathIcon } from '@aglyn/shared-ui-react'
+import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import React from 'react'
 import { FT, lbl } from '../lib/aglyn-deprecated'
 import { Components, FieldPreset } from '../lib/input-fields'

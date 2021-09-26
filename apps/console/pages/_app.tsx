@@ -21,14 +21,14 @@ import {
   MakeLinkElementsConfig,
   makeMetaElements,
   MakeMetaElementsConfig,
-} from '@aglyn/shared-ui-react'
+} from '@aglyn/shared-ui-jsx'
 import {
   CacheProvider,
   consoleTheme,
   createEmotionCache,
   EmotionCache,
   withTheme,
-} from '@aglyn/shared-ui-themes'
+} from '@aglyn/shared-feature-themes'
 import CssBaseline from '@mui/material/CssBaseline'
 import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
@@ -49,13 +49,12 @@ try {
       [AglynExtension.COMPONENTS]: true,
     },
   })
-}
-catch (e) {
+} catch (e) {
   console.error(e, 'initialize aglyn app')
 }
 
 function AppWrapperRaw(props) {
-  const {children} = props
+  const { children } = props
   const Wrapper = isProduction ? Fragment : Fragment // StrictMode
 
   useEffect(() => {
@@ -71,7 +70,7 @@ function AppWrapperRaw(props) {
         {makeMetaElements(metaElements)}
         {makeLinkElements(linkElements)}
       </Head>
-      <CssBaseline/>
+      <CssBaseline />
       <div className="app">
         <main>{children}</main>
       </div>
@@ -79,7 +78,7 @@ function AppWrapperRaw(props) {
   )
 }
 AppWrapperRaw.displayName = 'AppWrapper'
-const AppWrapper = withTheme({theme: consoleTheme})(AppWrapperRaw)
+const AppWrapper = withTheme({ theme: consoleTheme })(AppWrapperRaw)
 
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
@@ -121,7 +120,7 @@ export interface _AppProps extends NextAppProps {
  * @returns {JSX.Element}
  */
 function _App(props: _AppProps) {
-  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
+  const { Component, emotionCache = clientSideEmotionCache, pageProps } = props
 
   return (
     <CacheProvider value={emotionCache}>
@@ -132,7 +131,7 @@ function _App(props: _AppProps) {
   )
 }
 _App.displayName = '_App'
-_App.getInitialProps = async ({ctx, Component}) => {
+_App.getInitialProps = async ({ ctx, Component }) => {
   let pageProps = {}
 
   if (Component.getInitialProps) {
@@ -171,6 +170,6 @@ For detailed information please visit 'https://aglyn.com' or you may send an
 email to 'info@aglyn.com'.
 – Aglyn Engineering Team
 `,
-    'font-family:monospace;color:#E040FB;font-size:12px;',
+    'font-family:monospace;color:#E040FB;font-size:12px;'
   )
 }

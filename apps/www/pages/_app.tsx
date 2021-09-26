@@ -20,14 +20,14 @@ import {
   MakeLinkElementsConfig,
   makeMetaElements,
   MakeMetaElementsConfig,
-} from '@aglyn/shared-ui-react'
+} from '@aglyn/shared-ui-jsx'
 import {
   CacheProvider,
   consoleTheme,
   createEmotionCache,
   EmotionCache,
   withTheme,
-} from '@aglyn/shared-ui-themes'
+} from '@aglyn/shared-feature-themes'
 import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
 import { Fragment, useEffect } from 'react'
@@ -38,7 +38,6 @@ import { CurrentUserProviderComponent } from '../contexts/current-user-context'
 import * as AppController from '../lib/aglyn-deprecated'
 import AppLoaderOverlayView from '../views/AppLoaderOverlayView'
 
-
 declare function require(moduleNames: string[], onLoad: (...args: any[]) => void): void
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
@@ -47,10 +46,12 @@ let app
 if (typeof window !== 'undefined') {
   require(['../lib/aglyn-deprecated'], (withAppController: typeof AppController) => {
     const appOptions = {
-      ...(isProduction ? {} : {
-        authEmulator: 'http://localhost:9099/',
-        firestoreEmulator: {host: 'localhost', port: 8080},
-      }),
+      ...(isProduction
+        ? {}
+        : {
+            authEmulator: 'http://localhost:9099/',
+            firestoreEmulator: { host: 'localhost', port: 8080 },
+          }),
     }
     app = withAppController.withAppController(appOptions)
   })
@@ -63,7 +64,7 @@ const metaElements: MakeMetaElementsConfig = [
 const linkElements: MakeLinkElementsConfig = []
 
 function AppWrapperRaw(props) {
-  const {children} = props
+  const { children } = props
 
   useEffect(() => {
     // Remove the server-side injected CSS.
@@ -90,17 +91,15 @@ function AppWrapperRaw(props) {
         <AppContextProvider value={app}>
           <CurrentUserProviderComponent>
             <AppLoaderProviderComponent>
-              <main>
-                {children}
-              </main>
+              <main>{children}</main>
 
-              <AppLoaderOverlayView/>
+              <AppLoaderOverlayView />
             </AppLoaderProviderComponent>
           </CurrentUserProviderComponent>
         </AppContextProvider>
       </div>
-      {isProduction ? /* HubSpot Embed Code */ (
-        <script
+      {isProduction ? (
+        /* HubSpot Embed Code */ <script
           type="text/javascript"
           id="hs-script-loader"
           async
@@ -108,7 +107,6 @@ function AppWrapperRaw(props) {
           src="//js.hs-scripts.com/20566719.js"
         />
       ) : null}
-
     </Wrapper>
   )
 }
@@ -158,7 +156,7 @@ export interface _AppProps extends NextAppProps {
  * @returns {JSX.Element}
  */
 function _App(props: _AppProps) {
-  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
+  const { Component, emotionCache = clientSideEmotionCache, pageProps } = props
 
   return (
     <CacheProvider value={emotionCache}>
@@ -169,7 +167,7 @@ function _App(props: _AppProps) {
   )
 }
 _App.displayName = '_App'
-_App.getInitialProps = async ({ctx, Component}) => {
+_App.getInitialProps = async ({ ctx, Component }) => {
   let pageProps = {}
 
   if (Component.getInitialProps) {
@@ -184,7 +182,6 @@ _App.getInitialProps = async ({ctx, Component}) => {
   }
 }
 export default _App
-
 
 if (process.browser) {
   console.log(
@@ -209,6 +206,6 @@ For detailed information please visit 'https://aglyn.com' or you may send an
 email to 'info@aglyn.com'.
 – Aglyn Engineering Team
 `,
-    'font-family:monospace;color:#E040FB;font-size:12px;',
+    'font-family:monospace;color:#E040FB;font-size:12px;'
   )
 }

@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { AglynComponentData } from '@aglyn/sdk/framework'
+import { AglynComponentData } from '@aglyn/data-components'
 import { createContext, useContext } from 'react'
+
 
 export type UseElementsContextType = () => ElementsContextType
 

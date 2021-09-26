@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { AglynComponent, AglynComponentData } from '@aglyn/data-framework'
-import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared-ui-react'
-import { builderTheme, withTheme } from '@aglyn/shared-ui-themes'
+import { AglynComponent, AglynComponentData } from '@aglyn/data-components'
+import { builderTheme, withTheme } from '@aglyn/shared-feature-themes'
+import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
 import {
   ElementComponentsContextProvider,
   ElementsContextProvider,

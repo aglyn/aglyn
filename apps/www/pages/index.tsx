@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { GridItems } from '@aglyn/shared-ui-react'
+import { GridItems } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'

@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-import { ComponentWithInjectedProp, withContext } from '@aglyn/shared-ui-react'
+import { ComponentWithInjectedProp, withContext } from '@aglyn/shared-ui-jsx'
 import { createContext, PropsWithChildren, useContext, useEffect, useState } from 'react'
 import { FbUser } from '../lib/aglyn-deprecated'
 import { AppContextType, withAppContext } from './app-context'
-
 
 export type CurrentUserContextType = {
   currentUser: FbUser
@@ -43,7 +42,7 @@ export interface CurrentUserProviderComponentProps extends PropsWithChildren<{}>
 }
 
 function CurrentUserProviderComponentRaw(props: CurrentUserProviderComponentProps) {
-  const {children, app} = props
+  const { children, app } = props
   const currentUser = app?.getCurrentUser()
   const [ctxState, setCtxState] = useState(() => ({
     currentUser,
@@ -54,7 +53,7 @@ function CurrentUserProviderComponentRaw(props: CurrentUserProviderComponentProp
   useEffect(() => {
     const unsubscribe = app?.onAuthStateChanged?.(
       (user: FbUser) => {
-        setCtxState(prev => ({
+        setCtxState((prev) => ({
           ...prev,
           currentUser: user ?? null,
           loading: false,
@@ -62,12 +61,12 @@ function CurrentUserProviderComponentRaw(props: CurrentUserProviderComponentProp
         }))
       },
       (error) => {
-        setCtxState(prev => ({
+        setCtxState((prev) => ({
           ...prev,
           loading: false,
           error,
         }))
-      },
+      }
     )
     // Unsubscribe auth listener on unmount
     return () => {
@@ -75,11 +74,7 @@ function CurrentUserProviderComponentRaw(props: CurrentUserProviderComponentProp
     }
   }, [])
 
-  return (
-    <CurrentUserContextProvider value={ctxState}>
-      {children}
-    </CurrentUserContextProvider>
-  )
+  return <CurrentUserContextProvider value={ctxState}>{children}</CurrentUserContextProvider>
 }
 export const CurrentUserProviderComponent = withAppContext(CurrentUserProviderComponentRaw)
 
@@ -91,11 +86,10 @@ export const CurrentUserProviderComponent = withAppContext(CurrentUserProviderCo
  * @return {*}
  */
 export function withCurrentUserContext<P>(
-  Component: ComponentWithInjectedProp<P, CurrentUserContextConsumer, 'currentUserContext'>,
+  Component: ComponentWithInjectedProp<P, CurrentUserContextConsumer, 'currentUserContext'>
 ) {
   return withContext(CurrentUserContextConsumer, 'currentUserContext')(Component)
 }
-
 
 // Custom hook that shorthands the context!
 export const useCurrentUserContext = () => useContext(CurrentUserContext)

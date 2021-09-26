@@ -47,11 +47,15 @@
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:data"],
       "implicitDependencies": []
     },
-    "shared-ui-react": {
+    "shared-data-types": {
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
+    },
+    "shared-feature-themes": {
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
       "implicitDependencies": []
     },
-    "shared-ui-themes": {
+    "shared-ui-jsx": {
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
       "implicitDependencies": []
     },
@@ -71,10 +75,6 @@
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
       "implicitDependencies": []
     },
-    "shared-util-helpers": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
-    },
     "shared-util-logger": {
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:logger"],
       "implicitDependencies": []
@@ -87,7 +87,7 @@
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
       "implicitDependencies": []
     },
-    "shared-util-types": {
+    "shared-util-vendor": {
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
       "implicitDependencies": []
     },

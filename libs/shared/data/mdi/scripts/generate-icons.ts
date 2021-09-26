@@ -16,48 +16,55 @@
  */
 
 import util from '@mdi/util'
-import { capitalCase, paramCase } from '@aglyn/shared-util-helpers'
+import { capitalCase, paramCase } from '@aglyn/shared-util-vendor'
 import fs from 'fs'
 import path from 'path'
 import { Normal } from '../src/types'
-
 
 export type Id = string
 export type IdSet = Id[]
 
 interface FileInfo {
-  out: string;
-  exportName: string;
+  out: string
+  exportName: string
   data: Icons | Authors | Tags
 }
 
 interface Icons {
   iconIds: IdSet
-  byIconId: Normal.Lookup<{
-    path: string
-    name: string
-    alias: {
-      [aliasId: string]: true
-    }
-  }, string>
+  byIconId: Normal.Lookup<
+    {
+      path: string
+      name: string
+      alias: {
+        [aliasId: string]: true
+      }
+    },
+    string
+  >
 }
 
 interface Authors {
   authorIds: IdSet
-  byAuthorId: Normal.Lookup<{
-    name: string
-    icon: {
-      [iconId: string]: true
-    }
-  }, string>
+  byAuthorId: Normal.Lookup<
+    {
+      name: string
+      icon: {
+        [iconId: string]: true
+      }
+    },
+    string
+  >
 }
 interface Tags {
   tagIds: IdSet
-  byTagId: Normal.Lookup<{
-    name: string
-    icon: { [iconId: string]: true }
-  },
-    string>
+  byTagId: Normal.Lookup<
+    {
+      name: string
+      icon: { [iconId: string]: true }
+    },
+    string
+  >
 }
 
 const outDir = path.join(__dirname, '../generated/')
@@ -66,21 +73,21 @@ const meta = util.getMeta(true)
 const iconIds: string[] = []
 const authorIds: string[] = []
 const tagIds: string[] = []
-const icons: Icons = {iconIds, byIconId: {}}
-const authors: Authors = {authorIds, byAuthorId: {}}
-const tags: Tags = {tagIds, byTagId: {}}
+const icons: Icons = { iconIds, byIconId: {} }
+const authors: Authors = { authorIds, byAuthorId: {} }
+const tags: Tags = { tagIds, byTagId: {} }
 
 function configureIcon(iconMeta) {
-  const {name, path, aliases = []} = iconMeta
+  const { name, path, aliases = [] } = iconMeta
   const iconId = paramCase(name)
   iconIds.push(iconId)
-  icons.byIconId[iconId] = {path, name: capitalCase(iconId), alias: {}}
+  icons.byIconId[iconId] = { path, name: capitalCase(iconId), alias: {} }
   aliases.forEach((aliasId) => (icons.byIconId[iconId].alias[aliasId] = true))
   return iconId
 }
 
 function configureTags(iconId, iconMeta) {
-  const {tags: iconTags = []} = iconMeta
+  const { tags: iconTags = [] } = iconMeta
   iconTags.forEach((tagName) => {
     const tagId = paramCase(tagName)
     // Ensure tagId is present in allIds
@@ -98,9 +105,8 @@ function configureTags(iconId, iconMeta) {
   })
 }
 
-
 function configureAuthors(iconId, iconMeta) {
-  const {author} = iconMeta
+  const { author } = iconMeta
   const authorId = paramCase(author)
   if (!(authorIds.indexOf(authorId) >= 0)) {
     authorIds.push(authorId)
@@ -117,7 +123,7 @@ function configureAuthors(iconId, iconMeta) {
 }
 
 function generateFile(fileInfo: FileInfo, minify = false): void {
-  const {data, out} = fileInfo
+  const { data, out } = fileInfo
   const min = Boolean(minify)
   const contents = JSON.stringify(data, null, min ? null : 2)
   const filename = `${out}${min ? '.min' : ''}.json`
@@ -125,23 +131,22 @@ function generateFile(fileInfo: FileInfo, minify = false): void {
   fs.writeFile(outFile, contents, (err) => {
     if (err) {
       console.error('Error generating file', outFile)
-    }
-    else {
+    } else {
       console.info('Generating file', outFile)
     }
   })
 }
 
-;(function() {
+;(function () {
   meta.forEach((iconMeta) => {
     const iconId = configureIcon(iconMeta)
     configureTags(iconId, iconMeta)
     configureAuthors(iconId, iconMeta)
   })
   const filesInfo: FileInfo[] = [
-    {out: 'icons', exportName: 'icons', data: icons},
-    {out: 'authors', exportName: 'authors', data: authors},
-    {out: 'tags', exportName: 'tags', data: tags},
+    { out: 'icons', exportName: 'icons', data: icons },
+    { out: 'authors', exportName: 'authors', data: authors },
+    { out: 'tags', exportName: 'tags', data: tags },
   ]
   filesInfo.forEach((data) => {
     generateFile(data)

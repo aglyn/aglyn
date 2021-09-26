@@ -25,7 +25,7 @@ import {
   TYPE_KIND,
   TYPE_OF,
 } from '@aglyn/data-framework'
-import { styled } from '@aglyn/shared-ui-themes'
+import { styled } from '@aglyn/shared-feature-themes'
 import { Component, Ref } from 'react'
 
 export type ComponentBuilder<P = any> = (element: AglynComponentElementType<P>) => AglynComponent<P>

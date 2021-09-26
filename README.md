@@ -55,6 +55,30 @@ organizations. Easing maintenance and minimizing work required by expensive engi
 
 ## Monorepo packages
 
+**Library types**
+
+Library Types There are many different types of libraries in a workspace. In order to maintain a
+certain sense of order, we recommend having a small number of types, such as the below four (4)
+types of libraries.
+
+_Feature libraries:_
+
+Developers should consider feature libraries as libraries that implement smart UI (with access to
+data sources) for specific business use cases or pages in an application.
+
+_UI libraries:_
+
+A UI library contains only presentational components (also called "dumb" components).
+
+_Data-access libraries:_
+
+A data-access library contains code for interacting with a back-end system. It also includes all the
+code related to state management.
+
+_Utility libraries:_
+
+A utility library contains low-level utilities used by many libraries and applications.
+
 ### Apps
 
 * WWW
@@ -94,45 +118,41 @@ organizations. Easing maintenance and minimizing work required by expensive engi
 
 ### Shared libraries
 
-#### Type: data
+#### Type: _data_
 
 * MDI
   * NodeJS import: `@aglyn/shared-data-mdi`
   * Workspace name: `shared-data-mdi`
   * Directory: [libs/shared/data/mdi](`libs/shared/data/mdi`)
+* Types
+  * NodeJS import: `@aglyn/shared-data-types`
+  * Workspace name: `shared-data-types`
+  * Directory: [libs/shared/util/types](`libs/shared/data/types`)
 
-#### Type: feature
+#### Type: _feature_
 
-* Emitter
-  * NodeJS import: `@aglyn/shared-feature-emitter`
-  * Workspace name: `shared-feature-emitter`
-  * Directory: [libs/shared/feature/emitter](`libs/shared/feature/emitter`)
-* Logger
-  * NodeJS import: `@aglyn/shared-feature-logger`
-  * Workspace name: `shared-feature-logger`
-  * Directory: [libs/shared/feature/logger](`libs/shared/feature/logger`)
-* Timestamp
-  * NodeJS import: `@aglyn/shared-feature-timestamp`
-  * Workspace name: `shared-feature-timestamp`
-  * Directory: [libs/shared/feature/timestamp](`libs/shared/feature/timestamp`)
+* Themes
+  * NodeJS import: `@aglyn/shared-feature-themes`
+  * Workspace name: `shared-feature-themes`
+  * Directory: [libs/shared/feature/themes](`libs/shared/feature/themes`)
 
-#### Type: ui
+#### Type: _ui_
 
 * React components
-  * NodeJS import: `@aglyn/shared-ui-react`
-  * Workspace name: `shared-ui-react`
-  * Directory: [libs/shared/ui/react](`libs/shared/ui/react`)
-* Themes
-  * NodeJS import: `@aglyn/shared-ui-themes`
-  * Workspace name: `shared-ui-themes`
-  * Directory: [libs/shared/ui/themes](`libs/shared/ui/themes`)
+  * NodeJS import: `@aglyn/shared-ui-jsx`
+  * Workspace name: `shared-ui-jsx`
+  * Directory: [libs/shared/ui/jsx](`libs/shared/ui/jsx`)
 
-#### Type: util
+#### Type: _util_
 
 * Dom
   * NodeJS import: `@aglyn/shared-util-dom`
   * Workspace name: `shared-util-dom`
   * Directory: [libs/shared/util/dom](`libs/shared/util/dom`)
+* Emitter
+  * NodeJS import: `@aglyn/shared-util-emitter`
+  * Workspace name: `shared-util-emitter`
+  * Directory: [libs/shared/util/emitter](`libs/shared/util/emitter`)
 * Errors
   * NodeJS import: `@aglyn/shared-util-errors`
   * Workspace name: `shared-util-errors`
@@ -145,14 +165,18 @@ organizations. Easing maintenance and minimizing work required by expensive engi
   * NodeJS import: `@aglyn/shared-util-helpers`
   * Workspace name: `shared-util-helpers`
   * Directory: [libs/shared/util/helpers](`libs/shared/util/helpers`)
+* Logger
+  * NodeJS import: `@aglyn/shared-util-logger`
+  * Workspace name: `shared-util-logger`
+  * Directory: [libs/shared/util/logger](`libs/shared/util/logger`)
+* Timestamp
+  * NodeJS import: `@aglyn/shared-util-timestamp`
+  * Workspace name: `shared-util-timestamp`
+  * Directory: [libs/shared/util/timestamp](`libs/shared/util/timestamp`)
 * Tools
   * NodeJS import: `@aglyn/shared-util-tools`
   * Workspace name: `shared-util-tools`
   * Directory: [libs/shared/util/tools](`libs/shared/util/tools`)
-* Types
-  * NodeJS import: `@aglyn/shared-util-types`
-  * Workspace name: `shared-util-types`
-  * Directory: [libs/shared/util/types](`libs/shared/util/types`)
 
 
 <hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->

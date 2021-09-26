@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-ui-themes'
+import { styled } from '@aglyn/shared-feature-themes'
 import { ButtonProps } from '@mui/material/Button'
 import { DialogProps } from '@mui/material/Dialog'
 import { DialogContentTextProps } from '@mui/material/DialogContentText'

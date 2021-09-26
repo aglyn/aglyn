@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-import {
-  ComponentWithInjectedProp,
-  InjectedContextProp,
-  withContext,
-} from '@aglyn/shared-ui-react'
+import { ConditionalNonDist } from '@aglyn/shared-data-types'
+import { ComponentWithInjectedProp, InjectedContextProp, withContext } from '@aglyn/shared-ui-jsx'
 import { _isLength } from '@aglyn/shared-util-guards'
-import { createUid } from '@aglyn/shared-util-helpers'
 import { noop } from '@aglyn/shared-util-tools'
-import { ConditionalNonDist } from '@aglyn/shared-util-types'
+import { createUid } from '@aglyn/shared-util-vendor'
 import { createContext, PropsWithChildren, useContext, useState } from 'react'
 
 
 export type QueueId = string
 export type Queues = QueueId[]
 export type TupledDequeueFn = [QueueId, DequeueLoading]
-export type QueueResponse<Tuple = false> = ConditionalNonDist<Tuple, true, TupledDequeueFn, DequeueLoading>
+export type QueueResponse<Tuple = false> = ConditionalNonDist<Tuple,
+  true,
+  TupledDequeueFn,
+  DequeueLoading>
 
 export type DequeueLoading = () => void /* Should be called to dequeue/end loading event  */
 export type EnqueueLoading = <T extends boolean>(asTuple?: T) => QueueResponse<T>
@@ -49,22 +48,15 @@ export const APP_LOADER_CONTEXT_DEFAULT_VALUE: AppLoaderContextType = {
   checkLoading: noop() as any,
 }
 
-export const AppLoader = createContext<AppLoaderContextType>(
-  APP_LOADER_CONTEXT_DEFAULT_VALUE,
-)
+export const AppLoader = createContext<AppLoaderContextType>(APP_LOADER_CONTEXT_DEFAULT_VALUE)
 AppLoader.displayName = 'AppLoader'
 
-export const {
-  Provider: AppLoaderProvider,
-  Consumer: AppLoaderConsumer,
-} = AppLoader
+export const {Provider: AppLoaderProvider, Consumer: AppLoaderConsumer} = AppLoader
 
 export const useAppLoader = () => useContext(AppLoader)
 const createQueueId = () => createUid(5)
 
-export interface AppLoaderProviderComponentProps extends PropsWithChildren<{}> {
-
-}
+export interface AppLoaderProviderComponentProps extends PropsWithChildren<{}> {}
 
 export function AppLoaderProviderComponent(props: AppLoaderProviderComponentProps) {
   const {children} = props
@@ -75,7 +67,7 @@ export function AppLoaderProviderComponent(props: AppLoaderProviderComponentProp
       const queueId = createQueueId()
       const enqueue = () => {
         // Queue by appending the queueId to queue array
-        setState(prevState => ({
+        setState((prevState) => ({
           ...prevState,
           queues: [...prevState.queues, queueId],
           isLoading: true,
@@ -83,10 +75,12 @@ export function AppLoaderProviderComponent(props: AppLoaderProviderComponentProp
       }
       const dequeue = () => {
         // Dequeue by removing the queueId to queue array
-        setState(prevState => {
-          const queues = prevState.queues.filter(i => i !== queueId)
+        setState((prevState) => {
+          const queues = prevState.queues.filter((i) => i !== queueId)
           return {
-            ...prevState, queues, isLoading: _isLength(queues, 0, '>'),
+            ...prevState,
+            queues,
+            isLoading: _isLength(queues, 0, '>'),
           }
         })
       }
@@ -114,11 +108,7 @@ export function AppLoaderProviderComponent(props: AppLoaderProviderComponentProp
   //   routeQueue.current = null
   // })
 
-  return (
-    <AppLoaderProvider value={state}>
-      {children}
-    </AppLoaderProvider>
-  )
+  return <AppLoaderProvider value={state}>{children}</AppLoaderProvider>
 }
 
 const WithN = 'appLoader'
@@ -133,6 +123,8 @@ export type WithAppLoaderProps = InjectedContextProp<AppLoaderConsumer, WithN>
  * @param {ComponentWithInjectedProp<P, AppLoaderConsumer, WithN>} Component
  * @return {*}
  */
-export function withAppLoader<P>(Component: ComponentWithInjectedProp<P, AppLoaderConsumer, WithN>) {
+export function withAppLoader<P>(
+  Component: ComponentWithInjectedProp<P, AppLoaderConsumer, WithN>,
+) {
   return withContext(AppLoaderConsumer, WithN)(Component)
 }

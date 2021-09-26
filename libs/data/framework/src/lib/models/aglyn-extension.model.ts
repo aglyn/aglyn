@@ -16,17 +16,17 @@
  */
 
 import { getStaticField } from '@aglyn/shared-util-tools'
-import { LifecycleFlag } from '@aglyn/shared-util-types'
+import { LifecycleFlag } from '@aglyn/shared-data-types'
 import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '../symbol'
 import { AglynAppInstance, AglynExtensionInstance, AglynExtensionOptions } from '../types'
 import { AglynBaseModel } from './aglyn-base.model'
-
 
 const TAG = 'AglynExtensionModel'
 
 export abstract class AglynExtensionModel<T = any>
   extends AglynBaseModel
-  implements AglynExtensionInstance {
+  implements AglynExtensionInstance
+{
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly [TYPE_OF]: number | symbol = MODULE_TYPE
   public static readonly [TYPE_KIND]: number | symbol = EXTENSION_TYPE
@@ -53,7 +53,7 @@ export abstract class AglynExtensionModel<T = any>
 
   protected constructor(app: AglynAppInstance, options: AglynExtensionOptions) {
     super()
-    this.#options = {...options}
+    this.#options = { ...options }
     this.app = app
     this.#initialize()
   }

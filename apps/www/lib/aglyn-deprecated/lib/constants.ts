@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { FT } from './interfaces/dod'
+import { FT } from '../../../../../libs/shared/data/types/src/lib/dod'
 
 /**
  * Evaluation kinds

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AglynSvgLogo } from '@aglyn/shared-ui-react'
-import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared-ui-themes'
+import { AglynSvgLogo } from '@aglyn/shared-ui-jsx'
+import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared-feature-themes'
 import Box, { BoxProps } from '@mui/material/Box'
 import Container from '@mui/material/Container'
 import Slide from '@mui/material/Slide'
@@ -26,23 +26,23 @@ import { forwardRef, useEffect, useState } from 'react'
 import BackgroundImage from '../components/BackgroundImage'
 import Copyright from '../components/Copyright'
 
-
-const styles = (theme: Theme) => createStyles({
-  root: {
-    color: theme.palette.text.primary,
-  },
-  logo: {
-    height: 'auto',
-    width: 320,
-    maxWidth: '100%',
-    marginBottom: theme.spacing(4),
-  },
-  copyright: {
-    position: 'absolute',
-    bottom: theme.spacing(1),
-    left: theme.spacing(2),
-  },
-})
+const styles = (theme: Theme) =>
+  createStyles({
+    root: {
+      color: theme.palette.text.primary,
+    },
+    logo: {
+      height: 'auto',
+      width: 320,
+      maxWidth: '100%',
+      marginBottom: theme.spacing(4),
+    },
+    copyright: {
+      position: 'absolute',
+      bottom: theme.spacing(1),
+      left: theme.spacing(2),
+    },
+  })
 
 export interface AuthLayoutProps extends BoxProps {
   text: string
@@ -50,15 +50,15 @@ export interface AuthLayoutProps extends BoxProps {
 
 const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
   function RefRenderFn(props, ref) {
-    const {text, children, className, classes, ...rest} = props
-    const [animated, setAnimated] = useState({left: false, right: false})
+    const { text, children, className, classes, ...rest } = props
+    const [animated, setAnimated] = useState({ left: false, right: false })
 
     useEffect(() => {
       let leftAnimationTimeout = null
       let rightAnimationTimeout = null
 
       function animate(which: string) {
-        setAnimated(prev => ({...prev, [which]: true}))
+        setAnimated((prev) => ({ ...prev, [which]: true }))
       }
       leftAnimationTimeout = setTimeout(animate, 700, 'left')
       rightAnimationTimeout = setTimeout(animate, 500, 'right')
@@ -84,28 +84,23 @@ const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
           <Container maxWidth="lg">
             <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
               <div>
-                <AglynSvgLogo className={classes.logo}/>
-                <Typography
-                  children={text}
-                  variant="h2"
-                />
+                <AglynSvgLogo className={classes.logo} />
+                <Typography children={text} variant="h2" />
               </div>
             </Slide>
-            <Copyright className={classes.copyright}/>
+            <Copyright className={classes.copyright} />
           </Container>
         </Box>
         <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
           <Box alignItems="center" bgcolor="common.white" display="flex" width={450}>
-            <Container>
-              {children}
-            </Container>
+            <Container>{children}</Container>
           </Box>
         </Slide>
       </BackgroundImage>
     )
-  },
+  }
 )
 
 AuthLayout.displayName = 'Layout:AuthLayout'
 
-export default withStyles(styles, {name: 'Layout:AuthLayout'})(AuthLayout)
+export default withStyles(styles, { name: 'Layout:AuthLayout' })(AuthLayout)

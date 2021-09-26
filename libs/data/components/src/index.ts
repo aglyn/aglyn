@@ -1,3 +1,3 @@
-export * from './lib/components-types.extension'
-export * from './lib/components.extension'
-export * from './lib/components-api.extension'
+export * from './lib/types'
+export * from './lib/components.class'
+export * from './lib/api'

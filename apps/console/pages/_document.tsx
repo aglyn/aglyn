@@ -16,17 +16,17 @@
  */
 
 import {
-  makeLinkElements,
-  MakeLinkElementsConfig,
-  makeMetaElements,
-  MakeMetaElementsConfig,
-} from '@aglyn/shared-ui-react'
-import {
   createEmotionCache,
   createEmotionServer,
   EmotionCache,
   getConsoleMetaThemeColor,
-} from '@aglyn/shared-ui-themes'
+} from '@aglyn/shared-feature-themes'
+import {
+  makeLinkElements,
+  MakeLinkElementsConfig,
+  makeMetaElements,
+  MakeMetaElementsConfig,
+} from '@aglyn/shared-ui-jsx'
 import crypto from 'crypto'
 import Document from 'next/document'
 import NextDocument, {

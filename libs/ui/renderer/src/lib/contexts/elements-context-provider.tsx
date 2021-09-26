@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import { AglynComponentData } from '@aglyn/data-framework'
+import { AglynComponentData } from '@aglyn/data-components'
 import { ReactNode, useState } from 'react'
 import { ElementsContext, ElementsContextType } from './elements-context'
+
 
 export interface ElementsContextProviderProps {
   children?: ReactNode
@@ -26,12 +27,12 @@ export interface ElementsContextProviderProps {
 }
 
 export function ElementsContextProvider(props: ElementsContextProviderProps) {
-  const { children, elements, onUpdateElements } = props
+  const {children, elements, onUpdateElements} = props
   const [ctx, setCtx] = useState<ElementsContextType>({
     elements,
     updateElements: (elements, prev) => {
       onUpdateElements && onUpdateElements(elements, prev)
-      setCtx((prev) => ({ ...prev, elements }))
+      setCtx((prev) => ({...prev, elements}))
     },
   })
 
