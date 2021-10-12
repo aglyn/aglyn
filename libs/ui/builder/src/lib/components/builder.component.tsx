@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData, IAglynComponentElement } from '@aglyn/data-components'
+import { AglynComponentElementData } from '@aglyn/data-components'
 import { IAglynApp } from '@aglyn/data-framework'
 import { builderTheme, withTheme } from '@aglyn/shared-feature-themes'
 import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
@@ -25,7 +25,7 @@ import {
   ElementsContextProviderProps,
 } from '@aglyn/ui-renderer'
 import NoSsr from '@mui/material/NoSsr'
-import { forwardRef, Fragment, createContext, useCallback, useContext } from 'react'
+import { forwardRef, Fragment } from 'react'
 import { AglynAppContext } from '../../../../renderer/src/lib/contexts/aglyn-app-context'
 import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
 import { SelectionContextProvider } from '../contexts/selection-context-provider'
@@ -37,10 +37,8 @@ export interface BuilderComponentProps extends OverrideableComponentProps {
   noSsr?: boolean
   elements?: AglynComponentElementData[]
   onUpdateElements?: ElementsContextProviderProps['onUpdateElements']
-  elementComponents: IAglynComponentElement[]
   appCallback: () => IAglynApp
 }
-
 
 
 const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(
@@ -49,7 +47,6 @@ const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(
       component: Component,
       elements,
       onUpdateElements,
-      elementComponents,
       noSsr,
       appCallback: getApp,
       ...rest
@@ -57,29 +54,29 @@ const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(
     const Wrapper = noSsr ? NoSsr : Fragment
 
     return (
-     <Wrapper>
-       <AglynAppContext.Provider value={{getApp}}>
-         <Component ref={ref} id="aglyn:builder" {...rest}>
-           <ElementsContextProvider elements={elements} onUpdateElements={onUpdateElements}>
-             <ElementComponentsContextProvider elementComponents={elementComponents}>
-               {/*<SnackbarProvider maxSnack={3}>*/}
-               <ConfirmationProviderComponent>
-                 <SelectionContextProvider>
-                   <BuilderCanvasRendererComponent/>
+      <Wrapper>
+        <AglynAppContext.Provider value={{getApp}}>
+          <ElementComponentsContextProvider>
+            <ElementsContextProvider elements={elements} onUpdateElements={onUpdateElements}>
+              <Component ref={ref} id="aglyn:builder" {...rest}>
+                {/*<SnackbarProvider maxSnack={3}>*/}
+                <ConfirmationProviderComponent>
+                  <SelectionContextProvider>
+                    <BuilderCanvasRendererComponent/>
 
-                   <ComponentsDrawerContextProvider>
-                     <BuilderToolbarComponent id="aglyn:toolbar"/>
-                   </ComponentsDrawerContextProvider>
-                 </SelectionContextProvider>
-               </ConfirmationProviderComponent>
-               {/*</SnackbarProvider>*/}
-             </ElementComponentsContextProvider>
-           </ElementsContextProvider>
-         </Component>
-       </AglynAppContext.Provider>
-     </Wrapper>
+                    <ComponentsDrawerContextProvider>
+                      <BuilderToolbarComponent id="aglyn:toolbar"/>
+                    </ComponentsDrawerContextProvider>
+                  </SelectionContextProvider>
+                </ConfirmationProviderComponent>
+                {/*</SnackbarProvider>*/}
+              </Component>
+            </ElementsContextProvider>
+          </ElementComponentsContextProvider>
+        </AglynAppContext.Provider>
+      </Wrapper>
     )
-  }
+  },
 )
 
 BuilderComponentRaw.displayName = 'BuilderComponent'

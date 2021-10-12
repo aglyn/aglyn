@@ -115,6 +115,8 @@ export interface IAglynComponentsExtension extends IAglynExtension<ComponentsReg
   getAllComponentsKeys(): ComponentsRegistryKeys
   getAllComponentsValues(): ComponentsRegistryValues
 
+  getTemplateBlocks(): AglynComponentElementTemplateData[]
+
   getComponent(payload: GetComponentPayload): OrUndef<IAglynComponentElement>
   getComponentSchema(payload: GetComponentSchemaPayload): OrUndef<IAglynComponentSchema>
   getBundle(payload: GetBundlePayload): OrUndef<IAglynComponentsBundle>
@@ -130,7 +132,7 @@ export interface ComponentsRegistry {
   bundles: Map<BundleId, IAglynComponentsBundle>
   components: Map<ComponentId | [ComponentId, BundleId], IAglynComponentElement>
   schemas: Map<ComponentId | [ComponentId, BundleId], IAglynComponentSchema>
-  templates: Map<string, IAglynComponentSchema>
+  templates: Map<[string, ComponentId, BundleId?], AglynComponentElementTemplateData>
 }
 
 export interface IAglynComponentsBundle {
@@ -151,6 +153,9 @@ export interface IAglynComponentElement<P = any> extends AglynComponentClassElem
 }
 
 export interface IAglynComponentSchema<P = any> {
+  componentId: ComponentId,
+  bundleId?: BundleId,
+
   // Metadata
   metadata: {
     displayName: string
@@ -185,25 +190,26 @@ export interface IAglynComponentSchema<P = any> {
     resolveProps?: ResolveProps<P>
   },
 
+  templates?: AglynComponentElementTemplateData[]
 }
 
 export interface AglynComponentElementData {
   readonly $id: string
   readonly componentId: ComponentId
   readonly bundleId?: BundleId
-  name?: string
+  displayName?: string
   description?: string
   props?: AnyProps
   elements?: AglynComponentElementData[]
-  parent?: string
 }
 
 export interface AglynComponentElementTemplateData {
+  readonly id: string
   readonly componentId: ComponentId
   readonly bundleId?: BundleId
+  title: string
+  description?: string
   elements?: AglynComponentElementData[]
   props?: AnyProps
-  parent?: string
-  name?: string
-  description?: string
+  icon?: string
 }

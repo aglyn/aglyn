@@ -23,9 +23,9 @@ import {
   validateAppArg,
 } from '@aglyn/data-framework'
 import { OrUndef } from '@aglyn/shared-data-types'
-import { _extensionControllers } from '../../../../framework/src/lib/_internal'
 
 import {
+  AglynComponentElementTemplateData,
   ComponentsRegistryEntry,
   ComponentsRegistryKeys,
   ComponentsRegistryValues,
@@ -58,6 +58,10 @@ export function getAllComponentsValues(app: IAglynApp): ComponentsRegistryValues
 
 export function getAllComponentsKeys(app: IAglynApp): ComponentsRegistryKeys {
   return _getComponentsExtension(app)?.getAllComponentsKeys()
+}
+
+export function getTemplateBlocks(app: IAglynApp): AglynComponentElementTemplateData[] {
+  return _getComponentsExtension(app)?.getTemplateBlocks()
 }
 
 export function getComponent<P>(

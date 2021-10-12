@@ -63,9 +63,8 @@ export const BuilderToolbarComponent = forwardRef<any, BuilderToolbarComponentPr
         })
         .then((data: any) => {
           if (data) {
-            const { id: componentId } = data
             const prevElements = Array.from(elements)
-            const newElements = [...elements, createElementData(componentId)]
+            const newElements = [...elements, createElementData(data)]
             console.log('prev newElement', newElements, prevElements)
             updateElements && updateElements(newElements, prevElements)
           }

@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData, ComponentId } from '@aglyn/data-components'
+import {
+  AglynComponentElementData,
+  AglynComponentElementTemplateData,
+  ComponentId,
+} from '@aglyn/data-components'
 import { objectDeepMergeMany } from '@aglyn/shared-util-vendor'
 import { createElementDataId } from './create-element-data-id'
 
@@ -25,14 +29,13 @@ export const ELEMENT_DEFAULTS = {
 }
 
 export function createElementData(
-  componentId: ComponentId,
-  data?: Omit<AglynComponentElementData, '$id' | 'componentId'>,
+  template: AglynComponentElementTemplateData,
 ): AglynComponentElementData {
+  const { id: _, ...data } = template
   return objectDeepMergeMany([
     {...ELEMENT_DEFAULTS},
     {
       $id: createElementDataId(),
-      component: componentId,
     },
     {...data},
   ]) as AglynComponentElementData

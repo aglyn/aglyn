@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { loader as components, registerComponent } from '@aglyn/data-components'
-import { getApp, initializeApp } from '@aglyn/data-framework'
+import { registerComponent, loader as componentsExtension } from '@aglyn/data-components'
+import { initializeApp } from '@aglyn/data-framework'
 import {
   CacheProvider,
   consoleTheme,
@@ -45,86 +45,69 @@ const metaElements: MakeMetaElementsConfig = [
 ]
 const linkElements: MakeLinkElementsConfig = []
 
+
+const c1 = createElementComponent({
+  componentId: 'root',
+  metadata: {
+    displayName: 'Root Element',
+    title: 'Root element',
+    icon: 'block',
+  },
+}, 'span')
+
+const c2 = createElementComponent({
+  componentId: 'root1',
+  metadata: {
+    displayName: 'Root Element',
+    title: 'Root element',
+    icon: 'block',
+  },
+}, 'span')
+
+const c3 = createElementComponent({
+  componentId: 'root2',
+  metadata: {
+    displayName: 'Root Element',
+    title: 'Root element',
+    icon: 'block',
+  },
+}, 'span')
+
+const c4 = createElementComponent({
+  componentId: 'root3',
+  metadata: {
+    displayName: 'Root Element',
+    title: 'Root element',
+    icon: 'block',
+  },
+}, 'span')
+
+const c5 = createElementComponent({
+  componentId: 'root4',
+  metadata: {
+    displayName: 'Root Element',
+    title: 'Root element',
+    icon: 'block',
+  },
+  templates: [
+    {
+      id: 'root4:1',
+      componentId: 'root4',
+      title: 'Root 4',
+      props: {
+        children: 'First Root4'
+      }
+    }
+  ]
+}, 'span')
+const components = [c1, c2, c3, c4, c5]
+
 try {
   const app = initializeApp({
-    extensions: [components],
+    extensions: [componentsExtension],
   })
 
-
-  registerComponent(
-    app,
-    createElementComponent(
-      'root',
-      {
-        metadata: {
-          displayName: 'Root Element',
-          title: 'Root element',
-          icon: 'block'
-        }
-      },
-      'span'
-    )
-  )
-
-  registerComponent(
-    app,
-    createElementComponent(
-      'root1',
-      {
-        metadata: {
-          displayName: 'Root Element',
-          title: 'Root element',
-          icon: 'block'
-        }
-      },
-      'span'
-    )
-  )
-
-  registerComponent(
-    app,
-    createElementComponent(
-      'root2',
-      {
-        metadata: {
-          displayName: 'Root Element',
-          title: 'Root element',
-          icon: 'block'
-        }
-      },
-      'span'
-    )
-  )
-
-  registerComponent(
-    app,
-    createElementComponent(
-      'root3',
-      {
-        metadata: {
-          displayName: 'Root Element',
-          title: 'Root element',
-          icon: 'block'
-        }
-      },
-      'span'
-    )
-  )
-
-  registerComponent(
-    app,
-    createElementComponent(
-      'root4',
-      {
-        metadata: {
-          displayName: 'Root Element',
-          title: 'Root element',
-          icon: 'block'
-        }
-      },
-      'span'
-    )
-  )
+  components.forEach((i) => registerComponent(app, i))
 }
 catch (e) {
   console.error(e, 'initialize aglyn app')

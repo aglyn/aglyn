@@ -17,31 +17,25 @@
 
 import {
   AglynComponentElementType,
-  BundleId,
-  ComponentId,
   IAglynComponentSchema,
   RegisterComponentPayload,
 } from '@aglyn/data-components'
 import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '@aglyn/data-framework'
 import { JSXElementType } from '@aglyn/shared-data-types'
 import { styled as hocStyled } from '@aglyn/shared-feature-themes'
-import { _isArr } from '@aglyn/shared-util-guards'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { Component, Ref } from 'react'
 
 
 export function createElementComponent<P = any>(
-  componentId: ComponentId,
   schema: IAglynComponentSchema<P>,
-  component: AglynComponentElementType<P>
+  component: AglynComponentElementType<P>,
 ): RegisterComponentPayload<P>
 export function createElementComponent<P = any>(
-  identifiers: ComponentId | [ComponentId, BundleId],
   schema: IAglynComponentSchema<P>,
-  component: AglynComponentElementType<P>
+  component: AglynComponentElementType<P>,
 ): RegisterComponentPayload<P> {
-  const [componentId, bundleId] = _isArr(identifiers) ? identifiers : [identifiers]
-  const {renderFlags} = schema
+  const {componentId, bundleId, renderFlags} = schema
   const {styled} = {...renderFlags}
   const displayName = getDisplayName(component, componentId)
   const ComponentElement: JSXElementType = styled?.disable

@@ -15,15 +15,11 @@
  * limitations under the License.
  */
 
-import {
-  AglynComponentElementData,
-  getAllComponentsValues,
-} from '@aglyn/data-components'
+import { AglynComponentElementData } from '@aglyn/data-components'
 import { getApp } from '@aglyn/data-framework'
 import { BuilderComponent } from '@aglyn/ui-builder'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { samplePageData } from '../constants/sample-data'
-
 
 
 function Builder(props) {
@@ -33,7 +29,6 @@ function Builder(props) {
   }
 
   const [elements, setElements] = useState<AglynComponentElementData[]>(samplePageData)
-  const elementComponents = useMemo(() => getAllComponentsValues(getApp()), [])
 
   const handleUpdateElements = useCallback((elements: AglynComponentElementData[], prevElements) => {
     console.log('handleUpdateElements', elements, prevElements)
@@ -44,7 +39,6 @@ function Builder(props) {
     <BuilderComponent
       elements={elements}
       onUpdateElements={handleUpdateElements}
-      elementComponents={elementComponents}
       appCallback={appCallback}
     />
   )

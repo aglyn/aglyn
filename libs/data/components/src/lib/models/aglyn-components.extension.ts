@@ -17,8 +17,10 @@
 
 import { AglynExtensionModel, IAglynApp } from '@aglyn/data-framework'
 import { OrUndef } from '@aglyn/shared-data-types'
+import { _isArr } from '@aglyn/shared-util-guards'
 
 import {
+  AglynComponentElementTemplateData,
   AglynComponentEventFlag,
   ComponentsRegistry,
   ComponentsRegistryEntry,
@@ -84,8 +86,12 @@ export default class AglynComponentsExtension
     return this._componentValues()
   }
 
+  public getTemplateBlocks = (): AglynComponentElementTemplateData[] => {
+    return [...this._templateValues()]
+  }
+
   public getComponent = (payload: GetComponentPayload): OrUndef<IAglynComponentElement> => {
-    const {componentId, bundleId} = payload
+    const {componentId, bundleId = undefined} = payload
     if (bundleId) {
       return this.context.components?.get([componentId, bundleId])
     }
@@ -106,8 +112,7 @@ export default class AglynComponentsExtension
   public registerComponent = (payload: RegisterComponentPayload): this => {
     const {component, schema} = payload
     const componentId = component.componentId
-    const bundleId = component.bundleId
-    console.log('register component', componentId)
+    const bundleId = component.bundleId || undefined
 
     if (bundleId) {
       const bundle = this.context.bundles.get(bundleId)
@@ -122,6 +127,12 @@ export default class AglynComponentsExtension
       this.context.components.set(componentId, component)
       this.context.schemas.set(componentId, schema)
     }
+    if (_isArr(schema.templates)) {
+      schema.templates.forEach((i) => {
+        this.context.templates.set([i.id, componentId, bundleId], i)
+      })
+      return this
+    }
     return this
   }
   public registerBundle = (payload: RegisterBundlePayload): this => {
@@ -131,7 +142,7 @@ export default class AglynComponentsExtension
   }
 
   public unregisterComponent = (payload: UnregisterComponentPayload): this => {
-    const {componentId, bundleId} = payload
+    const {componentId, bundleId = undefined} = payload
     if (bundleId) {
       const bundle = this.context.bundles.get(bundleId)
       if (!bundle) {
@@ -141,10 +152,22 @@ export default class AglynComponentsExtension
       this.context.bundles.set(bundleId, bundle)
       this.context.components.delete([componentId, bundleId])
       this.context.schemas.delete([componentId, bundleId])
+
+      for (const [id, cid, bid] of this.context.templates.keys()) {
+        if ((!bundleId || bundleId === bid) && componentId === cid) {
+          this.context.templates.delete([id, cid, bid])
+        }
+      }
     }
     else {
       this.context.components.delete(componentId)
       this.context.schemas.delete(componentId)
+
+      for (const [id, cid] of this.context.templates.keys()) {
+        if (componentId === cid) {
+          this.context.templates.delete([id, cid])
+        }
+      }
     }
     return this
   }
@@ -155,8 +178,7 @@ export default class AglynComponentsExtension
       throw new Error(`No bundle exists with ID ${bundleId}.`)
     }
     bundle.components.forEach(componentId => {
-      this.context.components.delete([componentId, bundleId])
-      this.context.schemas.delete([componentId, bundleId])
+      this.unregisterComponent({componentId, bundleId})
     })
     this.context.bundles.delete(bundleId)
     return this
@@ -180,6 +202,9 @@ export default class AglynComponentsExtension
   }
   protected _componentValues = (): ComponentsRegistryValues => {
     return [...this.context?.components?.values()]
+  }
+  protected _templateValues = (): AglynComponentElementTemplateData[] => {
+    return [...this.context?.templates?.values()]
   }
   //end: not public
 }
