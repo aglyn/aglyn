@@ -16,25 +16,25 @@
  */
 
 import { ComponentId, createElementComponent, IAglynComponentSchema } from '@aglyn/data-components'
-import { Button } from '@mui/material'
+import { ListItemText } from '@mui/material'
 
 
-export const loader = () => import('@mui/material/Button').then(i => i.default)
-export const componentId: ComponentId = 'button'
+export const loader = () => import('@mui/material/ListItemText').then(i => i.default)
+export const componentId: ComponentId = 'list-item-text'
 export const bundleId: ComponentId = 'mui'
 export const metadata: IAglynComponentSchema['metadata'] = {
-  displayName: 'Button',
+  displayName: 'List Item Text',
 }
 export const templates: IAglynComponentSchema['templates'] = [
   {
-    id: 'mui:button',
-    title: 'Outlined Button',
+    id: 'mui:list-item-text',
+    title: 'List Item Text',
     data: {
       componentId: componentId,
       bundleId: bundleId,
       props: {
-        variant: 'outlined',
-        children: 'Click Me',
+        primary: 'Item Primary',
+        secondary: 'This is the secondary',
       },
     }
   },
@@ -45,6 +45,6 @@ export const component = createElementComponent({
   bundleId,
   metadata,
   templates,
-}, Button)
+}, ListItemText)
 
 export default component

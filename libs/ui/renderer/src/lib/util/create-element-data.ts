@@ -18,25 +18,34 @@
 import {
   AglynComponentElementData,
   AglynComponentElementTemplateData,
-  ComponentId,
+  TemplateSubElementData,
 } from '@aglyn/data-components'
 import { objectDeepMergeMany } from '@aglyn/shared-util-vendor'
 import { createElementDataId } from './create-element-data-id'
 
 
-export const ELEMENT_DEFAULTS = {
+export const ELEMENT_DEFAULTS: Partial<AglynComponentElementData> = {
   props: {},
+  elements: [],
 }
 
 export function createElementData(
   template: AglynComponentElementTemplateData,
 ): AglynComponentElementData {
-  const { id: _, ...data } = template
+  const {
+    data,
+  } = template
+
+  function mapTemplate(data: TemplateSubElementData): AglynComponentElementData {
+    return {
+      ...data,
+      $id: createElementDataId(),
+      elements: [...data.elements??[]].map((data) => mapTemplate(data)),
+    }
+  }
+
   return objectDeepMergeMany([
     {...ELEMENT_DEFAULTS},
-    {
-      $id: createElementDataId(),
-    },
-    {...data},
+    mapTemplate(data),
   ]) as AglynComponentElementData
 }

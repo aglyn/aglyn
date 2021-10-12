@@ -206,11 +206,14 @@ export interface AglynComponentElementData {
 
 export interface AglynComponentElementTemplateData {
   readonly id: string
-  readonly componentId: ComponentId
-  readonly bundleId?: BundleId
   title: string
   description?: string
-  elements?: AglynComponentElementData[]
+  data: TemplateSubElementData
+}
+
+export interface TemplateSubElementData {
+  readonly componentId: ComponentId
+  readonly bundleId?: BundleId
+  elements?: TemplateSubElementData[]
   props?: AnyProps
-  icon?: string
 }

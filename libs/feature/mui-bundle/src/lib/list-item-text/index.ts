@@ -15,4 +15,8 @@
  * limitations under the License.
  */
 
-export * from './feature-mui-bundle'
+import listItem from './list-item-text'
+
+
+export * from './list-item-text'
+export default listItem
