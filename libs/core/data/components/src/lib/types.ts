@@ -208,6 +208,7 @@ export interface AglynComponentElementTemplateData {
   readonly id: string
   title: string
   description?: string
+  icon?: string
   data: TemplateSubElementData
 }
 

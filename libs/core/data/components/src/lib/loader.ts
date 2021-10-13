@@ -15,5 +15,5 @@
  * limitations under the License.
  */
 
-export const loader = () => require('./lib/extension/components.extension').ComponentsExtension
+export const loader = () => require('./models/components.extension').default
 export default loader

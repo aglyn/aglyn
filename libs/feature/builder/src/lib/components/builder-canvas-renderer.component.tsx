@@ -24,6 +24,7 @@ import { ComponentType, forwardRef } from 'react'
 import { PanZoom } from 'react-easy-panzoom'
 import { BuilderElementRendererComponent } from './builder-element-renderer.component'
 
+
 export interface BuilderCanvasRendererComponentProps extends Partial<CanvasRendererComponentProps> {
   canvasRendererComponent?: ComponentType<CanvasRendererComponentProps>
 }
@@ -38,38 +39,20 @@ export const BuilderCanvasRendererComponent = forwardRef<any, BuilderCanvasRende
     const CanvasComponent = canvasRendererComponent || CanvasRendererComponent
     const elementRendererComponent = elementRendererComponentProp || BuilderElementRendererComponent
 
-    const aa = false
-
-    if (aa) {
-      return (
-        <PanZoom disabled>
-          <ElementsContext.Consumer>
-            {({ elements }) => (
-              <CanvasComponent
-                ref={ref}
-                id="aglyn:canvas"
-                elements={elements}
-                elementRendererComponent={elementRendererComponent}
-                {...rest}
-              />
-            )}
-          </ElementsContext.Consumer>
-        </PanZoom>
-      )
-    }
-
     return (
-      <ElementsContext.Consumer>
-        {({ elements }) => (
-          <CanvasComponent
-            ref={ref}
-            id="aglyn:canvas"
-            elements={elements}
-            elementRendererComponent={elementRendererComponent}
-            {...rest}
-          />
-        )}
-      </ElementsContext.Consumer>
+      <PanZoom disabled>
+        <ElementsContext.Consumer>
+          {({elements}) => (
+            <CanvasComponent
+              ref={ref}
+              id="aglyn:canvas"
+              elements={elements}
+              elementRendererComponent={elementRendererComponent}
+              {...rest}
+            />
+          )}
+        </ElementsContext.Consumer>
+      </PanZoom>
     )
   }
 )

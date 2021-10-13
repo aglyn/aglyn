@@ -27,11 +27,13 @@ export const componentId: ComponentId = 'list'
 export const bundleId: ComponentId = 'mui'
 export const metadata: IAglynComponentSchema['metadata'] = {
   displayName: 'List',
+  icon: 'format-list-text',
 }
 export const templates: IAglynComponentSchema['templates'] = [
   {
     id: 'mui:list',
     title: 'List',
+    icon: 'format-list-text',
     data: {
       componentId: componentId,
       bundleId: bundleId,
