@@ -15,16 +15,27 @@
  * limitations under the License.
  */
 
-import { Dictionary } from '@aglyn/shared-data-types'
+import { Dictionary, LifecycleObserver, Serializable, StringLike } from '@aglyn/shared-data-types'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { getStaticField } from '@aglyn/shared-util-tools'
 import { AglynEmitter } from '../constants/emitter'
 import { AglynError } from '../constants/error'
-import { AglynLogger, IAglynBaseModel } from '../types'
+import { AglynLogger } from '../types'
+
 
 const TAG = 'AglynBaseModel'
 
-export abstract class AglynBaseModel implements IAglynBaseModel {
+export interface AglynBaseModel extends StringLike, Serializable, LifecycleObserver {
+  getCreatedAt(): Timestamp
+  getErrorFactory(): AglynError
+  setErrorFactory(value: AglynError): this
+  getEmitter(): AglynEmitter
+  setEmitter(value: AglynEmitter): this
+  getLogger(): AglynLogger
+  setLogger(value: AglynLogger): this
+}
+
+export abstract class AglynBaseModel {
   public static readonly [Symbol.toStringTag]: string = TAG
   readonly #created: Timestamp
   #errorFactory: AglynError
@@ -69,3 +80,5 @@ export abstract class AglynBaseModel implements IAglynBaseModel {
     }
   }
 }
+
+export default AglynBaseModel

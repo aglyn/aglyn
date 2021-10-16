@@ -15,5 +15,20 @@
  * limitations under the License.
  */
 
+import { RegisterBundlePayload, RegisterComponentPayload } from '../constants/emitter'
+import { IAglynComponentsBundle } from '../controllers/aglyn-components.controller'
 
-export * from './main'
+
+export function createComponentsBundle(
+  bundle: Omit<IAglynComponentsBundle, 'components'>,
+  components: RegisterComponentPayload[],
+): RegisterBundlePayload {
+  const _components = [...components].map((i) => {
+    i.schema.bundleId = bundle.bundleId
+    return i
+  })
+  return {
+    bundle: {...bundle, components: []},
+    components: [..._components],
+  }
+}

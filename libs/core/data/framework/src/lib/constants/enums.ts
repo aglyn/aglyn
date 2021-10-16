@@ -26,6 +26,6 @@ export enum AglynCommandFlag {
   ANY = '*',
 }
 
-export enum AglynExtension {
+export enum AglynExtensionFlag {
   COMPONENTS = 'components',
 }

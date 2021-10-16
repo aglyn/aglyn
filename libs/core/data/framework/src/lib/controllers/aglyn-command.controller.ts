@@ -18,22 +18,45 @@
 import { Mitt } from '@aglyn/shared-util-vendor'
 import {
   AglynAppEventFlag,
-  AglynModuleEventFlag,
-  AglynModuleEventPayload,
+  AglynModuleActionFlag,
+  AglynModuleActionPayload,
 } from '../constants/emitter'
+import { COMMAND_TYPE, MODULE_TYPE } from '../constants/symbol'
+import type { AglynAppController } from '../controllers/aglyn-app.controller'
 import { AglynBaseModel } from '../models/aglyn-base.model'
-import { AglynCommander, IAglynApp, IAglynCommandController } from '../types'
+import {
+  AglynCommander,
+  AglynCommandParams,
+  AglynRegisters,
+  AglynTypeFields,
+  AglynUniqueId,
+} from '../types'
+
 
 const TAG = 'AglynCommandController'
 
-export class AglynCommandController extends AglynBaseModel implements IAglynCommandController {
+export type AglynCommandTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_TYPE>
+
+export interface AglynCommandHandler extends AglynUniqueId, AglynCommandTypeFields {
+  (data: AglynCommandParams['*']): void
+}
+
+export interface AglynCommandController extends AglynBaseModel {
+  executeCommand(data: AglynModuleActionPayload[AglynModuleActionFlag.COMMAND_TRIGGER]): void
+  resolveCommand(data: AglynModuleActionPayload[AglynModuleActionFlag.COMMAND_ACTION_REGISTER]): void
+  unregisterAction(data: AglynModuleActionPayload[AglynModuleActionFlag.COMMAND_ACTION_UNREGISTER]): void
+}
+
+export class AglynCommandController extends AglynBaseModel {
+
   public static readonly [Symbol.toStringTag]: string = TAG
-  protected app: IAglynApp
+
+  protected app: AglynAppController
   #commander: AglynCommander = Mitt()
 
-  constructor(props: { app: IAglynApp }) {
+  constructor(props: { app: AglynAppController }) {
     super()
-    const { app } = props
+    const {app} = props
     this.app = app
     this.#initialize()
   }
@@ -42,6 +65,14 @@ export class AglynCommandController extends AglynBaseModel implements IAglynComm
     this.setEmitter(this.app.getEmitter())
     this.setLogger(this.app.getLogger())
   }
+
+  public onInit = (): void => {
+    this.listeners.forEach(([flag, method]) => this.app.getEmitter().on(flag, method))
+  }
+  public onDestroy = (): void => {
+    this.listeners.forEach(([flag, method]) => this.app.getEmitter().off(flag, method))
+  }
+
   public toString = (): string => {
     return `${TAG}(app: '${this.app.getName()}')`
   }
@@ -51,43 +82,43 @@ export class AglynCommandController extends AglynBaseModel implements IAglynComm
       commands: [...this.#commander.all.values()],
     }
   }
-  public onInit = (): void => {
-    this.getEmitter().on(AglynModuleEventFlag.COMMAND_ACTION_REGISTER, this.registerAction)
-    this.getEmitter().on(AglynModuleEventFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction)
-    this.getEmitter().on(AglynModuleEventFlag.COMMAND_TRIGGER, this.executeCommand)
-  }
-  public onDestroy = (): void => {
-    this.getEmitter().off(AglynModuleEventFlag.COMMAND_ACTION_REGISTER, this.registerAction)
-    this.getEmitter().off(AglynModuleEventFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction)
-    this.getEmitter().off(AglynModuleEventFlag.COMMAND_TRIGGER, this.executeCommand)
-  }
+
   public getCommander = (): AglynCommander => {
     return this.#commander
   }
-  public registerAction = (
-    data: AglynModuleEventPayload[AglynModuleEventFlag.COMMAND_ACTION_REGISTER]
+  public resolveCommand = (
+    data: AglynModuleActionPayload[AglynModuleActionFlag.COMMAND_ACTION_REGISTER],
   ): void => {
-    const { handler } = data
+    const {handler} = data
     const commandId = handler?.$id
     this.#commander.on(commandId, handler)
-    this.getLogger().debug(AglynAppEventFlag.REGISTERED_COMMAND, { commandId })
-    this.getEmitter().emit(AglynAppEventFlag.REGISTERED_COMMAND, { commandId })
+    this.getLogger().debug(AglynAppEventFlag.REGISTERED_COMMAND, {commandId})
+    this.getEmitter().emit(AglynAppEventFlag.REGISTERED_COMMAND, {commandId})
   }
   public unregisterAction = (
-    data: AglynModuleEventPayload[AglynModuleEventFlag.COMMAND_ACTION_UNREGISTER]
+    data: AglynModuleActionPayload[AglynModuleActionFlag.COMMAND_ACTION_UNREGISTER],
   ): void => {
-    const { handler } = data
+    const {handler} = data
     const commandId = handler?.$id
     this.#commander.off(commandId, handler)
-    this.getLogger().debug(AglynAppEventFlag.UNREGISTERED_COMMAND, { commandId })
-    this.getEmitter().emit(AglynAppEventFlag.UNREGISTERED_COMMAND, { commandId })
+    this.getLogger().debug(AglynAppEventFlag.UNREGISTERED_COMMAND, {commandId})
+    this.getEmitter().emit(AglynAppEventFlag.UNREGISTERED_COMMAND, {commandId})
   }
   public executeCommand = (
-    data: AglynModuleEventPayload[AglynModuleEventFlag.COMMAND_TRIGGER]
+    data: AglynModuleActionPayload[AglynModuleActionFlag.COMMAND_TRIGGER],
   ): void => {
-    const { commandId } = data
-    this.#commander.emit(commandId, { app: this.app })
-    this.getLogger().debug(AglynAppEventFlag.TRIGGERED_COMMAND, { commandId })
-    this.getEmitter().emit(AglynAppEventFlag.TRIGGERED_COMMAND, { commandId })
+    const {commandId} = data
+    this.#commander.emit(commandId, {app: this.app})
+    this.getLogger().debug(AglynAppEventFlag.TRIGGERED_COMMAND, {commandId})
+    this.getEmitter().emit(AglynAppEventFlag.TRIGGERED_COMMAND, {commandId})
   }
+
+
+  private listeners: [AglynModuleActionFlag, (...args: any[]) => unknown][] = [
+    [AglynModuleActionFlag.COMMAND_ACTION_REGISTER, this.resolveCommand],
+    [AglynModuleActionFlag.COMMAND_ACTION_UNREGISTER, this.unregisterAction],
+    [AglynModuleActionFlag.COMMAND_TRIGGER, this.executeCommand],
+  ]
 }
+
+export default AglynCommandController

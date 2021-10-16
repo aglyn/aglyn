@@ -15,39 +15,61 @@
  * limitations under the License.
  */
 
-import { getStaticField } from '@aglyn/shared-util-tools'
-import { _commandControllers, _extensionControllers } from '../constants/_internal'
-import { AGLYN_EMITTER, AglynAppEventFlag, AglynModuleEventFlag } from '../constants/emitter'
+import { getStaticField, yes } from '@aglyn/shared-util-tools'
+import {
+  _commandControllers,
+  _componentsControllers,
+  _extensionControllers,
+} from '../constants/_internal'
+import { AGLYN_EMITTER, AglynAppEventFlag, AglynModuleActionFlag } from '../constants/emitter'
 import { DEFAULT_ENTRY_NAME } from '../constants/enums'
 import { AGLYN_ERROR } from '../constants/error'
 import { AGLYN_LOGGER } from '../constants/logger'
-import { APP_TYPE, TYPE_OF } from '../constants/symbol'
+import { TYPE_OF } from '../constants/symbol'
 import { AglynBaseModel } from '../models/aglyn-base.model'
-import {
-  AglynAppOptions,
-  AglynEffectType,
-  AglynPlatform,
-  AglynVersion,
-  IAglynApp,
-  IAglynCommandController,
-  IAglynExtensionController,
-} from '../types'
+import { AglynNamed, AglynPlatform, AglynVersion, Payload } from '../types'
 import { AglynCommandController } from './aglyn-command.controller'
-import { AglynExtensionController } from './aglyn-extension.controller'
+import { AglynComponentsController } from './aglyn-components.controller'
+import { AglynExtensionController, AglynExtensionLoader } from './aglyn-extension.controller'
 
 
-const TAG = 'AglynApp'
+const TAG = 'AglynAppController'
 
-export class AglynAppController extends AglynBaseModel implements IAglynApp {
+export type AglynAppOptions = AglynNamed & {
+  extensions?: AglynExtensionLoader[]
+}
+
+export interface AglynEffectOptions<T, U = unknown> extends Payload<U> {
+  type: T
+}
+
+export interface AglynAppController extends AglynBaseModel {
+  getName(): string
+  getOptions(): AglynAppOptions
+  getDeleted(): boolean
+  setDeleted(deleted: boolean): this
+  getCommandsController(): AglynCommandController
+  getExtensionsController(): AglynExtensionController
+
+  effect(data: AglynEffectOptions<AglynModuleActionFlag>): this
+}
+
+export class AglynAppController extends AglynBaseModel {
+
   public static readonly [Symbol.toStringTag]: string = TAG
-  public static readonly [TYPE_OF]: number | symbol = APP_TYPE
-  public readonly AglynAppCommandController = AglynCommandController
+
   public readonly AglynAppExtensionController = AglynExtensionController
+  public readonly AglynAppCommandController = AglynCommandController
+  public readonly AglynAppComponentsController = AglynComponentsController
+
+  #extensionController: AglynExtensionController = null
+  #commandController: AglynCommandController = null
+  #componentsController: AglynComponentsController = null
+
   readonly #options: AglynAppOptions = null
   readonly #name: string = null
-  #deleted = false
-  #commandController: IAglynCommandController = null
-  #extensionController: IAglynExtensionController = null
+  #isDeleted = false
+
   public get [TYPE_OF]() {
     return getStaticField(TYPE_OF, this)
   }
@@ -57,12 +79,16 @@ export class AglynAppController extends AglynBaseModel implements IAglynApp {
   public get version(): AglynVersion {
     return getStaticField('version', this)
   }
-  public get commands(): IAglynCommandController {
-    return this.#commandController
-  }
-  public get extensions(): IAglynExtensionController {
+  public get extensions(): AglynExtensionController {
     return this.#extensionController
   }
+  public get commands(): AglynCommandController {
+    return this.#commandController
+  }
+  public get components(): AglynComponentsController {
+    return this.#componentsController
+  }
+
   constructor(options: AglynAppOptions) {
     super()
     this.#options = {...options}
@@ -75,13 +101,39 @@ export class AglynAppController extends AglynBaseModel implements IAglynApp {
     this.setLogger(AGLYN_LOGGER)
 
     this.#commandController = new this.AglynAppCommandController({app: this})
+    this.#componentsController = new this.AglynAppComponentsController({app: this})
+
     this.#extensionController = new this.AglynAppExtensionController({app: this})
+
     _commandControllers.set(this.#name, this.#commandController)
+    _componentsControllers.set(this.#name, this.#componentsController)
+
     _extensionControllers.set(this.#name, this.#extensionController)
 
     this.getLogger().debug(AglynAppEventFlag.APP_CREATED, {app: this})
     this.getEmitter().emit(AglynAppEventFlag.APP_CREATED, {app: this})
   }
+
+  public onInit = (): void => {
+    this.#commandController.onInit()
+    this.#componentsController.onInit()
+
+    this.#extensionController.onInit()
+
+    this.getLogger().debug(AglynAppEventFlag.APP_LOADED, {appName: this.#name})
+    this.getEmitter().emit(AglynAppEventFlag.APP_LOADED, {appName: this.#name})
+  }
+  public onDestroy = (): void => {
+    this.#extensionController.unloadAllExtensions()
+    this.#extensionController.onDestroy()
+
+    this.#commandController.onDestroy()
+    this.#componentsController.onDestroy()
+
+    this.getLogger().debug(AglynAppEventFlag.APP_UNLOADED, {appName: this.#name})
+    this.getEmitter().emit(AglynAppEventFlag.APP_UNLOADED, {appName: this.#name})
+  }
+
   public toString = (): string => {
     return `${TAG}(name: '${name}')`
   }
@@ -92,40 +144,34 @@ export class AglynAppController extends AglynBaseModel implements IAglynApp {
       options: this.#options,
     }
   }
-  public onInit = (): void => {
-    this.#commandController.onInit()
-    this.#extensionController.onInit()
-    this.getLogger().debug(AglynAppEventFlag.APP_LOADED, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_LOADED, {appName: this.#name})
-  }
-  public onDestroy = (): void => {
-    this.#extensionController.unloadAllExtensions()
-    this.#commandController.onDestroy()
-    this.#extensionController.onDestroy()
-    this.getLogger().debug(AglynAppEventFlag.APP_UNLOADED, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_UNLOADED, {appName: this.#name})
-  }
+
   public getName = (): string => {
     return this.#name
   }
   public getOptions = (): AglynAppOptions => {
     return this.#options
   }
-  public getExtensionsController = (): IAglynExtensionController => {
+  public getExtensionsController = (): AglynExtensionController => {
     return this.#extensionController
   }
-  public getCommandsController = (): IAglynCommandController => {
+  public getCommandsController = (): AglynCommandController => {
     return this.#commandController
   }
-  public getDeleted = (): boolean => {
-    return this.#deleted
+  public getComponentsController = (): AglynComponentsController => {
+    return this.#componentsController
+  }
+  public isDeleted = (): boolean => {
+    return yes(this.#isDeleted)
   }
   public setDeleted = (value: boolean): this => {
-    this.#deleted = Boolean(value)
+    this.#isDeleted = Boolean(value)
     return this
   }
-  public effect = (data: AglynEffectType<AglynModuleEventFlag>) => {
+  public effect = (data: AglynEffectOptions<AglynModuleActionFlag>) => {
     const {type, payload} = data
     this.getEmitter().emit(type, payload as any)
+    return this
   }
 }
+
+export default AglynAppController

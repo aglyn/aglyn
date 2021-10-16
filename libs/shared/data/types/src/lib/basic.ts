@@ -184,9 +184,3 @@ export type ImplementsOn<K extends string, T extends (...args: unknown[]) => voi
 
 // export type Constructor
 export type BasicConstructor<T = unknown> = new (...args: T[]) => any
-
-/** Implements a toString method */
-export interface StringLike {
-  toString?(): string
-  [Symbol.toStringTag]?: string
-}

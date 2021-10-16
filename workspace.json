@@ -125,28 +125,6 @@
         }
       }
     },
-    "core-data-components": {
-      "root": "libs/core/data/components",
-      "sourceRoot": "libs/core/data/components/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "outputs": ["{options.outputFile}"],
-          "options": {
-            "lintFilePatterns": ["libs/core/data/components/**/*.{ts,tsx,js,jsx}"]
-          }
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/core/data/components"],
-          "options": {
-            "jestConfig": "libs/core/data/components/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      }
-    },
     "core-data-framework": {
       "root": "libs/core/data/framework",
       "sourceRoot": "libs/core/data/framework/src",

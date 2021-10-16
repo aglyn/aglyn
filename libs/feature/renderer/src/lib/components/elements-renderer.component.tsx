@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-components'
+import { AglynComponentElementData } from '@aglyn/core-data-framework'
 import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
 import { forwardRef, Fragment } from 'react'
 import {
   ElementRendererComponent,
   ElementRendererComponentProps,
 } from './element-renderer.component'
+
 
 export interface ElementsComponentProps extends OverrideableComponentProps {
   elementRendererComponent?: ElementRendererComponentProps['elementRendererComponent']
@@ -30,7 +31,7 @@ export interface ElementsComponentProps extends OverrideableComponentProps {
 
 export const ElementsRendererComponent = forwardRef<any, ElementsComponentProps>(
   function RefRenderFn(props, ref) {
-    const { component: Component, elementRendererComponent, children, ...rest } = props
+    const {component: Component, elementRendererComponent, children, ...rest} = props
     const ElementRendererComponentProp = elementRendererComponent || ElementRendererComponent
     return (
       <Component ref={ref} {...rest}>
@@ -43,7 +44,7 @@ export const ElementsRendererComponent = forwardRef<any, ElementsComponentProps>
         ))}
       </Component>
     )
-  }
+  },
 )
 
 ElementsRendererComponent.displayName = 'ElementsComponent'

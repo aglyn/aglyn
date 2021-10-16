@@ -16,6 +16,7 @@
  */
 
 export * from './api'
+
 export * from './constants/emitter'
 export * from './constants/enums'
 export * from './constants/error'
@@ -25,6 +26,51 @@ export * from './constants/symbol'
 export * from './constants/version'
 
 export * from './util/aglyn-is'
+export * from './util/create-components-bundle'
+export * from './util/create-element-component'
+
+export * from './types'
 
 export * from './models/aglyn-base.model'
-export * from './models/aglyn-extension.model'
+export {
+  AglynExtensionOptions,
+  AglynExtensionT,
+  AglynExtension,
+} from './models/aglyn-extension.model'
+
+export type {
+  AglynAppOptions,
+  AglynEffectOptions,
+  AglynAppController,
+} from './controllers/aglyn-app.controller'
+export type {
+  AglynExtensionTypeFields,
+  AglynExtensionLoader,
+  AglynExtensionController,
+} from './controllers/aglyn-extension.controller'
+
+export type {
+  AglynCommandTypeFields,
+  AglynCommandController,
+  AglynCommandHandler,
+} from './controllers/aglyn-command.controller'
+export type {
+  IAglynComponentsBundle,
+  IAglynComponentSchema,
+  BundleId,
+  ComponentId,
+  AglynComponentsTypeFields,
+  IAglynComponentElement,
+  AglynComponentElementTemplateData,
+  ComponentsRegistryEntry,
+  ComponentsRegistryKeys,
+  ComponentsRegistryValues,
+  AglynComponentClassElement,
+  AglynComponentElementData,
+  AglynComponentElementType,
+  AglynComponentFunctionElement,
+  AglynComponentIntrinsicElement,
+  HierarchyRestriction,
+  TemplateSubElementData,
+  AglynComponentsController,
+} from './controllers/aglyn-components.controller'

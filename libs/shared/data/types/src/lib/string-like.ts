@@ -15,22 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  IAglynComponentsBundle,
-  RegisterBundlePayload,
-  RegisterComponentPayload,
-} from '@aglyn/core-data-components'
-
-export function createComponentsBundle(
-  bundle: Omit<IAglynComponentsBundle, 'components'>,
-  components: RegisterComponentPayload[]
-): RegisterBundlePayload {
-  const _components = [...components].map((i) => {
-    i.schema.bundleId = bundle.bundleId
-    return i
-  })
-  return {
-    bundle: { ...bundle, components: [] },
-    components: [..._components],
-  }
+/** Implements a toString method */
+export interface StringLike {
+  toString?(): string
+  [Symbol.toStringTag]?: string
 }

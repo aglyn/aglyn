@@ -168,11 +168,6 @@ root
   * Workspace name: `core-data-framework`
   * Directory: [libs/core/data/framework](libs/core/data/framework)
 
-* **Extension: Components**
-  * NodeJS import: `@aglyn/core-data-components`
-  * Workspace name: `core-data-components`
-  * Directory: [libs/core/data/components](libs/core/data/components)
-
 * **Feature: Components Extensions Mui Plugin**
   * NodeJS import: `@aglyn/addon-ui-mui-bundle`
   * Workspace name: `addon-ui-mui-bundle`

@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-import {
-  AglynComponentElementType,
-  IAglynComponentSchema,
-  RegisterComponentPayload,
-} from '@aglyn/core-data-components'
-import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '@aglyn/core-data-framework'
 import { JSXElementType } from '@aglyn/shared-data-types'
 import { styled as hocStyled } from '@aglyn/shared-feature-themes'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { Component, Ref } from 'react'
+import { RegisterComponentPayload } from '../constants/emitter'
+import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '../constants/symbol'
+import {
+  AglynComponentElementType,
+  IAglynComponentSchema,
+} from '../controllers/aglyn-components.controller'
 
 
 export function createElementComponent(

@@ -19,7 +19,7 @@ import {
   ComponentId,
   createElementComponent,
   IAglynComponentSchema,
-} from '@aglyn/core-data-components'
+} from '@aglyn/core-data-framework'
 import { Button } from '@mui/material'
 
 

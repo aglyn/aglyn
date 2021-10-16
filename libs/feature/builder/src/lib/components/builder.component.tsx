@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-components'
-import { IAglynApp } from '@aglyn/core-data-framework'
+import { AglynAppController, AglynComponentElementData } from '@aglyn/core-data-framework'
 import {
+  AglynAppContext,
   ElementComponentsContextProvider,
   ElementsContextProvider,
   ElementsContextProviderProps,
@@ -27,7 +27,6 @@ import { ConfirmationProviderComponent, OverrideableComponentProps } from '@agly
 import Box from '@mui/material/Box'
 import NoSsr from '@mui/material/NoSsr'
 import { forwardRef, Fragment } from 'react'
-import { AglynAppContext } from '../../../../renderer/src/lib/contexts/aglyn-app-context'
 import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
 import { SelectionContextProvider } from '../contexts/selection-context-provider'
 import { BuilderCanvasRendererComponent } from './builder-canvas-renderer.component'
@@ -38,7 +37,7 @@ export interface BuilderComponentProps extends OverrideableComponentProps {
   noSsr?: boolean
   elements?: AglynComponentElementData[]
   onUpdateElements?: ElementsContextProviderProps['onUpdateElements']
-  appCallback: () => IAglynApp
+  appCallback: () => AglynAppController
 }
 
 const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(function RefRenderFn(

@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-import { BasicConstructor } from './base'
-
 export enum LifecycleFlag {
   INITIALIZED = 'initialized',
   DESTROYED = 'destroyed',

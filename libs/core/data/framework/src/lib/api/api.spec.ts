@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { initializeApp } from './api'
+import { initializeApp } from './app.api'
+
 
 describe('AglynApp', () => {
   it('should work', () => {
     const name = 'TestAglynApp'
-    expect(initializeApp({ name })).toHaveProperty('name', name)
+    expect(initializeApp({name})).toHaveProperty('name', name)
   })
 })

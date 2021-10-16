@@ -19,8 +19,9 @@ import {
   ComponentId,
   createElementComponent,
   IAglynComponentSchema,
-} from '@aglyn/core-data-components'
+} from '@aglyn/core-data-framework'
 import { ListItemText } from '@mui/material'
+
 
 export const loader = () => import('@mui/material/ListItemText').then((i) => i.default)
 export const componentId: ComponentId = 'list-item-text'
@@ -50,7 +51,7 @@ export const component = createElementComponent(
     metadata,
     templates,
   },
-  ListItemText
+  ListItemText,
 )
 
 export default component

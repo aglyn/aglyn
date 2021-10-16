@@ -21,12 +21,13 @@ import {
   IAglynComponentsBundle,
   RegisterBundlePayload,
   RegisterComponentPayload,
-} from '@aglyn/core-data-components'
+} from '@aglyn/core-data-framework'
 
 import button from './button'
 import list from './list'
 import listItem from './list-item'
 import listItemText from './list-item-text'
+
 
 export const bundleId: BundleId = 'mui'
 export const metadata: IAglynComponentsBundle['metadata'] = {
@@ -41,6 +42,6 @@ export const bundle: RegisterBundlePayload = createComponentsBundle(
     bundleId,
     metadata,
   },
-  components
+  components,
 )
 export default bundle

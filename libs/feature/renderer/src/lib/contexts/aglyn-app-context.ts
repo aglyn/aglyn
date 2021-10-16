@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import { IAglynApp } from '@aglyn/core-data-framework'
+import { AglynAppController } from '@aglyn/core-data-framework'
 import { createContext, useContext } from 'react'
 
-export type IAglynAppContext = { getApp(): IAglynApp }
+
+export type IAglynAppContext = { getApp(): AglynAppController }
 export const AglynAppContext = createContext<IAglynAppContext>({
   getApp: () => undefined,
 })

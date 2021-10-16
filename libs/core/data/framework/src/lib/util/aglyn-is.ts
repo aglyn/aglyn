@@ -16,14 +16,16 @@
  */
 import { _isFnT, _isObj } from '@aglyn/shared-util-guards'
 import {
-  APP_TYPE,
-  COMMAND_TYPE,
+  COMMAND_TYPE, COMPONENTS_TYPE,
   EXTENSION_TYPE,
   MODULE_TYPE,
   TYPE_KIND,
   TYPE_OF,
 } from '../constants/symbol'
-import { AglynAppModule, AglynCommandHandler, IAglynApp, IAglynExtension } from '../types'
+import type { AglynCommandHandler } from '../controllers/aglyn-command.controller'
+import type { AglynExtension } from '../models/aglyn-extension.model'
+import type { AglynAppModule } from '../types'
+
 
 export function typeOf(object: unknown) {
   if (_isFnT(object) || _isObj(object)) {
@@ -31,7 +33,6 @@ export function typeOf(object: unknown) {
     switch (_typeof) {
       case MODULE_TYPE:
         return _typeof
-      case APP_TYPE:
       default:
         return typeof object
     }
@@ -46,8 +47,11 @@ export function kindOf(object: unknown) {
     const kind = object[TYPE_KIND]
 
     switch (kind) {
-      case COMMAND_TYPE:
+      case MODULE_TYPE:
+
       case EXTENSION_TYPE:
+      case COMMAND_TYPE:
+      case COMPONENTS_TYPE:
       default:
         return kind
     }
@@ -56,15 +60,12 @@ export function kindOf(object: unknown) {
   return undefined
 }
 
-export function isApp<T>(object: unknown): object is IAglynApp {
-  return typeOf(object) === APP_TYPE
-}
 export function isAppModule<T>(object: unknown): object is AglynAppModule {
   return typeOf(object) === MODULE_TYPE
 }
 export function isCommand<T>(object: unknown): object is AglynCommandHandler {
   return kindOf(object) === COMMAND_TYPE
 }
-export function isExtension<T>(object: unknown): object is IAglynExtension {
+export function isExtension<T>(object: unknown): object is AglynExtension {
   return kindOf(object) === EXTENSION_TYPE
 }

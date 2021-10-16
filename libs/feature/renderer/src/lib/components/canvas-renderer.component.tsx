@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-components'
+import { AglynComponentElementData } from '@aglyn/core-data-framework'
 import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
 import { forwardRef, HTMLAttributes } from 'react'
 import {
@@ -23,6 +23,7 @@ import {
   ElementRendererComponentProps,
 } from './element-renderer.component'
 import { ElementsRendererComponent } from './elements-renderer.component'
+
 
 export interface CanvasRendererComponentProps
   extends HTMLAttributes<HTMLElement>,
@@ -48,7 +49,7 @@ export const CanvasRendererComponent = forwardRef<HTMLElement, CanvasRendererCom
         />
       </Component>
     )
-  }
+  },
 )
 
 CanvasRendererComponent.displayName = 'CanvasRendererComponent'

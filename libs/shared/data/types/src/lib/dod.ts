@@ -39,7 +39,7 @@
  */
 
 
-import { Dictionary } from './base'
+import { Dictionary } from './basic'
 
 
 /** Primary key */

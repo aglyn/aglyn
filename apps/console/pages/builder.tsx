@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-components'
-import { getApp } from '@aglyn/core-data-framework'
+import { AglynComponentElementData, getApp } from '@aglyn/core-data-framework'
 import { BuilderComponent } from '@aglyn/feature-builder'
 import { useCallback, useState } from 'react'
 import { samplePageData } from '../constants/sample-data'
+
 
 function Builder(props) {
   const appCallback = useCallback(() => getApp(), [])
@@ -34,7 +34,7 @@ function Builder(props) {
       console.log('handleUpdateElements', elements, prevElements)
       setElements(elements)
     },
-    []
+    [],
   )
 
   return (

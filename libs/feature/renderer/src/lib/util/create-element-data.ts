@@ -19,9 +19,10 @@ import {
   AglynComponentElementData,
   AglynComponentElementTemplateData,
   TemplateSubElementData,
-} from '@aglyn/core-data-components'
+} from '@aglyn/core-data-framework'
 import { objectDeepMergeMany } from '@aglyn/shared-util-vendor'
 import { createElementDataId } from './create-element-data-id'
+
 
 export const ELEMENT_DEFAULTS: Partial<AglynComponentElementData> = {
   props: {},
@@ -29,9 +30,9 @@ export const ELEMENT_DEFAULTS: Partial<AglynComponentElementData> = {
 }
 
 export function createElementData(
-  template: AglynComponentElementTemplateData
+  template: AglynComponentElementTemplateData,
 ): AglynComponentElementData {
-  const { data } = template
+  const {data} = template
 
   function mapTemplate(data: TemplateSubElementData): AglynComponentElementData {
     return {
@@ -42,7 +43,7 @@ export function createElementData(
   }
 
   return objectDeepMergeMany([
-    { ...ELEMENT_DEFAULTS },
+    {...ELEMENT_DEFAULTS},
     mapTemplate(data),
   ]) as AglynComponentElementData
 }

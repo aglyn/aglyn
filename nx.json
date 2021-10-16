@@ -35,10 +35,6 @@
       "tags": ["scope:app", "scope:app:console"],
       "implicitDependencies": ["console"]
     },
-    "core-data-components": {
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:extension"],
-      "implicitDependencies": []
-    },
     "core-data-framework": {
       "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:framework"],
       "implicitDependencies": []

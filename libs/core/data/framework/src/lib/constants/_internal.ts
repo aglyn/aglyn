@@ -14,8 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { AglynAppsMap, AglynCommandsControllersMap, AglynExtensionsControllersMap } from '../types'
+import type { AglynAppController } from '../controllers/aglyn-app.controller'
+import type { AglynComponentsController } from '../controllers/aglyn-components.controller'
+import type { AglynExtensionController } from '../controllers/aglyn-extension.controller'
+import type { AglynCommandController } from '../controllers/aglyn-command.controller'
 
-export const _apps: AglynAppsMap = new Map()
-export const _extensionControllers: AglynExtensionsControllersMap = new Map()
-export const _commandControllers: AglynCommandsControllersMap = new Map()
+export const _apps: Map<string, AglynAppController> = new Map()
+export const _extensionControllers: Map<string, AglynExtensionController> = new Map()
+export const _commandControllers: Map<string, AglynCommandController> = new Map()
+export const _componentsControllers: Map<string, AglynComponentsController> = new Map()

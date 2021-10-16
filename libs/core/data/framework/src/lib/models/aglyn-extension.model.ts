@@ -15,26 +15,41 @@
  * limitations under the License.
  */
 
-import { LifecycleFlag } from '@aglyn/shared-data-types'
+import { LifecycleFlag, LoadableObserver, OrNull } from '@aglyn/shared-data-types'
 import { getStaticField } from '@aglyn/shared-util-tools'
 import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '../constants/symbol'
-import { AglynExtensionOptions, IAglynApp, IAglynExtension } from '../types'
+import type { AglynAppController } from '../controllers/aglyn-app.controller'
+import { AglynExtensionTypeFields } from '../controllers/aglyn-extension.controller'
 import { AglynBaseModel } from './aglyn-base.model'
 
-const TAG = 'AglynExtensionModel'
 
-export abstract class AglynExtensionModel<T = any>
-  extends AglynBaseModel
-  implements IAglynExtension
-{
+const TAG = 'AglynExtension'
+
+export type AglynExtensionOptions = {
+  autoload?: boolean
+}
+
+export interface AglynExtension<T = any>
+  extends AglynBaseModel,
+    LoadableObserver,
+    AglynExtensionTypeFields {
+  getName(): string
+  getOptions(): AglynExtensionOptions
+  getContext(): T
+  setContext(value: T): this
+  onInit(app: AglynAppController): void
+  onDestroy(app: AglynAppController): void
+}
+
+export abstract class AglynExtension<T = any> extends AglynBaseModel {
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly [TYPE_OF]: number | symbol = MODULE_TYPE
   public static readonly [TYPE_KIND]: number | symbol = EXTENSION_TYPE
   public static readonly $id: string = null
   readonly #options: AglynExtensionOptions = null
-  protected app: IAglynApp
+  protected app: AglynAppController
   protected context?: T = null
-  #lifecycle?: LifecycleFlag = null
+  #lifecycle?: OrNull<LifecycleFlag> = null
   public get $id() {
     return getStaticField('$id', this)
   }
@@ -44,16 +59,16 @@ export abstract class AglynExtensionModel<T = any>
   public get [TYPE_KIND]() {
     return getStaticField(TYPE_KIND, this)
   }
-  public get lifecycle() {
+  public get lifecycle(): OrNull<LifecycleFlag> {
     return this.#lifecycle
   }
-  public set lifecycle(value) {
+  public set lifecycle(value: LifecycleFlag) {
     this.#lifecycle = value
   }
 
-  protected constructor(app: IAglynApp, options: AglynExtensionOptions) {
+  protected constructor(app: AglynAppController, options: AglynExtensionOptions) {
     super()
-    this.#options = { ...options }
+    this.#options = {...options}
     this.app = app
     this.#initialize()
   }
@@ -89,6 +104,13 @@ export abstract class AglynExtensionModel<T = any>
       [TYPE_KIND]: getStaticField(TYPE_KIND, this),
     }
   }
-  public abstract onInit(app: IAglynApp): void
-  public abstract onDestroy(app: IAglynApp): void
+  public onInit(app: AglynAppController): void {
+    throw new Error('You must implement `onInit`')
+  }
+  public onDestroy(app: AglynAppController): void {
+    throw new Error('You must implement `onDestroy`')
+  }
 }
+
+export type AglynExtensionT = typeof AglynExtension
+export default AglynExtension
