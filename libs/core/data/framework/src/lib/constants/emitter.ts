@@ -101,7 +101,7 @@ export type RegisterComponentPayload<P extends AnyProps = any> = PayloadData<{
   component: AglynComponentElement<P>
 }>
 export type RegisterBundlePayload = PayloadData<{
-  bundle: AglynComponentsBundle
+  bundle: Omit<AglynComponentsBundle, 'componentIds'>
   components: RegisterComponentPayload[]
 }>
 export type UnregisterComponentPayload = PayloadData<{

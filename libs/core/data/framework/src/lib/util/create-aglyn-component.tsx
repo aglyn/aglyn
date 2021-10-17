@@ -32,12 +32,17 @@ export function createAglynComponent(
 ): RegisterComponentPayload {
   const {componentId, bundleId, renderFlags} = schema
   const {emotionStyled} = {...renderFlags}
+
   const cDisplayName = getDisplayName(component, componentId)
   const displayName = `AglynComponent(${cDisplayName})`
-  const ComponentElement = emotionStyled?.disable ? component : styled(component as any, {
-    name: cDisplayName,
-    ...emotionStyled?.options,
-  })({})
+
+  const ComponentElement =
+    !emotionStyled?.disable
+      ? styled(component as any, {
+        name: cDisplayName,
+        ...emotionStyled?.options,
+      })({})
+      : component
 
   class AglynComponent extends Component<any> {
     public static readonly displayName = displayName
@@ -47,7 +52,7 @@ export function createAglynComponent(
     public static readonly [TYPE_OF] = MODULE_TYPE
     public static readonly [TYPE_KIND] = EXTENSION_TYPE
 
-    public innerRef?: Ref<any> = null
+    public innerRef?: Ref<any>
 
     constructor(props: any) {
       super(props)

@@ -15,14 +15,6 @@
  * limitations under the License.
  */
 
-export enum LifecycleFlag {
-  INITIALIZED = 'initialized',
-  DESTROYED = 'destroyed',
-  LOADING = 'loading',
-  LOADED = 'loaded',
-  UNLOADED = 'unloaded',
-}
-
 /** Observers to handle life cycle onInit/onDestroy events */
 export interface LifecycleObserver {
   /**

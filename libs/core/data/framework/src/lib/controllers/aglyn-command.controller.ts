@@ -76,10 +76,10 @@ export class AglynCommandController extends AglynBaseModel {
     this.setLogger(this.app.getLogger())
   }
 
-  public onInit = (): void => {
+  public aglynOnInit = (): void => {
     this.listeners.forEach(([flag, method]) => this.app.getEmitter().on(flag, method))
   }
-  public onDestroy = (): void => {
+  public aglynOnDestroy = (): void => {
     this.listeners.forEach(([flag, method]) => this.app.getEmitter().off(flag, method))
   }
 

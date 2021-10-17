@@ -24,27 +24,27 @@ import {
 import { createComponentElementId } from './create-component-element-id'
 
 
+function traverseComponentTemplate(data: TemplateSubElementData): AglynComponentElementData {
+  return {
+    ...data,
+    $id: createComponentElementId(),
+    elements: [...data?.elements || []].map((data) => traverseComponentTemplate(data)),
+  }
+}
+
 export const ELEMENT_DEFAULTS: Partial<AglynComponentElementData> = {
   props: {},
   elements: [],
 }
 
 export function createComponentElementData(
-  template: AglynComponentElementTemplateData,
+  template?: AglynComponentElementTemplateData,
 ): AglynComponentElementData {
-  const {data} = template
-
-  function mapTemplate(data: TemplateSubElementData): AglynComponentElementData {
-    return {
-      ...data,
-      $id: createComponentElementId(),
-      elements: [...(data.elements ?? [])].map((data) => mapTemplate(data)),
-    }
-  }
+  const {data} = {...template}
 
   return objectDeepMergeMany([
     {...ELEMENT_DEFAULTS},
-    mapTemplate(data),
+    traverseComponentTemplate(data),
   ]) as AglynComponentElementData
 }
 export default createComponentElementData

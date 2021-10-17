@@ -109,27 +109,27 @@ export class AglynAppController extends AglynBaseModel {
     this.getEmitter().emit(AglynAppEventFlag.APP_CREATED, {app: this})
   }
 
-  public onInit = (): void => {
+  public aglynOnInit = (): void => {
     this.getLogger().debug(AglynAppEventFlag.APP_PRE_INIT, {app: this})
     this.getEmitter().emit(AglynAppEventFlag.APP_PRE_INIT, {app: this})
 
-    this.#commandController.onInit()
-    this.#componentsController.onInit()
+    this.#commandController.aglynOnInit()
+    this.#componentsController.aglynOnInit()
 
-    this.#extensionController.onInit()
+    this.#extensionController.aglynOnInit()
 
     this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZED, {app: this})
     this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZED, {app: this})
   }
-  public onDestroy = (): void => {
+  public aglynOnDestroy = (): void => {
     this.getLogger().debug(AglynAppEventFlag.APP_PRE_DESTROY, {app: this})
     this.getEmitter().emit(AglynAppEventFlag.APP_PRE_DESTROY, {app: this})
 
     this.#extensionController.unloadAllExtensions()
-    this.#extensionController.onDestroy()
+    this.#extensionController.aglynOnDestroy()
 
-    this.#commandController.onDestroy()
-    this.#componentsController.onDestroy()
+    this.#commandController.aglynOnDestroy()
+    this.#componentsController.aglynOnDestroy()
 
     this.getLogger().debug(AglynAppEventFlag.APP_DESTROYED, {app: this})
     this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYED, {app: this})

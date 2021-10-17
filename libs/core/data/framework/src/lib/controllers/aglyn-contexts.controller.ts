@@ -14,17 +14,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { RegisterBundlePayload, RegisterComponentPayload } from '../constants/emitter'
-import { AglynComponentsBundle } from '../controllers/aglyn-components.controller'
-
-
-export function createComponentsBundle(
-  bundle: Omit<AglynComponentsBundle, 'componentIds'>,
-  components: RegisterComponentPayload[],
-): RegisterBundlePayload {
-  return {
-    bundle: {...bundle},
-    components: [...components],
-  }
-}

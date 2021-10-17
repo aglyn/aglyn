@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { LifecycleFlag, LoadableObserver, OrNull } from '@aglyn/shared-data-types'
+import { OrNull } from '@aglyn/shared-data-types'
 import { getStaticField } from '@aglyn/shared-util-tools'
 import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '../constants/symbol'
 import type { AglynAppController } from '../controllers/aglyn-app.controller'
 import { AglynExtensionTypeFields } from '../controllers/aglyn-extension.controller'
+import { AglynLifecycleFlag, AglynLoadableObserver } from '../types'
 import { AglynBaseModel } from './aglyn-base.model'
 
 
@@ -31,14 +32,14 @@ export type AglynExtensionOptions = {
 
 export interface AglynExtension<T = any>
   extends AglynBaseModel,
-    LoadableObserver,
+    AglynLoadableObserver,
     AglynExtensionTypeFields {
   getName(): string
   getOptions(): AglynExtensionOptions
   getContext(): T
   setContext(value: T): this
-  onInit(app: AglynAppController): void
-  onDestroy(app: AglynAppController): void
+  aglynOnInit(app: AglynAppController): void
+  aglynOnDestroy(app: AglynAppController): void
 }
 
 export abstract class AglynExtension<T = any> extends AglynBaseModel {
@@ -53,7 +54,7 @@ export abstract class AglynExtension<T = any> extends AglynBaseModel {
   readonly #options: AglynExtensionOptions = null
   protected app: AglynAppController
   protected context?: T = null
-  #lifecycle?: OrNull<LifecycleFlag> = null
+  #lifecycle?: OrNull<AglynLifecycleFlag> = AglynLifecycleFlag.UNREGISTERED
 
   public get $id() {
     return getStaticField('$id', this)
@@ -64,10 +65,10 @@ export abstract class AglynExtension<T = any> extends AglynBaseModel {
   public get [TYPE_KIND]() {
     return getStaticField(TYPE_KIND, this)
   }
-  public get lifecycle(): OrNull<LifecycleFlag> {
+  public get lifecycle(): OrNull<AglynLifecycleFlag> {
     return this.#lifecycle
   }
-  public set lifecycle(value: LifecycleFlag) {
+  public set lifecycle(value: AglynLifecycleFlag) {
     this.#lifecycle = value
   }
 
@@ -111,11 +112,11 @@ export abstract class AglynExtension<T = any> extends AglynBaseModel {
     this.context = value
     return this
   }
-  public onInit(app: AglynAppController): void {
-    throw new Error('You must implement `onInit`')
+  public aglynOnInit(app: AglynAppController): void {
+    throw new Error('You must implement `aglynOnInit`')
   }
-  public onDestroy(app: AglynAppController): void {
-    throw new Error('You must implement `onDestroy`')
+  public aglynOnDestroy(app: AglynAppController): void {
+    throw new Error('You must implement `aglynOnDestroy`')
   }
 }
 

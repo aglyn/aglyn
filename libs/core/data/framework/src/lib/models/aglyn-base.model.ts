@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Dictionary, LifecycleObserver, Serializable, StringLike } from '@aglyn/shared-data-types'
+import { Dictionary, Serializable, StringLike } from '@aglyn/shared-data-types'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { getStaticField } from '@aglyn/shared-util-tools'
 import { AglynEmitter } from '../constants/emitter'
@@ -23,11 +23,12 @@ import { AglynError } from '../constants/error'
 import { AglynLogger } from '../constants/logger'
 import { AGLYN_PLATFORM, AglynPlatform } from '../constants/platform'
 import { AglynVersion, SDK_VERSION } from '../constants/version'
+import { AglynLifecycleObserver } from '../types'
 
 
 const TAG = 'AglynBaseModel'
 
-export interface AglynBaseModel extends StringLike, Serializable, LifecycleObserver {
+export interface AglynBaseModel extends StringLike, Serializable, AglynLifecycleObserver {
   getCreatedAt(): Timestamp
   getErrorFactory(): AglynError
   setErrorFactory(value: AglynError): this
@@ -41,7 +42,7 @@ export abstract class AglynBaseModel {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly platform: AglynPlatform = AGLYN_PLATFORM
-  public static readonly version: AglynVersion = SDK_VERSION
+  public static readonly sdkVersion: AglynVersion = SDK_VERSION
 
   readonly #created: Timestamp
   #errorFactory: AglynError
@@ -54,8 +55,14 @@ export abstract class AglynBaseModel {
   public get platform(): AglynPlatform {
     return getStaticField('platform', this)
   }
-  public get version(): AglynVersion {
-    return getStaticField('version', this)
+  public get sdkVersion(): AglynVersion {
+    return getStaticField('sdkVersion', this)
+  }
+  public get logger(): AglynLogger {
+    return this.#logger
+  }
+  public get emitter(): AglynEmitter {
+    return this.#emitter
   }
 
   protected constructor() {

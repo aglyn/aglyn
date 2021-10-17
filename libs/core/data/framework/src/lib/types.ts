@@ -33,10 +33,6 @@ export type AglynUniqueId<T extends boolean = false> = T extends boolean
     : { readonly $id: string }
   : never
 
-export interface AglynNamed {
-  name?: string
-}
-
 export type AglynLoads<K extends string, T extends AglynUniqueId> = Implements<'load',
   K,
   (...data: T[]) => void> &
@@ -55,4 +51,41 @@ export type AglynRegisters<K extends string, T1 extends any, T2 extends any = T1
 export type AglynTypeFields<T extends SYMBOL_TYPE, U extends SYMBOL_TYPE = never> = {
   readonly [TYPE_OF]?: T
   readonly [TYPE_KIND]?: U
+}
+
+export interface AglynNamed {
+  name?: string
+}
+
+export enum AglynLifecycleFlag {
+  UNREGISTERED = 0b0000,
+  REGISTERED = 0b0010,
+  INITIALIZED = 0b0100,
+  LOADING = 0b1000,
+  LOADED = 0b1010,
+  UNLOADED = 0b1100,
+  DESTROYED = 0b1110,
+}
+
+/** Observers to handle life cycle onInit/onDestroy events */
+export interface AglynLifecycleObserver {
+  /**
+   * Should be invoked once immediately after instantiation
+   */
+  aglynOnInit?(props?: any): unknown
+  /**
+   * Should be invoked once as last step before garbage collection
+   */
+  aglynOnDestroy?(props?: any): unknown
+}
+
+export interface AglynLoadableObserver extends AglynLifecycleObserver {
+  /**
+   * Should be invoked each time the object is loaded
+   */
+  aglynOnLoad?(props?: any): unknown
+  /**
+   * Should be invoked each time the object is unloaded
+   */
+  aglynOnUnload?(props?: any): unknown
 }
