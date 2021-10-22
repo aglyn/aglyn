@@ -1,22 +1,5 @@
 {
   "version": 2,
-  "cli": {
-    "defaultCollection": "@nrwl/next"
-  },
-  "defaultProject": "console",
-  "generators": {
-    "@nrwl/react": {
-      "application": {
-        "babel": true
-      }
-    },
-    "@nrwl/next": {
-      "application": {
-        "style": "@emotion/styled",
-        "linter": "eslint"
-      }
-    }
-  },
   "projects": {
     "addon-ui-mui-bundle": {
       "root": "libs/addon/ui/mui-bundle",
@@ -38,7 +21,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:extension"],
+      "implicitDependencies": []
     },
     "console": {
       "root": "apps/console",
@@ -96,7 +81,9 @@
             "syncVersions": false
           }
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:console"],
+      "implicitDependencies": []
     },
     "console-e2e": {
       "root": "apps/console-e2e",
@@ -123,7 +110,9 @@
           },
           "outputs": ["{options.outputFile}"]
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:console"],
+      "implicitDependencies": ["console"]
     },
     "core-data-framework": {
       "root": "libs/core/data/framework",
@@ -151,7 +140,9 @@
             "syncVersions": false
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:framework"],
+      "implicitDependencies": []
     },
     "feature-builder": {
       "root": "libs/feature/builder",
@@ -173,7 +164,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-builder"],
+      "implicitDependencies": []
     },
     "feature-renderer": {
       "root": "libs/feature/renderer",
@@ -195,7 +188,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-renderer"],
+      "implicitDependencies": []
     },
     "shared-data-mdi": {
       "root": "libs/shared/data/mdi",
@@ -217,7 +212,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:data"],
+      "implicitDependencies": []
     },
     "shared-data-types": {
       "root": "libs/shared/data/types",
@@ -239,7 +236,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
     "shared-feature-themes": {
       "root": "libs/shared/feature/themes",
@@ -261,7 +260,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
+      "implicitDependencies": []
     },
     "shared-ui-jsx": {
       "root": "libs/shared/ui/jsx",
@@ -283,7 +284,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
+      "implicitDependencies": []
     },
     "shared-util-dom": {
       "root": "libs/shared/util/dom",
@@ -305,7 +308,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
     "shared-util-emitter": {
       "root": "libs/shared/util/emitter",
@@ -327,7 +332,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:emitter"],
+      "implicitDependencies": []
     },
     "shared-util-errors": {
       "root": "libs/shared/util/errors",
@@ -349,7 +356,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util", "scope:lib:error"],
+      "implicitDependencies": []
     },
     "shared-util-guards": {
       "root": "libs/shared/util/guards",
@@ -371,7 +380,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
     "shared-util-logger": {
       "root": "libs/shared/util/logger",
@@ -393,7 +404,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:logger"],
+      "implicitDependencies": []
     },
     "shared-util-timestamp": {
       "root": "libs/shared/util/timestamp",
@@ -415,7 +428,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:timestamp"],
+      "implicitDependencies": []
     },
     "shared-util-tools": {
       "root": "libs/shared/util/tools",
@@ -437,7 +452,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
     "shared-util-vendor": {
       "root": "libs/shared/util/vendor",
@@ -459,7 +476,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
     "www": {
       "root": "apps/www",
@@ -517,7 +536,9 @@
             "syncVersions": false
           }
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": []
     },
     "www-e2e": {
       "root": "apps/www-e2e",
@@ -544,7 +565,9 @@
           },
           "outputs": ["{options.outputFile}"]
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": ["www"]
     }
   }
 }

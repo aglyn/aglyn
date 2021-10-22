@@ -22,86 +22,21 @@
       }
     }
   },
-  "projects": {
-    "addon-ui-mui-bundle": {
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:extension"],
-      "implicitDependencies": []
+  "cli": {
+    "defaultCollection": "@nrwl/next"
+  },
+  "generators": {
+    "@nrwl/react": {
+      "application": {
+        "babel": true
+      }
     },
-    "console": {
-      "tags": ["scope:app", "scope:app:console"],
-      "implicitDependencies": []
-    },
-    "console-e2e": {
-      "tags": ["scope:app", "scope:app:console"],
-      "implicitDependencies": ["console"]
-    },
-    "core-data-framework": {
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:framework"],
-      "implicitDependencies": []
-    },
-    "feature-builder": {
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-builder"],
-      "implicitDependencies": []
-    },
-    "feature-renderer": {
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-renderer"],
-      "implicitDependencies": []
-    },
-    "shared-data-mdi": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:data"],
-      "implicitDependencies": []
-    },
-    "shared-data-types": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
-    },
-    "shared-feature-themes": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
-      "implicitDependencies": []
-    },
-    "shared-ui-jsx": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
-      "implicitDependencies": []
-    },
-    "shared-util-dom": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
-    },
-    "shared-util-emitter": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:emitter"],
-      "implicitDependencies": []
-    },
-    "shared-util-errors": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util", "scope:lib:error"],
-      "implicitDependencies": []
-    },
-    "shared-util-guards": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
-    },
-    "shared-util-logger": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:logger"],
-      "implicitDependencies": []
-    },
-    "shared-util-timestamp": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:timestamp"],
-      "implicitDependencies": []
-    },
-    "shared-util-tools": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
-    },
-    "shared-util-vendor": {
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
-    },
-    "www": {
-      "tags": ["scope:app", "scope:app:www"],
-      "implicitDependencies": []
-    },
-    "www-e2e": {
-      "tags": ["scope:app", "scope:app:www"],
-      "implicitDependencies": ["www"]
+    "@nrwl/next": {
+      "application": {
+        "style": "@emotion/styled",
+        "linter": "eslint"
+      }
     }
-  }
+  },
+  "defaultProject": "console"
 }
