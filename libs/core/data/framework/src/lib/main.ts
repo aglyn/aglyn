@@ -49,7 +49,7 @@ export * from './constants/symbol'
 export * from './constants/version'
 
 // 👇 ENUMS
-export { AglynCommandFlag } from './controllers/aglyn-command.controller'
+export { AglynCommandFlag } from './controllers/aglyn-commands.controller'
 export { LinealDirectiveFlag } from './controllers/aglyn-components.controller'
 
 
@@ -107,9 +107,9 @@ export type {
 export type {
   AglynExtensionTypeFields,
   AglynExtensionLoader,
-  AglynExtensionControllerT,
-  AglynExtensionController,
-} from './controllers/aglyn-extension.controller'
+  AglynExtensionsControllerT,
+  AglynExtensionsController,
+} from './controllers/aglyn-extensions.controller'
 export type {
   ContextStore,
   ContextDomain,
@@ -125,9 +125,9 @@ export type {
   AglynCommandResolverTypeFields,
   AglynCommandListenerTypeFields,
   AglynCommandParams,
-  AglynCommandControllerT,
-  AglynCommandController,
-} from './controllers/aglyn-command.controller'
+  AglynCommandsControllerT,
+  AglynCommandsController,
+} from './controllers/aglyn-commands.controller'
 export type {
   AglynComponentsBundle,
   AglynComponentSchema,

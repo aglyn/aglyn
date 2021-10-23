@@ -22,17 +22,13 @@ import { AglynErrorEventFlag } from '../constants/error'
 import { EXTENSION_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF } from '../constants/symbol'
 import type { AglynAppController } from '../controllers/aglyn-app.controller'
 import type { ExtensionUUN } from '../controllers/aglyn-components.controller'
-import type { AglynExtensionTypeFields } from '../controllers/aglyn-extension.controller'
+import type { AglynExtensionTypeFields } from '../controllers/aglyn-extensions.controller'
 import type { AglynLoadableObserver } from '../types'
-import type { AglynBaseModelOptions } from './aglyn-base.model'
-import { AglynModuleModel } from './aglyn-module.model'
+import { AglynModuleModel, AglynModuleModelOptions } from './aglyn-module.model'
 
 
-const TAG = 'AglynExtension'
-
-export interface AglynExtensionOptions extends AglynBaseModelOptions {
+export interface AglynExtensionOptions extends AglynModuleModelOptions {
   autoload?: boolean
-  app: AglynAppController
 }
 
 export interface AglynExtension<T = any, O extends AglynExtensionOptions = AglynExtensionOptions>
@@ -44,6 +40,8 @@ export interface AglynExtension<T = any, O extends AglynExtensionOptions = Aglyn
   setContext(value: T): this
 }
 
+const TAG = 'AglynExtension'
+
 export abstract class AglynExtension<T = any, O extends AglynExtensionOptions = AglynExtensionOptions> extends AglynModuleModel<O> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
@@ -52,6 +50,8 @@ export abstract class AglynExtension<T = any, O extends AglynExtensionOptions = 
   public static readonly [TYPE_KIND]: number | symbol = EXTENSION_TYPE
 
   public static readonly extensionName: string = null
+
+  public readonly moduleName: string = `${TAG}:${this.extensionName || 'unknown'}`
 
   protected context?: T = null
   #lifecycle?: OrNull<AglynLifecycleFlag> = AglynLifecycleFlag.UNREGISTERED
@@ -75,6 +75,7 @@ export abstract class AglynExtension<T = any, O extends AglynExtensionOptions = 
 
   protected constructor(options: O) {
     super(options)
+    this.moduleName = `extension:${this.extensionName}`
   }
 
   public toString = (): string => {

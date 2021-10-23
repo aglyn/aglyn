@@ -18,9 +18,15 @@
 
 import { AnyProps, Dictionary } from '@aglyn/shared-data-types'
 import { EmitterFn } from '@aglyn/shared-util-emitter'
-import type { createEffect as createEffectorEffect, createEvent as createEffectorEvent } from 'effector'
+import type {
+  createEffect as createEffectorEffect,
+  createEvent as createEffectorEvent,
+} from 'effector'
 import { Emitter } from 'mitt'
-import { AglynCommandListener, AglynCommandResolver } from '../controllers/aglyn-command.controller'
+import {
+  AglynCommandListener,
+  AglynCommandResolver,
+} from '../controllers/aglyn-commands.controller'
 import {
   AglynComponentElement,
   AglynComponentsBundle,
@@ -81,12 +87,12 @@ export interface AglynAppEventPayload extends Record<AglynAppEventFlag, AglynEmi
   [AglynAppEventFlag.APP_CREATING]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_CREATED]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_INITIALIZING]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_INITIALIZING_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
-  [AglynAppEventFlag.APP_INITIALIZED_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
+  [AglynAppEventFlag.APP_INITIALIZING_MODULE]: PayloadData<{ moduleName: string }>
+  [AglynAppEventFlag.APP_INITIALIZED_MODULE]: PayloadData<{ moduleName: string }>
   [AglynAppEventFlag.APP_INITIALIZED]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_DESTROYING]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_DESTROYING_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
-  [AglynAppEventFlag.APP_DESTROYED_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
+  [AglynAppEventFlag.APP_DESTROYING_MODULE]: PayloadData<{ moduleName: string }>
+  [AglynAppEventFlag.APP_DESTROYED_MODULE]: PayloadData<{ moduleName: string }>
   [AglynAppEventFlag.APP_DESTROYED]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_DELETING]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_DELETED]: PayloadData<{ appName: AppUUN }>

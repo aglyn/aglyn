@@ -18,12 +18,12 @@
 import { _extensionControllers } from '../constants/_internal'
 import { AglynAppEffectFlag, AglynModuleEffectPayload } from '../constants/emitter'
 import { AglynAppController } from '../controllers/aglyn-app.controller'
-import { AglynExtensionController } from '../controllers/aglyn-extension.controller'
+import { AglynExtensionsController } from '../controllers/aglyn-extensions.controller'
 import { AglynExtension } from '../models/aglyn-extension.model'
 import { _validateAppArg } from './app.api'
 
 
-export function _getExtensionController(app: AglynAppController): AglynExtensionController {
+export function _getExtensionController(app: AglynAppController): AglynExtensionsController {
   _validateAppArg(app)
   return _extensionControllers.get(app.getName())
 }

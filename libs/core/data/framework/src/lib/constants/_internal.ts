@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 import type { AglynAppController } from '../controllers/aglyn-app.controller'
-import type { AglynCommandController } from '../controllers/aglyn-command.controller'
+import type { AglynCommandsController } from '../controllers/aglyn-commands.controller'
 import type { AglynComponentsController, AppUUN } from '../controllers/aglyn-components.controller'
 import type { AglynContextsController } from '../controllers/aglyn-contexts.controller'
-import type { AglynExtensionController } from '../controllers/aglyn-extension.controller'
+import type { AglynExtensionsController } from '../controllers/aglyn-extensions.controller'
 
 
 export const _apps: Map<AppUUN, AglynAppController> = new Map()
-export const _extensionControllers: Map<AppUUN, AglynExtensionController> = new Map()
-export const _commandControllers: Map<AppUUN, AglynCommandController> = new Map()
+export const _extensionControllers: Map<AppUUN, AglynExtensionsController> = new Map()
+export const _commandControllers: Map<AppUUN, AglynCommandsController> = new Map()
 export const _componentsControllers: Map<AppUUN, AglynComponentsController> = new Map()
 export const _contextsControllers: Map<AppUUN, AglynContextsController> = new Map()

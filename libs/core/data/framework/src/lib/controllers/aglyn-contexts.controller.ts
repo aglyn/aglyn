@@ -73,11 +73,13 @@ export interface AglynContextsControllerOptions extends AglynModuleModelOptions 
   defaultStores: KeyValueMap<ContextStoreUid, { defaultState: any, options?: ContextStoreOptions<any> }>
 }
 
-const TAG = 'AglynContextsController'
+const TAG = 'AglynContexts'
 
 export class AglynContextsController extends AglynModuleModel<AglynContextsControllerOptions> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
+
+  public readonly moduleName: string = TAG
 
   #domain: ContextDomain = null
   #stores: Map<ContextStoreUid, ContextStore<any>> = new Map()

@@ -24,7 +24,7 @@ import { DEFAULT_ENTRY_NAME } from '../constants/enums'
 import { AGLYN_ERROR, AglynErrorEventFlag } from '../constants/error'
 import { AGLYN_LOGGER } from '../constants/logger'
 import { AglynAppController, AglynAppOptions } from '../controllers/aglyn-app.controller'
-import { AglynExtensionLoader } from '../controllers/aglyn-extension.controller'
+import { AglynExtensionLoader } from '../controllers/aglyn-extensions.controller'
 import { isAglynExtension, isAglynModule } from '../util/aglyn-is'
 
 

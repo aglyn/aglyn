@@ -36,12 +36,10 @@ import { isAglynExtension } from '../util/aglyn-is'
 import { ExtensionUUN } from './aglyn-components.controller'
 
 
-const TAG = 'AglynExtensionController'
-
 export type AglynExtensionTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof EXTENSION_TYPE>
 export type AglynExtensionLoader = () => Promise<AglynExtensionT>
 
-export interface AglynExtensionController extends AglynModuleModel {
+export interface AglynExtensionsController extends AglynModuleModel {
   registerExtension(payload: ExtensionRegisterPayload): void
   loadExtension(payload: ExtensionLoadPayload): void
   unloadExtension(payload: ExtensionUnloadPayload): void
@@ -52,10 +50,13 @@ export interface AglynExtensionController extends AglynModuleModel {
   destroyAllExtensions(): void
 }
 
+const TAG = 'AglynExtensions'
 
-export class AglynExtensionController extends AglynModuleModel {
+export class AglynExtensionsController extends AglynModuleModel {
 
   public static readonly [Symbol.toStringTag]: string = TAG
+
+  public readonly moduleName: string = TAG
 
   protected extensions: AglynExtensionMap = new Map()
 
@@ -198,5 +199,5 @@ export class AglynExtensionController extends AglynModuleModel {
   ]
 }
 
-export type AglynExtensionControllerT = typeof AglynExtensionController
-export default AglynExtensionController
+export type AglynExtensionsControllerT = typeof AglynExtensionsController
+export default AglynExtensionsController

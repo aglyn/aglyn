@@ -30,6 +30,7 @@ export type AglynModuleEffectListener<Effect extends AglynAppEffectFlag> = [
 
 export interface AglynModuleModelOptions extends AglynBaseModelOptions {
   app: AglynAppController
+  moduleName?: string
 }
 
 export interface AglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions>
@@ -38,10 +39,16 @@ export interface AglynModuleModel<O extends AglynModuleModelOptions = AglynModul
     AglynLifecycleObserver<AglynAppController> {
 }
 
+const TAG = 'AglynModule'
+
 export abstract class AglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions> extends AglynBaseModel<O> {
+
+  public static readonly [Symbol.toStringTag]: string = TAG
 
   public static readonly [TYPE_OF]: number | symbol = MODULE_TYPE
   public static readonly [TYPE_KIND]: number | symbol = undefined
+
+  public readonly moduleName: string = TAG
 
   protected app: AglynAppController
 

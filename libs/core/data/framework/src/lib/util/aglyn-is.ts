@@ -27,7 +27,7 @@ import {
 import type {
   AglynCommandListener,
   AglynCommandResolver,
-} from '../controllers/aglyn-command.controller'
+} from '../controllers/aglyn-commands.controller'
 import { AglynComponentElement } from '../controllers/aglyn-components.controller'
 import type { AglynExtension } from '../models/aglyn-extension.model'
 import type { AglynAppModule } from '../types'

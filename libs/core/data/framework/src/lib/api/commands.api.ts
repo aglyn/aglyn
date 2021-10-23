@@ -24,11 +24,11 @@ import {
   CommandUnregisterResolver,
 } from '../constants/emitter'
 import { AglynAppController } from '../controllers/aglyn-app.controller'
-import { AglynCommandController } from '../controllers/aglyn-command.controller'
+import { AglynCommandsController } from '../controllers/aglyn-commands.controller'
 import { _validateAppArg } from './app.api'
 
 
-export function _getCommandController(app: AglynAppController): AglynCommandController {
+export function _getCommandController(app: AglynAppController): AglynCommandsController {
   _validateAppArg(app)
   return _commandControllers.get(app.getName())
 }

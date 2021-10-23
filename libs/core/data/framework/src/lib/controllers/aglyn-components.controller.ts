@@ -50,8 +50,6 @@ import { AglynTypeFields } from '../types'
 import { isAglynComponentElement } from '../util/aglyn-is'
 
 
-const TAG = 'ComponentsExtension'
-
 export type AglynComponentsTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMPONENT_ELEMENT_TYPE>
 
 export type AglynComponentClassElement<P extends AnyProps = any> = ComponentClass<P>
@@ -211,9 +209,13 @@ export interface AglynComponentsController extends AglynModuleModel {
   unregisterBundle(payload: ComponentsBundleUnregisterPayload): this
 }
 
+const TAG = 'AglynComponents'
+
 export class AglynComponentsController extends AglynModuleModel {
 
   public static readonly [Symbol.toStringTag]: string = TAG
+
+  public readonly moduleName: string = TAG
 
   protected context: ComponentsRegistry = {
     bundles: new Map(),

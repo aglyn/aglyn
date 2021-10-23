@@ -34,8 +34,6 @@ import { AglynTypeFields, PayloadData } from '../types'
 import { CommandUId } from './aglyn-components.controller'
 
 
-const TAG = 'AglynCommandController'
-
 export type AglynCommandResolverTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_RESOLVER_TYPE>
 export type AglynCommandListenerTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_LISTENER_TYPE>
 
@@ -59,7 +57,7 @@ export interface AglynCommandListener extends AglynCommandListenerTypeFields {
   (data: { request: Dictionary, response: Dictionary }): void
 }
 
-export interface AglynCommandController extends AglynModuleModel {
+export interface AglynCommandsController extends AglynModuleModel {
   setResolver(data: CommandRegisterResolver): void
   registerListener(data: CommandRegisterListener): void
   removeResolver(data: CommandUnregisterResolver): void
@@ -67,9 +65,13 @@ export interface AglynCommandController extends AglynModuleModel {
   trigger(data: CommandTriggerPayload): void
 }
 
-export class AglynCommandController extends AglynModuleModel {
+const TAG = 'AglynCommands'
+
+export class AglynCommandsController extends AglynModuleModel {
 
   public static readonly [Symbol.toStringTag]: string = TAG
+
+  public readonly moduleName: string = TAG
 
   #commander: AglynCommander = Mitt()
   #resolvers: Map<CommandUId, AglynCommandResolver> = new Map()
@@ -177,5 +179,5 @@ export class AglynCommandController extends AglynModuleModel {
   ]
 }
 
-export type AglynCommandControllerT = typeof AglynCommandController
-export default AglynCommandController
+export type AglynCommandsControllerT = typeof AglynCommandsController
+export default AglynCommandsController
