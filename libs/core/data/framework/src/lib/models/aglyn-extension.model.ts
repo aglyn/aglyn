@@ -90,9 +90,7 @@ export abstract class AglynExtension<T = any, O extends AglynExtensionOptions = 
   }
 
   public aglynOnInit(app: AglynAppController): void {
-    throw this.getErrorFactory().create(AglynErrorEventFlag.EXTENSION_MISSING_MEMBER_METHOD, {
-      extensionName: this.extensionName, memberMethod: 'getErrorFactory',
-    })
+    super.aglynOnInit(app)
   }
   public aglynOnLoad(app: AglynAppController): void {
     throw this.getErrorFactory().create(AglynErrorEventFlag.EXTENSION_MISSING_MEMBER_METHOD, {
@@ -105,9 +103,7 @@ export abstract class AglynExtension<T = any, O extends AglynExtensionOptions = 
     })
   }
   public aglynOnDestroy(app: AglynAppController): void {
-    throw this.getErrorFactory().create(AglynErrorEventFlag.EXTENSION_MISSING_MEMBER_METHOD, {
-      extensionName: this.extensionName, memberMethod: 'aglynOnDestroy',
-    })
+    super.aglynOnDestroy(app)
   }
 
   public getExtensionName = (): ExtensionUUN => {

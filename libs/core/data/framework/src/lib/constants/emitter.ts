@@ -39,13 +39,17 @@ import { PayloadData } from '../types'
 
 export enum AglynAppEventFlag {
   APP_CREATING = 'event:app:creating', // 1
-  APP_CREATED = 'event:app:created', // 1
-  APP_INITIALIZING = 'event:app:initializing', // 2
-  APP_INITIALIZED = 'event:app:initialized', // 3
-  APP_DESTROYING = 'event:app:on-destroy', // 4
-  APP_DESTROYED = 'event:app:destroyed', // 5
-  APP_DELETING = 'event:app:on-delete', // 6
-  APP_DELETED = 'event:app:deleted', // 7
+  APP_CREATED = 'event:app:created', // 2
+  APP_INITIALIZING = 'event:app:initializing', // 3
+  APP_INITIALIZING_MODULE = 'event:app:initializing-module', // 4
+  APP_INITIALIZED_MODULE = 'event:app:initialized-module', // 5
+  APP_INITIALIZED = 'event:app:initialized', // 6
+  APP_DESTROYING = 'event:app:destroying', // 7
+  APP_DESTROYING_MODULE = 'event:app:destroying-module', // 8
+  APP_DESTROYED_MODULE = 'event:app:destroyed-module', // 9
+  APP_DESTROYED = 'event:app:destroyed', // 10
+  APP_DELETING = 'event:app:deleting', // 11
+  APP_DELETED = 'event:app:deleted', // 12
 
   EXTENSION_REGISTERED = 'event:extensions:registered-extension',
   EXTENSION_INITIALIZED = 'event:extensions:initialized-extension',
@@ -77,8 +81,12 @@ export interface AglynAppEventPayload extends Record<AglynAppEventFlag, AglynEmi
   [AglynAppEventFlag.APP_CREATING]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_CREATED]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_INITIALIZING]: PayloadData<{ appName: AppUUN }>
+  [AglynAppEventFlag.APP_INITIALIZING_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
+  [AglynAppEventFlag.APP_INITIALIZED_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
   [AglynAppEventFlag.APP_INITIALIZED]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_DESTROYING]: PayloadData<{ appName: AppUUN }>
+  [AglynAppEventFlag.APP_DESTROYING_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
+  [AglynAppEventFlag.APP_DESTROYED_MODULE]: PayloadData<{ appName: AppUUN, moduleName: string }>
   [AglynAppEventFlag.APP_DESTROYED]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_DELETING]: PayloadData<{ appName: AppUUN }>
   [AglynAppEventFlag.APP_DELETED]: PayloadData<{ appName: AppUUN }>

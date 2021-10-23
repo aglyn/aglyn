@@ -123,22 +123,44 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> {
     _extensionControllers.set(this.#name, this.#extensionController)
   }
   #initializeAppModules(): void {
-    // Load internal modules before extensions
-    this.#contextsController.aglynOnInit()
-    this.#commandController.aglynOnInit()
-    this.#componentsController.aglynOnInit()
+    const appName = this.#name
+    const modules = [
+      // Load internal modules before extensions
+      {name: 'contexts', controller: this.#contextsController},
+      {name: 'commands', controller: this.#commandController},
+      {name: 'components', controller: this.#componentsController},
 
-    // Last step
-    this.#extensionController.aglynOnInit()
+      // Last step
+      {name: 'extensions', controller: this.#extensionController},
+    ]
+
+    modules.forEach(({name: moduleName, controller}) => {
+      this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZING_MODULE, {appName, moduleName})
+      this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZING_MODULE, {appName, moduleName})
+      controller.aglynOnInit(this)
+      this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZED_MODULE, {appName, moduleName})
+      this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZED_MODULE, {appName, moduleName})
+    })
   }
   #destroyAppModules(): void {
-    // Destroy extensions before internal modules
-    this.#extensionController.aglynOnDestroy()
+    const appName = this.#name
+    const modules = [
+      // Destroy extensions before internal modules
+      {name: 'extensions', controller: this.#extensionController},
 
-    // Then destroy internal modules
-    this.#contextsController.aglynOnDestroy()
-    this.#commandController.aglynOnDestroy()
-    this.#componentsController.aglynOnDestroy()
+      // Then destroy internal modules
+      {name: 'contexts', controller: this.#contextsController},
+      {name: 'commands', controller: this.#commandController},
+      {name: 'components', controller: this.#componentsController},
+    ]
+
+    modules.forEach(({name: moduleName, controller}) => {
+      this.getLogger().debug(AglynAppEventFlag.APP_DESTROYING_MODULE, {appName, moduleName})
+      this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYING_MODULE, {appName, moduleName})
+      controller.aglynOnInit(this)
+      this.getLogger().debug(AglynAppEventFlag.APP_DESTROYED_MODULE, {appName, moduleName})
+      this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYED_MODULE, {appName, moduleName})
+    })
   }
 
   public aglynOnInit(): void {
