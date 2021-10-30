@@ -30,9 +30,14 @@ import { AppUUN, Payload } from '../types'
 import { AglynCommandsController, AglynCommandsControllerT } from './aglyn-commands.controller'
 import {
   AglynComponentsController,
+  AglynCommandsControllerOptions,
   AglynComponentsControllerT,
 } from './aglyn-components.controller'
-import { AglynContextsController, AglynContextsControllerT } from './aglyn-contexts.controller'
+import {
+  AglynContextsController,
+  AglynContextsControllerOptions,
+  AglynContextsControllerT,
+} from './aglyn-contexts.controller'
 import {
   AglynExtensionsController,
   AglynExtensionsControllerOptions,
@@ -43,8 +48,10 @@ import {
 export interface AglynAppOptions extends AglynBaseModelOptions {
   appName?: AppUUN
   modulesOptions?: {
-    extensions?: AglynExtensionsControllerOptions
-    commands?: AglynExtensionsControllerOptions
+    contexts?: Omit<AglynContextsControllerOptions, 'app'>
+    extensions?: Omit<AglynExtensionsControllerOptions, 'app'>
+    commands?: Omit<AglynExtensionsControllerOptions, 'app'>
+    components?: Omit<AglynCommandsControllerOptions, 'app'>
   }
 }
 
@@ -120,24 +127,28 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> {
     _contextsControllers.set(
       this.#name,
       this.#contextsController = new this.ContextsController({
-        ...this.options, app: this,
+        ...this.options.modulesOptions?.contexts,
+        app: this,
       }),
     )
     _commandsControllers.set(
       this.#name,
       this.#commandsController = new this.CommandController({
+        ...this.options.modulesOptions?.commands,
         app: this,
       }),
     )
     _componentsControllers.set(
       this.#name,
       this.#componentsController = new this.ComponentsController({
+        ...this.options.modulesOptions?.components,
         app: this,
       }),
     )
     _extensionsControllers.set(
       this.#name,
       this.#extensionsController = new this.ExtensionController({
+        ...this.options.modulesOptions?.extensions,
         app: this,
       }),
     )

@@ -114,23 +114,23 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
   }
 
   public createEvent = (payload: ContextsCreateEventPayload): ContextEvent => {
-    const {options} = payload
-    return this.#domain.createEvent(...options)
+    const {options} = {...payload}
+    return this.#domain.createEvent(...(options ?? [] as any))
   }
   public createEffect = (payload: ContextsCreateEffectPayload): ContextEffect => {
-    const {options} = payload
-    return this.#domain.createEffect(...options)
+    const {options} = {...payload}
+    return this.#domain.createEffect(...(options ?? [] as any))
   }
   public createStore = <T>(payload: ContextsCreateStorePayload<T>): ContextStore<T> => {
-    const {options, defaultState} = payload
+    const {options, defaultState} = {...payload}
     return this.#domain.createStore(defaultState, options)
   }
   public getStore = <T>(payload: ContextsGetStorePayload): ContextStore<T> => {
-    const {storeId} = payload
+    const {storeId} = {...payload}
     return this.#stores.get(storeId)
   }
   public setStore = <T>(payload: ContextsSetStorePayload<T>): this => {
-    const {storeId, store} = payload
+    const {storeId, store} = {...payload}
     if (storeId && store) {
       this.#stores.set(storeId, store)
     }
@@ -140,7 +140,7 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
     return this
   }
   public deleteStore = (payload: ContextsDeleteStorePayload): this => {
-    const {storeId} = payload
+    const {storeId} = {...payload}
     this.#stores.delete(storeId)
     return this
   }

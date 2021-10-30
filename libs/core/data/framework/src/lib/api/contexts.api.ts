@@ -25,7 +25,7 @@ import {
 } from '../constants/emitter'
 import { AglynAppController } from '../controllers/aglyn-app.controller'
 import type { AglynContextsController } from '../controllers/aglyn-contexts.controller'
-import { ContextStore } from '../controllers/aglyn-contexts.controller'
+import { ContextEffect, ContextEvent, ContextStore } from '../controllers/aglyn-contexts.controller'
 import { _validateAppArg } from './app.api'
 
 
@@ -38,33 +38,33 @@ export function _getContextsController(app: AglynAppController): AglynContextsCo
 export function createContextStore<T>(
   app: AglynAppController,
   payload: ContextsCreateStorePayload<T>,
-): void {
+): ContextStore<T> {
   const contextsController = _getContextsController(app)
-  contextsController.createStore(payload)
+  return contextsController.createStore(payload)
 }
 
 export function createContextEvent(
   app: AglynAppController,
-  payload: ContextsCreateEventPayload,
-): void {
+  payload?: ContextsCreateEventPayload,
+): ContextEvent {
   const contextsController = _getContextsController(app)
-  contextsController.createEvent(payload)
+  return contextsController.createEvent(payload)
 }
 
 export function createContextEffect(
   app: AglynAppController,
   payload: ContextsCreateEffectPayload,
-): void {
+): ContextEffect {
   const contextsController = _getContextsController(app)
-  contextsController.createEffect(payload)
+  return contextsController.createEffect(payload)
 }
 
 export function setContextStore<T>(
   app: AglynAppController,
   payload: ContextsSetStorePayload<T>,
-): void {
+): AglynContextsController {
   const contextsController = _getContextsController(app)
-  contextsController.setStore(payload)
+  return contextsController.setStore(payload)
 }
 
 export function getContextStore<T>(
@@ -78,7 +78,7 @@ export function getContextStore<T>(
 export function deleteContextStore(
   app: AglynAppController,
   payload: ContextsGetStorePayload,
-): void {
+): AglynContextsController {
   const contextsController = _getContextsController(app)
-  contextsController.deleteStore(payload)
+  return contextsController.deleteStore(payload)
 }

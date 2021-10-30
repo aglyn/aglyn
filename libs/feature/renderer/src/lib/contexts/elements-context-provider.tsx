@@ -15,31 +15,42 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-framework'
-import { ReactNode, useState } from 'react'
-import { ElementsContext, ElementsContextType } from './elements-context'
+import { AglynComponentElementData, getContextStore } from '@aglyn/core-data-framework'
+import { createApi } from 'effector'
+import { useStore } from 'effector-react'
+import { ReactNode } from 'react'
+import { useAglynAppContext } from './aglyn-app-context'
+import { ElementsContext } from './elements-context'
 
 
 export interface ElementsContextProviderProps {
   children?: ReactNode
-  elements?: AglynComponentElementData[]
   onUpdateElements?: (
-    newElements: AglynComponentElementData[],
     prevElements: AglynComponentElementData[],
+    newElements: AglynComponentElementData[],
   ) => void
 }
 
 export function ElementsContextProvider(props: ElementsContextProviderProps) {
-  const {children, elements, onUpdateElements} = props
-  const [ctx, setCtx] = useState<ElementsContextType>({
-    elements,
-    updateElements: (elements, prev) => {
-      onUpdateElements && onUpdateElements(elements, prev)
-      setCtx((prev) => ({...prev, elements}))
+  const {children, onUpdateElements} = props
+  const {getApp} = useAglynAppContext()
+
+  const store = getContextStore(getApp(), {storeId: 'elements'})
+  const {updateElements} = createApi(store, {
+    updateElements: (prevElements, newElements) => {
+      // event && event(prevElements, newElements)
+      onUpdateElements && onUpdateElements(prevElements as any, newElements)
+      return newElements
     },
   })
+  const elements = useStore(store)
 
-  return <ElementsContext.Provider value={ctx}>{children}</ElementsContext.Provider>
+
+  return (
+    <ElementsContext.Provider value={{elements, updateElements} as any}>
+      {children}
+    </ElementsContext.Provider>
+  )
 }
 ElementsContextProvider.displayName = 'ElementsContextProvider'
 ElementsContextProvider.defaultProps = {

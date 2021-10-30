@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { AglynAppController, AglynComponentElementData } from '@aglyn/core-data-framework'
+import {
+  AglynAppController,
+  AglynComponentElementData,
+  AppUUN,
+  getApp,
+} from '@aglyn/core-data-framework'
 import {
   AglynAppContext,
   ElementComponentsContextProvider,
@@ -26,7 +31,7 @@ import { consoleTheme, withTheme } from '@aglyn/shared-feature-themes'
 import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import NoSsr from '@mui/material/NoSsr'
-import { forwardRef, Fragment } from 'react'
+import { forwardRef, Fragment, useCallback } from 'react'
 import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
 import HoverContextProvider from '../contexts/hover-context-provider'
 import SelectionContextProvider from '../contexts/selection-context-provider'
@@ -36,9 +41,7 @@ import { BuilderToolbarComponent } from './builder-toolbar.component'
 
 export interface BuilderComponentProps extends OverrideableComponentProps {
   noSsr?: boolean
-  elements?: AglynComponentElementData[]
-  onUpdateElements?: ElementsContextProviderProps['onUpdateElements']
-  appCallback: () => AglynAppController
+  appName?: AppUUN
 }
 
 const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(function RefRenderFn(
@@ -49,10 +52,14 @@ const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(function RefR
     elements,
     onUpdateElements,
     noSsr,
-    appCallback: getApp,
+    appName,
     ...rest
   } = props
   const Wrapper = noSsr ? NoSsr : Fragment
+  const appCallback = useCallback(() => getApp(appName), [appName])
+  if (typeof document !== 'undefined') {
+    console.log('page:/builder app', appCallback())
+  }
 
   return (
     <Wrapper>

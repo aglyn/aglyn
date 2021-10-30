@@ -40,6 +40,7 @@ import { AppProps as NextAppProps } from 'next/app'
 import Head from 'next/head'
 import { Fragment, useEffect } from 'react'
 import { APP } from '../const'
+import { samplePageData } from '../constants/sample-data'
 
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()
@@ -125,7 +126,13 @@ const components = [c1, c2, c3, c4, c5]
 try {
   const app = initializeApp({
     logLevel: 'debug',
-    extensions: [],
+    modulesOptions: {
+      contexts: {
+        defaultStores: {
+          elements: {defaultState: samplePageData}
+        }
+      }
+    },
   })
 
   components.forEach((i) => registerComponent(app, i))

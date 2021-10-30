@@ -15,34 +15,13 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData, getApp } from '@aglyn/core-data-framework'
 import { BuilderComponent } from '@aglyn/feature-builder'
-import { useCallback, useState } from 'react'
-import { samplePageData } from '../constants/sample-data'
 
 
 function Builder(props) {
-  const appCallback = useCallback(() => getApp(), [])
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', appCallback())
-  }
-
-  const [elements, setElements] = useState<AglynComponentElementData[]>(samplePageData)
-
-  const handleUpdateElements = useCallback(
-    (elements: AglynComponentElementData[], prevElements) => {
-      console.log('handleUpdateElements', elements, prevElements)
-      setElements(elements)
-    },
-    [],
-  )
 
   return (
-    <BuilderComponent
-      elements={elements}
-      onUpdateElements={handleUpdateElements}
-      appCallback={appCallback}
-    />
+    <BuilderComponent />
   )
 }
 

@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-import {
-  CanvasRendererComponent,
-  CanvasRendererComponentProps,
-  ElementsContext,
-} from '@aglyn/feature-renderer'
+import { CanvasRendererComponent, ElementsContext } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
-import { ComponentType, forwardRef, HTMLAttributes, useCallback, useRef } from 'react'
+import { forwardRef, HTMLAttributes, useCallback, useRef } from 'react'
 import { PanZoom } from 'react-easy-panzoom'
 import { BuilderElementRendererComponent } from './builder-element-renderer.component'
 
@@ -71,16 +67,16 @@ const ZoomControlContainer = styled('div', {name: 'ZoomControlContainer'})(({the
 }))
 
 export interface BuilderCanvasRendererComponentProps extends HTMLAttributes<HTMLDivElement> {
-  canvasRendererComponent?: ComponentType<CanvasRendererComponentProps>
+  // canvasRendererComponent?: ComponentType<CanvasRendererComponentProps>
 }
 
 export const BuilderCanvasRendererComponent = forwardRef<any, BuilderCanvasRendererComponentProps>(
   function RefRenderFn(props, ref) {
     const {
-      canvasRendererComponent,
+      // canvasRendererComponent,
       ...rest
     } = props
-    const CanvasComponent = canvasRendererComponent || CanvasRendererComponent
+    // const CanvasComponent = canvasRendererComponent || CanvasRendererComponent
 
     const panRef = useRef<any>()
 
@@ -116,7 +112,7 @@ export const BuilderCanvasRendererComponent = forwardRef<any, BuilderCanvasRende
           <CanvasFrame>
             <ElementsContext.Consumer>
               {({elements}) => (
-                <CanvasComponent
+                <CanvasRendererComponent
                   id="aglyn:canvas"
                   elements={elements}
                   elementRendererComponent={BuilderElementRendererComponent}

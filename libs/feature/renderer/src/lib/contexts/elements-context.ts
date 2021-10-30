@@ -24,8 +24,8 @@ export type UseElementsContextType = () => ElementsContextType
 export interface ElementsContextType {
   elements: AglynComponentElementData[]
   updateElements?: (
-    newElements: AglynComponentElementData[],
     prevElements: AglynComponentElementData[],
+    newElements: AglynComponentElementData[],
   ) => void
 }
 

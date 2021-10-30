@@ -45,7 +45,11 @@ import {
   TYPE_KIND,
   TYPE_OF,
 } from '../constants/symbol'
-import { AglynModuleEffectListener, AglynModuleModel } from '../models/aglyn-module.model'
+import {
+  AglynModuleEffectListener,
+  AglynModuleModel,
+  AglynModuleModelOptions,
+} from '../models/aglyn-module.model'
 import { AglynTypeFields, BundleUId, ComponentId } from '../types'
 import { isAglynComponentElement } from '../util/aglyn-is'
 
@@ -185,6 +189,10 @@ export interface TemplateSubElementData<P extends AnyProps = any> {
   props?: AnyProps
 }
 
+export interface AglynCommandsControllerOptions extends AglynModuleModelOptions {
+
+}
+
 export interface AglynComponentsController extends AglynModuleModel {
   getAllComponents(): ComponentsRegistryEntry[]
   getAllComponentsKeys(): ComponentsRegistryKeys
@@ -205,7 +213,7 @@ export interface AglynComponentsController extends AglynModuleModel {
 const TAG = 'AglynComponents'
 const MODULE_NAME = 'components'
 
-export class AglynComponentsController extends AglynModuleModel {
+export class AglynComponentsController extends AglynModuleModel<AglynCommandsControllerOptions> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly childNs: string = MODULE_NAME
