@@ -17,6 +17,7 @@
 
 import { useAglynElementData, ElementRendererComponent, ElementRendererComponentProps } from '@aglyn/feature-renderer'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { useThrottledCallback } from '@aglyn/shared-util-vendor'
 import { forwardRef, memo, useCallback } from 'react'
 import { useHoverContext } from '../contexts/hover-context'
 import { useSelectionContext } from '../contexts/selection-context'
@@ -26,56 +27,66 @@ export interface BuilderElementRendererComponentProps extends ElementRendererCom
   [prop: string]: any
 }
 
-const BuilderElementRendererComponentRaw = forwardRef<any,
-  BuilderElementRendererComponentProps>(function RefRenderFn(props, ref) {
-  const {$id, elementRendererComponent, ...rest} = props
-  const {hover, close: closeHover} = useHoverContext()
-  const {select} = useSelectionContext()
-  const {confirm} = useConfirmationContext()
+const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendererComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {$id, ...rest} = props
+    const {hover, close: closeHover} = useHoverContext()
+    const {select, close: deselect, $id: selectedId} = useSelectionContext()
+    const {confirm} = useConfirmationContext()
 
-  const handleMouseOver = useCallback((e) => {
-    e.stopPropagation()
-    const target = e.currentTarget
-    const clientRect = target?.getBoundingClientRect?.().toJSON?.()
-    if (target && clientRect) {
-      hover({clientRect, $id})
-    }
-  }, [$id])
+    const handleMouseOver = useThrottledCallback(
+      useCallback((e) => {
+        e.stopPropagation()
+        const target = e.currentTarget
+        const clientRect = target?.getBoundingClientRect?.().toJSON?.()
+        if (target && clientRect) {
+          hover({clientRect, $id})
+        }
+      }, [$id]),
+      250
+    )
 
-  const handleMouseLeave = useCallback((e) => {
-    e.stopPropagation()
-    closeHover()
-  }, [])
+    const handleMouseLeave = useThrottledCallback(
+      useCallback((e) => {
+        e.stopPropagation()
+        closeHover()
+      }, []),
+      250
+    )
 
-  const handleClick = useCallback((e) => {
-    e.stopPropagation()
-    const target = e.currentTarget
-    const clientRect = target?.getBoundingClientRect?.().toJSON?.()
-    select({clientRect, $id})
-    confirm({title: 'clicked'})
-  }, [$id])
+    const handleMouseDown = useCallback((e) => {
+      e.stopPropagation()
+      if (selectedId === $id) {
+        deselect()
+      } else {
+        const target = e.currentTarget
+        const clientRect = target?.getBoundingClientRect?.().toJSON?.()
+        select({clientRect, $id})
+        confirm({title: 'clicked'})
+      }
+    }, [$id, selectedId])
 
-  const {componentId, bundleId} = useAglynElementData($id)
+    const {componentId, bundleId} = useAglynElementData($id)
 
-  return (
-    <ElementRendererComponent
-      ref={ref}
-      $id={$id}
-      elementRendererComponent={elementRendererComponent ?? BuilderElementRendererComponent}
-      data-aglyn-element-id={$id}
-      data-aglyn-component-id={componentId}
-      data-aglyn-bundle-id={bundleId}
-      onClick={handleClick}
-      onMouseOver={handleMouseOver}
-      // onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      {...rest}
-    />
-  )
-})
+    return (
+      <ElementRendererComponent
+        ref={ref}
+        $id={$id}
+        data-aglyn-element-id={$id}
+        data-aglyn-component-id={componentId}
+        data-aglyn-bundle-id={bundleId}
+        onMouseOver={handleMouseOver}
+        onMouseLeave={handleMouseLeave}
+        onMouseDown={handleMouseDown}
+        elementRendererComponent={BuilderElementRendererComponent}
+        {...rest}
+      />
+    )
+  }
+)
 
 BuilderElementRendererComponentRaw.displayName = 'BuilderElementRendererComponent'
 BuilderElementRendererComponentRaw.defaultProps = {}
 
-export const BuilderElementRendererComponent = memo(BuilderElementRendererComponentRaw)
+export const BuilderElementRendererComponent = BuilderElementRendererComponentRaw
 export default BuilderElementRendererComponent

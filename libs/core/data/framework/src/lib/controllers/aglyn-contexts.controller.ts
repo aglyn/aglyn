@@ -15,14 +15,16 @@
  * limitations under the License.
  */
 
-import { KeyValueMap } from '@aglyn/shared-data-types'
-import { _hasProperty, _isObj } from '@aglyn/shared-util-guards'
-import { getProperty } from '@aglyn/shared-util-tools'
+import { Dictionary, KeyValueMap } from '@aglyn/shared-data-types'
+import { _hasProperty, _isArr, _isArrEmpty, _isObj } from '@aglyn/shared-util-guards'
+import { arrayAddAtIndex, getProperty } from '@aglyn/shared-util-tools'
 import {
+  createApi,
   createDomain as createEffectorDomain,
   createEffect as createEffectorEffect,
   createEvent as createEffectorEvent,
   Domain as EffectorDomain,
+  Event as EffectorEvent,
   Store as EffectorStore,
 } from 'effector'
 import {
@@ -31,6 +33,7 @@ import {
   ContextsCreateEventPayload,
   ContextsCreateStorePayload,
   ContextsDeleteStorePayload,
+  ContextsGetStoreApiPayload,
   ContextsGetStorePayload,
   ContextsSetStorePayload,
 } from '../constants/emitter'
@@ -39,10 +42,13 @@ import {
   AglynModuleModel,
   AglynModuleModelOptions,
 } from '../models/aglyn-module.model'
-import { ContextStoreUid } from '../types'
+import { ContextStoreUid, ElementId } from '../types'
 import denormalizeComponentElementData from '../util/denormalize-component-element-data'
 import { normalizeComponentElementData } from '../util/normalize-component-element-data'
-import { AglynComponentElementData } from './aglyn-components.controller'
+import {
+  AglynComponentElementData,
+  AglynComponentElementDataNormalizedMap,
+} from './aglyn-components.controller'
 
 
 export interface ContextDomain extends EffectorDomain {
@@ -63,13 +69,34 @@ export type ContextStoreOptions<T> = {
   serialize?: 'ignore'
 }
 
+export type ElementsDataStore = {
+  past: AglynComponentElementDataNormalizedMap[]
+  present: AglynComponentElementDataNormalizedMap
+  future: AglynComponentElementDataNormalizedMap[]
+}
+
+export interface ElementsDataStoreApi {
+  addElement: EffectorEvent<AddElementPayload>
+  updateElements: EffectorEvent<UpdateElementsPayload>
+  undo: EffectorEvent<any>
+  redo: EffectorEvent<any>
+}
+
+export type AddElementPayload = {
+  parentId: ElementId,
+  position: number,
+  element: AglynComponentElementData
+}
+export type UpdateElementsPayload = AglynComponentElementDataNormalizedMap
+
 export interface AglynContextsController extends AglynModuleModel<AglynContextsControllerOptions> {
   getStore<T>(payload: ContextsGetStorePayload): ContextStore<T>
+  getStoreApi<T, K extends keyof T = keyof T>(payload: ContextsGetStoreApiPayload): T
   setStore<T>(payload: ContextsSetStorePayload<T>): this
   createStore<T>(payload: ContextsCreateStorePayload<T>): ContextStore<T>
   deleteStore(payload: ContextsDeleteStorePayload): this
-  createEvent(payload: ContextsCreateEventPayload): ContextEvent
-  createEffect(payload: ContextsCreateEffectPayload): ContextEffect
+  createEvent(payload?: ContextsCreateEventPayload): ContextEvent
+  createEffect(payload?: ContextsCreateEffectPayload): ContextEffect
 }
 
 export interface AglynContextsControllerOptions extends AglynModuleModelOptions {
@@ -100,16 +127,81 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
   }
   #setupInternalStores(): void {
     const normalizedElementsStore = this.createStore({
-        defaultState: normalizeComponentElementData(this.options.defaultElements || [], '__root__'),
+        defaultState: {
+          past: [] as AglynComponentElementDataNormalizedMap[],
+          present: normalizeComponentElementData(this.options.defaultElements || [], '__root__'),
+          future: [] as AglynComponentElementDataNormalizedMap[],
+        } as ElementsDataStore,
         options: {sid: 'elements'},
       },
     )
-    const denormalizedElementsStore = normalizedElementsStore.map((elements) => {
-      return denormalizeComponentElementData(elements, '__root__')
+
+    const elementHelpers = createApi(normalizedElementsStore, {
+      undo: (state, _) => {
+        const past = state.past
+        const present = state.present
+        const future = state.future
+
+        if (_isArr(past) && !_isArrEmpty(past)) {
+          future.unshift(present)
+          return {
+            past: past,
+            present: past.shift(),
+            future: future,
+          }
+        }
+      },
+      redo: (state, _) => {
+        const past = state.past
+        const present = state.present
+        const future = state.future
+
+        if (_isArr(future) && !_isArrEmpty(future)) {
+          past.push(present)
+          return {
+            past: past,
+            present: future.shift(),
+            future: future,
+          }
+        }
+      },
+      addElement: (state, payload: AddElementPayload) => {
+        state.past.push(state.present)
+
+        const {element, parentId, position} = payload
+        const newData = normalizeComponentElementData(element, parentId)
+        const present = {
+          ...state.present,
+          ...newData,
+          [parentId]: {
+            ...state.present[parentId],
+            elements: arrayAddAtIndex(
+              position,
+              state.present[parentId].elements || [],
+              newData[parentId]?.elements || [],
+              {copy: true},
+            ).items,
+          },
+        }
+
+        return {past: state.past, present, future: []}
+      },
+      // updateElement: (state, _) => {
+      //
+      // },
+      updateElements: (state, payload: AglynComponentElementDataNormalizedMap) => {
+        state.past.push(state.present)
+        return {past: state.past, present: payload, future: []}
+      },
     })
 
-    this.setStore({store: normalizedElementsStore, storeId: 'elements-normalized'})
-    this.setStore({store: denormalizedElementsStore, storeId: 'elements-denormalized'})
+    const denormalizedElementsStore = normalizedElementsStore.map((elements) => {
+      return denormalizeComponentElementData(elements.present, '__root__')
+    })
+
+    this.setStore({store: normalizedElementsStore, storeId: 'elements'})
+    this.setStore({store: elementHelpers, storeId: 'elements:api'})
+    this.setStore({store: denormalizedElementsStore, storeId: 'elements:denormalized'})
   }
   #setupDefaultStores(): void {
     const defaultStores = this.options.defaultStores
@@ -131,11 +223,11 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
     }
   }
 
-  public createEvent = (payload: ContextsCreateEventPayload): ContextEvent => {
+  public createEvent = (payload?: ContextsCreateEventPayload): ContextEvent => {
     const {options} = {...payload}
     return this.#domain.createEvent(...(options ?? [] as any))
   }
-  public createEffect = (payload: ContextsCreateEffectPayload): ContextEffect => {
+  public createEffect = (payload?: ContextsCreateEffectPayload): ContextEffect => {
     const {options} = {...payload}
     return this.#domain.createEffect(...(options ?? [] as any))
   }
@@ -146,6 +238,10 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
   public getStore = <T>(payload: ContextsGetStorePayload): ContextStore<T> => {
     const {storeId} = {...payload}
     return this.#stores.get(storeId)
+  }
+  public getStoreApi = <T, K extends keyof T = keyof T>(payload: ContextsGetStoreApiPayload): T => {
+    const {storeId} = {...payload}
+    return this.#stores.get(storeId) as unknown as T
   }
   public setStore = <T>(payload: ContextsSetStorePayload<T>): this => {
     const {storeId, store} = {...payload}

@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
+import { Dictionary } from '@aglyn/shared-data-types'
+import { Event as EffectorEvent } from 'effector'
 import { _contextsControllers } from '../constants/_internal'
 import {
   ContextsCreateEffectPayload,
   ContextsCreateEventPayload,
   ContextsCreateStorePayload,
+  ContextsGetStoreApiPayload,
   ContextsGetStorePayload,
   ContextsSetStorePayload,
 } from '../constants/emitter'
@@ -73,6 +76,14 @@ export function getContextStore<T>(
 ): ContextStore<T> {
   const contextsController = _getContextsController(app)
   return contextsController.getStore(payload)
+}
+
+export function getContextStoreApi<T, K extends keyof T = keyof T>(
+  app: AglynAppController,
+  payload: ContextsGetStoreApiPayload,
+): T {
+  const contextsController = _getContextsController(app)
+  return contextsController.getStoreApi(payload)
 }
 
 export function deleteContextStore(

@@ -22,13 +22,7 @@ import {
 } from '@aglyn/core-data-framework'
 import { AnyProps } from '@aglyn/shared-data-types'
 import { getDisplayName } from '@aglyn/shared-util-tools'
-import {
-  ComponentType,
-  forwardRef,
-  ForwardRefExoticComponent,
-  PropsWithoutRef,
-  RefAttributes,
-} from 'react'
+import { ComponentType, forwardRef, PropsWithoutRef, Ref, RefAttributes } from 'react'
 import useAglynComponent from './use-aglyn-component'
 import useAglynElementConditionalInnerRefProps
   from './use-aglyn-element-conditional-inner-ref-props'
@@ -36,46 +30,51 @@ import { useAglynElementData } from './use-aglyn-element-data'
 import useAglynElementResolvedProps from './use-aglyn-element-resolved-props'
 
 
-export interface ElementDataProps<P extends AnyProps = any> {
+export interface RequiredElementDataProps {
   $id: ElementId
-  // schema: AglynComponentSchema<P>
-  elementData: AglynComponentElementDataNormalized<P>
-  component: AglynComponentElement<P>
-  elemProps: P
 }
 
-export function withElementData<P extends AnyProps, T>(
-  Component: ComponentType<P & ElementDataProps>,
-): ForwardRefExoticComponent<PropsWithoutRef<P> & RefAttributes<T>> {
-  const component = forwardRef<T, Partial<ElementDataProps> & P>(
+export interface OptionalElementDataProps {
+  elementData: AglynComponentElementDataNormalized<any>
+  component: AglynComponentElement<any>
+  elemProps: any
+  innerRef?: Ref<any>
+}
+
+export interface ElementDataProps extends RequiredElementDataProps,
+  OptionalElementDataProps {
+
+}
+
+export function withAglynElement<U = any, T = any>(
+  WrappedComponent: ComponentType<PropsWithoutRef<ElementDataProps & U> & RefAttributes<T>>,
+): ComponentType<RequiredElementDataProps & U & RefAttributes<T>> {
+  const component = forwardRef<T, RequiredElementDataProps & U>(
     function RefRenderFn(props, ref) {
       const {$id, children: childrenProp, ...rest} = props
       const elementData = useAglynElementData($id)
-      const component = useAglynComponent({
-        componentId: elementData.componentId,
-        bundleId: elementData.bundleId,
-      })
+      const component = useAglynComponent(elementData.componentId, elementData.bundleId)
       const {children, ...elemProps} = useAglynElementResolvedProps($id)
       const innerRefProps = useAglynElementConditionalInnerRefProps($id, ref)
 
       return (
-        <Component
+        <WrappedComponent
           ref={ref}
           $id={$id}
           elementData={elementData}
           component={component}
           elemProps={elemProps}
           {...innerRefProps}
-          {...rest as P}
+          {...rest as any}
         >
           {children}
           {childrenProp}
-        </Component>
+        </WrappedComponent>
       )
     },
   )
-  component.displayName = `WithElementData(${getDisplayName(Component)})`
-  return component
+  component.displayName = `WithElementData(${getDisplayName(WrappedComponent)})`
+  return component as ComponentType<RequiredElementDataProps & U & RefAttributes<T>>
 }
 
-export default withElementData
+export default withAglynElement

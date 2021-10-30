@@ -23,16 +23,16 @@ import useAglynComponentSchema from './use-aglyn-component-schema'
 import { useAglynElementData } from './use-aglyn-element-data'
 
 
-export function useAglynElementConditionalInnerRefProps(
+export function useAglynElementConditionalInnerRefProps<T>(
   $id: ElementId,
-  ref: Ref<any>,
-): { innerRef?: Ref<any> } {
+  ref: Ref<T>,
+): { innerRef?: Ref<T> } {
   const {getApp} = useAglynAppContext()
   const elementData = useAglynElementData($id)
-  const schema = useAglynComponentSchema({
-    componentId: elementData.componentId,
-    bundleId: elementData.bundleId,
-  })
+  const schema = useAglynComponentSchema(
+    elementData.componentId,
+    elementData.bundleId
+  )
   const disabled = schema?.renderFlags?.elementRef?.disable
   const innerRef = schema?.renderFlags?.elementRef?.innerRef
 

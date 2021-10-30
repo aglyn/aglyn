@@ -15,25 +15,22 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-framework'
+import { ElementsDataStore, ElementsDataStoreApi } from '@aglyn/core-data-framework'
 import { createContext, useContext } from 'react'
-import { AddElementPayload } from './elements-context-provider'
 
 
 export type UseElementsContextType = () => ElementsContextType
 
-export interface ElementsContextType {
-  elements: AglynComponentElementData[]
-  updateElements?: (
-    prevElements: AglynComponentElementData[],
-    newElements: AglynComponentElementData[],
-  ) => void
-  addElement?: (payload: AddElementPayload) => void
+export interface ElementsContextType extends ElementsDataStoreApi {
+  elements: ElementsDataStore['present']
 }
 
 export const DEFAULT_ELEMENTS_CONTEXT: ElementsContextType = {
-  elements: [],
-  // updateElements: ((prev) => prev),
+  elements: {},
+  addElement: (() => {}) as any,
+  updateElements: (() => {}) as any,
+  undo: (() => {}) as any,
+  redo: (() => {}) as any,
 }
 export const ElementsContext = createContext<ElementsContextType>(DEFAULT_ELEMENTS_CONTEXT)
 ElementsContext.displayName = 'ElementsContext'

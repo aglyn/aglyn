@@ -117,7 +117,12 @@ export type {
   ContextDomain,
   ContextEvent,
   ContextEffect,
+  ElementsDataStore,
+  ElementsDataStoreApi,
+  AddElementPayload,
+  UpdateElementsPayload,
   ContextStoreOptions,
+  AglynContextsControllerOptions,
   AglynContextsControllerT,
   AglynContextsController,
 } from './controllers/aglyn-contexts.controller'
@@ -126,6 +131,7 @@ export type {
   AglynCommandListener,
   AglynCommandResolverTypeFields,
   AglynCommandListenerTypeFields,
+  AglynCommandsControllerOptions,
   AglynCommandsControllerT,
   AglynCommandsController,
 } from './controllers/aglyn-commands.controller'
@@ -147,7 +153,7 @@ export type {
   AglynComponentIntrinsicElement,
   ComponentsLinealOrder,
   TemplateSubElementData,
-  AglynCommandsControllerOptions,
+  AglynComponentsControllerOptions,
   AglynComponentsControllerT,
   AglynComponentsController,
 } from './controllers/aglyn-components.controller'

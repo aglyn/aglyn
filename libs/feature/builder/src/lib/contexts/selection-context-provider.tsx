@@ -47,8 +47,9 @@ export interface SelectionContextProviderProps {
 
 function SelectionContextProviderRaw(props: SelectionContextProviderProps) {
   const {children, defaultOptions, component: Component} = props
-  const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
+  const [options, setOptions] = useState<SelectionOptions>({})
   const [resolveReject, setResolveReject] = useState(() => [])
+  const { $id } = options
 
   const select = useCallback(
     (options: SelectionOptions) => {
@@ -63,6 +64,7 @@ function SelectionContextProviderRaw(props: SelectionContextProviderProps) {
 
   const close = useCallback(() => {
     setResolveReject([])
+    setOptions({})
   }, [])
 
   const cancel = useCallback(() => {
@@ -79,11 +81,11 @@ function SelectionContextProviderRaw(props: SelectionContextProviderProps) {
 
   const child = useMemo(() => {
     return (
-      <SelectionContext.Provider value={{select, close}}>
+      <SelectionContext.Provider value={{$id, select, close}}>
         {children}
       </SelectionContext.Provider>
     )
-  }, [children, select, close])
+  }, [children, $id, select, close])
 
   return (
     <Fragment>

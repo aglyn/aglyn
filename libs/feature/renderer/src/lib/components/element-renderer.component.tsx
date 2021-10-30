@@ -18,18 +18,21 @@
 import { ComponentId } from '@aglyn/core-data-framework'
 import { ReactIs } from '@aglyn/shared-ui-jsx'
 import { _isArrEmpty } from '@aglyn/shared-util-guards'
-import { ComponentType, forwardRef, HTMLAttributes } from 'react'
-import { ElementDataProps, withElementData } from '../hooks/with-element-data'
+import { ComponentType, forwardRef, HTMLAttributes, PropsWithoutRef, RefAttributes } from 'react'
+import { ElementDataProps, withAglynElement } from '../hooks/with-aglyn-element'
 import { ElementsRendererComponent } from './elements-renderer.component'
 
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export interface ElementRendererComponentProps extends HTMLAttributes<HTMLElement> {
+export interface ElementRendererComponentProps<T = any> extends HTMLAttributes<T> {
   $id: ComponentId
-  elementRendererComponent?: ComponentType<ElementRendererComponentProps>
+  elementRendererComponent?: ComponentType<PropsWithoutRef<ElementRendererComponentProps<any>> & RefAttributes<any>>
 }
 
-const ElementRendererComponentRaw = forwardRef<any, ElementDataProps & ElementRendererComponentProps>(
+export type DecoratedElementRendererProps<T = any> = ElementRendererComponentProps<T>
+  & ElementDataProps
+
+const ElementRendererComponentRaw = forwardRef<any, DecoratedElementRendererProps>(
   function RefRenderFn(_props, ref) {
     const {
       $id,
@@ -62,6 +65,6 @@ ElementRendererComponentRaw.defaultProps = {
   children: null,
 }
 
-export const ElementRendererComponent = withElementData(ElementRendererComponentRaw)
+export const ElementRendererComponent = withAglynElement(ElementRendererComponentRaw)
 
 export default ElementRendererComponent

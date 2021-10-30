@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CanvasRendererComponent, ElementsContext } from '@aglyn/feature-renderer'
+import { CanvasRendererComponent } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-guards'

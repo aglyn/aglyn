@@ -15,19 +15,4 @@
  * limitations under the License.
  */
 
-import type { BundleUId, CommandUId, AglynComponentElement } from '@aglyn/core-data-framework'
-import { getComponent } from '@aglyn/core-data-framework'
-import { useAglynAppContext } from '../contexts/aglyn-app-context'
-import { useMemo } from 'react'
-
-
-export function useAglynComponent(
-  componentId: CommandUId,
-  bundleId?: BundleUId,
-): AglynComponentElement {
-  const {getApp} = useAglynAppContext()
-  return useMemo(() => {
-    return getComponent(getApp(), {componentId, bundleId})
-  }, [getApp, componentId, bundleId])
-}
-export default useAglynComponent
+export * from 'use-debounce'

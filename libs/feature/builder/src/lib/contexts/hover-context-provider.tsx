@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { useThrottledCallback } from '@aglyn/shared-util-vendor'
 import {
   ElementType,
   Fragment,

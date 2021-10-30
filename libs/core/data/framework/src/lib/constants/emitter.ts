@@ -142,6 +142,7 @@ export enum AglynAppEffectFlag {
   CONTEXTS_CREATE_EVENT = 'effect:contexts:create-event',
   CONTEXTS_CREATE_EFFECT = 'effect:contexts:create-effect',
   CONTEXTS_GET_STORE = 'effect:contexts:get-store',
+  CONTEXTS_GET_STORE_API = 'effect:contexts:get-store-api',
   CONTEXTS_SET_STORE = 'effect:contexts:set-store',
   CONTEXTS_DELETE_STORE = 'effect:contexts:delete-store',
 
@@ -172,7 +173,8 @@ export type ContextsCreateStorePayload<T = any> = PayloadData<{ defaultState: T,
 export type ContextsCreateEventPayload = PayloadData<{ options: Parameters<typeof createEffectorEvent> }>
 export type ContextsCreateEffectPayload = PayloadData<{ options: Parameters<typeof createEffectorEffect> }>
 export type ContextsGetStorePayload = PayloadData<{ storeId: ContextStoreUid }>
-export type ContextsSetStorePayload<T = any> = PayloadData<{ storeId: ContextStoreUid, store: ContextStore<T> }>
+export type ContextsGetStoreApiPayload = PayloadData<{ storeId: ContextStoreUid }>
+export type ContextsSetStorePayload<T = any> = PayloadData<{ storeId: ContextStoreUid, store: ContextStore<T> | any }>
 export type ContextsDeleteStorePayload = PayloadData<{ storeId: ContextStoreUid }>
 
 export type ComponentGetPayload = PayloadData<{ componentId: CommandUId, bundleId?: BundleUId }>
@@ -201,6 +203,7 @@ export interface AglynModuleEffectPayload extends Record<AglynAppEffectFlag, Agl
   [AglynAppEffectFlag.CONTEXTS_CREATE_EVENT]: ContextsCreateEventPayload
   [AglynAppEffectFlag.CONTEXTS_CREATE_EFFECT]: ContextsCreateEffectPayload
   [AglynAppEffectFlag.CONTEXTS_GET_STORE]: ContextsGetStorePayload
+  [AglynAppEffectFlag.CONTEXTS_GET_STORE_API]: ContextsGetStoreApiPayload
   [AglynAppEffectFlag.CONTEXTS_SET_STORE]: ContextsSetStorePayload
   [AglynAppEffectFlag.CONTEXTS_DELETE_STORE]: ContextsDeleteStorePayload
 

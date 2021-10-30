@@ -16,7 +16,7 @@
  */
 
 import { createComponentElementData } from '@aglyn/core-data-framework'
-import { useElementsContext } from '@aglyn/feature-renderer'
+import { useAglynElementsStoreWithApi } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import TreeItem from '@mui/lab/TreeItem'
@@ -34,6 +34,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback } from 'react'
 import { useElementDrawerContext } from '../contexts/element-drawer-context'
+import { useSelectionContext } from '../contexts/selection-context'
 
 
 const StyledAppBar = styled(AppBar, {name: 'AppBar'})({
@@ -55,8 +56,8 @@ export const BuilderToolbarComponent = forwardRef<any, BuilderToolbarComponentPr
     const {children, ...rest} = props
 
     const {elementDrawer} = useElementDrawerContext()
-    const {elements, addElement} = useElementsContext()
-    // const { } = useSelectionContext()
+    const {elements, api: {addElement}} = useAglynElementsStoreWithApi()
+    const { $id: selectedId } = useSelectionContext()
     const handleFabClick = useCallback(async () => {
       const option = await elementDrawer({
         title: 'Add New Element',
@@ -69,9 +70,10 @@ export const BuilderToolbarComponent = forwardRef<any, BuilderToolbarComponentPr
       .then((data: any) => {
         if (data) {
           console.log('then newElement', data)
-          addElement && addElement({
+          addElement?.({
             position: 0,
-            parentId: '__root__',
+            parentId: selectedId || '__root__',
+
             element: createComponentElementData(data),
           })
         }
@@ -81,7 +83,7 @@ export const BuilderToolbarComponent = forwardRef<any, BuilderToolbarComponentPr
       })
 
       console.warn('async choice', option)
-    }, [elementDrawer, elements, addElement])
+    }, [selectedId, elementDrawer, elements, addElement])
 
     return (
       <StyledWrapper ref={ref} {...rest}>

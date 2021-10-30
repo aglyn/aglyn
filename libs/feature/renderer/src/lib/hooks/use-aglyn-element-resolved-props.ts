@@ -19,7 +19,6 @@ import type { ElementId } from '@aglyn/core-data-framework'
 import type { AnyProps } from '@aglyn/shared-data-types'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import { useMemo } from 'react'
-import { useAglynAppContext } from '../contexts/aglyn-app-context'
 import useAglynComponentSchema from './use-aglyn-component-schema'
 import { useAglynElementData } from './use-aglyn-element-data'
 
@@ -27,18 +26,22 @@ import { useAglynElementData } from './use-aglyn-element-data'
 export function useAglynElementResolvedProps<P extends AnyProps>(
   $id: ElementId,
 ): P {
-  const {getApp} = useAglynAppContext()
   const elementData = useAglynElementData($id)
-  const schema = useAglynComponentSchema({
-    componentId: elementData.componentId,
-    bundleId: elementData.bundleId,
-  })
+  const schema = useAglynComponentSchema(
+    elementData.componentId,
+    elementData.bundleId,
+  )
+  const resolveProps = schema?.renderFlags?.resolveProps
 
-  return useMemo(() => {
-    const resolveProps = schema?.renderFlags?.resolveProps
-    return (_isFnT(resolveProps)
-      ? resolveProps.call(undefined, elementData)
-      : elementData.props) || {}
-  }, [$id, getApp, elementData])
+  return useMemo(
+    () => {
+      return (
+        _isFnT(resolveProps)
+          ? resolveProps.call(undefined, elementData)
+          : elementData.props
+      ) || {}
+    },
+    [resolveProps, elementData],
+  ) as P
 }
 export default useAglynElementResolvedProps

@@ -15,17 +15,19 @@
  * limitations under the License.
  */
 
+import { ElementId } from '@aglyn/core-data-framework'
 import { createContext, useContext } from 'react'
 
 
 export interface SelectionOptions {
   clientRect?: DOMRect
-  $id?: string
+  $id?: ElementId
 }
 
 export type SelectFn = (options?: SelectionOptions) => Promise<unknown>
 
 export interface SelectionContextType {
+  $id: ElementId
   select: SelectFn
   close: () => void
 }

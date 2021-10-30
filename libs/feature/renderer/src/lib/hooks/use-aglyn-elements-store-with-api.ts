@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-import type { AglynComponentElementDataNormalized, ElementId } from '@aglyn/core-data-framework'
-import { getContextStore } from '@aglyn/core-data-framework'
-import type { AnyProps } from '@aglyn/shared-data-types'
+import {
+  ElementsDataStore,
+  ElementsDataStoreApi,
+  getContextStore,
+  getContextStoreApi,
+} from '@aglyn/core-data-framework'
 import { useStoreMap } from 'effector-react'
+import { useMemo } from 'react'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 
-export function useAglynElementData<P extends AnyProps>(
-  $id: ElementId,
-): AglynComponentElementDataNormalized<P> {
+export function useAglynElementsStoreWithApi(
+  state: 'present' | 'past' | 'future' = 'present',
+): { elements: ElementsDataStore[typeof state], api: ElementsDataStoreApi } {
   const {getApp} = useAglynAppContext()
-  const store = getContextStore(getApp(), {storeId: 'elements'})
-  const elementData = useStoreMap(store, (elements) => {
-    return elements['present'][$id]
-  })
-
-  return elementData
-
+  const store = getContextStore<ElementsDataStore>(getApp(), {storeId: 'elements'})
+  const api = getContextStoreApi<ElementsDataStoreApi>(getApp(), {storeId: 'elements:api'})
+  const elements = useStoreMap(store, (store) => store[state || ''])
+  return useMemo(() => {
+    return {elements, api}
+  }, [elements, api])
 }
-export default useAglynElementData
+export default useAglynElementsStoreWithApi

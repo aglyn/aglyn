@@ -76,8 +76,8 @@ export type LinealComponentOfBundle = [bundleId: BundleUId, componentId: Compone
 export type ComponentsLinealBundle = [bundleId: BundleUId]
 
 export type ComponentsLinealOrder<T extends ComponentsLinealDirectiveFlag = ComponentsLinealDirectiveFlag> = [
-  type: T,
-  definition: (LinealComponent | LinealComponentOfBundle | ComponentsLinealBundle)[]
+  directiveType: T,
+  directiveDefinition: (LinealComponent | LinealComponentOfBundle | ComponentsLinealBundle)[] | LinealComponent
 ]
 
 export type ComponentsRegistryKeys = (ComponentId | [ComponentId, BundleUId])[]
@@ -197,7 +197,7 @@ export interface TemplateSubElementData<P extends AnyProps = any> {
   props?: AnyProps
 }
 
-export interface AglynCommandsControllerOptions extends AglynModuleModelOptions {
+export interface AglynComponentsControllerOptions extends AglynModuleModelOptions {
 
 }
 
@@ -221,7 +221,7 @@ export interface AglynComponentsController extends AglynModuleModel {
 const TAG = 'AglynComponents'
 const MODULE_NAME = 'components'
 
-export class AglynComponentsController extends AglynModuleModel<AglynCommandsControllerOptions> {
+export class AglynComponentsController extends AglynModuleModel<AglynComponentsControllerOptions> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly childNs: string = MODULE_NAME
