@@ -24,10 +24,9 @@ export interface SelectionOptions {
   $id?: ElementId
 }
 
-export type SelectFn = (options?: SelectionOptions) => Promise<unknown>
+export type SelectFn = (options?: SelectionOptions) => void | Promise<unknown>
 
 export interface SelectionContextType {
-  $id: ElementId
   select: SelectFn
   close: () => void
 }

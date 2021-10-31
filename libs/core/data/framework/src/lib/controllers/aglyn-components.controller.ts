@@ -71,8 +71,6 @@ export enum ComponentsLinealDirectiveFlag {
   DISALLOW = 0x02,
 }
 
-export type LinealComponentOfBundle = [bundleId: BundleUId, componentId: ComponentId]
-export type ComponentsLinealBundle = [bundleId: BundleUId]
 export type LinealDefinition = ComponentId[]
   | { bundles?: BundleUId[], components: ComponentId[] }
   | { bundles: BundleUId[], components?: ComponentId[] }

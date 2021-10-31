@@ -21,16 +21,12 @@ import {
   memo,
   MouseEventHandler,
   ReactNode,
-  useCallback, useMemo,
+  useCallback,
+  useMemo,
   useState,
 } from 'react'
 import { SelectionComponent } from '../components/selection.component'
-import {
-  buildOptions,
-  DEFAULT_OPTIONS,
-  SelectionContext,
-  SelectionOptions,
-} from './selection-context'
+import { buildOptions, SelectionContext, SelectionOptions } from './selection-context'
 
 
 export interface SelectionContextProviderProps {
@@ -48,19 +44,16 @@ export interface SelectionContextProviderProps {
 function SelectionContextProviderRaw(props: SelectionContextProviderProps) {
   const {children, defaultOptions, component: Component} = props
   const [options, setOptions] = useState<SelectionOptions>({})
-  const [resolveReject, setResolveReject] = useState(() => [])
-  const { $id } = options
+  const [resolveReject, setResolveReject] = useState([])
 
-  const select = useCallback(
-    (options: SelectionOptions) => {
-      const opts = {...options}
-      return new Promise((resolve, reject) => {
-        setOptions(buildOptions(defaultOptions, opts))
-        setResolveReject([resolve, reject])
-      })
-    },
-    [defaultOptions],
-  )
+  const select = useCallback((opts: SelectionOptions) => {
+    return new Promise((resolve, reject) => {
+      const newOptions = buildOptions(defaultOptions, opts || {})
+
+      setOptions(newOptions)
+      setResolveReject([resolve, reject])
+    })
+  }, [defaultOptions])
 
   const close = useCallback(() => {
     setResolveReject([])
@@ -81,11 +74,11 @@ function SelectionContextProviderRaw(props: SelectionContextProviderProps) {
 
   const child = useMemo(() => {
     return (
-      <SelectionContext.Provider value={{$id, select, close}}>
+      <SelectionContext.Provider value={{select, close}}>
         {children}
       </SelectionContext.Provider>
     )
-  }, [children, $id, select, close])
+  }, [children, select, close])
 
   return (
     <Fragment>

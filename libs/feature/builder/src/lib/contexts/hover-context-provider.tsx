@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { useThrottledCallback } from '@aglyn/shared-util-vendor'
 import {
   ElementType,
   Fragment,
@@ -26,8 +25,10 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useDebouncedCallback } from 'use-debounce'
 import { HoverComponent } from '../components/hover.component'
 import { buildOptions, DEFAULT_OPTIONS, HoverContext, HoverOptions } from './hover-context'
+import { SelectionOptions } from './selection-context'
 
 
 export interface HoverContextProviderProps {
@@ -47,19 +48,26 @@ function HoverContextProviderRaw(props: HoverContextProviderProps) {
   const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
   const [resolveReject, setResolveReject] = useState(() => [])
 
-  const hover = useCallback(
-    (options: HoverOptions) => {
-      const opts = {...options}
+  const debounceHover = useDebouncedCallback(
+    (opts: SelectionOptions) => {
       return new Promise((resolve, reject) => {
-        setOptions(buildOptions(defaultOptions, opts))
+        setOptions(buildOptions(defaultOptions, opts || {}))
         setResolveReject([resolve, reject])
       })
     },
-    [defaultOptions],
+    200,
+  )
+  const debounceClose = useDebouncedCallback(
+    () => setResolveReject([]),
+    200
   )
 
+  const hover = useCallback((opts: HoverOptions) => {
+    return debounceHover(opts)
+  }, [defaultOptions])
+
   const close = useCallback(() => {
-    setResolveReject([])
+    debounceClose()
   }, [])
 
   const cancel = useCallback(() => {

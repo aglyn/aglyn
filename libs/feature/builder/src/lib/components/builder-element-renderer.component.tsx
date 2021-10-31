@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-import { useAglynElementData, ElementRendererComponent, ElementRendererComponentProps } from '@aglyn/feature-renderer'
+import {
+  ElementRendererComponent,
+  ElementRendererComponentProps,
+  useAglynElementData,
+} from '@aglyn/feature-renderer'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import { useThrottledCallback } from '@aglyn/shared-util-vendor'
-import { forwardRef, memo, useCallback } from 'react'
+import { forwardRef, useCallback } from 'react'
 import { useHoverContext } from '../contexts/hover-context'
 import { useSelectionContext } from '../contexts/selection-context'
 
@@ -31,40 +34,30 @@ const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendere
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
     const {hover, close: closeHover} = useHoverContext()
-    const {select, close: deselect, $id: selectedId} = useSelectionContext()
+    const {select, close: deselect} = useSelectionContext()
     const {confirm} = useConfirmationContext()
 
-    const handleMouseOver = useThrottledCallback(
-      useCallback((e) => {
-        e.stopPropagation()
-        const target = e.currentTarget
-        const clientRect = target?.getBoundingClientRect?.().toJSON?.()
-        if (target && clientRect) {
-          hover({clientRect, $id})
-        }
-      }, [$id]),
-      250
-    )
+    const handleMouseOver = useCallback((e) => {
+      e.stopPropagation()
+      const target = e.currentTarget
+      const clientRect = target?.getBoundingClientRect?.().toJSON?.()
+      if (target && clientRect) {
+        hover({clientRect, $id})
+      }
+    }, [$id, hover])
 
-    const handleMouseLeave = useThrottledCallback(
-      useCallback((e) => {
-        e.stopPropagation()
-        closeHover()
-      }, []),
-      250
-    )
+    const handleMouseLeave = useCallback((e) => {
+      e.stopPropagation()
+      closeHover()
+    }, [closeHover])
 
     const handleMouseDown = useCallback((e) => {
       e.stopPropagation()
-      if (selectedId === $id) {
-        deselect()
-      } else {
-        const target = e.currentTarget
-        const clientRect = target?.getBoundingClientRect?.().toJSON?.()
-        select({clientRect, $id})
-        confirm({title: 'clicked'})
-      }
-    }, [$id, selectedId])
+      const target = e.currentTarget
+      const clientRect = target?.getBoundingClientRect?.().toJSON?.()
+      select({clientRect, $id})
+      confirm({title: 'clicked'})
+    }, [$id])
 
     const {componentId, bundleId} = useAglynElementData($id)
 
@@ -82,7 +75,7 @@ const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendere
         {...rest}
       />
     )
-  }
+  },
 )
 
 BuilderElementRendererComponentRaw.displayName = 'BuilderElementRendererComponent'
