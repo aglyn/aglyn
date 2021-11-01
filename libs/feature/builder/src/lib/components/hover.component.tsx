@@ -25,14 +25,13 @@ export interface HoverComponentProps extends HTMLAttributes<HTMLDivElement> {
   options?: HoverOptions
   open?: boolean
   onClose?: (event?: Element) => void
-  hover?: boolean
-  select?: boolean
+  variant?: 'hovered' | 'selected'
 }
 
 const classKeys = generateUtilityClasses('HoverRoot', [
   'open',
   'hovered',
-  'focused',
+  'selected',
 ])
 
 const HoverRoot = styled('div', {name: 'HoverRoot'})(({theme}) => ({
@@ -52,7 +51,7 @@ const HoverRoot = styled('div', {name: 'HoverRoot'})(({theme}) => ({
     outlineColor: theme.palette.secondary.light,
     outlineStyle: 'dashed',
   },
-  [`&.${classKeys.focused}`]: {
+  [`&.${classKeys.selected}`]: {
     outlineWidth: 2,
     outlineOffset: -2,
     outlineColor: theme.palette.quaternary.main,
@@ -62,11 +61,18 @@ const HoverRoot = styled('div', {name: 'HoverRoot'})(({theme}) => ({
 
 export const HoverComponent = forwardRef<any, HoverComponentProps>(
   function RefRenderFn(props, ref) {
-    const {open, options, onClose, children, hover, select, ...rest} = props
+    const {
+      open,
+      options,
+      onClose,
+      children,
+      variant,
+      ...rest
+    } = props
     const className = clsx({
       [classKeys.open]: Boolean(open),
-      [classKeys.hovered]: Boolean(hover),
-      [classKeys.focused]: Boolean(select),
+      [classKeys.hovered]: Boolean(variant !== 'selected'),
+      [classKeys.selected]: Boolean(variant === 'selected'),
     })
     return (
       <HoverRoot

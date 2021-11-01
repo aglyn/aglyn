@@ -91,7 +91,7 @@ function HoverContextProviderRaw(props: HoverContextProviderProps) {
         open={selectedResolveReject.length === 2}
         options={selectedOptions}
         onClose={hoverDeselect}
-        select
+        variant={'selected'}
       />
     )
   }, [selectedResolveReject, selectedOptions, hoverDeselect])
@@ -102,7 +102,7 @@ function HoverContextProviderRaw(props: HoverContextProviderProps) {
         open={hoveredResolveReject.length === 2}
         options={hoveredOptions}
         onClose={hoverClose}
-        hover
+        variant={'hovered'}
       />
     )
   }, [hoveredResolveReject, hoveredOptions, hoverClose])
