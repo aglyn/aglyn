@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { ShapeOptions } from '../../vendor/mui'
 
-export const consoleShape: ShapeOptions = {
-  borderRadius: 10,
-  appIconBorderRadius: `17.544%`
-}
-export default consoleShape
+import Box, {BoxProps} from '@mui/material/Box'
+import {styled, visuallyHidden} from '@aglyn/shared-feature-themes'
+
+export const SrOnlyComponent = styled(Box)<BoxProps>({
+  ...visuallyHidden
+})
+export default SrOnlyComponent

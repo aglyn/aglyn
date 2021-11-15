@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-feature-themes'
+import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared-ui-jsx'
 import { _isStrT } from '@aglyn/shared-util-guards'
 import { _s, copy } from '@aglyn/shared-util-tools'
 import Container from '@mui/material/Container'
@@ -49,7 +49,7 @@ export interface ConsoleLayoutProps extends MainLayoutProps {
   ContentGridItemsProps?: GridItemsProps
   items?: GridItemsProps['items']
   header?: {
-    icon?: SvgPathIconProps['iconId'] | SvgPathIconProps
+    icon?: SvgPathIconProps['iconIds'] | SvgPathIconProps
     children?: React.ReactNode
   }
   aggregatedPageMeta: AggregatedPageMeta
@@ -87,7 +87,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
   }))
   const quickActionMenus: MainLayoutProps['quickActionMenus'] = [
     {
-      iconId: 'cog-outline',
+      iconIds: 'cog-outline',
       // alt: '',
       items: [
         {
@@ -121,14 +121,14 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
       {...rest}
     >
       <header>
-        <StyledNavBarSpacer/>
+        <StyledNavBarSpacer />
         <Container maxWidth={CONTENT_MAX_WIDTH}>
           <Typography component="h1" variant="h4">
             {header?.icon ? (
               <SvgPathIcon
                 color="secondary"
                 fontSize="inherit"
-                {...(_isStrT(header.icon) ? {iconId: header.icon} : header.icon)}
+                {...(_isStrT(header.icon) ? {iconIds: header.icon} : header.icon)}
                 className={clsx(
                   // classes.icon,
                   _isStrT(header.icon) ? null : header.icon.className,
@@ -137,7 +137,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
             ) : null}
             {header?.children ?? title}
           </Typography>
-          <Breadcrumbs items={breadcrumbItems}/>
+          <Breadcrumbs items={breadcrumbItems} />
         </Container>
       </header>
       <main /*className={classes.content}*/>

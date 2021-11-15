@@ -33,11 +33,19 @@ SvgPath.displayName = 'SvgPath'
 
 export default SvgPath
 
-export function svgPathElement(d: SvgPathData, passProps?: SvgPassProps) {
+export function svgPathElement(
+  d: SvgPathData,
+  passProps?: SvgPassProps,
+) {
   const {innerRef, ...rest} = {...passProps}
   return <SvgPath d={d} ref={innerRef} {...rest} />
 }
+svgPathElement.displayName = 'SvgPathElement'
 
-export function useSvgPathElement(d: SvgPathData, passProps?: SvgPassProps) {
+export function useSvgPathElement(
+  d: SvgPathData,
+  passProps?: SvgPassProps,
+) {
   return useMemo(() => svgPathElement(d, passProps), [d, passProps])
 }
+useSvgPathElement.displayName = 'UseSvgPathElement'

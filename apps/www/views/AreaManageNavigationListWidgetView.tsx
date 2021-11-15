@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AppLink, SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import { generateUtilityClasses, styled } from '@aglyn/shared-feature-themes'
+import { AppLink, SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import {
   Collapse,
   IconButton,
@@ -30,6 +30,7 @@ import React, { forwardRef } from 'react'
 import WidgetCard, { Props as WidgetCardProps } from '../components/WidgetCard'
 import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
 
+
 const classKeys = generateUtilityClasses('AreaManageNavigationListWidgetView', [
   'listItem',
   'active',
@@ -41,7 +42,7 @@ const classKeys = generateUtilityClasses('AreaManageNavigationListWidgetView', [
 
 const StyledListItem = styled(ListItemButton, {
   name: 'ListItem',
-})(({ theme }) => ({
+})(({theme}) => ({
   position: 'relative',
   [`&.${classKeys.active}`]: {
     '&:before': {
@@ -78,11 +79,9 @@ export interface AreaManageNavigationListWidgetViewProps extends Partial<WidgetC
   aggregatedPageMeta: AggregatedPageMeta
 }
 
-const AreaManageNavigationListWidgetViewRaw = forwardRef<
-  any,
-  AreaManageNavigationListWidgetViewProps
->(function RefRenderFn(props, ref) {
-  const { aggregatedPageMeta, ...rest } = props
+const AreaManageNavigationListWidgetViewRaw = forwardRef<any,
+  AreaManageNavigationListWidgetViewProps>(function RefRenderFn(props, ref) {
+  const {aggregatedPageMeta, ...rest} = props
   const {
     pathname,
     pageMeta,
@@ -91,7 +90,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     denormalizedAreaPages,
   } = aggregatedPageMeta
   const [activeCollapse, setActiveCollapse] = React.useState(
-    subArea?.id ?? pageMeta?.dynamic ? pageMeta?.parent : pageMeta?.id
+    subArea?.id ?? pageMeta?.dynamic ? pageMeta?.parent : pageMeta?.id,
   )
   const openAreaCollapse = (id) => (e) => {
     e.preventDefault()
@@ -102,7 +101,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     (item) => {
       return Boolean(activeCollapse === item?.id)
     },
-    [activeCollapse]
+    [activeCollapse],
   )
 
   const isActive = React.useCallback(
@@ -110,7 +109,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
       const path = pageMeta.dynamic ? pageMeta.parent : pathname
       return Boolean(path === item?.id)
     },
-    [pathname, pageMeta]
+    [pathname, pageMeta],
   )
 
   const isChildActive = React.useCallback(
@@ -118,7 +117,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
       const path = pageMeta.dynamic ? pageMeta.parent : pathname
       return Boolean(item.pages?.some((i) => path === i?.id))
     },
-    [pathname, pageMeta]
+    [pathname, pageMeta],
   )
 
   const getClass = (itemClass, item, topLvl = true) =>
@@ -133,7 +132,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     <WidgetCard ref={ref} {...rest}>
       <List
         subheader={
-          <ListSubheader children={'Manage Navigation'} sx={{ fontWeight: 'fontWeightMedium' }} />
+          <ListSubheader children={'Manage Navigation'} sx={{fontWeight: 'fontWeightMedium'}} />
         }
         disablePadding
       >
@@ -158,7 +157,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
                   onClick={openAreaCollapse(item?.id)}
                 >
                   <SvgPathIcon
-                    iconId={
+                    iconIds={
                       isOpen(item) || isActive(item) || isChildActive(item)
                         ? 'chevron-up'
                         : 'chevron-down'
@@ -201,6 +200,6 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
 
 AreaManageNavigationListWidgetViewRaw.displayName = 'AreaManageNavigationListWidgetView'
 export const AreaManageNavigationListWidgetView = withAggregatedPageMeta(
-  AreaManageNavigationListWidgetViewRaw
+  AreaManageNavigationListWidgetViewRaw,
 )
 export default AreaManageNavigationListWidgetView

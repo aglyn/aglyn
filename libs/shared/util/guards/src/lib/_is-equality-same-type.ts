@@ -16,24 +16,47 @@
  */
 
 
+import { _hasProperty } from './_has-property'
+
+
 export enum Equality {
   STRICT,
   LOOSE,
   DEFAULT = STRICT,
 }
 
+export interface IsEqualitySameTypeOptions {
+  truthiness?: 'strict' | 'loose'
+}
+
+type IsEqualitySameTypeRestParams<T, U extends T> =
+  | [...U[]]
+  | [...U[], IsEqualitySameTypeOptions]
+
+export function _isEqualitySameType<T, U extends T>(
+  value: T,
+  possibilities: U[],
+  options?: IsEqualitySameTypeOptions,
+): value is U
 export function _isEqualitySameType<T, U extends T>(
   value: T,
   ...possibilities: U[]
 ): value is U
 export function _isEqualitySameType<T, U extends T>(
- value: T,
- possibilities: U[],
- options?: { equality?: 'strict' | 'loose' },
+  value: T,
+  ...possibilities: IsEqualitySameTypeRestParams<T, U>
 ): value is U {
-  const {equality = Equality.DEFAULT} = {...options}
+  const _lastItem = possibilities.pop(),
+    _withOptions = _hasProperty('equality', _lastItem),
+    _options = {
+      truthiness: Equality.DEFAULT,
+      ..._withOptions ? _lastItem : undefined,
+    }
+  if(!_withOptions){
+    possibilities.push(_lastItem as U)
+  }
   return possibilities.some((possibility) => {
-    if (equality === 'loose') {
+    if (_options.truthiness === 'loose') {
       // noinspection EqualityComparisonWithCoercionJS
       return possibility == value
     }

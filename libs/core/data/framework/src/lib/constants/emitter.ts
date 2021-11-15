@@ -160,6 +160,8 @@ export enum AglynAppEffectFlag {
   COMPONENT_UNREGISTER = 'effect:components:unregister-component',
   COMPONENTS_BUNDLE_REGISTER = 'effect:components:register-components-bundle',
   COMPONENTS_BUNDLE_UNREGISTER = 'effect:components:unregister-components-bundle',
+
+  BUILDER_ = 'effect:command:trigger',
 }
 
 export type ExtensionHandleLoaderPayload = PayloadData<{ loader: AglynExtensionLoader, options?: Partial<AglynExtensionOptions> }>

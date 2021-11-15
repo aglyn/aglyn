@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { darken, styled } from '@aglyn/shared-feature-themes'
 import {
   AglynSvgLogo,
   AppLink,
@@ -24,7 +25,6 @@ import {
   Menu,
   SvgPathIcon,
 } from '@aglyn/shared-ui-jsx'
-import { darken, styled } from '@aglyn/shared-feature-themes'
 import { _isArr, _isArrEmpty, _isObj } from '@aglyn/shared-util-guards'
 import AppBar, { AppBarProps } from '@mui/material/AppBar'
 import Avatar from '@mui/material/Avatar'
@@ -45,20 +45,21 @@ import { APP, tailNavigation } from '../const'
 import { CurrentUserContextType, withCurrentUserContext } from '../contexts/current-user-context'
 import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
 
+
 const StyledLogo = styled(AglynSvgLogo, {
   name: 'AglynSvgLogo',
-})(({ theme }) => ({
+})(({theme}) => ({
   // color: '#36ca94', // Hulu
   color: theme.palette.secondary.light,
   lineHeight: '22px',
   fontSize: theme.typography.pxToRem(50),
   height: 'auto',
-  [theme.breakpoints.up('md')]: { fontSize: theme.typography.pxToRem(60) },
+  [theme.breakpoints.up('md')]: {fontSize: theme.typography.pxToRem(60)},
 }))
 
 const InnerAppBarTop = styled(AppBar, {
   name: 'InnerAppBarTop',
-})<AppBarProps<ElementType>>(({ theme }) => ({
+})<AppBarProps<ElementType>>(({theme}) => ({
   '&:after': {
     content: '" "',
     left: 0,
@@ -73,7 +74,7 @@ const InnerAppBarTop = styled(AppBar, {
 
 const TabBarTitle = styled('div', {
   name: 'TabBarTitle',
-})(({ theme }) => ({
+})(({theme}) => ({
   ...theme.typography.h6,
   paddingRight: theme.spacing(2),
   fontWeight: theme.typography.fontWeightLight,
@@ -102,7 +103,7 @@ const StyledRight = styled('div', {
 
 const StyledLogoWrapper = styled('div', {
   name: 'StyledLogoWrapper',
-})(({ theme }) => ({
+})(({theme}) => ({
   height: 36,
   flex: '0 0 auto',
   margin: theme.spacing(0.75, 0),
@@ -123,7 +124,7 @@ const StyledLogoInner = styled('span', {
 
 const StyledProductName = styled('span', {
   name: 'ProductName',
-})(({ theme }) => ({
+})(({theme}) => ({
   color: theme.palette.common.white,
   paddingLeft: theme.spacing(0.75),
   fontWeight: theme.typography.fontWeightLight,
@@ -140,7 +141,7 @@ const StyledProductName = styled('span', {
 
 const StyledTabs = styled(Tabs, {
   name: 'Tabs',
-})(({ theme }) => ({
+})(({theme}) => ({
   '& .Mui-flexContainer': {
     alignItems: 'center',
   },
@@ -165,7 +166,7 @@ const StyledTabs = styled(Tabs, {
 
 const StyledTab = styled(Tab, {
   name: 'Tab',
-})(({ theme }) => ({
+})(({theme}) => ({
   flexDirection: 'row',
   '& > *:first-child': {
     marginBottom: 0,
@@ -191,21 +192,21 @@ const StyledAvatar = styled(Avatar, {
 
 const StyledContent = styled('main', {
   name: 'Content',
-})(({ theme }) => ({
+})(({theme}) => ({
   // marginTop: theme.spacing(-6),
   marginTop: theme.mixins.toolbar.minHeight,
 }))
 
 const StyledMenu = styled(Menu, {
   name: 'Menu',
-})(({ theme }) => ({
+})(({theme}) => ({
   padding: theme.spacing(0.5, 0.25),
-  '&:last-child': { paddingLeft: theme.spacing(0.75) },
+  '&:last-child': {paddingLeft: theme.spacing(0.75)},
 }))
 
 const StyledBreadcrumbs = styled(Breadcrumbs, {
   name: 'Breadcrumbs',
-})(({ theme }) => ({
+})(({theme}) => ({
   marginTop: theme.spacing(1),
   color: darken(theme.palette.getContrastText(purple['600']), 0.12),
 
@@ -229,7 +230,7 @@ export const NAVIGATION_MAX_WIDTH = 'lg'
 export const FOOTER_MAX_WIDTH = 'lg'
 
 export interface QuickActionsMenuItem extends IconButtonProps {
-  iconId?: string
+  iconIds?: string
   avatar?: any
   dense?: boolean
   href?: any
@@ -264,21 +265,21 @@ function MainLayoutRaw(props: MainLayoutProps) {
     footerNavItems,
     quickActionMenus: quickActions,
   } = props
-  const { pageMeta, overrideMeta, pageAncestors } = aggregatedPageMeta
+  const {pageMeta, overrideMeta, pageAncestors} = aggregatedPageMeta
   const tabValue = navTabItems
     ? navTabItems
-        .filter((i) => router.asPath.includes(i.href))
-        .reduce((prev, current) => {
-          const currentHref = (_isObj(current.href) ? current.href.path : current.href) as string
-          const prevHref = (_isObj(prev.href) ? prev.href.path : prev.href) as string
+  .filter((i) => router.asPath.includes(i.href))
+  .reduce((prev, current) => {
+    const currentHref = (_isObj(current.href) ? current.href.paths : current.href) as string
+    const prevHref = (_isObj(prev.href) ? prev.href.paths : prev.href) as string
 
-          return currentHref.length > prevHref.length ? current : prev
-        }).href ?? ''
+    return currentHref.length > prevHref.length ? current : prev
+  }).href ?? ''
     : ''
 
-  const buildIconButton = ({ avatar, iconId, children, ...rest }, i) => (
+  const buildIconButton = ({avatar, iconId, children, ...rest}, i) => (
     <IconButton key={rest.id ?? rest['href'] ?? i} color="inherit" {...rest}>
-      {avatar ? <StyledAvatar {...avatar} /> : iconId && <SvgPathIcon iconId={iconId} />}
+      {avatar ? <StyledAvatar {...avatar} /> : iconId && <SvgPathIcon iconIds={iconId} />}
       {children}
     </IconButton>
   )
@@ -288,7 +289,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
       key={key}
       linkType="button"
       color="inherit"
-      sx={{ p: item?.avatar ? 0.5 : undefined }}
+      sx={{p: item?.avatar ? 0.5 : undefined}}
       {...item}
     />
   )
@@ -342,22 +343,22 @@ function MainLayoutRaw(props: MainLayoutProps) {
               >
                 {tabBarTitle && <TabBarTitle children={tabBarTitle} />}
                 {navTabItems &&
-                  navTabItems.map(({ iconId, ...item }, i) => (
-                    <StyledTab
-                      key={item.id ?? item['key'] ?? i}
-                      // disableRipple
-                      color="inherit"
-                      component={AppLink}
-                      href={item.href ?? ''}
-                      icon={<SvgPathIcon iconId={iconId} />}
-                      label={item.label}
-                      underline="none"
-                      value={item.href ?? i}
-                      wrapped
-                      {...a11yProps(i)}
-                      {...item}
-                    />
-                  ))}
+                navTabItems.map(({iconId, ...item}, i) => (
+                  <StyledTab
+                    key={item.id ?? item['key'] ?? i}
+                    // disableRipple
+                    color="inherit"
+                    component={AppLink}
+                    href={item.href ?? ''}
+                    icon={<SvgPathIcon iconIds={iconId} />}
+                    label={item.label}
+                    underline="none"
+                    value={item.href ?? i}
+                    wrapped
+                    {...a11yProps(i)}
+                    {...item}
+                  />
+                ))}
               </StyledTabs>
             </Container>
           </AppBar>

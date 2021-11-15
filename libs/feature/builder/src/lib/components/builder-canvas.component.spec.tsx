@@ -14,10 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { ShapeOptions } from '../../vendor/mui'
 
-export const consoleShape: ShapeOptions = {
-  borderRadius: 10,
-  appIconBorderRadius: `17.544%`
-}
-export default consoleShape
+import { render } from '@testing-library/react'
+
+import BuilderCanvasComponent from './builder-canvas.component'
+
+
+describe('BuilderCanvasComponent', () => {
+  it('should render successfully', () => {
+    const {baseElement} = render(<BuilderCanvasComponent />)
+    expect(baseElement).toBeTruthy()
+  })
+})

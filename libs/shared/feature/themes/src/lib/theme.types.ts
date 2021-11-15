@@ -15,13 +15,9 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
-
-import BuilderCanvasRendererComponent from './builder-canvas-renderer.component'
-
-describe('BuilderCanvasRendererComponent', () => {
-  it('should render successfully', () => {
-    const { baseElement } = render(<BuilderCanvasRendererComponent />)
-    expect(baseElement).toBeTruthy()
-  })
-})
+export interface TypeActionSvgState {
+  default: string
+  hover: string
+  active: string
+  focus: string
+}

@@ -14,10 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { ShapeOptions } from '../../vendor/mui'
+import { Theme, Shadows } from '../../vendor/mui'
 
-export const consoleShape: ShapeOptions = {
-  borderRadius: 10,
-  appIconBorderRadius: `17.544%`
+
+export function createInsetShadows<K extends number>(theme: Theme): Theme {
+  const insetShadows: Shadows = theme.insetShadows ??= [] as unknown as Shadows
+
+  for (const shadow of theme.shadows) {
+    if (shadow === 'none') {
+      insetShadows.push(shadow)
+      continue
+    }
+    insetShadows.push(`inset ${shadow.split('),').join('),inset ')}`)
+  }
+  return theme
 }
-export default consoleShape
+export default createInsetShadows

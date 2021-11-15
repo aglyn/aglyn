@@ -144,7 +144,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
             item={item}
             label={item.name}
             onActionClick={handleItemClick}
-            preview={<SvgPathIcon iconId={item.id}/>}
+            preview={<SvgPathIcon iconIds={item.id}/>}
             selected={isSelected}
           />
         )
@@ -158,7 +158,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
           <Grid spacing={2} container item>
             <Grid className={classes.preview} item>
               <ButtonBase className={classes.button} onClick={handleButtonClick} disableRipple>
-                <SvgPathIcon className={classes.icon} fontSize="inherit" iconId={value}/>
+                <SvgPathIcon className={classes.icon} fontSize="inherit" iconIds={value}/>
               </ButtonBase>
             </Grid>
             <Grid item sm>
@@ -175,7 +175,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
                 </span>
                 <SvgPathIcon
                   className={classes.icon}
-                  iconId={open ? 'chevron-up' : 'chevron-down'}
+                  iconIds={open ? 'chevron-up' : 'chevron-down'}
                 />
               </ButtonBase>
             </Grid>

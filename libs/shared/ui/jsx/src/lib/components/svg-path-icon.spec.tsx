@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import React from 'react'
 import { render } from '@testing-library/react'
+import React from 'react'
 
 import SvgPathIcon from './svg-path-icon'
 
+
 describe('SvgPathIcon', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<SvgPathIcon iconId={'help'} />)
+    const {baseElement} = render(<SvgPathIcon iconIds={'help'} />)
     expect(baseElement).toBeTruthy()
   })
 })

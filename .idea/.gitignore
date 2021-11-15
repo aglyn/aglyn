@@ -10,3 +10,4 @@
 !file.template.settings.xml
 !runConfigurations/
 !settingBackups/
+!etc/

@@ -85,7 +85,7 @@ function FieldObject(props: Props) {
     GridItemProps: {xs: 12},
     component: Components.Elements.byKey.Button,
     variant: 'outlined',
-    startIcon: <SvgPathIcon iconId="plus"/>,
+    startIcon: <SvgPathIcon iconIds="plus"/>,
     children: 'Add',
     onClick: (e) => {
       console.log('click')

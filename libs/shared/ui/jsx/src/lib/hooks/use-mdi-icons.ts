@@ -21,6 +21,7 @@ import { _isArr } from '@aglyn/shared-util-guards'
 import { FindWithFuzzy } from '@aglyn/shared-util-vendor'
 import { useCallback, useMemo, useState } from 'react'
 
+
 export type MdiIcon = {
   id: string
   name: string
@@ -48,13 +49,13 @@ export function useMemoizedMdiIcons(iconIds?: string[]): (MdiIcon | null)[] {
         return !icon
           ? null
           : {
-              id,
-              name: icon.name,
-              path: icon.path,
-              aliases: Object.keys(icon.alias).filter((i) => icon.alias[i] === true),
-            }
+            id,
+            name: icon.name,
+            path: icon.paths,
+            aliases: Object.keys(icon.alias).filter((i) => icon.alias[i] === true),
+          }
       }),
-    [ids]
+    [ids],
   )
 }
 
@@ -62,7 +63,7 @@ const defaultKeys = ['id', 'name', 'aliases']
 
 export function useMdiIcons(initialQuery?: string, opts?: FilterOpts): UseMdiIconsReturn {
   const allIcons = useMemoizedMdiIcons()
-  const options = { keys: opts?.keys ?? defaultKeys }
+  const options = {keys: opts?.keys ?? defaultKeys}
   const fuzzy = new FindWithFuzzy(allIcons, options)
   const searchItems = (query: string) => fuzzy.search(query ?? '').map((i) => i.item)
   const [query, setQuery] = useState(initialQuery ?? '')
@@ -73,7 +74,7 @@ export function useMdiIcons(initialQuery?: string, opts?: FilterOpts): UseMdiIco
   const applyFilter: ApplyFilterFn = useCallback((query: string) => setQuery(query), [])
   const clearFilter: ClearFilterFn = useCallback(() => setQuery(''), [])
 
-  return useMemo(() => [filteredIcons, { applyFilter, clearFilter }, mdiIcons], [filteredIcons])
+  return useMemo(() => [filteredIcons, {applyFilter, clearFilter}, mdiIcons], [filteredIcons])
 }
 
 export default useMdiIcons

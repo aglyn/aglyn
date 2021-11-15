@@ -14,10 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { ShapeOptions } from '../../vendor/mui'
+import { Shadows } from '../../vendor/mui'
 
-export const consoleShape: ShapeOptions = {
-  borderRadius: 10,
-  appIconBorderRadius: `17.544%`
+export const consoleShadows: Shadows = {
+
 }
-export default consoleShape
+export default consoleShadows

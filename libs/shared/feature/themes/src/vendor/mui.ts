@@ -74,8 +74,7 @@ import {
 // import { Mixins, MixinsOptions } from '@mui/material/styles/createMixins'
 // import { Typography, TypographyOptions } from '@mui/material/styles/createTypography'
 // import { ResponsiveFontSizesOptions } from '@mui/material/styles/responsiveFontSizes'
-// import { Shadows } from '@mui/material/styles/shadows'
-// import { ZIndex, ZIndexOptions } from '@mui/material/styles/zIndex'
+import { Shadows } from '@mui/material/styles/shadows'
 import {
   BaseCreateCSSProperties,
   BaseCSSProperties,
@@ -104,7 +103,7 @@ import {
   withThemeCreator,
   WithThemeCreatorOption,
 } from '@mui/styles'
-import { ClassKeyInferable } from '@mui/styles/withStyles'
+import type { ClassKeyInferable } from '@mui/styles/withStyles'
 import type {
   FilteringStyledOptions,
   MuiStyledOptions,
@@ -114,7 +113,10 @@ import type {
   StyledComponent,
   SxProps,
 } from '@mui/system'
+import { Shape } from '@mui/system/createTheme/shape'
+import { visuallyHidden } from '@mui/utils'
 import type { ElementType } from 'react'
+import { TypeActionSvgState } from '../lib/theme.types'
 
 
 type StyledOptions<P = any, FP extends keyof P = keyof P> = FilteringStyledOptions<P, FP> & MuiStyledOptions
@@ -195,35 +197,25 @@ declare module '@mui/material/styles' {
   interface Palette {
     tertiary: Palette['primary']
     quaternary: Palette['primary']
-    svgBg?: {
-      base: string
-      active: string
-    }
-    svgFilled?: {
-      base: string
-      active: string
-    }
-    svgStroke?: {
-      base: string
-      active: string
-    }
+    svgBg?: TypeActionSvgState
+    svgFilled?: TypeActionSvgState
+    svgStroke?: TypeActionSvgState
+    background: Palette['background']
+    text: Palette['text']
   }
 
   interface PaletteOptions {
-    tertiary: PaletteOptions['primary']
-    quaternary: PaletteOptions['primary']
-    svgBg?: {
-      base: string
-      active: string
-    }
-    svgFilled?: {
-      base: string
-      active: string
-    }
-    svgStroke?: {
-      base: string
-      active: string
-    }
+    tertiary?: PaletteOptions['primary']
+    quaternary?: PaletteOptions['primary']
+    svgBg?: TypeActionSvgState
+    svgFilled?: TypeActionSvgState
+    svgStroke?: TypeActionSvgState
+    background?: PaletteOptions['background']
+  }
+
+  interface Theme {
+    insetShadows: Shadows
+    shape: Shape & {appIconBorderRadius: number | string}
   }
 
   type ExtendPropsOfWithStyles<P extends { classes?: ClassNameMap<string> },
@@ -265,7 +257,7 @@ export type {
   PaletteColorOptions,
   PaletteOptions,
   // ResponsiveFontSizesOptions,
-  // Shadows,
+  Shadows,
   SimplePaletteColorOptions,
   ShapeOptions,
   Spacing,
@@ -333,4 +325,8 @@ export {
   withStyles,
   // withTheme,
   withThemeCreator,
+}
+
+export {
+  visuallyHidden,
 }

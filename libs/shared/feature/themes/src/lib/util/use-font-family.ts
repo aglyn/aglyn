@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import { systemFont } from '../constants'
+import { FALLBACK_FONT_FAMILY } from '../constants'
+
 
 export function useFontFamily(family: string): string {
-  return [family, ...systemFont].join(',')
+  return [family, ...FALLBACK_FONT_FAMILY].join(',')
 }
 export default useFontFamily

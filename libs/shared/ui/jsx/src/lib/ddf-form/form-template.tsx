@@ -50,7 +50,7 @@ export const GridFormTemplate = forwardRef<any, GridFormTemplateProps>(function 
               <Button
                 color="secondary"
                 disabled={submitting || !valid}
-                startIcon={<SvgPathIcon iconId="content-save"/>}
+                startIcon={<SvgPathIcon iconIds="content-save" />}
                 style={{marginRight: 8}}
                 type="submit"
                 variant="contained"

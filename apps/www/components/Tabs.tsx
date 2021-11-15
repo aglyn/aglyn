@@ -86,8 +86,8 @@ export default function Tabs() {
           variant="scrollable"
           onChange={handleChange}
         >
-          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconId="home" />} />
-          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconId="eye" />} />
+          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconIds="home" />} />
+          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconIds="eye" />} />
           {/* <MuiTab label="Item Two" {...a11yProps(2)} />
            <MuiTab label="Item Three" {...a11yProps(3)} /> */}
         </MuiTabs>
@@ -104,7 +104,7 @@ export default function Tabs() {
               children: (
                 <div align="center">
                   <div>
-                    <SvgPathIcon fontSize="large" iconId="file-document-multiple" />
+                    <SvgPathIcon fontSize="large" iconIds="file-document-multiple" />
                   </div>
                   <div>Entries</div>
                 </div>
@@ -126,7 +126,7 @@ export default function Tabs() {
               children: (
                 <div align="center">
                   <div>
-                    <SvgPathIcon fontSize="large" iconId="variable" />
+                    <SvgPathIcon fontSize="large" iconIds="variable" />
                   </div>
                   <div>Fields</div>
                 </div>
@@ -141,7 +141,7 @@ export default function Tabs() {
               children: (
                 <div align="center">
                   <div>
-                    <SvgPathIcon fontSize="large" iconId="check-network" />
+                    <SvgPathIcon fontSize="large" iconIds="check-network" />
                   </div>
                   <div>Rules</div>
                 </div>
@@ -156,7 +156,7 @@ export default function Tabs() {
               children: (
                 <div align="center">
                   <div>
-                    <SvgPathIcon fontSize="large" iconId="chart-sankey-variant" />
+                    <SvgPathIcon fontSize="large" iconIds="chart-sankey-variant" />
                   </div>
                   <div>Workflows</div>
                 </div>

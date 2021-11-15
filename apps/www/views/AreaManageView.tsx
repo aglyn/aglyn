@@ -227,12 +227,12 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
                   action: (
                     <Fragment>
                       <IconButton
-                        children={<SvgPathIcon iconId="filter-variant" />}
+                        children={<SvgPathIcon iconIds="filter-variant" />}
                         title="Filter list"
                         disabled
                       />
                       <IconButton
-                        children={<SvgPathIcon iconId="plus" />}
+                        children={<SvgPathIcon iconIds="plus" />}
                         title="Add item"
                         onClick={handleCreateDocumentFormOpen}
                       />

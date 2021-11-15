@@ -130,7 +130,7 @@ export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawer
     const appBarLeft = (
       <Fragment>
         <IconButton
-          children={<SvgPathIcon iconId="close"/>}
+          children={<SvgPathIcon iconIds="close" />}
           color="inherit"
           edge="start"
           onClick={handleDrawerCancel}
@@ -147,7 +147,7 @@ export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawer
 
     const appBarRight = {
       'edit-element-traits': (
-        <Button color="inherit" onClick={handleDrawerCancel} children="Cancel"/>
+        <Button color="inherit" onClick={handleDrawerCancel} children="Cancel" />
       ),
     }
 
@@ -163,7 +163,7 @@ export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawer
                 <SvgPathIcon
                   sx={{fontSize: '4.17em'}}
                   color="primary"
-                  iconId={item.icon}
+                  iconIds={item.icon}
                 />
               ) : (
                 item.icon

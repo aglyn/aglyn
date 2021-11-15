@@ -39,7 +39,7 @@ export function Index() {
     <StyledPage>
       <h2>Resources &amp; Tools</h2>
       <p>Thank you for using and showing some ♥ for Nx.</p>
-      <SvgPathIcon iconId={'bug'}/>
+      <SvgPathIcon iconIds={'bug'} />
       <GridButtons
         items={[
           {

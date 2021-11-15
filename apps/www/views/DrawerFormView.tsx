@@ -89,7 +89,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn
       appBarLeft={
         <React.Fragment>
           <IconButton
-            children={<SvgPathIcon iconId="close" />}
+            children={<SvgPathIcon iconIds="close" />}
             className={classes.closeButton}
             color="default"
             edge="start"

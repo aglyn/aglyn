@@ -40,12 +40,12 @@ export const navigationItems = [
 
 export const tabItems = [
   {
-    iconId: 'home',
+    iconIds: 'home',
     label: 'Dashboard',
     href: '/',
   },
   {
-    iconId: 'vector-polyline-edit',
+    iconIds: 'vector-polyline-edit',
     label: 'Manage',
     href: '/manage',
   },
@@ -53,8 +53,8 @@ export const tabItems = [
 
 export const quickActions = [
   {
-    iconId: 'cog-outline',
-    alt: ''
+    iconIds: 'cog-outline',
+    alt: '',
   },
   {
     title: 'Your Account',
@@ -64,10 +64,10 @@ export const quickActions = [
     },
     items: [
       {
-        children: 'Option 1'
-      }
-    ]
-  }
+        children: 'Option 1',
+      },
+    ],
+  },
 ]
 
 export const footerItems = [

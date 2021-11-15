@@ -18,11 +18,12 @@
 import { render } from '@testing-library/react'
 import React from 'react'
 
-import { BuilderToolbarComponent } from './builder-toolbar.component'
+import { BuilderAppbarModifyComponent } from './builder-appbar-modify.component'
+
 
 describe('BuilderToolbarComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<BuilderToolbarComponent />)
+    const {baseElement} = render(<BuilderAppbarModifyComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

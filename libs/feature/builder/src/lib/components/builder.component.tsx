@@ -23,13 +23,11 @@ import {
 } from '@aglyn/feature-renderer'
 import { consoleTheme, withTheme } from '@aglyn/shared-feature-themes'
 import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
-import Box from '@mui/material/Box'
 import NoSsr from '@mui/material/NoSsr'
 import { forwardRef, Fragment, useCallback } from 'react'
 import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
 import HoverContextProvider from '../contexts/hover-context-provider'
-import { BuilderCanvasRendererComponent } from './builder-canvas-renderer.component'
-import { BuilderToolbarComponent } from './builder-toolbar.component'
+import BuilderEditorComponent from './builder-editor.component'
 
 
 export interface BuilderComponentProps extends OverrideableComponentProps {
@@ -61,12 +59,12 @@ const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(function RefR
             <ConfirmationProviderComponent>
               <HoverContextProvider>
                 <ComponentsDrawerContextProvider>
-                  <Box ref={ref} id="aglyn:builder" {...rest}>
-                    <BuilderToolbarComponent id="aglyn:builder-toolbar">
-                      <BuilderCanvasRendererComponent/>
-                    </BuilderToolbarComponent>
 
-                  </Box>
+                  <BuilderEditorComponent
+                    ref={ref}
+                    {...rest}
+                  />
+
                 </ComponentsDrawerContextProvider>
               </HoverContextProvider>
             </ConfirmationProviderComponent>
@@ -79,10 +77,7 @@ const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(function RefR
 })
 
 BuilderComponentRaw.displayName = 'BuilderComponent'
-BuilderComponentRaw.defaultProps = {
-  component: 'div',
-  elements: [],
-}
+BuilderComponentRaw.defaultProps = {}
 
 export const BuilderComponent = withTheme({theme: consoleTheme})(BuilderComponentRaw)
 
