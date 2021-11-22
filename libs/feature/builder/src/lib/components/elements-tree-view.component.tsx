@@ -42,11 +42,11 @@ const CanvasElementTreeItemComponent = forwardRef<any, CanvasElementTreeItemComp
   },
 )
 
-export interface ComponentLayersComponentProps extends Partial<SingleSelectTreeViewProps> {
+export interface ElementsTreeViewComponentProps extends Partial<SingleSelectTreeViewProps> {
 
 }
 
-export const CanvasElementsTreeViewComponent = forwardRef<any, ComponentLayersComponentProps>(
+export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       children,
@@ -74,7 +74,7 @@ export const CanvasElementsTreeViewComponent = forwardRef<any, ComponentLayersCo
   },
 )
 
-CanvasElementsTreeViewComponent.displayName = 'CanvasElementsTreeViewComponent'
-CanvasElementsTreeViewComponent.defaultProps = {}
+ElementsTreeViewComponent.displayName = 'ElementsTreeViewComponent'
+ElementsTreeViewComponent.defaultProps = {}
 
-export default CanvasElementsTreeViewComponent
+export default ElementsTreeViewComponent

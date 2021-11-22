@@ -27,7 +27,7 @@ import { DndContext } from '@dnd-kit/core'
 import NoSsr from '@mui/material/NoSsr'
 import { forwardRef, Fragment, useCallback } from 'react'
 import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
-import BuilderEditorComponent from './builder-editor.component'
+import EditorComponent from './editor.component'
 
 
 export interface BuilderComponentProps extends OverrideableComponentProps {
@@ -67,7 +67,7 @@ const BuilderComponentRaw = forwardRef<any, BuilderComponentProps>(function RefR
               <ConfirmationProviderComponent>
                 <ComponentsDrawerContextProvider>
 
-                  <BuilderEditorComponent
+                  <EditorComponent
                     ref={ref}
                     {...rest}
                   />

@@ -43,7 +43,6 @@ import { forwardRef, memo, MouseEvent, useCallback } from 'react'
 import { useAglynBuilderStore } from '../../../../renderer/src/lib/hooks/use-aglyn-builder-store'
 import useAglynElementHistory from '../../../../renderer/src/lib/hooks/use-aglyn-elements-history'
 import { useElementDrawerContext } from '../contexts/element-drawer-context'
-import { useHoverContext } from '../contexts/hover-context'
 
 
 const StyledModifyAppBar = styled(AppBar, {name: 'StyledModifyAppBar'})({
@@ -88,9 +87,9 @@ const HistoryControls = memo(() => {
   )
 })
 
-export interface BuilderToolbarComponentProps extends Partial<AppBarProps> {}
+export interface AppBarModifyComponentProps extends Partial<AppBarProps> {}
 
-export const BuilderAppbarModifyComponent = forwardRef<any, BuilderToolbarComponentProps>(
+export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
@@ -101,7 +100,7 @@ export const BuilderAppbarModifyComponent = forwardRef<any, BuilderToolbarCompon
     const {
       parentId: selectedParentId,
       index: selectedIndex,
-      parentElements: selectedParentElements
+      parentElements: selectedParentElements,
     } = useAglynElementParentPosition(selectedId) || {}
 
     const handleFabClick = useCallback(async () => {
@@ -249,7 +248,7 @@ export const BuilderAppbarModifyComponent = forwardRef<any, BuilderToolbarCompon
   },
 )
 
-BuilderAppbarModifyComponent.displayName = 'BuilderAppbarModifyComponent'
-BuilderAppbarModifyComponent.defaultProps = {}
+AppBarModifyComponent.displayName = 'AppBarModifyComponent'
+AppBarModifyComponent.defaultProps = {}
 
-export default BuilderAppbarModifyComponent
+export default AppBarModifyComponent

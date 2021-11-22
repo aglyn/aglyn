@@ -18,10 +18,10 @@
 import { styled } from '@aglyn/shared-feature-themes'
 import Stack, { StackProps } from '@mui/material/Stack'
 import { forwardRef } from 'react'
-import { BuilderAppbarGlobalComponent } from './builder-appbar-global.component'
-import { BuilderAppbarModifyComponent } from './builder-appbar-modify.component'
-import { BuilderToolboxLeftComponent } from './builder-toolbox-left.component'
-import { BuilderViewportComponent } from './builder-viewport.component'
+import { AppBarGlobalComponent } from './app-bar-global.component'
+import { AppBarModifyComponent } from './app-bar-modify.component'
+import { ToolboxLeftComponent } from './toolbox-left.component'
+import { ViewportRootComponent } from './viewport-root.component'
 
 
 const BuilderContainer = styled(Stack, {name: 'BuilderContainer'})({
@@ -31,11 +31,11 @@ const BuilderContainer = styled(Stack, {name: 'BuilderContainer'})({
   overflow: 'hidden',
 })
 
-export interface BuilderEditorComponentProps extends StackProps {
+export interface EditorComponentProps extends StackProps {
 
 }
 
-export const BuilderEditorComponent = forwardRef<any, BuilderEditorComponentProps>(
+export const EditorComponent = forwardRef<any, EditorComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
@@ -57,11 +57,11 @@ export const BuilderEditorComponent = forwardRef<any, BuilderEditorComponentProp
           alignItems="stretch"
           spacing={0}
         >
-          <BuilderAppbarGlobalComponent
+          <AppBarGlobalComponent
             id="aglyn:builder-appbar-global"
             aria-label="builder application toolbar global"
           />
-          <BuilderAppbarModifyComponent
+          <AppBarModifyComponent
             id="aglyn:builder-appbar-modify"
             aria-label="builder application modifier toolbar"
           />
@@ -75,12 +75,12 @@ export const BuilderEditorComponent = forwardRef<any, BuilderEditorComponentProp
           spacing={0}
           sx={{overflowY: 'auto', overflowX: 'hidden'}}
         >
-          <BuilderToolboxLeftComponent
+          <ToolboxLeftComponent
             id="aglyn:builder-toolbox-left"
             aria-label="builder toolbox left"
           />
 
-          <BuilderViewportComponent
+          <ViewportRootComponent
             id="aglyn:builder-viewport"
             aria-label="builder viewport"
             direction="column"
@@ -95,7 +95,7 @@ export const BuilderEditorComponent = forwardRef<any, BuilderEditorComponentProp
   },
 )
 
-BuilderEditorComponent.displayName = 'BuilderEditorComponent'
-BuilderEditorComponent.defaultProps = {}
+EditorComponent.displayName = 'EditorComponent'
+EditorComponent.defaultProps = {}
 
-export default BuilderEditorComponent
+export default EditorComponent

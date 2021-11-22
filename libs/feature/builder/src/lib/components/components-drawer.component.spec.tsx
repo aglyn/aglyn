@@ -18,11 +18,12 @@
 import { render } from '@testing-library/react'
 import React from 'react'
 
-import { BuilderComponentsDrawerComponent } from './builder-components-drawer.component'
+import { ComponentsDrawerComponent } from './components-drawer.component'
+
 
 describe('BuilderComponentsDrawerComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<BuilderComponentsDrawerComponent />)
+    const {baseElement} = render(<ComponentsDrawerComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

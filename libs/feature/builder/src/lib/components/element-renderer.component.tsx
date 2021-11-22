@@ -17,10 +17,10 @@
 
 import { InteractionModeFlag } from '@aglyn/core-data-framework'
 import {
-  useAglynComponentSchema,
-  ElementRendererComponent,
-  ElementRendererComponentProps,
+  ElementRendererComponent as DefaultElementRendererComponent,
+  ElementRendererComponentProps as DefaultElementRendererComponentProps,
   useAglynBuilderStore,
+  useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/feature-renderer'
 import { useCombinedRefs } from '@aglyn/shared-ui-jsx'
@@ -32,11 +32,11 @@ import { forwardRef, Fragment, MouseEvent, useCallback, useRef } from 'react'
 import { ActivityContext, useHoverContext } from '../contexts/hover-context'
 
 
-export interface BuilderElementRendererComponentProps extends ElementRendererComponentProps {
+export interface ElementRendererComponentProps extends DefaultElementRendererComponentProps {
   [prop: string]: any
 }
 
-const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendererComponentProps>(
+const ElementRendererComponentRaw = forwardRef<any, ElementRendererComponentProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
     const localRef = useRef()
@@ -53,14 +53,14 @@ const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendere
       id: $id,
       data: {
         componentId, bundleId,
-        hierarchy: componentSchema?.renderFlags?.hierarchy
+        hierarchy: componentSchema?.renderFlags?.hierarchy,
       },
     })
     const {setNodeRef: dragRef, listeners, attributes, transform, isDragging} = useDraggable({
       id: $id,
       data: {
         componentId, bundleId,
-        hierarchy: componentSchema?.renderFlags?.hierarchy
+        hierarchy: componentSchema?.renderFlags?.hierarchy,
       },
     })
     const {onPointerDown, ...dragListeners} = listeners
@@ -130,13 +130,13 @@ const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendere
 
     return (
       <Fragment>
-        <ElementRendererComponent
+        <DefaultElementRendererComponent
           ref={useCombinedRefs(ref, localRef, dropRef, dragRef)}
           $id={$id}
           data-aglyn-element-id={$id}
           data-aglyn-component-id={componentId}
           data-aglyn-bundle-id={bundleId}
-          elementRendererComponent={BuilderElementRendererComponent}
+          elementRendererComponent={ElementRendererComponent}
           style={style}
           onMouseOver={handleMouseOver}
           onMouseOut={handleMouseLeave}
@@ -156,8 +156,8 @@ const BuilderElementRendererComponentRaw = forwardRef<any, BuilderElementRendere
   },
 )
 
-BuilderElementRendererComponentRaw.displayName = 'BuilderElementRendererComponent'
-BuilderElementRendererComponentRaw.defaultProps = {}
+ElementRendererComponentRaw.displayName = 'ElementRendererComponent'
+ElementRendererComponentRaw.defaultProps = {}
 
-export const BuilderElementRendererComponent = BuilderElementRendererComponentRaw
-export default BuilderElementRendererComponent
+export const ElementRendererComponent = ElementRendererComponentRaw
+export default ElementRendererComponent

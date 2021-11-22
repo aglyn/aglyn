@@ -18,15 +18,16 @@
 import { ElementComponentsContext } from '@aglyn/feature-renderer'
 import { ElementType, Fragment, ReactNode, useCallback, useState } from 'react'
 import {
-  BuilderComponentsDrawerComponent,
+  ComponentsDrawerComponent,
   ComponentsDrawerComponentProps,
-} from '../components/builder-components-drawer.component'
+} from '../components/components-drawer.component'
 import {
   buildOptions,
   DEFAULT_OPTIONS,
   ElementDrawerContext,
   ElementDrawerOptions,
 } from './element-drawer-context'
+
 
 export interface ElementDrawerContextProviderProps extends Partial<ComponentsDrawerComponentProps> {
   defaultOptions?: ElementDrawerOptions
@@ -35,9 +36,9 @@ export interface ElementDrawerContextProviderProps extends Partial<ComponentsDra
 }
 
 export function ComponentsDrawerContextProvider(props: ElementDrawerContextProviderProps) {
-  const { children, defaultOptions = {}, component, ...rest } = props
-  const Component = component || BuilderComponentsDrawerComponent
-  const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...defaultOptions })
+  const {children, defaultOptions = {}, component, ...rest} = props
+  const Component = component || ComponentsDrawerComponent
+  const [options, setOptions] = useState({...DEFAULT_OPTIONS, ...defaultOptions})
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
   const open = Boolean(resolveReject.length === 2)
@@ -49,7 +50,7 @@ export function ComponentsDrawerContextProvider(props: ElementDrawerContextProvi
         setResolveReject([resolve, reject])
       })
     },
-    [defaultOptions]
+    [defaultOptions],
   )
 
   const handleClose = useCallback((e, reason) => {
@@ -58,27 +59,27 @@ export function ComponentsDrawerContextProvider(props: ElementDrawerContextProvi
 
   const handleCancel = useCallback(
     (e, reason) => {
-      reject({ reason })
+      reject({reason})
       handleClose(e, reason)
     },
-    [reject, handleClose]
+    [reject, handleClose],
   )
 
   const handleConfirm = useCallback(
     (e, item) => {
-      resolve({ option: item })
+      resolve({option: item})
       handleClose(e, 'resolved')
     },
-    [resolve, handleClose, resolveReject]
+    [resolve, handleClose, resolveReject],
   )
 
   return (
     <Fragment>
-      <ElementDrawerContext.Provider value={{ elementDrawer }}>
+      <ElementDrawerContext.Provider value={{elementDrawer}}>
         {children}
       </ElementDrawerContext.Provider>
       <ElementComponentsContext.Consumer>
-        {({ templateBlocks }) => (
+        {({templateBlocks}) => (
           <Component
             open={open}
             options={options}

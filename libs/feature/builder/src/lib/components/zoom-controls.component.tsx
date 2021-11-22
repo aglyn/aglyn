@@ -44,7 +44,7 @@ const ZoomControlContainer = styled('div', {name: 'ZoomControlContainer'})(({the
   },
 }))
 
-export interface BuilderZoomControlsComponentProps extends HTMLAttributes<HTMLDivElement> {
+export interface ZoomControlsComponentProps extends HTMLAttributes<HTMLDivElement> {
   disableZoomResetButton?: boolean
   disableZoomDecreaseButton?: boolean
   disableZoomIncreaseButton?: boolean
@@ -53,7 +53,7 @@ export interface BuilderZoomControlsComponentProps extends HTMLAttributes<HTMLDi
   onZoomIncrease?: EventHandler<any>
 }
 
-export const BuilderZoomControlsComponent = forwardRef<any, BuilderZoomControlsComponentProps>(
+export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       disableZoomResetButton,
@@ -153,7 +153,7 @@ export const BuilderZoomControlsComponent = forwardRef<any, BuilderZoomControlsC
   },
 )
 
-BuilderZoomControlsComponent.displayName = 'BuilderZoomControlsComponent'
-BuilderZoomControlsComponent.defaultProps = {}
+ZoomControlsComponent.displayName = 'ZoomControlsComponent'
+ZoomControlsComponent.defaultProps = {}
 
-export default BuilderZoomControlsComponent
+export default ZoomControlsComponent

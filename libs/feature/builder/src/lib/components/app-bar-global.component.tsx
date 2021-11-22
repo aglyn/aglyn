@@ -28,9 +28,9 @@ const StyledGlobalAppBar = styled(AppBar, {name: 'StyledGlobalAppBar'})({
   top: 0,
 })
 
-export interface BuilderAppBarComponentProps extends Partial<AppBarProps> {}
+export interface AppBarGlobalComponentProps extends Partial<AppBarProps> {}
 
-export const BuilderAppbarGlobalComponent = forwardRef<any, BuilderAppBarComponentProps>(
+export const AppBarGlobalComponent = forwardRef<any, AppBarGlobalComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
@@ -55,7 +55,7 @@ export const BuilderAppbarGlobalComponent = forwardRef<any, BuilderAppBarCompone
   },
 )
 
-BuilderAppbarGlobalComponent.displayName = 'BuilderAppbarGlobalComponent'
-BuilderAppbarGlobalComponent.defaultProps = {}
+AppBarGlobalComponent.displayName = 'AppBarGlobalComponent'
+AppBarGlobalComponent.defaultProps = {}
 
-export default BuilderAppbarGlobalComponent
+export default AppBarGlobalComponent

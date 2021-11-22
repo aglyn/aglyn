@@ -19,10 +19,10 @@ import { CanvasRendererComponent } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { forwardRef, HTMLAttributes } from 'react'
 import { HoverContextProvider } from '../contexts/hover-context-provider'
-import { BuilderElementRendererComponent } from './builder-element-renderer.component'
+import { ElementRendererComponent } from './element-renderer.component'
 
 
-const BuilderFrameContainer = styled('div', {name: 'BuilderFrameContainer'})(({theme}) => ({
+const ViewportFrameContainer = styled('div', {name: 'ViewportFrameContainer'})(({theme}) => ({
   flexGrow: 1,
   minHeight: '100%',
   width: '100%',
@@ -31,29 +31,29 @@ const BuilderFrameContainer = styled('div', {name: 'BuilderFrameContainer'})(({t
   // position: 'relative',
 }))
 
-export interface BuilderFrameComponentProps extends HTMLAttributes<HTMLDivElement> {
+export interface ViewportFrameComponentProps extends HTMLAttributes<HTMLDivElement> {
 
 }
 
-export const BuilderFrameComponent = forwardRef<any, BuilderFrameComponentProps>(
+export const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
     return (
-      <BuilderFrameContainer ref={ref} {...rest}>
+      <ViewportFrameContainer ref={ref} {...rest}>
         <HoverContextProvider>
           <CanvasRendererComponent
             id="aglyn:canvas"
-            elementRendererComponent={BuilderElementRendererComponent}
+            elementRendererComponent={ElementRendererComponent}
           />
         </HoverContextProvider>
         {children}
-      </BuilderFrameContainer>
+      </ViewportFrameContainer>
     )
   },
 )
 
-BuilderFrameComponent.displayName = 'BuilderFrameComponent'
-BuilderFrameComponent.defaultProps = {}
+ViewportFrameComponent.displayName = 'ViewportFrameComponent'
+ViewportFrameComponent.defaultProps = {}
 
-export default BuilderFrameComponent
+export default ViewportFrameComponent

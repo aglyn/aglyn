@@ -23,8 +23,8 @@ import Stack, { StackProps } from '@mui/material/Stack'
 import clsx from 'clsx'
 import { useStoreMap } from 'effector-react'
 import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
-import { BuilderCanvasComponent } from './builder-canvas.component'
-import { BuilderZoomControlsComponent } from './builder-zoom-controls.component'
+import { ViewportCanvasComponent } from './viewport-canvas.component'
+import { ZoomControlsComponent } from './zoom-controls.component'
 
 
 const classKeys = generateComponentClassKeys('AglynBuilderViewport', [
@@ -36,7 +36,7 @@ const classKeys = generateComponentClassKeys('AglynBuilderViewport', [
 const StyledContainer = styled(Stack, {
   name: 'StyledContainer',
   // shouldForwardProp(propName) {return propName !== 'panelLeftWidth'},
-})<BuilderViewportComponentProps>( ({
+})<ViewportRootComponentProps>(({
   flexGrow: 1,
   overflow: 'hidden',
   // position: 'relative',
@@ -59,11 +59,11 @@ const CanvasShadow = styled('div', {name: 'CanvasShadow'})(({theme}) => ({
 }))
 
 
-export interface BuilderViewportComponentProps extends StackProps {
+export interface ViewportRootComponentProps extends StackProps {
   // drawerWidth?: number
 }
 
-export const BuilderViewportComponent = forwardRef<any, BuilderViewportComponentProps>(
+export const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, className, ...rest} = props
 
@@ -111,8 +111,8 @@ export const BuilderViewportComponent = forwardRef<any, BuilderViewportComponent
         {...rest}
       >
         <CanvasShadow />
-        <BuilderCanvasComponent pannerRef={pannerRef} />
-        <BuilderZoomControlsComponent
+        <ViewportCanvasComponent pannerRef={pannerRef} />
+        <ZoomControlsComponent
           onZoomReset={handleZoomReset}
           onZoomDecrease={handleZoomDecrease}
           onZoomIncrease={handleZoomIncrease}
@@ -123,7 +123,7 @@ export const BuilderViewportComponent = forwardRef<any, BuilderViewportComponent
   },
 )
 
-BuilderViewportComponent.displayName = 'BuilderViewportComponent'
-BuilderViewportComponent.defaultProps = {}
+ViewportRootComponent.displayName = 'ViewportRootComponent'
+ViewportRootComponent.defaultProps = {}
 
-export default BuilderViewportComponent
+export default ViewportRootComponent

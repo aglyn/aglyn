@@ -17,12 +17,12 @@
 
 import { render } from '@testing-library/react'
 
-import BuilderCanvasComponent from './builder-canvas.component'
+import ViewportCanvasComponent from './viewport-canvas.component'
 
 
-describe('BuilderCanvasComponent', () => {
+describe('ViewportCanvasComponent', () => {
   it('should render successfully', () => {
-    const {baseElement} = render(<BuilderCanvasComponent />)
+    const {baseElement} = render(<ViewportCanvasComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

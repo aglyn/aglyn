@@ -18,10 +18,10 @@
 import { alpha, styled } from '@aglyn/shared-feature-themes'
 import { ZoomablePanningComponent } from '@aglyn/shared-ui-jsx'
 import { forwardRef, HTMLAttributes, Ref } from 'react'
-import { BuilderFrameComponent } from './builder-frame.component'
+import { ViewportFrameComponent } from './viewport-frame.component'
 
 
-const BuilderCanvasContainer = styled('div', {name: 'BuilderCanvasContainer'})(({theme}) => ({
+const ViewportCanvasContainer = styled('div', {name: 'ViewportCanvasContainer'})(({theme}) => ({
   flexGrow: 1,
   minHeight: '100%',
   width: '100%',
@@ -39,7 +39,7 @@ const BuilderCanvasContainer = styled('div', {name: 'BuilderCanvasContainer'})((
   overflowX: 'auto',
 }))
 
-const BuilderArtboard = styled('div', {name: 'BuilderArtboard'})(({theme}) => ({
+const ViewportCanvasArtboard = styled('div', {name: 'ViewportCanvasArtboard'})(({theme}) => ({
   overflow: 'hidden',
   minHeight: '100%',
   width: theme.breakpoints.values.lg,
@@ -51,7 +51,7 @@ const BuilderArtboard = styled('div', {name: 'BuilderArtboard'})(({theme}) => ({
   // overflow: 'hidden',
 }))
 
-const BuilderCanvasPanner = styled(ZoomablePanningComponent, {name: 'BuilderCanvasPanner'})(({theme}) => ({
+const ViewportCanvasPanner = styled(ZoomablePanningComponent, {name: 'ViewportCanvasPanner'})(({theme}) => ({
   overflow: 'hidden',
   padding: theme.spacing(3),
   height: '100%',
@@ -66,18 +66,18 @@ const BuilderCanvasPanner = styled(ZoomablePanningComponent, {name: 'BuilderCanv
   },
 }))
 
-export interface BuilderCanvasComponentProps extends HTMLAttributes<HTMLDivElement> {
+export interface ViewportCanvasComponentProps extends HTMLAttributes<HTMLDivElement> {
   pannerRef?: Ref<any>
 }
 
-export const BuilderCanvasComponent = forwardRef<any, BuilderCanvasComponentProps>(
+export const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, pannerRef, ...rest} = props
 
     return (
-      <BuilderCanvasContainer ref={ref} {...rest}>
-        <BuilderArtboard>
-          {/*<BuilderCanvasPanner*/}
+      <ViewportCanvasContainer ref={ref} {...rest}>
+        <ViewportCanvasArtboard>
+          {/*<ViewportCanvasPanner*/}
           {/*  {...{ref: pannerRef} as any}*/}
           {/*  disableScrollZoom*/}
           {/*  disableDoubleClickZoom*/}
@@ -86,16 +86,16 @@ export const BuilderCanvasComponent = forwardRef<any, BuilderCanvasComponentProp
           {/*  noStateUpdate*/}
           {/*  disabled*/}
           {/*>*/}
-          <BuilderFrameComponent />
+          <ViewportFrameComponent />
           {children}
-          {/*</BuilderCanvasPanner>*/}
-        </BuilderArtboard>
-      </BuilderCanvasContainer>
+          {/*</ViewportCanvasPanner>*/}
+        </ViewportCanvasArtboard>
+      </ViewportCanvasContainer>
     )
   },
 )
 
-BuilderCanvasComponent.displayName = 'BuilderCanvasComponent'
-BuilderCanvasComponent.defaultProps = {}
+ViewportCanvasComponent.displayName = 'ViewportCanvasComponent'
+ViewportCanvasComponent.defaultProps = {}
 
-export default BuilderCanvasComponent
+export default ViewportCanvasComponent

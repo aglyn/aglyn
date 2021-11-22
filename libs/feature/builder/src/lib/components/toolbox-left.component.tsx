@@ -22,13 +22,13 @@ import { _isEqualitySameType } from '@aglyn/shared-util-guards'
 import Box from '@mui/material/Box'
 import Drawer, { DrawerProps } from '@mui/material/Drawer'
 import { forwardRef, HTMLAttributes } from 'react'
-import CanvasElementsTreeViewComponent from './canvas-elements-tree-view.component'
+import ElementsTreeViewComponent from './elements-tree-view.component'
 
 
 type ExtraProps<P> = P & { drawerWidth?: string | number, open?: boolean }
 
-const BuilderToolboxContainer = styled('div', {
-  name: 'BuilderToolboxContainer',
+const ToolboxContainer = styled('div', {
+  name: 'ToolboxContainer',
   shouldForwardProp(propName: any) {
     return !_isEqualitySameType(propName, 'open', 'drawerWidth')
   },
@@ -62,11 +62,11 @@ const StyledDrawer = styled(Drawer, {
   },
 }))
 
-export interface BuilderToolboxLeftComponentProps extends ExtraProps<HTMLAttributes<HTMLDivElement>> {
+export interface ToolboxLeftComponentProps extends ExtraProps<HTMLAttributes<HTMLDivElement>> {
   DrawerProps?: DrawerProps
 }
 
-export const BuilderToolboxLeftComponent = forwardRef<any, BuilderToolboxLeftComponentProps>(
+export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, drawerWidth: drawerWidthProp, DrawerProps, ...rest} = props
 
@@ -76,7 +76,7 @@ export const BuilderToolboxLeftComponent = forwardRef<any, BuilderToolboxLeftCom
     const open = Boolean(toggled)
 
     return (
-      <BuilderToolboxContainer
+      <ToolboxContainer
         ref={ref}
         drawerWidth={drawerWidth}
         open={open}
@@ -91,17 +91,17 @@ export const BuilderToolboxLeftComponent = forwardRef<any, BuilderToolboxLeftCom
         >
 
           <Box sx={{overflow: 'auto'}}>
-            <CanvasElementsTreeViewComponent />
+            <ElementsTreeViewComponent />
           </Box>
 
         </StyledDrawer>
         {children}
-      </BuilderToolboxContainer>
+      </ToolboxContainer>
     )
   },
 )
 
-BuilderToolboxLeftComponent.displayName = 'BuilderToolboxLeftComponent'
-BuilderToolboxLeftComponent.defaultProps = {}
+ToolboxLeftComponent.displayName = 'ToolboxLeftComponent'
+ToolboxLeftComponent.defaultProps = {}
 
-export default BuilderToolboxLeftComponent
+export default ToolboxLeftComponent

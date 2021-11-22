@@ -23,8 +23,8 @@ import {
   componentMapper,
   FormRenderer,
   GridFormTemplate,
-  GridList,
-  NavbarDrawer,
+  GridList as JsxGridList,
+  NavbarDrawer as JsxNavbarDrawer,
   NavbarDrawerProps,
   SvgPathIcon,
 } from '@aglyn/shared-ui-jsx'
@@ -38,8 +38,8 @@ import { forwardRef, Fragment, MouseEvent, useCallback } from 'react'
 import { ElementDrawerOptions } from '../contexts/element-drawer-context'
 
 
-const StyledGridList = styled(GridList, {
-  name: 'GridList',
+const ComponentDrawerGridList = styled(JsxGridList, {
+  name: 'ComponentDrawerGridList',
 })(({theme}) => ({
   overflowX: 'hidden',
   '& .AglynGridList-gridContainer': {
@@ -57,8 +57,8 @@ const StyledGridList = styled(GridList, {
   },
 }))
 
-const StyledNavbarDrawer = styled(NavbarDrawer, {
-  name: 'NavbarDrawer',
+const ComponentsDrawerNavbarDrawer = styled(JsxNavbarDrawer, {
+  name: 'ComponentsDrawerNavbarDrawer',
 })(({theme}) => ({
   '& .AglynNavbarDrawer-content': {
     backgroundColor: theme.palette.background.default,
@@ -87,7 +87,7 @@ export interface ComponentsDrawerComponentProps extends Partial<NavbarDrawerProp
   onDelete?: { bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void }['bivarianceHack']
 }
 
-export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawerComponentProps>(
+export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerComponentProps>(
   function RefRenderFn(props, ref) {
     const {className, options, onConfirm, onClose, onCancel, onDelete, items, ...rest} = props
 
@@ -177,7 +177,7 @@ export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawer
 
     const views = {
       'browse-site-components': (
-        <StyledGridList
+        <ComponentDrawerGridList
           GridContainerProps={{spacing: 2}}
           GridItemProps={{xs: 6, sm: 4}}
           renderItemContent={renderItemContent}
@@ -205,7 +205,7 @@ export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawer
     }
 
     return (
-      <StyledNavbarDrawer
+      <ComponentsDrawerNavbarDrawer
         ref={ref}
         AppBarProps={{color: 'secondary'}}
         anchor="bottom"
@@ -216,14 +216,14 @@ export const BuilderComponentsDrawerComponent = forwardRef<any, ComponentsDrawer
         {...rest}
       >
         {views[type]}
-      </StyledNavbarDrawer>
+      </ComponentsDrawerNavbarDrawer>
     )
   },
 )
 
-BuilderComponentsDrawerComponent.displayName = 'BuilderComponentsDrawerComponent'
-BuilderComponentsDrawerComponent.defaultProps = {
+ComponentsDrawerComponent.displayName = 'ComponentsDrawerComponent'
+ComponentsDrawerComponent.defaultProps = {
   items: [],
 }
 
-export default BuilderComponentsDrawerComponent
+export default ComponentsDrawerComponent
