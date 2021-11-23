@@ -22,10 +22,11 @@ import {
   PopperArrowComponent,
   SrOnlyComponent,
   SvgPathIcon,
+  SvgPathIconProps,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import { CSS } from '@aglyn/shared-util-tools'
-import Button from '@mui/material/Button'
+import Button, { ButtonProps } from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import Paper from '@mui/material/Paper'
 import MuiPopper, { PopperProps } from '@mui/material/Popper'
@@ -34,6 +35,7 @@ import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
 import { ChangeEvent, forwardRef, HTMLAttributes, SyntheticEvent, useCallback, useRef } from 'react'
 import { HoverOptions } from '../contexts/hover-context'
+import { useAddElementCallback } from '../hooks/use-add-element-callback'
 
 
 const popperClassKeys = generateComponentClassKeys('AglynPopper', [
@@ -195,7 +197,11 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
     const handleDeleteButtonClick = useCallback((e: ChangeEvent<unknown>) => {
       confirm({
         title: 'Are you sure?',
-        description: 'You are about to delete an element from the canvas, please confirm the desired option. Press \'OK\' to confirm and delete the item. Press \'Cancel\' to void the operation and close this dialog.',
+        description: 'You are about to delete an element from the canvas, please confirm the desired option. Press \'Delete\' to confirm and delete the item. Press \'Cancel\' to void the operation and close this dialog.',
+        confirmationText: 'Delete',
+        confirmationButtonProps: {
+          color: 'error',
+        },
       })
       .then(
         (res) => {
@@ -215,11 +221,11 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
       duplicateCanvasElement(getApp(), {$id})
     }, [$id])
 
-    const handleZoomIncrease = useCallback((e: ChangeEvent<unknown>) => {
-      // if (_isFnT()) {
-      //   // onZoomIncrease(e)
-      // }
-    }, [])
+    const handleAddElementClick = useAddElementCallback({
+      drawerOptions: {
+        type: 'edit-element-traits'
+      }
+    })
 
     const buttons = [
       {
@@ -233,10 +239,11 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
         buttonProps: {
           // disabled: yes(disableZoomResetButton),
           onClick: handleDeleteButtonClick,
-        },
+        } as ButtonProps,
         svgPathIconProps: {
           iconIds: 'delete-outline',
-        },
+          color: 'error',
+        } as SvgPathIconProps,
       },
       {
         id: 'duplicate-element',
@@ -254,6 +261,22 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
           iconIds: 'content-duplicate',
         },
       },
+      {
+        id: 'modify-props',
+        tooltipProps: {
+          title: 'Modify',
+        },
+        srOnlyProps: {
+          children: 'Modify',
+        },
+        buttonProps: {
+          // disabled: yes(disableZoomResetButton),
+          onClick: handleAddElementClick,
+        },
+        svgPathIconProps: {
+          iconIds: 'pencil',
+        },
+      },
     ]
 
     const arrowRef = useRef<HTMLElement>()
@@ -264,7 +287,7 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
           disablePortal
           open={open}
           anchorEl={anchorEl}
-          placement="top-start"
+          placement="top"
           modifiers={[
             {
               name: 'flip',
@@ -320,7 +343,7 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
           anchorEl={anchorEl}
           placement="top-start"
         >
-          <Paper sx={{bgcolor: 'quaternary.main', color: 'quaternary.contrastText', px: 0.5, py: 0.15}}>
+          <Paper sx={{bgcolor: 'quaternary.light', color: 'quaternary.contrastText', px: 0.5, py: 0.15}}>
             <Typography
               variant="body2"
             >

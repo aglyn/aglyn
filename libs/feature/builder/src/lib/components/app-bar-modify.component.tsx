@@ -87,11 +87,7 @@ export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>
     const {children, ...rest} = props
 
     const {getApp} = useAglynAppContext()
-    const handleAddElementClick = useAddElementCallback({
-      drawerOptions: {
-        type: 'edit-element-traits'
-      }
-    })
+    const handleAddElementClick = useAddElementCallback()
 
     const interactMode = useStoreMap(
       getBuilderStore(getApp(), {store: 'flags'}),
