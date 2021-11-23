@@ -17,18 +17,17 @@
 
 import { _isStrT } from '@aglyn/shared-util-guards'
 import {
-  AglynComponentElementData,
+  AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
-  AglynComponentElementDataNormalizedMap,
 } from '../controllers/aglyn-components.controller'
-import { ElementId } from '../types'
+import { AglynComponentElementDataNormalizedMap, ElementId } from '../types'
 
 
 const denormalizeData = (
   element: AglynComponentElementDataNormalized,
   flatMap: AglynComponentElementDataNormalizedMap = {},
-  elemData: AglynComponentElementData[] = [],
-): AglynComponentElementData => {
+  elemData: AglynComponentElementDataDenormalized[] = [],
+): AglynComponentElementDataDenormalized => {
   const {elements, ...rest} = element
 
   return {
@@ -42,16 +41,16 @@ const denormalizeData = (
 export function denormalizeComponentElementData(
   element: AglynComponentElementDataNormalized,
   parentId: ElementId,
-): AglynComponentElementData[]
+): AglynComponentElementDataDenormalized[]
 export function denormalizeComponentElementData(
   elements: AglynComponentElementDataNormalizedMap,
   parentId: ElementId,
-): AglynComponentElementData[]
+): AglynComponentElementDataDenormalized[]
 export function denormalizeComponentElementData(
   elements: AglynComponentElementDataNormalized | AglynComponentElementDataNormalizedMap,
   parentId: ElementId,
-): AglynComponentElementData[] {
-  const elemData: AglynComponentElementData[] = []
+): AglynComponentElementDataDenormalized[] {
+  const elemData: AglynComponentElementDataDenormalized[] = []
   const elems: AglynComponentElementDataNormalizedMap = _isStrT(elements.$id)
     ? {[elements.$id]: {...elements}} as AglynComponentElementDataNormalizedMap
     : {...elements} as AglynComponentElementDataNormalizedMap

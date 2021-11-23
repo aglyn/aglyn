@@ -41,7 +41,6 @@ import {
   AglynModuleModelOptions,
 } from '../models/aglyn-module.model'
 import { ContextStoreUid } from '../types'
-import { AglynComponentElementData } from './aglyn-components.controller'
 
 
 export interface ContextDomain extends EffectorDomain {

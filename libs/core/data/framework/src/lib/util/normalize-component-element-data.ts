@@ -16,23 +16,20 @@
  */
 
 import { _isArr } from '@aglyn/shared-util-guards'
-import {
-  AglynComponentElementData,
-  AglynComponentElementDataNormalizedMap,
-} from '../controllers/aglyn-components.controller'
-import { ElementId } from '../types'
+import { AglynComponentElementDataDenormalized } from '../controllers/aglyn-components.controller'
+import { AglynComponentElementDataNormalizedMap, ElementId } from '../types'
 
 
 const normalizeData = (
-  element: AglynComponentElementData,
+  element: AglynComponentElementDataDenormalized,
   parentId: ElementId,
   flatMap: AglynComponentElementDataNormalizedMap = {},
 ): AglynComponentElementDataNormalizedMap => {
-  const { elements, ...rest } = element
+  const {elements, ...rest} = element
   flatMap[rest.$id] = {...rest, parentId, elements: []}
   flatMap[parentId] = {
     ...flatMap[parentId],
-    elements: (flatMap[parentId]?.elements || []).concat(rest.$id)
+    elements: (flatMap[parentId]?.elements || []).concat(rest.$id),
   }
   elements?.forEach((child) => {
     normalizeData(child, rest.$id, flatMap)
@@ -41,15 +38,15 @@ const normalizeData = (
 }
 
 export function normalizeComponentElementData(
-  element: AglynComponentElementData,
+  element: AglynComponentElementDataDenormalized,
   parentId?: ElementId,
 ): AglynComponentElementDataNormalizedMap
 export function normalizeComponentElementData(
-  elements: AglynComponentElementData[],
+  elements: AglynComponentElementDataDenormalized[],
   parentId?: ElementId,
 ): AglynComponentElementDataNormalizedMap
 export function normalizeComponentElementData(
-  elements: AglynComponentElementData | AglynComponentElementData[],
+  elements: AglynComponentElementDataDenormalized | AglynComponentElementDataDenormalized[],
   parentId?: ElementId,
 ): AglynComponentElementDataNormalizedMap {
   let elemData

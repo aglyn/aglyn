@@ -17,14 +17,14 @@
 
 import { objectDeepMergeMany } from '@aglyn/shared-util-vendor'
 import {
-  AglynComponentElementData,
+  AglynComponentElementDataDenormalized,
   AglynComponentElementTemplateData,
   TemplateSubElementData,
 } from '../controllers/aglyn-components.controller'
 import { createComponentElementId } from './create-component-element-id'
 
 
-function traverseComponentTemplate(data: TemplateSubElementData): AglynComponentElementData {
+function traverseComponentTemplate(data: TemplateSubElementData): AglynComponentElementDataDenormalized {
   return {
     ...data,
     $id: createComponentElementId(),
@@ -32,19 +32,19 @@ function traverseComponentTemplate(data: TemplateSubElementData): AglynComponent
   }
 }
 
-export const ELEMENT_DEFAULTS: Partial<AglynComponentElementData> = {
+export const ELEMENT_DEFAULTS: Partial<AglynComponentElementDataDenormalized> = {
   props: {},
   elements: [],
 }
 
 export function createComponentElementData(
-  template?: AglynComponentElementTemplateData | {data: AglynComponentElementData},
-): AglynComponentElementData {
+  template?: AglynComponentElementTemplateData | { data: AglynComponentElementDataDenormalized },
+): AglynComponentElementDataDenormalized {
   const {data} = {...template}
 
   return objectDeepMergeMany([
     {...ELEMENT_DEFAULTS},
     traverseComponentTemplate(data),
-  ]) as AglynComponentElementData
+  ]) as AglynComponentElementDataDenormalized
 }
 export default createComponentElementData

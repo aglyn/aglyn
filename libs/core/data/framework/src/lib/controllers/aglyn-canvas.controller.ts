@@ -17,6 +17,7 @@
 
 import { _isArrEmpty } from '@aglyn/shared-util-guards'
 import { arrayAddAtIndex } from '@aglyn/shared-util-tools'
+import { objectDeepMerge } from '@aglyn/shared-util-vendor'
 import { createApi, Event as EffectorEvent } from 'effector'
 import {
   CanvasAddElementPayload,
@@ -38,13 +39,11 @@ import {
   AglynModuleModel,
   AglynModuleModelOptions,
 } from '../models/aglyn-module.model'
+import { AglynComponentElementDataNormalizedMap } from '../types'
 import { createComponentElementData } from '../util/create-component-element-data'
 import { denormalizeComponentElementData } from '../util/denormalize-component-element-data'
 import { normalizeComponentElementData } from '../util/normalize-component-element-data'
-import {
-  AglynComponentElementData,
-  AglynComponentElementDataNormalizedMap,
-} from './aglyn-components.controller'
+import { AglynComponentElementDataDenormalized } from './aglyn-components.controller'
 import { ContextDomain, ContextStore } from './aglyn-contexts.controller'
 
 
@@ -67,7 +66,7 @@ export interface ElementsDataStoreApi {
 
 
 export interface AglynCanvasControllerOptions extends AglynModuleModelOptions {
-  defaultElements: AglynComponentElementData[]
+  defaultElements: AglynComponentElementDataDenormalized[]
 }
 
 export interface AglynCanvasController extends AglynModuleModel<AglynCanvasControllerOptions> {
@@ -100,13 +99,13 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   #context: ContextStore<ElementsDataStore> = null
   #events: ElementsDataStoreApi = null
   #normalizedElementsStore: ContextStore<ElementsDataStore['present']> = null
-  #denormalizedElementsStore: ContextStore<AglynComponentElementData[]> = null
+  #denormalizedElementsStore: ContextStore<AglynComponentElementDataDenormalized[]> = null
 
   public get domain(): ContextDomain {return this.#domain}
   public get events(): ElementsDataStoreApi {return this.#events}
   public get context(): ContextStore<ElementsDataStore> {return this.#context}
   public get normalizedElementsStore(): ContextStore<ElementsDataStore['present']> {return this.#normalizedElementsStore}
-  public get denormalizedElementsStore(): ContextStore<AglynComponentElementData[]> {return this.#denormalizedElementsStore}
+  public get denormalizedElementsStore(): ContextStore<AglynComponentElementDataDenormalized[]> {return this.#denormalizedElementsStore}
 
   constructor(options) {
     super(options)
@@ -181,12 +180,12 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
     }
 
     const updateElement = (state: ElementsDataStore, payload: CanvasUpdateElementPayload) => {
-      const {element} = payload
+      const {element: {props, ...element}} = payload
       const present = {
         ...state.present,
         [element.$id]: {
-          ...state.present[element.$id],
-          ...element,
+          ...objectDeepMerge(state.present[element.$id], element),
+          props,
         },
       }
 

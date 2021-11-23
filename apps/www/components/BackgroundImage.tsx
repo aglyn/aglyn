@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
+import { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import { styled } from '@aglyn/shared-feature-themes'
 import { forwardRef, HTMLAttributes } from 'react'
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementData } from '@aglyn/core-data-framework'
+import { AglynComponentElementDataDenormalized } from '@aglyn/core-data-framework'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
 import { ButtonProps } from '@mui/material/Button'
 import { DialogProps } from '@mui/material/Dialog'
@@ -34,7 +34,7 @@ export interface SelectionComponentOptions {
   title?: DialogTitleProps['children']
   description?: DialogContentTextProps['children']
   clientRect?: DOMRect
-  $id?: AglynComponentElementData
+  $id?: AglynComponentElementDataDenormalized
 }
 
 export interface SelectionComponentProps extends HTMLAttributes<HTMLDivElement> {

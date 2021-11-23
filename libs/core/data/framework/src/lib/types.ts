@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
-import { Dictionary, Implements } from '@aglyn/shared-data-types'
+import { Dictionary, Implements, KeyValueMap } from '@aglyn/shared-data-types'
 import { SYMBOL_TYPE, TYPE_KIND, TYPE_OF } from './constants/symbol'
+import {
+  AglynComponentElementDataDenormalized,
+  AglynComponentElementDataNormalized,
+} from './controllers/aglyn-components.controller'
 import type { AglynExtension } from './models/aglyn-extension.model'
 
 
@@ -88,3 +92,6 @@ export type TemplateId = string
 export type ElementId = string
 export type CommandUId = string
 export type ContextStoreUid = string
+
+export type AglynComponentElementDataNormalizedMap = KeyValueMap<'__root__' | ComponentId, AglynComponentElementDataNormalized>
+export type AglynComponentElementDataNormalizedArray = AglynComponentElementDataDenormalized<any>[]

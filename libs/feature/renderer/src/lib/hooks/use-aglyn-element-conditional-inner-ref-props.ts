@@ -16,6 +16,7 @@
  */
 
 import type { ElementId } from '@aglyn/core-data-framework'
+import { InnerRefProp } from '@aglyn/shared-data-types'
 import { yes } from '@aglyn/shared-util-tools'
 import { Ref, useMemo } from 'react'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
@@ -26,12 +27,12 @@ import { useAglynElementData } from './use-aglyn-element-data'
 export function useAglynElementConditionalInnerRefProps<T>(
   $id: ElementId,
   ref: Ref<T>,
-): { innerRef?: Ref<T> } {
+): InnerRefProp<T> {
   const {getApp} = useAglynAppContext()
   const elementData = useAglynElementData($id)
   const schema = useAglynComponentSchema(
     elementData.componentId,
-    elementData.bundleId
+    elementData.bundleId,
   )
   const disabled = schema?.renderFlags?.elementRef?.disable
   const innerRef = schema?.renderFlags?.elementRef?.innerRef

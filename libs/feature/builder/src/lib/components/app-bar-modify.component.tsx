@@ -16,17 +16,12 @@
  */
 
 import {
-  createComponentElementData,
   getBuilderStore,
   InteractionModeFlag,
   setBuilderFlag,
   setBuilderPanels,
 } from '@aglyn/core-data-framework'
-import {
-  useAglynAppContext,
-  useAglynElementParentPosition,
-  useAglynElementsStoreWithApi,
-} from '@aglyn/feature-renderer'
+import { useAglynAppContext, useAglynElementHistory } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import AppBar, { AppBarProps } from '@mui/material/AppBar'
@@ -40,9 +35,7 @@ import Toolbar from '@mui/material/Toolbar'
 import Tooltip from '@mui/material/Tooltip'
 import { useStoreMap } from 'effector-react'
 import { forwardRef, memo, MouseEvent, useCallback } from 'react'
-import { useAglynBuilderStore } from '../../../../renderer/src/lib/hooks/use-aglyn-builder-store'
-import useAglynElementHistory from '../../../../renderer/src/lib/hooks/use-aglyn-elements-history'
-import { useElementDrawerContext } from '../contexts/element-drawer-context'
+import { useAddElementCallback } from '../hooks/use-add-element-callback'
 
 
 const StyledModifyAppBar = styled(AppBar, {name: 'StyledModifyAppBar'})({
@@ -94,42 +87,11 @@ export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>
     const {children, ...rest} = props
 
     const {getApp} = useAglynAppContext()
-    const {elementDrawer} = useElementDrawerContext()
-    const {elements, api: {addElement}} = useAglynElementsStoreWithApi()
-    const {$id: selectedId} = useAglynBuilderStore('canvas', 'selected') || {}
-    const {
-      parentId: selectedParentId,
-      index: selectedIndex,
-      parentElements: selectedParentElements,
-    } = useAglynElementParentPosition(selectedId) || {}
-
-    const handleFabClick = useCallback(async () => {
-      const option = await elementDrawer({
-        title: 'Add New Element',
-      })
-      .then((res: any) => {
-        if (res?.option?.type === 'selection') {
-          return res?.option?.data
-        }
-      })
-      .then((data: any) => {
-        if (data) {
-          const pos = (selectedIndex === -1 ? selectedParentElements.length : selectedIndex + 1)
-          console.log('then newElement', selectedIndex, pos, selectedParentElements)
-          addElement({
-            position: pos,
-            parentId: selectedParentId || '__root__',
-
-            element: createComponentElementData(data),
-          })
-        }
-      })
-      .catch((error) => {
-        throw error
-      })
-
-      console.warn('async choice', option)
-    }, [selectedId, elementDrawer, elements, addElement, selectedParentElements, selectedParentId, selectedIndex])
+    const handleAddElementClick = useAddElementCallback({
+      drawerOptions: {
+        type: 'edit-element-traits'
+      }
+    })
 
     const interactMode = useStoreMap(
       getBuilderStore(getApp(), {store: 'flags'}),
@@ -182,7 +144,7 @@ export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>
               aria-haspopup="menu"
               aria-label="add"
               edge="start"
-              onClick={handleFabClick}
+              onClick={handleAddElementClick}
             >
               <SvgPathIcon fontSize="small" iconIds={'shape-square-rounded-plus'} />
             </IconButton>

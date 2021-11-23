@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+import { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
 import {
   DataGrid,
   DataGridProps as MuiDataGridProps,

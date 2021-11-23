@@ -17,11 +17,13 @@
 
 import { AglynComponentElementTemplateData } from '@aglyn/core-data-framework'
 import { useAglynAppContext } from '@aglyn/feature-renderer'
+import { AnyProps } from '@aglyn/shared-data-types'
 import { styled } from '@aglyn/shared-feature-themes'
 import {
   CardIconListItem,
   componentMapper,
   FormRenderer,
+  FormSchema,
   GridFormTemplate,
   GridList as JsxGridList,
   NavbarDrawer as JsxNavbarDrawer,
@@ -77,8 +79,14 @@ const ComponentsDrawerNavbarDrawer = styled(JsxNavbarDrawer, {
   },
 }))
 
+export interface ComponentsDrawerOptionsProps extends ElementDrawerOptions {
+  type?: 'browse-site-components' | 'edit-element-traits'
+  propsSchema?: FormSchema
+  selectedElementProps?: AnyProps
+}
+
 export interface ComponentsDrawerComponentProps extends Partial<NavbarDrawerProps> {
-  options?: ElementDrawerOptions
+  options?: ComponentsDrawerOptionsProps
   items?: AglynComponentElementTemplateData[]
   onCancel?: { bivarianceHack<T>(event: MouseEvent<T>, reason: 'canceled'): void }['bivarianceHack']
   onConfirm?: {
@@ -89,13 +97,26 @@ export interface ComponentsDrawerComponentProps extends Partial<NavbarDrawerProp
 
 export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerComponentProps>(
   function RefRenderFn(props, ref) {
-    const {className, options, onConfirm, onClose, onCancel, onDelete, items, ...rest} = props
+    const {
+      options,
+      onConfirm,
+      onClose,
+      onCancel,
+      onDelete,
+      items,
+      ...rest
+    } = props
 
-    const {title, type = 'browse-site-components'} = {...options}
+    const {
+      title,
+      type = 'browse-site-components',
+      propsSchema = {} as any,
+      selectedElementProps = {} as any,
+    } = {...options}
     const {getApp} = useAglynAppContext()
 
-    const selectedElementProps: any = {}
-    const propsSchema: any = {}
+    // const selectedElementProps: any = {}
+    // const propsSchema: any = {}
     const handleElementSave = useCallback(
       (values) => {
         onConfirm?.call(null, null, {type: 'save', data: values})

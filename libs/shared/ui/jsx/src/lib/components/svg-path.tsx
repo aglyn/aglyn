@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
+import { PropsWithInnerRef } from '@aglyn/shared-data-types'
 import { forwardRef, SVGAttributes, useMemo } from 'react'
-import { PropsWithInnerRef } from '../types'
 
 
 export type SvgPathData = SvgPathProps['d']

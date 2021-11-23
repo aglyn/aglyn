@@ -18,22 +18,17 @@
 import {
   AglynComponentElementDataNormalizedMap,
   ElementsDataStoreApi,
-  getCanvasApiEvents,
-  getCanvasNormalizedElementsStore,
 } from '@aglyn/core-data-framework'
-import { useStoreMap } from 'effector-react'
 import { useMemo } from 'react'
-import { useAglynAppContext } from '../contexts/aglyn-app-context'
+import { useAglynCanvasApiEvents } from './use-aglyn-canvas-api-events'
+import { useAglynCanvasElementsNormalized } from './use-aglyn-canvas-elements-normalized'
 
 
-export function useAglynElementsStoreWithApi(): { elements: AglynComponentElementDataNormalizedMap, api: ElementsDataStoreApi } {
-  const {getApp} = useAglynAppContext()
-  const app = getApp()
-  const store = getCanvasNormalizedElementsStore(app)
-  const api = getCanvasApiEvents(app)
-  const elements = useStoreMap(store, (store) => store)
+export function useAglynCanvasElementsWithApi(): { elements: AglynComponentElementDataNormalizedMap, api: ElementsDataStoreApi } {
+  const elements = useAglynCanvasElementsNormalized()
+  const api = useAglynCanvasApiEvents()
   return useMemo(() => {
     return {elements, api}
   }, [elements, api])
 }
-export default useAglynElementsStoreWithApi
+export default useAglynCanvasElementsWithApi

@@ -16,8 +16,8 @@
  */
 
 import { ComponentId } from '@aglyn/core-data-framework'
-import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
-import { forwardRef, Fragment, memo } from 'react'
+import { OverrideableComponentProps } from '@aglyn/shared-data-types'
+import { forwardRef, Fragment } from 'react'
 import {
   ElementRendererComponent,
   ElementRendererComponentProps,

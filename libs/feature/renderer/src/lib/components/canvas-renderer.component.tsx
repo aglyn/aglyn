@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
+import { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import Box from '@mui/material/Box'
 import { forwardRef, HTMLAttributes } from 'react'
 import { useAglynElementData } from '../hooks/use-aglyn-element-data'

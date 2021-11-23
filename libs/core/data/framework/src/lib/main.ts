@@ -144,9 +144,8 @@ export type {
   ComponentsRegistryKeys,
   ComponentsRegistryValues,
   AglynComponentClassElement,
-  AglynComponentElementData,
+  AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
-  AglynComponentElementDataNormalizedMap,
   AglynComponentElementType,
   AglynComponentFunctionElement,
   AglynComponentIntrinsicElement,
@@ -162,7 +161,7 @@ export type {
   ElementsDataStoreApi,
   AglynCanvasControllerOptions,
   AglynCanvasControllerT,
-  AglynCanvasController
+  AglynCanvasController,
 } from './controllers/aglyn-canvas.controller'
 export type {
   BuilderPanelsState,
@@ -175,3 +174,4 @@ export type {
   AglynBuilderControllerT,
   AglynBuilderController,
 } from './controllers/aglyn-builder.controller'
+export { AglynComponentElementDataNormalizedMap } from './types'

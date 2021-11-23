@@ -16,6 +16,7 @@
  */
 
 import type { Component } from 'react'
+import { ElementType, Ref } from 'react'
 
 
 export type JSXKey = string | number
@@ -79,3 +80,23 @@ export interface JSXElementChildrenAttribute extends JSX.ElementChildrenAttribut
 export interface ResolveProps<P = any> {
   <OUT = P>(inProps: P): OUT
 }
+
+export type InnerRefProp<T = any> = { innerRef?: Ref<T> }
+export type PropsWithInnerRef<P, T> = InnerRefProp<T> & P
+
+export type InferElementTypeProps<T> = T extends ElementType<infer P> ? P : never
+
+export type OverrideComponentProp<P = any> = { component?: ElementType<P> }
+
+export type OverrideComponentsProps<T extends OverrideComponentProp = any> =
+  [T] extends [{ component: infer P }]
+    ? InferElementTypeProps<P>
+    : never
+
+export type OverrideComponentPropPlusOverrideProps<T extends OverrideComponentProp = any> =
+  [T] extends [{ component: ElementType }]
+    ? OverrideComponentsProps<T> & Pick<T, 'component'>
+    : { component?: undefined }
+
+export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P &
+  OverrideComponentPropPlusOverrideProps<T>

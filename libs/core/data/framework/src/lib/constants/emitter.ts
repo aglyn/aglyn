@@ -24,7 +24,8 @@ import type {
 import {
   BuilderContextStores,
   BuilderFlagState,
-  BuilderPanelsState, CommActionData,
+  BuilderPanelsState,
+  CommActionData,
 } from '../controllers/aglyn-builder.controller'
 import type {
   AglynCommandListener,
@@ -36,13 +37,14 @@ import type {
   AglynComponentSchema,
 } from '../controllers/aglyn-components.controller'
 import {
-  AglynComponentElementData, AglynComponentElementDataNormalized,
-  AglynComponentElementDataNormalizedMap,
+  AglynComponentElementDataDenormalized,
+  AglynComponentElementDataNormalized,
 } from '../controllers/aglyn-components.controller'
 import type { ContextStore, ContextStoreOptions } from '../controllers/aglyn-contexts.controller'
 import { AglynExtensionLoader } from '../controllers/aglyn-extensions.controller'
 import type { AglynExtension, AglynExtensionOptions } from '../models/aglyn-extension.model'
 import type {
+  AglynComponentElementDataNormalizedMap,
   AppUUN,
   BundleUId,
   CommandUId,
@@ -223,9 +225,9 @@ export type CanvasSetElementsPayload = PayloadData<{ elements: AglynComponentEle
 export type CanvasGetElementsNormalizedPayload = PayloadData<any>
 export type CanvasGetElementsDenormalizedPayload = PayloadData<any>
 export type CanvasGetApiEventsPayload = PayloadData<any>
-export type CanvasAddElementPayload = PayloadData<{ parentId: ElementId, position: number, element: AglynComponentElementData }>
+export type CanvasAddElementPayload = PayloadData<{ parentId: ElementId, position: number, element: AglynComponentElementDataDenormalized }>
 export type CanvasGetElementPayload = PayloadData<{ $id: ElementId }>
-export type CanvasUpdateElementPayload = PayloadData<{ element: AglynComponentElementDataNormalized }>
+export type CanvasUpdateElementPayload = PayloadData<{ element: Partial<AglynComponentElementDataNormalized> }>
 export type CanvasDeleteElementPayload = PayloadData<{ $id: ElementId }>
 export type CanvasMoveElementPayload = PayloadData<{ $id: ElementId, parentId: ElementId, position: number }>
 export type CanvasDuplicateElementPayload = PayloadData<{ $id: ElementId }>

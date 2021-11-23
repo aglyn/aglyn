@@ -15,14 +15,21 @@
  * limitations under the License.
  */
 
-import { DEFAULT_LEFT_DRAWER_WIDTH } from '@aglyn/feature-builder'
 import { useAglynAppContext, useAglynBuilderStore } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
+import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
 import { _isEqualitySameType } from '@aglyn/shared-util-guards'
+import MuiTabContext from '@mui/lab/TabContext'
+import MuiTabList from '@mui/lab/TabList'
+import MuiTabPanel from '@mui/lab/TabPanel'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import Drawer, { DrawerProps } from '@mui/material/Drawer'
-import { forwardRef, HTMLAttributes } from 'react'
-import ElementsTreeViewComponent from './elements-tree-view.component'
+import MuiTab from '@mui/material/Tab'
+import { forwardRef, HTMLAttributes, useCallback, useState } from 'react'
+import { DEFAULT_LEFT_DRAWER_WIDTH } from '../constants'
+import { useAddElementCallback } from '../hooks/use-add-element-callback'
+import { ElementsTreeViewComponent } from './elements-tree-view.component'
 
 
 type ExtraProps<P> = P & { drawerWidth?: string | number, open?: boolean }
@@ -71,9 +78,16 @@ export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
     const {children, drawerWidth: drawerWidthProp, DrawerProps, ...rest} = props
 
     const {getApp} = useAglynAppContext()
+    const handleAddElementClick = useAddElementCallback()
     const leftPanel = useAglynBuilderStore('panels', 'left')
     const {toggled, drawerWidth = drawerWidthProp} = leftPanel || {}
     const open = Boolean(toggled)
+
+    const [activeView, setActiveView] = useState(() => 'elements-tree')
+    const handleTabChange = useCallback((e, newValue) => {
+      setActiveView(newValue)
+    }, [])
+
 
     return (
       <ToolboxContainer
@@ -90,9 +104,39 @@ export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
           {...DrawerProps}
         >
 
-          <Box sx={{overflow: 'auto'}}>
-            <ElementsTreeViewComponent />
-          </Box>
+          <MuiTabContext value={activeView}>
+            <Box sx={{borderBottom: 1, borderColor: 'divider'}}>
+              <MuiTabList
+                onChange={handleTabChange}
+                variant="fullWidth"
+                indicatorColor="secondary"
+                textColor="primary"
+              >
+                <MuiTab
+                  value="elements-tree"
+                  icon={<SvgPathIcon iconIds="file-tree" />}
+                />
+              </MuiTabList>
+            </Box>
+
+            <MuiTabPanel
+              value="elements-tree"
+              sx={{p: 0, overflow: 'auto'}}
+            >
+              <Box
+                sx={{px: 0.5, pb: 1, pt: 1}}
+              >
+                <Button
+                  color="secondary"
+                  startIcon={<SvgPathIcon fontSize="inherit" iconIds="plus" />}
+                  onClick={handleAddElementClick}
+                >
+                  Add Element
+                </Button>
+              </Box>
+              <ElementsTreeViewComponent />
+            </MuiTabPanel>
+          </MuiTabContext>
 
         </StyledDrawer>
         {children}

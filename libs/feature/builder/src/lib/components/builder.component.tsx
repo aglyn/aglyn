@@ -21,8 +21,9 @@ import {
   ElementComponentsContextProvider,
   ElementsContextProvider,
 } from '@aglyn/feature-renderer'
+import { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import { consoleTheme, withTheme } from '@aglyn/shared-feature-themes'
-import { ConfirmationProviderComponent, OverrideableComponentProps } from '@aglyn/shared-ui-jsx'
+import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx'
 import { DndContext } from '@dnd-kit/core'
 import NoSsr from '@mui/material/NoSsr'
 import { forwardRef, Fragment, useCallback } from 'react'

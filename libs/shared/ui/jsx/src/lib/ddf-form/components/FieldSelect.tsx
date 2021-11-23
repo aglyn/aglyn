@@ -95,7 +95,7 @@ const FieldSelect = forwardRef<any, FieldSelectProps>(function RefRenderFn(props
           </MuiMenuItem>
         )}
         {options.map(({children, label, value, ...item}, index) => (
-          <MuiMenuItem key={value ?? index} value={value} {...item}>
+          <MuiMenuItem key={item.id ?? value ?? index} value={value} {...item}>
             {children ?? label}
           </MuiMenuItem>
         ))}

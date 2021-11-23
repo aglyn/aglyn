@@ -37,6 +37,7 @@ const ViewportCanvasContainer = styled('div', {name: 'ViewportCanvasContainer'})
   ].join(' '),
   overflowY: 'auto',
   overflowX: 'auto',
+  // display: 'flex',
 }))
 
 const ViewportCanvasArtboard = styled('div', {name: 'ViewportCanvasArtboard'})(({theme}) => ({
@@ -76,6 +77,7 @@ export const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentPr
 
     return (
       <ViewportCanvasContainer ref={ref} {...rest}>
+
         <ViewportCanvasArtboard>
           {/*<ViewportCanvasPanner*/}
           {/*  {...{ref: pannerRef} as any}*/}
@@ -90,6 +92,16 @@ export const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentPr
           {children}
           {/*</ViewportCanvasPanner>*/}
         </ViewportCanvasArtboard>
+
+
+        {/*<RulerComponent*/}
+        {/*  variant="vertical"*/}
+        {/*  sx={{position: 'relative', mt: '-16px', ml: '-22px'}}*/}
+        {/*/>*/}
+        {/*<RulerComponent*/}
+        {/*  variant="horizontal"*/}
+        {/*  sx={{position: 'relative', ml: '-11px', mt: '-20px'}}*/}
+        {/*/>*/}
       </ViewportCanvasContainer>
     )
   },

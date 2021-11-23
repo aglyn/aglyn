@@ -18,14 +18,14 @@
 import { IconId as MdiIconId } from '@aglyn/shared-data-mdi'
 import {
   AnyProps,
+  InnerRefProp,
   JSXIntrinsicElement,
   JSXNode,
-  KeyValueMap,
   OrUndef,
   ResolveProps,
 } from '@aglyn/shared-data-types'
 import { StyledOptions } from '@aglyn/shared-feature-themes'
-import { FormSchema, InnerRefProp } from '@aglyn/shared-ui-jsx'
+import { FormSchema } from '@aglyn/shared-ui-jsx'
 import { _isArr } from '@aglyn/shared-util-guards'
 import { ComponentClass, FunctionComponent } from 'react'
 import {
@@ -170,23 +170,6 @@ export interface AglynComponentSchema<P extends AnyProps = any> {
   templates?: AglynComponentElementTemplateData<P>[]
 }
 
-export interface AglynComponentElementData<P extends AnyProps = any> {
-  readonly $id: ElementId
-  readonly componentId: ComponentId
-  readonly bundleId?: BundleUId
-  displayName?: string
-  description?: string
-  props?: P
-  elements?: AglynComponentElementData<P>[]
-}
-
-export interface AglynComponentElementDataNormalized<P extends AnyProps = any> extends Omit<AglynComponentElementData<P>, 'elements'> {
-  elements?: ElementId[]
-  parentId?: ElementId
-}
-
-export type AglynComponentElementDataNormalizedMap = KeyValueMap<'__root__' | ComponentId, AglynComponentElementDataNormalized>
-
 export interface AglynComponentElementTemplateData<P extends AnyProps = any> {
   readonly id: TemplateId
   title: string
@@ -200,6 +183,25 @@ export interface TemplateSubElementData<P extends AnyProps = any> {
   readonly bundleId?: BundleUId
   elements?: TemplateSubElementData<P>[]
   props?: AnyProps
+}
+
+export interface AglynComponentElementData<P extends AnyProps = any> {
+  readonly $id: ElementId
+  readonly componentId: ComponentId
+  readonly bundleId?: BundleUId
+  parentId?: ElementId
+  displayName?: string
+  description?: string
+  props?: P
+  elements?: (AglynComponentElementDataDenormalized<P>[]) | (ElementId[])
+}
+
+export interface AglynComponentElementDataDenormalized<P extends AnyProps = any> extends AglynComponentElementData<P> {
+  elements?: AglynComponentElementDataDenormalized<P>[]
+}
+
+export interface AglynComponentElementDataNormalized<P extends AnyProps = any> extends AglynComponentElementData<P> {
+  elements?: ElementId[]
 }
 
 export interface AglynComponentsControllerOptions extends AglynModuleModelOptions {

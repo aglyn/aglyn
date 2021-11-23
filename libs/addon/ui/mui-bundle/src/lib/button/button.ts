@@ -21,7 +21,7 @@ import {
   ComponentId,
   createAglynComponentElement,
 } from '@aglyn/core-data-framework'
-import { Button } from '@mui/material'
+import Button from '@mui/material/Button'
 
 
 export const loader = () => import('@mui/material/Button').then((i) => i.default)
@@ -29,6 +29,23 @@ export const componentId: ComponentId = 'button'
 export const bundleId: ComponentId = 'mui'
 export const metadata: AglynComponentSchema['metadata'] = {
   displayName: 'Button',
+}
+export const renderFlags: AglynComponentSchema['renderFlags'] = {
+  propsSchema: {
+    fields: [
+      {
+        name: 'variant',
+        component: 'select',
+        label: 'Variant',
+        variant: 'outlined',
+        options: [
+          {value: 'text', label: 'Text'},
+          {value: 'outlined', label: 'Outlined'},
+          {value: 'contained', label: 'Contained'},
+        ],
+      }
+    ]
+  }
 }
 export const templates: AglynComponentElementTemplateData[] = [
   {
@@ -44,15 +61,14 @@ export const templates: AglynComponentElementTemplateData[] = [
     },
   },
 ]
+export const schema: AglynComponentSchema = {
+  componentId,
+  bundleId,
+  metadata,
+  renderFlags,
+  templates,
+}
 
-export const component = createAglynComponentElement(
-  {
-    componentId,
-    bundleId,
-    metadata,
-    templates,
-  },
-  Button,
-)
+export const component = createAglynComponentElement(schema, Button)
 
 export default component

@@ -17,27 +17,34 @@
 
 import { ElementId } from '@aglyn/core-data-framework'
 import { useAglynElementData, useAglynElementLabel } from '@aglyn/feature-renderer'
+import { styled } from '@aglyn/shared-feature-themes'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
-import TreeItem, { TreeItemProps } from '@mui/lab/TreeItem'
-import TreeView, { SingleSelectTreeViewProps } from '@mui/lab/TreeView'
+import MuiTreeItem, { TreeItemProps } from '@mui/lab/TreeItem'
+import MuiTreeView, { SingleSelectTreeViewProps } from '@mui/lab/TreeView'
 import { forwardRef } from 'react'
 
 
-interface CanvasElementTreeItemComponentProps extends Partial<TreeItemProps> {
+const ScrollableTreeView = styled(MuiTreeView, {name: 'ScrollableTreeView'})({
+  overflow: 'auto',
+  flexGrow: 1,
+  maxWidth: 400,
+})
+
+interface ElementsTreeItemComponentProps extends Partial<TreeItemProps> {
   $id: ElementId
 }
 
-const CanvasElementTreeItemComponent = forwardRef<any, CanvasElementTreeItemComponentProps>(
+const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
     const elements = useAglynElementData($id, 'elements')
     const label = useAglynElementLabel($id)
     return (
-      <TreeItem ref={ref} nodeId={$id} label={label} {...rest}>
+      <MuiTreeItem ref={ref} nodeId={$id} label={label} {...rest}>
         {elements.map(($id) => (
-          <CanvasElementTreeItemComponent key={$id} $id={$id} />
+          <ElementsTreeItemComponent key={$id} $id={$id} />
         ))}
-      </TreeItem>
+      </MuiTreeItem>
     )
   },
 )
@@ -56,20 +63,21 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
     const elements = useAglynElementData('__root__', 'elements')
 
     return (
-      <TreeView
+      <ScrollableTreeView
         ref={ref}
         aria-label="file system navigator"
         defaultCollapseIcon={<SvgPathIcon iconIds={'chevron-down'} />}
         defaultExpandIcon={<SvgPathIcon iconIds={'chevron-right'} />}
-        sx={{height: '100%', flexGrow: 1, maxWidth: 400, overflowY: 'auto'}}
         {...rest}
       >
 
         {elements.map(($id) => (
-          <CanvasElementTreeItemComponent key={$id} $id={$id} />
+          <ElementsTreeItemComponent key={$id} $id={$id} />
         ))}
 
-      </TreeView>
+        {children}
+
+      </ScrollableTreeView>
     )
   },
 )

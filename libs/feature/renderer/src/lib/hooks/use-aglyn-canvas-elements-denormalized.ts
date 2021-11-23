@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-import React from 'react'
+import {
+  AglynComponentElementDataNormalizedArray,
+  getCanvasDenormalizedElementsStore,
+} from '@aglyn/core-data-framework'
+import { useStoreMap } from 'effector-react'
+import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-/* eslint-disable-next-line */
-export interface RulerGuidesProps {}
 
-export function RulerGuides(props: RulerGuidesProps) {
-  return (
-    <div>
-      <h1>Welcome to RulerGuides!</h1>
-    </div>
-  )
+export function useAglynCanvasElementsDenormalized(): AglynComponentElementDataNormalizedArray {
+  const {getApp} = useAglynAppContext()
+  const app = getApp()
+  const store = getCanvasDenormalizedElementsStore(app)
+  return useStoreMap(store, (store) => store)
 }
-
-export default RulerGuides
+export default useAglynCanvasElementsDenormalized

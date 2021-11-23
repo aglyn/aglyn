@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import React from 'react'
 import { render } from '@testing-library/react'
+import React from 'react'
 
-import RulerGuides from './ruler-guides'
+import RulerGuides from './ruler-guides.component'
+
 
 describe('RulerGuides', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<RulerGuides />)
+    const {baseElement} = render(<RulerGuides />)
     expect(baseElement).toBeTruthy()
   })
 })

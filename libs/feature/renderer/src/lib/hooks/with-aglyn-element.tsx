@@ -20,9 +20,9 @@ import {
   AglynComponentElementDataNormalized,
   ElementId,
 } from '@aglyn/core-data-framework'
-import { AnyProps } from '@aglyn/shared-data-types'
+import { InnerRefProp } from '@aglyn/shared-data-types'
 import { getDisplayName } from '@aglyn/shared-util-tools'
-import { ComponentType, forwardRef, PropsWithoutRef, Ref, RefAttributes } from 'react'
+import { ComponentType, forwardRef, PropsWithoutRef, RefAttributes } from 'react'
 import useAglynComponent from './use-aglyn-component'
 import useAglynElementConditionalInnerRefProps
   from './use-aglyn-element-conditional-inner-ref-props'
@@ -34,11 +34,10 @@ export interface RequiredElementDataProps {
   $id: ElementId
 }
 
-export interface OptionalElementDataProps {
+export interface OptionalElementDataProps extends InnerRefProp {
   elementData: AglynComponentElementDataNormalized<any>
   component: AglynComponentElement<any>
   elemProps: any
-  innerRef?: Ref<any>
 }
 
 export interface ElementDataProps extends RequiredElementDataProps,

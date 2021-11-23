@@ -16,35 +16,12 @@
  */
 
 import { DistributiveOmit } from '@aglyn/shared-data-types'
-import {
-  ComponentProps,
-  ComponentPropsWithRef,
-  ElementType,
-  JSXElementConstructor,
-  Ref,
-} from 'react'
+import { ComponentProps, ComponentPropsWithRef, ElementType, JSXElementConstructor } from 'react'
 
-export type InferElementTypeProps<T> = T extends ElementType<infer P> ? P : never
+/**/
 
-export type OverrideComponentProp<P = any> = { component?: ElementType<P> }
-export type OverrideComponentsProps<T extends OverrideComponentProp = any> = [T] extends [
-  { component: infer P }
-]
-  ? InferElementTypeProps<P>
-  : never
-export type OverrideComponentPropPlusOverrideProps<T extends OverrideComponentProp = any> = [
-  T
-] extends [{ component: ElementType }]
-  ? OverrideComponentsProps<T> & Pick<T, 'component'>
-  : { component?: undefined }
 
-export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P &
-  OverrideComponentPropPlusOverrideProps<T>
-
-export type InnerRefProp<T = any> = {
-  innerRef?: Ref<T>
-}
-export type PropsWithInnerRef<P, T> = InnerRefProp<T> & P
+/**/
 
 /**
  * `T extends ConsistentWith<T, U>` means that where `T` has overlapping properties with
@@ -65,14 +42,10 @@ export type ConsistentWith<DecorationTargetProps, InjectedProps> = {
  * all the props to {component} except the {InjectedProps} and will accept
  * additional {AdditionalProps}
  */
-export type PropInjector<InjectedProps, AdditionalProps = {}> = <
-  C extends JSXElementConstructor<ConsistentWith<ComponentProps<C>, InjectedProps>>
->(
-  component: C
-) => JSXElementConstructor<
-  DistributiveOmit<JSX.LibraryManagedAttributes<C, ComponentProps<C>>, keyof InjectedProps> &
-    AdditionalProps
->
+export type PropInjector<InjectedProps, AdditionalProps = {}> = <C extends JSXElementConstructor<ConsistentWith<ComponentProps<C>, InjectedProps>>>(
+  component: C,
+) => JSXElementConstructor<DistributiveOmit<JSX.LibraryManagedAttributes<C, ComponentProps<C>>, keyof InjectedProps> &
+  AdditionalProps>
 
 /**
  * Generate a set of string literal types with the given default record `T` and
@@ -83,9 +56,7 @@ export type PropInjector<InjectedProps, AdditionalProps = {}> = <
  *
  * @internal
  */
-export type OverridableStringUnion<T extends string | number, U = {}> = GenerateStringUnion<
-  Overwrite<Record<T, true>, U>
->
+export type OverridableStringUnion<T extends string | number, U = {}> = GenerateStringUnion<Overwrite<Record<T, true>, U>>
 
 /**
  * Like `T & U`, but using the value types from `U` where their properties overlap.
@@ -94,17 +65,13 @@ export type OverridableStringUnion<T extends string | number, U = {}> = Generate
  */
 export type Overwrite<T, U> = DistributiveOmit<T, keyof U> & U
 
-type GenerateStringUnion<T> = Extract<
-  {
-    [Key in keyof T]: true extends T[Key] ? Key : never
-  }[keyof T],
-  string
->
+type GenerateStringUnion<T> = Extract<{
+  [Key in keyof T]: true extends T[Key] ? Key : never
+}[keyof T],
+  string>
 
 // https://stackoverflow.com/questions/53807517/how-to-test-if-two-types-are-exactly-the-same
-type IfEquals<T, U, Y = unknown, N = never> = (<G>() => G extends T ? 1 : 2) extends <
-  G
->() => G extends U ? 1 : 2
+type IfEquals<T, U, Y = unknown, N = never> = (<G>() => G extends T ? 1 : 2) extends <G>() => G extends U ? 1 : 2
   ? Y
   : N
 
@@ -121,7 +88,7 @@ export interface OverridableComponent<M extends OverridableTypeMap> {
        * Either a string to use a HTML element or a component.
        */
       component: C
-    } & OverrideProps<M, C>
+    } & OverrideProps<M, C>,
   ): JSX.Element
   (props: DefaultComponentProps<M>): JSX.Element
   propTypes?: any

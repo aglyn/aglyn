@@ -48,6 +48,15 @@ export const GridFormTemplate = forwardRef<any, GridFormTemplateProps>(function 
           <Box mt={2}>
             <FormControl margin="normal" fullWidth>
               <Button
+                variant="outlined"
+                onClick={onCancel}
+                fullWidth
+              >
+                Cancel
+              </Button>
+            </FormControl>
+            <FormControl margin="normal" fullWidth>
+              <Button
                 color="secondary"
                 disabled={submitting || !valid}
                 startIcon={<SvgPathIcon iconIds="content-save" />}
@@ -57,11 +66,6 @@ export const GridFormTemplate = forwardRef<any, GridFormTemplateProps>(function 
                 fullWidth
               >
                 Save Element
-              </Button>
-            </FormControl>
-            <FormControl margin="normal" fullWidth>
-              <Button onClick={onCancel} variant="text" fullWidth>
-                Cancel
               </Button>
             </FormControl>
           </Box>
