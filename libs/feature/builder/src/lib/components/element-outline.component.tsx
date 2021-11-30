@@ -15,103 +15,15 @@
  * limitations under the License.
  */
 
-import { deleteCanvasElement, duplicateCanvasElement, ElementId } from '@aglyn/core-data-framework'
-import { useAglynAppContext } from '@aglyn/feature-renderer'
+import { ElementId } from '@aglyn/core-data-framework'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import {
-  SrOnlyComponent,
-  SvgPathIcon,
-  SvgPathIconProps,
-  useCombinedRefs,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
 import { getElementClientRectBounding } from '@aglyn/shared-util-dom'
 import Box, { BoxProps } from '@mui/material/Box'
-import Button, { ButtonProps } from '@mui/material/Button'
-import ButtonGroup from '@mui/material/ButtonGroup'
 import MuiPopper, { PopperProps as MuiPopperProps } from '@mui/material/Popper'
-import Tooltip from '@mui/material/Tooltip'
 import clsx from 'clsx'
-import { ChangeEvent, forwardRef, RefObject, useCallback, useMemo, useRef } from 'react'
+import { forwardRef, RefObject, useMemo, useState } from 'react'
 import { useBuilderElementInteractionActivity } from '../hooks/use-builder-element-interaction-activity'
-
-
-const popperClassKeys = generateComponentClassKeys('AglynPopper', [
-  'arrow',
-])
-
-const Popper = styled(MuiPopper, {name: 'AglynPopper'})<MuiPopperProps>(({theme}) => ({
-  zIndex: 1,
-  '& > div': {
-    position: 'relative',
-  },
-  '&[data-popper-placement*="bottom"]': {
-    '& > div': {
-      marginTop: -2,
-    },
-    [`& .${popperClassKeys.arrow}`]: {
-      top: 0,
-      left: 0,
-      marginTop: '-0.85em',
-      width: '3em',
-      height: '1em',
-      paddingLeft: 5, paddingRight: 5,
-      '&::before': {
-        borderWidth: '0 1em 1em 1em',
-        borderColor: `transparent transparent ${theme.palette.primary.main} transparent`,
-      },
-    },
-  },
-  '&[data-popper-placement*="top"]': {
-    '& > div': {
-      marginBottom: -2,
-    },
-    [`& .${popperClassKeys.arrow}`]: {
-      bottom: 0,
-      left: 0,
-      marginBottom: '-0.85em',
-      width: '3em',
-      height: '1em',
-      paddingLeft: 5, paddingRight: 5,
-      '&::before': {
-        borderWidth: '1em 1em 0 1em',
-        borderColor: `${theme.palette.primary.main} transparent transparent transparent`,
-      },
-    },
-  },
-  '&[data-popper-placement*="right"]': {
-    '& > div': {
-      marginLeft: -2,
-    },
-    [`& .${popperClassKeys.arrow}`]: {
-      left: 0,
-      marginLeft: '-0.85em',
-      height: '3em',
-      width: '1em',
-      paddingTop: 5, paddingBottom: 5,
-      '&::before': {
-        borderWidth: '1em 1em 1em 0',
-        borderColor: `transparent ${theme.palette.primary.main} transparent transparent`,
-      },
-    },
-  },
-  '&[data-popper-placement*="left"]': {
-    '& > div': {
-      marginRight: -2,
-    },
-    [`& .${popperClassKeys.arrow}`]: {
-      right: 0,
-      marginRight: '-0.85em',
-      height: '3em',
-      width: '1em',
-      paddingTop: 5, paddingBottom: 5,
-      '&::before': {
-        borderWidth: '1em 0 1em 1em',
-        borderColor: `transparent transparent transparent ${theme.palette.primary.main}`,
-      },
-    },
-  },
-}))
+import ElementBadgeComponent from './element-badge.component'
 
 
 const classKeys = generateComponentClassKeys('AglynElementOutlineComponent', [
@@ -144,9 +56,9 @@ export const AglynElementOutline = styled(
   pointerEvents: 'none',
   position: 'absolute',
   left: 0, top: 0, right: 0, bottom: 0,
-  marginLeft: -2, marginTop: -2,
+  // marginLeft: -2, marginTop: -2,
   visibility: 'hidden',
-  transition: theme.transitions.create(['visibility', 'transform', 'width', 'height', 'left', 'right', 'top', 'bottom'], {
+  transition: theme.transitions.create(['width', 'height'], {
     duration: theme.transitions.duration.short,
     easing: theme.transitions.easing.easeInOut,
   }),
@@ -162,7 +74,7 @@ export const AglynElementOutline = styled(
   },
   [`&.${classKeys.selected}`]: {
     outlineWidth: 3,
-    outlineOffset: -1,
+    outlineOffset: 2,
     outlineColor: theme.palette.quaternary.main,
     outlineStyle: 'solid',
   },
@@ -173,7 +85,9 @@ export interface ElementOutlineComponentProps extends Partial<MuiPopperProps> {
   anchorRef?: RefObject<any>
   isOver?: boolean
   isDragging?: boolean
+  type?: 'hovered' | 'selected'
 }
+
 
 const ElementOutlineComponent = forwardRef<any, ElementOutlineComponentProps>(
   function RefRenderFn(props, ref) {
@@ -182,222 +96,82 @@ const ElementOutlineComponent = forwardRef<any, ElementOutlineComponentProps>(
       anchorRef,
       isOver,
       isDragging,
+      type,
       ...rest
     } = props
 
-    const anchorEl = anchorRef?.current
+    const [outlineRef, setOutlineRef] = useState(null)
+
+    const isTypeSelect = type === 'selected'
+
+    const {isSelfHovered, isSelfSelected} = useBuilderElementInteractionActivity($id)
+    const variant = (isDragging || isSelfSelected) ? 'selected' : 'hovered'
+
+    const isOutlineable = Boolean(isOver || isDragging || isSelfHovered || isSelfSelected)
+    const outlineOpen = Boolean(isOutlineable && anchorRef?.current)
+
+    const isBadgeable = Boolean(isTypeSelect && isSelfSelected && outlineOpen)
+    const badgeOpen = Boolean(isBadgeable)
 
     const {width, height} = useMemo(() => {
       const rect = anchorRef?.current
-        ? getElementClientRectBounding(anchorRef.current as any)
+        ? getElementClientRectBounding(anchorRef?.current as any)
         : {} as any
-      return {width: (rect.width || 0) + 4, height: (rect.height || 0) + 4}
+      return {
+        width: rect.width,
+        height: rect.height,
+      }
     }, [anchorRef?.current])
 
-    const {isSelfHovered, isSelfSelected} = useBuilderElementInteractionActivity($id)
-    const open = Boolean((isOver || isDragging || isSelfHovered || isSelfSelected) && anchorEl)
-    console.log('is open ', open, isOver, isDragging, isSelfHovered, isSelfSelected)
-    const tooltipOpen = Boolean((isDragging || isSelfSelected) && anchorEl)
-    const variant = (isDragging || isSelfSelected) ? 'selected' : 'hovered'
-
-    const localRef = useRef()
-    const outlineRef = useRef()
-
-    const {confirm} = useConfirmationContext()
-    const {getApp} = useAglynAppContext()
-
-    const handleDeleteButtonClick = useCallback((e: ChangeEvent<unknown>) => {
-      confirm({
-        title: 'Are you sure?',
-        description: 'You are about to delete an element from the canvas, please confirm the desired option. Press \'Delete\' to confirm and delete the item. Press \'Cancel\' to void the operation and close this dialog.',
-        confirmationText: 'Delete',
-        confirmationButtonProps: {
-          color: 'error',
-        },
-      })
-      .then(
-        (res) => {
-          // onClose()
-          deleteCanvasElement(getApp(), {$id})
-        },
-        (reason) => {
-          console.warn('rejected', reason)
-        },
-      )
-      .catch((e) => {
-        console.error(e)
-      })
-    }, [$id])
-
-    const handleDuplicateButtonClick = useCallback((e: ChangeEvent<unknown>) => {
-      duplicateCanvasElement(getApp(), {$id})
-    }, [$id])
-
-    // const handleAddElementClick = useAddElementCallback({
-    //   drawerOptions: {
-    //     type: 'edit-element-traits',
-    //   },
-    // })
-
-    const buttons = [
-      {
-        id: 'delete-element',
-        tooltipProps: {
-          title: 'Delete',
-        },
-        srOnlyProps: {
-          children: 'Delete',
-        },
-        buttonProps: {
-          // disabled: yes(disableZoomResetButton),
-          onClick: handleDeleteButtonClick,
-        } as ButtonProps,
-        svgPathIconProps: {
-          iconIds: 'delete-outline',
-          color: 'error',
-        } as SvgPathIconProps,
-      },
-      {
-        id: 'duplicate-element',
-        tooltipProps: {
-          title: 'Duplicate',
-        },
-        srOnlyProps: {
-          children: 'Duplicate',
-        },
-        buttonProps: {
-          // disabled: yes(disableZoomResetButton),
-          onClick: handleDuplicateButtonClick,
-        },
-        svgPathIconProps: {
-          iconIds: 'content-duplicate',
-        },
-      },
-      {
-        id: 'modify-props',
-        tooltipProps: {
-          title: 'Modify',
-        },
-        srOnlyProps: {
-          children: 'Modify',
-        },
-        buttonProps: {
-          // disabled: yes(disableZoomResetButton),
-          // onClick: handleAddElementClick,
-        },
-        svgPathIconProps: {
-          iconIds: 'pencil',
-        },
-      },
-    ]
-
-    const arrowRef = useRef<HTMLElement>()
 
     return (
-      <>
-        <MuiPopper
-          ref={useCombinedRefs(localRef, ref)}
-          open={open}
-          anchorEl={anchorEl}
-          placement="top-start"
-          keepMounted
-          disablePortal={true}
-          modifiers={[
-            {
-              name: 'flip',
-              enabled: false,
-              options: {
-                altBoundary: false,
-                rootBoundary: 'viewport',
-                padding: 0,
-              },
+      <MuiPopper
+        ref={ref}
+        open={outlineOpen}
+        anchorEl={anchorRef?.current}
+        placement="top-start"
+        keepMounted
+        disablePortal
+        modifiers={[
+          {
+            name: 'flip',
+            enabled: false,
+            options: {
+              altBoundary: false,
+              rootBoundary: 'viewport',
+              padding: 0,
             },
-            {
-              name: 'preventOverflow',
-              enabled: false,
-              options: {
-                altAxis: false,
-                altBoundary: false,
-                tether: true,
-                rootBoundary: 'viewport',
-                padding: 0,
-              },
+          },
+          {
+            name: 'preventOverflow',
+            enabled: false,
+            options: {
+              altAxis: false,
+              altBoundary: false,
+              tether: true,
+              rootBoundary: 'viewport',
+              padding: 0,
             },
-            // {
-            //   name: 'arrow',
-            //   enabled: true,
-            //   options: {
-            //     element: arrowRef,
-            //   },
-            // },
-          ]}
-          {...rest}
-        >
-          <AglynElementOutline
-            style={{width, height}}
-            ref={outlineRef}
-            variant={variant}
-            open
+          },
+        ]}
+        {...rest}
+      >
+        <AglynElementOutline
+          style={{width, height}}
+          ref={setOutlineRef}
+          variant={variant}
+          open
+        />
+
+        {isTypeSelect && (
+          <ElementBadgeComponent
+            anchorEl={outlineRef}
+            open={badgeOpen}
+            $id={$id}
+            arrow
           />
-          {/*<PopperArrowComponent className={popperClassKeys.arrow} />*/}
-
-          <Popper
-            anchorEl={outlineRef?.current}
-            open={Boolean(outlineRef?.current && tooltipOpen)}
-            placement="top"
-            disablePortal={true}
-            keepMounted
-            modifiers={[
-              {
-                name: 'flip',
-                enabled: false,
-                options: {
-                  altBoundary: false,
-                  rootBoundary: 'viewport',
-                  padding: 8,
-                },
-              },
-              {
-                name: 'preventOverflow',
-                enabled: false,
-                options: {
-                  altAxis: false,
-                  altBoundary: false,
-                  tether: false,
-                  rootBoundary: 'viewport',
-                  padding: 8,
-                },
-              },
-              // {
-              //   name: 'arrow',
-              //   enabled: false,
-              //   options: {
-              //     element: arrowRef,
-              //   },
-              // },
-            ]}
-          >
-            <div>
-              <ButtonGroup variant="contained" color="primary" aria-label="element controls">
-
-                {buttons.map(({id, tooltipProps, srOnlyProps, buttonProps, svgPathIconProps}) => (
-                  <Tooltip key={id} {...tooltipProps}>
-                    <Button {...buttonProps}>
-                      <SvgPathIcon fontSize="small" {...svgPathIconProps} />
-                      <SrOnlyComponent component="span" {...srOnlyProps} />
-                    </Button>
-                  </Tooltip>
-                ))}
-
-              </ButtonGroup>
-            </div>
-          </Popper>
-
-
-        </MuiPopper>
-
-
-      </>
+        )}
+      </MuiPopper>
     )
   },
 )

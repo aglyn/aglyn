@@ -26,39 +26,39 @@ import { ElementOutlineComponent } from './element-outline.component'
 import { ElementRendererComponent } from './element-renderer.component'
 
 
-const Toolbox = forwardRef(
-  function RefRenderFn(props) {
-    const selected = useCanvasSelected()
-    const selectedId = selected?.$id
-    const hovered = useCanvasHovered()
-    const hoveredId = hovered?.$id
+const Toolbox = (props) => {
+  const selected = useCanvasSelected()
+  const selectedId = selected?.$id
+  const hovered = useCanvasHovered()
+  const hoveredId = hovered?.$id
 
-    return (
-      <CanvasRenderedElementRefsConsumer>
-        {({getElement}) => (
-          <>
-            <ElementOutlineComponent
-              anchorRef={getElement(selectedId)}
-              // variant={outlineVariant}
-              // isDragging={isDragging}
-              // isOver={isOver}
-              data-aglyn-element-outline={selectedId ? `selected:${selectedId}` : undefined}
-              $id={selectedId}
-            />
-            <ElementOutlineComponent
-              anchorRef={getElement(hoveredId)}
-              // variant={outlineVariant}
-              // isDragging={isDragging}
-              // isOver={isOver}
-              data-aglyn-element-outline={hoveredId ? `hover:${hoveredId}` : undefined}
-              $id={hoveredId}
-            />
-          </>
-        )}
-      </CanvasRenderedElementRefsConsumer>
-    )
-  },
-)
+  return (
+    <CanvasRenderedElementRefsConsumer>
+      {({getElement}) => (
+        <>
+          <ElementOutlineComponent
+            key="hovered"
+            type="hovered"
+            anchorRef={getElement(hoveredId)}
+            // isDragging={isDragging}
+            // isOver={isOver}
+            data-aglyn-element-outline={hoveredId ? `hover:${hoveredId}` : undefined}
+            $id={hoveredId}
+          />
+          <ElementOutlineComponent
+            key="selected"
+            type="selected"
+            anchorRef={getElement(selectedId)}
+            // isDragging={isDragging}
+            // isOver={isOver}
+            data-aglyn-element-outline={selectedId ? `selected:${selectedId}` : undefined}
+            $id={selectedId}
+          />
+        </>
+      )}
+    </CanvasRenderedElementRefsConsumer>
+  )
+}
 
 
 const ViewportFrame = styled('div', {name: 'ViewportFrame'})(({theme}) => ({

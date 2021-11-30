@@ -51,33 +51,35 @@ const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps
     const label = useAglynElementLabel($id)
     const icon = useAglynComponentSchema(componentId, bundleId)?.metadata?.icon
     return (
-      <MuiTreeItem
-        ref={ref}
-        nodeId={$id}
-        label={(
-          <Fragment>
-            {(
-              <Fragment>
-                {_isStrT(icon) ? (
-                  <SvgPathIcon
-                    sx={{fontSize: '0.8em', ml: -0.25, mr: 0.75}}
-                    color="inherit"
-                    iconIds={icon}
-                  />
-                ) : (
-                  icon
-                )}
-              </Fragment>
-            ) as ReactNode}
-            {label}
-          </Fragment>
-        )}
-        {...rest}
-      >
-        {elements.map(($id) => (
-          <ElementsTreeItemComponent key={$id} $id={$id} />
-        ))}
-      </MuiTreeItem>
+      <>
+        <MuiTreeItem
+          ref={ref}
+          nodeId={$id}
+          label={(
+            <Fragment>
+              {(
+                <Fragment>
+                  {_isStrT(icon) ? (
+                    <SvgPathIcon
+                      sx={{fontSize: '0.8em', ml: -0.25, mr: 0.75}}
+                      color="inherit"
+                      iconIds={icon}
+                    />
+                  ) : (
+                    icon
+                  )}
+                </Fragment>
+              ) as ReactNode}
+              {label}
+            </Fragment>
+          )}
+          {...rest}
+        >
+          {elements.map(($id) => (
+            <ElementsTreeItemComponent key={$id} $id={$id} />
+          ))}
+        </MuiTreeItem>
+      </>
     )
   },
 )
@@ -99,7 +101,6 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
     const selectedId = selected?.$id
     const selectedIdHierarchy = useAglynCanvasElementHierarchy(selectedId)
 
-    console.log('selectedIdHierarchy', selectedId, selected, selectedIdHierarchy)
     const defaultExpanded = useMemo(() => (
       selectedIdHierarchy.filter((id) => id !== ELEMENT_ROOT_ID)
     ), [selectedIdHierarchy])

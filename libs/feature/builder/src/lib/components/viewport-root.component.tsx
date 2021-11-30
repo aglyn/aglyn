@@ -70,19 +70,19 @@ export const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>
     const pannerRef = useRef<any>()
 
     const handleZoomReset = useCallback((e: ChangeEvent<unknown>) => {
-      if (_isFnT(pannerRef.current.reset)) {
+      if (_isFnT(pannerRef.current?.reset)) {
         pannerRef.current.reset()
       }
     }, [])
 
     const handleZoomDecrease = useCallback((e: ChangeEvent<unknown>) => {
-      if (_isFnT(pannerRef.current.zoomOut)) {
+      if (_isFnT(pannerRef.current?.zoomOut)) {
         pannerRef.current.zoomOut()
       }
     }, [])
 
     const handleZoomIncrease = useCallback((e: ChangeEvent<unknown>) => {
-      if (_isFnT(pannerRef.current.zoomIn)) {
+      if (_isFnT(pannerRef.current?.zoomIn)) {
         pannerRef.current.zoomIn()
       }
     }, [])

@@ -21,7 +21,7 @@ import { BuilderComponent } from '@aglyn/feature-builder'
 function Builder(props) {
 
   return (
-    <BuilderComponent />
+    <BuilderComponent noSsr />
   )
 }
 

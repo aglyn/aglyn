@@ -102,6 +102,11 @@ const EditorComponentRaw = forwardRef<any, EditorComponentProps>(
                   alignItems="center"
                   spacing={0}
                 />
+
+                <ToolboxLeftComponent
+                  id="aglyn:builder-toolbox-left"
+                  aria-label="builder toolbox left"
+                />
               </Stack>
 
               {children}

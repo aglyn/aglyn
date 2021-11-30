@@ -20,7 +20,6 @@ import {
   setBuilderCanvasHovered,
   setBuilderCanvasSelected,
 } from '@aglyn/core-data-framework'
-import { ElementAttribute } from '@aglyn/feature-builder'
 import {
   ElementRendererComponent as DefaultElementRendererComponent,
   ElementRendererComponentProps as DefaultElementRendererComponentProps,
@@ -37,7 +36,6 @@ import Box, { BoxProps } from '@mui/material/Box'
 import { forwardRef, Fragment, MouseEvent, useCallback, useEffect, useRef } from 'react'
 import { useCanvasRenderedElementRefs } from '../contexts/canvas-rendered-element-refs'
 import { useBuilderElementAttributes } from '../hooks/use-builder-element-attributes'
-import { ElementOutlineComponent } from './element-outline.component'
 
 
 interface ElementBoxProps extends BoxProps {
@@ -177,7 +175,6 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
 
     return (
       <Fragment>
-
         <DefaultElementRendererComponent
           ref={useCombinedRefs(ref, localRef, dropRef, dragRef)}
           // component={}
@@ -191,35 +188,6 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
           {...dragListeners}
           {...rest}
         />
-
-        {/*<DefaultElementRendererComponent*/}
-        {/*  ref={useCombinedRefs(ref, localRef, dropRef, dragRef)}*/}
-        {/*  $id={$id}*/}
-        {/*  elementRendererComponent={ElementRendererComponent}*/}
-        {/*  style={style}*/}
-        {/*  onMouseOver={handleMouseOver}*/}
-        {/*  onMouseOut={handleMouseLeave}*/}
-        {/*  onPointerDown={handlePointerDown}*/}
-        {/*  {...dragListeners}*/}
-        {/*  {...rest}*/}
-        {/*/>*/}
-        {/*{...elementAttributes}*/}
-
-
-        {/*<ElementOutlineComponent*/}
-        {/*  anchorRef={localRef}*/}
-        {/*  // variant={outlineVariant}*/}
-        {/*  isDragging={isDragging}*/}
-        {/*  isOver={isOver}*/}
-        {/*  id={`elementOutline-${$id}`}*/}
-        {/*  $id={$id}*/}
-        {/*/>*/}
-        {/*<ActivityContext.Consumer>*/}
-        {/*  {(activityRef) => (*/}
-        {/*    <Portal container={activityRef.current}>*/}
-        {/*    </Portal>*/}
-        {/*  )}*/}
-        {/*</ActivityContext.Consumer>*/}
       </Fragment>
     )
   },
