@@ -33,7 +33,7 @@ export type DecoratedElementRendererProps<T = any> = ElementRendererComponentPro
   & ElementDataProps
 
 const ElementRendererComponentRaw = forwardRef<any, DecoratedElementRendererProps>(
-  function RefRenderFn(_props, ref) {
+  function RefRenderFn(props, ref) {
     const {
       $id,
       elemProps,
@@ -42,7 +42,7 @@ const ElementRendererComponentRaw = forwardRef<any, DecoratedElementRendererProp
       elementRendererComponent: elementRendererComponentProp,
       children,
       ...rest
-    } = _props
+    } = props
 
     const elementRendererComponent = elementRendererComponentProp || ElementRendererComponent
 

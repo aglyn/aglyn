@@ -15,23 +15,54 @@
  * limitations under the License.
  */
 
-import { InteractionModeFlag } from '@aglyn/core-data-framework'
+import {
+  InteractionModeFlag,
+  setBuilderCanvasHovered,
+  setBuilderCanvasSelected,
+} from '@aglyn/core-data-framework'
+import { ElementAttribute } from '@aglyn/feature-builder'
 import {
   ElementRendererComponent as DefaultElementRendererComponent,
   ElementRendererComponentProps as DefaultElementRendererComponentProps,
+  useAglynAppContext,
   useAglynBuilderStore,
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/feature-renderer'
+import { styled } from '@aglyn/shared-feature-themes'
 import { useCombinedRefs } from '@aglyn/shared-ui-jsx'
-import { getElementClientRectBounding } from '@aglyn/shared-util-dom'
 import { CSS } from '@aglyn/shared-util-tools'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import Portal from '@mui/material/Portal'
-import { forwardRef, Fragment, MouseEvent, useCallback, useRef } from 'react'
-import { ActivityContext, useHoverContext } from '../contexts/hover-context'
+import Box, { BoxProps } from '@mui/material/Box'
+import { forwardRef, Fragment, MouseEvent, useCallback, useEffect, useRef } from 'react'
+import { useCanvasRenderedElementRefs } from '../contexts/canvas-rendered-element-refs'
 import { useBuilderElementAttributes } from '../hooks/use-builder-element-attributes'
+import { ElementOutlineComponent } from './element-outline.component'
 
+
+interface ElementBoxProps extends BoxProps {
+
+}
+
+const ElementBox = styled(Box, {
+  name: 'ElementBox',
+})<ElementBoxProps>(({theme}) => ({
+  // [`&.[${ElementAttribute.HOVERED}]`]: {
+  //   visibility: 'visible',
+  // },
+  // [`&[${ElementAttribute.HOVERED}^="self"]`]: {
+  //   outlineWidth: 3,
+  //   outlineOffset: 2,
+  //   outlineColor: theme.palette.secondary.light,
+  //   outlineStyle: 'dashed',
+  // },
+  // [`&[${ElementAttribute.SELECTED}^="self"]`]: {
+  //   outlineWidth: 3,
+  //   outlineOffset: -1,
+  //   outlineColor: theme.palette.quaternary.main,
+  //   outlineStyle: 'solid',
+  // },
+}))
 
 export interface ElementRendererComponentProps extends DefaultElementRendererComponentProps {
   [prop: string]: any
@@ -40,12 +71,13 @@ export interface ElementRendererComponentProps extends DefaultElementRendererCom
 const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
-    const localRef = useRef()
+    const localRef = useRef<Element>()
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
     const componentSchema = useAglynComponentSchema(componentId, bundleId)
     const elementAttributes = useBuilderElementAttributes({$id, componentId, bundleId})
-    const {hoverOpen, hoverClose, hoverSelect, hoverDeselect} = useHoverContext()
+    const {getApp} = useAglynAppContext()
+    // const {hoverOpen, hoverClose, hoverSelect, hoverDeselect} = useHoverContext()
     const interactMode = useAglynBuilderStore('flags', 'interactMode')
     const rearrangeEnabled = interactMode === InteractionModeFlag.REARRANGE
     const selectEnabled = interactMode === InteractionModeFlag.SELECT
@@ -71,52 +103,54 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
     }
 
     const handleMouseOver = useCallback((e: MouseEvent<HTMLElement>) => {
-      if (isDragging) return
+      // if (isDragging) return
       e.stopPropagation()
       const target = e.currentTarget
       if (target) {
-        const clientPosition = getElementClientRectBounding(target)
-        hoverOpen(e, {
-          hovered: {
-            $id: $id,
-            position: clientPosition,
-            componentId: componentId,
-            bundleId: bundleId,
-          },
-        })
+        setBuilderCanvasHovered(getApp(), {hovered: {$id}})
+        // const clientPosition = getElementClientRectBounding(target)
+        // hoverOpen(e, {
+        //   hovered: {
+        //     $id: $id,
+        //     // position: clientPosition,
+        //     // componentId: componentId,
+        //     // bundleId: bundleId,
+        //   },
+        // })
       }
       else {
-        hoverClose(e as any)
+        // hoverClose(e as any)
       }
-    }, [isDragging, hoverOpen, hoverClose, $id])
+    }, [$id])
 
 
     const handleMouseLeave = useCallback((e) => {
       // if (isDragging) return
       // e.stopPropagation()
       // hoverClose(e)
-    }, [isDragging, hoverClose, $id])
+    }, [])
 
 
     const handleSelect = useCallback((e) => {
       e.stopPropagation()
       const target = e.currentTarget
       if (target) {
-        const clientPosition = getElementClientRectBounding(target)
-        hoverSelect(e, {
-          selected: {
-            $id: $id,
-            position: clientPosition,
-            componentId: componentId,
-            bundleId: bundleId,
-          },
-        })
+        setBuilderCanvasSelected(getApp(), {selected: {$id}})
+        // const clientPosition = getElementClientRectBounding(target)
+        // hoverSelect(e, {
+        //   selected: {
+        //     $id: $id,
+        //     // position: clientPosition,
+        //     // componentId: componentId,
+        //     // bundleId: bundleId,
+        //   },
+        // })
       }
       else {
-        hoverDeselect(e)
+        // hoverDeselect(e)
       }
       // confirm({title: 'clicked'})
-    }, [rearrangeEnabled, isDragging, hoverSelect, hoverDeselect, $id, componentId, bundleId])
+    }, [$id])
 
 
     const handlePointerDown = useCallback((e) => {
@@ -128,14 +162,25 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
       }
     }, [rearrangeEnabled, selectEnabled])
 
+    const {setElement, deleteElement} = useCanvasRenderedElementRefs()
+
+    useEffect(() => {
+      setElement($id, localRef)
+      return () => {
+        deleteElement($id)
+      }
+    }, [])
+
+
     // console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
     // console.log('element attributes', elementAttributes)
 
-
     return (
       <Fragment>
+
         <DefaultElementRendererComponent
           ref={useCombinedRefs(ref, localRef, dropRef, dragRef)}
+          // component={}
           $id={$id}
           elementRendererComponent={ElementRendererComponent}
           style={style}
@@ -146,13 +191,35 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
           {...dragListeners}
           {...rest}
         />
-        <ActivityContext.Consumer>
-          {(activityRef) => (
-            <Portal container={activityRef.current}>
-              {/*{isOver && !isDragging}*/}
-            </Portal>
-          )}
-        </ActivityContext.Consumer>
+
+        {/*<DefaultElementRendererComponent*/}
+        {/*  ref={useCombinedRefs(ref, localRef, dropRef, dragRef)}*/}
+        {/*  $id={$id}*/}
+        {/*  elementRendererComponent={ElementRendererComponent}*/}
+        {/*  style={style}*/}
+        {/*  onMouseOver={handleMouseOver}*/}
+        {/*  onMouseOut={handleMouseLeave}*/}
+        {/*  onPointerDown={handlePointerDown}*/}
+        {/*  {...dragListeners}*/}
+        {/*  {...rest}*/}
+        {/*/>*/}
+        {/*{...elementAttributes}*/}
+
+
+        {/*<ElementOutlineComponent*/}
+        {/*  anchorRef={localRef}*/}
+        {/*  // variant={outlineVariant}*/}
+        {/*  isDragging={isDragging}*/}
+        {/*  isOver={isOver}*/}
+        {/*  id={`elementOutline-${$id}`}*/}
+        {/*  $id={$id}*/}
+        {/*/>*/}
+        {/*<ActivityContext.Consumer>*/}
+        {/*  {(activityRef) => (*/}
+        {/*    <Portal container={activityRef.current}>*/}
+        {/*    </Portal>*/}
+        {/*  )}*/}
+        {/*</ActivityContext.Consumer>*/}
       </Fragment>
     )
   },

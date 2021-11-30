@@ -40,6 +40,13 @@ export function assignRefValue<T>(ref: Ref<T>, value: T): Ref<T> {
   return ref
 }
 
+export function handleMultipleRefs<T>(...refs: Ref<T>[]) {
+  return (element: T) => {
+    refs.forEach((ref) => assignRefValue(ref, element))
+    return element
+  }
+}
+
 /**
  * Combines multiple RefCallback|RefObject into one.
  * @param {React.Ref<T>} refs - 1 or more refs to be assigned
@@ -47,8 +54,7 @@ export function assignRefValue<T>(ref: Ref<T>, value: T): Ref<T> {
  */
 export function useCombinedRefs<T>(...refs: Ref<T>[]): RefCallback<T> {
   return useCallback((element: T) => {
-    refs.forEach((ref) => assignRefValue(ref, element))
-    return element
+    return handleMultipleRefs(...refs)(element)
   }, [refs])
 }
 

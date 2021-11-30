@@ -33,7 +33,6 @@ const classKeys = generateComponentClassKeys('AglynNavigationDrawer', [
   'left',
   'right',
   'content',
-  'paper',
 ])
 
 const Drawer = styled(MuiDrawer, {
@@ -113,7 +112,7 @@ export const NavigationDrawer = forwardRef<any, NavigationDrawerProps>(
     const appBarRightClassName = clsx(classKeys.right, AppBarRightProps?.className)
 
     return (
-      <Drawer ref={ref} className={className} {...rest}>
+      <Drawer ref={ref} anchor="right" className={className} {...rest}>
         <ElevationScroll target={localContentRef.current}>
           <AppBar
             color="default"

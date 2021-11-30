@@ -56,7 +56,6 @@ const EditorComponentRaw = forwardRef<any, EditorComponentProps>(
               ref={ref}
               id="aglyn:builder"
               direction="column"
-              justifyContent="space-between"
               alignContent="stretch"
               alignItems="stretch"
               spacing={0}
@@ -67,6 +66,9 @@ const EditorComponentRaw = forwardRef<any, EditorComponentProps>(
                 justifyContent="flex-start"
                 alignItems="stretch"
                 spacing={0}
+                sx={{
+                  zIndex: 1,
+                }}
               >
                 <AppBarGlobalComponent
                   id="aglyn:builder-appbar-global"
@@ -80,11 +82,13 @@ const EditorComponentRaw = forwardRef<any, EditorComponentProps>(
 
               <Stack
                 direction="row"
-                justifyContent="space-between"
                 alignItems="stretch"
                 flexGrow={1}
                 spacing={0}
-                sx={{overflowY: 'auto', overflowX: 'hidden'}}
+                sx={{
+                  overflow: 'hidden',
+                  zIndex: 0,
+                }}
               >
                 <ToolboxLeftComponent
                   id="aglyn:builder-toolbox-left"

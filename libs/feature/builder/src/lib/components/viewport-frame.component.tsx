@@ -18,11 +18,50 @@
 import { CanvasRendererComponent } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { forwardRef, HTMLAttributes } from 'react'
+import { CanvasRenderedElementRefsConsumer } from '../contexts/canvas-rendered-element-refs'
 import { HoverContextProvider } from '../contexts/hover-context-provider'
+import { useCanvasHovered } from '../hooks/use-builder-hovered'
+import { useCanvasSelected } from '../hooks/use-builder-selected'
+import { ElementOutlineComponent } from './element-outline.component'
 import { ElementRendererComponent } from './element-renderer.component'
 
 
-const ViewportFrameContainer = styled('div', {name: 'ViewportFrameContainer'})(({theme}) => ({
+const Toolbox = forwardRef(
+  function RefRenderFn(props) {
+    const selected = useCanvasSelected()
+    const selectedId = selected?.$id
+    const hovered = useCanvasHovered()
+    const hoveredId = hovered?.$id
+
+    return (
+      <CanvasRenderedElementRefsConsumer>
+        {({getElement}) => (
+          <>
+            <ElementOutlineComponent
+              anchorRef={getElement(selectedId)}
+              // variant={outlineVariant}
+              // isDragging={isDragging}
+              // isOver={isOver}
+              data-aglyn-element-outline={selectedId ? `selected:${selectedId}` : undefined}
+              $id={selectedId}
+            />
+            <ElementOutlineComponent
+              anchorRef={getElement(hoveredId)}
+              // variant={outlineVariant}
+              // isDragging={isDragging}
+              // isOver={isOver}
+              data-aglyn-element-outline={hoveredId ? `hover:${hoveredId}` : undefined}
+              $id={hoveredId}
+            />
+          </>
+        )}
+      </CanvasRenderedElementRefsConsumer>
+    )
+  },
+)
+
+
+const ViewportFrame = styled('div', {name: 'ViewportFrame'})(({theme}) => ({
   flexGrow: 1,
   minHeight: '100%',
   width: '100%',
@@ -40,15 +79,16 @@ export const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProp
     const {children, ...rest} = props
 
     return (
-      <ViewportFrameContainer ref={ref} {...rest}>
+      <ViewportFrame ref={ref} {...rest}>
         <HoverContextProvider>
           <CanvasRendererComponent
             id="aglyn:canvas"
             elementRendererComponent={ElementRendererComponent}
           />
+          <Toolbox />
         </HoverContextProvider>
         {children}
-      </ViewportFrameContainer>
+      </ViewportFrame>
     )
   },
 )

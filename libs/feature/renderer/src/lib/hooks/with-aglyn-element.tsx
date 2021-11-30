@@ -22,6 +22,7 @@ import {
 } from '@aglyn/core-data-framework'
 import { InnerRefProp } from '@aglyn/shared-data-types'
 import { getDisplayName } from '@aglyn/shared-util-tools'
+import clsx from 'clsx'
 import { ComponentType, forwardRef, PropsWithoutRef, RefAttributes } from 'react'
 import useAglynComponent from './use-aglyn-component'
 import useAglynElementConditionalInnerRefProps
@@ -32,6 +33,7 @@ import useAglynElementResolvedProps from './use-aglyn-element-resolved-props'
 
 export interface RequiredElementDataProps {
   $id: ElementId
+  className?: string
 }
 
 export interface OptionalElementDataProps extends InnerRefProp {
@@ -50,11 +52,12 @@ export function withAglynElement<U = any, T = any>(
 ): ComponentType<RequiredElementDataProps & U & RefAttributes<T>> {
   const component = forwardRef<T, RequiredElementDataProps & U>(
     function RefRenderFn(props, ref) {
-      const {$id, children: childrenProp, ...rest} = props
+      const {$id, children: childrenProp, className: classNameProp, ...rest} = props
       const elementData = useAglynElementData($id)
       const component = useAglynComponent(elementData.componentId, elementData.bundleId)
-      const {children, ...elemProps} = useAglynElementResolvedProps($id)
+      const {children, className: classNameElem, ...elemProps} = useAglynElementResolvedProps($id)
       const innerRefProps = useAglynElementConditionalInnerRefProps($id, ref)
+      const className = clsx(classNameProp, classNameElem)
 
       return (
         <WrappedComponent
@@ -63,6 +66,7 @@ export function withAglynElement<U = any, T = any>(
           elementData={elementData}
           component={component}
           elemProps={elemProps}
+          className={className}
           {...innerRefProps}
           {...rest as any}
         >

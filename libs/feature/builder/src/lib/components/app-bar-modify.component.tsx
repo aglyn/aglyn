@@ -24,7 +24,7 @@ import {
 import { useAglynAppContext, useAglynElementHistory } from '@aglyn/feature-renderer'
 import { styled } from '@aglyn/shared-feature-themes'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
-import AppBar, { AppBarProps } from '@mui/material/AppBar'
+import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
@@ -38,7 +38,7 @@ import { forwardRef, memo, MouseEvent, useCallback } from 'react'
 import { useAddElementCallback } from '../hooks/use-add-element-callback'
 
 
-const StyledModifyAppBar = styled(AppBar, {name: 'StyledModifyAppBar'})({
+const AglynAppBarModify = styled(MuiAppBar, {name: 'AglynAppBarModify'})({
   top: 0,
 })
 
@@ -80,7 +80,7 @@ const HistoryControls = memo(() => {
   )
 })
 
-export interface AppBarModifyComponentProps extends Partial<AppBarProps> {}
+export interface AppBarModifyComponentProps extends Partial<MuiAppBarProps> {}
 
 export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>(
   function RefRenderFn(props, ref) {
@@ -126,7 +126,7 @@ export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>
     }, [])
 
     return (
-      <StyledModifyAppBar
+      <AglynAppBarModify
         ref={ref}
         position="static"
         color="default"
@@ -201,7 +201,7 @@ export const AppBarModifyComponent = forwardRef<any, AppBarModifyComponentProps>
           {children}
         </Toolbar>
         <Divider />
-      </StyledModifyAppBar>
+      </AglynAppBarModify>
     )
   },
 )

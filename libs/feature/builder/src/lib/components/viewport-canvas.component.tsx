@@ -21,7 +21,7 @@ import { forwardRef, HTMLAttributes, Ref } from 'react'
 import { ViewportFrameComponent } from './viewport-frame.component'
 
 
-const ViewportCanvasContainer = styled('div', {name: 'ViewportCanvasContainer'})(({theme}) => ({
+const ViewportCanvas = styled('div', {name: 'ViewportCanvas'})(({theme}) => ({
   flexGrow: 1,
   minHeight: '100%',
   width: '100%',
@@ -76,7 +76,7 @@ export const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentPr
     const {children, pannerRef, ...rest} = props
 
     return (
-      <ViewportCanvasContainer ref={ref} {...rest}>
+      <ViewportCanvas ref={ref} {...rest}>
 
         <ViewportCanvasArtboard>
           {/*<ViewportCanvasPanner*/}
@@ -102,7 +102,7 @@ export const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentPr
         {/*  variant="horizontal"*/}
         {/*  sx={{position: 'relative', ml: '-11px', mt: '-20px'}}*/}
         {/*/>*/}
-      </ViewportCanvasContainer>
+      </ViewportCanvas>
     )
   },
 )

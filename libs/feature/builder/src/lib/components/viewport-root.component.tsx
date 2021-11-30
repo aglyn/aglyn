@@ -27,14 +27,14 @@ import { ViewportCanvasComponent } from './viewport-canvas.component'
 import { ZoomControlsComponent } from './zoom-controls.component'
 
 
-const classKeys = generateComponentClassKeys('AglynBuilderViewport', [
+const classKeys = generateComponentClassKeys('AglynViewport', [
   'panelLeftOpen',
   'panelBottomOpen',
   'panelRightOpen',
 ])
 
-const StyledContainer = styled(Stack, {
-  name: 'StyledContainer',
+const AglynViewport = styled(Stack, {
+  name: 'AglynViewport',
   // shouldForwardProp(propName) {return propName !== 'panelLeftWidth'},
 })<ViewportRootComponentProps>(({
   flexGrow: 1,
@@ -104,7 +104,7 @@ export const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>
     }, className)
 
     return (
-      <StyledContainer
+      <AglynViewport
         ref={ref}
         className={elemClassName}
         // drawerWidth={left?.drawerWidth}
@@ -118,7 +118,7 @@ export const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>
           onZoomIncrease={handleZoomIncrease}
         />
         {children}
-      </StyledContainer>
+      </AglynViewport>
     )
   },
 )

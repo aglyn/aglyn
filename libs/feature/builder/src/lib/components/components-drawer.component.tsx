@@ -62,17 +62,17 @@ const ComponentDrawerGridList = styled(JsxGridList, {
 const ComponentsDrawerNavbarDrawer = styled(JsxNavbarDrawer, {
   name: 'ComponentsDrawerNavbarDrawer',
 })(({theme}) => ({
-  '& .AglynNavbarDrawer-content': {
+  '& .AglynNavigationDrawer-content': {
     backgroundColor: theme.palette.background.default,
     overflow: 'auto',
   },
-  '& > .AglynNavbarDrawer-paper': {
+  '& > .MuiDrawer-paper': {
     margin: '0 auto',
     height: '100%',
     maxHeight: '100vh',
     [theme.breakpoints.up('sm')]: {height: theme.breakpoints.values.sm},
   },
-  '& .AglynNavbarDrawer-paper': {
+  '& .MuiDrawer-paper': {
     height: 480,
     width: 480,
     margin: '0 auto',

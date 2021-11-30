@@ -15,19 +15,11 @@
  * limitations under the License.
  */
 
-import { BundleUId, ComponentId, ElementId, getBuilderStore } from '@aglyn/core-data-framework'
-import { ELEMENT_ATTRIBUTE_PREFIX, ElementAttribute } from '@aglyn/feature-builder'
-import { useAglynAppContext } from '@aglyn/feature-renderer'
-import { IndexOf } from '@aglyn/shared-data-types'
-import { useStoreMap } from 'effector-react'
+import { BundleUId, ComponentId, ElementId } from '@aglyn/core-data-framework'
+import { ElementAttribute } from '@aglyn/feature-builder'
 import { useMemo } from 'react'
+import { useBuilderElementInteractionActivity } from './use-builder-element-interaction-activity'
 
-
-function buildAttributeKey(
-  name: IndexOf<ElementAttribute>
-): `${ELEMENT_ATTRIBUTE_PREFIX}${typeof name}` {
-   return `${ELEMENT_ATTRIBUTE_PREFIX}${name}`
-}
 
 function computeActivityValue(self: boolean, child: boolean) {
   if (child) return 'child'
@@ -45,38 +37,26 @@ export const useBuilderElementAttributes = (opts: UseBuilderElementAttributesOpt
   const {
     $id,
     componentId,
-    bundleId
+    bundleId,
   } = opts
 
-  const {getApp} = useAglynAppContext(),
-    store = getBuilderStore(getApp(), {store: 'canvas'}),
-    [
-      isSelfSelected,
-      isSelfHovered,
-      isChildSelected,
-      isChildHovered,
-    ] = useStoreMap({
-      store,
-      keys: [$id],
-      fn: (state, [$id]) => ([
-        state?.selected?.$id === $id,
-        state?.hovered?.$id === $id,
-        state?.selected?.hierarchy?.some((i) => i === $id),
-        state?.hovered?.hierarchy?.some((i) => i === $id)
-      ])
-    })
-
+  const {
+    isSelfSelected,
+    isSelfHovered,
+    isChildSelected,
+    isChildHovered,
+  } = useBuilderElementInteractionActivity($id)
 
   return useMemo(() => {
-    const selected = computeActivityValue(isSelfSelected, isChildSelected)
-    const hovered = computeActivityValue(isSelfHovered, isChildHovered)
+    const selected = computeActivityValue(isSelfSelected, false)
+    const hovered = computeActivityValue(isSelfHovered, false)
 
     return ({
-      [buildAttributeKey(ElementAttribute.ELEMENT_ID)]: $id,
-      [buildAttributeKey(ElementAttribute.COMPONENT_ID)]: componentId,
-      [buildAttributeKey(ElementAttribute.BUNDLE_ID)]: bundleId,
-      [buildAttributeKey(ElementAttribute.SELECTED)]: selected,
-      [buildAttributeKey(ElementAttribute.HOVERED)]: hovered,
+      [ElementAttribute.ELEMENT_ID]: $id,
+      [ElementAttribute.COMPONENT_ID]: componentId,
+      [ElementAttribute.BUNDLE_ID]: bundleId,
+      [ElementAttribute.SELECTED]: selected,
+      [ElementAttribute.HOVERED]: hovered,
     })
   }, [
     $id,
@@ -85,7 +65,7 @@ export const useBuilderElementAttributes = (opts: UseBuilderElementAttributesOpt
     isSelfSelected,
     isSelfHovered,
     isChildSelected,
-    isChildHovered
+    isChildHovered,
   ])
 }
 

@@ -23,7 +23,6 @@ import {
 import { useAglynAppContext, useAglynElementLabel } from '@aglyn/feature-renderer'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
 import {
-  PopperArrowComponent,
   SrOnlyComponent,
   SvgPathIcon,
   SvgPathIconProps,
@@ -32,14 +31,12 @@ import {
 import { CSS } from '@aglyn/shared-util-tools'
 import Button, { ButtonProps } from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
-import Paper from '@mui/material/Paper'
 import MuiPopper, { PopperProps } from '@mui/material/Popper'
 import Tooltip from '@mui/material/Tooltip'
-import Typography from '@mui/material/Typography'
-import clsx from 'clsx'
-import { ChangeEvent, forwardRef, HTMLAttributes, SyntheticEvent, useCallback, useRef } from 'react'
+import { ChangeEvent, forwardRef, SyntheticEvent, useCallback, useRef } from 'react'
 import { HoveredOptions } from '../contexts/hover-context'
 import { useAddElementCallback } from '../hooks/use-add-element-callback'
+import { ElementOutlineComponentProps } from './element-outline.component'
 
 
 const popperClassKeys = generateComponentClassKeys('AglynPopper', [
@@ -120,45 +117,11 @@ const Popper = styled(MuiPopper, {name: 'AglynPopper'})<PopperProps>(({theme}) =
 }))
 
 
-export interface HoverComponentProps extends HTMLAttributes<HTMLDivElement> {
+export interface HoverComponentProps extends ElementOutlineComponentProps {
   options?: HoveredOptions
-  open?: boolean
   onClose?: (event?: SyntheticEvent) => void
-  variant?: 'hovered' | 'selected'
   anchorEl?: PopperProps['anchorEl']
 }
-
-const classKeys = generateComponentClassKeys('AglynHoverRoot', [
-  'open',
-  'hovered',
-  'selected',
-])
-
-const HoverRoot = styled('div', {name: 'HoverRoot'})(({theme}) => ({
-  pointerEvents: 'none',
-  position: 'absolute',
-  // left: 0, top: 0,
-  visibility: 'hidden',
-  transition: theme.transitions.create(['visibility', 'transform', 'width', 'height', 'left', 'right', 'top', 'bottom'], {
-    duration: theme.transitions.duration.short,
-    easing: theme.transitions.easing.easeInOut,
-  }),
-  [`&.${classKeys.open}`]: {
-    visibility: 'visible',
-  },
-  [`&.${classKeys.hovered}`]: {
-    outlineWidth: 2,
-    outlineOffset: -1,
-    outlineColor: theme.palette.secondary.light,
-    outlineStyle: 'dashed',
-  },
-  [`&.${classKeys.selected}`]: {
-    outlineWidth: 2,
-    outlineOffset: 2,
-    outlineColor: theme.palette.quaternary.main,
-    outlineStyle: 'solid',
-  },
-}))
 
 export const HoverComponent = forwardRef<any, HoverComponentProps>(
   function RefRenderFn(props, ref) {
@@ -168,16 +131,10 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
       onClose,
       children,
       variant,
-      className: classNameProp,
       anchorEl,
       ...rest
     } = props
     const selected = variant === 'selected'
-    const className = clsx({
-      [classKeys.open]: Boolean(open),
-      [classKeys.hovered]: !selected,
-      [classKeys.selected]: selected,
-    }, classNameProp)
     const {
       $id,
     } = options || {}
@@ -285,92 +242,86 @@ export const HoverComponent = forwardRef<any, HoverComponentProps>(
 
     const arrowRef = useRef<HTMLElement>()
 
-    const popper = {
-      selected: (
-        <Popper
-          disablePortal
-          open={open}
-          anchorEl={anchorEl}
-          placement="top"
-          modifiers={[
-            {
-              name: 'flip',
-              enabled: true,
-              options: {
-                altBoundary: true,
-                rootBoundary: 'viewport',
-                padding: 8,
-              },
-            },
-            {
-              name: 'preventOverflow',
-              enabled: true,
-              options: {
-                altAxis: true,
-                altBoundary: true,
-                tether: true,
-                rootBoundary: 'viewport',
-                padding: 8,
-              },
-            },
-            {
-              name: 'arrow',
-              enabled: true,
-              options: {
-                element: arrowRef.current,
-              },
-            },
-          ]}
-        >
-          <div>
-            <PopperArrowComponent className={popperClassKeys.arrow} />
-            <ButtonGroup variant="contained" color="primary" aria-label="element controls">
-
-              {buttons.map(({id, tooltipProps, srOnlyProps, buttonProps, svgPathIconProps}) => (
-                <Tooltip key={id} {...tooltipProps}>
-                  <Button {...buttonProps}>
-                    <SvgPathIcon fontSize="small" {...svgPathIconProps} />
-                    <SrOnlyComponent component="span" {...srOnlyProps} />
-                  </Button>
-                </Tooltip>
-              ))}
-
-            </ButtonGroup>
-          </div>
-        </Popper>
-      ),
-      hovered: null,
-      hovered2: (
-        <Popper
-          disablePortal
-          open={open}
-          anchorEl={anchorEl}
-          placement="top-start"
-        >
-          <Paper sx={{bgcolor: 'quaternary.light', color: 'quaternary.contrastText', px: 0.5, py: 0.15}}>
-            <Typography
-              variant="body2"
-            >
-              {label}
-            </Typography>
-          </Paper>
-        </Popper>
-      ),
-    }[selected ? 'selected' : 'hovered']
+    // const popper = {
+    //   selected: (
+    //
+    //   ),
+    //   hovered: null,
+    //   hovered2: (
+    //     <Popper
+    //       disablePortal
+    //       open={open}
+    //       anchorEl={anchorEl}
+    //       placement="top-start"
+    //     >
+    //       <Paper sx={{bgcolor: 'quaternary.light', color: 'quaternary.contrastText', px: 0.5,
+    // py: 0.15}}> <Typography variant="body2" > {label} </Typography> </Paper> </Popper> ),
+    // }[selected ? 'selected' : 'hovered']
 
     // console.log('props', props, className)
 
     return (
       <>
-        {popper}
-        <HoverRoot
-          ref={ref}
-          style={style/*options?.clientRect*/}
-          className={className}
-          {...rest}
-        >
-          {children}
-        </HoverRoot>
+        {/*<Popper*/}
+        {/*  disablePortal*/}
+        {/*  open={open}*/}
+        {/*  anchorEl={anchorEl}*/}
+        {/*  placement="top"*/}
+        {/*  modifiers={[*/}
+        {/*    {*/}
+        {/*      name: 'flip',*/}
+        {/*      enabled: true,*/}
+        {/*      options: {*/}
+        {/*        altBoundary: true,*/}
+        {/*        rootBoundary: 'document',*/}
+        {/*        padding: 8,*/}
+        {/*      },*/}
+        {/*    },*/}
+        {/*    {*/}
+        {/*      name: 'preventOverflow',*/}
+        {/*      enabled: true,*/}
+        {/*      options: {*/}
+        {/*        altAxis: true,*/}
+        {/*        altBoundary: true,*/}
+        {/*        tether: true,*/}
+        {/*        rootBoundary: 'document',*/}
+        {/*        padding: 8,*/}
+        {/*      },*/}
+        {/*    },*/}
+        {/*    {*/}
+        {/*      name: 'arrow',*/}
+        {/*      enabled: true,*/}
+        {/*      options: {*/}
+        {/*        element: arrowRef.current,*/}
+        {/*      },*/}
+        {/*    },*/}
+        {/*  ]}*/}
+        {/*>*/}
+        {/*  <div>*/}
+        {/*    /!*<PopperArrowComponent className={popperClassKeys.arrow} />*!/*/}
+        {/*    <ButtonGroup variant="contained" color="primary" aria-label="element controls">*/}
+
+        {/*      {buttons.map(({id, tooltipProps, srOnlyProps, buttonProps, svgPathIconProps}) => (*/}
+        {/*        <Tooltip key={id} {...tooltipProps}>*/}
+        {/*          <Button {...buttonProps}>*/}
+        {/*            <SvgPathIcon fontSize="small" {...svgPathIconProps} />*/}
+        {/*            <SrOnlyComponent component="span" {...srOnlyProps} />*/}
+        {/*          </Button>*/}
+        {/*        </Tooltip>*/}
+        {/*      ))}*/}
+
+        {/*    </ButtonGroup>*/}
+        {/*  </div>*/}
+        {/*</Popper>*/}
+        {/*<ElementOutlineComponent*/}
+        {/*  ref={ref}*/}
+        {/*  style={style/*options?.clientRect*!/*/}
+        {/*  variant={variant}*/}
+        {/*  open={open}*/}
+        {/*  {...rest}*/}
+        {/*>*/}
+        {children}
+        {/*</ElementOutlineComponent>*/}
       </>
     )
   },

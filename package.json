@@ -84,6 +84,7 @@
     "react-easy-panzoom": "^0.4.4",
     "react-frame-component": "^5.1.0",
     "react-is": "^17.0.2",
+    "react-tether": "^2.0.8",
     "react-virtuoso": "^2.0.4",
     "react-window": "^1.8.6",
     "regenerator-runtime": "0.13.7",

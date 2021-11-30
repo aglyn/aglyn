@@ -24,7 +24,7 @@ import MuiTabList from '@mui/lab/TabList'
 import MuiTabPanel from '@mui/lab/TabPanel'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Drawer, { DrawerProps } from '@mui/material/Drawer'
+import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer'
 import MuiTab from '@mui/material/Tab'
 import { forwardRef, HTMLAttributes, useCallback, useState } from 'react'
 import { DEFAULT_LEFT_DRAWER_WIDTH } from '../constants'
@@ -40,6 +40,7 @@ const ToolboxContainer = styled('div', {
     return !_isEqualitySameType(propName, 'open', 'drawerWidth')
   },
 })<ExtraProps<HTMLAttributes<HTMLDivElement>>>(({theme, open, drawerWidth}) => ({
+  zIndex: theme.zIndex.appBar,
   transition: theme.transitions.create('margin', {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
@@ -53,15 +54,14 @@ const ToolboxContainer = styled('div', {
   }),
 }))
 
-const StyledDrawer = styled(Drawer, {
-  name: 'StyledDrawer',
+const AglynDrawer = styled(MuiDrawer, {
+  name: 'AglynDrawer',
   shouldForwardProp(propName: any) {
     return !_isEqualitySameType(propName, 'drawerWidth')
   },
-})<ExtraProps<DrawerProps>>(({theme, drawerWidth}) => ({
+})<ExtraProps<MuiDrawerProps>>(({theme, drawerWidth}) => ({
   width: drawerWidth ?? DEFAULT_LEFT_DRAWER_WIDTH,
   flexShrink: 0,
-  zIndex: theme.zIndex.appBar,
   [`& .MuiDrawer-paper`]: {
     width: drawerWidth ?? DEFAULT_LEFT_DRAWER_WIDTH,
     boxSizing: 'border-box',
@@ -70,7 +70,7 @@ const StyledDrawer = styled(Drawer, {
 }))
 
 export interface ToolboxLeftComponentProps extends ExtraProps<HTMLAttributes<HTMLDivElement>> {
-  DrawerProps?: DrawerProps
+  DrawerProps?: MuiDrawerProps
 }
 
 export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
@@ -96,7 +96,7 @@ export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
         open={open}
         {...rest}
       >
-        <StyledDrawer
+        <AglynDrawer
           drawerWidth={drawerWidth}
           variant="persistent"
           open={open}
@@ -138,7 +138,7 @@ export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
             </MuiTabPanel>
           </MuiTabContext>
 
-        </StyledDrawer>
+        </AglynDrawer>
         {children}
       </ToolboxContainer>
     )

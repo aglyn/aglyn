@@ -16,17 +16,18 @@
  */
 
 
-
 export const DEFAULT_LEFT_DRAWER_WIDTH = 240
 
-
+function buildAttributeKey(name: string): `${ELEMENT_ATTRIBUTE_PREFIX}${typeof name}` {
+  return `${ELEMENT_ATTRIBUTE_PREFIX}${name}`
+}
 export const ELEMENT_ATTRIBUTE_PREFIX = 'data-aglyn-'
 export type ELEMENT_ATTRIBUTE_PREFIX = typeof ELEMENT_ATTRIBUTE_PREFIX
 export const ElementAttribute = {
-  ELEMENT_ID: 'element-id',
-  COMPONENT_ID: 'component-id',
-  BUNDLE_ID: 'bundle-id',
-  SELECTED: 'selected',
-  HOVERED: 'hovered',
+  ELEMENT_ID: buildAttributeKey('element-id'),
+  COMPONENT_ID: buildAttributeKey('component-id'),
+  BUNDLE_ID: buildAttributeKey('bundle-id'),
+  SELECTED: buildAttributeKey('selected'),
+  HOVERED: buildAttributeKey('hovered'),
 }
 export type ElementAttribute = typeof ElementAttribute
