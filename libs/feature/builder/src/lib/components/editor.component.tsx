@@ -28,6 +28,7 @@ import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-c
 import { AppBarGlobalComponent } from './app-bar-global.component'
 import { AppBarModifyComponent } from './app-bar-modify.component'
 import { ToolboxLeftComponent } from './toolbox-left.component'
+import ToolboxRightComponent from './toolbox-right.component'
 import { ViewportRootComponent } from './viewport-root.component'
 
 
@@ -103,9 +104,9 @@ const EditorComponentRaw = forwardRef<any, EditorComponentProps>(
                   spacing={0}
                 />
 
-                <ToolboxLeftComponent
-                  id="aglyn:builder-toolbox-left"
-                  aria-label="builder toolbox left"
+                <ToolboxRightComponent
+                  id="aglyn:builder-toolbox-right"
+                  aria-label="builder toolbox right"
                 />
               </Stack>
 

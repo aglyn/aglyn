@@ -135,13 +135,17 @@ export interface AglynComponentBuilderFlags {
   selecting?: { disable?: boolean }
 }
 
+export interface AglynComponentPropsFormSchema extends FormSchema {
+
+}
+
 export interface AglynComponentRenderFlags<P extends AnyProps = any> {
   hierarchy?: {
     restrictChildren?: ComponentsLinealOrder
     restrictParent?: ComponentsLinealOrder
   }
   elementRef?: { disable?: boolean; innerRef?: boolean }
-  propsSchema?: FormSchema
+  propsSchema?: AglynComponentPropsFormSchema
   resolveProps?: ResolveProps<AglynComponentElementDataNormalized<P>>
   emotionStyled?: {
     disable?: boolean

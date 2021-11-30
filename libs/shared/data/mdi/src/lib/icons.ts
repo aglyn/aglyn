@@ -39,25 +39,34 @@ export const defaultIconFailover: IconData = {
   alias: {},
 }
 
+export interface GetIconDataOptions<U extends unknown> {
+  searchAliases?: boolean
+  failoverIcon?: U
+}
+
 function getIconData<K extends IconId, U extends unknown>(
   iconId: K,
-  failover: U = defaultIconFailover as U,
+  options?: GetIconDataOptions<U>,
 ): IconData | U {
+  const {searchAliases, failoverIcon} = {...options}
+  const failover = failoverIcon || defaultIconFailover
   if (!iconId) {
     console.warn('No icon id provided, falling back.')
     return failover
   }
   let data = icons.byIconId[iconId]
   if (!data) {
-    for (const iconId of icons.iconIds) {
-      // Search aliases
-      if (_hasProperty(iconId, icons.byIconId[iconId]?.alias ?? {})) {
-        data = icons.byIconId[iconId]
-        break
+    if (searchAliases) {
+      for (const iconId of icons.iconIds) {
+        // Search aliases
+        if (_hasProperty(iconId, icons.byIconId[iconId]?.alias ?? {})) {
+          data = icons.byIconId[iconId]
+          break
+        }
       }
     }
     if (!data) {
-      console.error(`No icon exists with id(${iconId}), falling back`)
+      console.error(`No icon exists with id '${iconId}', falling back`)
       return failover
     }
   }
@@ -68,43 +77,47 @@ type IconAndFail<K extends IconId, U extends unknown> = [iconId: K, failover?: U
 
 export function getIcon<K extends IconId, U extends unknown>(
   iconId: K,
-  failoverDefault?: U,
+  options?: GetIconDataOptions<U>,
 ): IconData | U
 
 export function getIcon<K extends IconId, U extends unknown>(
   iconIds: (K | IconAndFail<K, U>)[],
-  failoverDefault?: U,
+  options?: GetIconDataOptions<U>,
 ): (IconData | U)[]
 
 export function getIcon<K extends IconId, U extends unknown>(
   iconIds: K | ((K | IconAndFail<K, U>)[]),
-  failoverDefault: U = defaultIconFailover as U,
+  options?: GetIconDataOptions<U>,
 ): Conditional<typeof iconIds, any[], (IconData | U)[], IconData | U> {
-  const items: (IconAndFail<K, U> | K)[] = _isArr(iconIds) ? iconIds : [iconIds, failoverDefault]
+  const items: (IconAndFail<K, U> | K)[] = _isArr(iconIds) ? iconIds : [iconIds]
   const mapped = items.map((itemOrId: IconAndFail<K, U> | K) => {
-    const [id, failover = failoverDefault] = _isArr(itemOrId)
-      ? itemOrId
-      : [itemOrId, failoverDefault]
-    return getIconData(id, failover)
+    const [id, failoverInner] = _isArr(itemOrId) ? itemOrId : [itemOrId]
+    return getIconData(id, {...options, failoverIcon: failoverInner})
   })
   return _isArr(iconIds) ? mapped : mapped[0]
 }
 
 export function getIconPathData<K extends IconId, U extends unknown>(
   iconId: K,
-  failoverDefault?: U,
+  options?: GetIconDataOptions<U>,
 ): IconData['path'] | U
 
 export function getIconPathData<K extends IconId, U extends unknown>(
   iconIds: (K | IconAndFail<K, U>)[],
-  failoverDefault?: U,
+  options?: GetIconDataOptions<U>,
 ): (IconData['path'] | U)[]
 
 export function getIconPathData<K extends IconId, U extends unknown>(
   iconIds: (K | IconAndFail<K, U>)[] | K,
-  failoverDefault: U = defaultIconFailover as U,
+  options?: GetIconDataOptions<U>,
 ): Conditional<typeof iconIds, any[], (IconData['path'] | U)[], IconData['path'] | U> {
   return _isArr(iconIds)
-    ? (getIcon(iconIds ?? [null], failoverDefault) as (IconData | U)[]).map(data => _hasProperty('path', data) ? data.path : data)
-    : [getIcon(iconIds ?? [null], failoverDefault) as (IconData | U)].map(data => _hasProperty('path', data) ? data.path : data)[0]
+    ? (
+      (getIcon(iconIds ?? [null], options) as (IconData | U)[])
+      .map(data => _hasProperty('path', data) ? data.path : data)
+    )
+    : (
+      [getIcon(iconIds ?? [null], options) as (IconData | U)]
+      .map(data => _hasProperty('path', data) ? data.path : data)[0]
+    )
 }

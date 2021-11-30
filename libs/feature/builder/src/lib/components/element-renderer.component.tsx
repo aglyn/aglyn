@@ -33,7 +33,7 @@ import { useCombinedRefs } from '@aglyn/shared-ui-jsx'
 import { CSS } from '@aglyn/shared-util-tools'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import Box, { BoxProps } from '@mui/material/Box'
-import { forwardRef, Fragment, MouseEvent, useCallback, useEffect, useRef } from 'react'
+import { forwardRef, Fragment, MouseEvent, useCallback, useLayoutEffect, useRef } from 'react'
 import { useCanvasRenderedElementRefs } from '../contexts/canvas-rendered-element-refs'
 import { useBuilderElementAttributes } from '../hooks/use-builder-element-attributes'
 
@@ -123,8 +123,9 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
 
 
     const handleMouseLeave = useCallback((e) => {
-      // if (isDragging) return
-      // e.stopPropagation()
+      if (isDragging) return
+      e.stopPropagation()
+      setBuilderCanvasHovered(getApp(), {hovered: undefined})
       // hoverClose(e)
     }, [])
 
@@ -162,7 +163,7 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
 
     const {setElement, deleteElement} = useCanvasRenderedElementRefs()
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       setElement($id, localRef)
       return () => {
         deleteElement($id)

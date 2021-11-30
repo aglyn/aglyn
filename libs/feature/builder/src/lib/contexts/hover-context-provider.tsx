@@ -18,25 +18,16 @@
 import { ElementId } from '@aglyn/core-data-framework'
 // import { useDndMonitor } from '@dnd-kit/core'
 // import { DragOverEvent } from '@dnd-kit/core/dist/types'
-import { ElementType, Fragment, ReactNode, RefObject, useRef } from 'react'
-import { HoverComponent, HoverComponentProps } from '../components/hover.component'
+import { ReactNode, RefObject, useRef } from 'react'
 import {
   CanvasRenderedElementRefs,
   CanvasRenderedElementRefsProvider,
 } from './canvas-rendered-element-refs'
-import { HoveredOptions } from './hover-context'
 
 
 export interface HoverContextProviderProps {
-  defaultOptions?: Partial<HoveredOptions>
   children?: ReactNode
-  component: ElementType<HoverComponentProps>
 }
-
-type ResolveReject<T = any> = [] | [
-  resolve: (value: T | PromiseLike<T>) => void,
-  reject: (reason?: any) => void
-]
 
 function HoverContextProviderRaw(props: HoverContextProviderProps) {
   const {children} = props
@@ -64,19 +55,14 @@ function HoverContextProviderRaw(props: HoverContextProviderProps) {
   // console.log('selectedOptions selectedOpen', selectedOptions, selectedOpen, hoveredOpen)
 
   return (
-    <Fragment>
-      <CanvasRenderedElementRefsProvider value={elementRefs.current}>
-        {children}
-      </CanvasRenderedElementRefsProvider>
-    </Fragment>
+    <CanvasRenderedElementRefsProvider value={elementRefs.current}>
+      {children}
+    </CanvasRenderedElementRefsProvider>
   )
 }
 
 HoverContextProviderRaw.displayName = 'HoverContextProvider'
-HoverContextProviderRaw.defaultProps = {
-  component: HoverComponent,
-  defaultOptions: {},
-}
+HoverContextProviderRaw.defaultProps = {}
 
 export const HoverContextProvider = HoverContextProviderRaw
 export default HoverContextProvider

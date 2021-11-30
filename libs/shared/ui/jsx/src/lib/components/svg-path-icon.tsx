@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { getIconPathData, IconId as MdiIconId } from '@aglyn/shared-data-mdi'
+import { GetIconDataOptions, getIconPathData, IconId as MdiIconId } from '@aglyn/shared-data-mdi'
 import { _isArr, _isStrT } from '@aglyn/shared-util-guards'
 import MuiSvgIcon, { SvgIconProps as MuiSvgIconProps } from '@mui/material/SvgIcon'
 import { createSvgIcon } from '@mui/material/utils'
@@ -50,19 +50,22 @@ export function createSvgPathIcon(
 export interface SvgPathIconProps extends Partial<Omit<MuiSvgIconProps, 'path'>> {
   iconIds?: IconId | (IconId[])
   paths?: Path | (Path[])
+  mdiIconOptions?: GetIconDataOptions
 }
 
 export const SvgPathIcon = forwardRef<any, SvgPathIconProps>(function RefRenderFn(props, ref) {
-  const {iconIds, paths: pathsProp, children, ...rest} = props
+  const {iconIds, paths: pathsProp, children, mdiIconOptions, ...rest} = props
 
   const iconIdsPaths = useMemo(() => {
     const iconIdArray: IconId[] = _isStrT(iconIds) || _isArr(iconIds)
       ? _isStrT(iconIds) ? [iconIds] : iconIds
       : null
-    return iconIdArray || (!pathsProp && !children) ? getIconPathData(iconIdArray ?? [null]).map((iconPath, index) => (
-      <SvgPath key={index} d={iconPath as string} />
-    )) : null
-  }, [iconIds, pathsProp])
+    return (iconIdArray || (!pathsProp && !children))
+      ? getIconPathData(iconIdArray ?? [null], null, mdiIconOptions).map((iconPath, index) => (
+        <SvgPath key={index} d={iconPath as string} />
+      ))
+      : null
+  }, [iconIds, pathsProp, mdiIconOptions])
 
   const pathsPaths = useMemo(() => {
     const pathsArray = _isStrT(pathsProp) || _isArr(pathsProp)

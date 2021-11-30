@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-import {
+import type {
   AglynComponentElementTemplateData,
   AglynComponentSchema,
   ComponentId,
-  createAglynComponentElement,
 } from '@aglyn/core-data-framework'
+import { createAglynComponentElement } from '@aglyn/core-data-framework'
+import { FieldComponent } from '@aglyn/shared-ui-jsx'
 import Button from '@mui/material/Button'
 
 
@@ -35,7 +36,7 @@ export const renderFlags: AglynComponentSchema['renderFlags'] = {
     fields: [
       {
         name: 'variant',
-        component: 'select',
+        component: FieldComponent.SELECT,
         label: 'Variant',
         variant: 'outlined',
         options: [
@@ -43,9 +44,9 @@ export const renderFlags: AglynComponentSchema['renderFlags'] = {
           {value: 'outlined', label: 'Outlined'},
           {value: 'contained', label: 'Contained'},
         ],
-      }
-    ]
-  }
+      },
+    ],
+  },
 }
 export const templates: AglynComponentElementTemplateData[] = [
   {

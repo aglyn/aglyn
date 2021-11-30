@@ -33,18 +33,18 @@ const classKeys = generateComponentClassKeys('AglynElementOutlineComponent', [
 ])
 
 export interface AglynElementOutlineProps extends BoxProps {
-  variant?: 'hovered' | 'selected'
+  type?: 'hovered' | 'selected'
   open?: boolean
 }
 
 export const AglynElementOutline = styled(
   forwardRef<any, AglynElementOutlineProps>(
     function RefRenderFn(props, ref) {
-      const {className: classNameProp, variant, open, ...rest} = props
+      const {className: classNameProp, type, open, ...rest} = props
       const className = clsx({
         [classKeys.open]: Boolean(open),
-        [classKeys.hovered]: variant === 'hovered' || !variant,
-        [classKeys.selected]: variant === 'selected',
+        [classKeys.hovered]: type === 'hovered' || !type,
+        [classKeys.selected]: type === 'selected',
       }, classNameProp)
       return <Box ref={ref} className={className} {...rest} />
     },
@@ -56,7 +56,7 @@ export const AglynElementOutline = styled(
   pointerEvents: 'none',
   position: 'absolute',
   left: 0, top: 0, right: 0, bottom: 0,
-  // marginLeft: -2, marginTop: -2,
+  marginLeft: -2, marginTop: -2,
   visibility: 'hidden',
   transition: theme.transitions.create(['width', 'height'], {
     duration: theme.transitions.duration.short,
@@ -68,14 +68,14 @@ export const AglynElementOutline = styled(
   },
   [`&.${classKeys.hovered}`]: {
     outlineWidth: 3,
-    outlineOffset: 2,
-    outlineColor: theme.palette.secondary.light,
+    outlineOffset: -2,
+    outlineColor: theme.palette.quaternary.main,
     outlineStyle: 'dashed',
   },
   [`&.${classKeys.selected}`]: {
     outlineWidth: 3,
-    outlineOffset: 2,
-    outlineColor: theme.palette.quaternary.main,
+    outlineOffset: 1,
+    outlineColor: theme.palette.secondary.light,
     outlineStyle: 'solid',
   },
 }))
@@ -85,7 +85,7 @@ export interface ElementOutlineComponentProps extends Partial<MuiPopperProps> {
   anchorRef?: RefObject<any>
   isOver?: boolean
   isDragging?: boolean
-  type?: 'hovered' | 'selected'
+  type?: AglynElementOutlineProps['type']
 }
 
 
@@ -105,7 +105,7 @@ const ElementOutlineComponent = forwardRef<any, ElementOutlineComponentProps>(
     const isTypeSelect = type === 'selected'
 
     const {isSelfHovered, isSelfSelected} = useBuilderElementInteractionActivity($id)
-    const variant = (isDragging || isSelfSelected) ? 'selected' : 'hovered'
+    const outlineType = (isDragging || isSelfSelected) && isTypeSelect ? 'selected' : 'hovered'
 
     const isOutlineable = Boolean(isOver || isDragging || isSelfHovered || isSelfSelected)
     const outlineOpen = Boolean(isOutlineable && anchorRef?.current)
@@ -118,8 +118,8 @@ const ElementOutlineComponent = forwardRef<any, ElementOutlineComponentProps>(
         ? getElementClientRectBounding(anchorRef?.current as any)
         : {} as any
       return {
-        width: rect.width,
-        height: rect.height,
+        width: (rect.width ?? 0) + 4,
+        height: (rect.height ?? 0) + 4,
       }
     }, [anchorRef?.current])
 
@@ -159,7 +159,7 @@ const ElementOutlineComponent = forwardRef<any, ElementOutlineComponentProps>(
         <AglynElementOutline
           style={{width, height}}
           ref={setOutlineRef}
-          variant={variant}
+          type={outlineType}
           open
         />
 

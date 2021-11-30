@@ -220,7 +220,7 @@ const ElementBadgeComponentRaw = forwardRef<any, ElementBadgeComponentProps>(
         ref={ref}
         placement="top"
         disablePortal
-        keepMounted
+        // keepMounted
         arrow={arrow}
         modifiers={[
           {

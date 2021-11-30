@@ -62,6 +62,7 @@ export * from './constants/version'
 // 👇
 
 export * from './util/aglyn-is'
+export * from './util/build-component-props-form-schema'
 export * from './util/confirm-valid-lineal-relationship'
 export * from './util/create-aglyn-component-element'
 export * from './util/create-component-element-data'
@@ -152,6 +153,7 @@ export type {
   AglynComponentFunctionElement,
   AglynComponentIntrinsicElement,
   AglynComponentMetadata,
+  AglynComponentPropsFormSchema,
   AglynComponentRenderFlags,
   AglynComponentSchema,
   AglynComponentsBundle,

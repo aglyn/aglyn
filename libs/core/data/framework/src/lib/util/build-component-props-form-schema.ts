@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-import { FieldComponent } from '@aglyn/shared-ui-jsx'
+import { DEFAULT_PROPS_FORM_SCHEMA } from '../constants/components'
+import { AglynComponentPropsFormSchema } from '../controllers/aglyn-components.controller'
 
-export enum ComponentsLinealDirectiveFlag {
-  LIMIT_TO = 0x01,
-  DISALLOW = 0x02,
+
+export const buildComponentPropsFormSchema = (
+  formSchema?: AglynComponentPropsFormSchema,
+): AglynComponentPropsFormSchema => {
+  return {
+    ...DEFAULT_PROPS_FORM_SCHEMA,
+    ...formSchema,
+    fields: [
+      ...DEFAULT_PROPS_FORM_SCHEMA.fields || [],
+      ...formSchema?.fields || [],
+    ],
+  }
 }
 
-export const DEFAULT_PROPS_FORM_SCHEMA = {
-  fields: [
-    {
-      name: 'displayName',
-      component: FieldComponent.TEXT_FIELD,
-      label: 'Display name',
-      // variant: 'outlined',
-    }
-  ]
-}
+export default buildComponentPropsFormSchema

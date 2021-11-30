@@ -15,72 +15,34 @@
  * limitations under the License.
  */
 
-import { useAglynAppContext, useAglynBuilderStore } from '@aglyn/feature-renderer'
-import { styled } from '@aglyn/shared-feature-themes'
+import { useAglynBuilderStore } from '@aglyn/feature-renderer'
 import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
-import { _isEqualitySameType } from '@aglyn/shared-util-guards'
 import MuiTabContext from '@mui/lab/TabContext'
 import MuiTabList from '@mui/lab/TabList'
 import MuiTabPanel from '@mui/lab/TabPanel'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer'
 import MuiTab from '@mui/material/Tab'
-import { forwardRef, HTMLAttributes, useCallback, useState } from 'react'
-import { DEFAULT_LEFT_DRAWER_WIDTH } from '../constants'
+import { forwardRef, useCallback, useState } from 'react'
 import { useAddElementCallback } from '../hooks/use-add-element-callback'
 import { ElementsTreeViewComponent } from './elements-tree-view.component'
+import ToolboxDrawerComponent, { ToolboxDrawerComponentProps } from './toolbox-drawer.component'
 
 
-type ExtraProps<P> = P & { drawerWidth?: string | number, open?: boolean }
-
-const ToolboxContainer = styled('div', {
-  name: 'ToolboxContainer',
-  shouldForwardProp(propName: any) {
-    return !_isEqualitySameType(propName, 'open', 'drawerWidth')
-  },
-})<ExtraProps<HTMLAttributes<HTMLDivElement>>>(({theme, open, drawerWidth}) => ({
-  zIndex: theme.zIndex.appBar,
-  transition: theme.transitions.create('margin', {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  marginLeft: open ? 0 : -(drawerWidth ?? DEFAULT_LEFT_DRAWER_WIDTH),
-  ...(open && {
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.easeOut,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-}))
-
-const AglynDrawer = styled(MuiDrawer, {
-  name: 'AglynDrawer',
-  shouldForwardProp(propName: any) {
-    return !_isEqualitySameType(propName, 'drawerWidth')
-  },
-})<ExtraProps<MuiDrawerProps>>(({theme, drawerWidth}) => ({
-  width: drawerWidth ?? DEFAULT_LEFT_DRAWER_WIDTH,
-  flexShrink: 0,
-  [`& .MuiDrawer-paper`]: {
-    width: drawerWidth ?? DEFAULT_LEFT_DRAWER_WIDTH,
-    boxSizing: 'border-box',
-    position: 'unset',
-  },
-}))
-
-export interface ToolboxLeftComponentProps extends ExtraProps<HTMLAttributes<HTMLDivElement>> {
-  DrawerProps?: MuiDrawerProps
+export interface ToolboxLeftComponentProps extends ToolboxDrawerComponentProps {
 }
 
 export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
   function RefRenderFn(props, ref) {
-    const {children, drawerWidth: drawerWidthProp, DrawerProps, ...rest} = props
+    const {
+      children,
+      drawerWidth: drawerWidthProp,
+      ...rest
+    } = props
 
-    const {getApp} = useAglynAppContext()
     const handleAddElementClick = useAddElementCallback()
-    const leftPanel = useAglynBuilderStore('panels', 'left')
-    const {toggled, drawerWidth = drawerWidthProp} = leftPanel || {}
+    const panel = useAglynBuilderStore('panels', 'left')
+    const {toggled, drawerWidth = drawerWidthProp} = panel || {}
     const open = Boolean(toggled)
 
     const [activeView, setActiveView] = useState(() => 'elements-tree')
@@ -90,57 +52,50 @@ export const ToolboxLeftComponent = forwardRef<any, ToolboxLeftComponentProps>(
 
 
     return (
-      <ToolboxContainer
+      <ToolboxDrawerComponent
         ref={ref}
         drawerWidth={drawerWidth}
         open={open}
+        anchor="left"
         {...rest}
       >
-        <AglynDrawer
-          drawerWidth={drawerWidth}
-          variant="persistent"
-          open={open}
-          sx={{height: '100%'}}
-          {...DrawerProps}
-        >
 
-          <MuiTabContext value={activeView}>
-            <Box sx={{borderBottom: 1, borderColor: 'divider'}}>
-              <MuiTabList
-                onChange={handleTabChange}
-                variant="fullWidth"
-                indicatorColor="secondary"
-                textColor="primary"
-              >
-                <MuiTab
-                  value="elements-tree"
-                  icon={<SvgPathIcon iconIds="file-tree" />}
-                />
-              </MuiTabList>
-            </Box>
-
-            <MuiTabPanel
-              value="elements-tree"
-              sx={{p: 0, overflow: 'auto'}}
+        <MuiTabContext value={activeView}>
+          <Box sx={{borderBottom: 1, borderColor: 'divider'}}>
+            <MuiTabList
+              onChange={handleTabChange}
+              variant="fullWidth"
+              indicatorColor="secondary"
+              textColor="primary"
             >
-              <Box
-                sx={{px: 0.5, pb: 1, pt: 1}}
-              >
-                <Button
-                  color="secondary"
-                  startIcon={<SvgPathIcon fontSize="inherit" iconIds="plus" />}
-                  onClick={handleAddElementClick}
-                >
-                  Add Element
-                </Button>
-              </Box>
-              <ElementsTreeViewComponent />
-            </MuiTabPanel>
-          </MuiTabContext>
+              <MuiTab
+                value="elements-tree"
+                icon={<SvgPathIcon iconIds="file-tree" />}
+              />
+            </MuiTabList>
+          </Box>
 
-        </AglynDrawer>
+          <MuiTabPanel
+            value="elements-tree"
+            sx={{p: 0, overflow: 'auto'}}
+          >
+            <Box
+              sx={{px: 0.5, pb: 1, pt: 1}}
+            >
+              <Button
+                color="secondary"
+                startIcon={<SvgPathIcon fontSize="inherit" iconIds="plus" />}
+                onClick={handleAddElementClick}
+              >
+                Add Element
+              </Button>
+            </Box>
+            <ElementsTreeViewComponent />
+          </MuiTabPanel>
+        </MuiTabContext>
+
         {children}
-      </ToolboxContainer>
+      </ToolboxDrawerComponent>
     )
   },
 )
