@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import { render } from '@testing-library/react'
+import React from 'react'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
-}
+import { AppBarModifyComponent } from './app-bar-modify.component'
 
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+describe('BuilderToolbarComponent', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<AppBarModifyComponent />)
+    expect(baseElement).toBeTruthy()
+  })
+})

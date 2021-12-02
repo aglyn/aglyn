@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import { getBuilderStore } from '@aglyn/core-data-framework'
+import { useAglynAppContext } from '@aglyn/feature-renderer'
+import { useStoreMap } from 'effector-react'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
+export interface UseAglynCanvasHovered {}
+
+export const useAglynCanvasHovered = (opts?: UseAglynCanvasHovered) => {
+  const { getApp } = useAglynAppContext(),
+    store = getBuilderStore(getApp(), { store: 'canvas' })
+
+  return useStoreMap(store, (store) => store?.hovered)
 }
 
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+export default useAglynCanvasHovered

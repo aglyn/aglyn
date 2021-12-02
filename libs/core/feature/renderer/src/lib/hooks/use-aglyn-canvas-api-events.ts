@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import { ElementsDataStoreApi, getCanvasApiEvents } from '@aglyn/core-data-framework'
+import { useMemo } from 'react'
+import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
+export function useAglynCanvasApiEvents(): ElementsDataStoreApi {
+  const { getApp } = useAglynAppContext()
+  const app = getApp()
+  const api = getCanvasApiEvents(app)
+  return useMemo(() => api, [api])
 }
-
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+export default useAglynCanvasApiEvents

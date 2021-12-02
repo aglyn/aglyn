@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import {
+  AglynComponentElementDataNormalizedArray,
+  getCanvasDenormalizedElementsStore,
+} from '@aglyn/core-data-framework'
+import { useStoreMap } from 'effector-react'
+import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
+export function useAglynCanvasElementsDenormalized(): AglynComponentElementDataNormalizedArray {
+  const { getApp } = useAglynAppContext()
+  const app = getApp()
+  const store = getCanvasDenormalizedElementsStore(app)
+  return useStoreMap(store, (store) => store)
 }
-
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+export default useAglynCanvasElementsDenormalized

@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import type { AglynComponentElementTemplateData } from '@aglyn/core-data-framework'
+import { getAllComponentsTemplateValues } from '@aglyn/core-data-framework'
+import { useMemo } from 'react'
+import { useAglynAppContext } from '../contexts/aglyn-app-context'
+import { AnyProps } from '@aglyn/shared-data-types'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
+export function useAglynComponentTemplateBlocks<
+  P extends AnyProps
+>(): AglynComponentElementTemplateData<P>[] {
+  const { getApp } = useAglynAppContext()
+  return useMemo(() => {
+    return getAllComponentsTemplateValues(getApp())
+  }, [getApp])
 }
-
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+export default useAglynComponentTemplateBlocks

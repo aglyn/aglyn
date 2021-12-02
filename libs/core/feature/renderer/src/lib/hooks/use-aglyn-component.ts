@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import type { BundleUId, CommandUId, AglynComponentElement } from '@aglyn/core-data-framework'
+import { getComponent } from '@aglyn/core-data-framework'
+import { useAglynAppContext } from '../contexts/aglyn-app-context'
+import { useMemo } from 'react'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
+export function useAglynComponent(
+  componentId: CommandUId,
+  bundleId?: BundleUId
+): AglynComponentElement {
+  const { getApp } = useAglynAppContext()
+  return useMemo(() => {
+    return getComponent(getApp(), { componentId, bundleId })
+  }, [getApp, componentId, bundleId])
 }
-
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+export default useAglynComponent

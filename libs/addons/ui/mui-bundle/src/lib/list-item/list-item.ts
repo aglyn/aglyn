@@ -1,0 +1,70 @@
+/**
+ * @license
+ * Copyright 2021 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  AglynComponentElementTemplateData,
+  AglynComponentSchema,
+  ComponentId,
+  ComponentsLinealDirectiveFlag,
+  createAglynComponentElement,
+} from '@aglyn/core-data-framework'
+import { ListItem } from '@mui/material'
+
+export const loader = () => import('@mui/material/ListItem').then((i) => i.default)
+export const componentId: ComponentId = 'list-item'
+export const bundleId: ComponentId = 'mui'
+export const metadata: AglynComponentSchema['metadata'] = {
+  displayName: 'List Item',
+}
+export const renderFlags: AglynComponentSchema['renderFlags'] = {
+  hierarchy: {
+    restrictChildren: [ComponentsLinealDirectiveFlag.LIMIT_TO, { components: ['list'] }],
+  },
+}
+export const templates: AglynComponentElementTemplateData[] = [
+  {
+    id: 'mui:list-item',
+    title: 'List Item',
+    data: {
+      componentId: componentId,
+      bundleId: bundleId,
+      elements: [
+        {
+          componentId: 'list-item-text',
+          bundleId: bundleId,
+          props: {
+            primary: 'Item Primary',
+            secondary: 'This is the secondary',
+          },
+        },
+      ],
+    },
+  },
+]
+
+export const component = createAglynComponentElement(
+  {
+    componentId,
+    bundleId,
+    metadata,
+    templates,
+    renderFlags,
+  },
+  ListItem
+)
+
+export default component

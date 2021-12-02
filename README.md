@@ -39,7 +39,6 @@
   <br/>
 </div>
 
-
 ##### Monorepo status
 
 ![license](https://img.shields.io/github/license/aglyn/core?style=for-the-badge&cacheSeconds=maxAge&labelColor=404C5C& "Monorepo license")
@@ -136,7 +135,6 @@ A utility library contains low-level utilities used by many libraries and applic
 └──┴──┴────────────────────
 ```
 
-
 ### Apps
 
 ###### Monorepo package type
@@ -162,21 +160,20 @@ A utility library contains low-level utilities used by many libraries and applic
   * Directory: [libs/core/data/framework](libs/core/data/framework)
 
 * **Feature: Components Extensions Mui Plugin**
-  * NodeJS import: `@aglyn/addon-ui-mui-bundle`
-  * Workspace name: `addon-ui-mui-bundle`
-  * Directory: [libs/addon/ui/mui-bundle](libs/addon/ui/mui-bundle)
+  * NodeJS import: `@aglyn/addons-ui-mui-bundle`
+  * Workspace name: `addons-ui-mui-bundle`
+  * Directory: [libs/addons/ui/mui-bundle](libs/addons/ui/mui-bundle)
 
 #### UI
 
-* **Builder**
-  * NodeJS import: `@aglyn/feature-builder`
-  * Workspace name: `feature-builder`
-  * Directory: [libs/feature/builder](libs/feature/builder)
+* **Besigner**
+  * NodeJS import: `@aglyn/core-feature-besigner`
+  * Workspace name: `core-feature-besigner`
+  * Directory: [libs/core/feature/builder](libs/core/feature/besigner)
 * **Renderer**
-  * NodeJS import: `@aglyn/feature-renderer`
-  * Workspace name: `feature-renderer`
-  * Directory: [libs/feature/renderer](libs/feature/renderer)
-
+  * NodeJS import: `@aglyn/core-feature-renderer`
+  * Workspace name: `core-feature-renderer`
+  * Directory: [libs/core/feature/renderer](libs/core/feature/renderer)
 
 ### Kind: Shared libraries
 
@@ -242,6 +239,24 @@ A utility library contains low-level utilities used by many libraries and applic
   * Workspace name: `shared-util-tools`
   * Directory: [libs/shared/util/tools](libs/shared/util/tools)
 
+<hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+
+## Terminology and meaning
+
+### Extension
+
+Extrinsic or non-standard integration extending and/or modifying procedures and behavior—producing
+affects deviating systematic and foundational logic in default and composed standard behavior of the
+account or application instance. Subjectively and simultaneously, adding logical and behavioral
+features, solutions and other capabilities. Extensions are created by third-parties (community) and
+occasionally by an official first-party;
+
+### Add-ons
+
+Personalizing, pluggable account or application modules and features. Intended to contribute
+supports and integral adoptions, respecting the symbolical architecture and behavior of the account
+or application instance; fulfilling dependencies and behavioral requests. Created commonly by both
+first- and third-party entities.
 
 <hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
 
@@ -373,7 +388,6 @@ Nx can generate a dependency tree graph
 
 - Run `nx dep-graph` to see a diagram of the dependencies of your projects.
 
-
 <hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
 
 ## Environment files
@@ -400,7 +414,6 @@ to the [dotenv documentation](https://github.com/motdotla/dotenv) for more detai
 [Source](https://create-react-app.dev/docs/adding-custom-environment-variables)
 
 <hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
-
 
 ## Git
 

@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+import { render } from '@testing-library/react'
+import React from 'react'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
-}
+import { ComponentsDrawerComponent } from './components-drawer.component'
 
-Builder.displayName = 'Page-Builder'
-
-export default Builder
+describe('BuilderComponentsDrawerComponent', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<ComponentsDrawerComponent />)
+    expect(baseElement).toBeTruthy()
+  })
+})

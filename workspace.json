@@ -1,23 +1,23 @@
 {
   "version": 2,
   "projects": {
-    "addon-ui-mui-bundle": {
-      "root": "libs/addon/ui/mui-bundle",
-      "sourceRoot": "libs/addon/ui/mui-bundle/src",
+    "addons-ui-mui-bundle": {
+      "root": "libs/addons/ui/mui-bundle",
+      "sourceRoot": "libs/addons/ui/mui-bundle/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/addon/ui/mui-bundle/**/*.{ts,tsx,js,jsx}"]
+            "lintFilePatterns": ["libs/addons/ui/mui-bundle/**/*.{ts,tsx,js,jsx}"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/addon/ui/mui-bundle"],
+          "outputs": ["coverage/libs/addons/ui/mui-bundle"],
           "options": {
-            "jestConfig": "libs/addon/ui/mui-bundle/jest.config.js",
+            "jestConfig": "libs/addons/ui/mui-bundle/jest.config.js",
             "passWithNoTests": true
           }
         }
@@ -144,23 +144,23 @@
       "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:framework"],
       "implicitDependencies": []
     },
-    "feature-builder": {
-      "root": "libs/feature/builder",
-      "sourceRoot": "libs/feature/builder/src",
+    "core-feature-besigner": {
+      "root": "libs/core/feature/besigner",
+      "sourceRoot": "libs/core/feature/besigner/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/feature/builder/**/*.{ts,tsx,js,jsx}"]
+            "lintFilePatterns": ["libs/core/feature/besigner/**/*.{ts,tsx,js,jsx}"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/feature/builder"],
+          "outputs": ["coverage/libs/core/feature/besigner"],
           "options": {
-            "jestConfig": "libs/feature/builder/jest.config.js",
+            "jestConfig": "libs/core/feature/besigner/jest.config.js",
             "passWithNoTests": true
           }
         }
@@ -168,23 +168,23 @@
       "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-builder"],
       "implicitDependencies": []
     },
-    "feature-renderer": {
-      "root": "libs/feature/renderer",
-      "sourceRoot": "libs/feature/renderer/src",
+    "core-feature-renderer": {
+      "root": "libs/core/feature/renderer",
+      "sourceRoot": "libs/core/feature/renderer/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/feature/renderer/**/*.{ts,tsx,js,jsx}"]
+            "lintFilePatterns": ["libs/core/feature/renderer/**/*.{ts,tsx,js,jsx}"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/feature/renderer"],
+          "outputs": ["coverage/libs/core/feature/renderer"],
           "options": {
-            "jestConfig": "libs/feature/renderer/jest.config.js",
+            "jestConfig": "libs/core/feature/renderer/jest.config.js",
             "passWithNoTests": true
           }
         }

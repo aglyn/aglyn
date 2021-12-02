@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { BuilderComponent } from '@aglyn/core-feature-besigner'
+// import {  } from '@aglyn/core-data-framework'
+import { ReactNode } from 'react'
+import { ElementsContext } from './elements-context'
 
-function Builder(props) {
-  if (typeof document !== 'undefined') {
-    console.log('page:/builder app', getApp())
-  }
-  return <BuilderComponent />
+export interface ElementsContextProviderProps {
+  children?: ReactNode
+  // addElement?: (payload: AddElementPayload) => void
 }
 
-Builder.displayName = 'Page-Builder'
+export function ElementsContextProvider(props: ElementsContextProviderProps) {
+  const { children } = props
 
-export default Builder
+  return <ElementsContext.Provider value={undefined}>{children}</ElementsContext.Provider>
+}
+ElementsContextProvider.displayName = 'ElementsContextProvider'
+ElementsContextProvider.defaultProps = {}
+export default ElementsContextProvider

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { bundle as muiBundle } from '@aglyn/addon-ui-mui-bundle'
+import { bundle as muiBundle } from '@aglyn/addons-ui-mui-bundle'
 import {
   createAglynComponentElement,
   initializeApp,
@@ -58,7 +58,7 @@ const c1 = createAglynComponentElement(
       title: 'Root element',
     },
   },
-  'span',
+  'span'
 )
 
 const c2 = createAglynComponentElement(
@@ -69,7 +69,7 @@ const c2 = createAglynComponentElement(
       title: 'Root element',
     },
   },
-  'span',
+  'span'
 )
 
 const c3 = createAglynComponentElement(
@@ -80,7 +80,7 @@ const c3 = createAglynComponentElement(
       title: 'Root element',
     },
   },
-  'span',
+  'span'
 )
 
 const c4 = createAglynComponentElement(
@@ -91,7 +91,7 @@ const c4 = createAglynComponentElement(
       title: 'Root element',
     },
   },
-  'span',
+  'span'
 )
 
 const c5 = createAglynComponentElement(
@@ -114,7 +114,7 @@ const c5 = createAglynComponentElement(
       },
     ],
   },
-  'span',
+  'span'
 )
 const components = [c1, c2, c3, c4, c5]
 
@@ -130,13 +130,12 @@ try {
 
   components.forEach((i) => registerComponent(app, i))
   registerBundle(app, muiBundle)
-}
-catch (e) {
+} catch (e) {
   console.error(e, 'initialize aglyn app')
 }
 
 function AppWrapperRaw(props) {
-  const {children} = props
+  const { children } = props
   const Wrapper = isProduction ? Fragment : Fragment // StrictMode
 
   useEffect(() => {
@@ -160,7 +159,7 @@ function AppWrapperRaw(props) {
   )
 }
 AppWrapperRaw.displayName = 'AppWrapper'
-const AppWrapper = withTheme({theme: consoleThemeLight})(AppWrapperRaw)
+const AppWrapper = withTheme({ theme: consoleThemeLight })(AppWrapperRaw)
 
 const previewProduction = false
 const isProduction = process.env.NODE_ENV === 'production' || previewProduction
@@ -202,7 +201,7 @@ export interface _AppProps extends NextAppProps {
  * @returns {JSX.Element}
  */
 function _App(props: _AppProps) {
-  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
+  const { Component, emotionCache = clientSideEmotionCache, pageProps } = props
 
   return (
     <CacheProvider value={emotionCache}>
@@ -213,7 +212,7 @@ function _App(props: _AppProps) {
   )
 }
 _App.displayName = '_App'
-_App.getInitialProps = async ({ctx, Component}) => {
+_App.getInitialProps = async ({ ctx, Component }) => {
   let pageProps = {}
 
   if (Component.getInitialProps) {
