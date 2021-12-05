@@ -3,12 +3,24 @@
   "compilerOptions": {
     "jsx": "preserve",
     "allowJs": true,
-    "types": ["node", "jest"],
+    "types": [
+      "node",
+      "jest"
+    ],
     "isolatedModules": true,
     "noImplicitOverride": false,
     "strict": false,
-    "noEmit": false
+    "noEmit": false,
+    "incremental": true
   },
-  "include": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "next-env.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
+    "next-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

@@ -173,13 +173,13 @@ export namespace ConsolePalette {
   export namespace Action {
     export namespace SvgBackground {
       export const LIGHT: IActionStates = {
-        default: shadesOfGrey[50],
+        main: shadesOfGrey[50],
         hover: shadesOfGrey[50],
         active: shadesOfGrey[50],
         focus: shadesOfGrey[50],
       }
       export const DARK: IActionStates = {
-        default: shadesOfGrey[50],
+        main: shadesOfGrey[50],
         hover: shadesOfGrey[50],
         active: shadesOfGrey[50],
         focus: shadesOfGrey[50],
@@ -187,13 +187,13 @@ export namespace ConsolePalette {
     }
     export namespace SvgFilled {
       export const LIGHT: IActionStates = {
-        default: shadesOfGrey[500],
+        main: shadesOfGrey[500],
         hover: ConsolePalette.Ordinal.LIGHT.secondary['light'],
         active: ConsolePalette.Ordinal.LIGHT.secondary['light'],
         focus: ConsolePalette.Ordinal.LIGHT.secondary['light'],
       }
       export const DARK: IActionStates = {
-        default: shadesOfGrey[500],
+        main: shadesOfGrey[500],
         hover: ConsolePalette.Ordinal.LIGHT.secondary['light'],
         active: ConsolePalette.Ordinal.LIGHT.secondary['light'],
         focus: ConsolePalette.Ordinal.LIGHT.secondary['light'],
@@ -201,13 +201,13 @@ export namespace ConsolePalette {
     }
     export namespace SvgStroke {
       export const LIGHT: IActionStates = {
-        default: '#FFFFFF',
+        main: '#FFFFFF',
         hover: '#FFFFFF',
         active: '#FFFFFF',
         focus: '#FFFFFF',
       }
       export const DARK: IActionStates = {
-        default: '#FFFFFF',
+        main: '#FFFFFF',
         hover: '#FFFFFF',
         active: '#FFFFFF',
         focus: '#FFFFFF',

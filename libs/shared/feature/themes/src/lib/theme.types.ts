@@ -16,7 +16,7 @@
  */
 
 export interface IActionStates {
-  default: string
+  main: string
   hover: string
   active: string
   focus: string
