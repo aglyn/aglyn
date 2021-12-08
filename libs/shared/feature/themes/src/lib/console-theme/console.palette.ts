@@ -173,30 +173,30 @@ export namespace ConsolePalette {
   export namespace Action {
     export namespace SvgBackground {
       export const LIGHT: IActionStates = {
-        main: shadesOfGrey[50],
-        hover: shadesOfGrey[50],
-        active: shadesOfGrey[50],
-        focus: shadesOfGrey[50],
+        main:  ConsolePalette.shadesOfGrey[50],
+        hover:  ConsolePalette.shadesOfGrey[50],
+        active:  ConsolePalette.shadesOfGrey[50],
+        focus:  ConsolePalette.shadesOfGrey[50],
       }
       export const DARK: IActionStates = {
-        main: shadesOfGrey[50],
-        hover: shadesOfGrey[50],
-        active: shadesOfGrey[50],
-        focus: shadesOfGrey[50],
+        main:  ConsolePalette.shadesOfGrey[50],
+        hover:  ConsolePalette.shadesOfGrey[50],
+        active:  ConsolePalette.shadesOfGrey[50],
+        focus: ConsolePalette.shadesOfGrey[50],
       }
     }
     export namespace SvgFilled {
       export const LIGHT: IActionStates = {
-        main: shadesOfGrey[500],
-        hover: ConsolePalette.Ordinal.LIGHT.secondary['light'],
-        active: ConsolePalette.Ordinal.LIGHT.secondary['light'],
-        focus: ConsolePalette.Ordinal.LIGHT.secondary['light'],
+        main:  ConsolePalette.shadesOfGrey[500],
+        hover: Ordinal.LIGHT.secondary['light'],
+        active: Ordinal.LIGHT.secondary['light'],
+        focus: Ordinal.LIGHT.secondary['light'],
       }
       export const DARK: IActionStates = {
-        main: shadesOfGrey[500],
-        hover: ConsolePalette.Ordinal.LIGHT.secondary['light'],
-        active: ConsolePalette.Ordinal.LIGHT.secondary['light'],
-        focus: ConsolePalette.Ordinal.LIGHT.secondary['light'],
+        main:  ConsolePalette.shadesOfGrey[500],
+        hover: Ordinal.LIGHT.secondary['light'],
+        active: Ordinal.LIGHT.secondary['light'],
+        focus: Ordinal.LIGHT.secondary['light'],
       }
     }
     export namespace SvgStroke {

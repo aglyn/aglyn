@@ -179,6 +179,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
               <MuiLink
                 onClick={handleButtonClick}
                 variant="button"
+                component="button"
                 color="secondary"
                 sx={{
                   display: 'flex',
@@ -200,6 +201,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
                     placeholder="Search icons..."
                     size="small"
                     helperText={helperContent}
+                    fullWidth
                   />
                 </Grid>
                 <Grid item xs>

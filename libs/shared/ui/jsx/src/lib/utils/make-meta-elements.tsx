@@ -24,8 +24,19 @@ export type MakeMetaElementsConfig = [
 ][]
 
 export function makeMetaElements(items: MakeMetaElementsConfig): JSX.Element[] {
-  return items.map(([name, content, { id, ...rest } = {} as any], i) => (
-    <meta key={id ?? name ?? '' + content ?? i} id={id} name={name} content={content} {...rest} />
-  ))
+  return items.map((item, i) => {
+    const [name, content, other] = item
+    const {id, ...rest} = {...other}
+    const key = id || name || i
+    return (
+      <meta
+        key={key}
+        id={id}
+        name={name}
+        content={content}
+        {...rest}
+      />
+    )
+  })
 }
 export default makeMetaElements

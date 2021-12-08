@@ -16,6 +16,7 @@
  */
 
 import { styled } from '@aglyn/shared-feature-themes'
+import NoSsr from '@mui/material/NoSsr'
 import Stack, { StackProps } from '@mui/material/Stack'
 import { forwardRef } from 'react'
 import { AppBarPrimaryComponent } from './app-bar-primary.component'
@@ -68,10 +69,12 @@ const WorkspaceEditorComponentRaw = forwardRef<any, WorkspaceEditorComponentProp
             id="aglyn:besigner-appbar-primary"
             aria-label="primary app toolbar"
           />
-          <AppBarSecondaryComponent
-            id="aglyn:besigner-appbar-secondary"
-            aria-label="secondary app toolbar"
-          />
+          <NoSsr>
+            <AppBarSecondaryComponent
+              id="aglyn:besigner-appbar-secondary"
+              aria-label="secondary app toolbar"
+            />
+          </NoSsr>
         </Stack>
 
         <Stack
@@ -85,10 +88,12 @@ const WorkspaceEditorComponentRaw = forwardRef<any, WorkspaceEditorComponentProp
             zIndex: 0,
           }}
         >
-          <PanelLeftComponent
-            id="aglyn:besigner-panel-left"
-            aria-label="besigner left drawer"
-          />
+          <NoSsr>
+            <PanelLeftComponent
+              id="aglyn:besigner-panel-left"
+              aria-label="besigner left drawer"
+            />
+          </NoSsr>
 
           <ViewportRootComponent
             id="aglyn:besigner-viewport"
@@ -98,10 +103,12 @@ const WorkspaceEditorComponentRaw = forwardRef<any, WorkspaceEditorComponentProp
             spacing={0}
           />
 
-          <PanelRightComponent
-            id="aglyn:besigner-panel-right"
-            aria-label="besigner toolbox right"
-          />
+          <NoSsr>
+            <PanelRightComponent
+              id="aglyn:besigner-panel-right"
+              aria-label="besigner toolbox right"
+            />
+          </NoSsr>
         </Stack>
 
         {children}

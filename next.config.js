@@ -72,6 +72,11 @@ const aglynOptions = ({
     // Will be available on both server and client
     staticFolder: '/static',
   },
+
+  experimental: {
+    // ssr and displayName are configured by default
+    styledComponents: true,
+  },
 })
 
 

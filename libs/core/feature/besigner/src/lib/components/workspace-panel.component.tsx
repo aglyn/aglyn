@@ -112,7 +112,7 @@ const WorkspacePanel = styled('div', {
   })
 })
 
-export interface WorkspacePanelComponentProps extends ToolboxContainerProps {
+export interface WorkspacePanelComponentProps extends WorkspacePanelProps {
   DrawerProps?: MuiDrawerProps
   open?: boolean
   anchor?: MuiDrawerProps['anchor']
