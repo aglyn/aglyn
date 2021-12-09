@@ -166,31 +166,31 @@ export namespace FT {
     export const sorted = 'sorted'
 
     export const all = [
-      bool,
-      bytes,
-      timestamp,
-      float,
-      int32,
-      int64,
-      nil,
-      text,
-      coordinates,
-      map,
-      sorted,
+      Tag.bool,
+      Tag.bytes,
+      Tag.timestamp,
+      Tag.float,
+      Tag.int32,
+      Tag.int64,
+      Tag.nil,
+      Tag.text,
+      Tag.coordinates,
+      Tag.map,
+      Tag.sorted,
     ]
 
     export type T =
-      typeof bool
-      | typeof bytes
-      | typeof timestamp
-      | typeof float
-      | typeof int32
-      | typeof int64
-      | typeof nil
-      | typeof text
-      | typeof coordinates
-      | typeof map
-      | typeof sorted
+      typeof Tag.bool
+      | typeof Tag.bytes
+      | typeof Tag.timestamp
+      | typeof Tag.float
+      | typeof Tag.int32
+      | typeof Tag.int64
+      | typeof Tag.nil
+      | typeof Tag.text
+      | typeof Tag.coordinates
+      | typeof Tag.map
+      | typeof Tag.sorted
   }
 
   /** Match Type from Tag symbol */
