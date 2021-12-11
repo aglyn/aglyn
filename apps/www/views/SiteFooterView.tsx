@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AppLink, GridItems } from '@aglyn/shared/ui/react'
-import { styled } from '@aglyn/shared/ui/themes'
+import { AppLink, GridItems } from '@aglyn/shared-ui-jsx'
+import { styled } from '@aglyn/shared-feature-themes'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
 import MuiLink from '@mui/material/Link'
@@ -25,95 +25,86 @@ import NextImage from 'next/image'
 import { ElementType, forwardRef, HTMLAttributes } from 'react'
 import { footerNavigation } from '../const'
 
-
 const FooterElement = styled('footer', {
   name: 'FooterElement',
 })({
   background: 'none',
 })
 
-
 export interface SiteFooterViewProps extends HTMLAttributes<HTMLDivElement> {
   component?: ElementType
 }
 
-const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      children,
-      className: propClass,
-      ...rest
-    } = props
+const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(function RefRenderFn(
+  props,
+  ref
+) {
+  const { children, className: propClass, ...rest } = props
 
-    return (
-      <FooterElement
-        ref={ref}
-        {...rest}
-      >
-        <Box sx={{pt: 4}}>
-          {children && (
-            <Container maxWidth="lg">
-              {children}
-            </Container>
-          )}
-          <Container maxWidth="lg">
-            <GridItems
-              spacing={2}
-              justifyContent="space-between"
-              items={[
-                {
-                  xs: 12, sm: 6, md: 3,
-                  children: (
-                    <>
-                      <NextImage
-                        src="/_static/images/brand/aglyn-logo.svg"
-                        width={135}
-                        height={48}
-                        alt="aglyn"
-                      />
-                      <br/>
-                      <br/>
-                      <Box fontSize={16}><strong>Mailing Address</strong></Box>
-                      125 JOHNSTON LN
-                      <br/>
-                      JARRELL, TX, 76537-0029
-                      <br/>
-                      UNITED STATES
-                      <br/>
-                      <br/>
-                      Email: <MuiLink
-                      href="mailto:info@aglyn.com"
-                      children={'info@aglyn.com'}
+  return (
+    <FooterElement ref={ref} {...rest}>
+      <Box sx={{ pt: 4 }}>
+        {children && <Container maxWidth="lg">{children}</Container>}
+        <Container maxWidth="lg">
+          <GridItems
+            spacing={2}
+            justifyContent="space-between"
+            items={[
+              {
+                xs: 12,
+                sm: 6,
+                md: 3,
+                children: (
+                  <>
+                    <NextImage
+                      src="/_static/images/brand/aglyn-logo.svg"
+                      width={135}
+                      height={48}
+                      alt="aglyn"
                     />
-                      <br/>
-                    </>
-                  ),
-                },
-                ...footerNavigation.map(({items, ...item}, key) => ({
-                  xs: 12 as any, sm: 6 as any, md: 3 as any,
-                  children: (
-                    <>
-                      <Typography variant="overline">
-                        <b children={item.children}/>
-                      </Typography>
-                      <Typography component="ul">
-                        {items.map((item, key) => (
-                          <li key={key}>
-                            <AppLink {...item} />
-                          </li>
-                        ))}
-                      </Typography>
-                    </>
-                  ),
-                })),
-              ]}
-            />
-          </Container>
-        </Box>
-      </FooterElement>
-    )
-  },
-)
+                    <br />
+                    <br />
+                    <Box fontSize={16}>
+                      <strong>Mailing Address</strong>
+                    </Box>
+                    125 JOHNSTON LN
+                    <br />
+                    JARRELL, TX, 76537-0029
+                    <br />
+                    UNITED STATES
+                    <br />
+                    <br />
+                    Email: <MuiLink href="mailto:info@aglyn.com" children={'info@aglyn.com'} />
+                    <br />
+                  </>
+                ),
+              },
+              ...footerNavigation.map(({ items, ...item }, key) => ({
+                xs: 12 as any,
+                sm: 6 as any,
+                md: 3 as any,
+                children: (
+                  <>
+                    <Typography variant="overline">
+                      <b children={item.children} />
+                    </Typography>
+                    <Typography component="ul">
+                      {items.map((item, key) => (
+                        <li key={key}>
+                          <AppLink {...item} />
+                        </li>
+                      ))}
+                    </Typography>
+                  </>
+                ),
+              })),
+            ]}
+          />
+        </Container>
+      </Box>
+    </FooterElement>
+  )
+})
 
 SiteFooterView.displayName = 'SiteFooterView'
 export { SiteFooterView }

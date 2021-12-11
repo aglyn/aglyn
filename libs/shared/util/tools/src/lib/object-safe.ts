@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isObj } from '@aglyn/shared/util/guards'
+import { _isObj } from '@aglyn/shared-util-guards'
 
 
 /**

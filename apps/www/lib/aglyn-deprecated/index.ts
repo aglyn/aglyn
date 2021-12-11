@@ -20,16 +20,16 @@ export * from './lib/types'
 export * from './lib/overrides'
 
 // Interfaces
-export * from './lib/interfaces/crud'
-export * from './lib/interfaces/dod'
-export * from './lib/interfaces/initializable'
-export * from './lib/interfaces/json'
-export * from './lib/interfaces/normalized'
+export * from '../../../../libs/shared/data/types/src/lib/crud'
+export * from '../../../../libs/shared/data/types/src/lib/dod'
+export * from '../../../../libs/shared/data/types/src/lib/initializable'
+export * from '../../../../libs/shared/data/types/src/lib/serializable'
+export * from '../../../../libs/shared/data/types/src/lib/normalized'
 export * from './lib/interfaces/ref-controller'
 
 // Models
-export * from './lib/models/Crud'
-export * from './lib/models/Normalized'
+export * from '../../../../libs/shared/util/tools/src/lib/crud'
+export * from '../../../../libs/shared/util/tools/src/lib/normalized'
 
 // Controllers
 export * from './lib/controllers/app-controller'
@@ -38,6 +38,3 @@ export * from './lib/controllers/CollectionRefController'
 export * from './lib/controllers/DatabaseRefController'
 export * from './lib/controllers/DocumentRefController'
 export * from './lib/controllers/FieldRefController'
-
-// Data
-export * from './lib/constants'

@@ -1,53 +1,35 @@
+/**
+ * @license
+ * Copyright 2021 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 // MARK – IMPORTS
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const withNx = require('@nrwl/next/plugins/with-nx')
-const pkg = require('../../package.json')
+const withAglyn = require('../../nextjs-base.config')
 
 // MARK – GLOBALS
-const isProduction = Boolean(process.env.NODE_ENV === 'production')
+const isProduction = process.env.NODE_ENV === 'production'
 const securityPolicy = isProduction
   ? 'default-src \'self\' aglyn.com *.aglyn.com'
   : 'default-src \'self\''
 
-console.log('JSON.stringify(process.env.NODE_ENV)', JSON.stringify(process.env.NODE_ENV))
-
-/**
- * @type {import('@nrwl/next/plugins/with-nx').WithNxOptions}
- **/
-const nextConfig = {
-  nx: {
-    // Set this to false if you do not want to use SVGR
-    // See: https://github.com/gregberge/svgr
-    svgr: true,
-  },
-  reactStrictMode: !isProduction,
-  target: 'experimental-serverless-trace',
-  typescript: {
-    // Motivated by https://github.com/zeit/next.js/issues/7687
-    ignoreDevErrors: isProduction,
-    ignoreBuildErrors: isProduction,
-  },
-  eslint: {
-    ignoreDuringBuilds: isProduction,
-  },
+module.exports = withAglyn({
   // headers: [
-  //   {
-  //     key: 'Content-Security-Policy',
-  //     value: securityPolicy,
-  //   },
+  // {
+  //   key: 'Content-Security-Policy',
+  //   value: securityPolicy,
+  // },
   // ],
-  webpack: (config, options) => {
-    const { webpack, buildId } = options
-    config.plugins.push(
-      new webpack.DefinePlugin({
-        'process.env.BUILD_ID': JSON.stringify(buildId),
-        'process.env.VERSION': JSON.stringify(pkg.version),
-        'process.env.COMMIT_REF': JSON.stringify(process.env.COMMIT_REF),
-        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
-      }),
-    )
-    return config
-  },
-}
-
-module.exports = withNx(nextConfig)
+})

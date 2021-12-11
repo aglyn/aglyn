@@ -15,22 +15,23 @@
  * limitations under the License.
  */
 
-import { PKey, Ref } from '../interfaces/dod'
+import { DoD } from '@aglyn/shared-data-types'
+import { Crud } from '@aglyn/shared-util-tools'
 import { RefController } from '../interfaces/ref-controller'
-import { Crud } from '../models/Crud'
+
 
 /**
  *
  *
  * @export
  * @class BaseRefController
- * @extends {Crud<Ref.Base<S>>}
+ * @extends {Crud<DoD.Base<S>>}
  * @implements {RefController<S>}
  * @template S
  */
 export class BaseRefController<S, T> extends Crud<T> implements RefController<T> {
 
-  constructor(public readonly meta: Ref.Base<S>, model: T) {
+  constructor(public readonly meta: DoD.Ref.Base<S>, model: T) {
     super(model)
   }
 
@@ -54,11 +55,11 @@ export class BaseRefController<S, T> extends Crud<T> implements RefController<T>
   /** @inheritdoc */
   public onInit?(): void
 
-  public getId(): PKey {
+  public getId(): DoD.PKey {
     return this.meta.id
   }
 
-  public setId(value: PKey): this {
+  public setId(value: DoD.PKey): this {
     this.meta.id = value
     return this
   }

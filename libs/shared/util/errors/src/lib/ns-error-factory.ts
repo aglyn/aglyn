@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import { replaceTemplate } from './tools'
-import { ErrorTagMessages, ErrorTagPayloads, EventFlag, EventPayload } from './types'
+import { _isArr } from '@aglyn/shared-util-guards'
 import { NsError } from './ns-error'
+import { replaceTemplate } from './tools'
+import { ErrorPayload, ErrorTagMessages, ErrorTagPayloads, EventFlag } from './types'
 
 
 /**
@@ -69,25 +70,68 @@ export class NsErrorFactory<T extends string = EventFlag, U extends ErrorTagPayl
     private readonly scope: string,
     private readonly namespace: string,
     private readonly templates: ErrorTagMessages<T>,
-    private readonly scopeDelimiter: string = '/',
-  ) {}
+    private readonly nsDelimiter: string = '/',
+    private readonly scopeDelimiter: string = ':',
+    private readonly defaultMessage: string = 'Error',
+  ) {
+    this.create = this.create.bind(this)
+  }
+
+  protected makeShortCode<K extends T>(flag: K): string {
+    return [this.namespace, flag].join(this.nsDelimiter)
+  }
+  protected makeFullCode(shortCode: string): string {
+    return [this.scope, shortCode].join(this.scopeDelimiter)
+  }
+  protected makeShortMessage<K extends T>(flag: K, payload?: ErrorPayload): string {
+    const template = this.templates[flag]
+    return template ? replaceTemplate(template, payload) : this.defaultMessage
+  }
+  protected makeFullMessage(shortCode: string, shortMessage: string): string {
+    // Scope - Error message (namespace/flag).
+    return `[${this.scope}] - ${shortMessage} (${shortCode}).`
+  }
 
   /**
    * Build a new throwable
-   * @param flag error event identifier
-   * @param args payload data to set template variable values
-   * @returns {NsError}
+   * @example
+   * ```
+   * let age: string | number = 101
+   * const errorFactory = new NsErrorFactory('domain', 'my-lib', {
+   *   ['bad-string']: "Provided an invalid string '{$str}'"
+   * })
+   * if (typeof age !== 'string') {
+   *   throw errorFactory.create('bad-string', {str: age})
+   *   // Out = domain - Provided an invalid string '101' (my-lib/bad-string)
+   *   // Full Code = domain::my-lib/bad-string
+   * }
+   * ```
+   *
+   * @param flag - error event identifier
+   * @param payload - payload data to set template variable values
+   * @returns NsError
    */
-  create = <K extends T>(
-    flag: K,
-    ...args: K extends keyof U ? [U[K]] : []
-  ): NsError => {
-    const payload = (args[0] as EventPayload) || {}
-    const fullCode = `${this.scope}${this.scopeDelimiter}${flag}`
-    const template = this.templates[flag]
-    const message = template ? replaceTemplate(template, payload) : 'Error'
-    // Service Name: Error message (scope/flag).
-    const fullMessage = `${this.namespace}: ${message} (${fullCode}).`
-    return new NsError(fullCode, fullMessage, payload)
+  create<K extends T>(flag: K, ...payload: K extends keyof U ? [U[K]] : []): NsError {
+    const data: ErrorPayload = (_isArr(payload) && payload[0]) || {},
+      shortCode = this.makeShortCode(flag),
+      fullCode = this.makeFullCode(shortCode),
+      shortMessage = this.makeShortMessage(flag, data),
+      fullMessage = this.makeFullMessage(fullCode, shortMessage)
+
+    return new NsError(fullCode, fullMessage, data)
+  }
+
+  childFactory<T extends string, U extends ErrorTagPayloads<T>>(
+    childNamespace: string,
+    templates?: ErrorTagMessages<T>,
+  ) {
+    return new NsErrorFactory<T, U>(
+      this.scope,
+      [this.namespace, childNamespace].join(this.nsDelimiter),
+      (templates || this.templates) as ErrorTagMessages<T>,
+      this.nsDelimiter,
+      this.scopeDelimiter,
+      this.defaultMessage,
+    )
   }
 }

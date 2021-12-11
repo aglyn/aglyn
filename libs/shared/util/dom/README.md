@@ -1,4 +1,4 @@
-# shared-util-dom
+# @aglyn/shared-util-dom
 
 This library was generated with [Nx](https://nx.dev).
 

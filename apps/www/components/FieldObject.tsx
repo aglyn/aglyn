@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
+import {DoD} from '@aglyn/shared-data-types'
+import {SvgPathIcon} from '@aglyn/shared-ui-jsx'
 import React from 'react'
-import { Components, FieldPreset } from '../lib/input-fields'
-import { FT, lbl } from '../lib/aglyn-deprecated'
-import FormFields, { Props as FormFieldsProps } from './FormFields'
-import { SvgPathIcon } from '@aglyn/shared/ui/react'
+import {Components, FieldPreset} from '../lib/input-fields'
+import FormFields, {Props as FormFieldsProps} from './FormFields'
+
 
 function FieldObjectProperty(props: ObjectPropertyProps) {
-  const { value, ...rest } = props
+  const {value, ...rest} = props
   const [key, property] = value
   const fields = [
     {
-      GridItemProps: { xs: 2 },
+      GridItemProps: {xs: 2},
       component: Components.Elements.byKey.TextField,
       name: 'key',
       label: 'Key',
@@ -34,11 +35,11 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
       color: 'primary',
       fullWidth: true,
       size: 'small',
-      InputLabelProps: { shrink: true },
-      value: String(key)
+      InputLabelProps: {shrink: true},
+      value: String(key),
     },
     {
-      GridItemProps: { xs: 3 },
+      GridItemProps: {xs: 3},
       component: Components.Elements.byKey.SelectField,
       name: 'kind',
       label: 'Kind',
@@ -48,10 +49,10 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
       fullWidth: true,
       size: 'small',
       value: property.type,
-      items: FT.Tag.all.map((sym: any) => ({
+      items: DoD.FT.Tag.all.map((sym: any) => ({
         value: sym,
-        children: lbl[sym],
-      } as any))
+        children: DoD.lbl[sym],
+      } as any)),
     },
   ]
   return (
@@ -59,8 +60,9 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
   )
 }
 FieldObjectProperty.displayName = 'FieldObjectProperty'
+
 interface ObjectPropertyProps extends Omit<FormFieldsProps, 'items'> {
-  value: [key: string | number, property: { type: symbol }]
+  value: [key: string | number, property: {type: symbol}]
 }
 
 // const emptyObjectProperty = (key: string | number) => {
@@ -72,7 +74,7 @@ interface ObjectPropertyProps extends Omit<FormFieldsProps, 'items'> {
 // }
 
 function FieldObject(props: Props) {
-  const { value, onChange, ...rest } = props
+  const {value, onChange, ...rest} = props
 
   const handleAddProperty = React.useCallback((e) => {
     // setFields(prev => [...prev, emptyObjectProperty(prev.length)])
@@ -80,10 +82,10 @@ function FieldObject(props: Props) {
 
   const nameField = FieldPreset.Named.byKey.name
   const addButtonField = {
-    GridItemProps: { xs: 12 },
+    GridItemProps: {xs: 12},
     component: Components.Elements.byKey.Button,
     variant: 'outlined',
-    startIcon: <SvgPathIcon iconId="plus" />,
+    startIcon: <SvgPathIcon iconIds="plus" />,
     children: 'Add',
     onClick: (e) => {
       console.log('click')
@@ -96,7 +98,7 @@ function FieldObject(props: Props) {
       items={[
         nameField,
         Object.keys(value?.get('items')).map(k => value.get(k)),
-        addButtonField
+        addButtonField,
       ].filter(v => Boolean(v)) as any}
       {...rest}
     />

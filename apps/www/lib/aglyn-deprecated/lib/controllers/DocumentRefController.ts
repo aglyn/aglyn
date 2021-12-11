@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PKey, Ref, Schema } from '../interfaces/dod'
+import { DoD } from '@aglyn/shared-data-types'
 
 import { BaseRefController } from './BaseRefController'
 
@@ -25,16 +25,16 @@ import { BaseRefController } from './BaseRefController'
  *
  * @export
  * @class DocumentRefController
- * @extends {BaseRefController<Ref.Document<S>>}
+ * @extends {BaseRefController<DoD.Ref.Document<S>>}
  * @template S
  */
-export class DocumentRefController<S extends Schema.ModelFields> extends BaseRefController<S, Ref.Document<S>> {
+export class DocumentRefController<S extends DoD.Schema.ModelFields> extends BaseRefController<S, DoD.Ref.Document<S>> {
 
-  constructor(id: PKey, schema: S, fields?: Ref.Document<S>) {
-    super({ id, schema }, { ...fields })
+  constructor(id: DoD.PKey, schema: S, fields?: DoD.Ref.Document<S>) {
+    super({id, schema}, {...fields})
   }
 
-  public static from<S extends Schema.ModelFields>(id: PKey, schema: S, fields?: Ref.Document<S>) {
+  public static from<S extends DoD.Schema.ModelFields>(id: DoD.PKey, schema: S, fields?: DoD.Ref.Document<S>) {
     return new this(id, schema, fields)
   }
 
@@ -69,11 +69,11 @@ export class DocumentRefController<S extends Schema.ModelFields> extends BaseRef
     // }
   }
 
-  public getFields(): Ref.DocumentFields<S> {
+  public getFields(): DoD.Ref.DocumentFields<S> {
     return this.model
   }
 
-  public setFields(value: Ref.DocumentFields<S>): this {
+  public setFields(value: DoD.Ref.DocumentFields<S>): this {
     this.model = value
     return this
   }

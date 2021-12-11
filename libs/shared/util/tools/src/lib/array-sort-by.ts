@@ -36,3 +36,5 @@ export function arraySortBy<T>(
     return 0
   })
 }
+
+export default arraySortBy

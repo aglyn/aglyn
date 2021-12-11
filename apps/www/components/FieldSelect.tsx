@@ -20,7 +20,7 @@ import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@mui/material/Me
 
 
 export interface FieldSelectProps extends MuiTextFieldProps {
-  items: Array<MuiMenuItemProps>
+  items: MuiMenuItemProps[]
 }
 
 function FieldSelect(props: FieldSelectProps) {
@@ -28,7 +28,7 @@ function FieldSelect(props: FieldSelectProps) {
   return (
     <MuiTextField select {...rest}>
       {items.map((item, key) => (
-        <MuiMenuItem key={key} {...item as any} />)
+        <MuiMenuItem key={item.id ?? key} {...item} />)
       )}
     </MuiTextField>
   )

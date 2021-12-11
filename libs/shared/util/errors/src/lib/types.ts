@@ -19,7 +19,7 @@ export type EventFlag = string
 export type EventMessage = string
 export type Key = string
 export type VarSyntax<T extends Key> = `{$${T}}`
-export type EventPayload<K extends keyof any = keyof any, T = unknown> = Partial<Record<K, T>>
+export type ErrorPayload<K extends keyof any = keyof any, T = unknown> = Partial<Record<K, T>>
 
 export type ErrorTagMessages<T extends EventFlag = string> = Record<T, EventMessage>
-export type ErrorTagPayloads<T extends Key = string> = Record<T, EventPayload>
+export type ErrorTagPayloads<T extends Key = string> = Record<T, ErrorPayload>

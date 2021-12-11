@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { getDisplayName } from '@aglyn/shared/util/tools'
+import { getDisplayName } from '@aglyn/shared-util-tools'
 import { NextRouter, Router, useRouter } from 'next/router'
-import { ComponentType, forwardRef, HTMLAttributes } from 'react'
+import { ComponentType, forwardRef } from 'react'
 import { Normalized } from './aglyn-deprecated'
 
 
@@ -339,7 +339,7 @@ export function withAggregatedPageMeta<P>(
       return (
         <Component
           ref={ref}
-          aggregatedPageMeta={aggregatedPageMeta} 
+          aggregatedPageMeta={aggregatedPageMeta}
           {...props as P}
         />
       )

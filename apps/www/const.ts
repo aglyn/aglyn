@@ -15,40 +15,6 @@
  * limitations under the License.
  */
 
-export const currentYear = new Date().getFullYear()
-
-export const APP = {
-  LEGAL_NAME: 'Aglyn LLC',
-  VERSION: `${process.env.VERSION}`,
-  BUILD_ID: `${process.env.BUILD_ID}`,
-  COMMIT_REF: `${process.env.COMMIT_REF}`,
-  IS_PRODUCTION: process.env.NODE_ENV === 'production',
-
-  META_DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
-  META_TITLE: 'Aglyn',
-}
-
-export namespace Core {
-  export enum IconVariant {
-    // Data
-    Property = 'variable',
-    Document = 'book-variant',
-    Collection = 'book-variant-multiple',
-
-    // Data-Type
-    String = 'code-string',
-    Array = 'code-array',
-    Object = 'code-braces-box',
-
-    // User
-    Login = 'login-variant',
-    Logout = 'logout-variant',
-  }
-}
-
-export const productNames = {
-  www: '.com',
-}
 
 export const mainNavigation = [
   // {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isObj } from '@aglyn/shared/util/guards'
+import { _hasProperty, _isObj } from '@aglyn/shared-util-guards'
 
 
 /**
@@ -32,7 +32,7 @@ import { _isObj } from '@aglyn/shared/util/guards'
  * @returns {T[K]}
  */
 export function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] | undefined {
-  if (!_isObj(obj)) {
+  if (!_isObj(obj) || !_hasProperty(key, obj)) {
     return undefined
   }
   return obj[key]

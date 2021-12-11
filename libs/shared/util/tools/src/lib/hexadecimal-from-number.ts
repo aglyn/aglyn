@@ -22,6 +22,6 @@
  * @param {number} val
  * @returns {string}
  */
-export function HexadecimalFromNumber(val: number): string {
+export function hexadecimalFromNumber(val: number): string {
   return Number(val).toString(16)
 }

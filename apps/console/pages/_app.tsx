@@ -15,77 +15,13 @@
  * limitations under the License.
  */
 
-import { AglynExtension, initializeApp } from '@aglyn/framework/sdk'
-import {
-  makeLinkElements,
-  MakeLinkElementsConfig,
-  makeMetaElements,
-  MakeMetaElementsConfig,
-} from '@aglyn/shared/ui/react'
-import {
-  CacheProvider,
-  consoleTheme,
-  createEmotionCache,
-  EmotionCache,
-  withTheme,
-} from '@aglyn/shared/ui/themes'
-import CssBaseline from '@mui/material/CssBaseline'
+import { CacheProvider, createEmotionCache, EmotionCache } from '@aglyn/shared-feature-themes'
 import { AppProps as NextAppProps } from 'next/app'
-import Head from 'next/head'
-import { Fragment, useEffect } from 'react'
-import { APP } from '../../www/const'
+import AppWrapper from '../components/app-wrapper'
 
 
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()
-const metaElements: MakeMetaElementsConfig = [
-  ['viewport', 'width=device-width, initial-scale=1'],
-  ['description', APP.META_DESCRIPTION],
-]
-const linkElements: MakeLinkElementsConfig = []
-
-try {
-  initializeApp({
-    extensions: {
-      [AglynExtension.COMPONENTS]: true,
-    },
-  })
-}
-catch (e) {
-  console.error(e, 'initialize aglyn app')
-}
-
-function AppWrapperRaw(props) {
-  const {children} = props
-  const Wrapper = isProduction ? Fragment : Fragment // StrictMode
-
-  useEffect(() => {
-    // Remove the server-side injected CSS.
-    const jssStyles = document.querySelector('#jss-server-side')
-    if (jssStyles) jssStyles.parentElement.removeChild(jssStyles)
-  }, [])
-
-  return (
-    <Wrapper>
-      <Head>
-        <title>{APP.META_TITLE}</title>
-        {makeMetaElements(metaElements)}
-        {makeLinkElements(linkElements)}
-      </Head>
-      <CssBaseline/>
-      <div className="app">
-        <main>
-          {children}
-        </main>
-      </div>
-    </Wrapper>
-  )
-}
-AppWrapperRaw.displayName = 'AppWrapper'
-const AppWrapper = withTheme({theme: consoleTheme})(AppWrapperRaw)
-
-const previewProduction = false
-const isProduction = process.env.NODE_ENV === 'production' || previewProduction
 
 export interface _AppProps extends NextAppProps {
   emotionCache?: EmotionCache
@@ -123,7 +59,7 @@ export interface _AppProps extends NextAppProps {
  * @param {AppProps} props
  * @returns {JSX.Element}
  */
-function _App(props: _AppProps) {
+export default function _App(props: _AppProps) {
   const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
 
   return (
@@ -132,48 +68,5 @@ function _App(props: _AppProps) {
         <Component {...pageProps} />
       </AppWrapper>
     </CacheProvider>
-  )
-}
-_App.displayName = '_App'
-_App.getInitialProps = async ({ctx, Component}) => {
-  let pageProps = {}
-
-  if (Component.getInitialProps) {
-    pageProps = await Component.getInitialProps(ctx)
-  }
-
-  return {
-    pageProps: {
-      lang: ctx.query.lang || 'en',
-      ...pageProps,
-    },
-  }
-}
-export default _App
-
-if (process.browser) {
-  console.log(
-    `%c
-       d8888          888                         888      888       .d8888b.
-      d88888          888                         888      888      d88P  Y88b
-     d88P888          888                         888      888      888    888
-    d88P 888  .d88b.  888 888  888 88888b.        888      888      888
-   d88P  888 d88P"88b 888 888  888 888 "88b       888      888      888
-  d88P   888 888  888 888 888  888 888  888       888      888      888    888
- d8888888888 Y88b 888 888 Y88b 888 888  888       888      888      Y88b  d88P
-d88P     888  "Y88888 888  "Y88888 888  888       88888888 88888888  "Y8888P"
-                  888          888
-             Y8b d88P     Y8b d88P
-              "Y88P"       "Y88P"
-
-                            Copyright (c) 2021 Aglyn LLC. All Rights Reserved.
-
-Hello there, Friend! 👋
-
-For detailed information please visit 'https://aglyn.com' or you may send an
-email to 'info@aglyn.com'.
-– Aglyn Engineering Team
-`,
-    'font-family:monospace;color:#E040FB;font-size:12px;',
   )
 }

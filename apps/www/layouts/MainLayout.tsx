@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import {BUILD_ID, PKG_VERSION} from '@aglyn/shared-data-brand'
+import {darken, styled} from '@aglyn/shared-feature-themes'
 import {
   AglynSvgLogo,
   AppLink,
@@ -23,27 +25,24 @@ import {
   GridButtonsProps,
   Menu,
   SvgPathIcon,
-} from '@aglyn/shared/ui/react'
-import { darken, styled } from '@aglyn/shared/ui/themes'
-import { _isArr, _isArrEmpty, _isObj } from '@aglyn/shared/util/guards'
+} from '@aglyn/shared-ui-jsx'
+import {_isArr, _isArrEmpty, _isObj} from '@aglyn/shared-util-guards'
 import AppBar, {AppBarProps} from '@mui/material/AppBar'
 import Avatar from '@mui/material/Avatar'
 import Box from '@mui/material/Box'
-import { cyan, purple } from '@mui/material/colors'
+import {cyan, purple} from '@mui/material/colors'
 import Container from '@mui/material/Container'
-import IconButton, { IconButtonProps } from '@mui/material/IconButton'
-import Tab, { TabProps } from '@mui/material/Tab'
+import IconButton, {IconButtonProps} from '@mui/material/IconButton'
+import Tab, {TabProps} from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import Toolbar from '@mui/material/Toolbar'
 import Typography from '@mui/material/Typography'
 import Head from 'next/head'
-import { useRouter } from 'next/router'
-import { ElementType, Fragment, ReactNode } from 'react'
-import { Breadcrumbs, BreadcrumbsProps } from '../components/Breadcrumbs'
+import {useRouter} from 'next/router'
+import {ElementType, Fragment, ReactNode} from 'react'
+import {Breadcrumbs, BreadcrumbsProps} from '../components/Breadcrumbs'
 import Copyright from '../components/Copyright'
-import { APP, tailNavigation } from '../const'
-import { CurrentUserContextType, withCurrentUserContext } from '../contexts/current-user-context'
-import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
+import {tailNavigation} from '../const'
 
 
 const StyledLogo = styled(AglynSvgLogo, {
@@ -153,7 +152,9 @@ const StyledTabs = styled(Tabs, {
       content: '" "',
       display: 'block',
       position: 'absolute',
-      left: 0, top: 0, right: 0,
+      left: 0,
+      top: 0,
+      right: 0,
       margin: '0 auto',
       width: '80%',
       height: '100%',
@@ -228,7 +229,7 @@ export const NAVIGATION_MAX_WIDTH = 'lg'
 export const FOOTER_MAX_WIDTH = 'lg'
 
 export interface QuickActionsMenuItem extends IconButtonProps {
-  iconId?: string,
+  iconIds?: string
   avatar?: any
   dense?: boolean
   href?: any
@@ -241,12 +242,12 @@ export interface MainLayoutProps {
   tabBarTitle?: string
   centerNavigationItems?: Array<any>
   breadcrumbItems?: BreadcrumbsProps['items']
-  navTabItems?: (TabProps & AppLinkProps<'text'> & { iconId: string })[]
+  navTabItems?: (TabProps & AppLinkProps<'text'> & {iconIds: string})[]
   quickActionMenus?: QuickActionsMenuItem[]
   productName?: string
   footerNavItems?: GridButtonsProps['items']
-  aggregatedPageMeta: AggregatedPageMeta
-  currentUserContext: CurrentUserContextType
+  // aggregatedPageMeta: AggregatedPageMeta
+  // currentUserContext: CurrentUserContextType
 }
 
 function MainLayoutRaw(props: MainLayoutProps) {
@@ -255,38 +256,26 @@ function MainLayoutRaw(props: MainLayoutProps) {
     children,
     title,
     centerNavigationItems,
-    currentUserContext,
     tabBarTitle,
-    aggregatedPageMeta,
     navTabItems,
     productName,
     footerNavItems,
     quickActionMenus: quickActions,
   } = props
-  const {
-    pageMeta,
-    overrideMeta,
-    pageAncestors,
-  } = aggregatedPageMeta
-  const tabValue = navTabItems ? navTabItems
-  .filter(i => router.asPath.includes(i.href))
-  .reduce((prev, current) => {
-    const currentHref = (_isObj(current.href) ? current.href.path : current.href) as string
-    const prevHref = (_isObj(prev.href) ? prev.href.path : prev.href) as string
+  const tabValue = navTabItems
+    ? navTabItems
+    .filter((i) => router.asPath.includes(i.href))
+    .reduce((prev, current) => {
+      const currentHref = (_isObj(current.href) ? current.href.paths : current.href) as string
+      const prevHref = (_isObj(prev.href) ? prev.href.paths : prev.href) as string
 
-    return currentHref.length > prevHref.length ? current : prev
-  }).href ?? '' : ''
+      return currentHref.length > prevHref.length ? current : prev
+    }).href ?? ''
+    : ''
 
   const buildIconButton = ({avatar, iconId, children, ...rest}, i) => (
-    <IconButton
-      key={rest.id ?? rest['href'] ?? i}
-      color="inherit"
-      {...rest}
-    >
-      {avatar
-        ? (<StyledAvatar {...avatar}/>)
-        : iconId && (<SvgPathIcon iconId={iconId}/>)
-      }
+    <IconButton key={rest.id ?? rest['href'] ?? i} color="inherit" {...rest}>
+      {avatar ? <StyledAvatar {...avatar} /> : iconId && <SvgPathIcon iconIds={iconId} />}
       {children}
     </IconButton>
   )
@@ -302,57 +291,44 @@ function MainLayoutRaw(props: MainLayoutProps) {
   )
 
   // eslint-disable-next-line react/display-name
-  const buildNav = (id, actionBuilder) => (item, key) => (
+  const buildNav = (id, actionBuilder) => (item, key) =>
     _isArr(item.items) ? (
       <StyledMenu key={id + key} items={item.items}>
         {actionBuilder(item, key)}
       </StyledMenu>
     ) : (
-      <Fragment key={id + key}>
-        {actionBuilder(item, key)}
-      </Fragment>
+      <Fragment key={id + key}>{actionBuilder(item, key)}</Fragment>
     )
-  )
 
   return (
     <Fragment>
       <Head>
         <title>{`${title ?? 'Web App'}`}</title>
       </Head>
-      <AppBar
-        component="header"
-        elevation={3}
-        color="transparent"
-        position="fixed"
-      >
-        <InnerAppBarTop
-          component={'div'}
-          elevation={0}
-          color="primary"
-          position="relative"
-        >
+      <AppBar component="header" elevation={3} color="transparent" position="fixed">
+        <InnerAppBarTop component={'div'} elevation={0} color="primary" position="relative">
           <Container maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
             <Toolbar>
               <StyledLeft>
                 <StyledLogoWrapper>
                   <AppLink hrefAs="/" color="inherit" href="/" underline="none">
                     <StyledLogoInner>
-                      <StyledLogo color="inherit"/>
+                      <StyledLogo color="inherit" />
                     </StyledLogoInner>
-                    {productName ? (<StyledProductName children={` ${productName}`}/>) : null}
+                    {productName && (
+                      <StyledProductName>{` ${productName}`}</StyledProductName>
+                    )}
                   </AppLink>
                 </StyledLogoWrapper>
               </StyledLeft>
               <StyledCenter>
                 {(centerNavigationItems ?? []).map(buildNav('cni', buildTextButton))}
               </StyledCenter>
-              <StyledRight>
-                {(quickActions ?? []).map(buildNav('qa', buildIconButton))}
-              </StyledRight>
+              <StyledRight>{(quickActions ?? []).map(buildNav('qa', buildIconButton))}</StyledRight>
             </Toolbar>
           </Container>
         </InnerAppBarTop>
-        {(tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems))) ? (
+        {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
           <AppBar component="div" color="primary" elevation={0} position="static">
             <Container maxWidth={NAVIGATION_MAX_WIDTH}>
               <StyledTabs
@@ -363,17 +339,15 @@ function MainLayoutRaw(props: MainLayoutProps) {
                 value={tabValue}
                 variant="scrollable"
               >
-                {tabBarTitle && (
-                  <TabBarTitle children={tabBarTitle}/>
-                )}
-                {navTabItems && navTabItems.map(({iconId, ...item}, i) => (
+                {tabBarTitle && <TabBarTitle>{tabBarTitle}</TabBarTitle>}
+                {navTabItems && navTabItems.map(({iconIds, ...item}, i) => (
                   <StyledTab
                     key={item.id ?? item['key'] ?? i}
                     // disableRipple
                     color="inherit"
                     component={AppLink}
                     href={item.href ?? ''}
-                    icon={<SvgPathIcon iconId={iconId}/>}
+                    icon={<SvgPathIcon iconIds={iconIds} />}
                     label={item.label}
                     underline="none"
                     value={item.href ?? i}
@@ -387,9 +361,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
           </AppBar>
         ) : null}
       </AppBar>
-      <StyledContent>
-        {children}
-      </StyledContent>
+      <StyledContent>{children}</StyledContent>
       <footer>
         <Container maxWidth={FOOTER_MAX_WIDTH}>
           <Box
@@ -406,12 +378,12 @@ function MainLayoutRaw(props: MainLayoutProps) {
             }}
           >
             <StyledLeft>
-              <Copyright/>
+              <Copyright />
             </StyledLeft>
             <StyledRight>
               <GridButtons
                 spacing={1}
-                items={footerNavItems.map(i => ({
+                items={footerNavItems.map((i) => ({
                   size: 'small',
                   component: AppLink,
                   linkType: 'button',
@@ -427,14 +399,10 @@ function MainLayoutRaw(props: MainLayoutProps) {
               flexBasis="100%"
               justifyContent="center"
             >
-              <Typography
-                align="center"
-                color="textSecondary"
-                variant="overline"
-              >
-                <span>{`Version ${APP.VERSION}`}</span>
+              <Typography align="center" color="textSecondary" variant="overline">
+                <span>{`Version ${PKG_VERSION}`}</span>
                 {' '}
-                <span>{`(${APP.BUILD_ID})`}</span>
+                <span>{`(${BUILD_ID})`}</span>
               </Typography>
             </Box>
           </Box>
@@ -447,13 +415,9 @@ function MainLayoutRaw(props: MainLayoutProps) {
 MainLayoutRaw.displayName = 'MainLayout'
 MainLayoutRaw.defaultProps = {
   footerNavItems: tailNavigation as any,
-  aggregatedPageMeta: {} as any,
-  currentUserContext: {} as any,
+  // aggregatedPageMeta: {} as any,
+  // currentUserContext: {} as any,
 }
 
-export const MainLayout = withCurrentUserContext(
-  withAggregatedPageMeta(
-    MainLayoutRaw,
-  ),
-)
+export const MainLayout = /*withCurrentUserContext(withAggregatedPageMeta(*/MainLayoutRaw/*))*/
 export default MainLayout

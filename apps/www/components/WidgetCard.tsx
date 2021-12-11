@@ -15,48 +15,60 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import { createStyles, WithStyles, withStyles, Theme } from '@aglyn/shared/ui/themes'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import Card, {CardProps} from '@mui/material/Card'
+import CardActions, {CardActionsProps} from '@mui/material/CardActions'
+import MuiCardContent, {CardContentProps} from '@mui/material/CardContent'
+import MuiCardHeader, {CardHeaderProps} from '@mui/material/CardHeader'
 import clsx from 'clsx'
-import Card, { CardProps } from '@mui/material/Card'
-import CardHeader, { CardHeaderProps } from '@mui/material/CardHeader'
-import CardActions, { CardActionsProps } from '@mui/material/CardActions'
-import CardContent, { CardContentProps } from '@mui/material/CardContent'
+import React, {forwardRef} from 'react'
 import ErrorBoundary from './ErrorBoundary'
 
-const styles = (theme: Theme) => createStyles({
-  action: {/* empty */},
 
-  root: {marginBottom: theme.spacing(3)},
-  title: {fontWeight: theme.typography.fontWeightBold},
-  header: {'& $action': {}},
-  centerAction: {
-    marginBottom: theme.spacing(-1),
-    alignSelf: 'center'
-  },
-  content: { padding: 0 },
-  actions: {},
-  bordered: {
-    border: `1px solid ${theme.palette.divider}`,
-    borderRight: 'none',
-    borderLeft: 'none',
-  },
-  guttersY: {
-    paddingTop: theme.spacing(2),
-    paddingBottom: theme.spacing(2),
-    '&:last-child': { paddingBottom: theme.spacing(3) },
-  },
-  guttersX: {
+const classKey = generateComponentClassKeys('AglynCard', [
+  'contentGuttersX',
+  'contentGuttersY',
+  'contentBordered',
+  'headerCentered',
+])
+
+const CardContent = styled(MuiCardContent, {
+  name: 'AglynCardContent',
+})(({theme}) => ({
+  padding: 0,
+
+  [`&.${classKey.contentGuttersX}`]: {
     paddingLeft: theme.spacing(2),
     paddingRight: theme.spacing(2),
     [theme.breakpoints.up('md')]: {
       paddingTop: theme.spacing(3),
       paddingBottom: theme.spacing(3),
-    }
+    },
   },
-})
+  [`&.${classKey.contentGuttersY}`]: {
+    paddingTop: theme.spacing(2),
+    paddingBottom: theme.spacing(2),
+    '&:last-child': {paddingBottom: theme.spacing(3)},
+  },
+  [`&.${classKey.contentBordered}`]: {
+    border: `1px solid ${theme.palette.divider}`,
+    borderRight: 'none',
+    borderLeft: 'none',
+  },
+}))
 
-export interface Props extends CardProps {
+const CardHeader = styled(MuiCardHeader, {
+  name: 'AglynCardHeader',
+})(({theme}) => ({
+  fontWeight: theme.typography.fontWeightBold,
+
+  [`&.${classKey.headerCentered}`]: {
+    marginBottom: theme.spacing(-1),
+    alignSelf: 'center',
+  },
+}))
+
+export interface WidgetCardProps extends CardProps {
   header?: string
   actions?: CardActionsProps
   guttersX?: boolean
@@ -65,11 +77,10 @@ export interface Props extends CardProps {
   HeaderProps?: CardHeaderProps
   ContentProps?: CardContentProps
   ActionProps?: CardActionsProps
-  classes?: CardProps['classes'] & WithStyles<typeof styles>['classes']
 }
 
-const WidgetCard = React.forwardRef<any, Props & >(
-  function WidgetCard(props, ref) {
+const WidgetCard = forwardRef<any, WidgetCardProps>(
+  function RefRenderFn(props, ref) {
     const {
       actions,
       bordered,
@@ -85,44 +96,40 @@ const WidgetCard = React.forwardRef<any, Props & >(
       ...rest
     } = props
 
-    const _className = {
-      root: clsx(classes.root, className),
-      header: clsx(classes.header, HeaderProps?.className),
-      headerAction: clsx(classes.action, { [classes.centerAction]: !props.HeaderProps?.subheader }, HeaderProps?.classes?.action),
-      headerTitle: clsx(classes.title, HeaderProps?.titleTypographyProps?.className),
-      content: clsx(classes.content, {
-        [classes.guttersX]: Boolean(guttersX),
-        [classes.guttersY]: Boolean(guttersY),
-        [classes.bordered]: Boolean(bordered),
-      }, ContentProps?.className),
-      actions: clsx(classes.actions, ActionProps?.className),
-    }
+    const headerClassName = clsx({
+      [classKey.headerCentered]: !props.HeaderProps?.subheader,
+    }, HeaderProps?.className)
+
+    const contentClassName = clsx({
+      [classKey.contentGuttersX]: Boolean(guttersX),
+      [classKey.contentGuttersY]: Boolean(guttersY),
+      [classKey.contentBordered]: Boolean(bordered),
+    }, ContentProps?.className)
 
     return (
-      <Card ref={ref} className={_className.root} {...rest}>
+      <Card
+        ref={ref}
+        sx={{mb: 3}}
+        {...rest}
+      >
         {header || HeaderProps ? (
           <CardHeader
             {...HeaderProps}
-            className={_className.header}
-            classes={{
-              ...HeaderProps?.classes,
-              action: _className.headerAction,
-            }}
             title={header}
+            className={headerClassName}
             titleTypographyProps={{
               ...HeaderProps?.titleTypographyProps,
-              className: _className.headerTitle,
-              variant: 'h6'
+              variant: 'h6',
             }}
           />
         ) : null}
-        <CardContent {...ContentProps} className={_className.content}>
+        <CardContent {...ContentProps} className={contentClassName}>
           <ErrorBoundary>
             {children}
           </ErrorBoundary>
         </CardContent>
         {actions || ActionProps ? (
-          <CardActions {...ActionProps} className={_className.actions}>
+          <CardActions {...ActionProps}>
             <ErrorBoundary>
               {actions}
             </ErrorBoundary>
@@ -130,9 +137,9 @@ const WidgetCard = React.forwardRef<any, Props & >(
         ) : null}
       </Card>
     )
-  }
+  },
 )
 
 WidgetCard.displayName = 'WidgetCard'
 
-export default withStyles(styles, {name: 'WidgetCard'})(WidgetCard)
+export default WidgetCard

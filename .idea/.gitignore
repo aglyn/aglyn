@@ -1,0 +1,13 @@
+# IGNORE: EVERYTHING
+*
+
+# EXCEPT
+!.gitignore
+!copyright/
+!codeStyles/
+!fileTemplates/
+!dictionaries/
+!file.template.settings.xml
+!runConfigurations/
+!settingBackups/
+!etc/

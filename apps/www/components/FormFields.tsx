@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
+import { GridItems, GridItemsProps } from '@aglyn/shared-ui-jsx'
 import React from 'react'
-import { GridItems, GridItemsProps } from '@aglyn/shared/ui/react'
 import { GridField } from '../lib/input-fields'
-
 
 export type Props = GridItemsProps & {
   items: GridField[]
@@ -29,16 +28,10 @@ function FormFields(props: Props) {
 
   const itemMapper = (item: GridField) => {
     const { GridItemProps, component: Component, props } = item
-    return ({ children: (<Component {...props} />), ...GridItemProps })
+    return { children: <Component {...props} />, ...GridItemProps }
   }
 
-  return (
-    <GridItems
-      items={items.map(itemMapper)}
-      spacing={2}
-      {...rest}
-    />
-  )
+  return <GridItems items={items.map(itemMapper)} spacing={2} {...rest} />
 }
 
 FormFields.displayName = 'FormFields'

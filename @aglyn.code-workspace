@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"extensions": {
+		"recommendations": [
+			"nrwl.angular-console",
+			"jock.svg",
+			"pflannery.vscode-versionlens"
+		]
+	}
+}

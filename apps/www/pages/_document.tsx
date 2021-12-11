@@ -15,18 +15,10 @@
  * limitations under the License.
  */
 
-import {
-  makeLinkElements,
-  MakeLinkElementsConfig,
-  makeMetaElements,
-  MakeMetaElementsConfig,
-} from '@aglyn/shared/ui/react'
-import {
-  createEmotionCache,
-  createEmotionServer,
-  EmotionCache,
-  getConsoleMetaThemeColor,
-} from '@aglyn/shared/ui/themes'
+import {LINK_PREF, LINK_PRIORITY, META_PREF} from '@aglyn/shared-data-brand'
+import {createEmotionCache, createEmotionServer, EmotionCache} from '@aglyn/shared-feature-themes'
+import {makeLinkElements, makeMetaElements} from '@aglyn/shared-ui-jsx'
+import {getDisplayName} from '@aglyn/shared-util-tools'
 import Document from 'next/document'
 import NextDocument, {
   DocumentContext,
@@ -36,35 +28,10 @@ import NextDocument, {
   Main,
   NextScript,
 } from 'next/document'
-import { Children } from 'react'
-// import { ServerStyleSheet } from 'styled-components'
+import {Children} from 'react'
 
 
-const isProduction = Boolean(process.env.NODE_ENV === 'production')
-const preconnectElements: MakeLinkElementsConfig = [
-  ['preconnect', 'https://www.googletagmanager.com'],
-  ['preconnect', 'https://www.google-analytics.com'],
-  ['preconnect', 'https://adservice.google.com'],
-  ['preconnect', 'https://static.doubleclick.net'],
-  ['preconnect', 'https://googleads.g.doubleclick.net'],
-  ['preconnect', 'https://fonts.googleapis.com'],
-  ['preconnect', 'https://fonts.gstatic.com', {crossOrigin: 'anonymous'}],
-]
-const metaElements: MakeMetaElementsConfig = [
-  [undefined, 'en-us', {httpEquiv: 'content-language'}],
-  [undefined, 'IE=edge', {httpEquiv: 'X-UA-Compatible'}],
-  ['theme-color', getConsoleMetaThemeColor('light'), {media: '(prefers-color-scheme: light)'}],
-  ['theme-color', getConsoleMetaThemeColor('dark'), {media: '(prefers-color-scheme: dark)'}],
-]
-const linkElements: MakeLinkElementsConfig = [
-  ['shortcut icon', '/_static/images/favicons/favicon.ico'],
-  ['icon', '/_static/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
-  ['alternate icon', '/_static/images/favicons/favicon.png', {type: 'image/png'}],
-  ['manifest', '/_static/_pwa/manifest.json'],
-  ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
-]
-
-export type LangParam = { lang?: string }
+export type LangParam = {lang?: string}
 export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
 
 export interface _DocumentProps extends LangParam {}
@@ -102,7 +69,7 @@ export interface _DocumentProps extends LangParam {}
  * @extends {NextDocument<P>}
  * @template P
  */
-class _Document<P extends _DocumentProps> extends Document<P> {
+export default class _Document<P extends _DocumentProps> extends Document<P> {
 
   static displayName = '_Document'
 
@@ -122,9 +89,14 @@ class _Document<P extends _DocumentProps> extends Document<P> {
 
     ctx.renderPage = () =>
       originalRenderPage({
-        enhanceApp: (App: any) => (props) => (
-          <App emotionCache={cache} {...props} />
-        ),
+        enhanceApp: (App: any) => {
+          const displayName = `EnhancedApp(${getDisplayName(App)})`
+          const component = (props) => (
+            <App emotionCache={cache} {...props} />
+          )
+          component.displayName = displayName
+          return component
+        },
       })
 
     const initialProps = await NextDocument.getInitialProps(ctx)
@@ -140,7 +112,7 @@ class _Document<P extends _DocumentProps> extends Document<P> {
 
     return {
       ...initialProps,
-      lang: ctx.query.lang as string ?? 'en',
+      lang: ctx.query.lang as string || 'en',
       // Styles fragment is rendered after the app and page rendering finish.
       styles: [
         ...Children.toArray(initialProps.styles),
@@ -150,26 +122,20 @@ class _Document<P extends _DocumentProps> extends Document<P> {
   }
 
   public render(): JSX.Element {
-    const { lang } = this.props
+    const {lang} = this.props
     return (
       <Html lang={lang}>
         <Head>
-          <meta charSet="utf-8"/>
-          {makeLinkElements(preconnectElements)}
-          {makeMetaElements(metaElements)}
-          {makeLinkElements(linkElements)}
-          <link
-            rel="stylesheet"
-            href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
-          />
+          <meta charSet="utf-8" />
+          {makeLinkElements(LINK_PRIORITY)}
+          {makeMetaElements(META_PREF)}
+          {makeLinkElements(LINK_PREF)}
         </Head>
         <body>
-          <Main/>
-          <NextScript/>
+        <Main />
+        <NextScript />
         </body>
       </Html>
     )
   }
 }
-
-export default _Document

@@ -16,20 +16,13 @@
  */
 
 /**
- * No operation function with no return
- * @returns {any}
- * @param _
- */
-export function noop<T>(..._: T[]): void {
-  // Do nothing.
-}
-
-/**
  * Create a no operation function with no return
  * @returns {<T>(..._: T[]) => void}
  */
-export function noopFactory(): <T>(..._: T[]) => void {
+export function noop(): <T>(..._: T[]) => void {
   return function noop<T>(..._: T[]): void {
     // Do nothing.
   }
 }
+
+export default noop

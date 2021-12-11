@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isNum, _isStrT } from '@aglyn/shared/util/guards'
+import { _isNum, _isStrT } from '@aglyn/shared-util-guards'
 
 
 /**

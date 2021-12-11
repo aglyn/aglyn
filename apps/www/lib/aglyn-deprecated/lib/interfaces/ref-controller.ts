@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { CrudModel } from "./crud"
-import { Initializable } from './initializable'
+import { CrudModel, Initializable } from '@aglyn/shared-data-types'
+
 
 /**
  * Describes the base model object
@@ -29,7 +29,6 @@ import { Initializable } from './initializable'
  * @template T
  */
 export interface RefController<T> extends Initializable, CrudModel<T> {
-
 
 
 }

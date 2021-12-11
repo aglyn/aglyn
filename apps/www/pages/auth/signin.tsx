@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { AppLink } from '@aglyn/shared/ui/react'
-import { createStyles, Theme, withStyles, WithStyles } from '@aglyn/shared/ui/themes'
-import { remap } from '@aglyn/shared/util/tools'
+import { AppLink } from '@aglyn/shared-ui-jsx'
+import { objectRemap } from '@aglyn/shared-util-tools'
 import { Box, Button, Typography } from '@mui/material'
 import { useRouter } from 'next/router'
 import React, { useCallback, useState } from 'react'
@@ -27,50 +26,41 @@ import { Fields, formIsValid, validateField } from '../../forms'
 import AuthLayout from '../../layouts/AuthLayout'
 
 
-const styles = (theme: Theme) => createStyles({
-  form: {'& .MuiTextField-root': {}},
-  uppercase: {textTransform: 'uppercase'},
-  button: {
-    marginTop: theme.spacing(2),
-    marginBottom: theme.spacing(2),
-  },
-  bottom: {
-    lineHeight: 1.5,
-    marginTop: theme.spacing(4),
-  },
-})
+interface Props {
 
-export default withStyles(styles, {name: 'Page:SignIn'})(
-  withAppContext<WithStyles<typeof styles>>(
-    function SignIn(props) {
-      const {app, classes} = props
-      const currentUser = app?.getCurrentUser()
-      // console.log('app?.getCurrentUser()', currentUser)
-      const router = useRouter()
-      if (currentUser) {
-        router.push('/')
-      }
+}
 
-      const [submitting, setSubmitting] = useState(false)
-      const [formError, setFormError] = useState(null)
-      const [fields, setFields] = useState<Fields.FieldGroup>({
-        [Fields.emailField.id]: Fields.emailField,
-        [Fields.passwordField.id]: Fields.passwordField,
-      })
+export default withAppContext<Props>(
+  function SignIn(props) {
+    const { app } = props
+    const currentUser = app?.getCurrentUser?.()
+    // console.log('app?.getCurrentUser()', currentUser)
+    const router = useRouter()
+    if (currentUser) {
+      router.push('/')
+    }
 
-      const handleUpdate = (name: string) => e => {
-        const value = e.target?.value
-        setFields(prev => ({...prev, [name]: validateField(prev[name], value)}))
-      }
-      const clearForm = () => {
-        setFields(prev => {
-          return remap(prev, (value) => {
-            value.value = ''
-            return value
-          })
+    const [submitting, setSubmitting] = useState(false)
+    const [formError, setFormError] = useState(null)
+    const [fields, setFields] = useState<Fields.FieldGroup>({
+      [Fields.emailField.id]: Fields.emailField,
+      [Fields.passwordField.id]: Fields.passwordField,
+    })
+
+    const handleUpdate = (name: string) => (e) => {
+      const value = e.target?.value
+      setFields((prev) => ({ ...prev, [name]: validateField(prev[name], value) }))
+    }
+    const clearForm = () => {
+      setFields((prev) => {
+        return objectRemap(prev, (value) => {
+          value.value = ''
+          return value
         })
-      }
-      const onSubmit = useCallback(async (e) => {
+      })
+    }
+    const onSubmit = useCallback(
+      async (e) => {
         e.preventDefault()
         setSubmitting(true)
         setFormError(null)
@@ -92,75 +82,73 @@ export default withStyles(styles, {name: 'Page:SignIn'})(
           },
           (error) => {
             console.error('Form Error: ', error)
-            const {code, message} = error
+            const { code, message } = error
             setFormError(`(Code: ${code}) ${message}`)
             clearForm()
             setSubmitting(false)
-          },
+          }
         )
-      }, [fields])
+      },
+      [fields]
+    )
 
-      return (
-        <AuthLayout text="Sign In to your Account">
-          <form autoComplete="on" className={classes.form} onSubmit={onSubmit}>
-            <div>
-              <Typography
-                children="Enter your credentials"
-                className={classes.uppercase}
-                variant="h5"
-                gutterBottom
-              />
-              <FieldSet fields={fields} loading={submitting} onUpdate={handleUpdate}/>
-              <AppLink
-                children="Forgot password?"
-                color="primary"
-                href="/auth/recovery"
-              />
-              {formError && (
-                <Box
-                  bgcolor={'error.light'}
-                  border={2}
-                  borderColor={'error.main'}
-                  borderRadius={3}
-                  color={'error.contrastText'}
-                  my={2}
-                  px={2}
-                  py={2}
-                >
-                  <Typography>
-                    <b>{'Error: '}</b>{formError}
-                  </Typography>
-                </Box>
-              )}
-              <Button
-                children={submitting ? 'Please wait...' : 'Continue'}
-                className={classes.button}
-                color="secondary"
-                disabled={Boolean(submitting)}
-                size="large"
-                type="submit"
-                variant="contained"
-                fullWidth
-              />
-            </div>
-          </form>
-          <Typography
-            align="center"
-            className={classes.bottom}
-            color="primary"
-            component="div"
-            variant="overline"
-          >
-            <b children={'Don\'t have an account?'}/>
-            <br/>
-            <AppLink
-              children="Create an account"
-              color="secondary"
-              href="/auth/signup"
+    return (
+      <AuthLayout text="Sign In to your Account">
+        <form autoComplete="on" onSubmit={onSubmit}>
+          <div>
+            <Typography
+              children="Enter your credentials"
+              variant="h5"
+              gutterBottom
+              sx={{textTransform: 'uppercase'}}
             />
-          </Typography>
-        </AuthLayout>
-      )
-    },
-  ),
+            <FieldSet fields={fields} loading={submitting} onUpdate={handleUpdate} />
+            <AppLink children="Forgot password?" color="primary" href="/auth/recovery" />
+            {formError && (
+              <Box
+                bgcolor={'error.light'}
+                border={2}
+                borderColor={'error.main'}
+                borderRadius={3}
+                color={'error.contrastText'}
+                my={2}
+                px={2}
+                py={2}
+              >
+                <Typography>
+                  <b>{'Error: '}</b>
+                  {formError}
+                </Typography>
+              </Box>
+            )}
+            <Button
+              children={submitting ? 'Please wait...' : 'Continue'}
+              color="secondary"
+              disabled={Boolean(submitting)}
+              size="large"
+              type="submit"
+              variant="contained"
+              fullWidth
+              sx={{my: 2}}
+            />
+          </div>
+        </form>
+        <Typography
+          align="center"
+          color="primary"
+          component="div"
+          variant="overline"
+          sx={{lineHeight: 1.5, marginTop: 4}}
+        >
+          <b children={"Don't have an account?"} />
+          <br />
+          <AppLink
+            children="Create an account"
+            color="secondary"
+            href="/auth/signup"
+          />
+        </Typography>
+      </AuthLayout>
+    )
+  }
 )

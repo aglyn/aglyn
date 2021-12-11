@@ -1,4 +1,4 @@
-# shared-util-guards
+# @aglyn/shared-util-guards
 
 This library was generated with [Nx](https://nx.dev).
 

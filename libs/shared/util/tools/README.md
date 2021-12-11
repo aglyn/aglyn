@@ -1,4 +1,4 @@
-# shared-util-tools
+# @aglyn/shared-util-tools
 
 This library was generated with [Nx](https://nx.dev).
 

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { Item as GridItemProps } from '@aglyn/common/components/GridItems'
-import { FT, lbl, NormalizedData } from '@aglyn/core'
+import {DoD, NormalizedData} from '@aglyn/shared-data-types'
+import {GridListItemData as GridItemProps} from '@aglyn/shared-ui-jsx'
 import MuiButton from '@mui/material/Button'
 import MuiTextField from '@mui/material/TextField'
 import FieldArrayComponent from '../components/FieldArray'
@@ -26,13 +26,7 @@ import FieldSelect from '../components/FieldSelect'
 
 export namespace Components {
   export const Elements = {
-    keys: [
-      'Button',
-      'TextField',
-      'SelectField',
-      'FieldObject',
-      'FieldArray',
-    ],
+    keys: ['Button', 'TextField', 'SelectField', 'FieldObject', 'FieldArray'],
     byKey: {
       Button: MuiButton,
       TextField: MuiTextField,
@@ -59,11 +53,7 @@ export type GridFieldPreset = NormalizedData<GridField>
 
 export namespace FieldPreset {
   export const Named = {
-    keys: [
-      'id',
-      'displayName',
-      'dataType',
-    ],
+    keys: ['id', 'displayName', 'dataType'],
     byKey: {
       id: {
         GridItemProps: {xs: 12 as any},
@@ -109,10 +99,13 @@ export namespace FieldPreset {
           defaultValue: '',
           required: true,
           items: [{value: '', children: 'Select one', disabled: true}].concat(
-            FT.Tag.all.map((sym: any) => ({
-              value: sym,
-              children: lbl[sym],
-            } as any)),
+            DoD.FT.Tag.all.map(
+              (sym: any) =>
+                ({
+                  value: sym,
+                  children: DoD.lbl[sym],
+                } as any),
+            ),
           ),
         },
       },
@@ -126,5 +119,4 @@ export namespace FieldPreset {
       type: Named.byKey.kind,
     },
   }
-
 }

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import json from '../../json/tags.min.json'
-import { Normal } from '../../common/data-type'
+import json from '../../generated/tags.min.json'
+import { Normal } from '../types'
 
 
 type Json = typeof json

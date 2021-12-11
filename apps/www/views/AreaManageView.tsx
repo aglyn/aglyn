@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { SvgPathIcon } from '@aglyn/shared/ui/react'
-import { createUid } from '@aglyn/shared/util/helpers'
-import { _s, remap } from '@aglyn/shared/util/tools'
+import { SvgPathIcon, useAppLoader } from '@aglyn/shared-ui-jsx'
+import { createUid } from '@aglyn/shared-util-vendor'
+import { _s, objectRemap } from '@aglyn/shared-util-tools'
 import IconButton from '@mui/material/IconButton'
 import { useRouter } from 'next/router'
 import { useSnackbar } from 'notistack'
@@ -25,12 +25,10 @@ import { ChangeEvent, Fragment, useCallback, useEffect, useState } from 'react'
 import DataTable, { DataTableProps } from '../components/DataTable'
 import WidgetCard from '../components/WidgetCard'
 import { AppContextType, withAppContext } from '../contexts/app-context'
-import { useAppLoader } from '../contexts/app-loader-context'
 import { Fields } from '../forms'
 import ConsoleLayout from '../layouts/ConsoleLayout'
 import AreaManageNavigationListWidgetView from './AreaManageNavigationListWidgetView'
 import DrawerFormView from './DrawerFormView'
-
 
 const pageLen = 25
 
@@ -49,7 +47,6 @@ export interface AreaManageViewProps {
   app: AppContextType
 }
 
-
 function AreaManageViewRaw(props: AreaManageViewProps) {
   const {
     app,
@@ -62,15 +59,16 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
     onSaveError,
   } = props
   const router = useRouter()
-  const {enqueueSnackbar} = useSnackbar()
-  const {queueLoading, isLoading} = useAppLoader()
+  const { enqueueSnackbar } = useSnackbar()
+  const { queueLoading, isLoading } = useAppLoader()
   const [loadingDocuments, setLoadingDocuments] = useState(false)
   const [error, setError] = useState<any>(null)
   const [documents, setDocuments] = useState<{ [id: string]: any }>(null)
   const [formOpen, setFormOpen] = useState(false)
-  const [activeDocument, setActiveDocument] = useState<{ type: 'updating' | 'creating', data: any }>(null)
+  const [activeDocument, setActiveDocument] =
+    useState<{ type: 'updating' | 'creating'; data: any }>(null)
   const query = app.getCollectionRef(collectionId)
-  const rows = Object.entries(documents ?? {}).map(([id, v]) => ({id, ...v}))
+  const rows = Object.entries(documents ?? {}).map(([id, v]) => ({ id, ...v }))
   const openForm = () => setFormOpen(true)
   const closeForm = () => setFormOpen(false)
   const clearActiveDocument = () => setActiveDocument(null)
@@ -100,17 +98,16 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
   }
 
   // Update field on active document
-  const handleFieldUpdate = (fieldId: string) => (
-    event: ChangeEvent<HTMLTextAreaElement | HTMLInputElement>,
-  ) => {
-    const value = event.target.value
-    setActiveDocument(prev => ({...prev, data: {...prev.data, [fieldId]: value}}))
-  }
+  const handleFieldUpdate =
+    (fieldId: string) => (event: ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
+      const value = event.target.value
+      setActiveDocument((prev) => ({ ...prev, data: { ...prev.data, [fieldId]: value } }))
+    }
 
   // Open create form
   const handleCreateDocumentFormOpen = async () => {
     const dequeueLoader = queueLoading()
-    setActiveDocument({type: 'creating', data: {id: createUid()}})
+    setActiveDocument({ type: 'creating', data: { id: createUid() } })
     openForm()
     dequeueLoader()
   }
@@ -119,20 +116,22 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
   const setRemoteDocument = useCallback(async () => {
     console.debug('Saving active document', activeDocument)
     const dequeueLoader = queueLoading()
-    const {type, data} = activeDocument
-    const {id: dataId, ...allExceptId} = data
+    const { type, data } = activeDocument
+    const { id: dataId, ...allExceptId } = data
     const id = dataId ?? createUid()
-    await query.doc(id).set(allExceptId)
-    .then((res) => {
-      const actionMsg = type === 'creating' ? 'Created' : 'Updated'
-      enqueueSnackbar(`${actionMsg} successfully`, {variant: 'success'})
-      onSaveSuccess && onSaveSuccess(activeDocument)
-    })
-    .catch((error) => {
-      setError(error.message)
-      enqueueSnackbar(error?.message, {variant: 'error'})
-      onSaveError && onSaveError(error)
-    })
+    await query
+      .doc(id)
+      .set(allExceptId)
+      .then((res) => {
+        const actionMsg = type === 'creating' ? 'Created' : 'Updated'
+        enqueueSnackbar(`${actionMsg} successfully`, { variant: 'success' })
+        onSaveSuccess && onSaveSuccess(activeDocument)
+      })
+      .catch((error) => {
+        setError(error.message)
+        enqueueSnackbar(error?.message, { variant: 'error' })
+        onSaveError && onSaveError(error)
+      })
     handleCloseForm()
     dequeueLoader()
   }, [query, activeDocument])
@@ -161,26 +160,28 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
 
   // Listen for realtime updates
   useEffect(() => {
-    const cancelListener = query.onSnapshot((querySnapshot) => {
-      setLoadingDocuments(true)
-      setDocuments(prev => {
-        const items = {...prev}
-        querySnapshot.docChanges().forEach(change => {
-          if (change.type === 'removed') {
-            console.debug('Removed document update: ', change.doc.data())
-            delete items[change.doc.id]
-          }
-          else {
-            console.debug('Updated document update: ', change.doc.data())
-            items[change.doc.id] = {id: change.doc.id, ...change.doc.data()}
-          }
+    const cancelListener = query.onSnapshot(
+      (querySnapshot) => {
+        setLoadingDocuments(true)
+        setDocuments((prev) => {
+          const items = { ...prev }
+          querySnapshot.docChanges().forEach((change) => {
+            if (change.type === 'removed') {
+              console.debug('Removed document update: ', change.doc.data())
+              delete items[change.doc.id]
+            } else {
+              console.debug('Updated document update: ', change.doc.data())
+              items[change.doc.id] = { id: change.doc.id, ...change.doc.data() }
+            }
+          })
+          return items
         })
-        return items
-      })
-      setLoadingDocuments(false)
-    }, (error) => {
-      enqueueSnackbar(error?.message, {variant: 'error'})
-    })
+        setLoadingDocuments(false)
+      },
+      (error) => {
+        enqueueSnackbar(error?.message, { variant: 'error' })
+      }
+    )
     return () => {
       cancelListener()
     }
@@ -191,31 +192,33 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
     if (documentId && documents) {
       const document = documents[documentId]
       if (document) {
-        setActiveDocument({type: 'updating', data: document})
+        setActiveDocument({ type: 'updating', data: document })
         setError(null)
-      }
-      else {
+      } else {
         setError('Item does not exist!')
         setActiveDocument(null)
-        enqueueSnackbar('Error loading item', {variant: 'error'})
+        enqueueSnackbar('Error loading item', { variant: 'error' })
       }
     }
   }, [documentId, documents])
 
-  const mappedFields = remap(fields, (value => ({
-    ...value, value: activeDocument?.data[value.id] ?? value.value,
-  })))
+  const mappedFields = objectRemap(fields, (value) => ({
+    ...value,
+    value: activeDocument?.data[value.id] ?? value.value,
+  }))
 
   return (
     <Fragment>
       <ConsoleLayout
         items={[
           {
-            xs: 12, md: 3,
-            children: (<AreaManageNavigationListWidgetView/>),
+            xs: 12,
+            md: 3,
+            children: <AreaManageNavigationListWidgetView />,
           },
           {
-            xs: 12, md: 9,
+            xs: 12,
+            md: 9,
             children: (
               <WidgetCard
                 header={{
@@ -223,12 +226,12 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
                   action: (
                     <Fragment>
                       <IconButton
-                        children={<SvgPathIcon iconId="filter-variant"/>}
+                        children={<SvgPathIcon iconIds="filter-variant" />}
                         title="Filter list"
                         disabled
                       />
                       <IconButton
-                        children={<SvgPathIcon iconId="plus"/>}
+                        children={<SvgPathIcon iconIds="plus" />}
                         title="Add item"
                         onClick={handleCreateDocumentFormOpen}
                       />

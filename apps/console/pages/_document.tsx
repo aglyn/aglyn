@@ -15,18 +15,10 @@
  * limitations under the License.
  */
 
-import {
-  makeLinkElements,
-  MakeLinkElementsConfig,
-  makeMetaElements,
-  MakeMetaElementsConfig,
-} from '@aglyn/shared/ui/react'
-import {
-  createEmotionCache,
-  createEmotionServer,
-  EmotionCache,
-  getConsoleMetaThemeColor,
-} from '@aglyn/shared/ui/themes'
+import {IS_PRODUCTION, LINK_PREF, LINK_PRIORITY, META_PREF} from '@aglyn/shared-data-brand'
+import {createEmotionCache, createEmotionServer, EmotionCache} from '@aglyn/shared-feature-themes'
+import {makeLinkElements, makeMetaElements} from '@aglyn/shared-ui-jsx'
+import {getDisplayName} from '@aglyn/shared-util-tools'
 import crypto from 'crypto'
 import Document from 'next/document'
 import NextDocument, {
@@ -37,40 +29,16 @@ import NextDocument, {
   Main,
   NextScript,
 } from 'next/document'
-import { Children } from 'react'
-// import { ServerStyleSheet } from 'styled-components'
+import {Children} from 'react'
 
 
-const isProduction = Boolean(process.env.NODE_ENV === 'production')
-const preconnectElements: MakeLinkElementsConfig = [
-  ['preconnect', 'https://www.googletagmanager.com'],
-  ['preconnect', 'https://www.google-analytics.com'],
-  ['preconnect', 'https://adservice.google.com'],
-  ['preconnect', 'https://static.doubleclick.net'],
-  ['preconnect', 'https://googleads.g.doubleclick.net'],
-  ['preconnect', 'https://fonts.googleapis.com'],
-  ['preconnect', 'https://fonts.gstatic.com', {crossOrigin: 'anonymous'}],
-]
-const metaElements: MakeMetaElementsConfig = [
-  [undefined, 'en-us', {httpEquiv: 'content-language'}],
-  [undefined, 'IE=edge', {httpEquiv: 'X-UA-Compatible'}],
-  ['theme-color', getConsoleMetaThemeColor('light'), {media: '(prefers-color-scheme: light)'}],
-  ['theme-color', getConsoleMetaThemeColor('dark'), {media: '(prefers-color-scheme: dark)'}],
-]
-const linkElements: MakeLinkElementsConfig = [
-  ['shortcut icon', '/_static/images/favicons/favicon.ico'],
-  ['icon', '/_static/images/favicons/favicon.svg', {type: 'image/svg+xml'}],
-  ['alternate icon', '/_static/images/favicons/favicon.png', {type: 'image/png'}],
-  ['manifest', '/_static/_pwa/manifest.json'],
-  ['stylesheet', 'https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,300;0,400;0,500;0,700;0,900;1,300;1,400;1,500;1,700&display=swap'],
-]
 const cspHashOf = (text) => {
   const hash = crypto.createHash('sha256')
   hash.update(text)
   return `'sha256-${hash.digest('base64')}'`
 }
 
-export type LangParam = { lang?: string }
+export type LangParam = {lang?: string}
 export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
 
 export interface _DocumentProps extends LangParam {}
@@ -128,9 +96,14 @@ class _Document<P extends _DocumentProps> extends Document<P> {
 
     ctx.renderPage = () =>
       originalRenderPage({
-        enhanceApp: (App: any) => (props) => (
-          <App emotionCache={cache} {...props} />
-        ),
+        enhanceApp: (App: any) => {
+          const displayName = `EnhancedApp(${getDisplayName(App)})`
+          const component = (props) => (
+            <App emotionCache={cache} {...props} />
+          )
+          component.displayName = displayName
+          return component
+        },
       })
 
     const initialProps = await NextDocument.getInitialProps(ctx)
@@ -161,8 +134,8 @@ class _Document<P extends _DocumentProps> extends Document<P> {
     let csp = `default-src 'self'; script-src 'self' ${cspHashOf(
       NextScript.getInlineScriptSource(this.props),
     )}`
-    if (isProduction) {
-      csp = `default-src \'self\' aglyn.com *.aglyn.com' ${cspHashOf(
+    if (IS_PRODUCTION) {
+      csp = `default-src 'self' aglyn.com *.aglyn.com' ${cspHashOf(
         NextScript.getInlineScriptSource(this.props),
       )}`
     }
@@ -170,19 +143,15 @@ class _Document<P extends _DocumentProps> extends Document<P> {
     return (
       <Html lang={lang}>
         <Head>
-          <meta charSet="utf-8"/>
+          <meta charSet="utf-8" />
           {/*<meta httpEquiv="Content-Security-Policy" content={csp}/>*/}
-          {makeLinkElements(preconnectElements)}
-          {makeMetaElements(metaElements)}
-          {makeLinkElements(linkElements)}
-          <link
-            rel="stylesheet"
-            href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
-          />
+          {makeLinkElements(LINK_PRIORITY)}
+          {makeMetaElements(META_PREF)}
+          {makeLinkElements(LINK_PREF)}
         </Head>
         <body>
-          <Main/>
-          <NextScript/>
+          <Main />
+          <NextScript />
         </body>
       </Html>
     )

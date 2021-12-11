@@ -38,3 +38,5 @@ export function arraySortByDeepProperty<T>(items: T[], firstPath: string, second
     return -1
   })
 }
+
+export default arraySortByDeepProperty

@@ -1,23 +1,30 @@
 {
   "version": 2,
-  "cli": {
-    "defaultCollection": "@nrwl/next"
-  },
-  "defaultProject": "console",
-  "generators": {
-    "@nrwl/react": {
-      "application": {
-        "babel": true
-      }
-    },
-    "@nrwl/next": {
-      "application": {
-        "style": "@emotion/styled",
-        "linter": "eslint"
-      }
-    }
-  },
   "projects": {
+    "addons-ui-mui-bundle": {
+      "root": "libs/addons/ui/mui-bundle",
+      "sourceRoot": "libs/addons/ui/mui-bundle/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/addons/ui/mui-bundle/**/*.{ts,tsx,js,jsx}"]
+          },
+          "outputs": ["{options.outputFile}"]
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/addons/ui/mui-bundle"],
+          "options": {
+            "jestConfig": "libs/addons/ui/mui-bundle/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:extension"],
+      "implicitDependencies": []
+    },
     "console": {
       "root": "apps/console",
       "sourceRoot": "apps/console",
@@ -74,7 +81,9 @@
             "syncVersions": false
           }
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:console"],
+      "implicitDependencies": []
     },
     "console-e2e": {
       "root": "apps/console-e2e",
@@ -101,91 +110,27 @@
           },
           "outputs": ["{options.outputFile}"]
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:console"],
+      "implicitDependencies": ["console"]
     },
-    "framework-builder": {
-      "root": "libs/framework/builder",
-      "sourceRoot": "libs/framework/builder/src",
+    "core-data-framework": {
+      "root": "libs/core/data/framework",
+      "sourceRoot": "libs/core/data/framework/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/framework/builder/**/*.{ts,tsx,js,jsx}"]
+            "lintFilePatterns": ["libs/core/data/framework/**/*.ts"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/framework/builder"],
+          "outputs": ["coverage/libs/core/data/framework"],
           "options": {
-            "jestConfig": "libs/framework/builder/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      }
-    },
-    "framework-plugins-material": {
-      "root": "libs/framework/plugins/material",
-      "sourceRoot": "libs/framework/plugins/material/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "options": {
-            "lintFilePatterns": ["libs/framework/plugins/material/**/*.{ts,tsx,js,jsx}"]
-          },
-          "outputs": ["{options.outputFile}"]
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/framework/plugins/material"],
-          "options": {
-            "jestConfig": "libs/framework/plugins/material/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      }
-    },
-    "framework-renderer": {
-      "root": "libs/framework/renderer",
-      "sourceRoot": "libs/framework/renderer/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "options": {
-            "lintFilePatterns": ["libs/framework/renderer/**/*.{ts,tsx,js,jsx}"]
-          },
-          "outputs": ["{options.outputFile}"]
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/framework/renderer"],
-          "options": {
-            "jestConfig": "libs/framework/renderer/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      }
-    },
-    "framework-sdk": {
-      "root": "libs/framework/sdk",
-      "sourceRoot": "libs/framework/sdk/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "options": {
-            "lintFilePatterns": ["libs/framework/sdk/**/*.ts"]
-          },
-          "outputs": ["{options.outputFile}"]
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/framework/sdk"],
-          "options": {
-            "jestConfig": "libs/framework/sdk/jest.config.js",
+            "jestConfig": "libs/core/data/framework/jest.config.js",
             "passWithNoTests": true
           }
         },
@@ -195,7 +140,81 @@
             "syncVersions": false
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:framework"],
+      "implicitDependencies": []
+    },
+    "core-feature-besigner": {
+      "root": "libs/core/feature/besigner",
+      "sourceRoot": "libs/core/feature/besigner/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/core/feature/besigner/**/*.{ts,tsx,js,jsx}"]
+          },
+          "outputs": ["{options.outputFile}"]
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/core/feature/besigner"],
+          "options": {
+            "jestConfig": "libs/core/feature/besigner/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-builder"],
+      "implicitDependencies": []
+    },
+    "core-feature-renderer": {
+      "root": "libs/core/feature/renderer",
+      "sourceRoot": "libs/core/feature/renderer/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/core/feature/renderer/**/*.{ts,tsx,js,jsx}"]
+          },
+          "outputs": ["{options.outputFile}"]
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/core/feature/renderer"],
+          "options": {
+            "jestConfig": "libs/core/feature/renderer/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      },
+      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-renderer"],
+      "implicitDependencies": []
+    },
+    "shared-data-brand": {
+      "root": "libs/shared/data/brand",
+      "sourceRoot": "libs/shared/data/brand/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "outputs": ["{options.outputFile}"],
+          "options": {
+            "lintFilePatterns": ["libs/shared/data/brand/**/*.ts"]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/shared/data/brand"],
+          "options": {
+            "jestConfig": "libs/shared/data/brand/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      },
+      "tags": ["scope:lib"],
+      "implicitDependencies": []
     },
     "shared-data-mdi": {
       "root": "libs/shared/data/mdi",
@@ -217,117 +236,81 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:data"],
+      "implicitDependencies": []
     },
-    "shared-feature-emitter": {
-      "root": "libs/shared/feature/emitter",
-      "sourceRoot": "libs/shared/feature/emitter/src",
+    "shared-data-types": {
+      "root": "libs/shared/data/types",
+      "sourceRoot": "libs/shared/data/types/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/shared/feature/emitter/**/*.ts"]
+            "lintFilePatterns": ["libs/shared/data/types/**/*.ts"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/feature/emitter"],
+          "outputs": ["coverage/libs/shared/data/types"],
           "options": {
-            "jestConfig": "libs/shared/feature/emitter/jest.config.js",
+            "jestConfig": "libs/shared/data/types/jest.config.js",
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
-    "shared-feature-logger": {
-      "root": "libs/shared/feature/logger",
-      "sourceRoot": "libs/shared/feature/logger/src",
+    "shared-feature-themes": {
+      "root": "libs/shared/feature/themes",
+      "sourceRoot": "libs/shared/feature/themes/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/shared/feature/logger/**/*.ts"]
+            "lintFilePatterns": ["libs/shared/feature/themes/**/*.ts"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/feature/logger"],
+          "outputs": ["coverage/libs/shared/feature/themes"],
           "options": {
-            "jestConfig": "libs/shared/feature/logger/jest.config.js",
+            "jestConfig": "libs/shared/feature/themes/jest.config.js",
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
+      "implicitDependencies": []
     },
-    "shared-feature-timestamp": {
-      "root": "libs/shared/feature/timestamp",
-      "sourceRoot": "libs/shared/feature/timestamp/src",
+    "shared-ui-jsx": {
+      "root": "libs/shared/ui/jsx",
+      "sourceRoot": "libs/shared/ui/jsx/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/shared/feature/timestamp/**/*.ts"]
+            "lintFilePatterns": ["libs/shared/ui/jsx/**/*.{ts,tsx,js,jsx}"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/feature/timestamp"],
+          "outputs": ["coverage/libs/shared/ui/jsx"],
           "options": {
-            "jestConfig": "libs/shared/feature/timestamp/jest.config.js",
+            "jestConfig": "libs/shared/ui/jsx/jest.config.js",
             "passWithNoTests": true
           }
         }
-      }
-    },
-    "shared-ui-react": {
-      "root": "libs/shared/ui/react",
-      "sourceRoot": "libs/shared/ui/react/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "options": {
-            "lintFilePatterns": ["libs/shared/ui/react/**/*.{ts,tsx,js,jsx}"]
-          },
-          "outputs": ["{options.outputFile}"]
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/ui/react"],
-          "options": {
-            "jestConfig": "libs/shared/ui/react/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      }
-    },
-    "shared-ui-themes": {
-      "root": "libs/shared/ui/themes",
-      "sourceRoot": "libs/shared/ui/themes/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "options": {
-            "lintFilePatterns": ["libs/shared/ui/themes/**/*.ts"]
-          },
-          "outputs": ["{options.outputFile}"]
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/ui/themes"],
-          "options": {
-            "jestConfig": "libs/shared/ui/themes/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
+      "implicitDependencies": []
     },
     "shared-util-dom": {
       "root": "libs/shared/util/dom",
@@ -349,7 +332,33 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
+    },
+    "shared-util-emitter": {
+      "root": "libs/shared/util/emitter",
+      "sourceRoot": "libs/shared/util/emitter/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/shared/util/emitter/**/*.ts"]
+          },
+          "outputs": ["{options.outputFile}"]
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/shared/util/emitter"],
+          "options": {
+            "jestConfig": "libs/shared/util/emitter/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:emitter"],
+      "implicitDependencies": []
     },
     "shared-util-errors": {
       "root": "libs/shared/util/errors",
@@ -371,7 +380,9 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util", "scope:lib:error"],
+      "implicitDependencies": []
     },
     "shared-util-guards": {
       "root": "libs/shared/util/guards",
@@ -393,29 +404,57 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
-    "shared-util-helpers": {
-      "root": "libs/shared/util/helpers",
-      "sourceRoot": "libs/shared/util/helpers/src",
+    "shared-util-logger": {
+      "root": "libs/shared/util/logger",
+      "sourceRoot": "libs/shared/util/logger/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/shared/util/helpers/**/*.ts"]
+            "lintFilePatterns": ["libs/shared/util/logger/**/*.ts"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/util/helpers"],
+          "outputs": ["coverage/libs/shared/util/logger"],
           "options": {
-            "jestConfig": "libs/shared/util/helpers/jest.config.js",
+            "jestConfig": "libs/shared/util/logger/jest.config.js",
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:logger"],
+      "implicitDependencies": []
+    },
+    "shared-util-timestamp": {
+      "root": "libs/shared/util/timestamp",
+      "sourceRoot": "libs/shared/util/timestamp/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "options": {
+            "lintFilePatterns": ["libs/shared/util/timestamp/**/*.ts"]
+          },
+          "outputs": ["{options.outputFile}"]
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/shared/util/timestamp"],
+          "options": {
+            "jestConfig": "libs/shared/util/timestamp/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:timestamp"],
+      "implicitDependencies": []
     },
     "shared-util-tools": {
       "root": "libs/shared/util/tools",
@@ -437,29 +476,33 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
-    "shared-util-types": {
-      "root": "libs/shared/util/types",
-      "sourceRoot": "libs/shared/util/types/src",
+    "shared-util-vendor": {
+      "root": "libs/shared/util/vendor",
+      "sourceRoot": "libs/shared/util/vendor/src",
       "projectType": "library",
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
           "options": {
-            "lintFilePatterns": ["libs/shared/util/types/**/*.ts"]
+            "lintFilePatterns": ["libs/shared/util/vendor/**/*.ts"]
           },
           "outputs": ["{options.outputFile}"]
         },
         "test": {
           "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/util/types"],
+          "outputs": ["coverage/libs/shared/util/vendor"],
           "options": {
-            "jestConfig": "libs/shared/util/types/jest.config.js",
+            "jestConfig": "libs/shared/util/vendor/jest.config.js",
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
+      "implicitDependencies": []
     },
     "www": {
       "root": "apps/www",
@@ -517,7 +560,9 @@
             "syncVersions": false
           }
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": []
     },
     "www-e2e": {
       "root": "apps/www-e2e",
@@ -544,7 +589,9 @@
           },
           "outputs": ["{options.outputFile}"]
         }
-      }
+      },
+      "tags": ["scope:app", "scope:app:www"],
+      "implicitDependencies": ["www"]
     }
   }
 }

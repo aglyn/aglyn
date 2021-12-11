@@ -1,7 +1,7 @@
 {
   "root": true,
   "ignorePatterns": ["**/*"],
-  "plugins": ["@nrwl/nx"],
+  "plugins": ["@nrwl/nx", "eslint-plugin-tsdoc"],
   "overrides": [
     {
       "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
@@ -49,32 +49,41 @@
                 ]
               },
               {
-                "sourceTag": "scope:lib:framework",
+                "sourceTag": "scope:lib:sdk",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:framework",
+                  "scope:lib:sdk",
                   "scope:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:framework:sdk",
+                "sourceTag": "scope:lib:sdk:framework",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:framework:sdk",
+                  "scope:lib:sdk:framework",
                   "scope:lib:shared:util",
                   "scope:lib:shared:feature"
                 ]
               },
               {
-                "sourceTag": "scope:lib:framework:feature",
+                "sourceTag": "scope:lib:sdk:ui-besigner",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:framework:feature",
-                  "scope:lib:framework:sdk",
+                  "scope:lib:sdk:ui-besigner",
+                  "scope:lib:sdk:framework",
+                  "scope:lib:sdk:ui-renderer",
                   "scope:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:framework:plugin",
+                "sourceTag": "scope:lib:sdk:ui-renderer",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:framework:plugin",
+                  "scope:lib:sdk:ui-renderer",
+                  "scope:lib:sdk:framework",
+                  "scope:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "scope:lib:sdk:extension",
+                "onlyDependOnLibsWithTags": [
+                  "scope:lib:sdk:extension",
                   "scope:lib"
                 ]
               },
@@ -97,11 +106,12 @@
         "@typescript-eslint/no-empty-interface": "off",
         "@typescript-eslint/no-explicit-any": "off",
         "@typescript-eslint/no-namespace": "off",
+        "@typescript-eslint/no-non-null-assertion": "off",
         "@typescript-eslint/no-unused-vars": "warn",
         "@typescript-eslint/no-var-requires": "off",
         "no-fallthrough": "off",
-        "react/no-children-prop": "off",
-        "react-hooks/rules-of-hooks": "off"
+        "react-hooks/rules-of-hooks": "off",
+        "tsdoc/syntax": ["warn", {}]
       }
     },
     {
@@ -119,7 +129,8 @@
               "!@mui/material/test-utils/*"
             ]
           }
-        ]
+        ],
+        "react/no-children-prop": "off"
       }
     }
   ]

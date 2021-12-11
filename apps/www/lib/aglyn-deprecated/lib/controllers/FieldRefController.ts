@@ -15,25 +15,26 @@
  * limitations under the License.
  */
 
-import { PKey, Ref, Schema } from '../interfaces/dod'
+import { DoD } from '@aglyn/shared-data-types'
 
 import { BaseRefController } from './BaseRefController'
+
 
 /**
  *
  *
  * @export
  * @class FieldRefController
- * @extends {BaseRefController<Ref.Field<S>>}
+ * @extends {BaseRefController<DoD.Ref.Field<S>>}
  * @template S
  */
-export class FieldRefController<S extends Schema.FieldDefinition> extends BaseRefController<S, { value: Ref.Field<S> }> {
+export class FieldRefController<S extends DoD.Schema.FieldDefinition> extends BaseRefController<S, { value: DoD.Ref.Field<S> }> {
 
-  constructor(id: PKey, schema: S, value?: Ref.Field<S>) {
-    super({ id, schema }, { value: value })
+  constructor(id: DoD.PKey, schema: S, value?: DoD.Ref.Field<S>) {
+    super({id, schema}, {value: value})
   }
 
-  public static from<S extends Schema.FieldDefinition>(id: PKey, schema: S, value: Ref.Field<S>) {
+  public static from<S extends DoD.Schema.FieldDefinition>(id: DoD.PKey, schema: S, value: DoD.Ref.Field<S>) {
     return new this(id, schema, value)
   }
 
@@ -55,11 +56,11 @@ export class FieldRefController<S extends Schema.FieldDefinition> extends BaseRe
     console.debug('initValue', this.getId(), this.getSchema(), this.getValue())
   }
 
-  public getValue(): Ref.Field<S> {
+  public getValue(): DoD.Ref.Field<S> {
     return this.get('value')
   }
 
-  public setValue(value: Ref.Field<S>): this {
+  public setValue(value: DoD.Ref.Field<S>): this {
     return this.set('value', value)
   }
 

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AppLink, AppLinkProps } from '@aglyn/shared/ui/react'
-import { styled } from '@aglyn/shared/ui/themes'
+import { styled } from '@aglyn/shared-feature-themes'
+import { AppLink, AppLinkProps } from '@aglyn/shared-ui-jsx'
 import Typography from '@mui/material/Typography'
 import React, { forwardRef, ReactNode } from 'react'
 import { BackgroundImage, BackgroundImageProps } from '../components/BackgroundImage'

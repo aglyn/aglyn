@@ -15,51 +15,13 @@
  * limitations under the License.
  */
 
-import { _hasKey, _isStrT } from '@aglyn/shared/util/guards'
-import { len } from '@aglyn/shared/util/tools'
+import { _hasProperty, _isStrT } from '@aglyn/shared-util-guards'
+import { length } from '@aglyn/shared-util-tools'
 import { Schema as DdfSchema } from '@data-driven-forms/react-form-renderer'
 import validation from '@data-driven-forms/react-form-renderer/validation'
 import { ValidationOptions } from '@data-driven-forms/react-form-renderer/validation/validation'
 import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types'
 import md5 from 'md5'
-
-
-export const validateRegex = (value: string, regex) => (new RegExp(regex)).test(value)
-export const fieldHasError = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.ERROR)
-export const fieldHasValid = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.VALID)
-export const formIsValid = (fields: Fields.FieldGroup) => Object.values(fields).some(field => fieldHasValid(field))
-export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT => {
-  const current = {...field, value, errorMessage: null}
-
-  if (current.status === Fields.FieldStatus.NONE) {
-    current.status |= Fields.FieldStatus.TOUCHED
-  } else if (current.status & Fields.FieldStatus.VALID) {
-    current.status ^= Fields.FieldStatus.VALID
-  } else if (current.status & Fields.FieldStatus.ERROR) {
-    current.status ^= Fields.FieldStatus.ERROR
-  }
-
-  let isValid = true
-  const validators = current.validators ?? []
-
-  if (len(validators)) {
-    let i = 0
-    while (i < len(validators)) {
-      let {regex, errorMessage} = validators[i++]
-      if (!validateRegex(value, regex)) {
-        current.errorMessage = errorMessage
-        isValid = false
-        break
-      }
-    }
-  } else if (current.required) {
-    isValid = Boolean(value)
-    current.errorMessage = 'Field is required'
-  }
-  current.status |= isValid ? Fields.FieldStatus.VALID : Fields.FieldStatus.ERROR
-
-  return current
-}
 
 
 export namespace Fields {
@@ -112,6 +74,7 @@ export namespace Fields {
     required: true,
     validators: [
       {
+        // eslint-disable-next-line no-control-regex
         regex: /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/,
         errorMessage: 'Enter a valid email',
       },
@@ -188,22 +151,22 @@ export namespace Fields {
    *******************************/
 
   export const signUpForm: FieldGroup = {
-    [firstNameField.id]: firstNameField,
-    [lastNameField.id]: lastNameField,
-    [emailField.id]: emailField,
-    [passwordField.id]: emailField,
+    [Fields.firstNameField.id]: Fields.firstNameField,
+    [Fields.lastNameField.id]: Fields.lastNameField,
+    [Fields.emailField.id]: Fields.emailField,
+    [Fields.passwordField.id]: Fields.emailField,
   }
   export const signInForm: FieldGroup = {
-    [emailField.id]: emailField,
-    [passwordField.id]: emailField,
+    [Fields.emailField.id]: Fields.emailField,
+    [Fields.passwordField.id]: Fields.emailField,
   }
   export const permissionForm: FieldGroup = {
-    [nameField.id]: nameField,
-    [commentsField.id]: commentsField,
+    [Fields.nameField.id]: Fields.nameField,
+    [Fields.commentsField.id]: Fields.commentsField,
   }
   export const roleForm: FieldGroup = {
-    [nameField.id]: nameField,
-    [commentsField.id]: commentsField,
+    [Fields.nameField.id]: Fields.nameField,
+    [Fields.commentsField.id]: Fields.commentsField,
   }
 
 }
@@ -286,14 +249,14 @@ export namespace DdfForms {
     contact: md5('contact').toLowerCase().trim(),
   }
   const rawFormIdFromId = {
-    [formIds.contact]: 'contact',
+    [DdfForms.formIds.contact]: 'contact',
   }
   const formSchemaFromId = {
-    [formIds.contact]: ContactFormSchema,
+    [DdfForms.formIds.contact]: DdfForms.ContactFormSchema,
   }
 
   export function isValidFormId(id: unknown): id is string {
-    return _isStrT(id) && _hasKey(id, rawFormIdFromId)
+    return _isStrT(id) && _hasProperty(id, rawFormIdFromId)
   }
   export function getFormSchemaFromId(id: string): Schema {
     return formSchemaFromId[id]
@@ -303,4 +266,44 @@ export namespace DdfForms {
   }
 
 
+}
+
+export const validateRegex = (value: string, regex) => (new RegExp(regex)).test(value)
+export const fieldHasError = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.ERROR)
+export const fieldHasValid = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.VALID)
+export const formIsValid = (fields: Fields.FieldGroup) => Object.values(fields).some(field => fieldHasValid(field))
+export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT => {
+  const current = {...field, value, errorMessage: null}
+
+  if (current.status === Fields.FieldStatus.NONE) {
+    current.status |= Fields.FieldStatus.TOUCHED
+  }
+  else if (current.status & Fields.FieldStatus.VALID) {
+    current.status ^= Fields.FieldStatus.VALID
+  }
+  else if (current.status & Fields.FieldStatus.ERROR) {
+    current.status ^= Fields.FieldStatus.ERROR
+  }
+
+  let isValid = true
+  const validators = current.validators ?? []
+
+  if (length(validators)) {
+    let i = 0
+    while (i < length(validators)) {
+      const {regex, errorMessage} = validators[i++]
+      if (regex && !validateRegex(value, regex)) {
+        current.errorMessage = errorMessage
+        isValid = false
+        break
+      }
+    }
+  }
+  else if (current.required) {
+    isValid = Boolean(value)
+    current.errorMessage = 'Field is required'
+  }
+  current.status |= isValid ? Fields.FieldStatus.VALID : Fields.FieldStatus.ERROR
+
+  return current
 }

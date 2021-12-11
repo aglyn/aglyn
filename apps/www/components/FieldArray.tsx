@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
+import {DoD} from '@aglyn/shared-data-types'
+import {SvgPathIcon} from '@aglyn/shared-ui-jsx'
 import React from 'react'
-import { Components } from '../lib/input-fields'
-import { FT, lbl } from '../lib/aglyn-deprecated'
-import FormFields, { Props as FormFieldsProps } from './FormFields'
-import { SvgPathIcon } from '@aglyn/shared/ui/react'
+import {Components} from '../lib/input-fields'
+import FormFields, {Props as FormFieldsProps} from './FormFields'
+
 
 function FieldArrayItem(props: ArrayItemProps) {
-  const { value, ...rest } = props
+  const {value, ...rest} = props
   const [index, property] = value
   const fields = [
     {
-      GridItemProps: { xs: 1 },
+      GridItemProps: {xs: 1},
       component: Components.Elements.byKey.TextField,
       name: 'index',
       label: 'Index',
@@ -35,11 +36,11 @@ function FieldArrayItem(props: ArrayItemProps) {
       fullWidth: true,
       disabled: true,
       size: 'small',
-      InputLabelProps: { shrink: true },
-      value: String(index)
+      InputLabelProps: {shrink: true},
+      value: String(index),
     },
     {
-      GridItemProps: { xs: 3 },
+      GridItemProps: {xs: 3},
       component: Components.Elements.byKey.TextField,
       name: 'kind',
       label: 'Kind',
@@ -49,36 +50,38 @@ function FieldArrayItem(props: ArrayItemProps) {
       fullWidth: true,
       size: 'small',
       value: property.type,
-      items: FT.Tag.all.map((sym: any) => ({
-        value: sym,
-        children: lbl[sym],
-      } as any))
+      items: DoD.FT.Tag.all.map(
+        (sym: any) =>
+          ({
+            value: sym,
+            children: DoD.lbl[sym],
+          } as any),
+      ),
     },
   ]
-  return (
-    <FormFields items={fields} {...rest} />
-  )
+  return <FormFields items={fields} {...rest} />
 }
 FieldArrayItem.displayName = 'FieldArrayItem'
+
 interface ArrayItemProps extends FormFieldsProps {
-  value: [index: number, schema: { type: symbol }]
+  value: [index: number, schema: {type: symbol}]
 }
 
 const emptyArrayItem = (index: number) => {
-  return ({
-    GridItemProps: { xs: 12 },
+  return {
+    GridItemProps: {xs: 12},
     component: FieldArrayItem,
-    value: [index, { type: FT.Tag.sorted }],
-  })
+    value: [index, {type: DoD.FT.Tag.sorted}],
+  }
 }
 
 function FieldArray(props: Props) {
-  const { value, ...rest } = props
+  const {value, ...rest} = props
   const [fields, setFields] = React.useState<any>(
-    Array.from(new Array(3)).map((_, index) => emptyArrayItem(index))
+    Array.from(new Array(3)).map((_, index) => emptyArrayItem(index)),
   )
   const handleAddItem = React.useCallback((e) => {
-    setFields(prev => [...prev, emptyArrayItem(prev.length)])
+    setFields((prev) => [...prev, emptyArrayItem(prev.length)])
   }, [])
 
   console.log(fields)
@@ -86,17 +89,17 @@ function FieldArray(props: Props) {
     <FormFields
       items={fields.concat([
         {
-          GridItemProps: { xs: 12 },
+          GridItemProps: {xs: 12},
           component: Components.Elements.byKey.Button,
           variant: 'outlined',
-          startIcon: <SvgPathIcon iconId="plus" />,
+          startIcon: <SvgPathIcon iconIds="plus" />,
           children: 'Add',
           onClick: (e) => {
             console.log('click')
 
             handleAddItem(e)
           },
-        }
+        },
       ])}
       {...rest}
     />

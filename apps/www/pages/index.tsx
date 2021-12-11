@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import { GridItems } from '@aglyn/shared/ui/react'
+import {ProductNames} from '@aglyn/shared-data-brand'
+import {GridItems} from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'
 import Image from 'next/image'
 import React from 'react'
 import BackgroundImage from '../components/BackgroundImage'
-import { mainNavigation, productNames } from '../const'
+import {mainNavigation} from '../const'
 import MainLayout from '../layouts/MainLayout'
 import PromoSectionView from '../views/PromoSectionView'
 import SiteFooterView from '../views/SiteFooterView'
@@ -41,7 +42,7 @@ function Index(props: Props) {
     <MainLayout
       title={TITLE + ' | Aglyn'}
       centerNavigationItems={mainNavigation}
-      productName={productNames.www}
+      productName={ProductNames.WWW}
     >
       <BackgroundImage
         component={'header'}

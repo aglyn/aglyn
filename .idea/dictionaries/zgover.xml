@@ -2,14 +2,19 @@
   <dictionary name="zgover">
     <words>
       <w>aglyn</w>
+      <w>artboard</w>
       <w>badgeable</w>
+      <w>besigner</w>
       <w>nolookalikes</w>
       <w>numeronym</w>
       <w>outlineable</w>
       <w>preconnect</w>
       <w>raleway</w>
       <w>tupled</w>
+      <w>unserialize</w>
+      <w>unserialized</w>
       <w>unstyled</w>
+      <w>vercel</w>
     </words>
   </dictionary>
 </component>

@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
-import { PKey, Ref, Schema } from '../interfaces/dod'
+import { DoD } from '@aglyn/shared-data-types'
 
 import { BaseRefController } from './BaseRefController'
 
 
-export class CollectionRefController<S extends Schema.CollectionModel> extends BaseRefController<S, Ref.Collection<S>> {
+export class CollectionRefController<S extends DoD.Schema.CollectionModel> extends BaseRefController<S, DoD.Ref.Collection<S>> {
 
-  constructor(id: PKey, schema: S, documents?: Ref.Collection<S>) {
-    super({ id, schema }, { ...documents })
+  constructor(id: DoD.PKey, schema: S, documents?: DoD.Ref.Collection<S>) {
+    super({id, schema}, {...documents})
   }
 
-  public static from<S extends Schema.CollectionModel>(id: PKey, schema: S, documents?: Ref.Collection<S>) {
+  public static from<S extends DoD.Schema.CollectionModel>(id: DoD.PKey, schema: S, documents?: DoD.Ref.Collection<S>) {
     return new this(id, schema, documents)
   }
 
@@ -61,11 +61,11 @@ export class CollectionRefController<S extends Schema.CollectionModel> extends B
     // }
   }
 
-  public getDocuments(): Ref.CollectionDocuments<S> {
+  public getDocuments(): DoD.Ref.CollectionDocuments<S> {
     return this.model
   }
 
-  public setDocuments(value: Ref.CollectionDocuments<S>): this {
+  public setDocuments(value: DoD.Ref.CollectionDocuments<S>): this {
     this.model = value
     return this
   }

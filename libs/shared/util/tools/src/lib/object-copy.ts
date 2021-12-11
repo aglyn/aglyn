@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { PKey } from '@aglyn/shared/util/types'
+import { PKey } from '@aglyn/shared-data-types'
 
 
 /**

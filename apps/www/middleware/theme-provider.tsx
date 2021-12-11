@@ -19,10 +19,9 @@ import {
   Theme,
   ThemeProvider as MuiThemeProvider,
   ThemeProviderProps as MuiThemeProviderProps,
-} from '@aglyn/shared/ui/themes'
+} from '@aglyn/shared-feature-themes'
 import React from 'react'
 import { NextAppMiddleware } from '../lib/next-app'
-
 
 /**
  * Next app middleware for material-ui theme provider component
@@ -35,14 +34,16 @@ import { NextAppMiddleware } from '../lib/next-app'
  * @returns {ThemeProviderElement<T>}
  */
 export function ThemeProviderComponent<T>(props: Props): ThemeProviderElement<T> {
-  const {theme, children, selector, ...rest} = props
+  const { theme, children, selector, ...rest } = props
 
   React.useEffect(() => {
     function removeSsrStyles() {
       // Remove the server-side injected CSS from the client side to
       // avoid client and server style rule conflicts
       const jssStyles = document.querySelector(selector)
-      if (jssStyles) { jssStyles.parentElement.removeChild(jssStyles) }
+      if (jssStyles) {
+        jssStyles.parentElement.removeChild(jssStyles)
+      }
     }
     removeSsrStyles()
   }, [selector])
@@ -64,5 +65,5 @@ export type ThemeProviderMiddleware<T = Theme, P = Props> = (theme: T) => NextAp
 
 export const themeProvider: ThemeProviderMiddleware<any, any> = (theme) => ({
   name: 'themeProviderSsr',
-  Component: props => <ThemeProviderComponent {...props} theme={theme}/>,
+  Component: (props) => <ThemeProviderComponent {...props} theme={theme} />,
 })

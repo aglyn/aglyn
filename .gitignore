@@ -26,12 +26,12 @@
 !.vscode/extensions.json
 
 # IDE - Intellij IDEA
-.idea/*
-!.idea/copyright
-!.idea/codeStyles
-!.idea/fileTemplates
-!.idea/file.template.settings.xml
-!.idea/dictionaries
+#.idea/*
+#!.idea/copyright
+#!.idea/codeStyles
+#!.idea/fileTemplates
+#!.idea/file.template.settings.xml
+#!.idea/dictionaries
 
 # Environment files
 .env

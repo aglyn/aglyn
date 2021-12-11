@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { PKey } from '@aglyn/shared/util/types'
+import { PKey } from '@aglyn/shared-data-types'
 import { copy } from './copy'
-
 
 /**
  * Deeply copy all properties of a key value map

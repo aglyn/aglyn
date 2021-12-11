@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import Typography, { TypographyProps } from '@mui/material/Typography'
+import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-brand'
+import Typography, {TypographyProps} from '@mui/material/Typography'
 import React from 'react'
-import { APP, currentYear } from '../const'
 
 
 function Copyright(props: Props) {
   return (
     <Typography variant="subtitle2" {...props}>
-      {currentYear} &copy; {APP.LEGAL_NAME}
+      {CURRENT_YEAR} &copy; {BRAND.LEGAL_NAME}
     </Typography>
   )
 }

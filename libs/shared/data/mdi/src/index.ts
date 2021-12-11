@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-export * from '../common/data-type'
-
-export * from './lib/mdi-icons'
+export * from './types'
 
 export * from './lib/authors'
 export * from './lib/icons'

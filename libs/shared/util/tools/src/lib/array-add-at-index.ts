@@ -26,8 +26,15 @@ import { arrayMutate, MutatedArray } from './array-mutate'
  * @param {number} index
  * @param {Array<T>} array
  * @param {(T | Array<T>)} items
- * @returns {MutatedArray<T>}
+ * @returns {MutatedArray<Array<T>>}
+ * @param options
  */
-export function arrayAddAtIndex<T>(index: number, array: Array<T>, items: T | Array<T>): MutatedArray<T> {
-  return arrayMutate(index, array, items, {replace: false})
+export function arrayAddAtIndex<T>(
+  index: number,
+  array: Array<T>,
+  items: T | Array<T>,
+  options?: { replace?: boolean; copy?: boolean },
+): MutatedArray<T> {
+  const {replace = false, copy} = {...options}
+  return arrayMutate(index, array, items, {replace, copy})
 }

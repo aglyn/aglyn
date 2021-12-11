@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
-import { PKey, Schema } from '../interfaces/dod'
+import { DoD } from '@aglyn/shared-data-types'
 
 import { BaseRefController } from './BaseRefController'
 
 
-export class DatabaseRefController<Ss extends Schema.CollectionModels> extends BaseRefController<Ss, Schema.DatabaseCollections<Ss>> {
+export class DatabaseRefController<Ss extends DoD.Schema.CollectionModels> extends BaseRefController<Ss, DoD.Schema.DatabaseCollections<Ss>> {
 
-  constructor(id: PKey, schemas: Ss, instances?: Schema.DatabaseCollections<Ss>) {
-    super({ id, schema: schemas }, { ...instances })
+  constructor(id: DoD.PKey, schemas: Ss, instances?: DoD.Schema.DatabaseCollections<Ss>) {
+    super({id, schema: schemas}, {...instances})
   }
 
-  public static from<Ss extends Schema.CollectionModels>(id: PKey, schemas: Ss, collections: Schema.DatabaseCollections<Ss>) {
+  public static from<Ss extends DoD.Schema.CollectionModels>(id: DoD.PKey, schemas: Ss, collections: DoD.Schema.DatabaseCollections<Ss>) {
     return new this(id, schemas, collections)
   }
 
@@ -65,11 +65,11 @@ export class DatabaseRefController<Ss extends Schema.CollectionModels> extends B
     return super.getSchema()[id]
   }
 
-  public getCollections(): Schema.DatabaseCollections<Ss> {
+  public getCollections(): DoD.Schema.DatabaseCollections<Ss> {
     return this.model
   }
 
-  public setCollections(value: Schema.DatabaseCollections<Ss>): this {
+  public setCollections(value: DoD.Schema.DatabaseCollections<Ss>): this {
     this.model = value
     return this
   }

@@ -1,4 +1,4 @@
-# shared-util-errors
+# @aglyn/shared-util-errors
 
 This library was generated with [Nx](https://nx.dev).
 

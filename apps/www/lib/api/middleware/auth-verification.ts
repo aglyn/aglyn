@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isUndT } from '@aglyn/shared/util/guards'
+import { _isUndT } from '@aglyn/shared-util-guards'
 import { verifyIdToken } from '../../fetch-data/profile-data'
 import { Logger, Res } from '../helpers'
 import { ApiHandler, ApiRequest, ApiResponse } from '../types'
