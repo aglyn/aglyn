@@ -91,7 +91,6 @@ const withAglynNxNext = (opts = {}) => {
   return withNx({
     ...opts,
     env: {
-      NODE_ENV,
       PKG_VERSION,
       COMMIT_REF,
       PROCESS_VERSION,
