@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import { GridButtons, SvgPathIcon } from '@aglyn/shared-ui-jsx'
-import { makeStyles, Theme } from '@aglyn/shared-feature-themes'
+import {alpha, makeStyles, Theme} from '@aglyn/shared-feature-themes'
+import {GridButtons, SvgPathIcon} from '@aglyn/shared-ui-jsx'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import MuiTab from '@mui/material/Tab'
 import MuiTabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 import React from 'react'
+
 
 interface TabPanelProps {
   children?: React.ReactNode
@@ -31,7 +32,7 @@ interface TabPanelProps {
 }
 
 function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props
+  const {children, value, index, ...other} = props
 
   return (
     <div

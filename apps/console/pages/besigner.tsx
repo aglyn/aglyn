@@ -27,7 +27,7 @@ const AglynBesigner = dynamic(
 )
 
 function Besigner(props) {
-  
+
   if (HAS_DOCUMENT) {
     console.log('page:/besigner app', getApp())
   }
