@@ -15,50 +15,54 @@
  * limitations under the License.
  */
 
-import { AglynSvgLogo } from '@aglyn/shared-ui-jsx'
-import { createStyles, Theme, WithStyles, withStyles } from '@aglyn/shared-feature-themes'
-import Box, { BoxProps } from '@mui/material/Box'
+import {styled} from '@aglyn/shared-feature-themes'
+import {AglynSvgLogo} from '@aglyn/shared-ui-jsx'
+import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
 import Slide from '@mui/material/Slide'
 import Typography from '@mui/material/Typography'
-import clsx from 'clsx'
-import { forwardRef, useEffect, useState } from 'react'
-import BackgroundImage from '../components/BackgroundImage'
+import {forwardRef, useEffect, useState} from 'react'
+import BackgroundImage, {BackgroundImageProps} from '../components/BackgroundImage'
 import Copyright from '../components/Copyright'
 
-const styles = (theme: Theme) =>
-  createStyles({
-    root: {
-      color: theme.palette.text.primary,
-    },
-    logo: {
-      height: 'auto',
-      width: 320,
-      maxWidth: '100%',
-      marginBottom: theme.spacing(4),
-    },
-    copyright: {
-      position: 'absolute',
-      bottom: theme.spacing(1),
-      left: theme.spacing(2),
-    },
-  })
 
-export interface AuthLayoutProps extends BoxProps {
+const AuthLayoutBackground = styled(BackgroundImage, {
+  name: 'AglynAuthLayoutBackground',
+})(({theme}) => ({
+  color: theme.palette.text.primary,
+}))
+const AuthLayoutLogo = styled(AglynSvgLogo, {
+  name: 'AglynAuthLayoutLogo',
+})(({theme}) => ({
+  height: 'auto',
+  width: 320,
+  maxWidth: '100%',
+  marginBottom: theme.spacing(4),
+}))
+const AuthLayoutCopyright = styled(Copyright, {
+  name: 'AglynAuthLayoutCopyright',
+})(({theme}) => ({
+  position: 'absolute',
+  bottom: theme.spacing(1),
+  left: theme.spacing(2),
+}))
+
+
+export interface AuthLayoutProps extends BackgroundImageProps {
   text: string
 }
 
-const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
+const AuthLayout = forwardRef<any, AuthLayoutProps>(
   function RefRenderFn(props, ref) {
-    const { text, children, className, classes, ...rest } = props
-    const [animated, setAnimated] = useState({ left: false, right: false })
+    const {text, children, classes, ...rest} = props
+    const [animated, setAnimated] = useState({left: false, right: false})
 
     useEffect(() => {
       let leftAnimationTimeout = null
       let rightAnimationTimeout = null
 
       function animate(which: string) {
-        setAnimated((prev) => ({ ...prev, [which]: true }))
+        setAnimated((prev) => ({...prev, [which]: true}))
       }
       leftAnimationTimeout = setTimeout(animate, 700, 'left')
       rightAnimationTimeout = setTimeout(animate, 500, 'right')
@@ -70,10 +74,9 @@ const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
     }, [])
 
     return (
-      <BackgroundImage
+      <AuthLayoutBackground
         ref={ref}
         alignItems="stretch"
-        className={clsx(classes.root, className)}
         display="flex"
         height="100vh"
         url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
@@ -84,11 +87,11 @@ const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
           <Container maxWidth="lg">
             <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
               <div>
-                <AglynSvgLogo className={classes.logo} />
+                <AuthLayoutLogo />
                 <Typography children={text} variant="h2" />
               </div>
             </Slide>
-            <Copyright className={classes.copyright} />
+            <AuthLayoutCopyright />
           </Container>
         </Box>
         <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
@@ -96,11 +99,11 @@ const AuthLayout = forwardRef<any, AuthLayoutProps & WithStyles<typeof styles>>(
             <Container>{children}</Container>
           </Box>
         </Slide>
-      </BackgroundImage>
+      </AuthLayoutBackground>
     )
-  }
+  },
 )
 
-AuthLayout.displayName = 'Layout:AuthLayout'
+AuthLayout.displayName = 'AuthLayout'
 
-export default withStyles(styles, { name: 'Layout:AuthLayout' })(AuthLayout)
+export default AuthLayout

@@ -33,7 +33,7 @@ let app
 if (!app) {
   app = withAppController(appOptions)
 }
-console.log('app', app)
+// console.log('app', app)
 
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()

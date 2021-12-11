@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-feature-themes'
-import { GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps } from '@aglyn/shared-ui-jsx'
-import { _isStrT } from '@aglyn/shared-util-guards'
-import { _s, copy } from '@aglyn/shared-util-tools'
+import {styled} from '@aglyn/shared-feature-themes'
+import {GridItems, GridItemsProps, SvgPathIcon, SvgPathIconProps} from '@aglyn/shared-ui-jsx'
+import {_isArr, _isStrT} from '@aglyn/shared-util-guards'
+import {_s, copy} from '@aglyn/shared-util-tools'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'
-import clsx from 'clsx'
 import React from 'react'
 import Breadcrumbs from '../components/Breadcrumbs'
-import { CurrentUserContextType, withCurrentUserContext } from '../contexts/current-user-context'
-import { AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
-import { tabItems } from '../lib/navigation-menus'
-import MainLayout, { MainLayoutProps as MainLayoutProps } from './MainLayout'
+import {CurrentUserContextType, withCurrentUserContext} from '../contexts/current-user-context'
+import {AggregatedPageMeta, withAggregatedPageMeta} from '../lib/app-pages'
+import {tabItems} from '../lib/navigation-menus'
+import MainLayout, {MainLayoutProps as MainLayoutProps} from './MainLayout'
 
 
 export const CONTENT_MAX_WIDTH = 'lg'
@@ -80,11 +79,11 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     ...headerProp,
   }
   const breadcrumbItems = (breadcrumbItemsProp ?? (copy(pageAncestors) as any[]))
-  .concat(overrideMeta ?? pageMeta)
-  .map((item: any) => ({
-    href: _s(item?.id),
-    children: item?.name.plural,
-  }))
+    .concat(overrideMeta ?? pageMeta)
+    .map((item: any) => ({
+      href: _s(item?.id),
+      children: item?.name.plural,
+    }))
   const quickActionMenus: MainLayoutProps['quickActionMenus'] = [
     {
       iconIds: 'cog-outline',
@@ -128,11 +127,13 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
               <SvgPathIcon
                 color="secondary"
                 fontSize="inherit"
-                {...(_isStrT(header.icon) ? {iconIds: header.icon} : header.icon)}
-                className={clsx(
-                  // classes.icon,
-                  _isStrT(header.icon) ? null : header.icon.className,
-                )}
+                {
+                  ...(
+                    _isStrT(header.icon) || _isArr(header.icon)
+                      ? {iconIds: header.icon}
+                      : header.icon
+                  )
+                }
               />
             ) : null}
             {header?.children ?? title}

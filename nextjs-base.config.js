@@ -19,16 +19,15 @@
 const withNx = require('@nrwl/next/plugins/with-nx')
 const pkg = require('./package.json')
 
-const PKG_VERSION = String(pkg.version ?? 'UNDEFINED')
+const PKG_VERSION = String(pkg?.version ?? 'UNDEFINED')
 const PROCESS_VERSION = String(process.version ?? 'UNDEFINED')
 const PROCESS_VERSIONS = String(process.versions ?? 'UNDEFINED')
 
-const NODE_ENV = JSON.stringify(process.env.NODE_ENV)
 const COMMIT_REF = JSON.stringify(process.env.COMMIT_REF)
 
-const IS_DEVELOPMENT = NODE_ENV === 'development'
-const IS_PRODUCTION = NODE_ENV === 'production'
-const IS_TEST = NODE_ENV === 'test'
+const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+const IS_TEST = process.env.NODE_ENV === 'test'
 
 const SECURITY_HEADERS = [
   /**
@@ -87,6 +86,7 @@ const BRAND_HEADERS = [
  * @param opts {import('@nrwl/next/plugins/with-nx').WithNxOptions}
  **/
 const withAglynNxNext = (opts = {}) => {
+  console.log('process.env.NODE_ENV', process.env.NODE_ENV, IS_PRODUCTION)
 
   return withNx({
     ...opts,
@@ -106,9 +106,12 @@ const withAglynNxNext = (opts = {}) => {
     // Node.js process.
     compress: true,
 
-    optimizeFonts: true,
+    optimizeFonts: IS_PRODUCTION,
+
     // Opt-in to using the Next.js compiler for minification. This is 7x faster than Terser.
     swcMinify: false,
+
+    target: 'experimental-serverless-trace',
 
     reactStrictMode: !IS_PRODUCTION,
 
@@ -116,12 +119,19 @@ const withAglynNxNext = (opts = {}) => {
       // Motivated by https://github.com/zeit/next.js/issues/7687
       ignoreDevErrors: IS_PRODUCTION,
       ignoreBuildErrors: IS_PRODUCTION,
+
       ...opts?.typescript,
     },
 
     eslint: {
       ignoreDuringBuilds: IS_PRODUCTION,
       ...opts?.eslint,
+    },
+
+    nx: {
+      // Set this to false if you do not want to use SVGR
+      // See: https://github.com/gregberge/svgr
+      svgr: true,
     },
 
     images: {

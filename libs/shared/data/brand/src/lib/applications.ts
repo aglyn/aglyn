@@ -21,6 +21,10 @@ export const APP_WWW = {
   META_DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
 }
 
+export const ProductNames = {
+  WWW: '.com',
+}
+
 export enum IconVariant {
   // Data
   PROPERTY = 'variable',

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import MuiGrid, { GridProps as MuiGridProps } from '@mui/material/Grid'
-import React, { forwardRef } from 'react'
+import MuiGrid, {GridProps as MuiGridProps} from '@mui/material/Grid'
+import React, {forwardRef} from 'react'
 
 /* eslint-disable-next-line */
 export interface GridItemsProps extends MuiGridProps {
@@ -24,12 +24,16 @@ export interface GridItemsProps extends MuiGridProps {
 }
 
 export const GridItems = forwardRef<any, GridItemsProps>(function RefRenderFn(props, ref) {
-  const { items, ...rest } = props
+  const {items, ...rest} = props
 
   return (
     <MuiGrid ref={ref} container {...rest}>
       {items.map((item, key) => (
-        <MuiGrid key={item?.id ?? item?.key ?? key} item {...item} />
+        <MuiGrid
+          item
+          key={item?.key ?? item?.id ?? key}
+          {...item}
+        />
       ))}
     </MuiGrid>
   )

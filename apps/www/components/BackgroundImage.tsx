@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import { OverrideableComponentProps } from '@aglyn/shared-data-types'
-import { styled } from '@aglyn/shared-feature-themes'
-import { forwardRef, HTMLAttributes } from 'react'
+import {OverrideableComponentProps} from '@aglyn/shared-data-types'
+import {styled} from '@aglyn/shared-feature-themes'
+import {forwardRef, HTMLAttributes} from 'react'
+
 
 const BackgroundImageRoot = styled('div', {
   name: 'AglynBackgroundImage',
@@ -36,25 +37,24 @@ export interface BackgroundImageProps extends BaseProps, OverrideableComponentPr
   parallax?: boolean
 }
 
-const BackgroundImage = forwardRef<HTMLDivElement, BackgroundImageProps>(function RefRenderFn(
-  props,
-  ref
-) {
-  const { url, parallax, style, ...rest } = props
-  return (
-    <BackgroundImageRoot
-      ref={ref}
-      {...rest}
-      style={{
-        ...style,
-        backgroundImage: `url(${url})`,
-        backgroundAttachment: parallax ? 'fixed' : undefined,
-      }}
-    />
-  )
-})
+const BackgroundImage = forwardRef<any, BackgroundImageProps>(
+  function RefRenderFn(props, ref) {
+    const {url, parallax, style, ...rest} = props
+    return (
+      <BackgroundImageRoot
+        ref={ref}
+        {...rest}
+        style={{
+          ...style,
+          backgroundImage: `url(${url})`,
+          backgroundAttachment: parallax ? 'fixed' : undefined,
+        }}
+      />
+    )
+  },
+)
 
 BackgroundImage.displayName = 'BackgroundImage'
 
-export { BackgroundImage }
+export {BackgroundImage}
 export default BackgroundImage

@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { SvgPathIcon } from '@aglyn/shared-ui-jsx'
+import {DoD} from '@aglyn/shared-data-types'
+import {SvgPathIcon} from '@aglyn/shared-ui-jsx'
 import React from 'react'
-import { FT, lbl } from '../lib/aglyn-deprecated'
-import { Components, FieldPreset } from '../lib/input-fields'
-import FormFields, { Props as FormFieldsProps } from './FormFields'
+import {Components, FieldPreset} from '../lib/input-fields'
+import FormFields, {Props as FormFieldsProps} from './FormFields'
 
 
 function FieldObjectProperty(props: ObjectPropertyProps) {
@@ -49,9 +49,9 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
       fullWidth: true,
       size: 'small',
       value: property.type,
-      items: FT.Tag.all.map((sym: any) => ({
+      items: DoD.FT.Tag.all.map((sym: any) => ({
         value: sym,
-        children: lbl[sym],
+        children: DoD.lbl[sym],
       } as any)),
     },
   ]
@@ -62,7 +62,7 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
 FieldObjectProperty.displayName = 'FieldObjectProperty'
 
 interface ObjectPropertyProps extends Omit<FormFieldsProps, 'items'> {
-  value: [key: string | number, property: { type: symbol }]
+  value: [key: string | number, property: {type: symbol}]
 }
 
 // const emptyObjectProperty = (key: string | number) => {
@@ -85,7 +85,7 @@ function FieldObject(props: Props) {
     GridItemProps: {xs: 12},
     component: Components.Elements.byKey.Button,
     variant: 'outlined',
-    startIcon: <SvgPathIcon iconIds="plus"/>,
+    startIcon: <SvgPathIcon iconIds="plus" />,
     children: 'Add',
     onClick: (e) => {
       console.log('click')

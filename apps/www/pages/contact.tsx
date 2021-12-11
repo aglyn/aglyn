@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
-import { componentMapper, GridItems } from '@aglyn/shared-ui-jsx'
-import FormTemplateRenderProps from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
+import {ProductNames} from '@aglyn/shared-data-brand'
+import {componentMapper, GridItems} from '@aglyn/shared-ui-jsx'
+import FormTemplateRenderProps
+  from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
 import FormRenderer from '@data-driven-forms/react-form-renderer/form-renderer'
 import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
 import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
@@ -28,16 +30,17 @@ import Container from '@mui/material/Container'
 import Grid from '@mui/material/Grid'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
-import React, { useCallback } from 'react'
-import { mainNavigation, productNames } from '../const'
-import { DdfForms } from '../forms'
+import React, {useCallback} from 'react'
+import {mainNavigation} from '../const'
+import {DdfForms} from '../forms'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
 
+
 const FormTemplate = (props: FormTemplateRenderProps) => {
-  const { formFields, schema } = props
-  const { handleSubmit, getState } = useFormApi()
-  const { submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine } = getState()
+  const {formFields, schema} = props
+  const {handleSubmit, getState} = useFormApi()
+  const {submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine} = getState()
 
   if (submitFailed) {
     return (
@@ -75,7 +78,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
     <Grid
       container
       component={'form'}
-      style={{ width: '100%' }}
+      style={{width: '100%'}}
       onSubmit={handleSubmit}
       spacing={3}
     >
@@ -87,7 +90,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
       {/*})}*/}
       <FormSpy>
         {() => (
-          <Grid item xs={12} sx={{ textAlign: 'center' }}>
+          <Grid item xs={12} sx={{textAlign: 'center'}}>
             {submitting && (
               <Box mb={1}>
                 <LinearProgress color="secondary" />
@@ -127,11 +130,11 @@ function Contact(props) {
     <MainLayout
       title={'Contact Us | Aglyn'}
       centerNavigationItems={mainNavigation}
-      productName={productNames.www}
+      productName={ProductNames.WWW}
     >
       <main>
         <Box py={12} bgcolor={'background.paper'}>
-          <Container maxWidth={'lg'} sx={{ py: 4 }}>
+          <Container maxWidth={'lg'} sx={{py: 4}}>
             <GridItems
               alignItems="center"
               direction="column"

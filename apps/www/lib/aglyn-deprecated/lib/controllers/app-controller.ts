@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-import { DoD } from '@aglyn/shared-data-types'
-import { getApps } from '@firebase/app'
-import { Analytics, getAnalytics as getFbAnalytics } from 'firebase/analytics'
+// import 'firebase/firestore'
+import {DoD} from '@aglyn/shared-data-types'
+import {getApps} from '@firebase/app'
+import {Analytics, getAnalytics as getFbAnalytics} from 'firebase/analytics'
 
 import 'firebase/analytics'
-import { FirebaseApp, getApp as getFbApp, initializeApp } from 'firebase/app'
+import {FirebaseApp, getApp as getFbApp, initializeApp} from 'firebase/app'
 import {
   Auth,
   connectAuthEmulator,
@@ -45,15 +46,12 @@ import {
   Firestore,
   getFirestore as getFbFirestore,
 } from 'firebase/firestore'
-// import 'firebase/firestore'
+import {Permission, Role, User} from '../types'
 
-import { Persist } from '../constants'
-import { Permission, Role, User } from '../types'
-
-import { CollectionRefController } from './CollectionRefController'
-import { DatabaseRefController } from './DatabaseRefController'
-import { DocumentRefController } from './DocumentRefController'
-import { FieldRefController } from './FieldRefController'
+import {CollectionRefController} from './CollectionRefController'
+import {DatabaseRefController} from './DatabaseRefController'
+import {DocumentRefController} from './DocumentRefController'
+import {FieldRefController} from './FieldRefController'
 
 
 export type FbApp = FirebaseApp
@@ -85,7 +83,7 @@ export interface AppControllerConfig {
   /**
    * Default browser auth persistence
    */
-  authPersistence?: Persist
+  authPersistence?: DoD.Persist
   /**
    * URL of local firebase auth emulator, only used if set
    */
@@ -93,7 +91,7 @@ export interface AppControllerConfig {
   /**
    * URL of local firebase firestore emulator, only used if set
    */
-  firestoreEmulator?: { host: string, port: number }
+  firestoreEmulator?: {host: string, port: number}
 
   // =================
   // START – FIREBASE PROJECT CONFIG
@@ -131,11 +129,27 @@ export interface AppController {
   getAuth: () => FbAuth
   getFirestore: () => FbFirestore
   getCurrentUser: () => FbUser
-  signInUser: (email: string, password: string, onSuccess?: (user: FbUserCredential) => void, onError?: (error: any) => void, persistence?: Persist) => Promise<void>
-  signUpUser: (email: string, password: string, onSuccess?: (user: FbUserCredential) => void, onError?: (error: any) => void, persistence?: Persist) => Promise<void>
+  signInUser: (
+    email: string,
+    password: string,
+    onSuccess?: (user: FbUserCredential) => void,
+    onError?: (error: any) => void,
+    persistence?: DoD.Persist,
+  ) => Promise<void>
+  signUpUser: (
+    email: string,
+    password: string,
+    onSuccess?: (user: FbUserCredential) => void,
+    onError?: (error: any) => void,
+    persistence?: DoD.Persist,
+  ) => Promise<void>
   signOutUser: (onSuccess?: () => void, onError?: (error: any) => void) => Promise<void>
   onAuthStateChange: (...params: Parameters<typeof onFbAuthStateChanged> extends [unknown, ...infer U] ? U : never) => ReturnType<typeof onFbAuthStateChanged>
-  setAuthPersistence: (onSuccess?: () => void, onError?: (error: any) => void, override?: Persist) => Promise<void>
+  setAuthPersistence: (
+    onSuccess?: () => void,
+    onError?: (error: any) => void,
+    override?: DoD.Persist,
+  ) => Promise<void>
   getCollectionRef: <T extends FbDocumentData>(cid: string) => FbCollectionRef<T>
   getUsersCollectionRef: () => FbCollectionRef<User>
   getUserDocumentRef: (uid: DoD.PKey) => FbDocumentRef<User>
@@ -144,7 +158,12 @@ export interface AppController {
   setDodDatabase: (dbId: DoD.PKey, value: DoD.Ref.Database) => void
   getDodCollection: (dbId: DoD.PKey, cId: DoD.PKey) => CollectionRefController<any>
   getDodDocument: (dbId: DoD.PKey, cId: DoD.PKey, dId: DoD.PKey) => DocumentRefController<any>
-  getDodField: (dbId: DoD.PKey, cId: DoD.PKey, dId: DoD.PKey, fId: DoD.PKey) => FieldRefController<any>
+  getDodField: (
+    dbId: DoD.PKey,
+    cId: DoD.PKey,
+    dId: DoD.PKey,
+    fId: DoD.PKey,
+  ) => FieldRefController<any>
 }
 
 const testDb: DoD.Ref.Database = {
@@ -180,7 +199,7 @@ const testDb: DoD.Ref.Database = {
  */
 export const defaultAppConfig: AppControllerConfig = {
   appName: '[DEFAULT]',
-  authPersistence: Persist.SESSION,
+  authPersistence: DoD.Persist.SESSION,
 
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -368,24 +387,24 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
   const setAuthPersistence = async (
     onSuccess?: () => void,
     onError?: (error: any) => void,
-    override?: Persist,
+    override?: DoD.Persist,
   ) => {
-    await setPersistence(getAuth(), {type: Persist[override ?? config.authPersistence]})
-    .then(() => onSuccess && onSuccess())
-    .catch((error) => onError && onError(error))
+    await setPersistence(getAuth(), {type: DoD.Persist[override ?? config.authPersistence]})
+      .then(() => onSuccess && onSuccess())
+      .catch((error) => onError && onError(error))
   }
   const signInUser = async (
     email: string,
     password: string,
     onSuccess?: (user: FbUserCredential) => void,
     onError?: (error: any) => void,
-    persistence?: Persist,
+    persistence?: DoD.Persist,
   ) => {
     await setAuthPersistence(
       async () => {
         await signInWithEmailAndPassword(getAuth(), email, password)
-        .then((user) => onSuccess && onSuccess(user))
-        .catch((error) => onError && onError(error))
+          .then((user) => onSuccess && onSuccess(user))
+          .catch((error) => onError && onError(error))
       },
       (error) => onError && onError(error),
       persistence,
@@ -396,13 +415,13 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
     password: string,
     onSuccess?: (user: FbUserCredential) => void,
     onError?: (error: any) => void,
-    persistence?: Persist,
+    persistence?: DoD.Persist,
   ) => {
     await setAuthPersistence(
       async () => {
         await createUserWithEmailAndPassword(getAuth(), email, password)
-        .then((user) => onSuccess && onSuccess(user))
-        .catch((error) => onError && onError(error))
+          .then((user) => onSuccess && onSuccess(user))
+          .catch((error) => onError && onError(error))
       },
       (error) => onError && onError(error),
       persistence,
@@ -413,8 +432,8 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
     onError?: (error: any) => void,
   ) => {
     await signOut(getAuth())
-    .then(() => onSuccess && onSuccess())
-    .catch((error) => onError && onError(error))
+      .then(() => onSuccess && onSuccess())
+      .catch((error) => onError && onError(error))
   }
   const onAuthStateChange = (
     ...params: Parameters<typeof onFbAuthStateChanged> extends [unknown, ...infer U] ? U : never
@@ -463,7 +482,7 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
   // MARK: Dod methods
   /////////////////////////////
 
-  const databases: { [databaseId: string]: DoD.Ref.Database } = {}
+  const databases: {[databaseId: string]: DoD.Ref.Database} = {}
 
   const getDodDatabase = (dbId: DoD.PKey): DatabaseRefController<any> => {
     const db = databases[dbId]

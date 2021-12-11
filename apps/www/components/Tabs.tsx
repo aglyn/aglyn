@@ -22,11 +22,11 @@ import Box from '@mui/material/Box'
 import MuiTab from '@mui/material/Tab'
 import MuiTabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
-import React from 'react'
+import {ReactNode, SyntheticEvent, useCallback, useState} from 'react'
 
 
 interface TabPanelProps {
-  children?: React.ReactNode
+  children?: ReactNode
   index: any
   value: any
 }
@@ -69,11 +69,11 @@ const useStyles = makeStyles((theme: Theme) => ({
 
 export default function Tabs() {
   const classes = useStyles()
-  const [value, setValue] = React.useState(0)
+  const [value, setValue] = useState(0)
 
-  const handleChange = (event: React.ChangeEvent<{}>, newValue: number) => {
+  const handleChange = useCallback((event: SyntheticEvent, newValue: any) => {
     setValue(newValue)
-  }
+  }, [])
 
   return (
     <div className={classes.root}>
@@ -97,18 +97,16 @@ export default function Tabs() {
         <GridButtons
           items={[
             {
-              component: Box,
-              height: 100,
-              width: 100,
+              sx: {height: 1, width: 1},
               variant: 'contained',
               color: 'secondary',
               children: (
-                <div align="center">
+                <Box sx={{textAlign: 'center'}}>
                   <div>
                     <SvgPathIcon fontSize="large" iconIds="file-document-multiple" />
                   </div>
                   <div>Entries</div>
-                </div>
+                </Box>
               ),
             },
           ]}
@@ -119,48 +117,42 @@ export default function Tabs() {
         <GridButtons
           items={[
             {
-              component: Box,
-              height: 100,
-              width: 100,
+              sx: {height: 1, width: 1},
               variant: 'contained',
               color: 'secondary',
               children: (
-                <div align="center">
+                <Box sx={{textAlign: 'center'}}>
                   <div>
                     <SvgPathIcon fontSize="large" iconIds="variable" />
                   </div>
                   <div>Fields</div>
-                </div>
+                </Box>
               ),
             },
             {
-              component: Box,
-              height: 100,
-              width: 100,
+              sx: {height: 1, width: 1},
               variant: 'contained',
               color: 'secondary',
               children: (
-                <div align="center">
+                <Box sx={{textAlign: 'center'}}>
                   <div>
                     <SvgPathIcon fontSize="large" iconIds="check-network" />
                   </div>
                   <div>Rules</div>
-                </div>
+                </Box>
               ),
             },
             {
-              component: Box,
-              height: 100,
-              width: 100,
+              sx: {height: 1, width: 1},
               variant: 'contained',
               color: 'secondary',
               children: (
-                <div align="center">
+                <Box sx={{textAlign: 'center'}}>
                   <div>
                     <SvgPathIcon fontSize="large" iconIds="chart-sankey-variant" />
                   </div>
                   <div>Workflows</div>
-                </div>
+                </Box>
               ),
             },
           ]}

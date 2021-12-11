@@ -16,14 +16,13 @@
  */
 
 
-export const PKG_VERSION = JSON.stringify(process.env.PKG_VERSION)
-export const NODE_ENV = JSON.stringify(process.env.NODE_ENV)
-export const BUILD_ID = JSON.stringify(process.env.BUILD_ID)
-export const COMMIT_REF = JSON.stringify(process.env.COMMIT_REF)
+export const PKG_VERSION = process.env.PKG_VERSION || 'NULL'
+export const BUILD_ID = process.env.BUILD_ID || 'NULL'
+export const COMMIT_REF = process.env.COMMIT_REF || 'NULL'
 
-export const IS_PRODUCTION = NODE_ENV === 'production'
-export const IS_DEVELOPMENT = NODE_ENV === 'development'
-export const IS_TEST = NODE_ENV === 'test'
+export const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+export const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'
+export const IS_TEST = process.env.NODE_ENV === 'test'
 
 export const HAS_WINDOW = typeof window !== undefined
 export const HAS_DOCUMENT = typeof document !== undefined

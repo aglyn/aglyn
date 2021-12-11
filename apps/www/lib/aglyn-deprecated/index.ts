@@ -38,6 +38,3 @@ export * from './lib/controllers/CollectionRefController'
 export * from './lib/controllers/DatabaseRefController'
 export * from './lib/controllers/DocumentRefController'
 export * from './lib/controllers/FieldRefController'
-
-// Data
-export * from './lib/constants'

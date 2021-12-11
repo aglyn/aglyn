@@ -15,18 +15,15 @@
  * limitations under the License.
  */
 
-import Button, { ButtonProps as MuiButtonProps } from '@mui/material/Button'
-import React, { forwardRef } from 'react'
-import GridItems, { GridItemsProps } from './grid-items'
+import Button, {ButtonProps as MuiButtonProps} from '@mui/material/Button'
+import type {GridProps as MuiGridProps} from '@mui/material/Grid'
+import {forwardRef} from 'react'
+import GridItems from './grid-items'
 
-
-export type ButtonItem = MuiButtonProps & {
-  GridItemProps: GridItemsProps['items'][number]
-}
 
 /* eslint-disable-next-line */
-export interface GridButtonsProps extends Omit<GridItemsProps, 'items'> {
-  items: ButtonItem[]
+export interface GridButtonsProps extends MuiGridProps {
+  items: (MuiButtonProps & {GridItemProps?: MuiGridProps})[]
 }
 
 export const GridButtons = forwardRef<any, GridButtonsProps>(function RefRenderFn(props, ref) {
@@ -34,10 +31,12 @@ export const GridButtons = forwardRef<any, GridButtonsProps>(function RefRenderF
   return (
     <GridItems
       ref={ref}
-      items={items.map(({GridItemProps, ...item}) => ({
-        children: <Button {...item} />,
-        ...GridItemProps,
-      }))}
+      items={
+        items.map(({GridItemProps, ...item}) => ({
+          children: <Button {...item} />,
+          ...GridItemProps,
+        }))
+      }
       {...rest}
     />
   )

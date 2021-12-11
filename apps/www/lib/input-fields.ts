@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { FT, lbl, NormalizedData } from '@aglyn/shared-data-types'
-import { GridListItemData as GridItemProps } from '@aglyn/shared-ui-jsx'
+import {DoD, NormalizedData} from '@aglyn/shared-data-types'
+import {GridListItemData as GridItemProps} from '@aglyn/shared-ui-jsx'
 import MuiButton from '@mui/material/Button'
 import MuiTextField from '@mui/material/TextField'
 import FieldArrayComponent from '../components/FieldArray'
@@ -99,11 +99,11 @@ export namespace FieldPreset {
           defaultValue: '',
           required: true,
           items: [{value: '', children: 'Select one', disabled: true}].concat(
-            FT.Tag.all.map(
+            DoD.FT.Tag.all.map(
               (sym: any) =>
                 ({
                   value: sym,
-                  children: lbl[sym],
+                  children: DoD.lbl[sym],
                 } as any),
             ),
           ),
