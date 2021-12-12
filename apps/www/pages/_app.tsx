@@ -17,28 +17,26 @@
 
 import {IS_PRODUCTION} from '@aglyn/shared-data-brand'
 import {CacheProvider, createEmotionCache, EmotionCache} from '@aglyn/shared-feature-themes'
+import {NextAppWithLayout} from '@aglyn/shared-ui-next'
 import {AppProps as NextAppProps} from 'next/app'
 import AppWrapper from '../components/app-wrapper'
 import {withAppController} from '../lib/aglyn-deprecated/lib/controllers/app-controller'
 
 
-const previewProduction = true
-const appOptions = IS_PRODUCTION || previewProduction ? {} : {
-  authEmulator: 'http://localhost:9099/',
-  firestoreEmulator: {host: 'localhost', port: 8080},
-}
-
 let app
-
 if (!app) {
-  app = withAppController(appOptions)
+  const previewProduction = true
+  app = withAppController(IS_PRODUCTION || previewProduction ? {} : {
+    authEmulator: 'http://localhost:9099/',
+    firestoreEmulator: {host: 'localhost', port: 8080},
+  })
 }
 // console.log('app', app)
 
 // Client-side cache, shared for the whole session of the user in the browser.
 const clientSideEmotionCache = createEmotionCache()
 
-interface _AppProps extends NextAppProps {
+export interface _AppProps extends NextAppProps {
   emotionCache?: EmotionCache
 }
 
@@ -49,37 +47,47 @@ interface _AppProps extends NextAppProps {
  * responsible for rendering every page Component
  *
  * @example
- *  ## Resolution order
+ * > ## Resolution order
+ * >
+ * > ### Server-side
+ * > 1. [_App]{@link _App}.getInitialProps (if-exists)
+ * > 2. <PageComponent>.getInitialProps
+ * > 3. [_Document]{@link _Document}.getInitialProps
+ * > 4. [_App]{@link _App}.render
+ * > 5. <PageComponent>.render
+ * > 6. [_Document]{@link _Document}.render
+ * >
+ * > ### Server-side (w/ error)
+ * > 1. [_Document]{@link _Document}.getInitialProps
+ * > 2. [_App]{@link _App}.render
+ * > 3. <PageComponent>.render
+ * > 4. [_Document]{@link _Document}.render
+ * >
+ * > ### Client-side
+ * > 1. [_App]{@link _App}.getInitialProps (if-exists)
+ * > 2. <PageComponent>.getInitialProps
+ * > 3. [_App]{@link _App}.render
+ * > 4. <PageComponent>.render
  *
- *  ### Server-side
- *  1. [_App]{@link _App}.getInitialProps (if-exists)
- *  2. <PageComponent>.getInitialProps
- *  3. [_Document]{@link _Document}.getInitialProps
- *  4. [_App]{@link _App}.render
- *  5. <PageComponent>.render
- *  6. [_Document]{@link _Document}.render
- *
- *  ### Server-side (w/ error)
- *  1. [_Document]{@link _Document}.getInitialProps
- *  2. [_App]{@link _App}.render
- *  3. <PageComponent>.render
- *  4. [_Document]{@link _Document}.render
- *
- *  ### Client-side
- *  1. [_App]{@link _App}.getInitialProps (if-exists)
- *  2. <PageComponent>.getInitialProps
- *  3. [_App]{@link _App}.render
- *  4. <PageComponent>.render
- *
- * @param props - the _AppProps
- * @returns JSX.Element
+ * @param {AppProps} props
+ * @returns {JSX.Element}
  */
 export default function _App(props: _AppProps) {
-  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
+  const {
+    Component,
+    emotionCache = clientSideEmotionCache,
+    pageProps,
+    ...rest
+  } = props
+
   return (
     <CacheProvider value={emotionCache}>
-      <AppWrapper app={app}>
-        <Component {...pageProps} />
+      <AppWrapper>
+        <NextAppWithLayout
+          Component={Component}
+          pageProps={pageProps}
+          {...rest}
+        />
       </AppWrapper>
     </CacheProvider>
   )

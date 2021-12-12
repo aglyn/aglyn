@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {Icon, IconId} from '../../types/icon'
+import type {Icon, IconId} from '../../types/icon'
 
 
 export const DEFAULT_ICON: Icon = {

@@ -16,7 +16,6 @@
  */
 
 import type {Icon, IconId} from '../../types/icon'
-import {getMdiAllIcons} from './get-mdi-all-icons'
 import {handleIconNotFound} from './handle-icon-not-found'
 
 
@@ -30,14 +29,20 @@ type IconResponse<T> = T extends any
 export async function getMdiIconFromId(
   iconId: IconId | IconId[],
 ): Promise<IconResponse<typeof iconId>> {
-  return await getMdiAllIcons().then((icons) => {
-
-    if (Array.isArray(iconId)) {
-      return [...iconId].map((id) => {
-        return handleIconNotFound(id, icons.find((icon) => icon.id === id))
-      })
+  const baseUri = '../../generated/6.5.95/modules/isolated/mdi-'
+  
+  if (Array.isArray(iconId)) {
+    const icons = []
+    for (const id of iconId) {
+      const icon = id && await import(`${baseUri}${id}`).then((mod) => mod.default)
+      icons.push(handleIconNotFound(id, icon))
     }
-    return handleIconNotFound(iconId, icons.find((icon) => icon.id === iconId))
-  })
+    return icons
+  }
+
+  const icon = await import(`${baseUri}${iconId}`)
+    .then((mod) => mod.default)
+
+  return handleIconNotFound(iconId, icon)
 }
 export default getMdiIconFromId

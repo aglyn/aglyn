@@ -312,6 +312,29 @@
       "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
       "implicitDependencies": []
     },
+    "shared-ui-next": {
+      "root": "libs/shared/ui/next",
+      "sourceRoot": "libs/shared/ui/next/src",
+      "projectType": "library",
+      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "outputs": ["{options.outputFile}"],
+          "options": {
+            "lintFilePatterns": ["libs/shared/ui/next/**/*.{ts,tsx,js,jsx}"]
+          }
+        },
+        "test": {
+          "executor": "@nrwl/jest:jest",
+          "outputs": ["coverage/libs/shared/ui/next"],
+          "options": {
+            "jestConfig": "libs/shared/ui/next/jest.config.js",
+            "passWithNoTests": true
+          }
+        }
+      }
+    },
     "shared-util-dom": {
       "root": "libs/shared/util/dom",
       "sourceRoot": "libs/shared/util/dom/src",
