@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AnyProps, OrUndef } from '@aglyn/shared-data-types'
-import { _INTERNAL_COMPONENTS_ } from '../constants/_internal'
+import {AnyProps, OrUndef} from '@aglyn/shared-data-types'
+import {_INTERNAL_COMPONENTS_} from '../constants/_internal'
 import {
   ComponentGetPayload,
   ComponentRegisterPayload,
@@ -26,18 +26,18 @@ import {
   ComponentSchemaGetPayload,
   ComponentUnregisterPayload,
 } from '../constants/emitter'
-import { AglynAppController } from '../controllers/aglyn-app.controller'
+import {AglynAppController} from '../controllers/aglyn-app.controller'
 import type {
-  IAglynComponent,
-  AglynComponentElementTemplateData,
+  AglynComponentElementTemplate,
   AglynComponentsBundle,
   AglynComponentSchema,
   AglynComponentsController,
   ComponentsRegistryEntry,
   ComponentsRegistryKeys,
   ComponentsRegistryValues,
+  IAglynComponent,
 } from '../controllers/aglyn-components.controller'
-import { _validateAppArg } from './app.api'
+import {_validateAppArg} from './app.api'
 
 
 export function _getComponentsController(app: AglynAppController): AglynComponentsController {
@@ -60,7 +60,7 @@ export function getAllComponentsKeys(app: AglynAppController): ComponentsRegistr
 
 export function getAllComponentsTemplateValues(
   app: AglynAppController,
-): AglynComponentElementTemplateData[] {
+): AglynComponentElementTemplate[] {
   return _getComponentsController(app)?.getAllComponentsTemplateValues()
 }
 

@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-import { AglynComponentElementTemplateData } from '@aglyn/core-data-framework'
-import { createContext, useContext } from 'react'
+import {AglynComponentElementTemplate} from '@aglyn/core-data-framework'
+import {createContext, useContext} from 'react'
+
 
 export type UseElementComponentsContextType = () => AglynComponentsContextType
 
 export interface AglynComponentsContextType {
-  templateBlocks: AglynComponentElementTemplateData[]
+  templateBlocks: AglynComponentElementTemplate[]
 }
 
 export const DEFAULT_COMPONENTS_CONTEXT: AglynComponentsContextType = {
   templateBlocks: [],
 }
 export const AglynComponentsContext = createContext<AglynComponentsContextType>(
-  DEFAULT_COMPONENTS_CONTEXT
+  DEFAULT_COMPONENTS_CONTEXT,
 )
 AglynComponentsContext.displayName = 'AglynComponentsContext'
 

@@ -135,8 +135,7 @@ export type {
   AglynComponentElementData,
   AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
-  AglynComponentElementTemplateData,
-  AglynComponentMetadata,
+  AglynComponentElementTemplate,
   AglynComponentPropsFormSchema,
   AglynComponentRenderFlags,
   AglynComponentSchema,
@@ -149,6 +148,7 @@ export type {
   ComponentsLinealOrder,
   ComponentsRegistryContext,
   ComponentsRegistryEntry,
+  ComponentsRegistryEntryMetadata,
   ComponentsRegistryKeys,
   ComponentsRegistryValues,
   InstanceBundles,
@@ -156,7 +156,7 @@ export type {
   InstanceSchemas,
   InstanceTemplates,
   LinealDefinition,
-  TemplateSubElementData,
+  AglynComponentTemplateData,
 } from './controllers/aglyn-components.controller'
 export type {
   AglynCanvasController,

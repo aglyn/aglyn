@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-import {
-  ComponentRegisterPayload,
-  ComponentsBundleRegisterPayload,
-  createComponentsBundle,
-} from '@aglyn/core-data-framework'
+import {ComponentRegisterPayload, createComponentsBundle} from '@aglyn/core-data-framework'
 
 
 import button from './components/button'
-import { BUNDLE_ID } from './constants'
 import list from './components/list'
 import listItem from './components/list-item'
 import listItemText from './components/list-item-text'
+import {BUNDLE_ID} from './constants'
 
 
 export const schema = {
@@ -44,5 +40,5 @@ export const components: ComponentRegisterPayload[] = [
   listItemText,
 ]
 
-export const bundle: ComponentsBundleRegisterPayload = createComponentsBundle(schema, components)
+export const bundle = createComponentsBundle(schema, components)
 export default bundle

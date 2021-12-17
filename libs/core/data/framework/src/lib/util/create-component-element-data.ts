@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-import { objectDeepMergeMany } from '@aglyn/shared-util-vendor'
+import {objectDeepMergeMany} from '@aglyn/shared-util-vendor'
 import {
   AglynComponentElementDataDenormalized,
-  AglynComponentElementTemplateData,
-  TemplateSubElementData,
+  AglynComponentElementTemplate,
+  AglynComponentTemplateData,
 } from '../controllers/aglyn-components.controller'
-import { createComponentElementId } from './create-component-element-id'
+import {createComponentElementId} from './create-component-element-id'
 
 
-function traverseComponentTemplate(data: TemplateSubElementData): AglynComponentElementDataDenormalized {
+function traverseComponentTemplate(data: AglynComponentTemplateData): AglynComponentElementDataDenormalized {
   return {
     ...data,
     $id: createComponentElementId(),
@@ -33,8 +33,8 @@ function traverseComponentTemplate(data: TemplateSubElementData): AglynComponent
 }
 
 export type CreateComponentElementDataOptions =
-  | AglynComponentElementTemplateData
-  | { data: AglynComponentElementDataDenormalized }
+  | AglynComponentElementTemplate
+  | {data: AglynComponentElementDataDenormalized}
 
 export const ELEMENT_DEFAULTS: Partial<AglynComponentElementDataDenormalized> = {
   props: {},

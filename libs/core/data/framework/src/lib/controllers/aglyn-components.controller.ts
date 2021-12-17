@@ -19,6 +19,7 @@
 import type {IconId} from '@aglyn/shared-data-mdi'
 import type {
   AnyProps,
+  Dictionary,
   EmptyObj,
   JSXForwardRefExoticComponent,
   JSXPropsWithoutRef,
@@ -29,9 +30,14 @@ import type {
 import {JSXElementType} from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type {StyledOptions, SxProps} from '@aglyn/shared-feature-themes'
-// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type {FormSchema} from '@aglyn/shared-ui-jsx'
 import {_isArr} from '@aglyn/shared-util-guards'
+import type {
+  FieldActions,
+  ResolvePropsFunction,
+} from '@data-driven-forms/react-form-renderer/common-types/field'
+import type {ConditionDefinition} from '@data-driven-forms/react-form-renderer/condition'
+import type {DataType} from '@data-driven-forms/react-form-renderer/data-types'
+import type {Validator} from '@data-driven-forms/react-form-renderer/validators'
 import type {ComponentsLinealDirectiveFlag} from '../constants/components'
 import type {
   ComponentGetPayload,
@@ -81,7 +87,7 @@ export type ComponentsRegistryEntry = [
 export type InstanceBundles = Map<BundleUId, AglynComponentsBundle>
 export type InstanceComponents = Map<ComponentId | [ComponentId, BundleUId], IAglynComponent>
 export type InstanceSchemas = Map<ComponentId | [ComponentId, BundleUId], AglynComponentSchema>
-export type InstanceTemplates = Map<TemplateId, AglynComponentElementTemplateData>
+export type InstanceTemplates = Map<TemplateId, AglynComponentElementTemplate>
 
 
 export type AglynElementType<P = any> = JSXElementType<P>
@@ -101,18 +107,7 @@ export interface ComponentsRegistryContext {
   templates: InstanceTemplates
 }
 
-export interface AglynComponentsBundle {
-  readonly bundleId: BundleUId
-  metadata?: {
-    displayName: string
-    description?: string
-    iconIds?: string
-  }
-  componentIds: ComponentId[]
-}
-
-export interface AglynComponentMetadata {
-  // Metadata
+export interface ComponentsRegistryEntryMetadata {
   displayName: string
   title?: string
   subtitle?: string
@@ -134,8 +129,22 @@ export interface AglynComponentBesignerFlags {
   selecting?: {disable?: boolean}
 }
 
-export interface AglynComponentPropsFormSchema extends FormSchema {
+export interface AglynComponentField extends Dictionary<any> {
+  name: string
+  component: string
+  validate?: Validator[]
+  condition?: ConditionDefinition | (ConditionDefinition[])
+  initializeOnMount?: boolean
+  dataType?: DataType
+  initialValue?: any
+  clearedValue?: any
+  clearOnUnmount?: boolean
+  actions?: FieldActions
+  resolveProps?: ResolvePropsFunction
+}
 
+export interface AglynComponentPropsFormSchema {
+  fields: AglynComponentField[]
 }
 
 export interface AglynComponentRenderFlags<P = EmptyObj> {
@@ -155,33 +164,29 @@ export interface AglynComponentRenderFlags<P = EmptyObj> {
 export interface AglynComponentSchema<P = EmptyObj> {
   componentId: ComponentId
   bundleId?: BundleUId
-
   // Metadata
-  metadata: AglynComponentMetadata
-
+  metadata: ComponentsRegistryEntryMetadata
   // Besigner feature flags
   besignerFlags?: AglynComponentBesignerFlags
-
   // Render feature flags
   renderFlags?: AglynComponentRenderFlags<P>
-
   // Besigner templates for modeling new elements
-  templates?: AglynComponentElementTemplateData<P>[]
+  templates?: AglynComponentElementTemplate[]
 }
 
-export interface AglynComponentElementTemplateData<P = EmptyObj> {
+export interface AglynComponentElementTemplate {
   readonly id: TemplateId
   label: string
   description?: string
   iconIds?: IconId
   iconColor?: string,
-  data: TemplateSubElementData<P>
+  data: AglynComponentTemplateData
 }
 
-export interface TemplateSubElementData<P = EmptyObj> {
+export interface AglynComponentTemplateData {
   readonly componentId: ComponentId
   readonly bundleId?: BundleUId
-  elements?: TemplateSubElementData<P>[]
+  elements?: AglynComponentTemplateData[]
   props?: AnyProps
 }
 
@@ -203,15 +208,21 @@ export interface AglynComponentElementDataNormalized<P = any> extends AglynCompo
   elements?: ElementId[]
 }
 
+export interface AglynComponentsBundle {
+  readonly bundleId: BundleUId
+  metadata?: ComponentsRegistryEntryMetadata
+  componentIds: ComponentId[]
+}
+
 export interface AglynComponentsControllerOptions extends AglynModuleModelOptions {
 
 }
 
-export interface AglynComponentsController extends AglynModuleModel {
+export interface AglynComponentsController extends AglynModuleModel<AglynComponentsControllerOptions> {
   getAllComponents(): ComponentsRegistryEntry[]
   getAllComponentsKeys(): ComponentsRegistryKeys
   getAllComponentsValues(): ComponentsRegistryValues
-  getAllComponentsTemplateValues(): AglynComponentElementTemplateData[]
+  getAllComponentsTemplateValues(): AglynComponentElementTemplate[]
 
   getComponent(payload: ComponentGetPayload): OrUndef<IAglynComponent>
   getComponentSchema(payload: ComponentSchemaGetPayload): OrUndef<AglynComponentSchema>
@@ -267,7 +278,7 @@ export class AglynComponentsController extends AglynModuleModel<AglynComponentsC
   protected _componentValues = (): ComponentsRegistryValues => {
     return [...this.components.values()]
   }
-  protected _templateValues = (): AglynComponentElementTemplateData[] => {
+  protected _templateValues = (): AglynComponentElementTemplate[] => {
     return [...this.templates.values()]
   }
 
@@ -280,7 +291,7 @@ export class AglynComponentsController extends AglynModuleModel<AglynComponentsC
   public getAllComponentsValues = (): ComponentsRegistryValues => {
     return this._componentValues()
   }
-  public getAllComponentsTemplateValues = (): AglynComponentElementTemplateData[] => {
+  public getAllComponentsTemplateValues = (): AglynComponentElementTemplate[] => {
     return this._templateValues()
   }
 
@@ -309,7 +320,7 @@ export class AglynComponentsController extends AglynModuleModel<AglynComponentsC
     return bundleId ? `${bundleId}:${componentId}` : componentId
   }
 
-  public registerComponent = (payload: ComponentRegisterPayload): this => {
+  public registerComponent(payload: ComponentRegisterPayload): this {
     const {component, schema} = payload
     const componentId = schema.componentId
     const bundleId = schema.bundleId || undefined
@@ -348,7 +359,7 @@ export class AglynComponentsController extends AglynModuleModel<AglynComponentsC
     this.getEmitter().emit(AglynAppEventFlag.COMPONENT_REGISTERED, {componentId, bundleId})
     return this
   }
-  public registerBundle = (payload: ComponentsBundleRegisterPayload): this => {
+  public registerBundle(payload: ComponentsBundleRegisterPayload): this {
     const {bundle, components} = payload
     const _bundle: AglynComponentsBundle = {...bundle, componentIds: []}
     const bundleId: BundleUId = _bundle.bundleId
@@ -364,7 +375,7 @@ export class AglynComponentsController extends AglynModuleModel<AglynComponentsC
     return this
   }
 
-  public unregisterComponent = (payload: ComponentUnregisterPayload): this => {
+  public unregisterComponent(payload: ComponentUnregisterPayload): this {
     const {componentId, bundleId = undefined} = payload
     const key = this.buildMapKey({bundleId, componentId})
 

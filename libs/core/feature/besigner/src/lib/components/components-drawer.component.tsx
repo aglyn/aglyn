@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-import {
-  AglynComponentElementTemplateData,
-  DEFAULT_COMPONENT_ICON_ID,
-} from '@aglyn/core-data-framework'
-import { AnyProps } from '@aglyn/shared-data-types'
-import { styled } from '@aglyn/shared-feature-themes'
+import {AglynComponentElementTemplate, DEFAULT_COMPONENT_ICON_ID} from '@aglyn/core-data-framework'
+import {AnyProps} from '@aglyn/shared-data-types'
+import {styled} from '@aglyn/shared-feature-themes'
 import {
   CardIconListItem,
   FormSchema,
@@ -33,8 +30,8 @@ import {
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
-import { forwardRef, MouseEvent, useCallback, useMemo } from 'react'
-import { ElementDrawerOptions } from '../contexts/element-drawer-context'
+import {forwardRef, MouseEvent, useCallback, useMemo} from 'react'
+import {ElementDrawerOptions} from '../contexts/element-drawer-context'
 
 
 const ComponentsDrawer = styled(JsxNavbarDrawer, {
@@ -83,20 +80,20 @@ const ComponentsDrawerGridList = styled(JsxGridList, {
 const AppBarTitle = styled(Typography, {
   name: 'AglynAppBarTitle',
 })(({theme}) => ({
-  fontSize: theme.typography.pxToRem(20)
+  fontSize: theme.typography.pxToRem(20),
 }))
 
 
 const ItemSvgIcon = styled(SvgPathIcon, {
   name: 'AglynItemSvgIcon',
-})(({ theme }) => ({
+})(({theme}) => ({
   fontSize: theme.typography.pxToRem(64),
   padding: theme.spacing(1.5),
   borderRadius: '50%',
   backgroundColor: theme.palette.background.default,
   border: `1px solid ${theme.palette.divider}`,
   color: theme.palette.quaternary.main,
-  overflow: 'visible'
+  overflow: 'visible',
 }))
 
 
@@ -108,36 +105,36 @@ export interface ComponentsDrawerOptionsProps extends ElementDrawerOptions {
 
 export interface ComponentsDrawerComponentProps extends Partial<NavigationDrawerProps> {
   options?: ComponentsDrawerOptionsProps
-  items?: AglynComponentElementTemplateData[]
-  onCancel?: { bivarianceHack<T>(event: MouseEvent<T>, reason: 'canceled'): void }['bivarianceHack']
+  items?: AglynComponentElementTemplate[]
+  onCancel?: {bivarianceHack<T>(event: MouseEvent<T>, reason: 'canceled'): void}['bivarianceHack']
   onConfirm?: {
     bivarianceHack<T>(event: null | MouseEvent<T>, data: unknown): void
   }['bivarianceHack']
-  onDelete?: { bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void }['bivarianceHack']
+  onDelete?: {bivarianceHack<T>(event: MouseEvent<T>, data: unknown): void}['bivarianceHack']
 }
 
 export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerComponentProps>(
   function RefRenderFn(props, ref) {
-    const { options, onConfirm, onClose, onCancel, onDelete, items, ...rest } = props
+    const {options, onConfirm, onClose, onCancel, onDelete, items, ...rest} = props
 
-    const { title } = { ...options }
+    const {title} = {...options}
     const handleDrawerClose = useCallback(
       (e, reason) => {
         onClose?.call(null, e, reason)
       },
-      [onClose]
+      [onClose],
     )
     const handleDrawerCancel = useCallback(
       (e) => {
         onCancel?.call(null, e, 'canceled')
       },
-      [onCancel]
+      [onCancel],
     )
     const handleItemClick = useCallback(
       (e, item) => {
-        onConfirm?.call(null, e, { type: 'selection', data: item })
+        onConfirm?.call(null, e, {type: 'selection', data: item})
       },
-      [onConfirm]
+      [onConfirm],
     )
 
     const appBarLeft = useMemo(() => (
@@ -175,7 +172,7 @@ export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerCompone
           }
         />
       ),
-      [handleItemClick]
+      [handleItemClick],
     )
 
     return (
@@ -186,18 +183,18 @@ export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerCompone
         appBarLeft={appBarLeft}
         appBarRight={appBarRight}
         onClose={handleDrawerCancel}
-        AppBarProps={{ color: 'inherit' }}
+        AppBarProps={{color: 'inherit'}}
         {...rest}
       >
         <ComponentsDrawerGridList
-          GridContainerProps={{ spacing: 2 }}
-          GridItemProps={{ xs: 6, sm: 4 }}
+          GridContainerProps={{spacing: 2}}
+          GridItemProps={{xs: 6, sm: 4}}
           renderItemContent={renderItemContent}
           items={items}
         />
       </ComponentsDrawer>
     )
-  }
+  },
 )
 
 ComponentsDrawerComponent.displayName = 'ComponentsDrawerComponent'
