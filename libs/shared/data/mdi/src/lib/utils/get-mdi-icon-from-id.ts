@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type {Icon, IconId} from '../../types/icon'
 import {DEFAULT_ICON} from '../constants'
+import type {Icon, IconId} from '../types/icon'
 import {handleIconNotFound} from './handle-icon-not-found'
 
 
@@ -32,7 +32,7 @@ async function getLazyIcon(id: IconId) {
 
   try {
     icon = id
-      && await require(`../../generated/6.5.95/modules/mdi-${id}`)?.default
+      && await require(`../../../generated/6.5.95/modules/mdi-${id}`)?.default
       || DEFAULT_ICON
   }
   catch (e) {

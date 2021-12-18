@@ -37,8 +37,8 @@ function writeModuleFiles() {
     generateFile({data: icon, file: `mdi-${icon.id}`, dir: dir('modules'), type: 'module'})
   })
   // Generate default exported module array files
-  generateFile({data: icons, file: `mdi-icons-array`, dir: dir(), importDir: './modules/mdi-', type: 'module-array'})
-  // Generate named module files
+  // generateFile({data: icons, file: `mdi-icons-array`, dir: dir(), importDir: './modules/mdi-',
+  // type: 'module-array'}) Generate named module files
   generateFile({data: icons, file: 'mdi-icons-named', dir: dir(), importDir: './modules/mdi-', type: 'named'})
 }
 

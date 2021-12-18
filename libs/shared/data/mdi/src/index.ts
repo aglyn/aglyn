@@ -16,9 +16,9 @@
  */
 
 
-export * from './types/icon'
+export * from './lib/types/icon'
 
-export * from './lib/mdi-icons'
+// export * from './lib/mdi-icons'
 export * from './lib/constants'
 
 export * from './lib/utils/convert-id-to-module-name'

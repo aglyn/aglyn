@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type {Icon, IconId} from '../../types/icon'
 import {DEFAULT_ICON} from '../constants'
+import type {Icon, IconId} from '../types/icon'
 
 
 export function handleIconNotFound(id: IconId, icon: Icon) {

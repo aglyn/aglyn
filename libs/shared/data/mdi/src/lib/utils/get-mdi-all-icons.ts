@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import type {Icon} from '../../types/icon'
+import type {Icon} from '../types/icon'
 
 
 export const getMdiAllIcons = async (): Promise<Icon[]> => {
-  return await import('../../generated/6.5.95/mdi-icons-array')
-    .then((mod) => mod.default)
+  return await import('../mdi-icons')
+    .then(({...mod}) => Object.values(mod))
 }
 export default getMdiAllIcons

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type {IconId} from '../../types/icon'
 import {camelCase, camelCaseTransformMerge} from 'change-case'
+import type {IconId} from '../types/icon'
 
 
 export function convertIdToModuleName(id: IconId) {
