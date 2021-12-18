@@ -37,6 +37,7 @@
     "vercel:build:app:console": "npx nx build console --prod --verbose --outputPath=./dist/apps/console"
   },
   "dependencies": {
+    "@data-driven-forms/mui-component-mapper": "^3.16.0",
     "@data-driven-forms/react-form-renderer": "^3.16.0",
     "@dnd-kit/core": "^4.0.2",
     "@dnd-kit/utilities": "^3.0.0",

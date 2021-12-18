@@ -15,27 +15,25 @@
  * limitations under the License.
  */
 
-import ComponentMapper from '@data-driven-forms/react-form-renderer/common-types/component-mapper'
+import {componentMapper as muiComponentMapper} from '@data-driven-forms/mui-component-mapper'
+import {ComponentMapper, componentTypes} from '@data-driven-forms/react-form-renderer'
 
-import FieldIconSelect from './components/FieldIconSelect'
-import FieldSelect from './components/FieldSelect'
-import FieldTextField from './components/FieldTextField'
+import FieldIconSelect from './components/field-icon-select'
+// import FieldSelect from './components/field-select'
+// import FieldSwitch from './components/field-switch'
+// import FieldTextField from './components/field-text-field'
 
 
-export enum PropertyEditorFieldFlag {
-  CHECKBOX = 'checkbox',
-  DATE_PICKER = 'date-picker',
-  ICON_SELECT = 'icon-select',
-  RADIO = 'radio',
-  SELECT = 'select',
-  TEXT_FIELD = 'text-field',
-  TEXTAREA = 'textarea',
-  TIME_PICKER = 'time-picker',
+export const PropertyEditorFieldFlag = {
+  ...componentTypes,
+  ICON_SELECT: 'icon-select',
 }
 
 export const componentMapper: ComponentMapper = {
-  [PropertyEditorFieldFlag.TEXT_FIELD]: FieldTextField,
-  [PropertyEditorFieldFlag.TEXTAREA]: FieldTextField,
+  ...muiComponentMapper,
+  // [PropertyEditorFieldFlag.TEXT_FIELD]: FieldTextField,
+  // [PropertyEditorFieldFlag.TEXTAREA]: FieldTextField,
   [PropertyEditorFieldFlag.ICON_SELECT]: FieldIconSelect,
-  [PropertyEditorFieldFlag.SELECT]: FieldSelect,
+  // [PropertyEditorFieldFlag.SELECT]: FieldSelect,
+  // [PropertyEditorFieldFlag.SWITCH]: FieldSwitch,
 }

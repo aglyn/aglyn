@@ -33,7 +33,7 @@ import {
 } from '../components/element-error-boundary.component'
 
 
-export function aglynElementComponent<P extends AnyProps>(
+export function createAglynComponent<P extends AnyProps>(
   schema: AglynComponentSchema<P>,
   component: AglynElementType<P>,
   errorComponent?: ElementErrorBoundaryComponentProps<P>['errorComponent'],
@@ -76,4 +76,4 @@ export function aglynElementComponent<P extends AnyProps>(
   }
 }
 
-export default aglynElementComponent
+export default createAglynComponent

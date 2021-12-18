@@ -20,12 +20,12 @@ import {
   ComponentId,
   ComponentsLinealDirectiveFlag,
 } from '@aglyn/core-data-framework'
-import { aglynElementComponent, dynamicLoader } from '@aglyn/core-feature-renderer'
+import {createAglynComponent, dynamicLoader} from '@aglyn/core-feature-renderer'
 
-import ListItem, { ListItemProps } from '@mui/material/ListItem'
-import { BUNDLE_ID } from '../../constants'
-import { schema as listItemTextSchema } from '../list-item-text'
-import { generateTemplateId } from '../../utils/generate-template-id'
+import ListItem, {ListItemProps} from '@mui/material/ListItem'
+import {BUNDLE_ID} from '../constants'
+import {generateTemplateId} from '../utils/generate-template-id'
+import {schema as listItemTextSchema} from './list-item-text'
 
 
 const ID: ComponentId = 'list-item'
@@ -36,7 +36,7 @@ export const schema: AglynComponentSchema<ListItemProps> = {
   bundleId: BUNDLE_ID,
   metadata: {
     displayName: 'List Item',
-    iconIds: 'format-list-text',
+    iconPath: 'format-list-text',
     iconColor: '#2196f3',
   },
   renderFlags: {
@@ -52,18 +52,18 @@ export const schema: AglynComponentSchema<ListItemProps> = {
     {
       id: generateTemplateId(ID),
       label: 'List Item',
-      iconIds: 'format-list-text',
+      iconPath: 'format-list-text',
       iconColor: '#2196f3',
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,
         elements: [
-          listItemTextSchema.templates![0]!.data
+          listItemTextSchema.templates![0]!.data,
         ],
       },
     },
   ],
 }
-export const component = aglynElementComponent(schema, ListItem)
+export const component = createAglynComponent(schema, ListItem)
 
 export default component

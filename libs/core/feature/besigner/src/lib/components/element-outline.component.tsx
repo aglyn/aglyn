@@ -48,7 +48,7 @@ const ElementOutline = styled(Box, {
     easing: theme.transitions.easing.easeInOut,
   }),
   [`&.${classKeys.hovered}`]: {
-    outlineOffset: -1,
+    outlineOffset: 3,
     outlineStyle: 'dashed',
     outlineColor: theme.palette.quaternary.main,
   },

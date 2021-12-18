@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-feature-themes'
-import NoSsr from '@mui/material/NoSsr'
-import Stack, { StackProps } from '@mui/material/Stack'
-import { forwardRef } from 'react'
-import { AppBarPrimaryComponent } from './app-bar-primary.component'
-import { AppBarSecondaryComponent } from './app-bar-secondary.component'
-import { PanelLeftComponent } from './panel-left.component'
-import { PanelRightComponent } from './panel-right.component'
-import { ViewportRootComponent } from './viewport-root.component'
+import {styled} from '@aglyn/shared-feature-themes'
+import Stack, {StackProps} from '@mui/material/Stack'
+import {forwardRef} from 'react'
+import {AppBarPrimaryComponent} from './app-bar-primary.component'
+import {AppBarSecondaryComponent} from './app-bar-secondary.component'
+import {PanelLeftComponent} from './panel-left.component'
+import {PanelRightComponent} from './panel-right.component'
+import {ViewportRootComponent} from './viewport-root.component'
 
 
 const WorkspaceEditor = styled(Stack, {
-  name: 'AglynWorkspaceEditor'
+  name: 'AglynWorkspaceEditor',
 })({
   position: 'absolute',
   left: 0,
@@ -69,12 +68,10 @@ const WorkspaceEditorComponentRaw = forwardRef<any, WorkspaceEditorComponentProp
             id="aglyn:besigner-appbar-primary"
             aria-label="primary app toolbar"
           />
-          <NoSsr>
-            <AppBarSecondaryComponent
-              id="aglyn:besigner-appbar-secondary"
-              aria-label="secondary app toolbar"
-            />
-          </NoSsr>
+          <AppBarSecondaryComponent
+            id="aglyn:besigner-appbar-secondary"
+            aria-label="secondary app toolbar"
+          />
         </Stack>
 
         <Stack
@@ -88,12 +85,10 @@ const WorkspaceEditorComponentRaw = forwardRef<any, WorkspaceEditorComponentProp
             zIndex: 0,
           }}
         >
-          <NoSsr>
-            <PanelLeftComponent
-              id="aglyn:besigner-panel-left"
-              aria-label="besigner left drawer"
-            />
-          </NoSsr>
+          <PanelLeftComponent
+            id="aglyn:besigner-panel-left"
+            aria-label="besigner left drawer"
+          />
 
           <ViewportRootComponent
             id="aglyn:besigner-viewport"
@@ -103,18 +98,16 @@ const WorkspaceEditorComponentRaw = forwardRef<any, WorkspaceEditorComponentProp
             spacing={0}
           />
 
-          <NoSsr>
-            <PanelRightComponent
-              id="aglyn:besigner-panel-right"
-              aria-label="besigner toolbox right"
-            />
-          </NoSsr>
+          <PanelRightComponent
+            id="aglyn:besigner-panel-right"
+            aria-label="besigner toolbox right"
+          />
         </Stack>
 
         {children}
       </WorkspaceEditor>
     )
-  }
+  },
 )
 
 WorkspaceEditorComponentRaw.displayName = 'WorkspaceEditorComponent'

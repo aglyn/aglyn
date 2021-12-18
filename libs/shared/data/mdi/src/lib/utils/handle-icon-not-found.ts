@@ -21,6 +21,7 @@ import type {Icon, IconId} from '../types/icon'
 
 export function handleIconNotFound(id: IconId, icon: Icon) {
   if (!icon) {
+    console.warn(`Icon not found with id(${id})`)
     return DEFAULT_ICON
   }
   return icon

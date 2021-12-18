@@ -15,51 +15,21 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON} from '../constants'
-import type {Icon, IconId} from '../types/icon'
+import MdiIcons from '../internal'
+import type {Icon, IconResponse, IdParam} from '../types/icon'
 import {handleIconNotFound} from './handle-icon-not-found'
 
 
-type MdiIconFromId = Icon | undefined
-type IconResponse<T> = T extends any
-  ? T extends any[] ? MdiIconFromId[]
-    : T extends string ? MdiIconFromId
-      : never
-  : never
-
-async function getLazyIcon(id: IconId) {
-  let icon = null
-
-  try {
-    icon = id
-      && await require(`../../../generated/6.5.95/modules/mdi-${id}`)?.default
-      || DEFAULT_ICON
-  }
-  catch (e) {
-    console.warn(`Icon not found with id(${id})`, e)
-    icon = DEFAULT_ICON
-  }
-  // const icon = id && (await import(`../../generated/6.5.95/modules/mdi-${id}`)
-  //   .then((mod) => mod.default)
-  //   .catch((e) => {
-  //     console.warn(`Icon not found with id(${id})`, e)
-  //     return DEFAULT_ICON
-  //   }))
-  return handleIconNotFound(id, icon)
-}
-
-export const getMdiIconFromId = async (
-  iconId: IconId | IconId[],
-): Promise<IconResponse<typeof iconId>> => {
-
+export function getMdiIconFromId<T extends IdParam>(iconId: T): IconResponse<T> {
   if (Array.isArray(iconId)) {
-    const icons = []
+    const result: Icon[] = []
     for (const id of iconId) {
-      icons.push(await getLazyIcon(id))
+      const icon = id && MdiIcons.get(id)
+      result.push(handleIconNotFound(id, icon))
     }
-    return icons
+    return result as IconResponse<T>
   }
-
-  return await getLazyIcon(iconId)
+  const icon = iconId && MdiIcons.get(iconId)
+  return handleIconNotFound(iconId, icon) as IconResponse<T>
 }
 export default getMdiIconFromId

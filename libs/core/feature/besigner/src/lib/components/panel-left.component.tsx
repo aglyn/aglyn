@@ -18,7 +18,7 @@
 import {BesignerPanelTabFlag, setBesignerPanels} from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {IconVariant} from '@aglyn/shared-data-brand'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {MdiIcon, mdiPlus} from '@aglyn/shared-ui-mdi-jsx'
 import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import {hexadecimalFromNumber, hexadecimalToNumber} from '@aglyn/shared-util-tools'
 import MuiTabContext from '@mui/lab/TabContext'
@@ -27,21 +27,21 @@ import MuiTabPanel from '@mui/lab/TabPanel'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import MuiTab from '@mui/material/Tab'
-import {forwardRef, memo, useCallback, useMemo} from 'react'
+import React, {forwardRef, useCallback, useMemo} from 'react'
 import {useAddElementCallback} from '../hooks/use-add-element-callback'
 import {useAglynBesignerStoreState} from '../hooks/use-aglyn-besigner-store-state'
 import {ElementsTreeViewComponent} from './elements-tree-view.component'
 import {WorkspacePanelComponent, WorkspacePanelComponentProps} from './workspace-panel.component'
 
 
-const ElementsTree = memo(function ElementsTree() {
+const ElementsTree = function ElementsTree() {
   const handleAddElementClick = useAddElementCallback()
   return (
     <>
       <Box sx={{px: 0.5, pb: 1, pt: 1}}>
         <Button
           color="secondary"
-          startIcon={<MdiSvgIcon fontSize="inherit" iconIds="plus" />}
+          startIcon={<MdiIcon fontSize="inherit" path={mdiPlus.path} />}
           onClick={handleAddElementClick}
         >
           Add Element
@@ -50,12 +50,12 @@ const ElementsTree = memo(function ElementsTree() {
       <ElementsTreeViewComponent />
     </>
   )
-})
+}
 
 const tabs = [
   {
     id: BesignerPanelTabFlag.ELEMENTS_TREE,
-    iconIds: IconVariant.TREE_VIEW,
+    iconPath: IconVariant.TREE_VIEW,
     component: ElementsTree,
   },
 ]
@@ -93,11 +93,11 @@ const PanelLeftComponent = forwardRef<any, PanelLeftComponentProps>(
               indicatorColor="secondary"
               textColor="primary"
             >
-              {tabs.map(({id, iconIds}) => (
+              {tabs.map(({id, iconPath}) => (
                 <MuiTab
                   key={id}
                   value={hexadecimalFromNumber(id)}
-                  icon={<MdiSvgIcon iconIds={iconIds} />}
+                  icon={<MdiIcon path={iconPath} />}
                 />
               ))}
             </MuiTabList>

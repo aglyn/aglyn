@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export { default as dynamicLoader } from 'next/dynamic'
+export {default as dynamicLoader} from 'next/dynamic'
 
 export * from './components/element-renderer.component'
 export * from './components/elements-renderer.component'
@@ -45,4 +45,4 @@ export * from './hooks/use-aglyn-element-resolved-props'
 export * from './hooks/use-aglyn-elements-history'
 export * from './hooks/with-aglyn-element-data'
 
-export * from './utils/aglyn-element-component'
+export * from './utils/create-aglyn-component'

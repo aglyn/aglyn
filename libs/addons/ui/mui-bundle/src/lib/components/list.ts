@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import type { AglynComponentSchema, ComponentId } from '@aglyn/core-data-framework'
-import { ComponentsLinealDirectiveFlag } from '@aglyn/core-data-framework'
-import { aglynElementComponent, dynamicLoader } from '@aglyn/core-feature-renderer'
-import List, { ListProps } from '@mui/material/List'
-import { BUNDLE_ID } from '../../constants'
-import { schema as listItemSchema } from '../list-item'
-import { generateTemplateId } from '../../utils/generate-template-id'
+import type {AglynComponentSchema, ComponentId} from '@aglyn/core-data-framework'
+import {ComponentsLinealDirectiveFlag} from '@aglyn/core-data-framework'
+import {createAglynComponent, dynamicLoader} from '@aglyn/core-feature-renderer'
+import List, {ListProps} from '@mui/material/List'
+import {BUNDLE_ID} from '../constants'
+import {generateTemplateId} from '../utils/generate-template-id'
+import {schema as listItemSchema} from './list-item'
 
 
 const ID: ComponentId = 'list'
@@ -32,7 +32,7 @@ export const schema: AglynComponentSchema<ListProps> = {
   bundleId: 'mui',
   metadata: {
     displayName: 'List',
-    iconIds: 'format-list-bulleted-square',
+    iconPath: 'format-list-bulleted-square',
     iconColor: '#2196f3',
   },
   renderFlags: {
@@ -48,7 +48,7 @@ export const schema: AglynComponentSchema<ListProps> = {
     {
       id: generateTemplateId(ID),
       label: 'List',
-      iconIds: 'format-list-bulleted-square',
+      iconPath: 'format-list-bulleted-square',
       iconColor: '#2196f3',
       data: {
         componentId: ID,
@@ -61,6 +61,6 @@ export const schema: AglynComponentSchema<ListProps> = {
     },
   ],
 }
-export const component = aglynElementComponent(schema, List)
+export const component = createAglynComponent(schema, List)
 
 export default component

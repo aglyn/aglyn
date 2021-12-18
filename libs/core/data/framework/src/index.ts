@@ -15,4 +15,4 @@
  * limitations under the License.
  */
 
-export * from './lib'
+export * from './lib/framework'

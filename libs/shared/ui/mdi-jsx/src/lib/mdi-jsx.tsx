@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-import dynamic from 'next/dynamic'
 
-
-export const MdiSvgIcon = dynamic(
-  () => import('./components/mdi-svg-icon'),
-  {ssr: false, loading: () => (<span></span>)},
-)
-MdiSvgIcon.displayName = 'MdiSvgIcon'
-export type {MdiSvgIconProps} from './components/mdi-svg-icon'
+export * from '@aglyn/shared-data-mdi'
 
 export * from './hooks/use-mdi-icon'
 export * from './hooks/use-mdi-icons'
 export * from './hooks/use-mdi-icons-fuzzy'
 
 export * from './types'
+
+
+export * from './components/mdi-icon'
+export * from './components/mdi-svg-icon'
+
+// import dynamic from 'next/dynamic'
+// export const MdiSvgIcon = dynamic(
+//   () => import('./components/mdi-svg-icon'),
+//   {loading: () => (<span />)},
+// )
+// MdiSvgIcon.displayName = 'MdiSvgIcon'

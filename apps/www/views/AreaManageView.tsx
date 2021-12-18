@@ -16,13 +16,14 @@
  */
 
 import {useAppLoader} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {mdiFilterVariant, mdiPlus} from '@aglyn/shared-ui-mdi-jsx'
 import {_s, objectRemap} from '@aglyn/shared-util-tools'
 import {createUid} from '@aglyn/shared-util-vendor'
 import IconButton from '@mui/material/IconButton'
 import {useRouter} from 'next/router'
 import {useSnackbar} from 'notistack'
 import {ChangeEvent, Fragment, useCallback, useEffect, useState} from 'react'
+import MdiIcon from '../../../libs/shared/ui/mdi-jsx/src/lib/components/mdi-icon'
 import DataTable, {DataTableProps} from '../components/DataTable'
 import WidgetCard from '../components/WidgetCard'
 import {AppContextType, withAppContext} from '../contexts/app-context'
@@ -230,12 +231,12 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
                   action: (
                     <Fragment>
                       <IconButton
-                        children={<MdiSvgIcon iconIds="filter-variant" />}
+                        children={<MdiIcon path={mdiFilterVariant.path} />}
                         title="Filter list"
                         disabled
                       />
                       <IconButton
-                        children={<MdiSvgIcon iconIds="plus" />}
+                        children={<MdiIcon path={mdiPlus.path} />}
                         title="Add item"
                         onClick={handleCreateDocumentFormOpen}
                       />

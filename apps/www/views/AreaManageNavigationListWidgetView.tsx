@@ -17,7 +17,7 @@
 
 import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 import {AppLink} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {mdiChevronDown, mdiChevronUp, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {
   Collapse,
   IconButton,
@@ -28,7 +28,7 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import React, {forwardRef} from 'react'
-import WidgetCard, {Props as WidgetCardProps} from '../components/WidgetCard'
+import WidgetCard, {WidgetCardProps} from '../components/WidgetCard'
 import {AggregatedPageMeta, withAggregatedPageMeta} from '../lib/app-pages'
 
 
@@ -157,11 +157,11 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<any,
                   }
                   onClick={openAreaCollapse(item?.id)}
                 >
-                  <MdiSvgIcon
-                    iconIds={
+                  <MdiIcon
+                    path={
                       isOpen(item) || isActive(item) || isChildActive(item)
-                        ? 'chevron-up'
-                        : 'chevron-down'
+                        ? mdiChevronUp.path
+                        : mdiChevronDown.path
                     }
                   />
                 </IconButton>

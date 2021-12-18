@@ -136,6 +136,7 @@ export type {
   AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
   AglynComponentElementTemplate,
+  AglynComponentField,
   AglynComponentPropsFormSchema,
   AglynComponentRenderFlags,
   AglynComponentSchema,

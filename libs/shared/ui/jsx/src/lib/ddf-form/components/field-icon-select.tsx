@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON} from '@aglyn/shared-data-mdi'
+import {DEFAULT_ICON, mdiChevronDown, mdiChevronUp} from '@aglyn/shared-data-mdi'
 import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
-import {Icon, MdiSvgIcon, useMdiIconsFuzzy} from '@aglyn/shared-ui-mdi-jsx'
+import {Icon, MdiIcon, useMdiIconsFuzzy} from '@aglyn/shared-ui-mdi-jsx'
 import {useDebouncedCallback} from '@aglyn/shared-util-vendor'
 import {Tooltip} from '@mui/material'
 import Button from '@mui/material/Button'
@@ -119,7 +119,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
       const currentIcon = (currentValue && findIcon(currentValue)) || iconUnset
       const selectedIcon = (selected && findIcon(selected)) || iconUnset
       return [currentIcon, selectedIcon]
-    }, [currentValue, selected])
+    }, [currentValue, selected, allIcons])
 
 
     const handleButtonClick = useCallback(() => {
@@ -156,7 +156,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
             item={item}
             onActionClick={handleItemClick}
             selected={selected && selected === item.id}
-            preview={<MdiSvgIcon fontSize="medium" iconIds={item.id} />}
+            preview={<MdiIcon fontSize="medium" path={item.path} />}
           />
         </Tooltip>
       )
@@ -172,7 +172,7 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
               sx={(theme) => ({fontSize: theme.typography.pxToRem(38)})}
               title={currentIcon.name || 'Choose icon'}
             >
-              <MdiSvgIcon fontSize="inherit" iconIds={currentValue} />
+              <MdiIcon fontSize="inherit" path={currentIcon.path} />
             </ButtonBase>
           </Grid>
           <Grid item sm>
@@ -190,7 +190,12 @@ const FieldIconSelect = forwardRef<any, FieldIconSelectProps>(
                 justifyContent: 'flex-start',
               }}
             >
-              <span><MdiSvgIcon iconIds={open ? 'chevron-up' : 'chevron-down'} /></span>
+              <span>
+                <MdiIcon
+                  fontSize="inherit"
+                  path={open ? mdiChevronUp.path : mdiChevronDown.path}
+                />
+              </span>
               <span>{currentIcon.name}</span>
             </MuiLink>
           </Grid>

@@ -25,7 +25,7 @@ import {
 import {IconVariant} from '@aglyn/shared-data-brand'
 import {styled} from '@aglyn/shared-feature-themes'
 import {componentMapper, FormRenderer, GridFormTemplate} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import {hexadecimalFromNumber, hexadecimalToNumber} from '@aglyn/shared-util-tools'
 import MuiTabContext from '@mui/lab/TabContext'
@@ -37,7 +37,7 @@ import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
 import MuiTab from '@mui/material/Tab'
 import Typography from '@mui/material/Typography'
-import {forwardRef, Fragment, useCallback} from 'react'
+import React, {forwardRef, Fragment, useCallback} from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 import {useComponentFormSchema} from '../hooks/use-component-form-schema'
@@ -177,12 +177,12 @@ const PropsForm = function PropsForm({$id, ...props}: any) {
 const tabs = [
   {
     id: BesignerPanelTabFlag.ELEMENT_INFO,
-    iconIds: IconVariant.DETAILS,
+    iconPath: IconVariant.DETAILS,
     component: ElementInfo,
   },
   {
     id: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
-    iconIds: IconVariant.PROPERTIES,
+    iconPath: IconVariant.PROPERTIES,
     component: PropsForm,
   },
 ]
@@ -222,11 +222,11 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
               indicatorColor="secondary"
               textColor="primary"
             >
-              {tabs.map(({id, iconIds}) => (
+              {tabs.map(({id, iconPath}) => (
                 <MuiTab
                   key={id}
                   value={hexadecimalFromNumber(id)}
-                  icon={<MdiSvgIcon iconIds={iconIds} />}
+                  icon={<MdiIcon path={iconPath} />}
                 />
               ))}
             </MuiTabList>

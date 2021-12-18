@@ -14,6 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {mdiCogOutline, mdiHome, mdiVectorPolylineEdit} from '@aglyn/shared-ui-mdi-jsx'
+
 
 export const navigationItems = [
   {
@@ -40,12 +42,12 @@ export const navigationItems = [
 
 export const tabItems = [
   {
-    iconIds: 'home',
+    iconPath: mdiHome.path,
     label: 'Dashboard',
     href: '/',
   },
   {
-    iconIds: 'vector-polyline-edit',
+    iconPath: mdiVectorPolylineEdit.path,
     label: 'Manage',
     href: '/manage',
   },
@@ -53,7 +55,7 @@ export const tabItems = [
 
 export const quickActions = [
   {
-    iconIds: 'cog-outline',
+    iconPath: mdiCogOutline.path,
     alt: '',
   },
   {

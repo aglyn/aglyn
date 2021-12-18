@@ -17,14 +17,20 @@
 
 import {styled} from '@aglyn/shared-feature-themes'
 import {SrOnlyComponent} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {
+  mdiFitToPage,
+  MdiIcon,
+  MdiIconProps,
+  mdiMagnifyMinus,
+  mdiMagnifyPlus,
+} from '@aglyn/shared-ui-mdi-jsx'
 import {_isFnT} from '@aglyn/shared-util-guards'
 import {yes} from '@aglyn/shared-util-tools'
 import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 
 import Tooltip from '@mui/material/Tooltip'
-import {ChangeEvent, EventHandler, forwardRef, HTMLAttributes, useCallback} from 'react'
+import React, {ChangeEvent, EventHandler, forwardRef, HTMLAttributes, useCallback} from 'react'
 
 
 const ZoomControls = styled('div', {
@@ -109,8 +115,8 @@ export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>
           onClick: handleZoomReset,
         },
         svgPathIconProps: {
-          iconIds: 'fit-to-page',
-        },
+          path: mdiFitToPage.path,
+        } as MdiIconProps,
       },
       {
         id: 'decrease-zoom',
@@ -125,7 +131,7 @@ export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>
           onClick: handleZoomDecrease,
         },
         svgPathIconProps: {
-          iconIds: 'magnify-minus',
+          path: mdiMagnifyMinus.path,
         },
       },
       {
@@ -141,7 +147,7 @@ export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>
           onClick: handleZoomIncrease,
         },
         svgPathIconProps: {
-          iconIds: 'magnify-plus',
+          path: mdiMagnifyPlus.path,
         },
       },
     ]
@@ -152,7 +158,7 @@ export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>
           {buttons.map(({id, tooltipProps, srOnlyProps, buttonProps, svgPathIconProps}) => (
             <Tooltip key={id} {...tooltipProps}>
               <Button {...buttonProps}>
-                <MdiSvgIcon fontSize="small" {...svgPathIconProps} />
+                <MdiIcon fontSize="small" {...svgPathIconProps} />
                 <SrOnlyComponent component="span" {...srOnlyProps} />
               </Button>
             </Tooltip>

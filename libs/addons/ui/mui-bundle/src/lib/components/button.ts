@@ -15,13 +15,22 @@
  * limitations under the License.
  */
 
-import type { AglynComponentSchema, ComponentId } from '@aglyn/core-data-framework'
-import { ComponentsLinealDirectiveFlag, PropertyEditorFieldFlag } from '@aglyn/core-data-framework'
-import { aglynElementComponent, dynamicLoader } from '@aglyn/core-feature-renderer'
-import Button, { ButtonProps } from '@mui/material/Button'
-import { BUNDLE_ID } from '../../constants'
-import { schema as listItemSchema } from '../list-item'
-import { generateTemplateId } from '../../utils/generate-template-id'
+import type {AglynComponentSchema, ComponentId} from '@aglyn/core-data-framework'
+import {ComponentsLinealDirectiveFlag, PropertyEditorFieldFlag} from '@aglyn/core-data-framework'
+import {createAglynComponent, dynamicLoader} from '@aglyn/core-feature-renderer'
+import {mdiGestureTapButton} from '@aglyn/shared-ui-mdi-jsx'
+import Button, {ButtonProps} from '@mui/material/Button'
+import {
+  BUNDLE_ID,
+  FIELD_CHILDREN,
+  FIELD_COLOR,
+  FIELD_DISABLED,
+  FIELD_FULL_WIDTH,
+  FIELD_SIZE,
+  IS_OPTION_EQUAL_TO_VALUE,
+} from '../constants'
+import {generateTemplateId} from '../utils/generate-template-id'
+import {schema as listItemSchema} from './list-item'
 
 
 const ID: ComponentId = 'button'
@@ -32,7 +41,7 @@ export const schema: AglynComponentSchema<ButtonProps> = {
   bundleId: BUNDLE_ID,
   metadata: {
     displayName: 'Button',
-    iconIds: 'gesture-tap-button',
+    iconPath: mdiGestureTapButton.path,
     iconColor: '#4caf50',
   },
   renderFlags: {
@@ -45,12 +54,22 @@ export const schema: AglynComponentSchema<ButtonProps> = {
     },
     propsSchema: {
       fields: [
+        FIELD_CHILDREN,
+        FIELD_COLOR,
+        FIELD_DISABLED,
+        FIELD_FULL_WIDTH,
+        FIELD_SIZE,
         {
           name: 'variant',
+          description: 'The variant to use.',
           component: PropertyEditorFieldFlag.SELECT,
           label: 'Variant',
           variant: 'outlined',
+          isClearable: true,
+          size: 'small',
+          isOptionEqualToValue: IS_OPTION_EQUAL_TO_VALUE,
           options: [
+            {value: '', label: 'Default'},
             {value: 'text', label: 'Text'},
             {value: 'outlined', label: 'Outlined'},
             {value: 'contained', label: 'Contained'},
@@ -63,7 +82,7 @@ export const schema: AglynComponentSchema<ButtonProps> = {
     {
       id: generateTemplateId(ID),
       label: 'Outlined Button',
-      iconIds: 'gesture-tap-button',
+      iconPath: mdiGestureTapButton.path,
       iconColor: '#4caf50',
       data: {
         componentId: ID,
@@ -77,5 +96,5 @@ export const schema: AglynComponentSchema<ButtonProps> = {
   ],
 }
 
-export const component = aglynElementComponent(schema, Button)
+export const component = createAglynComponent(schema, Button)
 export default component

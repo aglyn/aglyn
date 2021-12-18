@@ -17,12 +17,11 @@
 
 import type {AglynComponentElementTemplate} from '@aglyn/core-data-framework'
 import {getAllComponentsTemplateValues} from '@aglyn/core-data-framework'
-import {AnyProps} from '@aglyn/shared-data-types'
 import {useMemo} from 'react'
 import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
-export function useAglynComponentTemplateBlocks<P extends AnyProps>(): AglynComponentElementTemplate<P>[] {
+export function useAglynComponentTemplateBlocks(): AglynComponentElementTemplate[] {
   const {getApp} = useAglynAppContext()
   return useMemo(() => {
     return getAllComponentsTemplateValues(getApp())

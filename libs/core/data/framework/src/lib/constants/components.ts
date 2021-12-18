@@ -16,36 +16,28 @@
  */
 
 
+import {PropertyEditorFieldFlag} from '@aglyn/shared-ui-jsx'
+
+
 export enum ComponentsLinealDirectiveFlag {
   LIMIT_TO = 0x01,
   DISALLOW = 0x02,
 }
 
-export enum PropertyEditorFieldFlag {
-  CHECKBOX = 'checkbox',
-  DATE_PICKER = 'date-picker',
-  ICON_SELECT = 'icon-select',
-  RADIO = 'radio',
-  SELECT = 'select',
-  TEXT_FIELD = 'text-field',
-  TEXTAREA = 'textarea',
-  TIME_PICKER = 'time-picker',
-}
-
-export const DEFAULT_COMPONENT_ICON_ID = 'cube-outline'
+export {PropertyEditorFieldFlag}
 
 export const DEFAULT_PROPS_FORM_SCHEMA = {
   fields: [
     {
-      name: 'displayName',
-      component: PropertyEditorFieldFlag.TEXT_FIELD,
-      label: 'Display name',
+      name: 'iconId',
+      component: PropertyEditorFieldFlag.ICON_SELECT,
+      label: 'Icon',
       // variant: 'outlined',
     },
     {
-      name: 'iconIds',
-      component: PropertyEditorFieldFlag.ICON_SELECT,
-      label: 'Icon',
+      name: 'displayName',
+      component: PropertyEditorFieldFlag.TEXT_FIELD,
+      label: 'Display name',
       // variant: 'outlined',
     },
   ],

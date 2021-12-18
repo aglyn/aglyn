@@ -17,7 +17,6 @@
 
 import {ComponentRegisterPayload, createComponentsBundle} from '@aglyn/core-data-framework'
 
-
 import button from './components/button'
 import list from './components/list'
 import listItem from './components/list-item'

@@ -22,8 +22,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:extension"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:addon"]
     },
     "console": {
       "root": "apps/console",
@@ -82,8 +81,7 @@
           }
         }
       },
-      "tags": ["scope:app", "scope:app:console"],
-      "implicitDependencies": []
+      "tags": ["sc:app", "sc:app:console"]
     },
     "console-e2e": {
       "root": "apps/console-e2e",
@@ -111,7 +109,7 @@
           "outputs": ["{options.outputFile}"]
         }
       },
-      "tags": ["scope:app", "scope:app:console"],
+      "tags": ["sc:app", "sc:app:console"],
       "implicitDependencies": ["console"]
     },
     "core-data-framework": {
@@ -141,8 +139,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:framework"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:core", "sc:lib:core:data", "sc:lib:core:data:framework"]
     },
     "core-feature-besigner": {
       "root": "libs/core/feature/besigner",
@@ -165,8 +162,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-builder"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:core", "sc:lib:core:ui", "sc:lib:core:ui:besigner"]
     },
     "core-feature-renderer": {
       "root": "libs/core/feature/renderer",
@@ -189,8 +185,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:sdk", "scope:lib:sdk:ui-renderer"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:core", "sc:lib:core:ui", "sc:lib:core:ui:renderer"]
     },
     "shared-data-brand": {
       "root": "libs/shared/data/brand",
@@ -213,8 +208,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:data"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:data"]
     },
     "shared-data-mdi": {
       "root": "libs/shared/data/mdi",
@@ -237,8 +231,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:data"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:data"]
     },
     "shared-data-types": {
       "root": "libs/shared/data/types",
@@ -261,8 +254,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
     },
     "shared-feature-themes": {
       "root": "libs/shared/feature/themes",
@@ -285,8 +277,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:ui"]
     },
     "shared-ui-jsx": {
       "root": "libs/shared/ui/jsx",
@@ -309,8 +300,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:ui"]
     },
     "shared-ui-mdi-jsx": {
       "root": "libs/shared/ui/mdi-jsx",
@@ -333,13 +323,13 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"]
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:ui"]
     },
     "shared-ui-next": {
       "root": "libs/shared/ui/next",
       "sourceRoot": "libs/shared/ui/next/src",
       "projectType": "library",
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:ui"],
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:ui"],
       "targets": {
         "lint": {
           "executor": "@nrwl/linter:eslint",
@@ -356,7 +346,8 @@
             "passWithNoTests": true
           }
         }
-      }
+      },
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:ui"]
     },
     "shared-util-dom": {
       "root": "libs/shared/util/dom",
@@ -379,8 +370,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
     },
     "shared-util-emitter": {
       "root": "libs/shared/util/emitter",
@@ -403,8 +393,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:emitter"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:feature"]
     },
     "shared-util-errors": {
       "root": "libs/shared/util/errors",
@@ -427,8 +416,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util", "scope:lib:error"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
     },
     "shared-util-guards": {
       "root": "libs/shared/util/guards",
@@ -451,8 +439,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
     },
     "shared-util-logger": {
       "root": "libs/shared/util/logger",
@@ -475,8 +462,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:logger"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:feature"]
     },
     "shared-util-timestamp": {
       "root": "libs/shared/util/timestamp",
@@ -499,8 +485,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:feature", "scope:lib:timestamp"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:feature"]
     },
     "shared-util-tools": {
       "root": "libs/shared/util/tools",
@@ -523,8 +508,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
     },
     "shared-util-vendor": {
       "root": "libs/shared/util/vendor",
@@ -547,8 +531,7 @@
           }
         }
       },
-      "tags": ["scope:lib", "scope:lib:shared", "scope:lib:shared:util"],
-      "implicitDependencies": []
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
     },
     "www": {
       "root": "apps/www",
@@ -607,8 +590,7 @@
           }
         }
       },
-      "tags": ["scope:app", "scope:app:www"],
-      "implicitDependencies": []
+      "tags": ["sc:app", "sc:app:www"]
     },
     "www-e2e": {
       "root": "apps/www-e2e",
@@ -636,7 +618,7 @@
           "outputs": ["{options.outputFile}"]
         }
       },
-      "tags": ["scope:app", "scope:app:www"],
+      "tags": ["sc:app", "sc:app:www"],
       "implicitDependencies": ["www"]
     }
   }

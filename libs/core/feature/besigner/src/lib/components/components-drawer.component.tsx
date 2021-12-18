@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import {AglynComponentElementTemplate, DEFAULT_COMPONENT_ICON_ID} from '@aglyn/core-data-framework'
+import {AglynComponentElementTemplate} from '@aglyn/core-data-framework'
+import {IconVariant} from '@aglyn/shared-data-brand'
 import {AnyProps} from '@aglyn/shared-data-types'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
@@ -26,7 +27,7 @@ import {
   NavigationDrawerProps,
   SrOnlyComponent,
 } from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {mdiClose, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
@@ -84,8 +85,8 @@ const AppBarTitle = styled(Typography, {
 }))
 
 
-const ItemSvgIcon = styled(MdiSvgIcon, {
-  name: 'AglynItemSvgIcon',
+const ItemIcon = styled(MdiIcon, {
+  name: 'AglynItemIcon',
 })(({theme}) => ({
   fontSize: theme.typography.pxToRem(64),
   padding: theme.spacing(1.5),
@@ -140,7 +141,7 @@ export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerCompone
     const appBarLeft = useMemo(() => (
       <>
         <IconButton color="inherit" edge="start" onClick={handleDrawerCancel} sx={{mr: 2}}>
-          <MdiSvgIcon iconIds="close" />
+          <MdiIcon path={mdiClose.path} />
           <SrOnlyComponent>close drawer</SrOnlyComponent>
         </IconButton>
         <AppBarTitle color="inherit" variant="h6">
@@ -163,9 +164,9 @@ export const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerCompone
           onActionClick={handleItemClick}
           preview={
             <>
-              <ItemSvgIcon
+              <ItemIcon
                 color="primary"
-                iconIds={item.iconIds || DEFAULT_COMPONENT_ICON_ID}
+                path={item.iconPath || IconVariant.ENTITY_BLOCK}
                 sx={{color: item.iconColor}}
               />
             </>

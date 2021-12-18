@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+import type {Icon, IconId} from '@aglyn/shared-data-mdi'
 import {Fuse} from '@aglyn/shared-util-vendor'
 import {useCallback, useMemo, useState} from 'react'
-import type {ApplyFilterFn, ClearFilterFn, Icon} from '../types'
+import type {ApplyFilterFn, ClearFilterFn} from '../types'
 import {useMdiIcons} from './use-mdi-icons'
 
 
@@ -27,8 +28,8 @@ type UseMdiIconsReturn = [
   applyFilter: ApplyFilterFn,
   clearFilter: ClearFilterFn
 ]
-export const useMdiIconsFuzzy = (): UseMdiIconsReturn => {
-  const allIcons = useMdiIcons()
+export function useMdiIconsFuzzy(iconId?: IconId[]): UseMdiIconsReturn {
+  const allIcons = useMdiIcons(iconId)
   const [filteredIcons, setFilteredIcons] = useState(allIcons)
 
   const fuzzy = useMemo(() => {

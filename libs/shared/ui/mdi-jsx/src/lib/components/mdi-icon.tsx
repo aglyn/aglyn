@@ -15,29 +15,30 @@
  * limitations under the License.
  */
 
-import type {IconId} from '@aglyn/shared-data-mdi'
-import {_isStrT} from '@aglyn/shared-util-guards'
-import {forwardRef} from 'react'
-import {useMdiIcon} from '../hooks/use-mdi-icon'
-import MdiIcon, {MdiIconProps} from './mdi-icon'
+import MuiSvgIcon, {SvgIconProps as MuiSvgIconProps} from '@mui/material/SvgIcon'
+import {forwardRef, SVGAttributes} from 'react'
+import {DEFAULT_ICON} from '@aglyn/shared-data-mdi'
 
 
-export interface MdiSvgIconProps extends MdiIconProps {
-  iconId?: IconId
+export interface MdiIconProps extends MuiSvgIconProps {
+  PathProps?: SVGAttributes<SVGPathElement>
 }
 
-const MdiSvgIcon = forwardRef<any, MdiSvgIconProps>(
+const MdiIcon = forwardRef<any, MdiIconProps>(
   function RefRenderFn(props, ref) {
-    const {iconId, ...rest} = props
-    const icon = useMdiIcon(_isStrT(iconId) ? iconId : null)
+    const {path, children, PathProps, ...rest} = props
 
     return (
-      <MdiIcon ref={ref} path={icon?.path} {...rest} />
+      <MuiSvgIcon ref={ref} {...rest}>
+        {children ? children : (
+          <path d={path || DEFAULT_ICON.path} {...PathProps} />
+        )}
+      </MuiSvgIcon>
     )
   },
 )
 
-MdiSvgIcon.displayName = 'MdiSvgIcon'
+MdiIcon.displayName = 'MdiIcon'
 
-export {MdiSvgIcon}
-export default MdiSvgIcon
+export {MdiIcon}
+export default MdiIcon

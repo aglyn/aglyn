@@ -29,3 +29,6 @@ export type Icon = {
   as: IconAliases
   tags: IconTags
 }
+
+export type IdParam = IconId[] | IconId
+export type IconResponse<T extends IdParam> = T extends IconId[] ? Icon[] : Icon

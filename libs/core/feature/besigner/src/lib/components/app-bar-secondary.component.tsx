@@ -23,7 +23,16 @@ import {
 } from '@aglyn/core-data-framework'
 import {useAglynAppContext, useAglynElementHistory} from '@aglyn/core-feature-renderer'
 import {styled} from '@aglyn/shared-feature-themes'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {
+  mdiCursorDefault,
+  mdiCursorMove,
+  mdiDockBottom,
+  mdiDockLeft,
+  mdiDockRight,
+  mdiRedo,
+  mdiShapeSquareRoundedPlus,
+  mdiUndo,
+} from '@aglyn/shared-ui-mdi-jsx'
 import MuiAppBar, {AppBarProps as MuiAppBarProps} from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
@@ -32,7 +41,8 @@ import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Toolbar from '@mui/material/Toolbar'
 import Tooltip from '@mui/material/Tooltip'
-import {forwardRef, memo, MouseEvent, useCallback} from 'react'
+import React, {forwardRef, MouseEvent, useCallback} from 'react'
+import MdiIcon from '../../../../../../shared/ui/mdi-jsx/src/lib/components/mdi-icon'
 import {useAddElementCallback} from '../hooks/use-add-element-callback'
 import {useAglynBesignerStoreState} from '../hooks/use-aglyn-besigner-store-state'
 
@@ -47,7 +57,7 @@ const AppBarSecondary = styled(MuiAppBar, {
   },
 }))
 
-const AddControls = memo(function AddControls() {
+const AddControls = function AddControls() {
 
   const handleAddElementClick = useAddElementCallback()
 
@@ -60,17 +70,14 @@ const AddControls = memo(function AddControls() {
           edge="start"
           onClick={handleAddElementClick}
         >
-          <MdiSvgIcon
-            fontSize="small"
-            iconIds={'shape-square-rounded-plus'}
-          />
+          <MdiIcon fontSize="small" path={mdiShapeSquareRoundedPlus.path} />
         </IconButton>
       </Tooltip>
     </Stack>
   )
-})
+}
 
-const HistoryControls = memo(function HistoryControls() {
+const HistoryControls = function HistoryControls() {
   const {undo, redo, past, future} = useAglynElementHistory()
 
   const handleUndoClick = useCallback(() => {
@@ -89,7 +96,7 @@ const HistoryControls = memo(function HistoryControls() {
             onClick={handleUndoClick}
             disabled={past <= 0}
           >
-            <MdiSvgIcon fontSize="small" iconIds={'undo'} />
+            <MdiIcon fontSize="small" path={mdiUndo.path} />
           </IconButton>
         </span>
       </Tooltip>
@@ -100,15 +107,15 @@ const HistoryControls = memo(function HistoryControls() {
             onClick={handleRedoClick}
             disabled={future <= 0}
           >
-            <MdiSvgIcon fontSize="small" iconIds={'redo'} />
+            <MdiIcon fontSize="small" path={mdiRedo.path} />
           </IconButton>
         </span>
       </Tooltip>
     </Stack>
   )
-})
+}
 
-const InteractControls = memo(function InteractControls() {
+const InteractControls = function InteractControls() {
   const {getApp} = useAglynAppContext()
   const interactMode = useAglynBesignerStoreState('flags', 'interactMode')
   const handleInteractModeClick = useCallback((event: MouseEvent<HTMLElement>, value: any) => {
@@ -131,7 +138,7 @@ const InteractControls = memo(function InteractControls() {
             selected={interactMode === InteractionModeFlag.SELECT}
             value={InteractionModeFlag.SELECT}
           >
-            <MdiSvgIcon fontSize="inherit" iconIds={'cursor-default'} />
+            <MdiIcon fontSize="inherit" path={mdiCursorDefault.path} />
           </ToggleButton>
         </Tooltip>
         <Tooltip title={'Rearrange'}>
@@ -139,15 +146,15 @@ const InteractControls = memo(function InteractControls() {
             selected={interactMode === InteractionModeFlag.REARRANGE}
             value={InteractionModeFlag.REARRANGE}
           >
-            <MdiSvgIcon fontSize="inherit" iconIds={'cursor-move'} />
+            <MdiIcon fontSize="inherit" path={mdiCursorMove.path} />
           </ToggleButton>
         </Tooltip>
       </ToggleButtonGroup>
     </Stack>
   )
-})
+}
 
-const PanelControls = memo(function PanelControls() {
+const PanelControls = function PanelControls() {
   const {getApp} = useAglynAppContext()
   const panels = useAglynBesignerStoreState('panels')
   const openPanels = Object.values(panels)
@@ -182,7 +189,7 @@ const PanelControls = memo(function PanelControls() {
             selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_LEFT)}
             value={BesignerPanelViewFlag.PANEL_LEFT}
           >
-            <MdiSvgIcon fontSize="inherit" iconIds={'dock-left'} />
+            <MdiIcon fontSize="inherit" path={mdiDockLeft.path} />
           </ToggleButton>
         </Tooltip>
         <Tooltip title={'Bottom panel'}>
@@ -190,7 +197,7 @@ const PanelControls = memo(function PanelControls() {
             selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_BOTTOM)}
             value={BesignerPanelViewFlag.PANEL_BOTTOM}
           >
-            <MdiSvgIcon fontSize="inherit" iconIds={'dock-bottom'} />
+            <MdiIcon fontSize="inherit" path={mdiDockBottom.path} />
           </ToggleButton>
         </Tooltip>
         <Tooltip title={'Right panel'}>
@@ -198,13 +205,13 @@ const PanelControls = memo(function PanelControls() {
             selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_RIGHT)}
             value={BesignerPanelViewFlag.PANEL_RIGHT}
           >
-            <MdiSvgIcon fontSize="inherit" iconIds={'dock-right'} />
+            <MdiIcon fontSize="inherit" path={mdiDockRight.path} />
           </ToggleButton>
         </Tooltip>
       </ToggleButtonGroup>
     </Stack>
   )
-})
+}
 
 export interface AppBarSecondaryComponentProps extends Partial<MuiAppBarProps> {}
 
@@ -228,6 +235,10 @@ export const AppBarSecondaryComponent = forwardRef<any, AppBarSecondaryComponent
           <HistoryControls />
 
           <Box sx={{flexGrow: 1}} />
+
+          <InteractControls />
+
+          <Box sx={{mx: 1}} />
 
           <InteractControls />
 

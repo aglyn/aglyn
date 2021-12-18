@@ -16,7 +16,6 @@
  */
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type {IconId} from '@aglyn/shared-data-mdi'
 import type {
   AnyProps,
   Dictionary,
@@ -30,6 +29,7 @@ import type {
 import {JSXElementType} from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type {StyledOptions, SxProps} from '@aglyn/shared-feature-themes'
+import type {MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import {_isArr} from '@aglyn/shared-util-guards'
 import type {
   FieldActions,
@@ -112,7 +112,7 @@ export interface ComponentsRegistryEntryMetadata {
   title?: string
   subtitle?: string
   description?: string
-  iconIds?: IconId
+  iconPath?: MdiIconProps['path']
   iconColor?: string,
 }
 
@@ -141,6 +141,7 @@ export interface AglynComponentField extends Dictionary<any> {
   clearOnUnmount?: boolean
   actions?: FieldActions
   resolveProps?: ResolvePropsFunction
+  description?: string
 }
 
 export interface AglynComponentPropsFormSchema {
@@ -178,7 +179,7 @@ export interface AglynComponentElementTemplate {
   readonly id: TemplateId
   label: string
   description?: string
-  iconIds?: IconId
+  iconPath?: MdiIconProps['path']
   iconColor?: string,
   data: AglynComponentTemplateData
 }

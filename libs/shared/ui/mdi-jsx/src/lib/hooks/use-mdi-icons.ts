@@ -15,40 +15,20 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON, getMdiAllIcons} from '@aglyn/shared-data-mdi'
-import {useEffect, useState} from 'react'
-import type {Icon, IconId} from '../types'
+import {DEFAULT_ICON, getMdiAllIcons, Icon, IconId} from '@aglyn/shared-data-mdi'
+import {useMemo} from 'react'
 
 
-export const useMdiIcons = (iconIds?: IconId[]): Icon[] => {
-  const [icons, setIcons] = useState(() => [])
-  const isWindow = typeof window !== 'undefined'
-
-  useEffect(() => {
-    let mounted = true
-
-    if (isWindow) {
-
-      ;(async function() {
-        await getMdiAllIcons().then((MdiIcons) => {
-          if (!mounted) return
-          setIcons(() => {
-            if (Array.isArray(iconIds)) {
-              const icons = MdiIcons.filter(({id}) => iconIds.indexOf(id) >= 0)
-              return iconIds.map((id) => {
-                return icons.find((icon) => icon.id === id) || DEFAULT_ICON
-              })
-            }
-            return MdiIcons
-          })
-        })
-      })()
-
+export function useMdiIcons(iconId?: IconId[]): Icon[] {
+  return useMemo(() => {
+    const MdiIcons = getMdiAllIcons()
+    if (Array.isArray(iconId)) {
+      const icons = MdiIcons.filter(({id}) => iconId.indexOf(id) >= 0)
+      return iconId.map((id) => {
+        return icons.find((icon) => icon.id === id) || DEFAULT_ICON
+      })
     }
-
-    return () => {mounted = false}
-  }, [iconIds, setIcons, isWindow])
-
-  return icons
+    return MdiIcons
+  }, [iconId])
 }
 export default useMdiIcons

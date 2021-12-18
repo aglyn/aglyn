@@ -15,37 +15,11 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON, getMdiIconFromId} from '@aglyn/shared-data-mdi'
-import {useEffect, useState} from 'react'
-import type {Icon, IconId} from '../types'
+import {getMdiIconFromId, IconResponse, IdParam} from '@aglyn/shared-data-mdi'
+import {useMemo} from 'react'
 
 
-type UseMdiIcon<T extends IconId[] | IconId> = T extends IconId[] ? Icon[] : Icon
-
-export const useMdiIcon = <T extends IconId[] | IconId>(
-  iconIds: T,
-): UseMdiIcon<T> => {
-
-  const [icon, setIcon] = useState<UseMdiIcon<T>>(
-    () => (Array.isArray(iconIds) ? [DEFAULT_ICON] : DEFAULT_ICON) as UseMdiIcon<T>,
-  )
-  const isWindow = typeof window !== 'undefined'
-
-  useEffect(() => {
-    let mounted = true
-
-    if (isWindow) {
-      ;(async function() {
-        await getMdiIconFromId(iconIds).then((icon: UseMdiIcon<T>) => {
-          if (!mounted) return
-          setIcon(icon)
-        })
-      })()
-    }
-
-    return () => {mounted = false}
-  }, [iconIds, setIcon, isWindow])
-
-  return icon
+export function useMdiIcon<T extends IdParam>(iconId: T): IconResponse<T> {
+  return useMemo(() => getMdiIconFromId(iconId), [iconId])
 }
 export default useMdiIcon

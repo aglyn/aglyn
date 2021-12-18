@@ -15,10 +15,6 @@
  * limitations under the License.
  */
 
-import type {Icon as MdiIcon, IconId as MdiIconId} from '@aglyn/shared-data-mdi'
 
-
-export type Icon = MdiIcon
-export type IconId = MdiIconId
 export type ApplyFilterFn = (query: string) => void
 export type ClearFilterFn = () => void

@@ -17,7 +17,7 @@
 
 import {getApp} from '@aglyn/core-data-framework'
 import {GridButtons} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {mdiBug, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import styled from '@emotion/styled'
 import React from 'react'
 
@@ -39,7 +39,7 @@ export function Index() {
     <StyledPage>
       <h2>Resources &amp; Tools</h2>
       <p>Thank you for using and showing some ♥ for Nx.</p>
-      <MdiSvgIcon iconIds={'bug'} />
+      <MdiIcon path={mdiBug.path} />
       <GridButtons
         items={[
           {

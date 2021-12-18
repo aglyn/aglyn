@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import type { AglynComponentSchema, ComponentId } from '@aglyn/core-data-framework'
-import { aglynElementComponent, dynamicLoader } from '@aglyn/core-feature-renderer'
-import ListItemText, { ListItemTextProps } from '@mui/material/ListItemText'
-import { BUNDLE_ID } from '../../constants'
-import { generateTemplateId } from '../../utils/generate-template-id'
+import type {AglynComponentSchema, ComponentId} from '@aglyn/core-data-framework'
+import {createAglynComponent, dynamicLoader} from '@aglyn/core-feature-renderer'
+import ListItemText, {ListItemTextProps} from '@mui/material/ListItemText'
+import {BUNDLE_ID} from '../constants'
+import {generateTemplateId} from '../utils/generate-template-id'
 
 
 const ID: ComponentId = 'list-item-text'
@@ -30,13 +30,13 @@ export const schema: AglynComponentSchema<ListItemTextProps> = {
   bundleId: BUNDLE_ID,
   metadata: {
     displayName: 'List Item Text',
-    iconIds: 'format-list-checks',
+    iconPath: 'format-list-checks',
   },
   templates: [
     {
       id: generateTemplateId(ID),
       label: 'List Item Text',
-      iconIds: 'format-list-checks',
+      iconPath: 'format-list-checks',
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,
@@ -48,6 +48,6 @@ export const schema: AglynComponentSchema<ListItemTextProps> = {
     },
   ],
 }
-export const component = aglynElementComponent(schema, ListItemText)
+export const component = createAglynComponent(schema, ListItemText)
 
 export default component

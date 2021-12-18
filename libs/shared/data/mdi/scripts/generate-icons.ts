@@ -21,7 +21,7 @@ import generateFile from './utils/generate-file'
 import mapIconData from './utils/map-icon-data'
 
 
-const outDir = path.join(__dirname, '../src/generated/')
+const outDir = path.join(__dirname, '../generated/')
 const version = util.getVersion()
 const meta = util.getMeta(true)
 const icons = meta.map(icon => mapIconData(icon))

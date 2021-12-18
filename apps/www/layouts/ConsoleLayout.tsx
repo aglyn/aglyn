@@ -17,12 +17,12 @@
 
 import {styled} from '@aglyn/shared-feature-themes'
 import {GridItems, GridItemsProps} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon, MdiSvgIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {_isArr, _isStrT} from '@aglyn/shared-util-guards'
+import {mdiCogOutline, MdiIcon, MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
+import {_isStrT} from '@aglyn/shared-util-guards'
 import {_s, copy} from '@aglyn/shared-util-tools'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'
-import React from 'react'
+import {ReactNode} from 'react'
 import Breadcrumbs from '../components/Breadcrumbs'
 import {CurrentUserContextType, withCurrentUserContext} from '../contexts/current-user-context'
 import {AggregatedPageMeta, withAggregatedPageMeta} from '../lib/app-pages'
@@ -49,8 +49,8 @@ export interface ConsoleLayoutProps extends MainLayoutProps {
   ContentGridItemsProps?: GridItemsProps
   items?: GridItemsProps['items']
   header?: {
-    icon?: MdiSvgIconProps['iconIds'] | MdiSvgIconProps
-    children?: React.ReactNode
+    icon?: MdiIconProps['path'] | ReactNode
+    children?: ReactNode
   }
   aggregatedPageMeta: AggregatedPageMeta
   currentUserContext: CurrentUserContextType
@@ -87,7 +87,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     }))
   const quickActionMenus: MainLayoutProps['quickActionMenus'] = [
     {
-      iconIds: 'cog-outline',
+      iconPath: mdiCogOutline.path,
       // alt: '',
       items: [
         {
@@ -124,19 +124,13 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
         <StyledNavBarSpacer />
         <Container maxWidth={CONTENT_MAX_WIDTH}>
           <Typography component="h1" variant="h4">
-            {header?.icon ? (
-              <MdiSvgIcon
+            {_isStrT(header?.icon) ? (
+              <MdiIcon
                 color="secondary"
                 fontSize="inherit"
-                {
-                  ...(
-                    _isStrT(header.icon) || _isArr(header.icon)
-                      ? {iconIds: header.icon}
-                      : header.icon
-                  )
-                }
+                path={header.icon}
               />
-            ) : null}
+            ) : header?.icon}
             {header?.children ?? title}
           </Typography>
           <Breadcrumbs items={breadcrumbItems} />

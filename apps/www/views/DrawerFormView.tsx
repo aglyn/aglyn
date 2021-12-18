@@ -22,7 +22,7 @@ import {
   withStyles,
 } from '@aglyn/shared-feature-themes'
 import {NavigationDrawer, NavigationDrawerProps} from '@aglyn/shared-ui-jsx'
-import {MdiSvgIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {mdiClose} from '@aglyn/shared-ui-mdi-jsx'
 import {_isStrT} from '@aglyn/shared-util-guards'
 import {objectRemap} from '@aglyn/shared-util-tools'
 import {Box, Button} from '@mui/material'
@@ -31,6 +31,7 @@ import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
 import React, {forwardRef} from 'react'
+import MdiIcon from '../../../libs/shared/ui/mdi-jsx/src/lib/components/mdi-icon'
 import FieldSet from '../components/FieldSet'
 import {Fields} from '../forms'
 
@@ -91,7 +92,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn
       appBarLeft={
         <React.Fragment>
           <IconButton
-            children={<MdiSvgIcon iconIds="close" />}
+            children={<MdiIcon path={mdiClose.path} />}
             className={classes.closeButton}
             color="default"
             edge="start"

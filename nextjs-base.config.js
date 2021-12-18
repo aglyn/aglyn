@@ -110,9 +110,9 @@ const withAglynNxNext = (opts = {}) => {
     optimizeFonts: IS_PRODUCTION,
 
     // Opt-in to using the Next.js compiler for minification. This is 7x faster than Terser.
-    swcMinify: false,
+    swcMinify: true,
 
-    target: 'experimental-serverless-trace',
+    // target: 'experimental-serverless-trace',
 
     outputStandalone: true,
 
@@ -122,7 +122,6 @@ const withAglynNxNext = (opts = {}) => {
       // Motivated by https://github.com/zeit/next.js/issues/7687
       ignoreDevErrors: IS_PRODUCTION,
       ignoreBuildErrors: IS_PRODUCTION,
-
       ...opts?.typescript,
     },
 
@@ -135,6 +134,7 @@ const withAglynNxNext = (opts = {}) => {
       // Set this to false if you do not want to use SVGR
       // See: https://github.com/gregberge/svgr
       svgr: true,
+      ...opts?.nx,
     },
 
     images: {
@@ -160,6 +160,9 @@ const withAglynNxNext = (opts = {}) => {
     experimental: {
       // ssr and displayName are configured by default
       styledComponents: true,
+      // Next.js can automatically create a standalone folder which copies only the necessary files
+      // for a production deployment including select files in node_modules.
+      // outputStandalone: true,
       ...opts?.experimental,
     },
 
