@@ -15,12 +15,5 @@
  * limitations under the License.
  */
 
-import {ComponentId} from '@aglyn/core-data-framework'
-import {BUNDLE_ID} from '../constants/bundle-common'
 
-
-export const generateTemplateId = (componentId: ComponentId): ComponentId => {
-  return `${BUNDLE_ID}:${componentId}`
-}
-
-export default generateTemplateId
+export const BUNDLE_ID = 'mui'

@@ -57,22 +57,33 @@
                 ]
               },
               {
+                "sourceTag": "sc:lib:core:feature",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:core:data",
+                  "sc:lib:core:feature",
+                  "sc:lib:core:ui",
+                  "sc:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "sc:lib:core:feature:besigner",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:core:data",
+                  "sc:lib:core:feature:renderer",
+                  "sc:lib:core:ui",
+                  "sc:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "sc:lib:core:feature:renderer",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:core:data",
+                  "sc:lib:core:ui",
+                  "sc:lib:shared"
+                ]
+              },
+              {
                 "sourceTag": "sc:lib:core:ui",
-                "onlyDependOnLibsWithTags": [
-                  "sc:lib:core:data",
-                  "sc:lib:shared"
-                ]
-              },
-              {
-                "sourceTag": "sc:lib:core:ui:besigner",
-                "onlyDependOnLibsWithTags": [
-                  "sc:lib:core:data",
-                  "sc:lib:core:ui:renderer",
-                  "sc:lib:shared"
-                ]
-              },
-              {
-                "sourceTag": "sc:lib:core:ui:renderer",
                 "onlyDependOnLibsWithTags": [
                   "sc:lib:core:data",
                   "sc:lib:shared"

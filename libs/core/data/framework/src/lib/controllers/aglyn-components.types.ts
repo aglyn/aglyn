@@ -198,9 +198,12 @@ export interface AglynComponentElementDataNormalized<P = any> extends AglynCompo
   elements?: ElementId[]
 }
 
-export interface AglynComponentsBundle {
+export interface AglymComponentsBundleSchema {
   readonly bundleId: BundleUId
   metadata?: ComponentsRegistryEntryMetadata
+}
+
+export interface AglynComponentsBundle extends AglymComponentsBundleSchema {
   componentIds: ComponentId[]
 }
 

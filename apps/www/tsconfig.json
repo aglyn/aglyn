@@ -10,7 +10,7 @@
     "isolatedModules": true,
     "noImplicitOverride": false,
     "strict": false,
-    "noEmit": false,
+    "noEmit": true,
     "incremental": true
   },
   "include": [
@@ -21,6 +21,6 @@
     "next-env.d.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules", "../generated"
   ]
 }

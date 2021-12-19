@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import MdiIcons from '../internal'
+import {MdiIcons} from '../internal'
 import type {Icon, IconResponse, IdParam} from '../types/icon'
 import {handleIconNotFound} from './handle-icon-not-found'
 

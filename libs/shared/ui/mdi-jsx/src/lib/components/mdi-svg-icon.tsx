@@ -19,7 +19,7 @@ import type {IconId} from '@aglyn/shared-data-mdi'
 import {_isStrT} from '@aglyn/shared-util-guards'
 import {forwardRef} from 'react'
 import {useMdiIcon} from '../hooks/use-mdi-icon'
-import MdiIcon, {MdiIconProps} from './mdi-icon'
+import MdiIcon, {type MdiIconProps} from './mdi-icon'
 
 
 export interface MdiSvgIconProps extends MdiIconProps {

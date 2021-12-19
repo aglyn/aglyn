@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-import type {AglynComponentSchema, ComponentId} from '@aglyn/core-data-framework'
-import {ComponentsLinealDirectiveFlag} from '@aglyn/core-data-framework'
-import {createAglynComponent, dynamicLoader} from '@aglyn/core-feature-renderer'
+import {
+  type AglynComponentSchema,
+  type ComponentId,
+  ComponentsLinealDirectiveFlag,
+} from '@aglyn/core-data-framework'
 import {mdiFormatListBulletedSquare} from '@aglyn/shared-ui-mdi-jsx'
-import List, {ListProps} from '@mui/material/List'
-import {BUNDLE_ID} from '../constants'
+import List, {type ListProps} from '@mui/material/List'
+import {BUNDLE_ID} from '../constants/bundle-common'
 import {generateTemplateId} from '../utils/generate-template-id'
 import {schema as listItemSchema} from './list-item'
 
 
 const ID: ComponentId = 'list'
 
-export const loader = dynamicLoader(() => import('@mui/material/List'))
 export const schema: AglynComponentSchema<ListProps> = {
   componentId: ID,
   bundleId: 'mui',
@@ -60,6 +61,5 @@ export const schema: AglynComponentSchema<ListProps> = {
     },
   ],
 }
-export const component = createAglynComponent(schema, List)
 
-export default component
+export default List

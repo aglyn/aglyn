@@ -20,36 +20,27 @@ import {
   type ComponentId,
   PropertyEditorFieldFlag,
 } from '@aglyn/core-data-framework'
-import {mdiGestureTapButton} from '@aglyn/shared-ui-mdi-jsx'
-import Button, {type ButtonProps} from '@mui/material/Button'
+import {mdiBorderInside} from '@aglyn/shared-ui-mdi-jsx'
+import Toolbar, {type ToolbarProps} from '@mui/material/Toolbar'
 import {BUNDLE_ID} from '../constants/bundle-common'
-import {
-  FIELD_COLOR,
-  FIELD_DISABLED,
-  FIELD_FULL_WIDTH,
-  FIELD_SIZE,
-  IS_OPTION_EQUAL_TO_VALUE,
-} from '../constants/field-presets'
+import {FIELD_DISABLE_GUTTERS, IS_OPTION_EQUAL_TO_VALUE} from '../constants/field-presets'
 import {generateTemplateId} from '../utils/generate-template-id'
 
 
-const ID: ComponentId = 'button'
+const ID: ComponentId = 'toolbar'
 
-export const schema: AglynComponentSchema<ButtonProps> = {
+export const schema: AglynComponentSchema<ToolbarProps> = {
   componentId: ID,
   bundleId: BUNDLE_ID,
   metadata: {
-    displayName: 'Button',
-    iconPath: mdiGestureTapButton.path,
+    displayName: 'Toolbar Content',
+    iconPath: mdiBorderInside.path,
     iconColor: '#2196f3',
   },
   renderFlags: {
     propsSchema: {
       fields: [
-        FIELD_COLOR,
-        FIELD_DISABLED,
-        FIELD_FULL_WIDTH,
-        FIELD_SIZE,
+        FIELD_DISABLE_GUTTERS,
         {
           name: 'variant',
           description: 'The variant to use.',
@@ -61,9 +52,8 @@ export const schema: AglynComponentSchema<ButtonProps> = {
           isOptionEqualToValue: IS_OPTION_EQUAL_TO_VALUE,
           options: [
             {value: '', label: 'Default'},
-            {value: 'text', label: 'Text'},
-            {value: 'outlined', label: 'Outlined'},
-            {value: 'contained', label: 'Contained'},
+            {value: 'dense', label: 'Dense'},
+            {value: 'regular', label: 'Regular'},
           ],
         },
       ],
@@ -72,19 +62,15 @@ export const schema: AglynComponentSchema<ButtonProps> = {
   templates: [
     {
       id: generateTemplateId(ID),
-      label: 'Outlined Button',
-      iconPath: mdiGestureTapButton.path,
+      label: 'Toolbar Content',
+      iconPath: mdiBorderInside.path,
       iconColor: '#2196f3',
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,
-        props: {
-          variant: 'outlined',
-          children: 'Click Me',
-        },
       },
     },
   ],
 }
 
-export default Button
+export default Toolbar

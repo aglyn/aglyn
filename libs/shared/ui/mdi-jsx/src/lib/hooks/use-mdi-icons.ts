@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON, getMdiAllIcons, Icon, IconId} from '@aglyn/shared-data-mdi'
+import {DEFAULT_ICON, getMdiAllIcons, type Icon, type IconId} from '@aglyn/shared-data-mdi'
 import {useMemo} from 'react'
 
 

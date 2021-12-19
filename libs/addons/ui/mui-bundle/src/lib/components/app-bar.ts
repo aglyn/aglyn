@@ -15,51 +15,48 @@
  * limitations under the License.
  */
 
-import {
-  type AglynComponentSchema,
-  type ComponentId,
-  ComponentsLinealDirectiveFlag,
-} from '@aglyn/core-data-framework'
-import {mdiFormatListText} from '@aglyn/shared-ui-mdi-jsx'
-
-import ListItem, {type ListItemProps} from '@mui/material/ListItem'
+import {type AglynComponentSchema, type ComponentId} from '@aglyn/core-data-framework'
+import {mdiPageLayoutHeader} from '@aglyn/shared-ui-mdi-jsx'
+import AppBar, {type AppBarProps} from '@mui/material/AppBar'
 import {BUNDLE_ID} from '../constants/bundle-common'
+import {FIELD_COLOR_ALT1, FIELD_POSITION} from '../constants/field-presets'
 import {generateTemplateId} from '../utils/generate-template-id'
-import {schema as listItemTextSchema} from './list-item-text'
+import {schema as toolbarSchema} from './toolbar'
 
 
-const ID: ComponentId = 'list-item'
+const ID: ComponentId = 'app-bar'
 
-export const schema: AglynComponentSchema<ListItemProps> = {
+export const schema: AglynComponentSchema<AppBarProps> = {
   componentId: ID,
   bundleId: BUNDLE_ID,
   metadata: {
-    displayName: 'List Item',
-    iconPath: mdiFormatListText.path,
+    displayName: 'App Toolbar',
+    iconPath: mdiPageLayoutHeader.path,
+    iconColor: '#2196f3',
   },
   renderFlags: {
-    hierarchy: {
-      restrictChildren: [
-        ComponentsLinealDirectiveFlag.LIMIT_TO, {
-          components: [listItemTextSchema.componentId],
-        },
+    propsSchema: {
+      fields: [
+        FIELD_COLOR_ALT1,
+        FIELD_POSITION,
       ],
     },
   },
   templates: [
     {
       id: generateTemplateId(ID),
-      label: 'List Item',
-      iconPath: mdiFormatListText.path,
+      label: 'App Toolbar',
+      iconPath: mdiPageLayoutHeader.path,
+      iconColor: '#2196f3',
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,
         elements: [
-          listItemTextSchema.templates![0]!.data,
+          toolbarSchema.templates![0]!.data,
         ],
       },
     },
   ],
 }
 
-export default ListItem
+export default AppBar

@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-import { CanvasRendererComponent } from '@aglyn/core-feature-renderer'
-import { styled } from '@aglyn/shared-feature-themes'
-import { forwardRef, HTMLAttributes } from 'react'
-import { HoverContextProvider } from '../contexts/hover-context-provider'
-import { ElementRendererComponent } from './element-renderer.component'
-import { ViewportPoppersComponent } from './viewport-poppers.component'
+import {CanvasRendererComponent} from '@aglyn/core-feature-renderer'
+import {styled} from '@aglyn/shared-feature-themes'
+// import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
+import {forwardRef, HTMLAttributes} from 'react'
+import {HoverContextProvider} from '../contexts/hover-context-provider'
+import {ElementRendererComponent} from './element-renderer.component'
+import {ViewportPoppersComponent} from './viewport-poppers.component'
 
 
 const ViewportFrame = styled('div', {
-  name: 'AglynViewportFrame'
-})(({ theme }) => ({
+  name: 'AglynViewportFrame',
+})(({theme}) => ({
   flexGrow: 1,
   minHeight: '100%',
   width: '100%',
@@ -38,25 +39,27 @@ export interface ViewportFrameComponentProps extends HTMLAttributes<HTMLDivEleme
 
 const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
   function RefRenderFn(props, ref) {
-    const { children, ...rest } = props
+    const {children, ...rest} = props
 
     return (
       <ViewportFrame ref={ref} {...rest}>
         <HoverContextProvider>
+          {/*<MuiShadowDom.div>*/}
           <CanvasRendererComponent
             id="aglyn:canvas"
             elementRendererComponent={ElementRendererComponent}
           />
+          {/*</MuiShadowDom.div>*/}
           <ViewportPoppersComponent />
         </HoverContextProvider>
         {children}
       </ViewportFrame>
     )
-  }
+  },
 )
 
 ViewportFrameComponent.displayName = 'ViewportFrameComponent'
 ViewportFrameComponent.defaultProps = {}
 
-export { ViewportFrameComponent }
+export {ViewportFrameComponent}
 export default ViewportFrameComponent

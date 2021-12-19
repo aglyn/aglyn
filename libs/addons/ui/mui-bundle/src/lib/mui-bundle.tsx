@@ -16,13 +16,27 @@
  */
 
 import {ComponentRegisterPayload, createComponentsBundle} from '@aglyn/core-data-framework'
+import {createAglynComponent} from '@aglyn/core-feature-renderer'
 import {mdiViewArray} from '@aglyn/shared-ui-mdi-jsx'
 
-import button from './components/button'
-import list from './components/list'
-import listItem from './components/list-item'
-import listItemText from './components/list-item-text'
-import {BUNDLE_ID} from './constants'
+import appBar, {schema as appBarSchema} from './components/app-bar'
+import button, {schema as buttonSchema} from './components/button'
+import list, {schema as listSchema} from './components/list'
+import listItem, {schema as listItemSchema} from './components/list-item'
+import listItemText, {schema as listItemTextSchema} from './components/list-item-text'
+import toolbar, {schema as toolbarSchema} from './components/toolbar'
+
+import {BUNDLE_ID} from './constants/bundle-common'
+
+
+export const components: ComponentRegisterPayload[] = [
+  createAglynComponent(appBarSchema, appBar),
+  createAglynComponent(buttonSchema, button),
+  createAglynComponent(listSchema, list),
+  createAglynComponent(listItemSchema, listItem),
+  createAglynComponent(listItemTextSchema, listItemText),
+  createAglynComponent(toolbarSchema, toolbar),
+]
 
 
 export const schema = {
@@ -33,12 +47,6 @@ export const schema = {
     iconPath: mdiViewArray.path,
   },
 }
-export const components: ComponentRegisterPayload[] = [
-  button,
-  list,
-  listItem,
-  listItemText,
-]
 
 export const bundle = createComponentsBundle(schema, components)
 export default bundle

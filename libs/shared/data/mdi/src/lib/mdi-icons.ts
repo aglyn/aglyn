@@ -18,8 +18,8 @@
 export * from './types/icon'
 
 export * from './mdi-icons-named'
-export * from './constants'
+export {DEFAULT_ICON} from './constants'
 
-export * from './utils/convert-id-to-module-name'
-export * from './utils/get-mdi-all-icons'
-export * from './utils/get-mdi-icon-from-id'
+export {convertIdToModuleName} from './utils/convert-id-to-module-name'
+export {getMdiAllIcons} from './utils/get-mdi-all-icons'
+export {getMdiIconFromId} from './utils/get-mdi-icon-from-id'

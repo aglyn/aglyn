@@ -16,13 +16,12 @@
  */
 
 
+export * from './types'
 export * from '@aglyn/shared-data-mdi'
 
 export * from './hooks/use-mdi-icon'
 export * from './hooks/use-mdi-icons'
 export * from './hooks/use-mdi-icons-fuzzy'
-
-export * from './types'
 
 
 export * from './components/mdi-icon'

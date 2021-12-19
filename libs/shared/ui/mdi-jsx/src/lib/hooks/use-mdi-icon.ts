@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {getMdiIconFromId, IconResponse, IdParam} from '@aglyn/shared-data-mdi'
+import {getMdiIconFromId, type IconResponse, type IdParam} from '@aglyn/shared-data-mdi'
 import {useMemo} from 'react'
 
 

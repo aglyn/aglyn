@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import MuiSvgIcon, {SvgIconProps as MuiSvgIconProps} from '@mui/material/SvgIcon'
-import {forwardRef, SVGAttributes} from 'react'
 import {DEFAULT_ICON} from '@aglyn/shared-data-mdi'
+import MuiSvgIcon, {type SvgIconProps as MuiSvgIconProps} from '@mui/material/SvgIcon'
+import {forwardRef, type SVGAttributes} from 'react'
 
 
 export interface MdiIconProps extends MuiSvgIconProps {
