@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-import { MKey } from '@aglyn/shared-data-types'
-import { _isFnT } from '@aglyn/shared-util-guards'
-import { getDisplayName } from '@aglyn/shared-util-tools'
-import { ComponentType, createElement } from 'react'
+import {MapKey} from '@aglyn/shared-data-types'
+import {_isFnT} from '@aglyn/shared-util-guards'
+import {getDisplayName} from '@aglyn/shared-util-tools'
+import {ComponentType, createElement} from 'react'
 
 
 /** Merge props for WithHoc utility functions */
-export type WithHocProps<P, N extends MKey, T> = P & { [K in N]: T }
+export type WithHocProps<P, N extends MapKey, T> = P & { [K in N]: T }
 
 /** Component with merge props from WithHocProps for WithHoc utility functions */
-export type WithHocComponent<P, N extends MKey, T> = ComponentType<WithHocProps<P, N, T>>
+export type WithHocComponent<P, N extends MapKey, T> = ComponentType<WithHocProps<P, N, T>>
 
 /** "with*" HOC function type */
-export type WithHocFn<P, T, K extends MKey> = {
+export type WithHocFn<P, T, K extends MapKey> = {
   (Component: WithHocComponent<P, K, T>, prop?: K): ComponentType<P>
 }
 
@@ -37,8 +37,8 @@ export type WithHocFnBuilder = {
   <P, T, U extends string>(value: T | ((props: P) => T), injectedPropName: U): WithHocFn<P, T, U>
 }
 
-function withHocFactoryBuilderImpl<P, T, U extends MKey>(
-  value: T | { (props: P): T },
+function withHocFactoryBuilderImpl<P, T, U extends MapKey>(
+  value: T | {(props: P): T},
   injectedPropName: U,
 ) {
   return function withHocFactory(

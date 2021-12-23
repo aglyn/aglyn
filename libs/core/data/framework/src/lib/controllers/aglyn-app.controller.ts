@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { yes } from '@aglyn/shared-util-tools'
+import {yes} from '@aglyn/shared-util-tools'
 import {
   _INTERNAL_BESIGNERS_,
   _INTERNAL_CANVAS_,
@@ -25,89 +25,55 @@ import {
   _INTERNAL_EXTENSIONS_,
   DEFAULT_APP_UUN,
 } from '../constants/_internal'
-import { AglynAppEffectFlag, AglynAppEventFlag } from '../constants/emitter'
-import { AglynBaseModel, AglynBaseModelOptions } from '../models/aglyn-base.model'
-import { AppUUN, Payload } from '../types'
-import {
-  AglynBesignerController,
-  AglynBesignerControllerOptions,
-} from './aglyn-besigner.controller'
-import { AglynCanvasController, AglynCanvasControllerOptions } from './aglyn-canvas.controller'
-import { AglynCommandsController } from './aglyn-commands.controller'
-import {
-  AglynComponentsController,
-  AglynComponentsControllerOptions,
-} from './aglyn-components.controller'
-import {
-  AglynContextsController,
-  AglynContextsControllerOptions,
-} from './aglyn-contexts.controller'
-import {
-  AglynExtensionsController,
-  AglynExtensionsControllerOptions,
-} from './aglyn-extensions.controller'
+import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
+import AglynBaseModel from '../models/aglyn-base.model'
+import type {AglynAppOptions, AglynEffectOptions, IAglynAppController} from './aglyn-app.types'
+import AglynBesignerController from './aglyn-besigner.controller'
+import type {IAglynBesignerController} from './aglyn-besigner.types'
+import AglynCanvasController from './aglyn-canvas.controller'
+import type {IAglynCanvasController} from './aglyn-canvas.types'
+import AglynCommandsController from './aglyn-commands.controller'
+import type {IAglynCommandsController} from './aglyn-commands.types'
+import AglynComponentsController from './aglyn-components.controller'
+import type {IAglynComponentsController} from './aglyn-components.types'
+import AglynContextsController from './aglyn-contexts.controller'
+import type {IAglynContextsController} from './aglyn-contexts.types'
+import AglynExtensionsController from './aglyn-extensions.controller'
+import type {IAglynExtensionsController} from './aglyn-extensions.types'
 
-
-export interface AglynAppOptions extends AglynBaseModelOptions {
-  appName?: AppUUN
-  modulesOptions?: {
-    contexts?: AglynContextsControllerOptions
-    extensions?: AglynExtensionsControllerOptions
-    commands?: AglynExtensionsControllerOptions
-    components?: AglynComponentsControllerOptions
-    canvas?: AglynCanvasControllerOptions
-    besigner?: AglynBesignerControllerOptions
-  }
-}
-
-export interface AglynEffectOptions<T, U = unknown> extends Payload<U> {
-  type: T
-}
-
-export interface AglynAppController extends AglynBaseModel<AglynAppOptions> {
-  getName(): string
-  isDeleted(): boolean
-
-  getExtensionsController(): AglynExtensionsController
-  getContextsController(): AglynContextsController
-  getCommandsController(): AglynCommandsController
-  getComponentsController(): AglynComponentsController
-
-  effect(data: AglynEffectOptions<AglynAppEffectFlag>): this
-}
 
 const TAG = 'AglynApp'
 
-export class AglynAppController extends AglynBaseModel<AglynAppOptions> {
+export class AglynAppController extends AglynBaseModel<AglynAppOptions> implements IAglynAppController {
 
   public static readonly [Symbol.toStringTag]: string = TAG
 
   readonly #name: string = null
 
-  #extensionsController: AglynExtensionsController = null
-  #contextsController: AglynContextsController = null
-  #commandsController: AglynCommandsController = null
-  #componentsController: AglynComponentsController = null
-  #canvasController: AglynCanvasController = null
-  #besignerController: AglynBesignerController = null
+  #extensionsController: IAglynExtensionsController = null
+  #contextsController: IAglynContextsController = null
+  #commandsController: IAglynCommandsController = null
+  #componentsController: IAglynComponentsController = null
+  #canvasController: IAglynCanvasController = null
+  #besignerController: IAglynBesignerController = null
   #isDeleted = false
 
-  public get extensions(): AglynExtensionsController {
+  public get extensions(): IAglynExtensionsController {
     return this.#extensionsController
   }
-  public get contexts(): AglynContextsController {
+  public get contexts(): IAglynContextsController {
     return this.#contextsController
   }
-  public get commands(): AglynCommandsController {
+  public get commands(): IAglynCommandsController {
     return this.#commandsController
   }
-  public get components(): AglynComponentsController {
+  public get components(): IAglynComponentsController {
     return this.#componentsController
   }
-  public get canvas(): AglynCanvasController {
+  public get canvas(): IAglynCanvasController {
     return this.#canvasController
   }
-  public get besigner(): AglynBesignerController {
+  public get besigner(): IAglynBesignerController {
     return this.#besignerController
   }
   public get deleted(): boolean {
@@ -235,34 +201,36 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> {
     this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYED, {appName: this.#name})
   }
 
-  public getName = (): string => {
+  public getName(): string {
     return this.#name
   }
-  public getExtensionsController = (): AglynExtensionsController => {
+  public getExtensionsController(): IAglynExtensionsController {
     return this.#extensionsController
   }
-  public getContextsController = (): AglynContextsController => {
+  public getContextsController(): IAglynContextsController {
     return this.#contextsController
   }
-  public getCommandsController = (): AglynCommandsController => {
+  public getCanvasController(): IAglynCanvasController {
+    return this.#canvasController
+  }
+  public getCommandsController(): IAglynCommandsController {
     return this.#commandsController
   }
-  public getComponentsController = (): AglynComponentsController => {
+  public getComponentsController(): IAglynComponentsController {
     return this.#componentsController
   }
-  public isDeleted = (): boolean => {
+  public isDeleted(): boolean {
     return yes(this.#isDeleted)
   }
-  public setDeleted = (value: boolean): this => {
+  public setDeleted(value: boolean): this {
     this.#isDeleted = Boolean(value)
     return this
   }
-  public effect = (data: AglynEffectOptions<AglynAppEffectFlag>) => {
+  public effect(data: AglynEffectOptions<AglynAppEffectFlag>) {
     const {type, payload} = data
     this.getEmitter().emit(type, payload as any)
     return this
   }
 }
 
-export type AglynAppControllerT = typeof AglynAppController
 export default AglynAppController

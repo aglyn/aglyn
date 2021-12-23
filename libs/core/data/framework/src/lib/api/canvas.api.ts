@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { _INTERNAL_CANVAS_ } from '../constants/_internal'
-import {
+import {_INTERNAL_CANVAS_} from '../constants/_internal'
+import type {
   CanvasAddElementPayload,
   CanvasDeleteElementPayload,
   CanvasDuplicateElementPayload,
@@ -30,19 +30,19 @@ import {
   CanvasUndoPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import { AglynAppController } from '../controllers/aglyn-app.controller'
-import type { AglynCanvasController } from '../controllers/aglyn-canvas.controller'
-import { _validateAppArg } from './app.api'
+import type {IAglynAppController} from '../controllers/aglyn-app.types'
+import type {IAglynCanvasController} from '../controllers/aglyn-canvas.types'
+import {_validateAppArg} from './app.api'
 
 
-export function _getCanvasController(app: AglynAppController): AglynCanvasController {
+export function _getCanvasController(app: IAglynAppController): IAglynCanvasController {
   _validateAppArg(app)
   return _INTERNAL_CANVAS_.get(app.getName())
 }
 
 
 export function getCanvasStore(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload?: CanvasGetStorePayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -50,7 +50,7 @@ export function getCanvasStore(
 }
 
 export function getCanvasNormalizedElementsStore(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload?: CanvasGetElementsNormalizedPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -58,7 +58,7 @@ export function getCanvasNormalizedElementsStore(
 }
 
 export function getCanvasDenormalizedElementsStore(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload?: CanvasGetElementsDenormalizedPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -66,7 +66,7 @@ export function getCanvasDenormalizedElementsStore(
 }
 
 export function getCanvasApiEvents(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload?: CanvasGetApiEventsPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -75,7 +75,7 @@ export function getCanvasApiEvents(
 
 
 export function canvasUndo(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasUndoPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -83,7 +83,7 @@ export function canvasUndo(
 }
 
 export function canvasRedo(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasRedoPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -91,7 +91,7 @@ export function canvasRedo(
 }
 
 export function setCanvasElements(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasSetElementsPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -99,7 +99,7 @@ export function setCanvasElements(
 }
 
 export function addCanvasElement(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasAddElementPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -107,7 +107,7 @@ export function addCanvasElement(
 }
 
 export function updateCanvasElement(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasUpdateElementPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -115,7 +115,7 @@ export function updateCanvasElement(
 }
 
 export function deleteCanvasElement(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasDeleteElementPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -123,7 +123,7 @@ export function deleteCanvasElement(
 }
 
 export function moveCanvasElement(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasMoveElementPayload,
 ) {
   const canvasController = _getCanvasController(app)
@@ -131,17 +131,9 @@ export function moveCanvasElement(
 }
 
 export function duplicateCanvasElement(
-  app: AglynAppController,
+  app: IAglynAppController,
   payload: CanvasDuplicateElementPayload,
 ) {
   const canvasController = _getCanvasController(app)
   return canvasController.duplicateElement(payload)
 }
-
-// export function getCanvasElement(
-//   app: AglynAppController,
-//   payload: CanvasAddElementPayload,
-// ) {
-//   const canvasController = _getCanvasController(app)
-//   return canvasController.addElement(payload)
-// }

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { DEFAULT_PROPS_FORM_SCHEMA } from '../constants/components'
-import { AglynComponentPropsFormSchema } from '../controllers/aglyn-components.controller'
+import {DEFAULT_PROPS_FORM_SCHEMA} from '../constants/components'
+import {AglynComponentPropsFormSchema} from '../controllers/aglyn-components.types'
 
 
 export const buildComponentPropsFormSchema = (

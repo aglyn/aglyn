@@ -15,29 +15,21 @@
  * limitations under the License.
  */
 
-import {
-  AglynComponentClassElement,
-  AglynComponentElementType,
-  COMPONENT_ELEMENT_TYPE,
-  EXTENSION_TYPE,
-  MODULE_TYPE,
-  TYPE_KIND,
-  TYPE_OF,
-} from '@aglyn/core-data-framework'
-import { AnyProps, PropsWithInnerRef } from '@aglyn/shared-data-types'
-import { ReactIs } from '@aglyn/shared-ui-jsx'
-import { Component } from 'react'
+import {AglynElementType} from '@aglyn/core-data-framework'
+import {AnyProps, PropsWithInnerRef} from '@aglyn/shared-data-types'
+import {ReactIs} from '@aglyn/shared-ui-jsx'
+import {Component} from 'react'
 
 
 export interface ElementErrorBoundaryComponentState {error: any}
 
 export type ElementErrorBoundaryComponentProps<P extends AnyProps> = PropsWithInnerRef<{
-  component: AglynComponentElementType<P>
-  errorComponent?: AglynComponentElementType<{ props: P, error: any }>
+  component: AglynElementType<P>
+  errorComponent?: AglynElementType<{props: P, error: any}>
   props: P
 }>
 
-export class ElementErrorBoundaryComponent<P extends AnyProps> extends Component<ElementErrorBoundaryComponentProps<P>, ElementErrorBoundaryComponentState> {
+class ElementErrorBoundaryComponent<P extends AnyProps> extends Component<ElementErrorBoundaryComponentProps<P>, ElementErrorBoundaryComponentState> {
 
   public static displayName = `ElementErrorBoundaryComponent`
 
@@ -53,23 +45,32 @@ export class ElementErrorBoundaryComponent<P extends AnyProps> extends Component
   public renderError() {
     const {props, errorComponent: ErrorComponent} = this.props
 
-    return ReactIs.isValidElementType(ErrorComponent) ? (
-      <ErrorComponent
-        error={this.state.error}
-        props={props}
-      />
-    ) : (
-      <>Error rendering component!</>
+    return (
+      <>
+        {ReactIs.isValidElementType(ErrorComponent) ? (
+          <ErrorComponent
+            error={this.state.error}
+            props={props}
+          />
+        ) : (
+          <>Error rendering component!</>
+        )}
+      </>
     )
   }
   public render() {
     const {innerRef, props, component} = this.props,
       Component = component as any
 
-    return this.state.error ? this.renderError() : (
-      <Component ref={innerRef} {...props} />
+    return (
+      <>
+        {this.state.error ? this.renderError() : (
+          <Component ref={innerRef} {...props} />
+        )}
+      </>
     )
   }
 }
 
+export {ElementErrorBoundaryComponent}
 export default ElementErrorBoundaryComponent

@@ -12,79 +12,105 @@
             "allow": [],
             "depConstraints": [
               {
-                "sourceTag": "scope:app",
+                "sourceTag": "sc:app",
                 "onlyDependOnLibsWithTags": [
-                  "scope:app",
-                  "scope:lib"
+                  "sc:lib"
                 ]
               },
               {
-                "sourceTag": "scope:app:www",
+                "sourceTag": "sc:app:www",
                 "onlyDependOnLibsWithTags": [
                   "*"
                 ]
               },
               {
-                "sourceTag": "scope:lib",
+                "sourceTag": "sc:app:console",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib"
+                  "*"
                 ]
               },
               {
-                "sourceTag": "scope:lib:shared",
+                "sourceTag": "sc:lib",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:shared"
+                  "sc:lib"
                 ]
               },
               {
-                "sourceTag": "scope:lib:shared:util",
+                "sourceTag": "sc:lib:addon",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:shared:util"
+                  "sc:lib:core",
+                  "sc:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:shared:feature",
+                "sourceTag": "sc:lib:core",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:shared:feature"
+                  "sc:lib:core",
+                  "sc:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:sdk",
+                "sourceTag": "sc:lib:core:data",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:sdk",
-                  "scope:lib:shared"
+                  "sc:lib:shared:util",
+                  "sc:lib:shared:feature"
                 ]
               },
               {
-                "sourceTag": "scope:lib:sdk:framework",
+                "sourceTag": "sc:lib:core:feature",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:sdk:framework",
-                  "scope:lib:shared:util",
-                  "scope:lib:shared:feature"
+                  "sc:lib:core:data",
+                  "sc:lib:core:feature",
+                  "sc:lib:core:ui",
+                  "sc:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:sdk:ui-besigner",
+                "sourceTag": "sc:lib:core:feature:besigner",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:sdk:ui-besigner",
-                  "scope:lib:sdk:framework",
-                  "scope:lib:sdk:ui-renderer",
-                  "scope:lib:shared"
+                  "sc:lib:core:data",
+                  "sc:lib:core:feature:renderer",
+                  "sc:lib:core:ui",
+                  "sc:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:sdk:ui-renderer",
+                "sourceTag": "sc:lib:core:feature:renderer",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:sdk:ui-renderer",
-                  "scope:lib:sdk:framework",
-                  "scope:lib:shared"
+                  "sc:lib:core:data",
+                  "sc:lib:core:ui",
+                  "sc:lib:shared"
                 ]
               },
               {
-                "sourceTag": "scope:lib:sdk:extension",
+                "sourceTag": "sc:lib:core:ui",
                 "onlyDependOnLibsWithTags": [
-                  "scope:lib:sdk:extension",
-                  "scope:lib"
+                  "sc:lib:core:data",
+                  "sc:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "sc:lib:shared",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "sc:lib:shared:data",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "sc:lib:shared:util",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:shared"
+                ]
+              },
+              {
+                "sourceTag": "sc:lib:shared:feature",
+                "onlyDependOnLibsWithTags": [
+                  "sc:lib:shared"
                 ]
               },
               {
@@ -102,10 +128,10 @@
       "files": ["*.ts", "*.tsx"],
       "extends": ["plugin:@nrwl/nx/typescript"],
       "rules": {
-        "@typescript-eslint/no-empty-function": "warn",
+        "@typescript-eslint/no-empty-function": "off",
         "@typescript-eslint/no-empty-interface": "off",
         "@typescript-eslint/no-explicit-any": "off",
-        "@typescript-eslint/no-namespace": "off",
+        "@typescript-eslint/no-namescace": "off",
         "@typescript-eslint/no-non-null-assertion": "off",
         "@typescript-eslint/no-unused-vars": "warn",
         "@typescript-eslint/no-var-requires": "off",

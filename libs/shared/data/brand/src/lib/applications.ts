@@ -15,6 +15,25 @@
  * limitations under the License.
  */
 
+import {
+  mdiArrowTopLeft,
+  mdiBookVariant,
+  mdiBookVariantMultiple,
+  mdiCodeArray,
+  mdiCodeBracesBox,
+  mdiCodeString,
+  mdiContentDuplicate,
+  mdiCubeOutline,
+  mdiDeleteOutline,
+  mdiFileTree,
+  mdiFormDropdown,
+  mdiInformationVariant,
+  mdiLoginVariant,
+  mdiLogoutVariant,
+  mdiPencil,
+  mdiVariable,
+} from '@aglyn/shared-ui-mdi-jsx'
+
 
 export const APP_WWW = {
   META_TITLE: 'Aglyn',
@@ -25,30 +44,32 @@ export const ProductNames = {
   WWW: '.com',
 }
 
-export enum IconVariant {
+export const IconVariant = {
+  // Blocks and symbols
+  ENTITY_BLOCK: mdiCubeOutline.path,
+
   // Data
-  PROPERTY = 'variable',
-  DOCUMENT = 'book-variant',
-  COLLECTION = 'book-variant-multiple',
+  PROPERTY: mdiVariable.path,
+  DOCUMENT: mdiBookVariant.path,
+  COLLECTION: mdiBookVariantMultiple.path,
 
   // Data-sets
-  PROPERTIES = 'form-dropdown',
-  DETAILS = 'information-variant',
-  TREE_VIEW = 'file-tree',
-
+  PROPERTIES: mdiFormDropdown.path,
+  DETAILS: mdiInformationVariant.path,
+  TREE_VIEW: mdiFileTree.path,
 
   // Data-Type
-  STRING = 'code-string',
-  ARRAY = 'code-array',
-  OBJECT = 'code-braces-box',
+  STRING: mdiCodeString.path,
+  ARRAY: mdiCodeArray.path,
+  OBJECT: mdiCodeBracesBox.path,
 
   // Modification
-  MODIFY_DUPLICATE = 'content-duplicate',
-  MODIFY_DELETE = 'delete-outline',
-  MODIFY_EDIT = 'pencil',
-  SELECT_PARENT = 'arrow-top-left',
+  MODIFY_DUPLICATE: mdiContentDuplicate.path,
+  MODIFY_DELETE: mdiDeleteOutline.path,
+  MODIFY_EDIT: mdiPencil.path,
+  SELECT_PARENT: mdiArrowTopLeft.path,
 
   // User
-  LOGIN = 'login-variant',
-  LOGOUT = 'logout-variant',
+  LOGIN: mdiLoginVariant.path,
+  LOGOUT: mdiLogoutVariant.path,
 }

@@ -1,54 +1,80 @@
-# Add 'dependencies' label to any change to npm or yarn related stuff
-'dependencies':
-  - package.json
-  - yarn.lock
+# All configurations and dependency files
 
-'tsconfig':
+'Configuration':
   - tsconfig.json
   - tsconfig.*.json
-
-'jest-config':
   - jest.json
   - jest.*.json
-
-'Nx Config':
   - nx.json
+  - workspace.json
   - workspace.*.json
+  - migrations.json
+  - next.config.js
+  - nextjs-base.config.js
+  - firebase.json
+  - firebase.indexes.json
+  - firebase.rules
+  - babel.config.js
+  - .babelrc
+'Dependencies':
+  - package.json
+  - package-lock.json
+  - yarn.lock
+'TypeScript':
+  - tsconfig.json
+  - tsconfig.*.json
+'Jest':
+  - jest.json
+  - jest.*.json
+'Nx':
+  - nx.json
+  - workspace.json
+  - workspace.*.json
+  - migrations.json
+'Nextjs':
+  - next.config.js
+  - nextjs-base.config.js
+'Firebase':
+  - firebase.json
+  - firebase.indexes.json
+  - firebase.rules
+  - .firebaserc
+'Babel':
+  - babel.config.js
+  - .babelrc
 
-'Monorepo Libs':
-  - libs/*
-  - libs/**/*
+# Monorepo Top Level
 
-'Monorepo Apps':
+'Mono App':
   - apps/*
   - apps/**/*
-
-'Shared':
+'Mono Lib':
+  - libs/*
+  - libs/**/*
+'Mono Shared':
   - libs/shared/*
   - libs/shared/**/*
 
-'App: WWW':
+# Monorepo Apps
+
+'App: www':
   - apps/www/*
   - apps/www/**/*
-
-'App: Console':
+'App: console':
   - apps/console/*
   - apps/console/**/*
 
-'SDK: Framework':
+# Aglyn SDK
+
+'ADK Core':
   - libs/core/data/framework/*
   - libs/core/data/framework/**/*
-
-'SDK: Extension':
-  - libs/core/data/*
-  - libs/core/data/**/*
-  - !libs/core/data/framework/*
-  - !libs/core/ata/framework/**/*
-
-'View: Renderer':
+'ADK Renderer':
   - libs/core/feature/renderer/*
   - libs/core/feature/renderer/**/*
-
-'View: Besigner':
+'ADK Besigner':
   - libs/core/feature/besigner/*
   - libs/core/feature/besigner/**/*
+'ADK Add-ons':
+  - libs/addons/*
+  - libs/addons/**/*

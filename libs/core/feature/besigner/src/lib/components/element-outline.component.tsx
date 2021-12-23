@@ -15,25 +15,26 @@
  * limitations under the License.
  */
 
-import { OverridableStringUnion } from '@aglyn/shared-data-types'
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { useDynamicEffect } from '@aglyn/shared-ui-jsx'
-import { getElementClientRectBounding, VirtualElement } from '@aglyn/shared-util-dom'
-import { _isFnT } from '@aglyn/shared-util-guards'
-import Box, { BoxProps } from '@mui/material/Box'
+import {OverridableStringUnion} from '@aglyn/shared-data-types'
+import {alpha, generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {useDynamicEffect} from '@aglyn/shared-ui-jsx'
+import {getElementClientRectBounding, VirtualElement} from '@aglyn/shared-util-dom'
+import {_isFnT} from '@aglyn/shared-util-guards'
+import Box, {BoxProps} from '@mui/material/Box'
 import clsx from 'clsx'
-import { forwardRef, memo, useState } from 'react'
+import {forwardRef, memo, useState} from 'react'
+
 
 export interface ElementOutlineComponentPropsVariantOverrides {}
 
 const classKeys = generateComponentClassKeys('AglynElementOutline', [
   'hovered',
-  'selected'
+  'selected',
 ])
 
 const ElementOutline = styled(Box, {
   name: 'AglynElementOutline',
-})(({ theme }) => ({
+})(({theme}) => ({
   pointerEvents: 'none',
   position: 'absolute',
   overflow: 'hidden',
@@ -48,33 +49,33 @@ const ElementOutline = styled(Box, {
     easing: theme.transitions.easing.easeInOut,
   }),
   [`&.${classKeys.hovered}`]: {
-    outlineOffset: -1,
+    outlineOffset: 0,
     outlineStyle: 'dashed',
     outlineColor: theme.palette.quaternary.main,
+    backgroundColor: alpha(theme.palette.quaternary.dark, 0.36),
   },
   [`&.${classKeys.selected}`]: {
-    outlineOffset: 1,
+    outlineOffset: 6,
+    outlineWidth: 2,
     outlineColor: theme.palette.secondary.light,
     outlineStyle: 'solid',
   },
 }))
 
 export interface AglynElementOutlineProps extends BoxProps {
-  variant?: OverridableStringUnion<
-    'hovered' | 'selected',
-    ElementOutlineComponentPropsVariantOverrides
-  >
+  variant?: OverridableStringUnion<'hovered' | 'selected',
+    ElementOutlineComponentPropsVariantOverrides>
   anchorEl?: null | VirtualElement | (() => VirtualElement)
 }
 
 const ElementOutlineComponentRaw = forwardRef<any, AglynElementOutlineProps>(
   function RefRenderFn(props, ref) {
-    const { className: classNameProp, variant, anchorEl, ...rest } = props
+    const {className: classNameProp, variant, anchorEl, ...rest} = props
     const className = clsx({
       [classKeys[variant]]: Boolean(classKeys[variant]),
     }, classNameProp)
 
-    const [{ width, height }, setDimensions] = useState(() => ({
+    const [{width, height}, setDimensions] = useState(() => ({
       width: 0,
       height: 0,
     }))
@@ -96,7 +97,7 @@ const ElementOutlineComponentRaw = forwardRef<any, AglynElementOutlineProps>(
         {...rest}
       />
     )
-  }
+  },
 )
 
 ElementOutlineComponentRaw.displayName = 'ElementOutlineComponent'

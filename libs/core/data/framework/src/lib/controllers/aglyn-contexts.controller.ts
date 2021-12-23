@@ -15,16 +15,9 @@
  * limitations under the License.
  */
 
-import type { KeyValueMap } from '@aglyn/shared-data-types'
-import { _hasProperty, _isObj } from '@aglyn/shared-util-guards'
-import { getProperty } from '@aglyn/shared-util-tools'
-import {
-  createDomain as createEffectorDomain,
-  createEffect as createEffectorEffect,
-  createEvent as createEffectorEvent,
-  Domain as EffectorDomain,
-  Store as EffectorStore,
-} from 'effector'
+import {_hasProperty, _isObj} from '@aglyn/shared-util-guards'
+import {getProperty} from '@aglyn/shared-util-tools'
+import {createDomain as createEffectorDomain} from 'effector'
 import type {
   ContextsCreateEffectPayload,
   ContextsCreateEventPayload,
@@ -34,52 +27,25 @@ import type {
   ContextsGetStorePayload,
   ContextsSetStorePayload,
 } from '../constants/emitter'
-import { AglynAppEffectFlag } from '../constants/emitter'
+import {AglynAppEffectFlag} from '../constants/emitter'
+import AglynModuleModel from '../models/aglyn-module.model'
+import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
+import type {ContextStoreUid} from '../types'
+import type {IAglynAppController} from './aglyn-app.types'
 import type {
-  AglynModuleEffectListener,
-  AglynModuleModelOptions,
-} from '../models/aglyn-module.model'
-import { AglynModuleModel } from '../models/aglyn-module.model'
-import type { ContextStoreUid } from '../types'
-import type { AglynAppController } from './aglyn-app.controller'
+  AglynContextsControllerOptions,
+  ContextDomain,
+  ContextEffect,
+  ContextEvent,
+  ContextStore,
+  IAglynContextsController,
+} from './aglyn-contexts.types'
 
-
-export interface ContextDomain extends EffectorDomain {
-
-}
-
-export interface ContextStore<T> extends EffectorStore<T> {
-
-}
-
-export type ContextEvent = ReturnType<typeof createEffectorEvent>
-export type ContextEffect = ReturnType<typeof createEffectorEffect>
-
-export type ContextStoreOptions<T> = {
-  name?: string
-  sid?: string
-  updateFilter?: (update: T, current: T) => boolean
-  serialize?: 'ignore'
-}
-
-export interface AglynContextsController extends AglynModuleModel<AglynContextsControllerOptions> {
-  getStore<T>(payload: ContextsGetStorePayload): ContextStore<T>
-  getStoreApi<T, K extends keyof T = keyof T>(payload: ContextsGetStoreApiPayload): T
-  setStore<T>(payload: ContextsSetStorePayload<T>): this
-  createStore<T>(payload: ContextsCreateStorePayload<T>): ContextStore<T>
-  deleteStore(payload: ContextsDeleteStorePayload): this
-  createEvent(payload?: ContextsCreateEventPayload): ContextEvent
-  createEffect(payload?: ContextsCreateEffectPayload): ContextEffect
-}
-
-export interface AglynContextsControllerOptions extends AglynModuleModelOptions {
-  defaultStores: KeyValueMap<ContextStoreUid, { defaultState: any, options?: ContextStoreOptions<any> }>
-}
 
 const TAG = 'AglynContexts'
 const MODULE_NAME = 'contexts'
 
-export class AglynContextsController extends AglynModuleModel<AglynContextsControllerOptions> {
+export class AglynContextsController extends AglynModuleModel<AglynContextsControllerOptions> implements IAglynContextsController {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly namespace: string = `aglyn:${MODULE_NAME}`
@@ -92,7 +58,7 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
     return this.#domain
   }
 
-  constructor(app: AglynAppController, options: AglynContextsControllerOptions) {
+  constructor(app: IAglynAppController, options: AglynContextsControllerOptions) {
     super(app, options)
     this.#setup()
   }
@@ -120,27 +86,27 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
     }
   }
 
-  public createEvent = (payload?: ContextsCreateEventPayload): ContextEvent => {
+  public createEvent(payload?: ContextsCreateEventPayload): ContextEvent {
     const {options} = {...payload}
     return this.#domain.createEvent(...(options ?? [] as any))
   }
-  public createEffect = (payload?: ContextsCreateEffectPayload): ContextEffect => {
+  public createEffect(payload?: ContextsCreateEffectPayload): ContextEffect {
     const {options} = {...payload}
     return this.#domain.createEffect(...(options ?? [] as any))
   }
-  public createStore = <T>(payload: ContextsCreateStorePayload<T>): ContextStore<T> => {
+  public createStore<T>(payload: ContextsCreateStorePayload<T>): ContextStore<T> {
     const {options, defaultState} = {...payload}
     return this.#domain.createStore(defaultState, options)
   }
-  public getStore = <T>(payload: ContextsGetStorePayload): ContextStore<T> => {
+  public getStore<T>(payload: ContextsGetStorePayload): ContextStore<T> {
     const {storeId} = {...payload}
     return this.#stores.get(storeId)
   }
-  public getStoreApi = <T, K extends keyof T = keyof T>(payload: ContextsGetStoreApiPayload): T => {
+  public getStoreApi<T, K extends keyof T = keyof T>(payload: ContextsGetStoreApiPayload): T {
     const {storeId} = {...payload}
     return this.#stores.get(storeId) as unknown as T
   }
-  public setStore = <T>(payload: ContextsSetStorePayload<T>): this => {
+  public setStore<T>(payload: ContextsSetStorePayload<T>): this {
     const {storeId, store} = {...payload}
     if (storeId && store) {
       this.#stores.set(storeId, store)
@@ -150,7 +116,7 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
     }
     return this
   }
-  public deleteStore = (payload: ContextsDeleteStorePayload): this => {
+  public deleteStore(payload: ContextsDeleteStorePayload): this {
     const {storeId} = {...payload}
     this.#stores.delete(storeId)
     return this
@@ -166,5 +132,4 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
   ]
 }
 
-export type AglynContextsControllerT = typeof AglynContextsController
 export default AglynContextsController

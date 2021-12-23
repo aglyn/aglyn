@@ -16,9 +16,9 @@
  */
 
 
-export const PKG_VERSION = process.env.PKG_VERSION || 'NULL'
-export const BUILD_ID = process.env.BUILD_ID || 'NULL'
-export const COMMIT_REF = process.env.COMMIT_REF || 'NULL'
+export const PKG_VERSION = String(process.env.PKG_VERSION || 'NULL')
+export const BUILD_ID = String(process.env.BUILD_ID || 'NULL')
+export const COMMIT_REF = String(process.env.COMMIT_REF || 'NULL')
 
 export const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 export const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'

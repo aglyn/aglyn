@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-export { default as FormRenderer } from '@data-driven-forms/react-form-renderer/form-renderer'
-export * as FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
-export * as useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
-export * as useFieldApi from '@data-driven-forms/react-form-renderer/use-field-api'
+export * from '@data-driven-forms/react-form-renderer/form-renderer'
+export {default as FormRenderer} from '@data-driven-forms/react-form-renderer/form-renderer'
+export * from '@data-driven-forms/react-form-renderer/use-form-api'
+export {default as useFormApi} from '@data-driven-forms/react-form-renderer/use-form-api'
+export * from '@data-driven-forms/react-form-renderer/use-field-api'
+export {default as useFieldApi} from '@data-driven-forms/react-form-renderer/use-field-api'
+export {default as FormSpy} from '@data-driven-forms/react-form-renderer/form-spy'
+export {default as ValidatorTypes} from '@data-driven-forms/react-form-renderer/validator-types'

@@ -15,65 +15,66 @@
  * limitations under the License.
  */
 
-import { FormTemplateRenderProps } from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
-
-import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
-import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
+import {mdiContentSave, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import type {
+  FormTemplateRenderProps,
+} from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
 
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import Grid from '@mui/material/Grid'
-import { forwardRef } from 'react'
-import { SvgPathIcon } from '../components/svg-path-icon'
+import React, {forwardRef} from 'react'
+
+import {FormSpy, useFormApi} from './ddf-reexports'
 
 
 export interface GridFormTemplateProps extends FormTemplateRenderProps {}
 
-export const GridFormTemplate = forwardRef<any, GridFormTemplateProps>(function RefRenderFn(
-  props,
-  ref,
-) {
-  const {formFields, schema} = props
-  const {handleSubmit, onReset, onCancel, getState} = useFormApi()
-  const {submitting, valid, pristine} = getState()
-  return (
-    <form ref={ref} onSubmit={handleSubmit} noValidate>
-      {schema.title}
-      <Grid spacing={2} container>
-        {formFields}
-      </Grid>
-      <FormSpy>
-        {({submitting, validating, pristine, valid}) => (
-          <Box mt={2}>
-            <FormControl margin="normal" fullWidth>
-              <Button
-                variant="outlined"
-                onClick={onCancel}
-                disabled={submitting || validating}
-                fullWidth
-              >
-                Cancel
-              </Button>
-            </FormControl>
-            <FormControl margin="normal" fullWidth>
-              <Button
-                color="secondary"
-                disabled={submitting || !valid || pristine}
-                startIcon={<SvgPathIcon iconIds="content-save" />}
-                style={{marginRight: 8}}
-                type="submit"
-                variant="contained"
-                fullWidth
-              >
-                Save Element
-              </Button>
-            </FormControl>
-          </Box>
-        )}
-      </FormSpy>
-    </form>
-  )
-})
+export const GridFormTemplate = forwardRef<any, GridFormTemplateProps>(
+  function RefRenderFn(props, ref) {
+    const {formFields, schema, ...rest} = props
+    const {handleSubmit, onReset, onCancel, getState} = useFormApi()
+    const {submitting, valid, pristine} = getState()
+    console.log('rest grid form template', rest)
+    return (
+      <form ref={ref} onSubmit={handleSubmit} noValidate>
+        {schema.title}
+        <Grid spacing={2} container>
+          {formFields}
+        </Grid>
+        <FormSpy>
+          {({submitting, validating, pristine, valid}) => (
+            <Box mt={2}>
+              <FormControl margin="normal" fullWidth>
+                <Button
+                  variant="outlined"
+                  onClick={onCancel}
+                  disabled={submitting || validating}
+                  fullWidth
+                >
+                  Cancel
+                </Button>
+              </FormControl>
+              <FormControl margin="normal" fullWidth>
+                <Button
+                  color="secondary"
+                  disabled={submitting || !valid || pristine}
+                  startIcon={<MdiIcon path={mdiContentSave.path} />}
+                  style={{marginRight: 8}}
+                  type="submit"
+                  variant="contained"
+                  fullWidth
+                >
+                  Save Element
+                </Button>
+              </FormControl>
+            </Box>
+          )}
+        </FormSpy>
+      </form>
+    )
+  },
+)
 GridFormTemplate.displayName = 'GridFormTemplate'
 export default GridFormTemplate

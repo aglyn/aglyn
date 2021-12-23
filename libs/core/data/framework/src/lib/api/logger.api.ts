@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import { Logger, LogHandler, LogLevelString } from '@aglyn/shared-util-logger'
-import { AGLYN_LOGGER, AglynLogger } from '../constants/logger'
-import { AglynAppController } from '../controllers/aglyn-app.controller'
-import { _validateAppArg } from './app.api'
+import {Logger, LogHandler, LogLevelString} from '@aglyn/shared-util-logger'
+import {AGLYN_LOGGER, AglynLogger} from '../constants/logger'
+import AglynAppController from '../controllers/aglyn-app.controller'
+import type {IAglynAppController} from '../controllers/aglyn-app.types'
+import {_validateAppArg} from './app.api'
 
 
 /**
@@ -27,7 +28,7 @@ import { _validateAppArg } from './app.api'
  * @param logHandler - An custom log handler to execute whenever the SDK makes a logging call.
  */
 export function setUserLogHandler(
-  app: AglynAppController,
+  app: IAglynAppController,
   logHandler: LogHandler,
 ): void
 /**
@@ -36,7 +37,7 @@ export function setUserLogHandler(
  * @param logHandler - An custom log handler to execute whenever the SDK makes a logging call.
  */
 export function setUserLogHandler(
-  ctx: AglynAppController | AglynLogger | null,
+  ctx: IAglynAppController | AglynLogger | null,
   logHandler: LogHandler,
 ): void {
   if (ctx instanceof AglynAppController) {
@@ -62,8 +63,8 @@ export function setUserLogHandler(
  * @param options - the options to pass to `setLogLevel()`
  */
 export function setLogLevel(
-  app: AglynAppController,
-  options: { logLevel: LogLevelString },
+  app: IAglynAppController,
+  options: {logLevel: LogLevelString},
 ): void
 
 /**
@@ -77,8 +78,8 @@ export function setLogLevel(
  * @param options - the options to pass to `setLogLevel()`
  */
 export function setLogLevel(
-  ctx: AglynAppController | AglynLogger | null,
-  options: { logLevel: LogLevelString },
+  ctx: IAglynAppController | AglynLogger | null,
+  options: {logLevel: LogLevelString},
 ): void {
   const {logLevel} = options
   if (ctx instanceof AglynAppController) {

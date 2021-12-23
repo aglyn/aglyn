@@ -15,40 +15,21 @@
  * limitations under the License.
  */
 
-import { Dictionary, Serializable, StringLike } from '@aglyn/shared-data-types'
-import { LogLevelString } from '@aglyn/shared-util-logger'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { getStaticField } from '@aglyn/shared-util-tools'
-import { AGLYN_EMITTER, AglynEmitter } from '../constants/emitter'
-import { AGLYN_ERROR, AglynErrorFactory } from '../constants/error'
-import { AGLYN_LOGGER, AglynLogger } from '../constants/logger'
-import { AGLYN_PLATFORM, AglynPlatform } from '../constants/platform'
-import { AglynVersion, SDK_VERSION } from '../constants/version'
-import { AglynLifecycleObserver } from '../types'
+import type {Dictionary} from '@aglyn/shared-data-types'
+import {Timestamp} from '@aglyn/shared-util-timestamp'
+import {getStaticField} from '@aglyn/shared-util-tools'
+import {AGLYN_EMITTER, AglynEmitter} from '../constants/emitter'
+import {AGLYN_ERROR, AglynErrorFactory} from '../constants/error'
+import {AGLYN_LOGGER, AglynLogger} from '../constants/logger'
+import {AGLYN_PLATFORM, AglynPlatform} from '../constants/platform'
+import {AglynVersion, SDK_VERSION} from '../constants/version'
+import type {AglynBaseModelOptions, IAglynBaseModel} from './aglyn-base.types'
 
-
-export interface AglynBaseModelOptions {
-  logLevel?: LogLevelString
-  errorFactory?: AglynErrorFactory
-  emitter?: AglynEmitter
-  logger?: AglynLogger
-}
-
-export interface AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOptions> extends StringLike, Serializable, AglynLifecycleObserver {
-  getCreatedAt(): Timestamp
-  getOptions(): O
-  getErrorFactory(): AglynErrorFactory
-  setErrorFactory(value: AglynErrorFactory): this
-  getEmitter(): AglynEmitter
-  setEmitter(value: AglynEmitter): this
-  getLogger(): AglynLogger
-  setLogger(value: AglynLogger): this
-}
 
 const TAG = 'AglynBaseModel'
 const MODULE_NAME = 'model'
 
-export abstract class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOptions> {
+export abstract class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOptions> implements IAglynBaseModel<O> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly namespace: string = MODULE_NAME

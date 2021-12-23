@@ -19,15 +19,16 @@
 const withNx = require('@nrwl/next/plugins/with-nx')
 const pkg = require('./package.json')
 
-const PKG_VERSION = String(pkg?.version ?? 'UNDEFINED')
-const PROCESS_VERSION = String(process.version ?? 'UNDEFINED')
-const PROCESS_VERSIONS = String(process.versions ?? 'UNDEFINED')
+const PKG_VERSION = String(pkg?.version ?? 'NULL')
+const PROCESS_VERSION = String(process.version ?? 'NULL')
+const PROCESS_VERSIONS = String(process.versions ?? 'NULL')
 
-const COMMIT_REF = JSON.stringify(process.env.COMMIT_REF)
+const COMMIT_REF = String(process.env.COMMIT_REF ?? 'NULL')
 
-const IS_DEVELOPMENT = process.env.NODE_ENV === 'development'
-const IS_PRODUCTION = process.env.NODE_ENV === 'production'
-const IS_TEST = process.env.NODE_ENV === 'test'
+const NODE_ENV = process.env.NODE_ENV
+const IS_DEVELOPMENT = NODE_ENV === 'development'
+const IS_PRODUCTION = NODE_ENV === 'production'
+const IS_TEST = NODE_ENV === 'test'
 
 const SECURITY_HEADERS = [
   /**
@@ -86,7 +87,7 @@ const BRAND_HEADERS = [
  * @param opts {import('@nrwl/next/plugins/with-nx').WithNxOptions}
  **/
 const withAglynNxNext = (opts = {}) => {
-  console.log('process.env.NODE_ENV', process.env.NODE_ENV, IS_PRODUCTION)
+  console.log('process.env.NODE_ENV', NODE_ENV)
 
   return withNx({
     ...opts,
@@ -104,14 +105,12 @@ const withAglynNxNext = (opts = {}) => {
     // Next.js provides gzip compression to compress rendered content and static files. In general
     // you will want to enable compression on a HTTP proxy like nginx, to offload load from the
     // Node.js process.
-    compress: true,
+    compress: IS_PRODUCTION,
 
     optimizeFonts: IS_PRODUCTION,
 
     // Opt-in to using the Next.js compiler for minification. This is 7x faster than Terser.
     swcMinify: false,
-
-    target: 'experimental-serverless-trace',
 
     reactStrictMode: !IS_PRODUCTION,
 
@@ -119,7 +118,6 @@ const withAglynNxNext = (opts = {}) => {
       // Motivated by https://github.com/zeit/next.js/issues/7687
       ignoreDevErrors: IS_PRODUCTION,
       ignoreBuildErrors: IS_PRODUCTION,
-
       ...opts?.typescript,
     },
 
@@ -131,7 +129,8 @@ const withAglynNxNext = (opts = {}) => {
     nx: {
       // Set this to false if you do not want to use SVGR
       // See: https://github.com/gregberge/svgr
-      svgr: true,
+      svgr: false,
+      ...opts?.nx,
     },
 
     images: {
@@ -156,7 +155,10 @@ const withAglynNxNext = (opts = {}) => {
 
     experimental: {
       // ssr and displayName are configured by default
-      styledComponents: true,
+      styledComponents: false,
+      // Next.js can automatically create a standalone folder which copies only the necessary files
+      // for a production deployment including select files in node_modules.
+      outputStandalone: false,
       ...opts?.experimental,
     },
 

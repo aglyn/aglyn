@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { _isStrT } from '@aglyn/shared-util-guards'
+import {_isStrT} from '@aglyn/shared-util-guards'
 import {
   AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
-} from '../controllers/aglyn-components.controller'
-import { AglynComponentElementDataNormalizedMap, ElementId } from '../types'
+} from '../controllers/aglyn-components.types'
+import {AglynComponentElementDataNormalizedMap, ElementId} from '../types'
 
 
 const denormalizeData = (

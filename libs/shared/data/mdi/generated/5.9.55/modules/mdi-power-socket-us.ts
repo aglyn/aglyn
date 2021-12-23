@@ -1,0 +1,18 @@
+export default {
+  "id": "power-socket-us",
+  "name": "Power Socket Us",
+  "path": "M8,7H10V12H8V7M4.22,2H19.78C21,2 22,3 22,4.22V19.78A2.22,2.22 0 0,1 19.78,22H4.22C3,22 2,21 2,19.78V4.22A2.22,2.22 0 0,1 4.22,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4M14,7.5H16V11.5H14V7.5M10.5,16.25A1.5,1.5 0 0,1 12,14.75A1.5,1.5 0 0,1 13.5,16.25V17H10.5V16.25Z",
+  "as": [
+    "plug-socket-us",
+    "power-socket-ca",
+    "power-socket-mx",
+    "power-socket-type-b",
+    "power-socket-united-states",
+    "power-socket-japan",
+    "power-socket-canada",
+    "power-socket-mexico"
+  ],
+  "tags": [
+    "Home Automation"
+  ]
+}

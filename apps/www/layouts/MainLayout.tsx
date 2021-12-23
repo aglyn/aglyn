@@ -24,8 +24,8 @@ import {
   GridButtons,
   GridButtonsProps,
   Menu,
-  SvgPathIcon,
 } from '@aglyn/shared-ui-jsx'
+import {MdiIcon, MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import {_isArr, _isArrEmpty, _isObj} from '@aglyn/shared-util-guards'
 import AppBar, {AppBarProps} from '@mui/material/AppBar'
 import Avatar from '@mui/material/Avatar'
@@ -39,7 +39,7 @@ import Toolbar from '@mui/material/Toolbar'
 import Typography from '@mui/material/Typography'
 import Head from 'next/head'
 import {useRouter} from 'next/router'
-import {ElementType, Fragment, ReactNode} from 'react'
+import React, {ElementType, Fragment, ReactNode} from 'react'
 import {Breadcrumbs, BreadcrumbsProps} from '../components/Breadcrumbs'
 import Copyright from '../components/Copyright'
 import {tailNavigation} from '../const'
@@ -229,7 +229,7 @@ export const NAVIGATION_MAX_WIDTH = 'lg'
 export const FOOTER_MAX_WIDTH = 'lg'
 
 export interface QuickActionsMenuItem extends IconButtonProps {
-  iconIds?: string
+  iconPath?: MdiIconProps['path']
   avatar?: any
   dense?: boolean
   href?: any
@@ -242,7 +242,7 @@ export interface MainLayoutProps {
   tabBarTitle?: string
   centerNavigationItems?: Array<any>
   breadcrumbItems?: BreadcrumbsProps['items']
-  navTabItems?: (TabProps & AppLinkProps<'text'> & {iconIds: string})[]
+  navTabItems?: (TabProps & AppLinkProps<'text'> & {iconPath: MdiIconProps['path']})[]
   quickActionMenus?: QuickActionsMenuItem[]
   productName?: string
   footerNavItems?: GridButtonsProps['items']
@@ -273,9 +273,9 @@ function MainLayoutRaw(props: MainLayoutProps) {
     }).href ?? ''
     : ''
 
-  const buildIconButton = ({avatar, iconId, children, ...rest}, i) => (
+  const buildIconButton = ({avatar, iconPath, children, ...rest}, i) => (
     <IconButton key={rest.id ?? rest['href'] ?? i} color="inherit" {...rest}>
-      {avatar ? <StyledAvatar {...avatar} /> : iconId && <SvgPathIcon iconIds={iconId} />}
+      {avatar ? <StyledAvatar {...avatar} /> : iconPath && <MdiIcon path={iconPath} />}
       {children}
     </IconButton>
   )
@@ -340,14 +340,18 @@ function MainLayoutRaw(props: MainLayoutProps) {
                 variant="scrollable"
               >
                 {tabBarTitle && <TabBarTitle>{tabBarTitle}</TabBarTitle>}
-                {navTabItems && navTabItems.map(({iconIds, ...item}, i) => (
+                {navTabItems && navTabItems.map(({iconPath, ...item}, i) => (
                   <StyledTab
                     key={item.id ?? item['key'] ?? i}
                     // disableRipple
                     color="inherit"
                     component={AppLink}
                     href={item.href ?? ''}
-                    icon={<SvgPathIcon iconIds={iconIds} />}
+                    icon={
+                      <MdiIcon
+                        path={iconPath}
+                      />
+                    }
                     label={item.label}
                     underline="none"
                     value={item.href ?? i}

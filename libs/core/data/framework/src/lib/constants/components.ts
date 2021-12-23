@@ -16,37 +16,39 @@
  */
 
 
+// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
+import {PropertyEditorFieldFlag} from '@aglyn/shared-ui-jsx'
+import {AglynComponentPropsFormSchema} from '../controllers/aglyn-components.types'
+
+
 export enum ComponentsLinealDirectiveFlag {
   LIMIT_TO = 0x01,
   DISALLOW = 0x02,
 }
 
-export enum PropertyEditorFieldFlag {
-  CHECKBOX = 'checkbox',
-  DATE_PICKER = 'date-picker',
-  ICON_SELECT = 'icon-select',
-  RADIO = 'radio',
-  SELECT = 'select',
-  TEXT_FIELD = 'text-field',
-  TEXTAREA = 'textarea',
-  TIME_PICKER = 'time-picker',
-}
+export {PropertyEditorFieldFlag}
 
-export const DEFAULT_COMPONENT_ICON_ID = 'cube-outline'
-
-export const DEFAULT_PROPS_FORM_SCHEMA = {
+export const DEFAULT_PROPS_FORM_SCHEMA: AglynComponentPropsFormSchema = {
   fields: [
+    // {
+    //   name: 'iconId',
+    //   component: PropertyEditorFieldFlag.ICON_SELECT,
+    //   label: 'Icon',
+    //   // variant: 'outlined',
+    // },
+    // {
+    //   name: 'displayName',
+    //   component: PropertyEditorFieldFlag.TEXT_FIELD,
+    //   label: 'Display name',
+    //   // variant: 'outlined',
+    // },
     {
-      name: 'displayName',
+      name: 'children',
+      description: 'The content of the component.',
       component: PropertyEditorFieldFlag.TEXT_FIELD,
-      label: 'Display name',
-      // variant: 'outlined',
-    },
-    {
-      name: 'iconIds',
-      component: PropertyEditorFieldFlag.ICON_SELECT,
-      label: 'Icon',
-      // variant: 'outlined',
+      label: 'Content',
+      variant: 'outlined',
+      size: 'small',
     },
   ],
 }

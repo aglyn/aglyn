@@ -15,26 +15,26 @@
  * limitations under the License.
  */
 
-import type { AglynAppController } from '../controllers/aglyn-app.controller'
-import type { AglynBesignerController } from '../controllers/aglyn-besigner.controller'
-import type { AglynCanvasController } from '../controllers/aglyn-canvas.controller'
-import type { AglynCommandsController } from '../controllers/aglyn-commands.controller'
-import type { AglynComponentsController } from '../controllers/aglyn-components.controller'
-import type { AglynContextsController } from '../controllers/aglyn-contexts.controller'
-import type { AglynExtensionsController } from '../controllers/aglyn-extensions.controller'
-import type { AppUUN } from '../types'
+import type {IAglynAppController} from '../controllers/aglyn-app.types'
+import type {IAglynBesignerController} from '../controllers/aglyn-besigner.types'
+import type {IAglynCanvasController} from '../controllers/aglyn-canvas.types'
+import type {IAglynCommandsController} from '../controllers/aglyn-commands.types'
+import type {IAglynComponentsController} from '../controllers/aglyn-components.types'
+import type {IAglynContextsController} from '../controllers/aglyn-contexts.types'
+import type {IAglynExtensionsController} from '../controllers/aglyn-extensions.types'
+import type {AppUUN} from '../types'
 
 
 export const DEFAULT_APP_UUN = '[DEFAULT]'
 export type DEFAULT_APP_UUN = typeof DEFAULT_APP_UUN
 
-export const _INTERNAL_APPS_: Map<AppUUN, AglynAppController> = new Map()
-export const _INTERNAL_EXTENSIONS_: Map<AppUUN, AglynExtensionsController> = new Map()
-export const _INTERNAL_COMMANDS_: Map<AppUUN, AglynCommandsController> = new Map()
-export const _INTERNAL_COMPONENTS_: Map<AppUUN, AglynComponentsController> = new Map()
-export const _INTERNAL_BESIGNERS_: Map<AppUUN, AglynBesignerController> = new Map()
-export const _INTERNAL_CANVAS_: Map<AppUUN, AglynCanvasController> = new Map()
-export const _INTERNAL_CONTEXTS_: Map<AppUUN, AglynContextsController> = new Map()
+export const _INTERNAL_APPS_: Map<AppUUN, IAglynAppController> = new Map()
+export const _INTERNAL_EXTENSIONS_: Map<AppUUN, IAglynExtensionsController> = new Map()
+export const _INTERNAL_COMMANDS_: Map<AppUUN, IAglynCommandsController> = new Map()
+export const _INTERNAL_COMPONENTS_: Map<AppUUN, IAglynComponentsController> = new Map()
+export const _INTERNAL_BESIGNERS_: Map<AppUUN, IAglynBesignerController> = new Map()
+export const _INTERNAL_CANVAS_: Map<AppUUN, IAglynCanvasController> = new Map()
+export const _INTERNAL_CONTEXTS_: Map<AppUUN, IAglynContextsController> = new Map()
 
 
 const y = new Date().getFullYear()

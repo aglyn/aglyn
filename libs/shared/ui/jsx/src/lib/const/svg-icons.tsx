@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import { forwardRef } from 'react'
-import { createSvgPathIcon } from '../components/svg-path-icon'
-import SvgIcon, {SvgIconProps} from '@mui/material/SvgIcon'
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import MuiSvgIcon, {SvgIconProps as MuiSvgIconProps} from '@mui/material/SvgIcon'
+import {forwardRef} from 'react'
 
 
 export const AGLYN_SVG_LOGO = {
@@ -34,10 +33,38 @@ export const BESIGNER_SVG_LOGO = {
   viewBox: '0 0 77.2 18',
 }
 
-export const AglynSvgLogo = createSvgPathIcon('AglynSvgLogo', AGLYN_SVG_LOGO.path, {
-  viewBox: AGLYN_SVG_LOGO.viewBox,
-  'aria-label': 'Aglyn logo',
-})
+export const AglynSvgLogo = forwardRef<any, MuiSvgIconProps>(
+  function RefRenderFn(props, ref) {
+    return (
+      <MuiSvgIcon
+        ref={ref}
+        viewBox={AGLYN_SVG_LOGO.viewBox}
+        aria-label={'Aglyn Logo'}
+        {...props}
+      >
+        <path d={AGLYN_SVG_LOGO.path} />
+      </MuiSvgIcon>
+    )
+  },
+)
+AglynSvgLogo.displayName = 'AglynSvgLogo'
+
+export const BesignerSvgLogo = forwardRef<any, MuiSvgIconProps>(
+  function RefRenderFn(props, ref) {
+    return (
+      <MuiSvgIcon
+        ref={ref}
+        viewBox={BESIGNER_SVG_LOGO.viewBox}
+        aria-label={'Besigner Logo'}
+        {...props}
+      >
+        <path d={BESIGNER_SVG_LOGO.path} />
+      </MuiSvgIcon>
+    )
+  },
+)
+BesignerSvgLogo.displayName = 'BesignerSvgLogo'
+
 
 const aglynSvgIconClassKey = generateComponentClassKeys('AglynSvgIcon', [
   'rectBg',
@@ -45,16 +72,18 @@ const aglynSvgIconClassKey = generateComponentClassKeys('AglynSvgIcon', [
   'a2',
   'a3',
 ])
-export interface AglynSvgIconProps extends SvgIconProps {
+
+export interface AglynSvgIconProps extends MuiSvgIconProps {
   rectBgColor?: string
   a1Color?: string
   a2Color?: string
   a3Color?: string
 }
+
 export const AglynSvgIcon = styled(forwardRef<any, AglynSvgIconProps>(
   function RefRenderFn(props, ref) {
     return (
-      <SvgIcon ref={ref} {...props}>
+      <MuiSvgIcon ref={ref} {...props}>
         <defs>
           <clipPath id="b">
             <rect width="24" height="24" />
@@ -86,11 +115,11 @@ export const AglynSvgIcon = styled(forwardRef<any, AglynSvgIconProps>(
             </g>
           </g>
         </g>
-      </SvgIcon>
+      </MuiSvgIcon>
     )
-  }
+  },
 ), {
-  name: 'AglynSvgIcon'
+  name: 'AglynSvgIcon',
 })(({theme, rectBgColor, a1Color, a2Color, a3Color}) => ({
   [`& .${aglynSvgIconClassKey.rectBg}`]: {
     fill: 'currentColor',
@@ -109,9 +138,4 @@ export const AglynSvgIcon = styled(forwardRef<any, AglynSvgIconProps>(
     color: a3Color ?? theme.palette.primary.contrastText,
   },
 }))
-AglynSvgIcon.displayName = "AglynSvgIcon"
-
-export const BesignerSvgLogo = createSvgPathIcon('BesignerSvgLogo', BESIGNER_SVG_LOGO.path, {
-  viewBox: BESIGNER_SVG_LOGO.viewBox,
-  'aria-label': 'BesignerSvgLogo',
-})
+AglynSvgIcon.displayName = 'AglynSvgIcon'

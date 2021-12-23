@@ -1,13 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<module type="WEB_MODULE" version="4">
+<module type="JAVA_MODULE" version="4">
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/apps/console/public" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/console/specs" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/www/public" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/www/specs" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/console-e2e/src" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/www-e2e/src" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/console-e2e" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/www-e2e" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/libs" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/static" type="java-resource" />
       <excludeFolder url="file://$MODULE_DIR$/.firebase" />
-      <excludeFolder url="file://$MODULE_DIR$/.husky/_" />
-      <excludeFolder url="file://$MODULE_DIR$/.idea" />
       <excludeFolder url="file://$MODULE_DIR$/dist" />
+      <excludeFolder url="file://$MODULE_DIR$/.husky/_" />
+      <excludeFolder url="file://$MODULE_DIR$/_idea" />
+      <excludeFolder url="file://$MODULE_DIR$/.idea" />
+      <excludeFolder url="file://$MODULE_DIR$/libs/shared/data/mdi/src/generated" />
+      <excludeFolder url="file://$MODULE_DIR$/libs/shared/data/mdi/generated" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

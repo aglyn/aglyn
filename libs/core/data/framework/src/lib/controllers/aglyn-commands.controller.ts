@@ -15,61 +15,32 @@
  * limitations under the License.
  */
 
-import type { Dictionary } from '@aglyn/shared-data-types'
-import { EmitterFn } from '@aglyn/shared-util-emitter'
-import { _isFnT } from '@aglyn/shared-util-guards'
-import {
-  AglynAppEffectFlag,
-  AglynAppEventFlag,
+import {EmitterFn} from '@aglyn/shared-util-emitter'
+import {_isFnT} from '@aglyn/shared-util-guards'
+import type {
   CommandRegisterListenerPayload,
   CommandRemoveResolverPayload,
   CommandsSetResolverPayload,
   CommandTriggerPayload,
   CommandUnregisterListenerPayload,
 } from '../constants/emitter'
-import type { COMMAND_LISTENER_TYPE, COMMAND_RESOLVER_TYPE, MODULE_TYPE } from '../constants/symbol'
-import {
-  AglynModuleEffectListener,
-  AglynModuleModel,
-  AglynModuleModelOptions,
-} from '../models/aglyn-module.model'
-import type { AglynTypeFields, CommandUId } from '../types'
-import { AglynAppController } from './aglyn-app.controller'
+import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
+import AglynModuleModel from '../models/aglyn-module.model'
+import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
+import type {CommandUId} from '../types'
+import type {IAglynAppController} from './aglyn-app.types'
+import type {
+  AglynCommander,
+  AglynCommandResolver,
+  AglynCommandsControllerOptions,
+  IAglynCommandsController,
+} from './aglyn-commands.types'
 
-
-export type AglynCommandResolverTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_RESOLVER_TYPE>
-export type AglynCommandListenerTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_LISTENER_TYPE>
-
-export type TriggerListenerPayload<T, U> = { payload: T, response: U }
-export type AglynCommander = EmitterFn<Record<CommandUId, TriggerListenerPayload<any, any>>>
-
-
-export interface AglynCommandResolver extends AglynCommandResolverTypeFields {
-  commandId: CommandUId
-  (data: Dictionary): any
-}
-
-export interface AglynCommandListener extends AglynCommandListenerTypeFields {
-  commandId: CommandUId
-  (data: TriggerListenerPayload<any, any>): void
-}
-
-export interface AglynCommandsControllerOptions extends AglynModuleModelOptions {
-  handlers?: CommandsSetResolverPayload
-}
-
-export interface AglynCommandsController extends AglynModuleModel<AglynCommandsControllerOptions> {
-  setResolver(data: CommandsSetResolverPayload): void
-  registerListener(data: CommandRegisterListenerPayload): void
-  removeResolver(data: CommandRemoveResolverPayload): void
-  unregisterListener(data: CommandUnregisterListenerPayload): void
-  trigger(data: CommandTriggerPayload): void
-}
 
 const TAG = 'AglynCommands'
 const MODULE_NAME = 'commands'
 
-export class AglynCommandsController extends AglynModuleModel<AglynCommandsControllerOptions> {
+export class AglynCommandsController extends AglynModuleModel<AglynCommandsControllerOptions> implements IAglynCommandsController {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly namespace: string = `aglyn:${MODULE_NAME}`
@@ -85,7 +56,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
     return this.#resolvers
   }
 
-  constructor(app: AglynAppController, options: AglynCommandsControllerOptions) {
+  constructor(app: IAglynAppController, options: AglynCommandsControllerOptions) {
     super(app, options)
   }
 
@@ -96,7 +67,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
     }
   }
 
-  public setResolver = (payload: CommandsSetResolverPayload): void => {
+  public setResolver(payload: CommandsSetResolverPayload): void {
     const {resolver, commandId: cId} = payload
     const commandId = resolver?.commandId || cId
     if (_isFnT(resolver) && commandId) {
@@ -108,7 +79,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public registerListener = (payload: CommandRegisterListenerPayload): void => {
+  public registerListener(payload: CommandRegisterListenerPayload): void {
     const {listener, commandId: cId} = payload
     const commandId = listener?.commandId || cId
     if (commandId && _isFnT(listener)) {
@@ -120,7 +91,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public unregisterListener = (payload: CommandUnregisterListenerPayload): void => {
+  public unregisterListener(payload: CommandUnregisterListenerPayload): void {
     const {listener, commandId: cId} = payload
     const commandId = listener?.commandId || cId
     if (commandId) {
@@ -132,7 +103,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public removeResolver = (payload: CommandRemoveResolverPayload): void => {
+  public removeResolver(payload: CommandRemoveResolverPayload): void {
     const {commandId} = payload
     if (commandId) {
       this.#resolvers.delete(commandId)
@@ -143,7 +114,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public trigger = (payload: CommandTriggerPayload): void => {
+  public trigger(payload: CommandTriggerPayload): void {
     const {commandId} = payload
     const resolver = this.#resolvers.get(commandId)
     if (_isFnT(resolver)) {
@@ -174,5 +145,4 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
   ]
 }
 
-export type AglynCommandsControllerT = typeof AglynCommandsController
 export default AglynCommandsController

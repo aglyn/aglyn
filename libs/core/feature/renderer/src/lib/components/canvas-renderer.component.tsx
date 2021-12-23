@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-framework'
-import { OverrideableComponentProps } from '@aglyn/shared-data-types'
+import {CANVAS_ROOT_ELEMENT_ID} from '@aglyn/core-data-framework'
+import type {OverrideableComponentProps} from '@aglyn/shared-data-types'
 import Box from '@mui/material/Box'
-import { forwardRef, HTMLAttributes } from 'react'
-import { useAglynElementData } from '../hooks/use-aglyn-element-data'
+import {forwardRef, HTMLAttributes} from 'react'
+import {useAglynElementData} from '../hooks/use-aglyn-element-data'
 import {
   ElementRendererComponent,
   ElementRendererComponentProps,
 } from './element-renderer.component'
-import { ElementsRendererComponent } from './elements-renderer.component'
+import {ElementsRendererComponent} from './elements-renderer.component'
+
 
 export interface CanvasRendererComponentProps
   extends HTMLAttributes<HTMLElement>,
@@ -34,7 +35,7 @@ export interface CanvasRendererComponentProps
 
 const CanvasRendererComponent = forwardRef<any, CanvasRendererComponentProps>(
   function RefRenderFn(props, ref) {
-    const { elementRendererComponent: elementRendererComponentProp, children, ...rest } = props
+    const {elementRendererComponent: elementRendererComponentProp, children, ...rest} = props
     const elementRendererComponent = elementRendererComponentProp || ElementRendererComponent
     const elements = useAglynElementData(CANVAS_ROOT_ELEMENT_ID, 'elements')
     return (
@@ -46,7 +47,7 @@ const CanvasRendererComponent = forwardRef<any, CanvasRendererComponentProps>(
         {children}
       </Box>
     )
-  }
+  },
 )
 
 CanvasRendererComponent.displayName = 'CanvasRendererComponent'
@@ -54,5 +55,5 @@ CanvasRendererComponent.defaultProps = {
   component: 'div',
 }
 
-export { CanvasRendererComponent }
+export {CanvasRendererComponent}
 export default CanvasRendererComponent

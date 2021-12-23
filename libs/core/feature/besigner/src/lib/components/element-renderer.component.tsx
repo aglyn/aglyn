@@ -27,15 +27,15 @@ import {
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import { styled } from '@aglyn/shared-feature-themes'
-import { useCombinedRefs, useDynamicEffect } from '@aglyn/shared-ui-jsx'
-import { CSS } from '@aglyn/shared-util-tools'
-import { useDraggable, useDroppable } from '@dnd-kit/core'
-import Box, { BoxProps } from '@mui/material/Box'
-import { forwardRef, MouseEvent, useCallback, useRef } from 'react'
-import { useCanvasRenderedElementRefs } from '../contexts/canvas-rendered-element-refs'
-import { useBesignerElementAttributes } from '../hooks/use-besigner-element-attributes'
-import { useAglynBesignerStoreState } from '../hooks/use-aglyn-besigner-store-state'
+import {styled} from '@aglyn/shared-feature-themes'
+import {useCombinedRefs, useDynamicEffect} from '@aglyn/shared-ui-jsx'
+import {CSS} from '@aglyn/shared-util-tools'
+import {useDraggable, useDroppable} from '@dnd-kit/core'
+import Box, {BoxProps} from '@mui/material/Box'
+import {forwardRef, MouseEvent, useCallback, useRef} from 'react'
+import {useCanvasRenderedElementRefs} from '../contexts/canvas-rendered-element-refs'
+import {useAglynBesignerStoreState} from '../hooks/use-aglyn-besigner-store-state'
+import {useBesignerElementAttributes} from '../hooks/use-besigner-element-attributes'
 
 
 interface ElementBoxProps extends BoxProps {}
@@ -127,7 +127,7 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
     const handleMouseLeave = useCallback((e) => {
       if (isDragging) return
       e.stopPropagation()
-      setBesignerCanvasHovered(getApp(), {hovered: undefined})
+      setBesignerCanvasHovered(getApp(), {hovered: {}})
       // hoverClose(e)
     }, [])
 
@@ -165,7 +165,7 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
       return () => {
         deleteElementRef($id)
       }
-    }, [])
+    }, [$id, localRef, setElementRef, deleteElementRef])
 
     // console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
     // console.log('element attributes', elementAttributes)
@@ -191,5 +191,5 @@ const ElementRendererComponent = forwardRef<any, ElementRendererComponentProps>(
 ElementRendererComponent.displayName = 'Besigner.ElementRendererComponent'
 ElementRendererComponent.defaultProps = {}
 
-export { ElementRendererComponent }
+export {ElementRendererComponent}
 export default ElementRendererComponent

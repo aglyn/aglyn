@@ -15,27 +15,54 @@
  * limitations under the License.
  */
 
-import ComponentMapper from '@data-driven-forms/react-form-renderer/common-types/component-mapper'
+import {componentMapper as muiComponentMapper} from '@data-driven-forms/mui-component-mapper'
+import Select from '@data-driven-forms/mui-component-mapper/select'
+import Switch from '@data-driven-forms/mui-component-mapper/switch'
+import TextField from '@data-driven-forms/mui-component-mapper/text-field'
+import {ComponentMapper, componentTypes} from '@data-driven-forms/react-form-renderer'
+import FieldIconSelect from './components/field-icon-select'
+// import FieldSelect from './components/field-select'
+// import FieldSwitch from './components/field-switch'
+// import FieldTextField from './components/field-text-field'
 
-import FieldIconSelect from './components/FieldIconSelect'
-import FieldSelect from './components/FieldSelect'
-import FieldTextField from './components/FieldTextField'
+export const IS_OPTION_EQUAL_TO_VALUE = ((option: any, value: any) => option.value === value)
 
-
-export enum PropertyEditorFieldFlag {
-  CHECKBOX = 'checkbox',
-  DATE_PICKER = 'date-picker',
-  ICON_SELECT = 'icon-select',
-  RADIO = 'radio',
-  SELECT = 'select',
-  TEXT_FIELD = 'text-field',
-  TEXTAREA = 'textarea',
-  TIME_PICKER = 'time-picker',
+export const PropertyEditorFieldFlag = {
+  ...componentTypes,
+  ICON_SELECT: 'icon-select',
 }
 
 export const componentMapper: ComponentMapper = {
-  [PropertyEditorFieldFlag.TEXT_FIELD]: FieldTextField,
-  [PropertyEditorFieldFlag.TEXTAREA]: FieldTextField,
-  [PropertyEditorFieldFlag.ICON_SELECT]: FieldIconSelect,
-  [PropertyEditorFieldFlag.SELECT]: FieldSelect,
+  ...muiComponentMapper,
+  // [PropertyEditorFieldFlag.TEXT_FIELD]: FieldTextField,
+  // [PropertyEditorFieldFlag.TEXTAREA]: FieldTextField,
+  [PropertyEditorFieldFlag.SELECT]: {
+    component: Select,
+    isClearable: true,
+    size: 'small',
+    variant: 'outlined',
+    TextFieldProps: {
+      color: 'secondary',
+    },
+    isOptionEqualToValue: IS_OPTION_EQUAL_TO_VALUE,
+  },
+  [PropertyEditorFieldFlag.SWITCH]: {
+    component: Switch,
+    size: 'medium',
+    color: 'secondary',
+
+  },
+  [PropertyEditorFieldFlag.TEXT_FIELD]: {
+    component: TextField,
+    size: 'small',
+    color: 'secondary',
+  },
+  [PropertyEditorFieldFlag.ICON_SELECT]: {
+    component: FieldIconSelect,
+    isClearable: true,
+    size: 'small',
+    isOptionEqualToValue: IS_OPTION_EQUAL_TO_VALUE,
+  },
+  // [PropertyEditorFieldFlag.SELECT]: FieldSelect,
+  // [PropertyEditorFieldFlag.SWITCH]: FieldSwitch,
 }

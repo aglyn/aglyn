@@ -15,19 +15,17 @@
  * limitations under the License.
  */
 
-import { ComponentId } from '@aglyn/core-data-framework'
-import { ReactIs } from '@aglyn/shared-ui-jsx'
-import { _isArrEmpty } from '@aglyn/shared-util-guards'
-import { ComponentType, forwardRef, HTMLAttributes, PropsWithoutRef, RefAttributes } from 'react'
-import { ElementDataProps, withAglynElementData } from '../hooks/with-aglyn-element-data'
-import { ElementsRendererComponent } from './elements-renderer.component'
+import {ComponentId} from '@aglyn/core-data-framework'
+import {ReactIs} from '@aglyn/shared-ui-jsx'
+import {_isArrEmpty} from '@aglyn/shared-util-guards'
+import {ComponentType, forwardRef, HTMLAttributes, PropsWithoutRef, RefAttributes} from 'react'
+import {ElementDataProps, withAglynElementData} from '../hooks/with-aglyn-element-data'
+import {ElementsRendererComponent} from './elements-renderer.component'
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export interface ElementRendererComponentProps<T = any> extends HTMLAttributes<T> {
   $id: ComponentId
-  elementRendererComponent?: ComponentType<
-    PropsWithoutRef<ElementRendererComponentProps<any>> & RefAttributes<any>
-  >
+  elementRendererComponent?: ComponentType<PropsWithoutRef<ElementRendererComponentProps<any>> & RefAttributes<any>>
 }
 
 export type DecoratedElementRendererProps<T = any> = ElementRendererComponentProps<T> &
@@ -60,7 +58,7 @@ const ElementRendererComponentRaw = forwardRef<any, DecoratedElementRendererProp
     ) : (
       <>Error loading element component</>
     )
-  }
+  },
 )
 
 ElementRendererComponentRaw.displayName = 'Renderer.ElementRendererComponent'

@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-import { Dictionary, Implements, KeyValueMap } from '@aglyn/shared-data-types'
-import { CANVAS_ROOT_ELEMENT_ID } from './constants/canvas'
-import { SYMBOL_TYPE, TYPE_KIND, TYPE_OF } from './constants/symbol'
+import {Dictionary, Implements, KeyValueMap} from '@aglyn/shared-data-types'
+import {CANVAS_ROOT_ELEMENT_ID} from './constants/canvas'
+import {SYMBOL_TYPE, TYPE_KIND, TYPE_OF} from './constants/symbol'
 import {
   AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
-} from './controllers/aglyn-components.controller'
-import type { AglynExtension } from './models/aglyn-extension.model'
+} from './controllers/aglyn-components.types'
+import {IAglynExtension} from './models/aglyn-extension.types'
 
 
-export type Payload<T = any> = { payload: T }
+export type Payload<T = any> = {payload: T}
 export type PayloadData<T extends Dictionary = any> = T
-export type PayloadParams<T extends any> = { [K in keyof T]: T[K] }
+export type PayloadParams<T> = { [K in keyof T]: T[K] }
 
-export type AglynExtensionMap = Map<string, AglynExtension>
+export type AglynExtensionMap = Map<string, IAglynExtension>
 export type AglynAppModule<T extends AglynUniqueId = any> = T
 
 export type AglynUniqueId<T extends boolean = false> = T extends boolean
   ? T extends true
-    ? { getId(): string }
-    : { readonly $id: string }
+    ? {getId(): string}
+    : {readonly $id: string}
   : never
 
 export type AglynLoads<K extends string, T extends AglynUniqueId> = Implements<'load',
@@ -48,7 +48,7 @@ export type AglynRegistersType<K extends string, T extends AglynUniqueId> = Impl
   (type: K, data: T) => void> &
   Implements<'unregister', '', (type: K, id: T['$id']) => void>
 
-export type AglynRegisters<K extends string, T1 extends any, T2 extends any = T1> = Implements<'register',
+export type AglynRegisters<K extends string, T1, T2 = T1> = Implements<'register',
   K,
   (...data: T1[]) => void> &
   Implements<'unregister', K, (...data: T2[]) => void>
@@ -74,7 +74,7 @@ export interface AglynLifecycleObserver<T = any> {
   aglynOnDestroy?(props?: T): void
 }
 
-export interface AglynLoadableObserver<T1 = any, T2 = any> extends AglynLifecycleObserver<T1> {
+export interface AglynLoadableObserver<T1 = any, T2 = T1> extends AglynLifecycleObserver<T1> {
   /**
    * Should be invoked each time the object is loaded
    */
@@ -94,7 +94,7 @@ export type ElementId = string
 export type CommandUId = string
 export type ContextStoreUid = string
 
-export type AglynComponentElementDataNormalizedMap = KeyValueMap<ComponentId, AglynComponentElementDataNormalized>
+export type AglynComponentElementDataNormalizedMap = KeyValueMap<ElementId, AglynComponentElementDataNormalized>
 export type AglynComponentElementDataNormalizedArray = AglynComponentElementDataDenormalized<any>[]
 
 export type AglynComponentElementHierarchy<$ID extends ElementId = null> =

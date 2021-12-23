@@ -4,8 +4,10 @@ This library was generated with [Nx](https://nx.dev).
 
 ## Updating generated files
 
-1. Run TS file `./scripts/generate.ts`
+Run TS file `./src/scripts/generate-icons.ts`
 
-## Running unit tests
+Example:
 
-Run `nx test mdi-icons` to execute the unit tests via [Jest](https://jestjs.io).
+```sh
+cd ./src/scripts/ && npx ts-node --module commonjs ./generate-icons.ts 
+```

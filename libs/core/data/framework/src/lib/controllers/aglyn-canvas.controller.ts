@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-import { createApi, Event as EffectorEvent } from 'effector'
-import { persist } from 'effector-storage/local'
-import { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
+import {createApi} from 'effector'
+import {persist} from 'effector-storage/local'
+import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
 import type {
   CanvasAddElementPayload,
   CanvasDeleteElementPayload,
   CanvasDuplicateElementPayload,
   CanvasGetApiEventsPayload,
-  CanvasGetElementPayload,
   CanvasGetElementsDenormalizedPayload,
   CanvasGetElementsNormalizedPayload,
   CanvasGetStorePayload,
@@ -33,75 +32,40 @@ import type {
   CanvasUndoPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type {
-  AglynModuleEffectListener,
-  AglynModuleModelOptions,
-} from '../models/aglyn-module.model'
-import { AglynModuleModel } from '../models/aglyn-module.model'
+import AglynModuleModel from '../models/aglyn-module.model'
+import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
 import type {
   AglynComponentElementDataNormalizedArray,
   AglynComponentElementDataNormalizedMap,
 } from '../types'
-import { denormalizeComponentElementData } from '../util/denormalize-component-element-data'
-import { handleRedoEvent } from '../util/handle-state-modification-history-redo'
-import { handleUndoEvent } from '../util/handle-state-modification-history-undo'
-import { normalizeComponentElementData } from '../util/normalize-component-element-data'
+import {denormalizeComponentElementData} from '../util/denormalize-component-element-data'
+import {handleRedoEvent} from '../util/handle-state-modification-history-redo'
+import {handleUndoEvent} from '../util/handle-state-modification-history-undo'
+import {normalizeComponentElementData} from '../util/normalize-component-element-data'
 import {
-  handleCanvasAddElement, handleCanvasApiEvent,
+  handleCanvasAddElement,
+  handleCanvasApiChangeEvent,
   handleCanvasDeleteElement,
   handleCanvasDuplicateElement,
   handleCanvasMoveElement,
   handleCanvasSetElements,
   handleCanvasUpdateElement,
 } from '../util/utils.canvas'
-import type { AglynAppController } from './aglyn-app.controller'
-import type { AglynComponentElementDataDenormalized } from './aglyn-components.controller'
-import type { ContextDomain, ContextStore } from './aglyn-contexts.controller'
-
-
-export type ElementsDataStore = {
-  past: AglynComponentElementDataNormalizedMap[]
-  present: AglynComponentElementDataNormalizedMap
-  future: AglynComponentElementDataNormalizedMap[]
-}
-
-export interface ElementsDataStoreApi {
-  undo: EffectorEvent<any>
-  redo: EffectorEvent<any>
-  setElements: EffectorEvent<CanvasSetElementsPayload>
-  addElement: EffectorEvent<CanvasAddElementPayload>
-  updateElement: EffectorEvent<CanvasUpdateElementPayload>
-  deleteElement: EffectorEvent<CanvasDeleteElementPayload>
-  moveElement: EffectorEvent<CanvasMoveElementPayload>
-  duplicateElement: EffectorEvent<CanvasDuplicateElementPayload>
-}
-
-
-export interface AglynCanvasControllerOptions extends AglynModuleModelOptions {
-  initialElements: AglynComponentElementDataDenormalized[]
-}
-
-export interface AglynCanvasController extends AglynModuleModel<AglynCanvasControllerOptions> {
-  getStore(payload?: CanvasGetApiEventsPayload)
-  getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload)
-  getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload)
-  undo(payload?: CanvasUndoPayload)
-  redo(payload?: CanvasRedoPayload)
-  getApiEvents(payload?: CanvasGetApiEventsPayload)
-  setElements(payload: CanvasSetElementsPayload)
-  addElement(payload: CanvasAddElementPayload)
-  getElement(payload: CanvasGetElementPayload)
-  updateElement(payload: CanvasUpdateElementPayload)
-  deleteElement(payload: CanvasDeleteElementPayload)
-  moveElement(payload: CanvasMoveElementPayload)
-  duplicateElement(payload: CanvasDuplicateElementPayload)
-}
+import type {IAglynAppController} from './aglyn-app.types'
+import type {
+  AglynCanvasControllerOptions,
+  ElementsDataStore,
+  ElementsDataStoreApi,
+  IAglynCanvasController,
+} from './aglyn-canvas.types'
+import type {AglynComponentElementDataDenormalized} from './aglyn-components.types'
+import {ContextDomain, ContextStore} from './aglyn-contexts.types'
 
 
 const TAG = 'AglynCanvas'
 const MODULE_NAME = 'canvas'
 
-export class AglynCanvasController extends AglynModuleModel<AglynCanvasControllerOptions> {
+export class AglynCanvasController extends AglynModuleModel<AglynCanvasControllerOptions> implements IAglynCanvasController {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly namespace: string = `aglyn:${MODULE_NAME}`
@@ -119,7 +83,7 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   public get normalizedElementsStore(): ContextStore<AglynComponentElementDataNormalizedMap> {return this.#normalizedElementsStore}
   public get denormalizedElementsStore(): ContextStore<AglynComponentElementDataNormalizedArray> {return this.#denormalizedElementsStore}
 
-  constructor(app: AglynAppController, options: AglynCanvasControllerOptions) {
+  constructor(app: IAglynAppController, options: AglynCanvasControllerOptions) {
     super(app, options)
     this.#setup()
   }
@@ -142,12 +106,12 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
     this.#events = createApi(this.#context, {
       undo: handleUndoEvent,
       redo: handleRedoEvent,
-      setElements: handleCanvasApiEvent(handleCanvasSetElements),
-      addElement: handleCanvasApiEvent(handleCanvasAddElement),
-      updateElement: handleCanvasApiEvent(handleCanvasUpdateElement),
-      moveElement: handleCanvasApiEvent(handleCanvasMoveElement),
-      duplicateElement: handleCanvasApiEvent(handleCanvasDuplicateElement),
-      deleteElement: handleCanvasApiEvent(handleCanvasDeleteElement),
+      setElements: handleCanvasApiChangeEvent(handleCanvasSetElements),
+      addElement: handleCanvasApiChangeEvent(handleCanvasAddElement),
+      updateElement: handleCanvasApiChangeEvent(handleCanvasUpdateElement),
+      moveElement: handleCanvasApiChangeEvent(handleCanvasMoveElement),
+      duplicateElement: handleCanvasApiChangeEvent(handleCanvasDuplicateElement),
+      deleteElement: handleCanvasApiChangeEvent(handleCanvasDeleteElement),
     })
   }
 
@@ -210,5 +174,4 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   protected listeners: AglynModuleEffectListener<any>[] = []
 }
 
-export type AglynCanvasControllerT = typeof AglynCanvasController
 export default AglynCanvasController

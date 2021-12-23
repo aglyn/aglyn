@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-framework'
-import { GridButtons, SvgPathIcon } from '@aglyn/shared-ui-jsx'
+import {getApp} from '@aglyn/core-data-framework'
+import {GridButtons} from '@aglyn/shared-ui-jsx'
+import {mdiBug, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import styled from '@emotion/styled'
 import React from 'react'
 
 
 const StyledPage = styled.div`
-  .page
-  {
+  .page {
   }
 `
 
@@ -39,7 +39,7 @@ export function Index() {
     <StyledPage>
       <h2>Resources &amp; Tools</h2>
       <p>Thank you for using and showing some ♥ for Nx.</p>
-      <SvgPathIcon iconIds={'bug'} />
+      <MdiIcon path={mdiBug.path} />
       <GridButtons
         items={[
           {

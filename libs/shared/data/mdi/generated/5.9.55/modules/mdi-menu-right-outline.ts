@@ -1,0 +1,7 @@
+export default {
+  "id": "menu-right-outline",
+  "name": "Menu Right Outline",
+  "path": "M9,6H10.5L16.5,12L10.5,18H9V6M13.67,12L11,9.33V14.67L13.67,12Z",
+  "as": [],
+  "tags": []
+}

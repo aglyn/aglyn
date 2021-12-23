@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import img3 from '/public/_static/images/designer/website-designer-custom-element-attributes.png'
+import img2 from '/public/_static/images/designer/website-designer-element-categories.png'
+import img4 from '/public/_static/images/designer/website-designer-functional-operations.png'
+import img1 from '/public/_static/images/designer/website-designer-preview-collage.png'
 import {ProductNames} from '@aglyn/shared-data-brand'
 import {GridItems} from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
@@ -29,14 +33,9 @@ import PromoSectionView from '../views/PromoSectionView'
 import SiteFooterView from '../views/SiteFooterView'
 
 
-interface Props {
-
-}
-
 const TITLE = 'Build websites for your business goals'
 
-function Index(props: Props) {
-  const {} = props
+function Index(props) {
 
   return (
     <MainLayout
@@ -62,8 +61,9 @@ function Index(props: Props) {
                   xs: 12, md: 5,
                   children: (
                     <Image
-                      src="/_static/images/designer/website-designer-preview-collage.png"
+                      src={img1}
                       alt="website designer preview collage"
+                      placeholder="blur"
                       width="504"
                       height="380"
                       loading="eager"
@@ -106,8 +106,9 @@ function Index(props: Props) {
                   xs: 12, md: 4,
                   children: (
                     <Image
-                      src="/_static/images/designer/website-designer-element-categories.png"
+                      src={img2}
                       alt="website designer element category search"
+                      placeholder="blur"
                       width="400"
                       height="478"
                     />
@@ -148,8 +149,9 @@ function Index(props: Props) {
                   xs: 12, md: 4,
                   children: (
                     <Image
-                      src="/_static/images/designer/website-designer-custom-element-attributes.png"
+                      src={img3}
                       alt="website designer custom element attributes"
+                      placeholder="blur"
                       width="400"
                       height="477"
                     />
@@ -190,8 +192,9 @@ function Index(props: Props) {
                   xs: 12, md: 4,
                   children: (
                     <Image
-                      src="/_static/images/designer/website-designer-functional-operations.png"
+                      src={img4}
                       alt="website designer functional operations"
+                      placeholder="blur"
                       width="400"
                       height="440"
                     />

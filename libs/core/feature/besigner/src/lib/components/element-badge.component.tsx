@@ -30,14 +30,13 @@ import {
   PopperStyledComponent,
   PopperStyledComponentProps,
   SrOnlyComponent,
-  SvgPathIcon,
-  SvgPathIconProps,
 } from '@aglyn/shared-ui-jsx'
+import {MdiIcon, MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import Button, {ButtonProps} from '@mui/material/Button'
 import ButtonGroup, {ButtonGroupProps} from '@mui/material/ButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
 import Zoom from '@mui/material/Zoom'
-import {ChangeEvent, forwardRef, memo, useCallback, useState} from 'react'
+import React, {ChangeEvent, forwardRef, memo, useCallback, useState} from 'react'
 import {useDeleteElementCallback} from '../hooks/use-delete-element-callback'
 
 
@@ -83,9 +82,9 @@ const ElementBadgeButtonGroup = forwardRef<any, ElementBadgeButtonGroupProps>(
           onClick: handleDeleteClick,
         } as ButtonProps,
         svgPathIconProps: {
-          iconIds: IconVariant.MODIFY_DELETE,
+          path: IconVariant.MODIFY_DELETE,
           color: 'error',
-        } as SvgPathIconProps,
+        } as MdiIconProps,
       },
       {
         id: 'duplicate-element',
@@ -100,7 +99,7 @@ const ElementBadgeButtonGroup = forwardRef<any, ElementBadgeButtonGroupProps>(
           onClick: handleDuplicateClick,
         },
         svgPathIconProps: {
-          iconIds: IconVariant.MODIFY_DUPLICATE,
+          path: IconVariant.MODIFY_DUPLICATE,
         },
       },
       {
@@ -116,7 +115,7 @@ const ElementBadgeButtonGroup = forwardRef<any, ElementBadgeButtonGroupProps>(
           onClick: handleModifyClick,
         },
         svgPathIconProps: {
-          iconIds: IconVariant.MODIFY_EDIT,
+          path: IconVariant.MODIFY_EDIT,
         },
       },
       (parentId && !isRootElementId(parentId)) ? ({
@@ -132,7 +131,7 @@ const ElementBadgeButtonGroup = forwardRef<any, ElementBadgeButtonGroupProps>(
           onClick: handleSelectParentClick,
         },
         svgPathIconProps: {
-          iconIds: IconVariant.SELECT_PARENT,
+          path: IconVariant.SELECT_PARENT,
         },
       }) : null,
     ].filter(i => i && !i.buttonProps.disabled)
@@ -143,12 +142,13 @@ const ElementBadgeButtonGroup = forwardRef<any, ElementBadgeButtonGroupProps>(
         variant="contained"
         color="primary"
         aria-label="element controls"
+        sx={{boxShadow: 4}}
         {...rest}
       >
         {buttons.map(({id, tooltipProps, srOnlyProps, buttonProps, svgPathIconProps}) => (
           <Tooltip key={id} {...tooltipProps}>
             <Button {...buttonProps}>
-              <SvgPathIcon fontSize="small" {...svgPathIconProps} />
+              <MdiIcon fontSize="small" {...svgPathIconProps} />
               <SrOnlyComponent component="span" {...srOnlyProps} />
             </Button>
           </Tooltip>

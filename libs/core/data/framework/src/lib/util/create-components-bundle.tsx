@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-import { ComponentRegisterPayload, ComponentsBundleRegisterPayload } from '../constants/emitter'
-import { AglynComponentsBundle } from '../controllers/aglyn-components.controller'
+import type {ComponentRegisterPayload, ComponentsBundleRegisterPayload} from '../constants/emitter'
+import type {AglymComponentsBundleSchema} from '../controllers/aglyn-components.types'
 
 
 export function createComponentsBundle(
-  bundle: Omit<AglynComponentsBundle, 'componentIds'>,
+  bundle: AglymComponentsBundleSchema,
   components: ComponentRegisterPayload[],
 ): ComponentsBundleRegisterPayload {
   return {
-    bundle: {...bundle},
-    components: [...components],
+    bundle,
+    components,
   }
 }

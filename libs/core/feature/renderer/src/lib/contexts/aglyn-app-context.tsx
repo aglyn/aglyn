@@ -15,22 +15,27 @@
  * limitations under the License.
  */
 
-import { AglynAppController, AppUUN, DEFAULT_APP_UUN, getApp } from '@aglyn/core-data-framework'
-import { createContext, memo, ReactNode, useContext, useState } from 'react'
+import {
+  AppUUN,
+  DEFAULT_APP_UUN,
+  getApp as getAglynApp,
+  IAglynAppController,
+} from '@aglyn/core-data-framework'
+import {createContext, memo, ReactNode, useCallback, useContext} from 'react'
+
 
 export interface IAglynAppContext {
-  getApp: (appName?: AppUUN) => AglynAppController
+  getApp: (appName?: AppUUN) => IAglynAppController
 }
 
 export const AglynAppContext = createContext<IAglynAppContext>({
-  getApp,
+  getApp: getAglynApp,
 })
 AglynAppContext.displayName = 'AglynAppContext'
 
 export const {
   Provider: AglynAppContextProvider,
   Consumer: AglynAppContextConsumer,
-  displayName: aglynAppContextDisplayName,
 } = AglynAppContext
 export default AglynAppContext
 
@@ -44,14 +49,17 @@ export interface AglynAppContextComponentProps {
 }
 
 function AglynAppContextComponentRaw(props: AglynAppContextComponentProps) {
-  const { appName, children } = props
-  const [value] = useState(() => ({
-    getApp: (appNameOverride?: AppUUN) => {
-      return getApp(appNameOverride || appName)
-    },
-  }))
+  const {appName, children} = props
 
-  return <AglynAppContextProvider value={value}>{children}</AglynAppContextProvider>
+  const getApp = useCallback((overrideName?: AppUUN): IAglynAppController => {
+    return getAglynApp(overrideName ?? appName)
+  }, [appName])
+
+  return (
+    <AglynAppContextProvider value={{getApp}}>
+      {children}
+    </AglynAppContextProvider>
+  )
 }
 AglynAppContextComponentRaw.displayName = 'AglynAppContextComponent'
 AglynAppContextComponentRaw.defaultProps = {

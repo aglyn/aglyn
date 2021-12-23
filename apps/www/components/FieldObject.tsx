@@ -16,8 +16,9 @@
  */
 
 import {DoD} from '@aglyn/shared-data-types'
-import {SvgPathIcon} from '@aglyn/shared-ui-jsx'
+import {mdiPlus} from '@aglyn/shared-ui-mdi-jsx'
 import React from 'react'
+import MdiIcon from '../../../libs/shared/ui/mdi-jsx/src/lib/components/mdi-icon'
 import {Components, FieldPreset} from '../lib/input-fields'
 import FormFields, {Props as FormFieldsProps} from './FormFields'
 
@@ -85,7 +86,7 @@ function FieldObject(props: Props) {
     GridItemProps: {xs: 12},
     component: Components.Elements.byKey.Button,
     variant: 'outlined',
-    startIcon: <SvgPathIcon iconIds="plus" />,
+    startIcon: <MdiIcon path={mdiPlus.path} />,
     children: 'Add',
     onClick: (e) => {
       console.log('click')

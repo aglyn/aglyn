@@ -18,27 +18,25 @@
 import {BesignerPanelTabFlag, setBesignerPanels} from '@aglyn/core-data-framework'
 import {
   useAglynAppContext,
-  useAglynCanvasApiEvents,
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import {IconVariant} from '@aglyn/shared-data-brand'
 import {styled} from '@aglyn/shared-feature-themes'
-import {componentMapper, FormRenderer, GridFormTemplate, SvgPathIcon} from '@aglyn/shared-ui-jsx'
+import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import {hexadecimalFromNumber, hexadecimalToNumber} from '@aglyn/shared-util-tools'
 import MuiTabContext from '@mui/lab/TabContext'
 import MuiTabList from '@mui/lab/TabList'
 import MuiTabPanel from '@mui/lab/TabPanel'
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import Divider from '@mui/material/Divider'
-import FormControl from '@mui/material/FormControl'
 import MuiTab from '@mui/material/Tab'
 import Typography from '@mui/material/Typography'
-import {forwardRef, Fragment, memo, useCallback} from 'react'
-import useAglynBesignerStoreState from '../hooks/use-aglyn-besigner-store-state'
-import {useComponentFormSchema} from '../hooks/use-component-form-schema'
+import React, {forwardRef, Fragment, useCallback} from 'react'
+import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
+import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
+import ElementPropsForm from './element-props-form.component'
 import {WorkspacePanelComponent, WorkspacePanelComponentProps} from './workspace-panel.component'
 
 
@@ -55,7 +53,7 @@ const DividerSpacer = styled(Divider, {
   marginBottom: theme.spacing(2),
 }))
 
-const ElementInfo = memo(function ElementInfo({$id, ...props}: any) {
+const ElementInfo = function ElementInfo({$id, ...props}: any) {
   const {componentId, bundleId, parentId} = useAglynElementData($id) || {}
   const {metadata} = useAglynComponentSchema(componentId, bundleId) || {}
   const {displayName, title, subtitle, description} = metadata || {}
@@ -136,51 +134,29 @@ const ElementInfo = memo(function ElementInfo({$id, ...props}: any) {
       ))}
     </TabPanelInner>
   )
-})
+}
 
 
-const PropsForm = memo(function PropsForm({$id, ...props}: any) {
-  const {updateElement, deleteElement} = useAglynCanvasApiEvents()
-  const {props: elemProps, componentId, bundleId} = useAglynElementData($id) || {}
-  const formSchema = useComponentFormSchema({componentId, bundleId})
-
-  const handleFormCancel = useCallback((e, reason) => {}, [])
-  const handleElementSave = useCallback((values) => {
-    updateElement({element: {$id, props: {...values}}})
-  }, [$id])
-  const handleDeleteElement = useCallback((e) => {
-    deleteElement({$id})
-  }, [$id])
+const PropsForm = function PropsForm({$id, ...props}: any) {
 
   return (
     <TabPanelInner {...props}>
-      <FormRenderer
-        FormTemplate={GridFormTemplate}
-        componentMapper={componentMapper}
-        onCancel={handleFormCancel}
-        onSubmit={handleElementSave}
-        initialValues={elemProps}
-        schema={formSchema}
+      <ElementPropsForm
+        $id={$id}
       />
-
-      <FormControl margin="none" fullWidth>
-        <Button onClick={handleDeleteElement} sx={{mt: 2, color: 'error.main'}} fullWidth>
-          Delete Element
-        </Button>
-      </FormControl>
     </TabPanelInner>
   )
-})
+}
 
 const tabs = [
   {
     id: BesignerPanelTabFlag.ELEMENT_INFO,
-    iconIds: IconVariant.DETAILS,
+    iconPath: IconVariant.DETAILS,
     component: ElementInfo,
   },
   {
     id: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
-    iconIds: IconVariant.PROPERTIES,
+    iconPath: IconVariant.PROPERTIES,
     component: PropsForm,
   },
 ]
@@ -192,15 +168,15 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
     const {children, ...rest} = props
 
     const {getApp} = useAglynAppContext()
-    const {$id} = useAglynBesignerStoreState('canvas', 'selected') || {}
-    const {toggled, tab, size} = useAglynBesignerStoreState('panels', 'panelRight') || {}
+    const {$id} = useAglynCanvasSelected() || {}
+    const toggled = useAglynBesignerPanelValue('panelRight', 'toggled')
+    const tab = useAglynBesignerPanelValue('panelRight', 'tab')
+    const size = useAglynBesignerPanelValue('panelRight', 'size')
     const value = tab && _isEqualitySameType(tab, ...tabs.map((i) => i.id))
       ? tab : BesignerPanelTabFlag.ELEMENT_INFO
     const handleTabChange = useCallback((e, val) => {
       setBesignerPanels(getApp(), {panelRight: {tab: hexadecimalToNumber(val)}})
     }, [])
-
-    console.log('panel toggled, tab, size', toggled, tab, size)
 
     return (
       <WorkspacePanelComponent
@@ -218,11 +194,11 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
               indicatorColor="secondary"
               textColor="primary"
             >
-              {tabs.map(({id, iconIds}) => (
+              {tabs.map(({id, iconPath}) => (
                 <MuiTab
                   key={id}
                   value={hexadecimalFromNumber(id)}
-                  icon={<SvgPathIcon iconIds={iconIds} />}
+                  icon={<MdiIcon path={iconPath} />}
                 />
               ))}
             </MuiTabList>

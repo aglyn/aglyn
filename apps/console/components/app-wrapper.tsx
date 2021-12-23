@@ -22,7 +22,7 @@ import {
   registerBundle,
   registerComponent,
 } from '@aglyn/core-data-framework'
-import {aglynElementComponent} from '@aglyn/core-feature-renderer'
+import {createAglynComponent} from '@aglyn/core-feature-renderer'
 import {APP_WWW, IS_PRODUCTION} from '@aglyn/shared-data-brand'
 import {consoleThemeLight, withTheme} from '@aglyn/shared-feature-themes'
 import {
@@ -37,7 +37,7 @@ import {Fragment, useEffect} from 'react'
 import {samplePageData} from '../constants/sample-data'
 
 
-const c1 = aglynElementComponent(
+const c1 = createAglynComponent(
   {
     componentId: 'root',
     metadata: {
@@ -48,7 +48,7 @@ const c1 = aglynElementComponent(
   'span',
 )
 
-const c2 = aglynElementComponent(
+const c2 = createAglynComponent(
   {
     componentId: 'root1',
     metadata: {
@@ -59,7 +59,7 @@ const c2 = aglynElementComponent(
   'span',
 )
 
-const c3 = aglynElementComponent(
+const c3 = createAglynComponent(
   {
     componentId: 'root2',
     metadata: {
@@ -70,7 +70,7 @@ const c3 = aglynElementComponent(
   'span',
 )
 
-const c4 = aglynElementComponent(
+const c4 = createAglynComponent(
   {
     componentId: 'root3',
     metadata: {
@@ -81,7 +81,7 @@ const c4 = aglynElementComponent(
   'span',
 )
 
-const c5 = aglynElementComponent(
+const c5 = createAglynComponent(
   {
     componentId: 'root4',
     metadata: {

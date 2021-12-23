@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { _isFnT } from '@aglyn/shared-util-guards'
-import Stack, { StackProps } from '@mui/material/Stack'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {_isFnT} from '@aglyn/shared-util-guards'
+import Stack, {StackProps} from '@mui/material/Stack'
 import clsx from 'clsx'
-import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
-import { useAglynBesignerPanelValue } from '../hooks/use-aglyn-besigner-panel-value'
-import { ViewportCanvasComponent } from './viewport-canvas.component'
-import { ZoomControlsComponent } from './zoom-controls.component'
+import {ChangeEvent, forwardRef, useCallback, useRef} from 'react'
+import {useAglynBesignerPanelValue} from '../hooks/use-aglyn-besigner-panel-value'
+import {ViewportCanvasComponent} from './viewport-canvas.component'
+import {ZoomControlsComponent} from './zoom-controls.component'
 
 
 const classKeys = generateComponentClassKeys('AglynViewport', [
@@ -44,7 +44,7 @@ const AglynViewport = styled(Stack, {
 })
 
 const CanvasShadow = styled('div', {
-  name: 'AglynCanvasShadow'
+  name: 'AglynCanvasShadow',
 })(({theme}) => ({
   flexGrow: 1,
   overflow: 'hidden',
@@ -109,7 +109,6 @@ export const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>
         // drawerWidth={left?.drawerWidth}
         {...rest}
       >
-        <CanvasShadow />
         <ViewportCanvasComponent pannerRef={pannerRef} />
         <ZoomControlsComponent
           onZoomReset={handleZoomReset}

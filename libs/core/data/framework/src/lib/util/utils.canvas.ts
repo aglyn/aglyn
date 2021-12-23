@@ -15,56 +15,42 @@
  * limitations under the License.
  */
 
-import { handleStateModificationHistoryChange } from '@aglyn/core-data-framework'
-import { _isArrEmpty } from '@aglyn/shared-util-guards'
-import { arrayAddAtIndex } from '@aglyn/shared-util-tools'
-import { objectDeepMerge } from '@aglyn/shared-util-vendor'
+import {handleStateModificationHistoryChange} from '@aglyn/core-data-framework'
+import {arrayAddAtIndex} from '@aglyn/shared-util-tools'
+import {objectDeepMerge} from '@aglyn/shared-util-vendor'
 import type {
   CanvasAddElementPayload,
   CanvasDeleteElementPayload,
   CanvasDuplicateElementPayload,
+  CanvasGetElementPayload,
   CanvasMoveElementPayload,
   CanvasSetElementsPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type { ElementsDataStore } from '../controllers/aglyn-canvas.controller'
-import type { AglynComponentElementDataNormalizedMap } from '../types'
-import { createComponentElementDataCopy } from './create-component-element-data-copy'
-import { deleteComponentElement } from './delete-component-element'
-import { handleStateModificationHistoryRedo } from './handle-state-modification-history-redo'
-import { handleStateModificationHistoryUndo } from './handle-state-modification-history-undo'
-import { normalizeComponentElementData } from './normalize-component-element-data'
+import {ElementsDataStore} from '../controllers/aglyn-canvas.types'
+import type {AglynComponentElementDataNormalizedMap} from '../types'
+import {createComponentElementDataCopy} from './create-component-element-data-copy'
+import {deleteComponentElement} from './delete-component-element'
+import {normalizeComponentElementData} from './normalize-component-element-data'
+
 
 type CanvasApiEventHandler<S extends ElementsDataStore, P> = (
   state: ElementsDataStore['present'],
-  payload: P
+  payload: P,
 ) => ElementsDataStore['present']
-export const handleCanvasApiEvent = <S extends ElementsDataStore, P>(
-  fn: CanvasApiEventHandler<S, P>
+
+export const handleCanvasApiChangeEvent = <S extends ElementsDataStore, P>(
+  fn: CanvasApiEventHandler<S, P>,
 ) => (
-  state: S, payload: P
+  state: S, payload: P,
 ) => {
   return handleStateModificationHistoryChange(state, fn(state.present, payload))
 }
 
 
-export const handleCanvasUndo = (state: ElementsDataStore) => {
-  if (!_isArrEmpty(state.past)) {
-    return handleStateModificationHistoryUndo(state)
-  }
-  return undefined
-}
-export const handleCanvasRedo = (state: ElementsDataStore) => {
-  if (!_isArrEmpty(state.future)) {
-    return handleStateModificationHistoryRedo(state)
-  }
-  return undefined
-}
-
-
 export const handleCanvasSetElements = (
   state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasSetElementsPayload
+  payload: CanvasSetElementsPayload,
 ) => {
 
   const {elements} = payload
@@ -72,7 +58,7 @@ export const handleCanvasSetElements = (
 }
 export const handleCanvasAddElement = (
   state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasAddElementPayload
+  payload: CanvasAddElementPayload,
 ) => {
 
   const {element, parentId, index} = payload
@@ -93,9 +79,19 @@ export const handleCanvasAddElement = (
 }
 
 
+export const handleCanvasGetElement = (
+  state: AglynComponentElementDataNormalizedMap,
+  payload: CanvasGetElementPayload,
+) => {
+
+  const {$id} = payload
+  return state[$id]
+}
+
+
 export const handleCanvasUpdateElement = (
   state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasUpdateElementPayload
+  payload: CanvasUpdateElementPayload,
 ) => {
 
   const {element: {props, ...element}} = payload
@@ -111,7 +107,7 @@ export const handleCanvasUpdateElement = (
 
 export const handleCanvasMoveElement = (
   state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasMoveElementPayload
+  payload: CanvasMoveElementPayload,
 ) => {
 
   const {$id, index, parentId} = payload
@@ -141,7 +137,7 @@ export const handleCanvasMoveElement = (
 
 export const handleCanvasDuplicateElement = (
   state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasDuplicateElementPayload
+  payload: CanvasDuplicateElementPayload,
 ) => {
 
   const {$id} = payload
@@ -157,7 +153,7 @@ export const handleCanvasDuplicateElement = (
 }
 export const handleCanvasDeleteElement = (
   state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasDeleteElementPayload
+  payload: CanvasDeleteElementPayload,
 ) => {
 
   const {$id} = payload

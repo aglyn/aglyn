@@ -16,13 +16,22 @@
  */
 
 import {alpha, makeStyles, Theme} from '@aglyn/shared-feature-themes'
-import {GridButtons, SvgPathIcon} from '@aglyn/shared-ui-jsx'
+import {GridButtons} from '@aglyn/shared-ui-jsx'
+import {
+  mdiChartSankeyVariant,
+  mdiCheckNetwork,
+  mdiEye,
+  mdiFileDocumentMultiple,
+  mdiHome,
+  mdiVariable,
+} from '@aglyn/shared-ui-mdi-jsx'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import MuiTab from '@mui/material/Tab'
 import MuiTabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
 import {ReactNode, SyntheticEvent, useCallback, useState} from 'react'
+import MdiIcon from '../../../libs/shared/ui/mdi-jsx/src/lib/components/mdi-icon'
 
 
 interface TabPanelProps {
@@ -87,8 +96,8 @@ export default function Tabs() {
           variant="scrollable"
           onChange={handleChange}
         >
-          <MuiTab label="Home" {...a11yProps(0)} icon={<SvgPathIcon iconIds="home" />} />
-          <MuiTab label="View" {...a11yProps(1)} icon={<SvgPathIcon iconIds="eye" />} />
+          <MuiTab label="Home" {...a11yProps(0)} icon={<MdiIcon path={mdiHome.path} />} />
+          <MuiTab label="View" {...a11yProps(1)} icon={<MdiIcon path={mdiEye.path} />} />
           {/* <MuiTab label="Item Two" {...a11yProps(2)} />
            <MuiTab label="Item Three" {...a11yProps(3)} /> */}
         </MuiTabs>
@@ -103,7 +112,7 @@ export default function Tabs() {
               children: (
                 <Box sx={{textAlign: 'center'}}>
                   <div>
-                    <SvgPathIcon fontSize="large" iconIds="file-document-multiple" />
+                    <MdiIcon fontSize="large" path={mdiFileDocumentMultiple.path} />
                   </div>
                   <div>Entries</div>
                 </Box>
@@ -123,7 +132,7 @@ export default function Tabs() {
               children: (
                 <Box sx={{textAlign: 'center'}}>
                   <div>
-                    <SvgPathIcon fontSize="large" iconIds="variable" />
+                    <MdiIcon fontSize="large" path={mdiVariable.path} />
                   </div>
                   <div>Fields</div>
                 </Box>
@@ -136,7 +145,7 @@ export default function Tabs() {
               children: (
                 <Box sx={{textAlign: 'center'}}>
                   <div>
-                    <SvgPathIcon fontSize="large" iconIds="check-network" />
+                    <MdiIcon fontSize="large" path={mdiCheckNetwork.path} />
                   </div>
                   <div>Rules</div>
                 </Box>
@@ -149,7 +158,7 @@ export default function Tabs() {
               children: (
                 <Box sx={{textAlign: 'center'}}>
                   <div>
-                    <SvgPathIcon fontSize="large" iconIds="chart-sankey-variant" />
+                    <MdiIcon fontSize="large" path={mdiChartSankeyVariant.path} />
                   </div>
                   <div>Workflows</div>
                 </Box>

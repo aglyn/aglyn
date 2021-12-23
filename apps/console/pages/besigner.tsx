@@ -16,9 +16,10 @@
  */
 
 import {getApp} from '@aglyn/core-data-framework'
-import {HAS_DOCUMENT} from '@aglyn/shared-data-brand'
+import {IS_BROWSER} from '@aglyn/shared-data-brand'
 import {AppLoaderOverlayView} from '@aglyn/shared-ui-jsx'
 import dynamic from 'next/dynamic'
+import {useEffect} from 'react'
 
 
 const AglynBesigner = dynamic(
@@ -28,9 +29,12 @@ const AglynBesigner = dynamic(
 
 function Besigner(props) {
 
-  if (HAS_DOCUMENT) {
-    console.log('page:/besigner app', getApp())
-  }
+  useEffect(() => {
+    if (IS_BROWSER) {
+      console.log('page:/besigner app', getApp())
+    }
+  }, [])
+
   return <AglynBesigner />
 }
 

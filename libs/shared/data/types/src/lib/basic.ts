@@ -15,35 +15,14 @@
  * limitations under the License.
  */
 
-/** A type of null or undefined */
-export type NUN = null | undefined
-
-/** Construct a type from type of T or null */
-export type OrNull<T> = T | null
-
-/** Construct a type from type of T or undefined */
-export type OrUndef<T> = T | undefined
-
-/** Construct a type from type of T or null or undefined */
-export type OrNUN<T> = T | NUN
-
-/** Construct a type from type of T or never */
-export type OrNever<T> = T | never
-
-/** Construct a type from type of T or unknown */
-export type OrUnk<T> = T | unknown
-
-/** Construct a type from type of T or any */
-export type OrAny<T> = T | any
+/** A safe index key when symbol is not supported */
+export type Key = string | number
 
 /** A index signature for a object key  */
 export type PKey = string | number | symbol
 
 /** A index signature for a mapped object */
 export type MapKey = string | symbol
-
-/** @alias MapKey */
-export type MKey = MapKey
 
 /** The index signature type of T */
 export type KeyOf<T> = keyof T

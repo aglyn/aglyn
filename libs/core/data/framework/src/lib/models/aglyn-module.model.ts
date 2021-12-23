@@ -15,33 +15,21 @@
  * limitations under the License.
  */
 
-import { getStaticField } from '@aglyn/shared-util-tools'
-import { AglynAppEffectFlag, AglynModuleEffectPayload } from '../constants/emitter'
-import { MODULE_TYPE, TYPE_KIND, TYPE_OF } from '../constants/symbol'
-import type { AglynAppController } from '../controllers/aglyn-app.controller'
-import type { AglynLifecycleObserver, AglynTypeFields } from '../types'
-import { AglynBaseModel, AglynBaseModelOptions } from './aglyn-base.model'
+import {getStaticField} from '@aglyn/shared-util-tools'
+import {MODULE_TYPE, TYPE_KIND, TYPE_OF} from '../constants/symbol'
+import type {IAglynAppController} from '../controllers/aglyn-app.types'
+import AglynBaseModel from './aglyn-base.model'
+import type {
+  AglynModuleEffectListener,
+  AglynModuleModelOptions,
+  IAglynModuleModel,
+} from './aglyn-module.types'
 
-
-export type AglynModuleTypeFields = AglynTypeFields<typeof MODULE_TYPE, number | symbol>
-export type AglynModuleEffectListener<Effect extends AglynAppEffectFlag> = [
-  Effect, (args: AglynModuleEffectPayload[Effect]) => unknown
-]
-
-export interface AglynModuleModelOptions extends AglynBaseModelOptions {
-
-}
-
-export interface AglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions>
-  extends AglynBaseModel<O>,
-    AglynModuleTypeFields,
-    AglynLifecycleObserver<AglynAppController> {
-}
 
 const TAG = 'AglynModule'
 const MODULE_NAME = 'module'
 
-export abstract class AglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions> extends AglynBaseModel<O> {
+export abstract class AglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions> extends AglynBaseModel<O> implements IAglynModuleModel<O> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly [TYPE_OF]: number | symbol = MODULE_TYPE
@@ -59,7 +47,7 @@ export abstract class AglynModuleModel<O extends AglynModuleModelOptions = Aglyn
     return getStaticField('moduleName', this)
   }
 
-  protected constructor(protected app: AglynAppController, options: O) {
+  protected constructor(protected app: IAglynAppController, options: O) {
     super(options)
     this.#setup()
   }
@@ -79,15 +67,14 @@ export abstract class AglynModuleModel<O extends AglynModuleModelOptions = Aglyn
     }
   }
 
-  public aglynOnInit(app?: AglynAppController): void {
+  public aglynOnInit(app?: IAglynAppController): void {
     this.listeners.forEach(([flag, method]) => this.app.getEmitter().on(flag, method))
   }
-  public aglynOnDestroy(app?: AglynAppController): void {
+  public aglynOnDestroy(app?: IAglynAppController): void {
     this.listeners.forEach(([flag, method]) => this.app.getEmitter().off(flag, method))
   }
 
   protected listeners: AglynModuleEffectListener<any>[] = []
 }
 
-export type AglynModuleModelT = typeof AglynModuleModel
 export default AglynModuleModel

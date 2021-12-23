@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { CacheProvider, createEmotionCache, EmotionCache } from '@aglyn/shared-feature-themes'
-import { AppProps as NextAppProps } from 'next/app'
+import {CacheProvider, createEmotionCache, EmotionCache} from '@aglyn/shared-feature-themes'
+import {NextAppWithLayout} from '@aglyn/shared-ui-next'
+import {AppProps as NextAppProps} from 'next/app'
 import AppWrapper from '../components/app-wrapper'
 
 
@@ -60,12 +61,21 @@ export interface _AppProps extends NextAppProps {
  * @returns {JSX.Element}
  */
 export default function _App(props: _AppProps) {
-  const {Component, emotionCache = clientSideEmotionCache, pageProps} = props
+  const {
+    Component,
+    emotionCache = clientSideEmotionCache,
+    pageProps,
+    ...rest
+  } = props
 
   return (
     <CacheProvider value={emotionCache}>
       <AppWrapper>
-        <Component {...pageProps} />
+        <NextAppWithLayout
+          Component={Component}
+          pageProps={pageProps}
+          {...rest}
+        />
       </AppWrapper>
     </CacheProvider>
   )

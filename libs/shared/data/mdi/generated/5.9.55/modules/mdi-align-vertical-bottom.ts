@@ -1,0 +1,7 @@
+export default {
+  "id": "align-vertical-bottom",
+  "name": "Align Vertical Bottom",
+  "path": "M11 18H5V2H11V18M19 8H13V18H19V8M22 20H2V22H22V20Z",
+  "as": [],
+  "tags": []
+}

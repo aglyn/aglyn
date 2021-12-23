@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-feature-themes'
-import { getDisplayName } from '@aglyn/shared-util-tools'
-import MuiGrid, { GridProps as MuiGridProps } from '@mui/material/Grid'
+import {styled} from '@aglyn/shared-feature-themes'
+import {getDisplayName} from '@aglyn/shared-util-tools'
+import MuiGrid, {GridProps as MuiGridProps} from '@mui/material/Grid'
 import {
   ComponentType,
   forwardRef,
@@ -28,26 +28,28 @@ import {
 
 
 const FieldGridItem = styled(MuiGrid, {
-  name: 'AglynFieldGridItem'
+  name: 'AglynFieldGridItem',
 })({position: 'relative'})
 
-export type WithGridItemProps = {
+interface WithGridItem<P> extends ForwardRefExoticComponent<PropsWithoutRef<P & WithGridItemProps> & RefAttributes<any>> {}
+
+export interface WithGridItemProps {
   FormFieldGridProps?: MuiGridProps
 }
 
-export function withGridItem<P>(
-  WrappedComponent: ComponentType<P>,
-): ForwardRefExoticComponent<PropsWithoutRef<P & WithGridItemProps> & RefAttributes<any>> {
+export function withGridItem<P>(WrappedComponent: ComponentType<P>): WithGridItem<P> {
   const displayName = getDisplayName(WrappedComponent)
-  const WithFieldGrid = forwardRef<any, P & WithGridItemProps>(function RefRenderFn(props, ref) {
-    const {FormFieldGridProps, ...rest} = props
+  const WithFieldGrid = forwardRef<any, P & WithGridItemProps>(
+    function RefRenderFn(props, ref) {
+      const {FormFieldGridProps, ...rest} = props
 
-    return (
-      <FieldGridItem ref={ref} xs={12} item {...FormFieldGridProps}>
-        <WrappedComponent {...(rest as P)} />
-      </FieldGridItem>
-    )
-  })
+      return (
+        <FieldGridItem ref={ref} xs={12} item {...FormFieldGridProps}>
+          <WrappedComponent {...(rest as P)} />
+        </FieldGridItem>
+      )
+    }
+  )
   WithFieldGrid.displayName = `WithFieldGrid(${displayName})`
   return WithFieldGrid
 }

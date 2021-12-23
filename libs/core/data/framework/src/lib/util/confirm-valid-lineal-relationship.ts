@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { _isArr, _isArrEmpty } from '@aglyn/shared-util-guards'
-import { ComponentsLinealDirectiveFlag } from '../constants/components'
+import {_isArr, _isArrEmpty} from '@aglyn/shared-util-guards'
+import {ComponentsLinealDirectiveFlag} from '../constants/components'
 import {
   AglynComponentRenderFlags,
   ComponentsLinealOrder,
-} from '../controllers/aglyn-components.controller'
-import { BundleUId, ComponentId } from '../types'
+} from '../controllers/aglyn-components.types'
+import {BundleUId, ComponentId} from '../types'
 
 
 export enum InvalidLinealRelationFlag {

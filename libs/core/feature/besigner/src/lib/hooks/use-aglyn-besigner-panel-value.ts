@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-import { BesignerContextStores } from '@aglyn/core-data-framework'
-import { useMemo } from 'react'
-import { useAglynBesignerStoreState } from './use-aglyn-besigner-store-state'
+import {BesignerPanelsState} from '@aglyn/core-data-framework'
+import {KeyOf} from '@aglyn/shared-data-types'
+import {useMemo} from 'react'
+import {useAglynBesignerStoreState} from './use-aglyn-besigner-store-state'
 
 
-export const useAglynBesignerPanelValue = <P extends keyof BesignerContextStores['panels']>(
+export const useAglynBesignerPanelValue = <P extends KeyOf<BesignerPanelsState>, K extends KeyOf<BesignerPanelsState[P]>>(
   item: P,
-  key: keyof BesignerContextStores['panels'][P]
-) => {
+  key: K,
+): BesignerPanelsState[P][K] => {
   const panel = useAglynBesignerStoreState('panels', item)
   const {[key]: value} = {...panel}
 

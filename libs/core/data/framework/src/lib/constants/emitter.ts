@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type { AnyProps, Dictionary } from '@aglyn/shared-data-types'
-import { EmitterFn } from '@aglyn/shared-util-emitter'
+import type {AnyProps, Dictionary} from '@aglyn/shared-data-types'
+import {EmitterFn} from '@aglyn/shared-util-emitter'
 import type {
   createEffect as createEffectorEffect,
   createEvent as createEffectorEvent,
@@ -27,21 +27,18 @@ import type {
   BesignerContextStores,
   BesignerFlagState,
   BesignerPanelsState,
-} from '../controllers/aglyn-besigner.controller'
+} from '../controllers/aglyn-besigner.types'
+import type {AglynCommandListener, AglynCommandResolver} from '../controllers/aglyn-commands.types'
 import type {
-  AglynCommandListener,
-  AglynCommandResolver,
-} from '../controllers/aglyn-commands.controller'
-import type {
-  IAglynComponent,
   AglynComponentElementDataDenormalized,
   AglynComponentElementDataNormalized,
   AglynComponentsBundle,
   AglynComponentSchema,
-} from '../controllers/aglyn-components.controller'
-import type { ContextStore, ContextStoreOptions } from '../controllers/aglyn-contexts.controller'
-import type { AglynExtensionLoader } from '../controllers/aglyn-extensions.controller'
-import type { AglynExtension, AglynExtensionOptions } from '../models/aglyn-extension.model'
+  IAglynComponent,
+} from '../controllers/aglyn-components.types'
+import type {ContextStore, ContextStoreOptions} from '../controllers/aglyn-contexts.types'
+import type {AglynExtensionLoader} from '../controllers/aglyn-extensions.types'
+import type {AglynExtensionOptions, IAglynExtension} from '../models/aglyn-extension.types'
 import type {
   AglynComponentElementDataNormalizedMap,
   AppUUN,
@@ -100,46 +97,46 @@ export enum AglynAppEventFlag {
 }
 
 export interface AglynAppEventPayload extends Record<AglynAppEventFlag, AglynEmitterPayload> {
-  [AglynAppEventFlag.APP_CREATING]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_CREATED]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_INITIALIZING]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_MODULE_INITIALIZING]: PayloadData<{ moduleName: string }>
-  [AglynAppEventFlag.APP_MODULE_INITIALIZED]: PayloadData<{ moduleName: string }>
-  [AglynAppEventFlag.APP_INITIALIZED]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_DESTROYING]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_MODULE_DESTROYING]: PayloadData<{ moduleName: string }>
-  [AglynAppEventFlag.APP_MODULE_DESTROYED]: PayloadData<{ moduleName: string }>
-  [AglynAppEventFlag.APP_DESTROYED]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_DELETING]: PayloadData<{ appName: AppUUN }>
-  [AglynAppEventFlag.APP_DELETED]: PayloadData<{ appName: AppUUN }>
+  [AglynAppEventFlag.APP_CREATING]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_CREATED]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_INITIALIZING]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_MODULE_INITIALIZING]: PayloadData<{moduleName: string}>
+  [AglynAppEventFlag.APP_MODULE_INITIALIZED]: PayloadData<{moduleName: string}>
+  [AglynAppEventFlag.APP_INITIALIZED]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_DESTROYING]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_MODULE_DESTROYING]: PayloadData<{moduleName: string}>
+  [AglynAppEventFlag.APP_MODULE_DESTROYED]: PayloadData<{moduleName: string}>
+  [AglynAppEventFlag.APP_DESTROYED]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_DELETING]: PayloadData<{appName: AppUUN}>
+  [AglynAppEventFlag.APP_DELETED]: PayloadData<{appName: AppUUN}>
 
-  [AglynAppEventFlag.EXTENSION_REGISTERED]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_INITIALIZING]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_INITIALIZED]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_LOADING]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_LOADED]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_UNLOADING]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_UNLOADED]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_DESTROYING]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynAppEventFlag.EXTENSION_DESTROYED]: PayloadData<{ extensionName: ExtensionUUN }>
+  [AglynAppEventFlag.EXTENSION_REGISTERED]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_INITIALIZING]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_INITIALIZED]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_LOADING]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_LOADED]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_UNLOADING]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_UNLOADED]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_DESTROYING]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynAppEventFlag.EXTENSION_DESTROYED]: PayloadData<{extensionName: ExtensionUUN}>
 
-  [AglynAppEventFlag.COMMAND_RESOLVER_TRIGGERING]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_RESOLVER_TRIGGERED]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_RESOLVER_SET]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_RESOLVER_REMOVED]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_LISTENERS_TRIGGERING]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_LISTENERS_TRIGGERED]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_LISTENER_REGISTERED]: PayloadData<{ commandId: CommandUId }>
-  [AglynAppEventFlag.COMMAND_LISTENER_UNREGISTERED]: PayloadData<{ commandId: CommandUId }>
+  [AglynAppEventFlag.COMMAND_RESOLVER_TRIGGERING]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_RESOLVER_TRIGGERED]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_RESOLVER_SET]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_RESOLVER_REMOVED]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_LISTENERS_TRIGGERING]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_LISTENERS_TRIGGERED]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_LISTENER_REGISTERED]: PayloadData<{commandId: CommandUId}>
+  [AglynAppEventFlag.COMMAND_LISTENER_UNREGISTERED]: PayloadData<{commandId: CommandUId}>
 
-  [AglynAppEventFlag.COMPONENT_REGISTERING]: PayloadData<{ componentId: ComponentId, bundleId?: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_REGISTERED]: PayloadData<{ componentId: ComponentId, bundleId?: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_UNREGISTERING]: PayloadData<{ componentId: ComponentId, bundleId?: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_UNREGISTERED]: PayloadData<{ componentId: ComponentId, bundleId?: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_BUNDLE_REGISTERING]: PayloadData<{ bundleId: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_BUNDLE_REGISTERED]: PayloadData<{ bundleId: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_BUNDLE_UNREGISTERING]: PayloadData<{ bundleId: BundleUId }>
-  [AglynAppEventFlag.COMPONENT_BUNDLE_UNREGISTERED]: PayloadData<{ bundleId: BundleUId }>
+  [AglynAppEventFlag.COMPONENT_REGISTERING]: PayloadData<{componentId: ComponentId, bundleId?: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_REGISTERED]: PayloadData<{componentId: ComponentId, bundleId?: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_UNREGISTERING]: PayloadData<{componentId: ComponentId, bundleId?: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_UNREGISTERED]: PayloadData<{componentId: ComponentId, bundleId?: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_BUNDLE_REGISTERING]: PayloadData<{bundleId: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_BUNDLE_REGISTERED]: PayloadData<{bundleId: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_BUNDLE_UNREGISTERING]: PayloadData<{bundleId: BundleUId}>
+  [AglynAppEventFlag.COMPONENT_BUNDLE_UNREGISTERED]: PayloadData<{bundleId: BundleUId}>
 }
 
 export enum AglynAppEffectFlag {
@@ -179,57 +176,57 @@ export enum AglynAppEffectFlag {
   BESIGNER_CLOSE_PANEL = 'effect:besigner:close-panel',
 }
 
-export type ExtensionHandleLoaderPayload = PayloadData<{ loader: AglynExtensionLoader, options?: Partial<AglynExtensionOptions> }>
-export type ExtensionRegisterPayload = PayloadData<{ extension: AglynExtension }>
-export type ExtensionInitializePayload = PayloadData<{ extension: AglynExtension }>
-export type ExtensionDestroyPayload = PayloadData<{ extensionName: ExtensionUUN }>
-export type ExtensionLoadPayload = PayloadData<{ extensionName: ExtensionUUN }>
-export type ExtensionUnloadPayload = PayloadData<{ extensionName: ExtensionUUN }>
+export type ExtensionHandleLoaderPayload = PayloadData<{loader: AglynExtensionLoader, options?: Partial<AglynExtensionOptions>}>
+export type ExtensionRegisterPayload = PayloadData<{extension: IAglynExtension}>
+export type ExtensionInitializePayload = PayloadData<{extension: IAglynExtension}>
+export type ExtensionDestroyPayload = PayloadData<{extensionName: ExtensionUUN}>
+export type ExtensionLoadPayload = PayloadData<{extensionName: ExtensionUUN}>
+export type ExtensionUnloadPayload = PayloadData<{extensionName: ExtensionUUN}>
 
-export type ContextsCreateStorePayload<T = any> = PayloadData<{ defaultState: T, options?: ContextStoreOptions<T> }>
-export type ContextsCreateEventPayload = PayloadData<{ options: Parameters<typeof createEffectorEvent> }>
-export type ContextsCreateEffectPayload = PayloadData<{ options: Parameters<typeof createEffectorEffect> }>
-export type ContextsGetStorePayload = PayloadData<{ storeId: ContextStoreUid }>
-export type ContextsGetStoreApiPayload = PayloadData<{ storeId: ContextStoreUid }>
-export type ContextsSetStorePayload<T = any> = PayloadData<{ storeId: ContextStoreUid, store: ContextStore<T> | any }>
-export type ContextsDeleteStorePayload = PayloadData<{ storeId: ContextStoreUid }>
+export type ContextsCreateStorePayload<T = any> = PayloadData<{defaultState: T, options?: ContextStoreOptions<T>}>
+export type ContextsCreateEventPayload = PayloadData<{options: Parameters<typeof createEffectorEvent>}>
+export type ContextsCreateEffectPayload = PayloadData<{options: Parameters<typeof createEffectorEffect>}>
+export type ContextsGetStorePayload = PayloadData<{storeId: ContextStoreUid}>
+export type ContextsGetStoreApiPayload = PayloadData<{storeId: ContextStoreUid}>
+export type ContextsSetStorePayload<T = any> = PayloadData<{storeId: ContextStoreUid, store: ContextStore<T> | any}>
+export type ContextsDeleteStorePayload = PayloadData<{storeId: ContextStoreUid}>
 
-export type ComponentGetPayload = PayloadData<{ componentId: CommandUId, bundleId?: BundleUId }>
-export type ComponentsGetPayload = PayloadData<{ ids?: { componentId: CommandUId, bundleId?: BundleUId }[] }>
-export type ComponentSchemaGetPayload = PayloadData<{ componentId: CommandUId, bundleId?: BundleUId }>
-export type ComponentsBundleGetPayload = PayloadData<{ bundleId: BundleUId }>
-export type ComponentRegisterPayload<P extends AnyProps = any> = PayloadData<{ schema: AglynComponentSchema<P>, component: IAglynComponent<P> }>
-export type ComponentUnregisterPayload = PayloadData<{ componentId: ComponentId, bundleId: BundleUId }>
-export type ComponentsBundleRegisterPayload = PayloadData<{ bundle: Omit<AglynComponentsBundle, 'componentIds'>, components: ComponentRegisterPayload[] }>
-export type ComponentsBundleUnregisterPayload = PayloadData<{ bundleId: BundleUId }>
+export type ComponentGetPayload = PayloadData<{componentId: CommandUId, bundleId?: BundleUId}>
+export type ComponentsGetPayload = PayloadData<{ids?: {componentId: CommandUId, bundleId?: BundleUId}[]}>
+export type ComponentSchemaGetPayload = PayloadData<{componentId: CommandUId, bundleId?: BundleUId}>
+export type ComponentsBundleGetPayload = PayloadData<{bundleId: BundleUId}>
+export type ComponentRegisterPayload<P extends AnyProps = any> = PayloadData<{schema: AglynComponentSchema<P>, component: IAglynComponent<P>}>
+export type ComponentUnregisterPayload = PayloadData<{componentId: ComponentId, bundleId: BundleUId}>
+export type ComponentsBundleRegisterPayload = PayloadData<{bundle: Omit<AglynComponentsBundle, 'componentIds'>, components: ComponentRegisterPayload[]}>
+export type ComponentsBundleUnregisterPayload = PayloadData<{bundleId: BundleUId}>
 
-export type CommandsSetResolverPayload = PayloadData<{ commandId?: CommandUId, resolver: AglynCommandResolver }>
-export type CommandRemoveResolverPayload = PayloadData<{ commandId: CommandUId }>
-export type CommandRegisterListenerPayload = PayloadData<{ commandId?: CommandUId, listener: AglynCommandListener }>
-export type CommandUnregisterListenerPayload = PayloadData<{ commandId?: CommandUId, listener: AglynCommandListener }>
-export type CommandTriggerPayload = PayloadData<{ commandId: CommandUId } & Dictionary>
+export type CommandsSetResolverPayload = PayloadData<{commandId?: CommandUId, resolver: AglynCommandResolver}>
+export type CommandRemoveResolverPayload = PayloadData<{commandId: CommandUId}>
+export type CommandRegisterListenerPayload = PayloadData<{commandId?: CommandUId, listener: AglynCommandListener}>
+export type CommandUnregisterListenerPayload = PayloadData<{commandId?: CommandUId, listener: AglynCommandListener}>
+export type CommandTriggerPayload = PayloadData<{commandId: CommandUId} & Dictionary>
 
-export type BesignerGetStorePayload<K extends keyof BesignerContextStores = any> = PayloadData<{ store: K }>
-export type BesignerFlagInteractModePayload<K extends keyof BesignerFlagState = any> = PayloadData<{ flag: K, value: BesignerFlagState[K] }>
+export type BesignerGetStorePayload<K extends keyof BesignerContextStores = any> = PayloadData<{store: K}>
+export type BesignerFlagInteractModePayload<K extends keyof BesignerFlagState = any> = PayloadData<{flag: K, value: BesignerFlagState[K]}>
 export type BesignerSetPanelPayload = PayloadData<Partial<BesignerPanelsState>>
-export type BesignerOpenPanelPayload = PayloadData<{ panel: keyof BesignerPanelsState }>
-export type BesignerClosePanelPayload = PayloadData<{ panel: keyof BesignerPanelsState }>
-export type BesignerSetCanvasSelectedPayload = PayloadData<{ selected: BesignerCanvasSelectedElement }>
-export type BesignerSetCanvasHoveredPayload = PayloadData<{ hovered: BesignerCanvasHoveredElement }>
+export type BesignerOpenPanelPayload = PayloadData<{panel: keyof BesignerPanelsState}>
+export type BesignerClosePanelPayload = PayloadData<{panel: keyof BesignerPanelsState}>
+export type BesignerSetCanvasSelectedPayload = PayloadData<{selected: BesignerCanvasSelectedElement}>
+export type BesignerSetCanvasHoveredPayload = PayloadData<{hovered: BesignerCanvasHoveredElement}>
 
 export type CanvasUndoPayload = PayloadData<any>
 export type CanvasRedoPayload = PayloadData<any>
 export type CanvasGetStorePayload = PayloadData<any>
-export type CanvasSetElementsPayload = PayloadData<{ elements: AglynComponentElementDataNormalizedMap }>
+export type CanvasSetElementsPayload = PayloadData<{elements: AglynComponentElementDataNormalizedMap}>
 export type CanvasGetElementsNormalizedPayload = PayloadData<any>
 export type CanvasGetElementsDenormalizedPayload = PayloadData<any>
 export type CanvasGetApiEventsPayload = PayloadData<any>
-export type CanvasAddElementPayload = PayloadData<{ parentId: ElementId, index: number, element: AglynComponentElementDataDenormalized }>
-export type CanvasGetElementPayload = PayloadData<{ $id: ElementId }>
-export type CanvasUpdateElementPayload = PayloadData<{ element: Partial<AglynComponentElementDataNormalized> }>
-export type CanvasDeleteElementPayload = PayloadData<{ $id: ElementId }>
-export type CanvasMoveElementPayload = PayloadData<{ $id: ElementId, parentId: ElementId, index: number }>
-export type CanvasDuplicateElementPayload = PayloadData<{ $id: ElementId }>
+export type CanvasAddElementPayload = PayloadData<{parentId: ElementId, index: number, element: AglynComponentElementDataDenormalized}>
+export type CanvasGetElementPayload = PayloadData<{$id: ElementId}>
+export type CanvasUpdateElementPayload = PayloadData<{element: Partial<AglynComponentElementDataNormalized>}>
+export type CanvasDeleteElementPayload = PayloadData<{$id: ElementId}>
+export type CanvasMoveElementPayload = PayloadData<{$id: ElementId, parentId: ElementId, index: number}>
+export type CanvasDuplicateElementPayload = PayloadData<{$id: ElementId}>
 
 export interface AglynModuleEffectPayload extends Record<AglynAppEffectFlag, AglynEmitterPayload> {
   [AglynAppEffectFlag.EXTENSION_REGISTER]: ExtensionRegisterPayload

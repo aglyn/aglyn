@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-import { _INTERNAL_COMMANDS_ } from '../constants/_internal'
-import {
+import {_INTERNAL_COMMANDS_} from '../constants/_internal'
+import type {
   CommandRegisterListenerPayload,
   CommandRemoveResolverPayload,
   CommandsSetResolverPayload,
   CommandTriggerPayload,
   CommandUnregisterListenerPayload,
 } from '../constants/emitter'
-import { AglynAppController } from '../controllers/aglyn-app.controller'
-import { AglynCommandsController } from '../controllers/aglyn-commands.controller'
-import { _validateAppArg } from './app.api'
+import type {IAglynAppController} from '../controllers/aglyn-app.types'
+import type {IAglynCommandsController} from '../controllers/aglyn-commands.types'
+import {_validateAppArg} from './app.api'
 
 
-export function _getCommandController(app: AglynAppController): AglynCommandsController {
+export function _getCommandController(app: IAglynAppController): IAglynCommandsController {
   _validateAppArg(app)
   return _INTERNAL_COMMANDS_.get(app.getName())
 }
 
 
 export function setCommandResolver(
-  app: AglynAppController,
+  app: IAglynAppController,
   data: CommandsSetResolverPayload,
 ): void {
   const commandController = _getCommandController(app)
@@ -43,7 +43,7 @@ export function setCommandResolver(
 }
 
 export function removeCommandResolver(
-  app: AglynAppController,
+  app: IAglynAppController,
   data: CommandRemoveResolverPayload,
 ): void {
   const commandController = _getCommandController(app)
@@ -51,7 +51,7 @@ export function removeCommandResolver(
 }
 
 export function registerCommandListener(
-  app: AglynAppController,
+  app: IAglynAppController,
   data: CommandRegisterListenerPayload,
 ): void {
   const commandController = _getCommandController(app)
@@ -59,7 +59,7 @@ export function registerCommandListener(
 }
 
 export function unregisterCommandListener(
-  app: AglynAppController,
+  app: IAglynAppController,
   data: CommandUnregisterListenerPayload,
 ): void {
   const commandController = _getCommandController(app)
@@ -67,7 +67,7 @@ export function unregisterCommandListener(
 }
 
 export function triggerCommand(
-  app: AglynAppController,
+  app: IAglynAppController,
   data: CommandTriggerPayload,
 ): void {
   const commandController = _getCommandController(app)

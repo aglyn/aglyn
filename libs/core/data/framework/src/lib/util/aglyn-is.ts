@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { _isFnT, _isObj } from '@aglyn/shared-util-guards'
+import {_isFnT, _isObj} from '@aglyn/shared-util-guards'
 import {
   COMMAND_LISTENER_TYPE,
   COMMAND_RESOLVER_TYPE,
@@ -24,13 +24,10 @@ import {
   TYPE_KIND,
   TYPE_OF,
 } from '../constants/symbol'
-import type {
-  AglynCommandListener,
-  AglynCommandResolver,
-} from '../controllers/aglyn-commands.controller'
-import type { IAglynComponent } from '../controllers/aglyn-components.controller'
-import type { AglynExtension } from '../models/aglyn-extension.model'
-import type { AglynAppModule } from '../types'
+import {AglynCommandListener, AglynCommandResolver} from '../controllers/aglyn-commands.types'
+import {IAglynComponent} from '../controllers/aglyn-components.types'
+import {AglynExtension} from '../models/aglyn-extension.types'
+import type {AglynAppModule} from '../types'
 
 
 export function typeOf(object: unknown) {

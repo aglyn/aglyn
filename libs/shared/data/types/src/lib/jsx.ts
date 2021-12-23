@@ -15,8 +15,13 @@
  * limitations under the License.
  */
 
-import type { Component, ComponentProps, ComponentPropsWithRef, ElementType, Ref } from 'react'
-import type { DistributiveOmit, EmptyObj } from './basic'
+import type {
+  Requireable as PropTypesRequireable,
+  ValidationMap as PropTypesValidationMap,
+  Validator as PropTypesValidator,
+} from 'prop-types'
+import type {Component, ComponentProps, ComponentPropsWithRef, ElementType, Ref} from 'react'
+import type {AnyObj, DistributiveOmit, EmptyObj} from './basic'
 
 
 export type JSXKey = string | number
@@ -38,13 +43,58 @@ export type JSXElementClassComponent<P> = new (props: P) => JSXElementClass
 export type JSXElementConstructor<P> = JSXElementFunctionComponent<P> | JSXElementClassComponent<P>
 export type JSXIntrinsicElement<P = any> = JSXIntrinsicElementMap<P>[keyof JSXIntrinsicElements]
 export type JSXElementType<P = any> =
-  JSXIntrinsicElement<P>
+  | JSXIntrinsicElement<P>
   | JSXElementConstructor<P>
 
-interface JSXNodeArray extends Array<JSXNode> {}
+export type JSXPropValidator<T> = PropTypesValidator<T>;
+export type JSXPropRequireable<T> = PropTypesRequireable<T>;
+export type JSXPropValidationMap<T> = PropTypesValidationMap<T>;
+type JSXWeakValidationMap<T> = {
+  [K in keyof T]?: null extends T[K]
+    ? JSXPropValidator<T[K] | null | undefined>
+    : undefined extends T[K]
+      ? JSXPropValidator<T[K] | null | undefined>
+      : JSXPropValidator<T[K]>
+}
 
-export interface JSXElementBase<P = any,
-  T extends string | JSXElementConstructor<any> = string | JSXElementConstructor<any>> {
+export type JSXRefCallback<T> = {bivarianceHack(instance: T | null): void}['bivarianceHack'];
+export type JSXRef<T> = JSXRefCallback<T> | JSXRefObject<T> | null
+/** Ensures that the props do not include ref at all */
+export type JSXPropsWithoutRef<P> =
+// Pick would not be sufficient for this. We'd like to avoid unnecessary mapping and need a
+// distributive conditional to support unions. see:
+// https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types
+// https://github.com/Microsoft/TypeScript/issues/28339
+  P extends any ? ('ref' extends keyof P ? Pick<P, Exclude<keyof P, 'ref'>> : P) : P;
+
+/** Ensures that the props do not include string ref, which cannot be forwarded */
+export type JSXPropsWithRef<P> =
+// Just "P extends { ref?: infer R }" looks sufficient, but R will infer as {} if P is {}.
+  'ref' extends keyof P
+    ? P extends {ref?: infer R | undefined}
+      ? string extends R
+        ? JSXPropsWithoutRef<P> & {ref?: Exclude<R, string> | undefined}
+        : P
+      : P
+    : P;
+
+export type JSXPropsWithChildren<P> = P & {children?: JSXNode | undefined};
+
+export interface JSXRefObject<T> {
+  readonly current: T | null;
+}
+
+export interface JSXAttributes {
+  key?: JSXKey | null | undefined;
+}
+
+export interface JSXRefAttributes<T> extends JSXAttributes {
+  ref?: JSXRef<T> | undefined;
+}
+
+export interface JSXNodeArray extends Array<JSXNode> {}
+
+export interface JSXElementBase<P = any, T extends string | JSXElementConstructor<any> = string | JSXElementConstructor<any>> {
   type: T
   props: P
   key: JSXKey | null
@@ -64,7 +114,7 @@ export interface JSXElementClassBase<P = EmptyObj, S = EmptyObj> extends Compone
   state: Readonly<S>
 }
 
-interface JSXPortal extends JSXElementBase {
+export interface JSXPortal extends JSXElementBase {
   key: JSXKey | null
   children: JSXNode
 }
@@ -77,26 +127,54 @@ export interface JSXElementAttributesProperty extends JSX.ElementAttributesPrope
 
 export interface JSXElementChildrenAttribute extends JSX.ElementChildrenAttribute {}
 
+// TODO: similar to how Fragment is actually a symbol, the values returned from createContext,
+// forwardRef and memo are actually objects that are treated specially by the renderer; see:
+// https://github.com/facebook/react/blob/v16.6.0/packages/react/src/ReactContext.js#L35-L48
+// https://github.com/facebook/react/blob/v16.6.0/packages/react/src/forwardRef.js#L42-L45
+// https://github.com/facebook/react/blob/v16.6.0/packages/react/src/memo.js#L27-L31
+// However, we have no way of telling the JSX parser that it's a JSX element type or its props
+// other than by pretending to be a normal component.  We don't just use ComponentType or
+// FunctionComponent types because you are not supposed to attach statics to this object, but
+// rather to the original function.
+export interface JSXExoticComponent<P = AnyObj> {
+  /**
+   * **NOTE**: Exotic components are not callable.
+   */
+  (props: P): (JSXElementBase | null);
+  readonly $$typeof: symbol;
+}
+
+export interface JSXNamedExoticComponent<P = AnyObj> extends JSXExoticComponent<P> {
+  displayName?: string | undefined;
+}
+
+// will show `ForwardRef(${Component.displayName || Component.name})` in devtools by default,
+// but can be given its own specific name
+export interface JSXForwardRefExoticComponent<P> extends JSXNamedExoticComponent<P> {
+  defaultProps?: Partial<P> | undefined;
+  propTypes?: JSXWeakValidationMap<P> | undefined;
+}
+
 export interface ResolveProps<P = any> {
   <OUT = P>(inProps: P): OUT
 }
 
-export type InnerRefProp<T = any> = { innerRef?: Ref<T> }
+export type InnerRefProp<T = any> = {innerRef?: Ref<T>}
 export type PropsWithInnerRef<P, T = any> = P & InnerRefProp<T>
 
 export type InferElementTypeProps<T> = T extends ElementType<infer P> ? P : never
 
-export type OverrideComponentProp<P = any> = { component?: ElementType<P> }
+export type OverrideComponentProp<P = any> = {component?: ElementType<P>}
 
 export type OverrideComponentsProps<T extends OverrideComponentProp = any> =
-  [T] extends [{ component: infer P }]
+  [T] extends [{component: infer P}]
     ? InferElementTypeProps<P>
     : never
 
 export type OverrideComponentPropPlusOverrideProps<T extends OverrideComponentProp = any> =
-  [T] extends [{ component: ElementType }]
+  [T] extends [{component: ElementType}]
     ? OverrideComponentsProps<T> & Pick<T, 'component'>
-    : { component?: undefined }
+    : {component?: undefined}
 
 export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P &
   OverrideComponentPropPlusOverrideProps<T>
