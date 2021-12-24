@@ -24,9 +24,10 @@ import {
 } from '../types'
 
 
-export const getComponentElementHierarchy = (
-  $id: ElementId, elements: AglynComponentElementDataNormalizedMap,
-): AglynComponentElementHierarchy<typeof $id> => {
+export function getComponentElementHierarchy<T extends ElementId>(
+  $id: T,
+  elements: AglynComponentElementDataNormalizedMap,
+): AglynComponentElementHierarchy<T> {
   const hierarchy = [CANVAS_ROOT_ELEMENT_ID]
 
   let currentId: ElementId = $id
@@ -35,7 +36,7 @@ export const getComponentElementHierarchy = (
     currentId = elements[currentId]?.parentId
   }
 
-  return hierarchy as AglynComponentElementHierarchy<typeof $id>
+  return hierarchy as AglynComponentElementHierarchy<T>
 }
 
 export default getComponentElementHierarchy

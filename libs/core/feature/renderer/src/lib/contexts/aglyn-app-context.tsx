@@ -21,7 +21,7 @@ import {
   getApp as getAglynApp,
   IAglynAppController,
 } from '@aglyn/core-data-framework'
-import {createContext, memo, ReactNode, useCallback, useContext} from 'react'
+import {createContext, ReactNode, useCallback, useContext} from 'react'
 
 
 export interface IAglynAppContext {
@@ -48,7 +48,7 @@ export interface AglynAppContextComponentProps {
   children?: ReactNode
 }
 
-function AglynAppContextComponentRaw(props: AglynAppContextComponentProps) {
+function AglynAppContextComponent(props: AglynAppContextComponentProps) {
   const {appName, children} = props
 
   const getApp = useCallback((overrideName?: AppUUN): IAglynAppController => {
@@ -61,9 +61,9 @@ function AglynAppContextComponentRaw(props: AglynAppContextComponentProps) {
     </AglynAppContextProvider>
   )
 }
-AglynAppContextComponentRaw.displayName = 'AglynAppContextComponent'
-AglynAppContextComponentRaw.defaultProps = {
+AglynAppContextComponent.displayName = 'AglynAppContextComponent'
+AglynAppContextComponent.defaultProps = {
   appName: DEFAULT_APP_UUN,
 }
 
-export const AglynAppContextComponent = memo(AglynAppContextComponentRaw)
+export {AglynAppContextComponent}

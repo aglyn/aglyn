@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type {ViewRect} from '@aglyn/shared-util-dom'
 import type {LogLevelString} from '@aglyn/shared-util-logger'
 import type {
   BesignerPanelTabFlag,
@@ -30,6 +31,7 @@ import type {
   BesignerOpenPanelPayload,
   BesignerSetCanvasHoveredPayload,
   BesignerSetCanvasSelectedPayload,
+  BesignerSetDndStatePayload,
   BesignerSetPanelPayload,
 } from '../constants/emitter'
 import type {
@@ -37,8 +39,9 @@ import type {
   AglynModuleModelT,
   IAglynModuleModel,
 } from '../models/aglyn-module.types'
-import type {BundleUId, ComponentId, ElementId, TemplateId} from '../types'
+import type {BundleUId, ComponentId, ElementId} from '../types'
 import type {IAglynAppController} from './aglyn-app.types'
+import type {AglynComponentHierarchy} from './aglyn-components.types'
 import type {ContextDomain, ContextStore} from './aglyn-contexts.types'
 
 
@@ -71,28 +74,38 @@ export type BesignerPanelsState = {
   panelRight?: BesignerPanelItem
   panelBottom?: BesignerPanelItem
 }
+export type BesignerDndElementBaseData<T extends DndDragSourceTypeFlag | DndDropLinealTypeFlag> = {
+  $id: ElementId
+  type?: T
+  componentId?: ComponentId
+  bundleId?: BundleUId
+  hierarchy?: AglynComponentHierarchy
+}
+export type BesignerDndElementActive = {
+  id: string
+  data: {current?: BesignerDndElementBaseData<DndDragSourceTypeFlag>}
+  disabled?: boolean
+  rect: {
+    current?: {
+      initial: ViewRect | null;
+      translated: ViewRect | null;
+    }
+  }
+}
+export type BesignerDndElementOver = {
+  id: string
+  data: {current?: BesignerDndElementBaseData<DndDropLinealTypeFlag>}
+  disabled?: boolean
+  rect: {
+    current?: {
+      initial: ViewRect | null;
+      translated: ViewRect | null;
+    }
+  }
+}
 export type BesignerDndState = {
-  disallowed?: boolean
-  dragging?: boolean
-  dragActivity?: {
-    type?: DndDragSourceTypeFlag
-    $id?: ElementId | TemplateId
-    componentId?: ComponentId
-    bundleUId?: BundleUId
-  }
-  dropActivity?: {
-    type?: DndDropLinealTypeFlag
-    item?: {
-      $id?: ElementId
-      componentId?: ComponentId
-      bundleUId?: BundleUId
-    }
-    parent?: {
-      $id?: ElementId
-      componentId?: ComponentId
-      bundleUId?: BundleUId
-    }
-  }
+  active?: BesignerDndElementActive
+  over?: BesignerDndElementOver
 }
 export type BesignerContextStores = {
   flags: BesignerFlagState
@@ -130,6 +143,7 @@ export interface IAglynBesignerController extends IAglynModuleModel<AglynBesigne
   setPanels(payload: BesignerSetPanelPayload)
   openPanel(payload: BesignerOpenPanelPayload)
   closePanel(payload: BesignerClosePanelPayload)
+  setDndState(payload: BesignerSetDndStatePayload)
   setCanvasSelected(payload: BesignerSetCanvasSelectedPayload)
   setCanvasHovered(payload: BesignerSetCanvasHoveredPayload)
 }

@@ -35,7 +35,7 @@ import {_isStrT} from '@aglyn/shared-util-guards'
 import MuiTreeItem, {TreeItemProps} from '@mui/lab/TreeItem'
 import MuiTreeView, {SingleSelectTreeViewProps} from '@mui/lab/TreeView'
 import {forwardRef, Fragment, useCallback, useMemo} from 'react'
-import useAglynBesignerStoreState from '../hooks/use-aglyn-besigner-store-state'
+import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 
 
 const ScrollableTreeView = styled(MuiTreeView, {name: 'AglynScrollableTreeView'})({
@@ -100,7 +100,7 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
 
     const {getApp} = useAglynAppContext()
     const elements = useAglynElementData(CANVAS_ROOT_ELEMENT_ID, 'elements')
-    const selected = useAglynBesignerStoreState('canvas', 'selected')
+    const selected = useAglynCanvasSelected() || {}
     const selectedId = selected?.$id
     const selectedIdHierarchy = useAglynCanvasElementHierarchy(selectedId)
 

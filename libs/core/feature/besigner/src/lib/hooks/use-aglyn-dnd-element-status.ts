@@ -15,32 +15,26 @@
  * limitations under the License.
  */
 
-import {
-  getCanvasApiEvents,
-  getCanvasStore,
-  type ModificationHistoryState,
-} from '@aglyn/core-data-framework'
+
+import {type ElementId, getBesignerStore} from '@aglyn/core-data-framework'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {useStoreMap} from 'effector-react'
-import {useMemo} from 'react'
-import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
-export function useAglynElementHistory() {
+export const useAglynDndElementStatus = ($id: ElementId) => {
   const {getApp} = useAglynAppContext()
   const app = getApp()
-  const store = getCanvasStore(app)
-  const {undo, redo} = getCanvasApiEvents(app)
-  const {past, future} = useStoreMap(store, <T>(state: ModificationHistoryState<T>) => {
-    return {past: state.past.length, future: state.future.length}
+  const dndStore = getBesignerStore(app, {store: 'dnd'})
+  return useStoreMap({
+    store: dndStore,
+    keys: [$id],
+    fn: (store, [$id]) => {
+      return {
+        isActive: $id && store.active?.data?.current?.$id === $id,
+        isOver: $id && store.over?.data?.current?.$id === $id,
+      }
+    },
   })
-  return useMemo(
-    () => ({
-      undo,
-      redo,
-      past,
-      future,
-    }),
-    [undo, redo, past, future],
-  )
 }
-export default useAglynElementHistory
+
+export default useAglynDndElementStatus

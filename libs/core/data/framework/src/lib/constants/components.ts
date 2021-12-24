@@ -34,7 +34,6 @@ export const DEFAULT_PROPS_FORM_SCHEMA: AglynComponentPropsFormSchema = {
     //   name: 'iconId',
     //   component: PropertyEditorFieldFlag.ICON_SELECT,
     //   label: 'Icon',
-    //   // variant: 'outlined',
     // },
     // {
     //   name: 'displayName',
@@ -47,8 +46,6 @@ export const DEFAULT_PROPS_FORM_SCHEMA: AglynComponentPropsFormSchema = {
       description: 'The content of the component.',
       component: PropertyEditorFieldFlag.TEXT_FIELD,
       label: 'Content',
-      variant: 'outlined',
-      size: 'small',
     },
   ],
 }

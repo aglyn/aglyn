@@ -17,11 +17,13 @@
 
 import {CanvasRendererComponent} from '@aglyn/core-feature-renderer'
 import {styled} from '@aglyn/shared-feature-themes'
+import {NoSsr} from '@mui/material'
+import Box from '@mui/material/Box'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
 import {forwardRef, HTMLAttributes} from 'react'
-import {HoverContextProvider} from '../contexts/hover-context-provider'
+import {CanvasRenderedElementRefsComponent} from '../contexts/canvas-rendered-element-refs'
+import {ElementOverlayComponent} from './element-overlay.component'
 import {ElementRendererComponent} from './element-renderer.component'
-import {ViewportPoppersComponent} from './viewport-poppers.component'
 
 
 const ViewportFrame = styled('div', {
@@ -43,15 +45,29 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
 
     return (
       <ViewportFrame ref={ref} {...rest}>
-        <HoverContextProvider>
+        <CanvasRenderedElementRefsComponent>
           {/*<MuiShadowDom.div>*/}
-          <CanvasRendererComponent
+          <Box
             id="aglyn:canvas"
-            elementRendererComponent={ElementRendererComponent}
-          />
+            // sx={{position: 'relative'}}
+          >
+            <CanvasRendererComponent
+              elementRendererComponent={ElementRendererComponent}
+            />
+          </Box>
           {/*</MuiShadowDom.div>*/}
-          <ViewportPoppersComponent />
-        </HoverContextProvider>
+          <NoSsr defer>
+
+            <Box
+              id="aglyn:canvas-overlay"
+              sx={{position: 'relative'}}
+            >
+              <CanvasRendererComponent
+                elementRendererComponent={ElementOverlayComponent}
+              />
+            </Box>
+          </NoSsr>
+        </CanvasRenderedElementRefsComponent>
         {children}
       </ViewportFrame>
     )

@@ -16,17 +16,19 @@
  */
 
 import {
-  AglynComponentElementHierarchy,
-  ElementId,
+  type AglynComponentElementDataNormalizedMap,
+  type AglynComponentElementHierarchy,
+  type ElementId,
   getCanvasNormalizedElementsStore,
   getComponentElementHierarchy,
 } from '@aglyn/core-data-framework'
 import { useStoreMap } from 'effector-react'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-export const useAglynCanvasElementHierarchy = (
-  $id: ElementId | null
-): AglynComponentElementHierarchy<typeof $id> => {
+
+export function useAglynCanvasElementHierarchy<T extends ElementId>(
+  $id: T
+): AglynComponentElementHierarchy<T> {
   const { getApp } = useAglynAppContext()
   const app = getApp()
   const store = getCanvasNormalizedElementsStore(app)
@@ -34,8 +36,9 @@ export const useAglynCanvasElementHierarchy = (
   return useStoreMap({
     store,
     keys: [$id],
-    fn: (state, [$id]) => {
+    fn: (state: AglynComponentElementDataNormalizedMap, [$id]) => {
       return getComponentElementHierarchy($id, state)
     },
-  })
+  }) as AglynComponentElementHierarchy<T>
 }
+export default useAglynCanvasElementHierarchy

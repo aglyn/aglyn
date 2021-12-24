@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { _isArr } from '@aglyn/shared-util-guards'
-import { getDisplayName } from '@aglyn/shared-util-tools'
+import {_isArr} from '@aglyn/shared-util-guards'
+import {getDisplayName} from '@aglyn/shared-util-tools'
 import CssBaseline from '@mui/material/CssBaseline'
-import { ComponentType, memo } from 'react'
-import { Theme, ThemeProvider } from '../../vendor/mui'
+import {ComponentType} from 'react'
+import {Theme, ThemeProvider} from '../../vendor/mui'
 
 
 export type WithThemeOptions = {
@@ -34,7 +34,7 @@ function withTheme(options: WithThemeOptions) {
   return function WithTheme<P>(Component: ComponentType<P>) {
     const displayName = `WithTheme(${getDisplayName(Component)})`
 
-    function WithTheme(props: P & { themeType?: 'light' | 'dark' }) {
+    function WithTheme(props: P & {themeType?: 'light' | 'dark'}) {
       const {themeType, ...rest} = props
       const activeTheme = themeType === 'dark' ? darkTheme : lightTheme
       return (
@@ -45,8 +45,8 @@ function withTheme(options: WithThemeOptions) {
       )
     }
     WithTheme.displayName = displayName
-    return memo(WithTheme)
+    return WithTheme
   }
 }
-export { withTheme }
+export {withTheme}
 export default withTheme

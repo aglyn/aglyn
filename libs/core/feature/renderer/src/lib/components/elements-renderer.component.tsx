@@ -15,45 +15,51 @@
  * limitations under the License.
  */
 
-import { ComponentId } from '@aglyn/core-data-framework'
-import { OverrideableComponentProps } from '@aglyn/shared-data-types'
-import { forwardRef, Fragment } from 'react'
+import {ComponentId} from '@aglyn/core-data-framework'
+import {OverrideableComponentProps} from '@aglyn/shared-data-types'
+import {forwardRef, Fragment} from 'react'
 import {
   ElementRendererComponent,
   ElementRendererComponentProps,
 } from './element-renderer.component'
+
 
 export interface ElementsComponentProps extends OverrideableComponentProps {
   elementRendererComponent?: ElementRendererComponentProps['elementRendererComponent']
   elements?: ComponentId[]
 }
 
-const ElementsRendererComponentRaw = forwardRef<any, ElementsComponentProps>(function RefRenderFn(
-  props,
-  ref
-) {
-  const { component: Component, elementRendererComponent, elements, children, ...rest } = props
-  const ElementRendererComponentProp = elementRendererComponent || ElementRendererComponent
-  return (
-    <Component ref={ref} {...rest}>
-      {elements.map(($id) => (
-        <ElementRendererComponentProp
-          key={$id}
-          $id={$id}
-          elementRendererComponent={ElementRendererComponentProp}
-        />
-      ))}
-      {children}
-    </Component>
-  )
-})
+const ElementsRendererComponent = forwardRef<any, ElementsComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      component: Component,
+      elementRendererComponent: renderer,
+      elements,
+      children,
+      ...rest
+    } = props
+    const ElementRendererComponentProp = renderer || ElementRendererComponent
+    return (
+      <Component ref={ref} {...rest}>
+        {children}
+        {elements.map(($id) => (
+          <ElementRendererComponentProp
+            key={$id}
+            $id={$id}
+            elementRendererComponent={ElementRendererComponentProp}
+          />
+        ))}
+      </Component>
+    )
+  },
+)
 
-ElementsRendererComponentRaw.displayName = 'ElementsComponent'
-ElementsRendererComponentRaw.defaultProps = {
+ElementsRendererComponent.displayName = 'ElementsRendererComponent'
+ElementsRendererComponent.defaultProps = {
   component: Fragment,
   children: null,
   elements: [],
 }
 
-export const ElementsRendererComponent = ElementsRendererComponentRaw
+export {ElementsRendererComponent}
 export default ElementsRendererComponent

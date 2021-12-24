@@ -15,95 +15,90 @@
  * limitations under the License.
  */
 
-import { ElementId } from '@aglyn/core-data-framework'
-import MuiPopper, { PopperProps as MuiPopperProps } from '@mui/material/Popper'
-import { forwardRef, RefObject } from 'react'
-import { useBesignerElementInteractionActivity } from '../hooks/use-besigner-element-interaction-activity'
-import { ElementBadgeComponent } from './element-badge.component'
-import { AglynElementOutlineProps, ElementOutlineComponent } from './element-outline.component'
+import {type ElementId} from '@aglyn/core-data-framework'
+import MuiPopper, {type PopperProps as MuiPopperProps} from '@mui/material/Popper'
+import {forwardRef} from 'react'
+import {CanvasRenderedElementRefsConsumer} from '../contexts/canvas-rendered-element-refs'
+import ElementBadgeComponent from './element-badge.component'
+import {ElementOutlineComponent} from './element-outline.component'
 
+
+const modifiers = [
+  {
+    name: 'flip',
+    enabled: false,
+    options: {
+      altBoundary: false,
+      rootBoundary: 'viewport',
+      padding: 0,
+    },
+  },
+  {
+    name: 'preventOverflow',
+    enabled: false,
+    options: {
+      altAxis: false,
+      altBoundary: false,
+      tether: false,
+      rootBoundary: 'viewport',
+      padding: 0,
+    },
+  },
+]
 
 export interface ElementPopperComponentProps extends Partial<MuiPopperProps> {
   $id: ElementId
-  isOver?: boolean
-  isDragging?: boolean
-  variant?: AglynElementOutlineProps['variant']
-  badgeable?: boolean
-  onGetElementRef: ($id: ElementId) => RefObject<Element>
 }
 
 const ElementPopperComponent = forwardRef<any, ElementPopperComponentProps>(
   function RefRenderFn(props, ref) {
-    const {$id, isOver, isDragging, variant, badgeable, onGetElementRef, ...rest} = props
-
-    const anchorRef = onGetElementRef($id)
-    const {isSelfHovered, isSelfSelected} = useBesignerElementInteractionActivity($id)
-
-    const isTypeSelect = variant === 'selected'
-    const outlineType = (isDragging || isSelfSelected) && isTypeSelect ? 'selected' : 'hovered'
-
-    const isOutlineable = Boolean(isOver || isDragging || isSelfHovered || isSelfSelected)
-    const outlineOpen = Boolean(isOutlineable && anchorRef?.current)
-
-    const isBadgeable = Boolean(isSelfSelected && outlineOpen)
-    const badgeOpen = Boolean(isTypeSelect && isBadgeable)
-
-    const modifiers = [
-      {
-        name: 'flip',
-        enabled: false,
-        options: {
-          altBoundary: false,
-          rootBoundary: 'viewport',
-          padding: 0,
-        },
-      },
-      {
-        name: 'preventOverflow',
-        enabled: false,
-        options: {
-          altAxis: false,
-          altBoundary: false,
-          tether: true,
-          rootBoundary: 'viewport',
-          padding: 0,
-        },
-      },
-    ]
+    const {
+      $id,
+      children,
+      ...rest
+    } = props
 
     return (
-      <MuiPopper
-        ref={ref}
-        open={outlineOpen}
-        anchorEl={anchorRef?.current}
-        placement="top-start"
-        modifiers={modifiers}
-        keepMounted
-        disablePortal
-        {...rest}
-      >
-        <ElementOutlineComponent
-          data-aglyn-element-outline={variant}
-          anchorEl={anchorRef?.current}
-          variant={outlineType}
-        />
+      <CanvasRenderedElementRefsConsumer>
+        {({getElementRef}) => {
+          const anchorEl = getElementRef($id)?.current
 
-        {badgeable && (
-          <ElementBadgeComponent
-            data-aglyn-element-badge={variant}
-            anchorEl={anchorRef?.current}
-            open={badgeOpen}
-            $id={$id}
-          />
-        )}
-      </MuiPopper>
-    )
-  },
-)
-ElementPopperComponent.displayName = 'ElementPopperComponent'
-ElementPopperComponent.defaultProps = {
-  variant: 'hovered',
-}
+          return (
+            <>
+              <MuiPopper
+                ref={ref}
+                anchorEl={anchorEl}
+                placement="top-start"
+                modifiers={modifiers}
+                open
+                data-aglyn-element-popper={$id}
+                keepMounted
+                disablePortal
+                //{...elementAttributes}
+                {...rest}
+              >
+                <ElementOutlineComponent
+                  anchorEl={anchorEl}
+                  $id={$id}
+                  data-aglyn-element-outline={$id}
+                />
+                <ElementBadgeComponent
+                  anchorEl={anchorEl}
+                  $id={$id}
+                  data-aglyn-element-badge={$id}
+                />
 
-export { ElementPopperComponent }
-export default ElementPopperComponent
+              </MuiPopper>
+              {children}
+            </>
+          )
+        }}
+          </CanvasRenderedElementRefsConsumer>
+          )
+        },
+        )
+        ElementPopperComponent.displayName = 'ElementPopperComponent'
+        ElementPopperComponent.defaultProps = {}
+
+        export {ElementPopperComponent}
+        export default ElementPopperComponent

@@ -36,7 +36,6 @@ export const GridFormTemplate = forwardRef<any, GridFormTemplateProps>(
     const {formFields, schema, ...rest} = props
     const {handleSubmit, onReset, onCancel, getState} = useFormApi()
     const {submitting, valid, pristine} = getState()
-    console.log('rest grid form template', rest)
     return (
       <form ref={ref} onSubmit={handleSubmit} noValidate>
         {schema.title}

@@ -28,6 +28,7 @@ import type {
   BesignerFlagState,
   BesignerPanelsState,
 } from '../controllers/aglyn-besigner.types'
+import {BesignerDndState} from '../controllers/aglyn-besigner.types'
 import type {AglynCommandListener, AglynCommandResolver} from '../controllers/aglyn-commands.types'
 import type {
   AglynComponentElementDataDenormalized,
@@ -211,6 +212,7 @@ export type BesignerFlagInteractModePayload<K extends keyof BesignerFlagState = 
 export type BesignerSetPanelPayload = PayloadData<Partial<BesignerPanelsState>>
 export type BesignerOpenPanelPayload = PayloadData<{panel: keyof BesignerPanelsState}>
 export type BesignerClosePanelPayload = PayloadData<{panel: keyof BesignerPanelsState}>
+export type BesignerSetDndStatePayload = PayloadData<{dnd: (prev: BesignerDndState) => Partial<BesignerDndState>}>
 export type BesignerSetCanvasSelectedPayload = PayloadData<{selected: BesignerCanvasSelectedElement}>
 export type BesignerSetCanvasHoveredPayload = PayloadData<{hovered: BesignerCanvasHoveredElement}>
 

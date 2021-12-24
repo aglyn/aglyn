@@ -47,13 +47,13 @@ const ElementRendererComponentRaw = forwardRef<any, DecoratedElementRendererProp
 
     return ReactIs.isValidElementType(Component) ? (
       <Component ref={ref} {...elemProps} {...rest}>
+        {children}
         {!_isArrEmpty(elementData.elements || []) ? (
           <ElementsRendererComponent
             elementRendererComponent={elementRendererComponent}
             elements={elementData.elements}
           />
         ) : null}
-        {children}
       </Component>
     ) : (
       <>Error loading element component</>

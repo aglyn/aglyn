@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-import { AppUUN } from '@aglyn/core-data-framework'
+import {AppUUN} from '@aglyn/core-data-framework'
 import {
   AglynAppContextComponent,
   ElementComponentsContextProvider,
   ElementsContextProvider,
 } from '@aglyn/core-feature-renderer'
-import { consoleThemeDark, consoleThemeLight, withTheme } from '@aglyn/shared-feature-themes'
-import { ConfirmationProviderComponent } from '@aglyn/shared-ui-jsx'
-import { DndContext } from '@dnd-kit/core'
+import {consoleThemeDark, consoleThemeLight, withTheme} from '@aglyn/shared-feature-themes'
+import {ConfirmationProviderComponent} from '@aglyn/shared-ui-jsx'
 import NoSsr from '@mui/material/NoSsr'
-import { forwardRef, Fragment, useCallback } from 'react'
-import { ComponentsDrawerContextProvider } from '../contexts/components-drawer-context.provider'
-import { WorkspaceEditorComponent, WorkspaceEditorComponentProps } from './workspace-editor.component'
+import {forwardRef, Fragment} from 'react'
+import {ComponentsDrawerContextProvider} from '../contexts/components-drawer-context.provider'
+import BesignerDndContext from './besigner-dnd-context.component'
+import {WorkspaceEditorComponent, WorkspaceEditorComponentProps} from './workspace-editor.component'
 
 
 export interface BesignerComponentProps extends WorkspaceEditorComponentProps {
@@ -42,17 +42,11 @@ const BesignerComponentRaw = forwardRef<any, BesignerComponentProps>(function Re
   const {noSsr, appName, ...rest} = props
   const Wrapper = noSsr ? NoSsr : Fragment
 
-  const handleDragStart = useCallback((...args) => {
-    console.log('drag start', ...args)
-  }, [])
-  const handleDragEnd = useCallback((...args) => {
-    console.log('drag end', ...args)
-  }, [])
 
   return (
     <Wrapper>
       <AglynAppContextComponent appName={appName}>
-        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <BesignerDndContext>
           <ElementComponentsContextProvider>
             <ElementsContextProvider>
               <ConfirmationProviderComponent>
@@ -64,7 +58,7 @@ const BesignerComponentRaw = forwardRef<any, BesignerComponentProps>(function Re
               </ConfirmationProviderComponent>
             </ElementsContextProvider>
           </ElementComponentsContextProvider>
-        </DndContext>
+        </BesignerDndContext>
       </AglynAppContextComponent>
     </Wrapper>
   )

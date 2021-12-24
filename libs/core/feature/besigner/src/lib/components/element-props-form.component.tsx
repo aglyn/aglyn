@@ -37,7 +37,9 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
     const {updateElement, deleteElement} = useAglynCanvasApiEvents()
-    const {props: elemProps, componentId, bundleId} = useAglynElementData($id) || {}
+    const componentId = useAglynElementData($id, 'componentId')
+    const bundleId = useAglynElementData($id, 'bundleId')
+    const elemProps = useAglynElementData($id, 'props')
     const formSchema = useComponentFormSchema({componentId, bundleId})
 
     const handleFormCancel = useCallback((e, reason) => {}, [])

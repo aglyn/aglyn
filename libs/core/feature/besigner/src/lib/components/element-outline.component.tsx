@@ -15,21 +15,27 @@
  * limitations under the License.
  */
 
-import {OverridableStringUnion} from '@aglyn/shared-data-types'
+import {type ElementId} from '@aglyn/core-data-framework'
+import {useAglynElementData} from '@aglyn/core-feature-renderer'
 import {alpha, generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 import {useDynamicEffect} from '@aglyn/shared-ui-jsx'
-import {getElementClientRectBounding, VirtualElement} from '@aglyn/shared-util-dom'
-import {_isFnT} from '@aglyn/shared-util-guards'
-import Box, {BoxProps} from '@mui/material/Box'
+import {getElementClientRectBounding, type VirtualElement} from '@aglyn/shared-util-dom'
+import Box, {type BoxProps} from '@mui/material/Box'
 import clsx from 'clsx'
-import {forwardRef, memo, useState} from 'react'
+import {forwardRef, useState} from 'react'
+import useAglynCanvasElementStatus from '../hooks/use-aglyn-canvas-element-status'
+import useAglynDndElementStatus from '../hooks/use-aglyn-dnd-element-status'
+import useBesignerElementAttributes from '../hooks/use-besigner-element-attributes'
 
-
-export interface ElementOutlineComponentPropsVariantOverrides {}
 
 const classKeys = generateComponentClassKeys('AglynElementOutline', [
-  'hovered',
-  'selected',
+  'open',
+  'hoveringSelf',
+  'selectedSelf',
+  'hoveringChild',
+  'selectedChild',
+  'draggingSelf',
+  'draggingOverSelf',
 ])
 
 const ElementOutline = styled(Box, {
@@ -37,73 +43,139 @@ const ElementOutline = styled(Box, {
 })(({theme}) => ({
   pointerEvents: 'none',
   position: 'absolute',
-  overflow: 'hidden',
   left: 0,
   top: 0,
   right: 0,
   bottom: 0,
-  // marginLeft: -2, marginTop: -3,
-  outlineWidth: 2,
-  transition: theme.transitions.create(['width', 'height'], {
-    duration: theme.transitions.duration.short,
-    easing: theme.transitions.easing.easeInOut,
+  outlineColor: 'transparent',
+  outlineOffset: 0,
+  outlineWidth: 1,
+  outlineStyle: 'dashed',
+  transition: theme.transitions.create([
+    'visibility',
+    'outlineWidth',
+    'outlineOffset',
+    'outlineStyle',
+    'outlineColor',
+    'backgroundColor',
+  ], {
+    duration: theme.transitions.duration.enteringScreen,
+    easing: theme.transitions.easing.easeIn,
   }),
-  [`&.${classKeys.hovered}`]: {
-    outlineOffset: 0,
-    outlineStyle: 'dashed',
-    outlineColor: theme.palette.quaternary.main,
-    backgroundColor: alpha(theme.palette.quaternary.dark, 0.36),
+  [`&.${classKeys.open}`]: {
+    transition: theme.transitions.create([
+      'visibility',
+      'outlineWidth',
+      'outlineOffset',
+      'outlineStyle',
+      'outlineColor',
+      'backgroundColor',
+    ], {
+      duration: theme.transitions.duration.leavingScreen,
+      easing: theme.transitions.easing.easeOut,
+    }),
   },
-  [`&.${classKeys.selected}`]: {
-    outlineOffset: 6,
+  [`&.${classKeys.selectedSelf}`]: {
     outlineWidth: 2,
-    outlineColor: theme.palette.secondary.light,
     outlineStyle: 'solid',
+    outlineColor: theme.palette.quaternary.main,
+  },
+  [`&.${classKeys.hoveringChild}`]: {
+    outlineColor: theme.palette.grey['A400'],
+    backgroundColor: alpha(theme.palette.secondary.light, 0.12),
+  },
+  [`&.${classKeys.selectedChild}`]: {
+    outlineColor: theme.palette.grey['A400'],
+  },
+
+  [`&.${classKeys.hoveringSelf}`]: {
+    outlineWidth: 2,
+    outlineColor: theme.palette.secondary.main,
+    backgroundColor: alpha(theme.palette.secondary.dark, 0.12),
+
+    [`&.${classKeys.selectedSelf}`]: {
+      outlineWidth: 2,
+      outlineOffset: 3,
+      outlineStyle: 'solid',
+      outlineColor: theme.palette.quaternary.main,
+      backgroundColor: alpha(theme.palette.quaternary.dark, 0.12),
+    },
+    [`&.${classKeys.selectedChild}`]: {
+      outlineStyle: 'dashed',
+    },
+  },
+
+  [`&.${classKeys.draggingSelf}`]: {
+    outlineColor: 'transparent',
+    backgroundColor: alpha(theme.palette.grey['300'], 0.76),
+  },
+  [`&.${classKeys.draggingOverSelf}`]: {
+    backgroundColor: alpha(theme.palette.quaternary.dark, 0.76),
+    outlineColor: theme.palette.quaternary.main,
   },
 }))
 
 export interface AglynElementOutlineProps extends BoxProps {
-  variant?: OverridableStringUnion<'hovered' | 'selected',
-    ElementOutlineComponentPropsVariantOverrides>
-  anchorEl?: null | VirtualElement | (() => VirtualElement)
+  $id: ElementId
+  anchorEl?: VirtualElement
 }
 
-const ElementOutlineComponentRaw = forwardRef<any, AglynElementOutlineProps>(
+const ElementOutlineComponent = forwardRef<any, AglynElementOutlineProps>(
   function RefRenderFn(props, ref) {
-    const {className: classNameProp, variant, anchorEl, ...rest} = props
+    const {
+      className: classNameProp,
+      $id,
+      anchorEl,
+      ...rest
+    } = props
+    const {isOver, isActive} = useAglynDndElementStatus($id)
+    const componentId = useAglynElementData($id, 'componentId')
+    const bundleId = useAglynElementData($id, 'bundleId')
+    const elementAttributes = useBesignerElementAttributes({$id, componentId, bundleId})
+    const {
+      isSelfSelected,
+      isSelfHovered,
+      isChildSelected,
+      isChildHovered,
+    } = useAglynCanvasElementStatus($id, true)
+
     const className = clsx({
-      [classKeys[variant]]: Boolean(classKeys[variant]),
+      [classKeys.open]: Boolean(anchorEl),
+      [classKeys.draggingSelf]: Boolean(isActive),
+      [classKeys.draggingOverSelf]: Boolean(isOver),
+      [classKeys.hoveringSelf]: Boolean(isSelfHovered),
+      [classKeys.selectedSelf]: Boolean(isSelfSelected),
+      [classKeys.selectedChild]: Boolean(isChildSelected),
+      [classKeys.hoveringChild]: Boolean(isChildHovered),
     }, classNameProp)
 
-    const [{width, height}, setDimensions] = useState(() => ({
-      width: 0,
-      height: 0,
-    }))
 
+    const [style, setStyle] = useState(null)
     useDynamicEffect(() => {
-      const element = _isFnT(anchorEl) ? anchorEl() : anchorEl
-      const rect = element && getElementClientRectBounding(element)
-      setDimensions({
-        width: rect?.width ?? 0,
-        height: rect?.height ?? 0,
-      })
+      const rect = anchorEl && getElementClientRectBounding(anchorEl)
+      console.log('anchorEl', anchorEl, rect)
+      if (rect) {
+        setStyle({
+          width: rect.width,
+          height: rect.height,
+        })
+      }
     }, [anchorEl])
 
     return (
       <ElementOutline
         ref={ref}
         className={className}
-        style={{width, height}}
+        style={style}
+        {...elementAttributes}
         {...rest}
       />
     )
   },
 )
 
-ElementOutlineComponentRaw.displayName = 'ElementOutlineComponent'
-ElementOutlineComponentRaw.defaultProps = {
-  variant: 'hovered',
-}
+ElementOutlineComponent.displayName = 'ElementOutlineComponent'
+ElementOutlineComponent.defaultProps = {}
 
-export const ElementOutlineComponent = memo(ElementOutlineComponentRaw)
+export {ElementOutlineComponent}
 export default ElementOutlineComponent

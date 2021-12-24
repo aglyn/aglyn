@@ -29,6 +29,7 @@ import type {
   BesignerSetCanvasSelectedPayload,
   BesignerSetPanelPayload,
 } from '../constants/emitter'
+import {BesignerSetDndStatePayload} from '../constants/emitter'
 import AglynModuleModel from '../models/aglyn-module.model'
 import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
 import type {IAglynAppController} from './aglyn-app.types'
@@ -185,6 +186,16 @@ export class AglynBesignerController extends AglynModuleModel<AglynBesignerContr
         }
       },
 
+      setDndState: (store, payload: BesignerSetDndStatePayload) => {
+        const {dnd} = payload || {}
+        return {
+          ...store,
+          dnd: {
+            ...dnd(store.dnd),
+          },
+        }
+      },
+
       setCanvasSelected: (store, payload: BesignerSetCanvasSelectedPayload) => {
         const {selected} = payload || {}
         return {
@@ -236,6 +247,9 @@ export class AglynBesignerController extends AglynModuleModel<AglynBesignerContr
   }
   public closePanel(payload: BesignerClosePanelPayload) {
     return this.#context.events.setPanels(payload)
+  }
+  public setDndState(payload: BesignerSetDndStatePayload) {
+    return this.#context.events.setDndState(payload)
   }
   public setCanvasSelected(payload: BesignerSetCanvasSelectedPayload) {
     return this.#context.events.setCanvasSelected(payload)

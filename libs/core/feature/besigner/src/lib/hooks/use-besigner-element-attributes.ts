@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { BundleUId, ComponentId, ElementId } from '@aglyn/core-data-framework'
-import { ElementAttribute } from '@aglyn/core-feature-besigner'
-import { useBesignerElementInteractionActivity } from './use-besigner-element-interaction-activity'
+import {BundleUId, ComponentId, ElementId} from '@aglyn/core-data-framework'
+import {ElementAttribute} from '../constants'
+import useAglynCanvasElementStatus from './use-aglyn-canvas-element-status'
 
 
 function computeActivityValue(self: boolean, child: boolean) {
@@ -36,12 +36,11 @@ export const useBesignerElementAttributes = (opts: UseBesignerElementAttributesO
   const {$id, componentId, bundleId} = opts
 
   const {isSelfSelected, isSelfHovered, isChildSelected, isChildHovered} =
-    useBesignerElementInteractionActivity($id)
+    useAglynCanvasElementStatus($id, true)
   const selected = computeActivityValue(isSelfSelected, isChildSelected)
   const hovered = computeActivityValue(isSelfHovered, isChildHovered)
 
   const attributes = {
-    [ElementAttribute.ELEMENT_ID]: `${$id}`,
     [ElementAttribute.COMPONENT_ID]: `${componentId}`,
     [ElementAttribute.BUNDLE_ID]: bundleId,
     [ElementAttribute.SELECTED]: selected,

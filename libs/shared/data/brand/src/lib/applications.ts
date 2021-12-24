@@ -25,6 +25,7 @@ import {
   mdiContentDuplicate,
   mdiCubeOutline,
   mdiDeleteOutline,
+  mdiDrag,
   mdiFileTree,
   mdiFormDropdown,
   mdiInformationVariant,
@@ -67,6 +68,7 @@ export const IconVariant = {
   MODIFY_DUPLICATE: mdiContentDuplicate.path,
   MODIFY_DELETE: mdiDeleteOutline.path,
   MODIFY_EDIT: mdiPencil.path,
+  MODIFY_DRAG: mdiDrag.path,
   SELECT_PARENT: mdiArrowTopLeft.path,
 
   // User

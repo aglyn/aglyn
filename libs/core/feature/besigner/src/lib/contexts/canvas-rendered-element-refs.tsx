@@ -15,22 +15,45 @@
  * limitations under the License.
  */
 
-import { ElementId } from '@aglyn/core-data-framework'
-// import { useDndMonitor } from '@dnd-kit/core'
-// import { DragOverEvent } from '@dnd-kit/core/dist/types'
-import { ReactNode, RefObject, useRef, useState } from 'react'
-import {
-  CanvasRenderedElementRefs,
-  CanvasRenderedElementRefsProvider,
-} from './canvas-rendered-element-refs'
+import {type ElementId} from '@aglyn/core-data-framework'
+import {createContext, ReactNode, RefObject, useContext, useRef, useState} from 'react'
 
-export interface HoverContextProviderProps {
+
+export interface CanvasRenderedElementRefs {
+  // elementRefs: RefObject<{ [$id: ElementId]: RefObject<Element> }>
+  getElementRef: ($id: ElementId) => RefObject<Element>
+  setElementRef: ($id: ElementId, ref: RefObject<Element>) => void
+  deleteElementRef: ($id: ElementId) => void
+}
+
+export const CanvasRenderedElementRefsContext = createContext<CanvasRenderedElementRefs>({
+  // elementRefs: {current: {}},
+  getElementRef() {
+    return {current: null}
+  },
+  setElementRef() {},
+  deleteElementRef() {},
+})
+CanvasRenderedElementRefsContext.displayName = 'CanvasRenderedElementRefsContext'
+
+export const {
+  displayName,
+  Provider: CanvasRenderedElementRefsProvider,
+  Consumer: CanvasRenderedElementRefsConsumer,
+} = CanvasRenderedElementRefsContext
+
+export const useCanvasRenderedElementRefs = () => {
+  return useContext(CanvasRenderedElementRefsContext)
+}
+
+
+export interface CanvasRenderedElementRefsComponentProps {
   children?: ReactNode
 }
 
-function HoverContextProviderRaw(props: HoverContextProviderProps) {
-  const { children } = props
-  const elementRefs = useRef<{ [$id: ElementId]: RefObject<Element> }>({})
+function CanvasRenderedElementRefsComponent(props: CanvasRenderedElementRefsComponentProps) {
+  const {children} = props
+  const elementRefs = useRef<{[$id: ElementId]: RefObject<Element>}>({})
   const [context] = useState<CanvasRenderedElementRefs>(() => ({
     getElementRef: ($id: ElementId): RefObject<Element> => {
       return elementRefs.current[$id]
@@ -60,8 +83,8 @@ function HoverContextProviderRaw(props: HoverContextProviderProps) {
   )
 }
 
-HoverContextProviderRaw.displayName = 'HoverContextProvider'
-HoverContextProviderRaw.defaultProps = {}
+CanvasRenderedElementRefsComponent.displayName = 'CanvasRenderedElementRefsComponent'
+CanvasRenderedElementRefsComponent.defaultProps = {}
 
-export const HoverContextProvider = HoverContextProviderRaw
-export default HoverContextProvider
+export {CanvasRenderedElementRefsComponent}
+export default CanvasRenderedElementRefsComponent

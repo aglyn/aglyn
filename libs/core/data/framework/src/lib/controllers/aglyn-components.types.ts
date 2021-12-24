@@ -137,11 +137,13 @@ export interface AglynComponentPropsFormSchema {
   fields: AglynComponentField[]
 }
 
+export type AglynComponentHierarchy = {
+  restrictChildren?: ComponentsLinealOrder
+  restrictParent?: ComponentsLinealOrder
+}
+
 export interface AglynComponentRenderFlags<P = EmptyObj> {
-  hierarchy?: {
-    restrictChildren?: ComponentsLinealOrder
-    restrictParent?: ComponentsLinealOrder
-  }
+  hierarchy?: AglynComponentHierarchy
   elementRef?: {disable?: boolean; innerRef?: boolean}
   propsSchema?: AglynComponentPropsFormSchema
   resolveProps?: ResolveProps<AglynComponentElementDataNormalized<P>>

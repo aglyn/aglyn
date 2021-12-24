@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import MuiPopper, { PopperProps as MuiPopperProps } from '@mui/material/Popper'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {_isEqualitySameType} from '@aglyn/shared-util-guards'
+import MuiPopper, {type PopperProps as MuiPopperProps} from '@mui/material/Popper'
 import clsx from 'clsx'
-import { forwardRef, HTMLAttributes } from 'react'
+import {forwardRef, HTMLAttributes} from 'react'
 
 
 const classKeys = generateComponentClassKeys('AglynPopperStyled', [
@@ -132,5 +132,5 @@ PopperStyledComponent.defaultProps = {
   arrowGap: 2,
 }
 
-export { PopperStyledComponent }
+export {PopperStyledComponent}
 export default PopperStyledComponent

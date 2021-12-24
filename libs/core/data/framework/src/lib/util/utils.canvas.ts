@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {handleStateModificationHistoryChange} from '@aglyn/core-data-framework'
-import {arrayAddAtIndex} from '@aglyn/shared-util-tools'
+import {arrayAddAtIndex, arrayRemoveItem, arrayReorder} from '@aglyn/shared-util-tools'
 import {objectDeepMerge} from '@aglyn/shared-util-vendor'
 import type {
   CanvasAddElementPayload,
@@ -31,6 +30,8 @@ import {ElementsDataStore} from '../controllers/aglyn-canvas.types'
 import type {AglynComponentElementDataNormalizedMap} from '../types'
 import {createComponentElementDataCopy} from './create-component-element-data-copy'
 import {deleteComponentElement} from './delete-component-element'
+import getComponentElementHierarchy from './get-component-element-hierarchy'
+import handleStateModificationHistoryChange from './handle-state-modification-history-change'
 import {normalizeComponentElementData} from './normalize-component-element-data'
 
 
@@ -111,27 +112,50 @@ export const handleCanvasMoveElement = (
 ) => {
 
   const {$id, index, parentId} = payload
-  const current = state[$id]
-  return {
+  const parentHierarchy = getComponentElementHierarchy(parentId, state)
+
+  if (parentHierarchy.some((id) => id === $id)) {
+    throw new Error('New parent is same or a child of the element')
+  }
+
+  const current = {...state[$id]}
+  const response = {
     ...state,
     [$id]: {
-      ...state[$id],
+      ...current,
       parentId: parentId,
     },
-    [parentId]: {
-      ...state[parentId],
+  }
+  const parentElements = response[parentId].elements || []
+
+  if (parentId === current.parentId) {
+    response[parentId] = {
+      ...response[parentId],
+      elements: arrayReorder(
+        parentElements,
+        parentElements.indexOf($id),
+        index === -1 ? parentElements.length : index,
+      ),
+    }
+  }
+  else {
+    response[parentId] = {
+      ...response[parentId],
       elements: arrayAddAtIndex(
-        index,
-        state[parentId].elements || [],
+        index === -1 ? parentElements.length : index,
+        parentElements,
         $id,
         {copy: true},
       ).items,
-    },
-    [current.parentId]: {
-      ...state[current.parentId],
-      elements: (state[current.parentId].elements || []).filter(i => i !== $id),
-    },
+    }
+    const currentParentElements = response[current.parentId].elements || []
+    response[current.parentId] = {
+      ...response[current.parentId],
+      elements: arrayRemoveItem($id, currentParentElements),
+    }
   }
+
+  return response
 }
 
 

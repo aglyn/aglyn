@@ -23,10 +23,12 @@ import { useMemo } from 'react'
 import { useAglynCanvasApiEvents } from './use-aglyn-canvas-api-events'
 import { useAglynCanvasElementsNormalized } from './use-aglyn-canvas-elements-normalized'
 
-export function useAglynCanvasElementsWithApi(): {
+export type CanvasElementWithApi = {
   elements: AglynComponentElementDataNormalizedMap
   api: ElementsDataStoreApi
-} {
+}
+
+export function useAglynCanvasElementsWithApi(): CanvasElementWithApi {
   const elements = useAglynCanvasElementsNormalized()
   const api = useAglynCanvasApiEvents()
   return useMemo(() => {

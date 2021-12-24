@@ -15,15 +15,12 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID, createComponentElementData } from '@aglyn/core-data-framework'
-import {
-  useAglynCanvasApiEvents,
-  useAglynElementParentPosition,
-} from '@aglyn/core-feature-renderer'
-import { SyntheticEvent, useCallback } from 'react'
-import { ElementDrawerOptions, useElementDrawerContext } from '../contexts/element-drawer-context'
-import useAglynBesignerStoreState from './use-aglyn-besigner-store-state'
+import {CANVAS_ROOT_ELEMENT_ID, createComponentElementData} from '@aglyn/core-data-framework'
+import {useAglynCanvasApiEvents, useAglynElementParentPosition} from '@aglyn/core-feature-renderer'
+import {SyntheticEvent, useCallback} from 'react'
+import {ElementDrawerOptions, useElementDrawerContext} from '../contexts/element-drawer-context'
 import useAglynCanvasSelected from './use-aglyn-canvas-selected'
+
 
 export interface UseAddElementCallbackOptions<E extends SyntheticEvent<any> = SyntheticEvent<any>> {
   onComplete?: (event: E | null, response: unknown) => void
@@ -36,13 +33,13 @@ export type AddElementCallback<E extends SyntheticEvent<any> = SyntheticEvent<an
 }['bivarianceHack']
 
 export function useAddElementCallback<E extends SyntheticEvent<any>>(
-  options?: UseAddElementCallbackOptions
+  options?: UseAddElementCallbackOptions,
 ): AddElementCallback<E> {
-  const { onComplete, onError, drawerOptions } = { ...options }
-  const { elementDrawer } = useElementDrawerContext()
-  const { addElement } = useAglynCanvasApiEvents()
-  const { $id } = useAglynBesignerStoreState('canvas', 'selected') || {}
-  const { parentId, index, parentElements } = useAglynElementParentPosition($id) || {}
+  const {onComplete, onError, drawerOptions} = {...options}
+  const {elementDrawer} = useElementDrawerContext()
+  const {addElement} = useAglynCanvasApiEvents()
+  const {$id} = useAglynCanvasSelected() || {}
+  const {parentId, index, parentElements} = useAglynElementParentPosition($id) || {}
   const siblingCount = parentElements.length
 
   return useCallback(
@@ -62,7 +59,8 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
             }
             console.log('addElement', newElement)
             addElement(newElement)
-          } else {
+          }
+          else {
             console.warn('Invalid data returned for addElement callback', data)
           }
           onComplete && onComplete(e, res)
@@ -75,7 +73,7 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
           options?.onError && options?.onError(e, error)
         })
     },
-    [elementDrawer, addElement, siblingCount, parentId, index, onComplete, onError, drawerOptions]
+    [elementDrawer, addElement, siblingCount, parentId, index, onComplete, onError, drawerOptions],
   )
 }
 

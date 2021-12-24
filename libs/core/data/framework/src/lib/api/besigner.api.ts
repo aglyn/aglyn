@@ -25,6 +25,7 @@ import type {
   BesignerSetCanvasSelectedPayload,
   BesignerSetPanelPayload,
 } from '../constants/emitter'
+import {BesignerSetDndStatePayload} from '../constants/emitter'
 import type {IAglynAppController} from '../controllers/aglyn-app.types'
 import type {
   BesignerContextStores,
@@ -77,6 +78,14 @@ export function closeBesignerPanel(
 ) {
   const besignerController = _getBesignerController(app)
   return besignerController.closePanel(payload)
+}
+
+export function setBesignerDndState(
+  app: IAglynAppController,
+  payload?: BesignerSetDndStatePayload,
+) {
+  const besignerController = _getBesignerController(app)
+  return besignerController.setDndState(payload)
 }
 
 export function setBesignerCanvasSelected(

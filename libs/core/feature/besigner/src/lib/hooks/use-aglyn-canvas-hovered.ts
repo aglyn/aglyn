@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-import { type ElementsDataStoreApi, getCanvasApiEvents } from '@aglyn/core-data-framework'
-import { useMemo } from 'react'
-import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-export function useAglynCanvasApiEvents(): ElementsDataStoreApi {
-  const { getApp } = useAglynAppContext()
-  const app = getApp()
-  const api = getCanvasApiEvents(app)
-  return useMemo(() => api, [api])
+import useAglynBesignerStoreState from './use-aglyn-besigner-store-state'
+
+
+export const useAglynCanvasHovered = () => {
+  return useAglynBesignerStoreState('canvas', 'hovered')
 }
-export default useAglynCanvasApiEvents
+
+export default useAglynCanvasHovered

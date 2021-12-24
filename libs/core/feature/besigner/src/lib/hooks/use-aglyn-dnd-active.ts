@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import { render } from '@testing-library/react'
-import HoverContextProvider from './hover-context-provider'
 
-describe('HoverContextProvider', () => {
-  it('should render successfully', () => {
-    const { baseElement } = render(<HoverContextProvider />)
-    expect(baseElement).toBeTruthy()
-  })
-})
+import useAglynBesignerStoreState from './use-aglyn-besigner-store-state'
+
+
+export const useAglynDndActive = () => {
+  return useAglynBesignerStoreState('dnd', 'active')
+}
+
+export default useAglynDndActive

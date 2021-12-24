@@ -72,8 +72,8 @@ export interface IAglynCanvasController extends IAglynModuleModel<AglynCanvasCon
   readonly denormalizedElementsStore: ContextStore<AglynComponentElementDataNormalizedArray>
 
   getStore(payload?: CanvasGetApiEventsPayload)
-  getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload)
-  getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload)
+  getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload): ContextStore<AglynComponentElementDataNormalizedMap>
+  getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload): ContextStore<AglynComponentElementDataNormalizedArray>
   undo(payload?: CanvasUndoPayload)
   redo(payload?: CanvasRedoPayload)
   getApiEvents(payload?: CanvasGetApiEventsPayload)

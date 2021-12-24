@@ -54,7 +54,9 @@ const DividerSpacer = styled(Divider, {
 }))
 
 const ElementInfo = function ElementInfo({$id, ...props}: any) {
-  const {componentId, bundleId, parentId} = useAglynElementData($id) || {}
+  const componentId = useAglynElementData($id, 'componentId')
+  const bundleId = useAglynElementData($id, 'bundleId')
+  const parentId = useAglynElementData($id, 'parentId')
   const {metadata} = useAglynComponentSchema(componentId, bundleId) || {}
   const {displayName, title, subtitle, description} = metadata || {}
   const failoverText = '(undefined)'

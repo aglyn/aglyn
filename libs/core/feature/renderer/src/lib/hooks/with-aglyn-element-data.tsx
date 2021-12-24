@@ -41,10 +41,12 @@ export interface OptionalElementDataProps extends InnerRefProp {
 }
 
 export interface ElementDataProps extends RequiredElementDataProps, OptionalElementDataProps {}
+type WrappedComponent<U, T> = ComponentType<PropsWithoutRef<ElementDataProps & U> & RefAttributes<T>>
+type DecoratedComponent<U, T> = ComponentType<RequiredElementDataProps & U & RefAttributes<T>>
 
 export function withAglynElementData<U = any, T = any>(
-  WrappedComponent: ComponentType<PropsWithoutRef<ElementDataProps & U> & RefAttributes<T>>
-): ComponentType<RequiredElementDataProps & U & RefAttributes<T>> {
+  WrappedComponent: WrappedComponent<U, T>
+): DecoratedComponent<U, T> {
 
   const displayName = getDisplayName(WrappedComponent)
   const WithAglynElementData = forwardRef<T, RequiredElementDataProps & U>(
@@ -74,7 +76,7 @@ export function withAglynElementData<U = any, T = any>(
     }
   )
   WithAglynElementData.displayName = `WithAglynElementData(${displayName})`
-  return WithAglynElementData as ComponentType<RequiredElementDataProps & U & RefAttributes<T>>
+  return WithAglynElementData as DecoratedComponent<U, T>
 }
 
 export default withAglynElementData

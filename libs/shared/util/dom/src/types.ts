@@ -56,3 +56,18 @@ export type Coordinates = {
   x: number;
   y: number;
 }
+
+
+export interface LayoutRect {
+  width: number;
+  height: number;
+  offsetLeft: number;
+  offsetTop: number;
+}
+
+export interface ViewRect extends LayoutRect {
+  top: number;
+  left: number;
+  right: number;
+  bottom: number;
+}
