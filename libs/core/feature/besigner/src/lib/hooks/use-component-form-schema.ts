@@ -28,7 +28,7 @@ export interface UseComponentFormSchema extends AglynComponentPropsFormSchema {}
 
 export interface UseComponentFormSchemaOptions {
   componentId: ComponentId
-  bundleId: BundleUId
+  bundleId?: BundleUId
 }
 
 export const useComponentFormSchema = (

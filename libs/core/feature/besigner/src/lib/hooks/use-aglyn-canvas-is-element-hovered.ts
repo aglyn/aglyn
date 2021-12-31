@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-import {
-  getCanvasApiEvents,
-  getCanvasStore,
-  type ModificationHistoryState,
-} from '@aglyn/core-data-framework'
+import {type ElementId, getBesignerStore} from '@aglyn/core-data-framework'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {useStoreMap} from 'effector-react'
-import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
-export function useAglynElementHistory() {
+export function useAglynCanvasElementIsHovered($id: ElementId): boolean {
   const {getApp} = useAglynAppContext()
-  const app = getApp()
-  const store = getCanvasStore(app)
-  const {undo, redo} = getCanvasApiEvents(app)
-  const {past, future} = useStoreMap(store, <T>(state: ModificationHistoryState<T>) => {
-    return {past: state.past.length, future: state.future.length}
+  const dndStore = getBesignerStore(getApp(), {store: 'canvas'})
+  return useStoreMap({
+    store: dndStore,
+    keys: [$id],
+    fn: (store, [$id]) => Boolean($id && store.hovered?.$id === $id),
   })
-  return [undo, redo, past, future]
 }
-export default useAglynElementHistory
+
+export default useAglynCanvasElementIsHovered

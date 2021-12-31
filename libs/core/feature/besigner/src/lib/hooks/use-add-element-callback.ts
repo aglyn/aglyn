@@ -16,7 +16,7 @@
  */
 
 import {CANVAS_ROOT_ELEMENT_ID, createComponentElementData} from '@aglyn/core-data-framework'
-import {useAglynCanvasApiEvents, useAglynElementParentPosition} from '@aglyn/core-feature-renderer'
+import {useAglynCanvasApiEvents} from '@aglyn/core-feature-renderer'
 import {type SyntheticEvent, useCallback} from 'react'
 import {
   type ElementDrawerOptions,
@@ -42,42 +42,33 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
   const {elementDrawer} = useElementDrawerContext()
   const {addElement} = useAglynCanvasApiEvents()
   const {$id} = useAglynCanvasSelected() || {}
-  const {parentId, index, parentElements} = useAglynElementParentPosition($id) || {}
-  const siblingCount = parentElements.length
 
-  return useCallback(
-    (e, options) => {
-      elementDrawer({
-        title: 'Add New Element',
-        ...drawerOptions,
-        ...options?.drawerOptions,
+  return useCallback((e, opts) => {
+    elementDrawer({title: 'Add New Element', ...drawerOptions, ...opts?.drawerOptions})
+      .then((res: any) => {
+        const data = res?.option?.data
+        if (data) {
+          const newElement = {
+            index: -1,
+            parentId: $id || CANVAS_ROOT_ELEMENT_ID,
+            element: createComponentElementData(data),
+          }
+          console.log('addElement', newElement)
+          addElement(newElement)
+        }
+        else {
+          console.warn('Invalid data returned for addElement callback', data)
+        }
+        onComplete && onComplete(e, res)
+        opts?.onComplete && opts?.onComplete(e, res)
       })
-        .then((res: any) => {
-          const data = res?.option?.data
-          if (data) {
-            const newElement = {
-              index: index === -1 ? siblingCount : index + 1,
-              parentId: parentId || CANVAS_ROOT_ELEMENT_ID,
-              element: createComponentElementData(data),
-            }
-            console.log('addElement', newElement)
-            addElement(newElement)
-          }
-          else {
-            console.warn('Invalid data returned for addElement callback', data)
-          }
-          onComplete && onComplete(e, res)
-          options?.onComplete && options?.onComplete(e, res)
-        })
 
-        .catch((error) => {
-          console.error(error)
-          onError && onError(e, error)
-          options?.onError && options?.onError(e, error)
-        })
-    },
-    [elementDrawer, addElement, siblingCount, parentId, index, onComplete, onError, drawerOptions],
-  )
+      .catch((error) => {
+        console.error(error)
+        onError && onError(e, error)
+        opts?.onError && opts?.onError(e, error)
+      })
+  }, [elementDrawer, drawerOptions, onComplete, $id, addElement, onError])
 }
 
 export default useAddElementCallback

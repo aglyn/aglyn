@@ -21,28 +21,25 @@ import {
   setBesignerCanvasSelected,
 } from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
-import {type ChangeEvent, useCallback} from 'react'
+import {useCallback} from 'react'
 
 
-export type UseAglynElementStatusManagers = [
-  handleHover: (e: ChangeEvent<any>, $id?: ElementId) => void,
-  handleSelect: (e: ChangeEvent<any>, $id?: ElementId) => void,
+export type UseAglynCanvasElementStatusManagers = [
+  handleHover: ($id?: ElementId) => void,
+  handleSelect: ($id?: ElementId) => void,
 ]
 
 
-export function useAglynElementStatusManagers(
+export function useAglynCanvasElementStatusManagers(
   $id: ElementId = null,
-): UseAglynElementStatusManagers {
+): UseAglynCanvasElementStatusManagers {
   const {getApp} = useAglynAppContext()
-  const handleHover = useCallback((e, $idOverride: ElementId = null) => {
-    e.stopPropagation()
+  const handleHover = useCallback(($idOverride: ElementId = null) => {
     setBesignerCanvasHovered(getApp(), {
       hovered: (prev) => ({...prev, $id: $idOverride || $id}),
     })
   }, [$id, getApp])
-  const handleSelect = useCallback((e, $idOverride: ElementId = null) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleSelect = useCallback(($idOverride: ElementId = null) => {
     setBesignerCanvasSelected(getApp(), {
       selected: (prev) => ({...prev, $id: $idOverride || $id}),
     })
@@ -50,4 +47,4 @@ export function useAglynElementStatusManagers(
 
   return [handleHover, handleSelect]
 }
-export default useAglynElementStatusManagers
+export default useAglynCanvasElementStatusManagers

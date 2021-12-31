@@ -25,7 +25,6 @@ export function useAglynElementLabel($id: ElementId) {
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
   const schema = useAglynComponentSchema(componentId, bundleId)
-  const label = displayName || schema?.metadata?.displayName || $id
-  return label
+  return displayName || schema?.metadata?.displayName || $id
 }
 export default useAglynElementLabel

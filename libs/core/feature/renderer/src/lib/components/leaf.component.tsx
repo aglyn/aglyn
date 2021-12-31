@@ -26,7 +26,7 @@ import useAglynElementResolvedProps from '../hooks/use-aglyn-element-resolved-pr
 import BranchComponent from './branch.component'
 
 
-export interface LeafComponentProps extends BoxProps {
+export interface LeafComponentProps extends BoxProps<any, any> {
   $id: ComponentId
   leafComponent?: LeafComponent
 }

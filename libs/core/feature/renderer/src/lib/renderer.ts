@@ -41,7 +41,6 @@ export * from './hooks/use-aglyn-element-data'
 export * from './hooks/use-aglyn-element-label'
 export * from './hooks/use-aglyn-element-parent-position'
 export * from './hooks/use-aglyn-element-resolved-props'
-export * from './hooks/use-aglyn-elements-history'
 export * from './hooks/with-aglyn-element-data'
 
 export * from './utils/create-aglyn-component'

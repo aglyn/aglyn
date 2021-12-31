@@ -148,7 +148,7 @@ const ElementPopperComponent = forwardRef<any, ElementPopperComponentProps>(
       <CanvasRenderedElementRefsConsumer>
         {([, , getElementRef]) => {
           const data = getElementRef($id)
-          const anchorEl = data?.element?.current,
+          const anchorEl = data?.element?.current || virtualElement,
             dragHandleRef = data?.dragHandle
 
           // console.log('anchorEl', variant, $id, getElementRef($id))

@@ -15,22 +15,27 @@
  * limitations under the License.
  */
 
-import {CANVAS_ROOT_ELEMENT_ID, type ElementId} from '@aglyn/core-data-framework'
+import {type ElementId} from '@aglyn/core-data-framework'
 import {useAglynElementData} from './use-aglyn-element-data'
 
 
-export function useAglynElementParentPosition($id: ElementId): {
-  index: number
-  parentId: ElementId
-  parentElements: ElementId[]
-} {
-  const parentId = useAglynElementData($id, 'parentId') || null
-  const parentElements = useAglynElementData(parentId || CANVAS_ROOT_ELEMENT_ID, 'elements') || []
+export type useAglynElementParentPosition = [
+  indexInParent: number,
+  parentId: ElementId,
+  parentElementIds: ElementId[],
+]
 
-  return ({
-    index: (parentElements || []).indexOf($id),
-    parentId: parentId,
-    parentElements: parentElements,
-  })
+export function useAglynElementParentPosition(
+  $id: ElementId,
+): useAglynElementParentPosition {
+  const parentId = useAglynElementData($id, 'parentId')
+  const parentElements = useAglynElementData(parentId, 'elements') || []
+  const indexInParent = parentElements.indexOf($id)
+
+  return [
+    indexInParent,
+    parentId,
+    parentElements,
+  ]
 }
 export default useAglynElementData

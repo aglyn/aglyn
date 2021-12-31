@@ -21,7 +21,7 @@ import {
   setBesignerFlag,
   setBesignerPanels,
 } from '@aglyn/core-data-framework'
-import {useAglynAppContext, useAglynElementHistory} from '@aglyn/core-feature-renderer'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
   mdiCursorDefault,
@@ -37,7 +37,7 @@ import {
 import MuiAppBar, {type AppBarProps as MuiAppBarProps} from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
-import Stack from '@mui/material/Stack'
+import Stack, {type StackProps} from '@mui/material/Stack'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Toolbar from '@mui/material/Toolbar'
@@ -45,6 +45,7 @@ import Tooltip from '@mui/material/Tooltip'
 import {forwardRef, type MouseEvent, useCallback} from 'react'
 import {useAddElementCallback} from '../hooks/use-add-element-callback'
 import {useAglynBesignerStoreState} from '../hooks/use-aglyn-besigner-store-state'
+import useAglynCanvasHistoryControls from '../hooks/use-aglyn-elements-history'
 
 
 const AppBarSecondary = styled(MuiAppBar, {
@@ -57,63 +58,67 @@ const AppBarSecondary = styled(MuiAppBar, {
   },
 }))
 
-const AddControls = function AddControls() {
+const AddControls = forwardRef<any, StackProps>(
+  function RefRenderFn(props, ref) {
 
-  const handleAddElementClick = useAddElementCallback()
+    const handleAddElementClick = useAddElementCallback()
 
-  return (
-    <Stack direction="row" spacing={1}>
-      <Tooltip title={'Add element'}>
-        <IconButton
-          aria-haspopup="menu"
-          aria-label="add"
-          edge="start"
-          onClick={handleAddElementClick}
-        >
-          <MdiIcon fontSize="small" path={mdiShapeSquareRoundedPlus.path} />
-        </IconButton>
-      </Tooltip>
-    </Stack>
-  )
-}
+    return (
+      <Stack ref={ref} direction="row" spacing={1} {...props}>
+        <Tooltip title={'Add element'}>
+          <IconButton
+            aria-haspopup="menu"
+            aria-label="add"
+            edge="start"
+            onClick={handleAddElementClick}
+          >
+            <MdiIcon fontSize="small" path={mdiShapeSquareRoundedPlus.path} />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    )
+  },
+)
 
-const HistoryControls = function HistoryControls() {
-  const [undo, redo, past, future] = useAglynElementHistory()
+const HistoryControls = forwardRef<any, StackProps>(
+  function RefRenderFn(props, ref) {
+    const [undo, redo, canUndo, canRedo] = useAglynCanvasHistoryControls()
 
-  const handleUndoClick = useCallback(() => {
-    undo()
-  }, [undo])
-  const handleRedoClick = useCallback(() => {
-    redo()
-  }, [redo])
+    const handleUndoClick = useCallback(() => {
+      undo()
+    }, [undo])
+    const handleRedoClick = useCallback(() => {
+      redo()
+    }, [redo])
 
-  return (
-    <Stack direction="row" spacing={0.25}>
-      <Tooltip title={'Undo (⌘Z)'}>
+    return (
+      <Stack ref={ref} direction="row" spacing={0.25} {...props}>
+        <Tooltip title={'Undo (⌘Z)'}>
         <span>
           <IconButton
             aria-label="undo action"
             onClick={handleUndoClick}
-            disabled={past <= 0}
+            disabled={!canUndo}
           >
             <MdiIcon fontSize="small" path={mdiUndo.path} />
           </IconButton>
         </span>
-      </Tooltip>
-      <Tooltip title={'Redo (⌘Y)'}>
+        </Tooltip>
+        <Tooltip title={'Redo (⌘Y)'}>
         <span>
           <IconButton
             aria-label="redo action"
             onClick={handleRedoClick}
-            disabled={future <= 0}
+            disabled={!canRedo}
           >
             <MdiIcon fontSize="small" path={mdiRedo.path} />
           </IconButton>
         </span>
-      </Tooltip>
-    </Stack>
-  )
-}
+        </Tooltip>
+      </Stack>
+    )
+  },
+)
 
 const InteractControls = function InteractControls() {
   const {getApp} = useAglynAppContext()
@@ -123,7 +128,7 @@ const InteractControls = function InteractControls() {
       flag: 'interactMode',
       value: InteractionModeFlag[InteractionModeFlag[value]],
     })
-  }, [])
+  }, [getApp])
 
   return (
     <Stack direction="row" spacing={1}>
@@ -154,70 +159,72 @@ const InteractControls = function InteractControls() {
   )
 }
 
-const PanelControls = function PanelControls() {
-  const {getApp} = useAglynAppContext()
-  const panels = useAglynBesignerStoreState('panels')
-  const openPanels = Object.values(panels)
-    .filter((i) => Boolean(i?.toggled))
-    .map((i) => i?.id)
+const PanelControls = forwardRef<any, StackProps>(
+  function RefRenderFn(props, ref) {
+    const {getApp} = useAglynAppContext()
+    const panels = useAglynBesignerStoreState('panels')
+    const openPanels = Object.values(panels)
+      .filter((i) => Boolean(i?.toggled))
+      .map((i) => i?.id)
 
-  const handlePanelToggle = useCallback(
-    (event: MouseEvent<HTMLElement>, value: BesignerPanelViewFlag[]) => {
-      setBesignerPanels(getApp(), {
-        panels: (panels) => ({
-          panelLeft: {
-            ...panels.panelLeft,
-            toggled: value.indexOf(BesignerPanelViewFlag.PANEL_LEFT) >= 0,
-          },
-          panelRight: {
-            ...panels.panelRight,
-            toggled: value.indexOf(BesignerPanelViewFlag.PANEL_RIGHT) >= 0,
-          },
-          panelBottom: {
-            ...panels.panelBottom,
-            toggled: value.indexOf(BesignerPanelViewFlag.PANEL_BOTTOM) >= 0,
-          },
-        }),
-      })
-    },
-    [],
-  )
+    const handlePanelToggle = useCallback(
+      (event: MouseEvent<HTMLElement>, value: BesignerPanelViewFlag[]) => {
+        setBesignerPanels(getApp(), {
+          panels: (panels) => ({
+            panelLeft: {
+              ...panels.panelLeft,
+              toggled: value.indexOf(BesignerPanelViewFlag.PANEL_LEFT) >= 0,
+            },
+            panelRight: {
+              ...panels.panelRight,
+              toggled: value.indexOf(BesignerPanelViewFlag.PANEL_RIGHT) >= 0,
+            },
+            panelBottom: {
+              ...panels.panelBottom,
+              toggled: value.indexOf(BesignerPanelViewFlag.PANEL_BOTTOM) >= 0,
+            },
+          }),
+        })
+      },
+      [getApp],
+    )
 
-  return (
-    <Stack direction="row" spacing={1}>
-      <ToggleButtonGroup
-        size="small"
-        value={openPanels}
-        onChange={handlePanelToggle}
-      >
-        <Tooltip title={'Left panel'}>
-          <ToggleButton
-            selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_LEFT)}
-            value={BesignerPanelViewFlag.PANEL_LEFT}
-          >
-            <MdiIcon fontSize="inherit" path={mdiDockLeft.path} />
-          </ToggleButton>
-        </Tooltip>
-        <Tooltip title={'Bottom panel'}>
-          <ToggleButton
-            selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_BOTTOM)}
-            value={BesignerPanelViewFlag.PANEL_BOTTOM}
-          >
-            <MdiIcon fontSize="inherit" path={mdiDockBottom.path} />
-          </ToggleButton>
-        </Tooltip>
-        <Tooltip title={'Right panel'}>
-          <ToggleButton
-            selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_RIGHT)}
-            value={BesignerPanelViewFlag.PANEL_RIGHT}
-          >
-            <MdiIcon fontSize="inherit" path={mdiDockRight.path} />
-          </ToggleButton>
-        </Tooltip>
-      </ToggleButtonGroup>
-    </Stack>
-  )
-}
+    return (
+      <Stack ref={ref} direction="row" spacing={1} {...ref}>
+        <ToggleButtonGroup
+          size="small"
+          value={openPanels}
+          onChange={handlePanelToggle}
+        >
+          <Tooltip title={'Left panel'}>
+            <ToggleButton
+              selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_LEFT)}
+              value={BesignerPanelViewFlag.PANEL_LEFT}
+            >
+              <MdiIcon fontSize="inherit" path={mdiDockLeft.path} />
+            </ToggleButton>
+          </Tooltip>
+          <Tooltip title={'Bottom panel'}>
+            <ToggleButton
+              selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_BOTTOM)}
+              value={BesignerPanelViewFlag.PANEL_BOTTOM}
+            >
+              <MdiIcon fontSize="inherit" path={mdiDockBottom.path} />
+            </ToggleButton>
+          </Tooltip>
+          <Tooltip title={'Right panel'}>
+            <ToggleButton
+              selected={openPanels.some(i => i === BesignerPanelViewFlag.PANEL_RIGHT)}
+              value={BesignerPanelViewFlag.PANEL_RIGHT}
+            >
+              <MdiIcon fontSize="inherit" path={mdiDockRight.path} />
+            </ToggleButton>
+          </Tooltip>
+        </ToggleButtonGroup>
+      </Stack>
+    )
+  },
+)
 
 export interface AppBarSecondaryComponentProps extends Partial<MuiAppBarProps> {}
 

@@ -25,12 +25,11 @@ import {
 import {IconVariant} from '@aglyn/shared-data-brand'
 import {alpha, styled} from '@aglyn/shared-feature-themes'
 import {mdiChevronDown, mdiChevronRight, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {_isStrT} from '@aglyn/shared-util-guards'
 import MuiTreeItem, {treeItemClasses, type TreeItemProps} from '@mui/lab/TreeItem'
 import MuiTreeView, {type SingleSelectTreeViewProps} from '@mui/lab/TreeView'
 import {forwardRef, Fragment, useCallback, useMemo, useState} from 'react'
+import useAglynCanvasElementStatusManagers from '../hooks/use-aglyn-canvas-element-status-managers'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
-import useAglynElementStatusManagers from '../hooks/use-aglyn-element-status-managers'
 
 
 const TreeItem = styled(MuiTreeItem, {name: 'AglynTreeItem'})(({theme}) => ({
@@ -60,11 +59,11 @@ interface ElementsTreeItemComponentProps extends Partial<TreeItemProps> {
 const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props,
-      elements = useAglynElementData($id, 'elements'),
+      elements = useAglynElementData($id, 'elements') || [],
       componentId = useAglynElementData($id, 'componentId'),
       bundleId = useAglynElementData($id, 'bundleId'),
       label = useAglynElementLabel($id),
-      {iconPath, iconColor} = useAglynComponentSchema(componentId, bundleId)?.metadata || {}
+      metadata = useAglynComponentSchema(componentId, bundleId)?.metadata
 
     return (
       <TreeItem
@@ -76,7 +75,7 @@ const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps
           <Fragment>
             <MdiIcon
               color="quaternary"
-              path={iconPath || IconVariant.ENTITY_BLOCK}
+              path={metadata?.iconPath || IconVariant.ENTITY_BLOCK}
               sx={{
                 fontSize: 20,
                 marginLeft: -0.25,
@@ -88,7 +87,7 @@ const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps
                 border: 1,
                 borderColor: 'divider',
                 boxShadow: 1,
-                color: _isStrT(iconColor) ? iconColor : 'quaternary',
+                color: metadata?.iconColor || 'quaternary',
               }}
             />
             {label}
@@ -111,7 +110,7 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
     const {children, ...rest} = props
     const selected = useAglynCanvasSelected()
     const selectedHierarchy = useAglynCanvasElementHierarchy(selected?.$id)
-    const [handleHover, handleSelect] = useAglynElementStatusManagers()
+    const [handleHover, handleSelect] = useAglynCanvasElementStatusManagers()
     const [expanded, setExpanded] = useState<ElementId[]>([])
     const allExpanded = useMemo(() => [
       ...selectedHierarchy, ...expanded,
@@ -120,12 +119,13 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
     const handleTreeItemSelect = useCallback((e, $id) => {
       e.stopPropagation()
       e.preventDefault()
-      handleSelect(e, $id === selected?.$id ? null : $id)
+      handleSelect($id === selected?.$id ? null : $id)
     }, [handleSelect, selected])
 
 
     const handleTreeItemFocus = useCallback((e, $id) => {
-      handleHover(e, $id)
+      e.stopPropagation()
+      handleHover($id)
     }, [handleHover])
 
 

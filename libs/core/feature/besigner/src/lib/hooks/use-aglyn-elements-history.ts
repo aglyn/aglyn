@@ -15,28 +15,30 @@
  * limitations under the License.
  */
 
-
-import {type ElementId, getBesignerStore} from '@aglyn/core-data-framework'
-import {useAglynAppContext} from '@aglyn/core-feature-renderer'
+import {getCanvasStore} from '@aglyn/core-data-framework'
+import {useAglynAppContext, useAglynCanvasApiEvents} from '@aglyn/core-feature-renderer'
 import {useStoreMap} from 'effector-react'
 
 
-export type AglynDndElementStatus = [
-  isDragging: boolean,
-  isDraggingOver: boolean
+export type UseAglynCanvasHistory = [
+  undo: () => void,
+  redo: () => void,
+  canUndo: boolean,
+  canRedo: boolean,
 ]
 
-export function useAglynDndElementStatus($id: ElementId): AglynDndElementStatus {
+export function useAglynCanvasHistoryControls(): UseAglynCanvasHistory {
   const {getApp} = useAglynAppContext()
-  const dndStore = getBesignerStore(getApp(), {store: 'dnd'})
-  return useStoreMap({
-    store: dndStore,
-    keys: [$id],
-    fn: (store, [$id]) => [
-      Boolean($id && store.active?.$id === $id),
-      Boolean($id && store.over?.$id === $id),
+  const store = getCanvasStore(getApp())
+  const {undo, redo} = useAglynCanvasApiEvents()
+  const [canUndo, canRedo] = useStoreMap({
+    store,
+    keys: [],
+    fn: (state) => [
+      state.past.length > 0,
+      state.future.length > 0,
     ],
   })
+  return [undo, redo, canUndo, canRedo]
 }
-
-export default useAglynDndElementStatus
+export default useAglynCanvasHistoryControls

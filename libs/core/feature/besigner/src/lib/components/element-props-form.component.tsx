@@ -39,15 +39,15 @@ import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 const FormTemplate = forwardRef<any, FormTemplateRenderProps>(
   function RefRenderFn(props, ref) {
     const {formFields, schema, ...rest} = props
-    const {handleSubmit, onReset, onCancel, getState} = useFormApi()
+    const {handleSubmit} = useFormApi()
     return (
-      <form ref={ref} onSubmit={handleSubmit} noValidate>
+      <form ref={ref} onSubmit={handleSubmit} noValidate {...rest}>
         {schema.title}
         <Grid spacing={2} container>
           {formFields}
         </Grid>
         <FormSpy>
-          {({submitting, validating, pristine, valid}) => (
+          {({submitting, pristine, valid}) => (
             <Box mt={2}>
               <FormControl margin="normal" fullWidth>
                 <Button

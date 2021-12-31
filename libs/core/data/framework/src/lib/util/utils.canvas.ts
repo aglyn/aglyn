@@ -21,7 +21,6 @@ import {
   type CanvasAddElementPayload,
   type CanvasDeleteElementPayload,
   type CanvasDuplicateElementPayload,
-  type CanvasGetElementPayload,
   type CanvasMoveElementPayload,
   type CanvasSetElementsPayload,
   type CanvasUpdateElementPayload,
@@ -63,30 +62,26 @@ export const handleCanvasAddElement = (
 ) => {
 
   const {element, parentId, index} = payload
+
+  const newParent = state[parentId]
+  if (!newParent) {throw new Error('Element must have a valid parent')}
+
   const newData = normalizeComponentElementData(element, parentId)
+  const siblingIds = state[parentId]?.elements || []
+
   return {
     ...state,
     ...newData,
     [parentId]: {
       ...state[parentId],
       elements: arrayAddAtIndex(
-        index,
+        index === -1 ? siblingIds.length : index,
         state[parentId]?.elements || [],
         newData[parentId]?.elements || [],
         {copy: true},
       ).items,
     },
   }
-}
-
-
-export const handleCanvasGetElement = (
-  state: AglynComponentElementDataNormalizedMap,
-  payload: CanvasGetElementPayload,
-) => {
-
-  const {$id} = payload
-  return state[$id]
 }
 
 
@@ -100,6 +95,7 @@ export const handleCanvasUpdateElement = (
     ...state,
     [element.$id]: {
       ...objectDeepMerge(state[element.$id], element),
+      parentId: state[element.$id].parentId,
       props,
     },
   }
@@ -112,9 +108,12 @@ export const handleCanvasMoveElement = (
 ) => {
 
   const {$id, index, parentId} = payload
-  const parentHierarchy = getComponentElementHierarchy(parentId, state)
 
-  if (parentHierarchy.some((id) => id === $id)) {
+  const newParent = state[parentId]
+  if (!newParent) {throw new Error('Element must have a valid parent')}
+
+  const parentHierarchy = getComponentElementHierarchy(parentId, state)
+  if (parentHierarchy.indexOf($id) >= 0) {
     throw new Error('New parent is same or a child of the element')
   }
 
@@ -126,16 +125,16 @@ export const handleCanvasMoveElement = (
       parentId: parentId,
     },
   }
-  const parentElements = response[parentId].elements || []
+  const siblingIds = response[parentId]?.elements || []
 
   if (parentId === current.parentId) {
-    console.log('reordoering')
+    console.log('reordering')
     response[parentId] = {
       ...response[parentId],
       elements: arrayReorder(
-        parentElements,
-        parentElements.indexOf($id),
-        index === -1 ? parentElements.length - 1 : index,
+        siblingIds,
+        siblingIds.indexOf($id),
+        index === -1 ? siblingIds.length : index,
       ),
     }
   }
@@ -144,8 +143,8 @@ export const handleCanvasMoveElement = (
     response[parentId] = {
       ...response[parentId],
       elements: arrayAddAtIndex(
-        index === -1 ? parentElements.length - 1 : index,
-        parentElements,
+        index === -1 ? siblingIds.length : index,
+        siblingIds,
         $id,
         {copy: true},
       ).items,

@@ -33,6 +33,7 @@ import {
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
+import {hexadecimalFromNumber} from '@aglyn/shared-util-tools'
 import {useCallback, useEffect, useMemo} from 'react'
 import {
   type DragElementWrapper,
@@ -65,7 +66,22 @@ export type UseLeafDnd = [
   dragPreviewRef: DragPreviewRef,
   dropRef: DropRef,
 ]
-export function useLeafDnd($id: ElementId): UseLeafDnd {
+
+export type UseLeafDndOptions = {
+  dragType?: DndDragSourceTypeFlag
+  dropType?: DndDropLinealTypeFlag
+}
+
+export function useLeafDnd(
+  $id: ElementId,
+  options?: UseLeafDndOptions,
+): UseLeafDnd {
+
+  const {
+    dragType = DndDragSourceTypeFlag.CANVAS_ELEMENT,
+    dropType = DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
+  } = {...options}
+
   const {getApp} = useAglynAppContext()
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
@@ -97,14 +113,14 @@ export function useLeafDnd($id: ElementId): UseLeafDnd {
 
   const dragItem = useMemo(() => ({
     $id,
-    type: DndDragSourceTypeFlag.CANVAS_ELEMENT,
+    type: dragType,
     componentId,
     bundleId,
     hierarchy,
-  }), [$id, bundleId, componentId, hierarchy])
+  }), [$id, dragType, bundleId, componentId, hierarchy])
 
   const draggable = useDrag<BesignerDndElementActive, BesignerDndElementOver, DragCollected>(() => ({
-    type: 'aglyn-element',
+    type: hexadecimalFromNumber(dragType),
     item: () => {
       handleDragStart(dragItem)
       return dragItem
@@ -142,14 +158,17 @@ export function useLeafDnd($id: ElementId): UseLeafDnd {
 
   const dropItem: BesignerDndElementOver = useMemo(() => ({
     $id,
-    type: DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
+    type: dropType,
     componentId,
     bundleId,
     hierarchy,
-  }), [$id, bundleId, componentId, hierarchy])
+  }), [$id, dropType, bundleId, componentId, hierarchy])
 
   const droppable = useDrop<BesignerDndElementActive, BesignerDndElementOver, DropCollected>(() => ({
-    accept: 'aglyn-element',
+    accept: [
+      hexadecimalFromNumber(DndDragSourceTypeFlag.CANVAS_ELEMENT),
+      hexadecimalFromNumber(DndDragSourceTypeFlag.COMPONENT_TEMPLATE),
+    ],
     drop: (active, monitor) => {
       if (monitor.didDrop()) return undefined
       if (monitor.isOver({shallow: true})) {

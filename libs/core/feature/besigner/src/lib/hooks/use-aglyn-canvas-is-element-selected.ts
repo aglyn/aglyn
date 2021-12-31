@@ -15,26 +15,19 @@
  * limitations under the License.
  */
 
-import {
-  type AglynComponentElementHierarchy,
-  type ElementId,
-  getCanvasNormalizedElementsStore,
-  getComponentElementHierarchy,
-} from '@aglyn/core-data-framework'
+import {type ElementId, getBesignerStore} from '@aglyn/core-data-framework'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {useStoreMap} from 'effector-react'
-import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
-export function useAglynCanvasElementHierarchy<T extends ElementId>(
-  $id: T,
-): AglynComponentElementHierarchy<T> {
+export function useAglynCanvasElementIsSelected($id: ElementId): boolean {
   const {getApp} = useAglynAppContext()
-  const store = getCanvasNormalizedElementsStore(getApp())
-
+  const dndStore = getBesignerStore(getApp(), {store: 'canvas'})
   return useStoreMap({
-    store,
+    store: dndStore,
     keys: [$id],
-    fn: (state, [$id]) => getComponentElementHierarchy($id, state),
-  }) as AglynComponentElementHierarchy<T>
+    fn: (store, [$id]) => Boolean($id && store.selected?.$id === $id),
+  })
 }
-export default useAglynCanvasElementHierarchy
+
+export default useAglynCanvasElementIsSelected

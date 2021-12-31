@@ -30,6 +30,7 @@ import AglynBaseModel from '../models/aglyn-base.model'
 import {
   type AglynAppOptions,
   type AglynEffectOptions,
+  AppUUN,
   type IAglynAppController,
 } from './aglyn-app.types'
 import AglynBesignerController from './aglyn-besigner.controller'
@@ -52,85 +53,71 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> implemen
 
   public static readonly [Symbol.toStringTag]: string = TAG
 
-  readonly #name: string = null
-
+  readonly #appName: AppUUN = null
+  #deleted = false
   #extensionsController: IAglynExtensionsController = null
   #contextsController: IAglynContextsController = null
   #commandsController: IAglynCommandsController = null
   #componentsController: IAglynComponentsController = null
   #canvasController: IAglynCanvasController = null
   #besignerController: IAglynBesignerController = null
-  #isDeleted = false
 
-  public get extensions(): IAglynExtensionsController {
-    return this.#extensionsController
-  }
-  public get contexts(): IAglynContextsController {
-    return this.#contextsController
-  }
-  public get commands(): IAglynCommandsController {
-    return this.#commandsController
-  }
-  public get components(): IAglynComponentsController {
-    return this.#componentsController
-  }
-  public get canvas(): IAglynCanvasController {
-    return this.#canvasController
-  }
-  public get besigner(): IAglynBesignerController {
-    return this.#besignerController
-  }
-  public get deleted(): boolean {
-    return this.#isDeleted
-  }
+  public get appName(): AppUUN {return this.#appName}
+  public get deleted(): boolean {return this.#deleted}
+  public get extensions(): IAglynExtensionsController {return this.#extensionsController}
+  public get contexts(): IAglynContextsController {return this.#contextsController}
+  public get commands(): IAglynCommandsController {return this.#commandsController}
+  public get components(): IAglynComponentsController {return this.#componentsController}
+  public get canvas(): IAglynCanvasController {return this.#canvasController}
+  public get besigner(): IAglynBesignerController {return this.#besignerController}
 
   constructor(options: AglynAppOptions) {
-    super({...options})
-    this.#name = options.appName || DEFAULT_APP_UUN
+    super(options)
+    this.#appName = options.appName || DEFAULT_APP_UUN
     this.#setup()
   }
   #setup() {
-    this.getLogger().debug(AglynAppEventFlag.APP_CREATING, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_CREATING, {appName: this.#name})
+    this.getLogger().debug(AglynAppEventFlag.APP_CREATING, {appName: this.#appName})
+    this.getEmitter().emit(AglynAppEventFlag.APP_CREATING, {appName: this.#appName})
 
     this.#setupAppModules()
 
-    this.getLogger().debug(AglynAppEventFlag.APP_CREATED, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_CREATED, {appName: this.#name})
+    this.getLogger().debug(AglynAppEventFlag.APP_CREATED, {appName: this.#appName})
+    this.getEmitter().emit(AglynAppEventFlag.APP_CREATED, {appName: this.#appName})
   }
   #setupAppModules(): void {
     _INTERNAL_CONTEXTS_.set(
-      this.#name,
+      this.#appName,
       this.#contextsController = new AglynContextsController(this, {
         ...this.options.modulesOptions?.contexts,
       }),
     )
     _INTERNAL_COMMANDS_.set(
-      this.#name,
+      this.#appName,
       this.#commandsController = new AglynCommandsController(this, {
         ...this.options.modulesOptions?.commands,
       }),
     )
     _INTERNAL_COMPONENTS_.set(
-      this.#name,
+      this.#appName,
       this.#componentsController = new AglynComponentsController(this, {
         ...this.options.modulesOptions?.components,
       }),
     )
     _INTERNAL_CANVAS_.set(
-      this.#name,
+      this.#appName,
       this.#canvasController = new AglynCanvasController(this, {
         ...this.options.modulesOptions?.canvas,
       }),
     )
     _INTERNAL_BESIGNERS_.set(
-      this.#name,
+      this.#appName,
       this.#besignerController = new AglynBesignerController(this, {
         ...this.options.modulesOptions?.besigner,
       }),
     )
     _INTERNAL_EXTENSIONS_.set(
-      this.#name,
+      this.#appName,
       this.#extensionsController = new AglynExtensionsController(this, {
         ...this.options.modulesOptions?.extensions,
       }),
@@ -177,36 +164,37 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> implemen
     }
   }
   public toString(): string {
-    return `${this[Symbol.toStringTag]}(name: '${name}')`
+    console.log('app name', this.#appName)
+    return `${this[Symbol.toStringTag]}(name: '${this.#appName}')`
   }
   public toJSON() {
     return {
       ...super.toJSON(),
-      name: this.#name,
+      name: this.#appName,
     }
   }
 
   public aglynOnInit(): void {
-    this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZING, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZING, {appName: this.#name})
+    this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZING, {appName: this.#appName})
+    this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZING, {appName: this.#appName})
 
     this.#initializeAppModules()
 
-    this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZED, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZED, {appName: this.#name})
+    this.getLogger().debug(AglynAppEventFlag.APP_INITIALIZED, {appName: this.#appName})
+    this.getEmitter().emit(AglynAppEventFlag.APP_INITIALIZED, {appName: this.#appName})
   }
   public aglynOnDestroy(): void {
-    this.getLogger().debug(AglynAppEventFlag.APP_DESTROYING, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYING, {appName: this.#name})
+    this.getLogger().debug(AglynAppEventFlag.APP_DESTROYING, {appName: this.#appName})
+    this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYING, {appName: this.#appName})
 
     this.#destroyAppModules()
 
-    this.getLogger().debug(AglynAppEventFlag.APP_DESTROYED, {appName: this.#name})
-    this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYED, {appName: this.#name})
+    this.getLogger().debug(AglynAppEventFlag.APP_DESTROYED, {appName: this.#appName})
+    this.getEmitter().emit(AglynAppEventFlag.APP_DESTROYED, {appName: this.#appName})
   }
 
-  public getName(): string {
-    return this.#name
+  public getName(): AppUUN {
+    return this.#appName
   }
   public getExtensionsController(): IAglynExtensionsController {
     return this.#extensionsController
@@ -224,13 +212,13 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> implemen
     return this.#componentsController
   }
   public isDeleted(): boolean {
-    return yes(this.#isDeleted)
+    return yes(this.#deleted)
   }
   public setDeleted(value: boolean): this {
-    this.#isDeleted = Boolean(value)
+    this.#deleted = Boolean(value)
     return this
   }
-  public effect(data: AglynEffectOptions<AglynAppEffectFlag>) {
+  public effect<U>(data: AglynEffectOptions<AglynAppEffectFlag, U>) {
     const {type, payload} = data
     this.getEmitter().emit(type, payload as any)
     return this

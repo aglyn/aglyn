@@ -66,8 +66,9 @@ export interface IAglynAppController extends IAglynBaseModel<AglynAppOptions> {
   readonly canvas: IAglynCanvasController
   readonly besigner?: IAglynBesignerController
   readonly deleted: boolean
+  readonly appName: AppUUN
 
-  getName(): string
+  getName(): AppUUN
   isDeleted(): boolean
   setDeleted(value: boolean): this
   getExtensionsController(): IAglynExtensionsController

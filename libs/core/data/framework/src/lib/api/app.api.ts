@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
-import {type MutableShallow} from '@aglyn/shared-data-types'
 import {_isStrEmpty} from '@aglyn/shared-util-guards'
-import {trim} from '@aglyn/shared-util-tools'
 import {_INTERNAL_APPS_} from '../constants/_internal'
 import {DEFAULT_APP_UUN} from '../constants/app'
 import {AGLYN_EMITTER, AglynAppEventFlag} from '../constants/emitter'
@@ -35,11 +33,11 @@ export function getAllApps(): IAglynAppController[] {
   return [..._INTERNAL_APPS_.values()]
 }
 
-export function doesAppExist(name?: AppUUN): boolean {
-  return _INTERNAL_APPS_.has(name || DEFAULT_APP_UUN)
+export function doesAppExist(appName?: AppUUN): boolean {
+  return _INTERNAL_APPS_.has(appName || DEFAULT_APP_UUN)
 }
 
-export function getApp(name?: string): IAglynAppController {
+export function getApp(name?: AppUUN): IAglynAppController {
   const appName = name || DEFAULT_APP_UUN
   if (!doesAppExist(appName)) {
     throw AGLYN_ERROR.create(AglynErrorEventFlag.APP_NONE, {appName})
@@ -47,28 +45,26 @@ export function getApp(name?: string): IAglynAppController {
   return _INTERNAL_APPS_.get(appName)
 }
 
-export function deleteApp(app: IAglynAppController): void {
-  _validateAppArg(app)
-  const appName = app.getName()
+export function deleteApp(appName?: AppUUN): void {
+  const app = getApp(appName || DEFAULT_APP_UUN)
   AGLYN_LOGGER.debug(AglynAppEventFlag.APP_DELETING, {appName})
   AGLYN_EMITTER.emit(AglynAppEventFlag.APP_DELETING, {appName})
   app.aglynOnDestroy?.()
   _INTERNAL_APPS_.delete(appName)
-  ;(app as MutableShallow<IAglynAppController>)['deleted'] = true
+  app.setDeleted(true)
   AGLYN_LOGGER.debug(AglynAppEventFlag.APP_DELETED, {appName})
   AGLYN_EMITTER.emit(AglynAppEventFlag.APP_DELETED, {appName})
 }
 
-export function initializeApp(opts: AglynAppOptions = {}): IAglynAppController {
-  const options: AglynAppOptions = {...opts}
-  const appName: string = trim(opts.appName || DEFAULT_APP_UUN)
+export function initializeApp(opts?: AglynAppOptions): IAglynAppController {
+  const appName: string = opts?.appName || DEFAULT_APP_UUN
   if (_isStrEmpty(appName)) {
     throw AGLYN_ERROR.create(AglynErrorEventFlag.APP_BAD_NAME, {appName})
   }
   if (doesAppExist(appName)) {
     throw AGLYN_ERROR.create(AglynErrorEventFlag.APP_EXISTS, {appName})
   }
-  const app: IAglynAppController = new AglynAppController(options)
+  const app: IAglynAppController = new AglynAppController({...opts, appName})
   _INTERNAL_APPS_.set(appName, app)
 
   app.aglynOnInit()

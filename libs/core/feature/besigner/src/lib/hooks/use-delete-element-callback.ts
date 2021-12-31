@@ -43,9 +43,8 @@ export const useDeleteElementCallback = (
   const {$id, onfulfilled, onrejected, oncatch} = {...options}
   const {confirm} = useConfirmationContext()
   const {getApp} = useAglynAppContext()
-  return useCallback(
-    (e: ChangeEvent<unknown>, clbkOpts?: UseDeleteElementCallbackOptions) => {
-      const app = getApp()
+
+  return useCallback((e: ChangeEvent<unknown>, opts?: UseDeleteElementCallbackOptions) => {
 
       confirm({
         title: 'Are you sure?',
@@ -58,25 +57,26 @@ export const useDeleteElementCallback = (
       })
         .then(
           (res) => {
+            const app = getApp()
             setBesignerCanvasSelected(app, {selected: () => ({})})
             setBesignerCanvasHovered(app, {hovered: () => ({})})
-            deleteCanvasElement(app, {$id: clbkOpts?.$id ?? $id})
-            clbkOpts?.onfulfilled && clbkOpts?.onfulfilled(res)
+            deleteCanvasElement(app, {$id: opts?.$id || $id})
+            opts?.onfulfilled && opts?.onfulfilled(res)
             onfulfilled && onfulfilled(res)
           },
           (reason) => {
             console.warn('rejected', reason)
-            clbkOpts?.onrejected && clbkOpts?.onrejected(reason)
+            opts?.onrejected && opts?.onrejected(reason)
             onrejected && onrejected(reason)
           },
         )
         .catch((e) => {
           console.error('caught error', e)
-          clbkOpts?.oncatch && clbkOpts?.oncatch(e)
+          opts?.oncatch && opts?.oncatch(e)
           oncatch && oncatch(e)
         })
-    },
-    [$id, onfulfilled, onrejected, oncatch, confirm],
+
+    }, [getApp, confirm, $id, onfulfilled, onrejected, oncatch],
   )
 }
 

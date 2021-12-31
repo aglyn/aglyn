@@ -21,15 +21,14 @@ import {
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import {useCombinedRefs} from '@aglyn/shared-ui-jsx'
-import {forwardRef, useEffect, useRef} from 'react'
+import {type ChangeEvent, forwardRef, useCallback, useEffect, useRef} from 'react'
 import {useCanvasRenderedElementRefs} from '../contexts/canvas-rendered-element-refs'
-import useAglynElementStatusManagers from '../hooks/use-aglyn-element-status-managers'
+import useAglynCanvasElementStatusManagers from '../hooks/use-aglyn-canvas-element-status-managers'
+import useAglynCanvasElementIsSelected from '../hooks/use-aglyn-canvas-is-element-selected'
 import useLeafDnd from '../hooks/use-leaf-dnd'
 
 
-export interface ElementLeafComponentProps extends LeafComponentProps {
-  [prop: string]: any
-}
+export interface ElementLeafComponentProps extends LeafComponentProps {}
 
 const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
   function RefRenderFn(props, ref) {
@@ -37,12 +36,23 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
     const leaf = leafComponent || ElementLeafComponent
-    const [handleHover, handleSelect] = useAglynElementStatusManagers($id)
+    const isSelected = useAglynCanvasElementIsSelected($id)
+    const [handleHover, handleSelect] = useAglynCanvasElementStatusManagers($id)
     const [dragHandleRef, dragPreviewRef, dropRef] = useLeafDnd($id)
     const [setElementRef, deleteElementRef] = useCanvasRenderedElementRefs()
     const elemRef = useRef<Element>(null)
     setElementRef($id, {$id, element: elemRef, dragHandle: dragHandleRef})
     useEffect(() => () => {deleteElementRef($id)}, [$id, deleteElementRef])
+
+    const handleOnMouseOver = useCallback((e: ChangeEvent<any>) => {
+      e.stopPropagation()
+      handleHover($id)
+    }, [$id, handleHover])
+    const handleOnMouseDown = useCallback((e: ChangeEvent<any>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      handleSelect($id)
+    }, [$id, handleSelect])
 
     // console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
     // console.log('element attributes', elementAttributes)
@@ -52,12 +62,13 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
         ref={useCombinedRefs(ref, elemRef, dragPreviewRef, dropRef)}
         $id={$id}
         leafComponent={leaf}
-        onMouseOver={handleHover}
-        onMouseDown={handleSelect}
+        onMouseOver={handleOnMouseOver}
+        onMouseDown={handleOnMouseDown}
         data-aglyn-element-type="element"
         data-aglyn-element-id={$id}
         data-aglyn-element-component={componentId}
         data-aglyn-element-bundle={bundleId}
+        data-aglyn-element-selected={isSelected}
         {...rest}
       />
     )
