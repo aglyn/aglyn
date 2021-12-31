@@ -21,14 +21,55 @@ import {
   componentMapper,
   FormRenderer,
   type FormRendererProps,
+  FormSpy,
   GridFormTemplate,
+  useFormApi,
 } from '@aglyn/shared-ui-jsx'
+import {mdiContentSave, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {type FormTemplateRenderProps} from '@data-driven-forms/react-form-renderer'
+import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
+import Grid from '@mui/material/Grid'
 import {type ChangeEvent, forwardRef, useCallback} from 'react'
 import useComponentFormSchema from '../hooks/use-component-form-schema'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
+
+const FormTemplate = forwardRef<any, FormTemplateRenderProps>(
+  function RefRenderFn(props, ref) {
+    const {formFields, schema, ...rest} = props
+    const {handleSubmit, onReset, onCancel, getState} = useFormApi()
+    return (
+      <form ref={ref} onSubmit={handleSubmit} noValidate>
+        {schema.title}
+        <Grid spacing={2} container>
+          {formFields}
+        </Grid>
+        <FormSpy>
+          {({submitting, validating, pristine, valid}) => (
+            <Box mt={2}>
+              <FormControl margin="normal" fullWidth>
+                <Button
+                  color="secondary"
+                  disabled={submitting || !valid || pristine}
+                  startIcon={<MdiIcon path={mdiContentSave.path} />}
+                  style={{marginRight: 8}}
+                  type="submit"
+                  variant="contained"
+                  fullWidth
+                >
+                  Save Element
+                </Button>
+              </FormControl>
+            </Box>
+          )}
+        </FormSpy>
+      </form>
+    )
+  },
+)
+GridFormTemplate.displayName = 'GridFormTemplate'
 
 export interface ElementPropsFormProps extends FormRendererProps {
   $id?: ElementId
@@ -47,7 +88,7 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback((values) => {
       updateElement({element: {$id, props: {...values}}})
-    }, [$id])
+    }, [$id, updateElement])
     const handleDeleteElement = useCallback((e: ChangeEvent<unknown>) => {
       deleteElementCallback(e)
     }, [deleteElementCallback])
@@ -56,7 +97,7 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
       <>
         <FormRenderer
           ref={ref}
-          FormTemplate={GridFormTemplate}
+          FormTemplate={FormTemplate}
           componentMapper={componentMapper}
           onCancel={handleFormCancel}
           onSubmit={handleElementSave}

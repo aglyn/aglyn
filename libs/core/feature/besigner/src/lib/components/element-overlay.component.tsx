@@ -30,10 +30,10 @@ function ElementOverlayComponent(props: ViewportPoppersComponentProps) {
   return (
     <>
       <ElementPopperComponent
-        variant="selectedOverlay"
+        variant="hoveredOverlay"
       />
       <ElementPopperComponent
-        variant="hoveredOverlay"
+        variant="selectedOverlay"
       />
     </>
   )

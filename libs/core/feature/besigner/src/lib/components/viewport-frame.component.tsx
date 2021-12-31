@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import {TrunkComponent} from '@aglyn/core-feature-renderer'
+import {setBesignerCanvasHovered} from '@aglyn/core-data-framework'
+import {TrunkComponent, useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {styled} from '@aglyn/shared-feature-themes'
 import Box from '@mui/material/Box'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
-import {forwardRef, HTMLAttributes} from 'react'
+import {forwardRef, HTMLAttributes, MouseEvent, useCallback} from 'react'
 import CanvasRenderedElementRefsComponent from '../contexts/canvas-rendered-element-refs'
 import ElementLeafComponent from './element-leaf.component'
 import ElementOverlayComponent from './element-overlay.component'
@@ -42,12 +43,21 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
+
+    const {getApp} = useAglynAppContext()
+    const handleMouseLeave = useCallback((e: MouseEvent) => {
+      e.stopPropagation()
+      setBesignerCanvasHovered(getApp(), {hovered: () => ({})})
+    }, [getApp])
+
+    console.log('viewport frame')
     return (
       <ViewportFrame ref={ref} {...rest}>
         <CanvasRenderedElementRefsComponent>
           {/*<MuiShadowDom.div>*/}
           <Box
             id="aglyn:canvas"
+            onMouseLeave={handleMouseLeave}
           >
             <TrunkComponent leafComponent={ElementLeafComponent} />
           </Box>

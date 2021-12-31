@@ -16,7 +16,6 @@
  */
 
 import {type ElementId} from '@aglyn/core-data-framework'
-import {useDraggable} from '@dnd-kit/core'
 import {
   createContext,
   type MutableRefObject,
@@ -25,26 +24,21 @@ import {
   useRef,
   useState,
 } from 'react'
-import {DragElementWrapper} from 'react-dnd'
+import {type DragElementWrapper, type DragSourceOptions} from 'react-dnd'
 
 
-type UseDraggableReturnType = ReturnType<typeof useDraggable>
-export type ElementDragHandle = {
-  listeners: UseDraggableReturnType['listeners']
-  attributes: UseDraggableReturnType['attributes']
-}
+export type ElementDragHandle<T = any> = DragElementWrapper<DragSourceOptions>
 export type CanvasElementRefEntry = {
   $id: ElementId
   element: MutableRefObject<Element>
-  dragHandle: DragElementWrapper<any>
+  dragHandle: ElementDragHandle<any>
 }
 
-export interface CanvasRenderedElementRefs {
-  // elementRefs: RefObject<{ [$id: ElementId]: RefObject<Element> }>
-  getElementRef: ($id: ElementId) => CanvasElementRefEntry
-  setElementRef: ($id: ElementId, ref: CanvasElementRefEntry) => void
-  deleteElementRef: ($id: ElementId) => void
-}
+export type CanvasRenderedElementRefs = [
+  setElementRef: ($id: ElementId, ref: CanvasElementRefEntry) => void,
+  deleteElementRef: ($id: ElementId) => void,
+  getElementRef: ($id: ElementId) => CanvasElementRefEntry,
+]
 
 export const CanvasRenderedElementRefsContext = createContext<CanvasRenderedElementRefs>(null)
 CanvasRenderedElementRefsContext.displayName = 'CanvasRenderedElementRefsContext'
@@ -67,17 +61,17 @@ export interface CanvasRenderedElementRefsComponentProps {
 function CanvasRenderedElementRefsComponent(props: CanvasRenderedElementRefsComponentProps) {
   const {children} = props
   const elementRefs = useRef<Record<ElementId, CanvasElementRefEntry>>({})
-  const [context] = useState<CanvasRenderedElementRefs>(() => ({
-    getElementRef: ($id) => {
-      return elementRefs.current[$id]
-    },
-    deleteElementRef: ($id): void => {
-      delete elementRefs.current[$id]
-    },
-    setElementRef: ($id, ref): void => {
+  const [context] = useState<CanvasRenderedElementRefs>(() => ([
+    ($id, ref): void => {
       elementRefs.current[$id] = ref
     },
-  }))
+    ($id): void => {
+      delete elementRefs.current[$id]
+    },
+    ($id) => {
+      return elementRefs.current[$id]
+    },
+  ]))
 
   // useDndMonitor({
   //   onDragStart(event) {},

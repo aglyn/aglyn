@@ -16,9 +16,7 @@
  */
 
 import {mdiContentSave, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import type {
-  FormTemplateRenderProps,
-} from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
+import {type FormTemplateRenderProps} from '@data-driven-forms/react-form-renderer'
 
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'

@@ -19,20 +19,18 @@ import {
   type BesignerCanvasState,
   BesignerPanelTabFlag,
   duplicateCanvasElement,
-  isRootElementId,
+  setBesignerCanvasHovered,
   setBesignerCanvasSelected,
   setBesignerPanels,
 } from '@aglyn/core-data-framework'
 import {useAglynAppContext, useAglynElementData} from '@aglyn/core-feature-renderer'
-import {IconVariant} from '@aglyn/shared-data-brand'
 import {type KeyOf} from '@aglyn/shared-data-types'
-import MuiButtonGroup from '@mui/material/ButtonGroup'
 import MuiPopper, {type PopperProps as MuiPopperProps} from '@mui/material/Popper'
-import {ChangeEvent, forwardRef} from 'react'
+import {ChangeEvent, forwardRef, useCallback} from 'react'
 import {CanvasRenderedElementRefsConsumer} from '../contexts/canvas-rendered-element-refs'
 import useAglynBesignerStoreState from '../hooks/use-aglyn-besigner-store-state'
-import {BadgeButton} from './element-overlay-badge-buttons.component'
-import ElementOverlayOutlineComponent from './element-overlay-outline-component'
+import ElementOverlayBadgeComponent from './element-overlay-badge.component'
+import ElementOverlayOutlineComponent from './element-overlay-outline.component'
 
 
 const modifiers = [
@@ -92,18 +90,66 @@ const ElementPopperComponent = forwardRef<any, ElementPopperComponentProps>(
 
 
     const {getApp} = useAglynAppContext()
-    const selected = useAglynBesignerStoreState('canvas', 'selected')
-    const hovered = useAglynBesignerStoreState('canvas', 'hovered')
-    const state = {selected, hovered}[variantToStoreName[variant]]
+    const store = variantToStoreName[variant]
+    const state = useAglynBesignerStoreState('canvas', store)
     const $id = state?.$id
-    const parentId = useAglynElementData($id, 'parentId') || null
+    const parentId = useAglynElementData($id, 'parentId')
+
+
+    const handleDuplicateClick = useCallback((e: ChangeEvent<unknown>) => {
+      duplicateCanvasElement(getApp(), {$id})
+    }, [$id, getApp])
+
+
+    const handleModifyClick = useCallback((e: ChangeEvent<unknown>) => {
+      setBesignerPanels(getApp(), {
+        panels: (panels) => ({
+          ...panels,
+          panelRight: {
+            ...panels.panelRight,
+            toggled: true,
+            tab: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
+          },
+        }),
+      })
+    }, [getApp])
+
+
+    const handleSelectParentClick = useCallback((e: ChangeEvent<unknown>) => {
+      setBesignerCanvasSelected(getApp(), {
+        selected: (prev) => ({
+          ...prev,
+          $id: parentId,
+        }),
+      })
+    }, [getApp, parentId])
+
+
+    const handleHoverParent = useCallback((e: ChangeEvent<unknown>) => {
+      setBesignerCanvasHovered(getApp(), {
+        hovered: (prev) => ({
+          ...prev,
+          $id: parentId,
+        }),
+      })
+    }, [getApp, parentId])
+
+
+    const handleHoverParentLeave = useCallback((e: ChangeEvent<unknown>) => {
+      setBesignerCanvasHovered(getApp(), {
+        hovered: (prev) => ({
+          ...prev,
+          $id: null,
+        }),
+      })
+    }, [getApp])
 
     return (
       <CanvasRenderedElementRefsConsumer>
-        {({getElementRef}) => {
+        {([, , getElementRef]) => {
           const data = getElementRef($id)
           const anchorEl = data?.element?.current,
-            dragHandle = data?.dragHandle
+            dragHandleRef = data?.dragHandle
 
           // console.log('anchorEl', variant, $id, getElementRef($id))
 
@@ -130,56 +176,24 @@ const ElementPopperComponent = forwardRef<any, ElementPopperComponentProps>(
               >
 
                 {variant === 'selectedOverlay' && (
-                  <MuiButtonGroup
-                    ref={ref}
-                    variant="contained"
-                    color={'primary' as any}
-                    aria-label="element controls"
+                  <ElementOverlayBadgeComponent
+                    $id={$id}
                     data-aglyn-overlay-id={$id}
                     data-aglyn-overlay-variant={variant}
                     data-aglyn-overlay-type="badge"
+                    dragHandleRef={dragHandleRef}
+                    onModifyClick={handleModifyClick}
+                    onDuplicateClick={handleDuplicateClick}
+                    onSelectParentClick={handleSelectParentClick}
+                    onHoverParent={handleHoverParent}
+                    onHoverParentLeave={handleHoverParentLeave}
                     sx={{
                       boxShadow: 4,
-                      position: 'absolute',
-                      left: 0, top: 0,
-                      marginTop: '-32px',
                       pointerEvents: 'auto',
+                      marginTop: `-2.1em`,
+                      position: 'absolute',
                     }}
-                    {...rest}
-                  >
-                    {!isRootElementId($id) && (
-                      <BadgeButton
-                        title="Drag"
-                        children="drag"
-                        ButtonProps={{ref: dragHandle}}
-                        iconPath={IconVariant.MODIFY_DRAG}
-                        IconProps={{color: 'secondary'}}
-                      />
-                    )}
-                    {!isRootElementId($id) && (
-                      <BadgeButton
-                        title="Duplicate"
-                        children="duplicate"
-                        ButtonProps={{onClick: handleDuplicateClick}}
-                        iconPath={IconVariant.MODIFY_DUPLICATE}
-                      />
-                    )}
-                    <BadgeButton
-                      title="Modify"
-                      children="modify"
-                      onClick={handleModifyClick}
-                      iconPath={IconVariant.MODIFY_EDIT}
-                    />
-
-                    {parentId && (
-                      <BadgeButton
-                        title="Select parent"
-                        children={'select parent'}
-                        ButtonProps={{onClick: handleSelectParentClick}}
-                        iconPath={IconVariant.SELECT_PARENT}
-                      />
-                    )}
-                  </MuiButtonGroup>
+                  />
                 )}
               </ElementOverlayOutlineComponent>
             </MuiPopper>
@@ -187,33 +201,6 @@ const ElementPopperComponent = forwardRef<any, ElementPopperComponentProps>(
         }}
       </CanvasRenderedElementRefsConsumer>
     )
-
-
-    function handleDuplicateClick(e: ChangeEvent<unknown>) {
-      duplicateCanvasElement(getApp(), {$id})
-    }
-
-    function handleSelectParentClick(e: ChangeEvent<unknown>) {
-      setBesignerCanvasSelected(getApp(), {
-        selected: (prev) => ({
-          ...prev,
-          $id: parentId,
-        }),
-      })
-    }
-
-    function handleModifyClick(e: ChangeEvent<unknown>) {
-      setBesignerPanels(getApp(), {
-        panels: (panels) => ({
-          ...panels,
-          panelRight: {
-            ...panels.panelRight,
-            toggled: true,
-            tab: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
-          },
-        }),
-      })
-    }
   },
 )
 ElementPopperComponent.displayName = 'ElementPopperComponent'

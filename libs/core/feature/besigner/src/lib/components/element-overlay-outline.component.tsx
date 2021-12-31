@@ -20,7 +20,7 @@ import {alpha, generateComponentClassKeys, styled} from '@aglyn/shared-feature-t
 import {getElementClientRectBounding, type VirtualElement} from '@aglyn/shared-util-dom'
 import Box, {type BoxProps} from '@mui/material/Box'
 import clsx from 'clsx'
-import {forwardRef} from 'react'
+import {forwardRef, useMemo} from 'react'
 import useAglynCanvasElementStatus from '../hooks/use-aglyn-canvas-element-status'
 import useAglynDndElementStatus from '../hooks/use-aglyn-dnd-element-status'
 
@@ -30,7 +30,7 @@ const classKeys = generateComponentClassKeys('AglynElementOverlayOutline', [
   'hoveringSelf',
   'selectedSelf',
   'draggingSelf',
-  'draggingOverSelf',
+  'draggingOver',
 ])
 
 const ElementOverlayOutline = styled(Box, {
@@ -47,12 +47,11 @@ const ElementOverlayOutline = styled(Box, {
   outlineWidth: 1,
   outlineStyle: 'dashed',
   // transition: theme.transitions.create([
-  //   'visibility',
-  //   'outlineWidth',
-  //   'outlineOffset',
-  //   'outlineStyle',
-  //   'outlineColor',
-  //   'backgroundColor',
+  //   'outline-width',
+  //   'outline-offset',
+  //   'outline-style',
+  //   'outline-color',
+  //   'background-color',
   // ], {
   //   duration: theme.transitions.duration.standard,
   //   easing: theme.transitions.easing.easeInOut,
@@ -63,30 +62,22 @@ const ElementOverlayOutline = styled(Box, {
     outlineStyle: 'solid',
     outlineColor: theme.palette.quaternary.main,
   },
+  [`&.${classKeys.hoveringSelf}`]: {
+    outlineColor: theme.palette.grey['A400'],
+    backgroundColor: alpha(theme.palette.grey['A400'], 0.12),
+  },
   [`&.${classKeys.draggingSelf}`]: {
     outlineColor: 'transparent',
     backgroundColor: alpha(theme.palette.grey['300'], 0.76),
   },
-  [`&.${classKeys.draggingOverSelf}`]: {
+  [`&.${classKeys.draggingOver}`]: {
     outlineColor: theme.palette.quaternary.main,
     backgroundColor: alpha(theme.palette.quaternary.dark, 0.76),
-  },
-
-  [`&.${classKeys.hoveringSelf}`]: {
-    outlineColor: theme.palette.grey['A400'],
-    backgroundColor: alpha(theme.palette.grey['A400'], 0.12),
-    // [`&.${classKeys.selectedSelf}`]: {
-    //   outlineColor: theme.palette.quaternary.main,
-    //   backgroundColor: alpha(theme.palette.quaternary.dark, 0.12),
-    // },
-    // [`&.${classKeys.draggingOverSelf}`]: {
-    //   outlineColor: theme.palette.quaternary.main,
-    //   backgroundColor: alpha(theme.palette.quaternary.dark, 0.76),
-    // },
-    // [`&.${classKeys.draggingSelf}`]: {
-    //   outlineColor: 'transparent',
-    //   backgroundColor: alpha(theme.palette.grey['300'], 0.76),
-    // },
+    [`&.${classKeys.draggingSelf}`]: {
+      outlineColor: 'transparent',
+      backgroundColor: alpha(theme.palette.grey['300'], 0.76),
+      cursor: 'no-drop',
+    },
   },
 
 }))
@@ -100,36 +91,25 @@ const ElementOverlayOutlineComponent = forwardRef<any, ElementOverlayOutlineProp
   function RefRenderFn(props, ref) {
     const {className: classNameProp, $id, anchorEl, ...rest} = props
 
-    const [isActive, isOver] = useAglynDndElementStatus($id)
+    const [isDragging, isDraggingOver] = useAglynDndElementStatus($id)
     const {isSelfSelected, isSelfHovered} = useAglynCanvasElementStatus($id)
-    const {width, height} = anchorEl && getElementClientRectBounding(anchorEl) || {}
-    // const componentId = useAglynElementData($id, 'componentId')
-    // const bundleId = useAglynElementData($id, 'bundleId')
-    // const elementAttributes = useBesignerElementAttributes({$id, componentId, bundleId})
+    const rect = anchorEl && getElementClientRectBounding(anchorEl)
+    const style = useMemo(() => (
+      rect ? {width: rect.width, height: rect.height} : {}
+    ), [rect])
 
     const className = clsx({
-      [classKeys.draggingSelf]: Boolean(isActive),
-      [classKeys.draggingOverSelf]: Boolean(isOver),
+      [classKeys.draggingSelf]: Boolean(isDragging),
+      [classKeys.draggingOver]: Boolean(isDraggingOver),
       [classKeys.hoveringSelf]: Boolean(isSelfHovered),
       [classKeys.selectedSelf]: Boolean(isSelfSelected),
     }, classNameProp)
-
-
-    // useDynamicEffect(() => {
-    //   const rect = anchorEl && getElementClientRectBounding(anchorEl)
-    //   if (rect) {
-    //     setStyle({
-    //       width: rect.width,
-    //       height: rect.height,
-    //     })
-    //   }
-    // }, [anchorEl])
 
     return (
       <ElementOverlayOutline
         ref={ref}
         className={className}
-        style={{width, height}}
+        style={style}
         {...rest}
       />
     )

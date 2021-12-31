@@ -56,7 +56,7 @@ export function useAglynElementData<P = EmptyObj,
       if (!key) {
         return store[$id]
       }
-      return store[$id]?.[key]
+      return store[$id]?.[key] || null
     },
   }) as UseAglynElementData<P, K>
 }

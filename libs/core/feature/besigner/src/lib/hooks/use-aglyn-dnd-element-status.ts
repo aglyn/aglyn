@@ -22,8 +22,8 @@ import {useStoreMap} from 'effector-react'
 
 
 export type AglynDndElementStatus = [
-  isActive: boolean,
-  isOver: boolean
+  isDragging: boolean,
+  isDraggingOver: boolean
 ]
 
 export function useAglynDndElementStatus($id: ElementId): AglynDndElementStatus {

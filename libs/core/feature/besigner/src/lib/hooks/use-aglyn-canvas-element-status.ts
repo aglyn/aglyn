@@ -39,7 +39,7 @@ type ElementChildStatus = {
 export type AglynCanvasElementStatus<T> =
   Conditional<T, true, ElementSelfStatus & ElementChildStatus, ElementSelfStatus>
 
-export function useAglynCanvasElementStatus<T extends boolean>(
+export function useAglynCanvasElementStatus<T extends boolean = false>(
   $id: ElementId,
   includeChildStatus: T = false as T,
 ): AglynCanvasElementStatus<T> {
@@ -64,9 +64,6 @@ export function useAglynCanvasElementStatus<T extends boolean>(
 
       return response
     },
-    // updateFilter: (update, current) => {
-    //   return !deepEqual(current, update, {strict: true})
-    // },
   })
 
   function checkHierarchy(v: string[], $id: ElementId) {

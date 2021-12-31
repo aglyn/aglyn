@@ -246,10 +246,6 @@ export const AppBarSecondaryComponent = forwardRef<any, AppBarSecondaryComponent
 
           <Box sx={{mx: 1}} />
 
-          <InteractControls />
-
-          <Box sx={{mx: 1}} />
-
           <PanelControls />
 
           {children}

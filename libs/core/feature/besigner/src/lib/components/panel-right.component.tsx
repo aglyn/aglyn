@@ -24,7 +24,6 @@ import {
 import {IconVariant} from '@aglyn/shared-data-brand'
 import {styled} from '@aglyn/shared-feature-themes'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import {hexadecimalFromNumber, hexadecimalToNumber} from '@aglyn/shared-util-tools'
 import MuiTabContext from '@mui/lab/TabContext'
 import MuiTabList from '@mui/lab/TabList'
@@ -33,7 +32,7 @@ import Box from '@mui/material/Box'
 import Divider from '@mui/material/Divider'
 import MuiTab from '@mui/material/Tab'
 import Typography from '@mui/material/Typography'
-import React, {forwardRef, Fragment, useCallback} from 'react'
+import {forwardRef, Fragment, useCallback, useMemo} from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 import ElementPropsForm from './element-props-form.component'
@@ -46,6 +45,13 @@ const TabPanelInner = styled('div', {
   padding: theme.spacing(2),
   width: '100%',
 }))
+const TabPanel = styled(MuiTabPanel, {
+  name: 'AglynTabPanel',
+})({
+  padding: 0,
+  overflow: 'auto',
+  height: '100%',
+})
 const DividerSpacer = styled(Divider, {
   name: 'AglynDividerSpacer',
 })(({theme}) => ({
@@ -60,7 +66,7 @@ const ElementInfo = function ElementInfo({$id, ...props}: any) {
   const {metadata} = useAglynComponentSchema(componentId, bundleId) || {}
   const {displayName, title, subtitle, description} = metadata || {}
   const failoverText = '(undefined)'
-  const details = [
+  const details = useMemo(() => [
     {
       id: 'element-overview',
       label: 'Element Overview',
@@ -113,16 +119,17 @@ const ElementInfo = function ElementInfo({$id, ...props}: any) {
         },
       ],
     },
-  ]
+  ], [$id, bundleId, componentId, description, displayName, parentId, subtitle, title])
+
   return (
-    <TabPanelInner {...props}>
-      {details.map(({id, label, items}) => (
-        <Fragment key={id}>
+    <>
+      {details.map(({label, items}, key) => (
+        <Fragment key={key}>
           <Typography variant="subtitle1" component="div" sx={{mb: 2}}>
             {label}
           </Typography>
-          {items.map(({id, label, value}) => (
-            <Fragment key={id}>
+          {items.map(({label, value}, key) => (
+            <Fragment key={key}>
               <Typography variant="caption" component="div" sx={{textTransform: 'uppercase'}}>
                 <b>{label}:</b>
               </Typography>
@@ -134,34 +141,9 @@ const ElementInfo = function ElementInfo({$id, ...props}: any) {
           <DividerSpacer variant="middle" />
         </Fragment>
       ))}
-    </TabPanelInner>
+    </>
   )
 }
-
-
-const PropsForm = function PropsForm({$id, ...props}: any) {
-
-  return (
-    <TabPanelInner {...props}>
-      <ElementPropsForm
-        $id={$id}
-      />
-    </TabPanelInner>
-  )
-}
-
-const tabs = [
-  {
-    id: BesignerPanelTabFlag.ELEMENT_INFO,
-    iconPath: IconVariant.DETAILS,
-    component: ElementInfo,
-  },
-  {
-    id: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
-    iconPath: IconVariant.PROPERTIES,
-    component: PropsForm,
-  },
-]
 
 export interface PanelRightComponentProps extends WorkspacePanelComponentProps {}
 
@@ -170,12 +152,11 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
     const {children, ...rest} = props
 
     const {getApp} = useAglynAppContext()
-    const {$id} = useAglynCanvasSelected() || {}
+    const selected = useAglynCanvasSelected()
     const toggled = useAglynBesignerPanelValue('panelRight', 'toggled')
     const tab = useAglynBesignerPanelValue('panelRight', 'tab')
     const size = useAglynBesignerPanelValue('panelRight', 'size')
-    const value = tab && _isEqualitySameType(tab, ...tabs.map((i) => i.id))
-      ? tab : BesignerPanelTabFlag.ELEMENT_INFO
+    const value = tab || BesignerPanelTabFlag.ELEMENT_INFO
     const handleTabChange = useCallback((e, val) => {
       setBesignerPanels(getApp(), {
         panels: (panels) => ({
@@ -186,7 +167,7 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
           },
         }),
       })
-    }, [])
+    }, [getApp])
 
     return (
       <WorkspacePanelComponent
@@ -204,30 +185,40 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
               indicatorColor="secondary"
               textColor="primary"
             >
-              {tabs.map(({id, iconPath}) => (
-                <MuiTab
-                  key={id}
-                  value={hexadecimalFromNumber(id)}
-                  icon={<MdiIcon path={iconPath} />}
-                />
-              ))}
+              <MuiTab
+                value={hexadecimalFromNumber(BesignerPanelTabFlag.ELEMENT_INFO)}
+                icon={<MdiIcon path={IconVariant.DETAILS} />}
+              />
+              <MuiTab
+                value={hexadecimalFromNumber(BesignerPanelTabFlag.ELEMENT_PROPS_FORM)}
+                icon={<MdiIcon path={IconVariant.PROPERTIES} />}
+              />
             </MuiTabList>
           </Box>
-          {tabs.map(({component: Component, id}) => (
-            <MuiTabPanel
-              key={id}
-              value={hexadecimalFromNumber(id)}
-              sx={{p: 0, overflow: 'auto'}}
-            >
-              {$id ? (<Component $id={$id} />) : (
-                <TabPanelInner>
-                  <Typography variant="subtitle1" component="div" align="center">
-                    No element selected...
-                  </Typography>
-                </TabPanelInner>
+
+          <TabPanel value={hexadecimalFromNumber(BesignerPanelTabFlag.ELEMENT_INFO)}>
+            <TabPanelInner>
+              {selected?.$id ? (
+                <ElementInfo $id={selected?.$id} />
+              ) : (
+                <Typography variant="subtitle1" component="div" align="center">
+                  No element selected...
+                </Typography>
               )}
-            </MuiTabPanel>
-          ))}
+            </TabPanelInner>
+          </TabPanel>
+
+          <TabPanel value={hexadecimalFromNumber(BesignerPanelTabFlag.ELEMENT_PROPS_FORM)}>
+            <TabPanelInner>
+              {selected?.$id ? (
+                <ElementPropsForm $id={selected?.$id} />
+              ) : (
+                <Typography variant="subtitle1" component="div" align="center">
+                  No element selected...
+                </Typography>
+              )}
+            </TabPanelInner>
+          </TabPanel>
         </MuiTabContext>
 
         {children}

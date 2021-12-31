@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { _isFnT } from '@aglyn/shared-util-guards'
-import { MutableRefObject, Ref, RefCallback, useCallback } from 'react'
+import {_isFnT} from '@aglyn/shared-util-guards'
+import {MutableRefObject, Ref, RefCallback, useCallback} from 'react'
 
 
 function isRefCallback<T>(val): val is RefCallback<T> {
@@ -29,7 +29,7 @@ function isRefCallback<T>(val): val is RefCallback<T> {
  * @param {T} value - new ref value
  * @returns {Ref<T>} - the same passed ref
  */
-export function assignRefValue<T>(ref: Ref<T>, value: T): Ref<T> {
+function assignRefValue<T>(ref: Ref<T>, value: T): Ref<T> {
   if (!ref) return null
   if (isRefCallback(ref)) {
     ref(value)
@@ -40,7 +40,7 @@ export function assignRefValue<T>(ref: Ref<T>, value: T): Ref<T> {
   return ref
 }
 
-export function handleMultipleRefs<T>(...refs: Ref<T>[]) {
+function handleMultipleRefs<T>(...refs: Ref<T>[]): (element: T) => T {
   return (element: T) => {
     refs.forEach((ref) => assignRefValue(ref, element))
     return element
@@ -52,7 +52,7 @@ export function handleMultipleRefs<T>(...refs: Ref<T>[]) {
  * @param {React.Ref<T>} refs - 1 or more refs to be assigned
  * @returns {React.RefCallback<T>} - callback to pass to elem ref prop
  */
-export function useCombinedRefs<T>(...refs: Ref<T>[]): RefCallback<T> {
+export function useCombinedRefs<T>(...refs: Ref<T>[]): (element: T) => T {
   return useCallback((element: T) => {
     return handleMultipleRefs(...refs)(element)
   }, [refs])

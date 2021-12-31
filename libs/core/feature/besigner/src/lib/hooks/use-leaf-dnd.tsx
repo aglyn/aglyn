@@ -1,0 +1,183 @@
+/**
+ * @license
+ * Copyright 2021 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  BesignerDndElementActive,
+  BesignerDndElementOver,
+  DndDragSourceTypeFlag,
+  DndDropLinealTypeFlag,
+  ElementId,
+  isRootElementId,
+  setBesignerCanvasHovered,
+  setBesignerCanvasSelected,
+  setBesignerDndState,
+} from '@aglyn/core-data-framework'
+import {
+  useAglynAppContext,
+  useAglynCanvasApiEvents,
+  useAglynCanvasElementHierarchy,
+  useAglynComponentSchema,
+  useAglynElementData,
+} from '@aglyn/core-feature-renderer'
+import {MouseEvent, MouseEventHandler, useCallback, useEffect, useMemo} from 'react'
+import {
+  DragElementWrapper,
+  DragPreviewOptions,
+  DragSourceOptions,
+  DropTargetMonitor,
+  useDrag,
+  useDrop,
+} from 'react-dnd'
+
+
+export type DropCollected = {
+  isOver?: boolean
+  isOverSelf?: boolean
+  isOverChildren?: boolean
+  isOverSameDrag?: boolean
+  isOverChildOfSameDrag?: boolean
+  isDragging?: boolean
+}
+export type DragCollected = {
+  isDragging?: boolean,
+  active?: BesignerDndElementActive
+  over?: BesignerDndElementOver,
+}
+export declare type DragHandleRef = DragElementWrapper<DragSourceOptions>;
+export declare type DragPreviewRef = DragElementWrapper<DragPreviewOptions>
+export declare type DropRef = DragElementWrapper<any>;
+export type UseLeafDnd = [
+  dragHandleRef: DragHandleRef,
+  dragPreviewRef: DragPreviewRef,
+  dropRef: DropRef,
+  onHover: MouseEventHandler<any>,
+  onSelect: MouseEventHandler<any>
+]
+export function useLeafDnd($id: ElementId): UseLeafDnd {
+  const componentId = useAglynElementData($id, 'componentId')
+  const bundleId = useAglynElementData($id, 'bundleId')
+  const {getApp} = useAglynAppContext()
+  const {moveElement} = useAglynCanvasApiEvents()
+  const componentSchema = useAglynComponentSchema(componentId, bundleId)
+  const hierarchy = componentSchema?.renderFlags?.hierarchy
+
+
+  const handleSelect = useCallback((e: MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setBesignerCanvasSelected(getApp(), {selected: () => ({$id})})
+  }, [$id, getApp])
+  const handleHover = useCallback((e: MouseEvent) => {
+    e.stopPropagation()
+    setBesignerCanvasHovered(getApp(), {hovered: () => ({$id})})
+  }, [$id, getApp])
+  const handleDragStart = useCallback((active: BesignerDndElementActive) => {
+    console.log('handleDragStart', $id, active)
+    setBesignerCanvasSelected(getApp(), {selected: () => ({$id: active.$id})})
+    setBesignerDndState(getApp(), {dnd: () => ({active})})
+  }, [$id, getApp])
+  const handleDragOver = useCallback((over?: BesignerDndElementOver) => {
+    setBesignerCanvasHovered(getApp(), {hovered: () => ({$id: over?.$id})})
+    setBesignerDndState(getApp(), {dnd: (prev) => ({...prev, over})})
+  }, [getApp])
+  const handleDragEnd = useCallback((
+    active: BesignerDndElementActive,
+    over?: BesignerDndElementOver,
+  ) => {
+    console.log('handleDragEnd', active, over)
+    setBesignerDndState(getApp(), {dnd: () => ({})})
+    if (over?.$id && active?.$id !== over.$id) {
+      moveElement({$id: active.$id, parentId: over?.$id, index: -1})
+    }
+  }, [getApp, moveElement])
+
+
+  const dragItem = useMemo(() => ({
+    $id,
+    type: DndDragSourceTypeFlag.CANVAS_ELEMENT,
+    componentId,
+    bundleId,
+    hierarchy,
+  }), [$id, bundleId, componentId, hierarchy])
+
+  const draggable = useDrag<BesignerDndElementActive, BesignerDndElementOver, DragCollected>(() => ({
+    type: 'aglyn-element',
+    item: () => {
+      handleDragStart(dragItem)
+      return dragItem
+    },
+    isDragging: (monitor) => monitor?.getItem()?.$id === $id,
+    canDrag: !isRootElementId($id),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+      // dropItem: monitor.getDropResult(),
+      // active: monitor.getItem(),
+    }),
+  }))
+
+  const [{isDragging}, dragHandleRef, dragPreviewRef] = draggable
+  const trail = useAglynCanvasElementHierarchy($id)
+  const dropCollector = useCallback((monitor: DropTargetMonitor) => {
+    const active = monitor.getItem<BesignerDndElementActive>()
+    const isOverDrop = trail.some((i) => i === $id)
+    const isInSame = isOverDrop && active && active.$id && trail.some((i) => i === active.$id)
+    const isOver = monitor.isOver({shallow: false})
+    const isOverSelf = monitor.isOver({shallow: true})
+    const isOverChildren = isOver && !isOverSelf
+    const isOverSameDrag = isOver && isDragging
+    const isOverChildOfSameDrag = isInSame && !isOverSameDrag
+    return {
+      isOver,
+      isOverSelf,
+      isOverChildren,
+      isOverSameDrag,
+      isOverChildOfSameDrag,
+      isDragging,
+    }
+  }, [$id, isDragging, trail])
+
+
+  const dropItem: BesignerDndElementOver = useMemo(() => ({
+    $id,
+    type: DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
+    componentId,
+    bundleId,
+    hierarchy,
+  }), [$id, bundleId, componentId, hierarchy])
+
+  const droppable = useDrop<BesignerDndElementActive, BesignerDndElementOver, DropCollected>(() => ({
+    accept: 'aglyn-element',
+    drop: (active, monitor) => {
+      if (monitor.didDrop()) return undefined
+      if (monitor.isOver({shallow: true})) {
+        console.log('drop collection', active, dropItem)
+        handleDragEnd(active, dropItem)
+      }
+      return dropItem
+    },
+    collect: dropCollector,
+  }), [])
+
+  const [{isOverSelf}, dropRef] = droppable
+
+  useEffect(() => {
+    isOverSelf && handleDragOver(dropItem)
+  }, [handleDragOver, isOverSelf, dropItem])
+
+  return [dragHandleRef, dragPreviewRef, dropRef, handleHover, handleSelect]
+}
+export default useLeafDnd
