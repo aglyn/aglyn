@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {ComponentId} from '@aglyn/core-data-framework'
+import {type ComponentId} from '@aglyn/core-data-framework'
 import {_isArrEmpty} from '@aglyn/shared-util-guards'
 import Box, {type BoxProps} from '@mui/material/Box'
 import clsx from 'clsx'

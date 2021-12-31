@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import { createUid } from '@aglyn/shared-util-vendor'
+import {createUid} from '@aglyn/shared-util-vendor'
+import {ELEMENT_ID_LENGTH} from '../constants/components'
 
-
-export const ELEMENT_ID_LENGTH = 10
 
 export function createComponentElementId() {
   return createUid(ELEMENT_ID_LENGTH)

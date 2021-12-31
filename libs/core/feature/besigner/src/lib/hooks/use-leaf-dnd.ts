@@ -16,11 +16,11 @@
  */
 
 import {
-  BesignerDndElementActive,
-  BesignerDndElementOver,
+  type BesignerDndElementActive,
+  type BesignerDndElementOver,
   DndDragSourceTypeFlag,
   DndDropLinealTypeFlag,
-  ElementId,
+  type ElementId,
   isRootElementId,
   setBesignerCanvasHovered,
   setBesignerCanvasSelected,
@@ -35,10 +35,10 @@ import {
 } from '@aglyn/core-feature-renderer'
 import {useCallback, useEffect, useMemo} from 'react'
 import {
-  DragElementWrapper,
-  DragPreviewOptions,
-  DragSourceOptions,
-  DropTargetMonitor,
+  type DragElementWrapper,
+  type DragPreviewOptions,
+  type DragSourceOptions,
+  type DropTargetMonitor,
   useDrag,
   useDrop,
 } from 'react-dnd'

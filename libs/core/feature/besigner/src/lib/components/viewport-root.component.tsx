@@ -17,9 +17,9 @@
 
 import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 import {_isFnT} from '@aglyn/shared-util-guards'
-import Stack, {StackProps} from '@mui/material/Stack'
+import Stack, {type StackProps} from '@mui/material/Stack'
 import clsx from 'clsx'
-import {ChangeEvent, forwardRef, useCallback, useRef} from 'react'
+import {type ChangeEvent, forwardRef, useCallback, useRef} from 'react'
 import {useAglynBesignerPanelValue} from '../hooks/use-aglyn-besigner-panel-value'
 import {ViewportCanvasComponent} from './viewport-canvas.component'
 import {ZoomControlsComponent} from './zoom-controls.component'

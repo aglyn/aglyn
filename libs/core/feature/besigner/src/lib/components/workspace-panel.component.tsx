@@ -16,14 +16,14 @@
  */
 
 import clsx from 'clsx'
-import { DEFAULT_LEFT_DRAWER_WIDTH } from '../constants'
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer'
-import { forwardRef, HTMLAttributes } from 'react'
+import {DEFAULT_LEFT_DRAWER_WIDTH} from '../constants'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {_isEqualitySameType} from '@aglyn/shared-util-guards'
+import MuiDrawer, {type DrawerProps as MuiDrawerProps} from '@mui/material/Drawer'
+import {forwardRef, type HTMLAttributes} from 'react'
 
 
-const classKeys = generateComponentClassKeys('AglynWorkspacePanel',[
+const classKeys = generateComponentClassKeys('AglynWorkspacePanel', [
   'drawer',
   'open',
   'anchorLeft',
@@ -41,7 +41,7 @@ const WorkspacePanel = styled('div', {
   shouldForwardProp(propName: any) {
     return !_isEqualitySameType(propName, 'size')
   },
-})<WorkspacePanelProps>(({ theme, size }) => {
+})<WorkspacePanelProps>(({theme, size}) => {
   const calcSize = (size || DEFAULT_LEFT_DRAWER_WIDTH)
 
   return ({
@@ -100,7 +100,7 @@ const WorkspacePanel = styled('div', {
           width: calcSize,
           height: '100%',
         },
-      }
+      },
     },
     [`& .${classKeys.drawer}`]: {
       flexShrink: 0,
@@ -108,7 +108,7 @@ const WorkspacePanel = styled('div', {
         boxSizing: 'border-box',
         position: 'unset',
       },
-    }
+    },
   })
 })
 
@@ -157,7 +157,7 @@ const WorkspacePanelComponent = forwardRef<any, WorkspacePanelComponentProps>(
         </MuiDrawer>
       </WorkspacePanel>
     )
-  }
+  },
 )
 
 WorkspacePanelComponent.displayName = 'WorkspacePanelComponent'
@@ -165,5 +165,5 @@ WorkspacePanelComponent.defaultProps = {
   anchor: 'left',
 }
 
-export { WorkspacePanelComponent }
+export {WorkspacePanelComponent}
 export default WorkspacePanelComponent

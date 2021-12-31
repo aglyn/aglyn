@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {AppUUN} from '@aglyn/core-data-framework'
+import {type AppUUN} from '@aglyn/core-data-framework'
 import {
   AglynAppContextComponent,
   ElementComponentsContextProvider,
@@ -27,7 +27,10 @@ import NoSsr from '@mui/material/NoSsr'
 import {forwardRef, Fragment} from 'react'
 import {ComponentsDrawerContextProvider} from '../contexts/components-drawer-context.provider'
 import BesignerDndContext from './besigner-dnd-context.component'
-import {WorkspaceEditorComponent, WorkspaceEditorComponentProps} from './workspace-editor.component'
+import {
+  WorkspaceEditorComponent,
+  type WorkspaceEditorComponentProps,
+} from './workspace-editor.component'
 
 
 export interface BesignerComponentProps extends WorkspaceEditorComponentProps {
@@ -35,34 +38,33 @@ export interface BesignerComponentProps extends WorkspaceEditorComponentProps {
   appName?: AppUUN
 }
 
-const BesignerComponentRaw = forwardRef<any, BesignerComponentProps>(function RefRenderFn(
-  props,
-  ref,
-) {
-  const {noSsr, appName, ...rest} = props
-  const Wrapper = noSsr ? NoSsr : Fragment
+const BesignerComponentRaw = forwardRef<any, BesignerComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {noSsr, appName, ...rest} = props
+    const Wrapper = noSsr ? NoSsr : Fragment
 
 
-  return (
-    <Wrapper>
-      <AglynAppContextComponent appName={appName}>
-        <BesignerDndContext>
-          <ElementComponentsContextProvider>
-            <ElementsContextProvider>
-              <ConfirmationProviderComponent>
-                <ComponentsDrawerContextProvider>
-                  {/*<SnackbarProvider maxSnack={3}>*/}
-                  <WorkspaceEditorComponent ref={ref} {...rest} />
-                  {/*</SnackbarProvider>*/}
-                </ComponentsDrawerContextProvider>
-              </ConfirmationProviderComponent>
-            </ElementsContextProvider>
-          </ElementComponentsContextProvider>
-        </BesignerDndContext>
-      </AglynAppContextComponent>
-    </Wrapper>
-  )
-})
+    return (
+      <Wrapper>
+        <AglynAppContextComponent appName={appName}>
+          <BesignerDndContext>
+            <ElementComponentsContextProvider>
+              <ElementsContextProvider>
+                <ConfirmationProviderComponent>
+                  <ComponentsDrawerContextProvider>
+                    {/*<SnackbarProvider maxSnack={3}>*/}
+                    <WorkspaceEditorComponent ref={ref} {...rest} />
+                    {/*</SnackbarProvider>*/}
+                  </ComponentsDrawerContextProvider>
+                </ConfirmationProviderComponent>
+              </ElementsContextProvider>
+            </ElementComponentsContextProvider>
+          </BesignerDndContext>
+        </AglynAppContextComponent>
+      </Wrapper>
+    )
+  },
+)
 
 BesignerComponentRaw.displayName = 'BesignerComponent'
 BesignerComponentRaw.defaultProps = {}

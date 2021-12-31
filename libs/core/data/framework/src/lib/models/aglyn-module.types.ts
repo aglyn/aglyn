@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-import type {AglynAppEffectFlag, AglynModuleEffectPayload} from '../constants/emitter'
-import type {MODULE_TYPE, TYPE_KIND, TYPE_OF} from '../constants/symbol'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {AglynTypeFields} from '../types'
-import type {AglynBaseModelOptions, AglynBaseModelT, IAglynBaseModel} from './aglyn-base.types'
+import {type AglynAppEffectFlag, type AglynModuleEffectPayload} from '../constants/emitter'
+import {type TYPE_KIND, type TYPE_OF} from '../constants/symbol'
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {type AglynBaseModelOptions, AglynBaseModelT, IAglynBaseModel} from './aglyn-base.types'
 
 
-export type AglynModuleTypeFields = AglynTypeFields<MODULE_TYPE, number | symbol>
 export type AglynModuleEffectListener<Effect extends AglynAppEffectFlag> = [
-  Effect, (args: AglynModuleEffectPayload[Effect]) => unknown
+  Effect,
+  (args: AglynModuleEffectPayload[Effect]) => unknown
 ]
 
 export interface AglynModuleModelOptions extends AglynBaseModelOptions {
 
 }
 
-export interface IAglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions> extends IAglynBaseModel<O, IAglynAppController>, AglynModuleTypeFields {
+export interface IAglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions> extends IAglynBaseModel<O, IAglynAppController> {
   readonly [TYPE_OF]: number | symbol
   readonly [TYPE_KIND]: number | symbol
   readonly moduleName: string

@@ -15,42 +15,36 @@
  * limitations under the License.
  */
 
-import type {KeyValueMap} from '@aglyn/shared-data-types'
-import type {
-  createEffect as createEffectorEffect,
-  createEvent as createEffectorEvent,
-  Domain as EffectorDomain,
-  Store as EffectorStore,
-} from 'effector/effector.cjs'
-import type {
-  ContextsCreateEffectPayload,
-  ContextsCreateEventPayload,
-  ContextsCreateStorePayload,
-  ContextsDeleteStorePayload,
-  ContextsGetStoreApiPayload,
-  ContextsGetStorePayload,
-  ContextsSetStorePayload,
+import {type KeyValueMap} from '@aglyn/shared-data-types'
+import {
+  type Domain as EffectorDomain,
+  type Effect as EffectorEffect,
+  type Event as EffectorEvent,
+  type Store as EffectorStore,
+} from 'effector'
+import {
+  type ContextsCreateEffectPayload,
+  type ContextsCreateEventPayload,
+  type ContextsCreateStorePayload,
+  type ContextsDeleteStorePayload,
+  type ContextsGetStoreApiPayload,
+  type ContextsGetStorePayload,
+  type ContextsSetStorePayload,
 } from '../constants/emitter'
-import type {
-  AglynModuleModelOptions,
-  AglynModuleModelT,
-  IAglynModuleModel,
+import {
+  type AglynModuleModelOptions,
+  type AglynModuleModelT,
+  type IAglynModuleModel,
 } from '../models/aglyn-module.types'
-import type {ContextStoreUid} from '../types'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {IAglynBesignerController} from './aglyn-besigner.types'
+import {type IAglynAppController} from './aglyn-app.types'
+import {type IAglynBesignerController} from './aglyn-besigner.types'
 
 
-export interface ContextDomain extends EffectorDomain {
-
-}
-
-export interface ContextStore<T> extends EffectorStore<T> {
-
-}
-
-export type ContextEvent = ReturnType<typeof createEffectorEvent>
-export type ContextEffect = ReturnType<typeof createEffectorEffect>
+export type ContextStoreUid = string
+export type ContextDomain = EffectorDomain
+export type ContextStore<State> = EffectorStore<State>
+export type ContextEvent<Payload = any> = EffectorEvent<Payload>
+export type ContextEffect<Params = any, Done = any, Fail = Error> = EffectorEffect<Params, Done, Fail>
 export type ContextStoreOptions<T> = {
   name?: string
   sid?: string

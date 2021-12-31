@@ -17,8 +17,11 @@
 
 import {CANVAS_ROOT_ELEMENT_ID, createComponentElementData} from '@aglyn/core-data-framework'
 import {useAglynCanvasApiEvents, useAglynElementParentPosition} from '@aglyn/core-feature-renderer'
-import {SyntheticEvent, useCallback} from 'react'
-import {ElementDrawerOptions, useElementDrawerContext} from '../contexts/element-drawer-context'
+import {type SyntheticEvent, useCallback} from 'react'
+import {
+  type ElementDrawerOptions,
+  useElementDrawerContext,
+} from '../contexts/element-drawer-context'
 import useAglynCanvasSelected from './use-aglyn-canvas-selected'
 
 

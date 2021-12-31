@@ -15,34 +15,36 @@
  * limitations under the License.
  */
 
-import type {AglynAppEffectFlag} from '../constants/emitter'
-import type {
-  AglynBaseModelOptions,
-  AglynBaseModelT,
-  IAglynBaseModel,
+import {type AglynAppEffectFlag} from '../constants/emitter'
+import {
+  type AglynBaseModelOptions,
+  type AglynBaseModelT,
+  type IAglynBaseModel,
 } from '../models/aglyn-base.types'
-import type {AppUUN, Payload} from '../types'
-
-import type {AglynBesignerControllerOptions, IAglynBesignerController} from './aglyn-besigner.types'
-import type {AglynCanvasControllerOptions, IAglynCanvasController} from './aglyn-canvas.types'
-import type {IAglynCommandsController} from './aglyn-commands.types'
-import type {
-  AglynComponentsControllerOptions,
-  IAglynComponentsController,
+import {type AglynUniqueId, type Payload} from '../types'
+import {
+  type AglynBesignerControllerOptions,
+  type  IAglynBesignerController,
+} from './aglyn-besigner.types'
+import {type AglynCanvasControllerOptions, type IAglynCanvasController} from './aglyn-canvas.types'
+import {type IAglynCommandsController} from './aglyn-commands.types'
+import {
+  type AglynComponentsControllerOptions,
+  type IAglynComponentsController,
 } from './aglyn-components.types'
-import type {
-  AglynContextsControllerOptions,
-  IAglynContextsController,
+import {
+  type AglynContextsControllerOptions,
+  type IAglynContextsController,
 } from './aglyn-contexts.types'
-import type {
-  AglynExtensionsControllerOptions,
-  IAglynExtensionsController,
+import {
+  type AglynExtensionsControllerOptions,
+  type IAglynExtensionsController,
 } from './aglyn-extensions.types'
 
 
-export interface AglynEffectOptions<T, U = unknown> extends Payload<U> {
-  type: T
-}
+export type AppUUN = string
+export type AglynAppModule<T extends AglynUniqueId = any> = T
+export type AglynEffectOptions<T, U = unknown> = Payload<U> & {type: T}
 
 export interface AglynAppOptions extends AglynBaseModelOptions {
   appName?: AppUUN
@@ -62,7 +64,7 @@ export interface IAglynAppController extends IAglynBaseModel<AglynAppOptions> {
   readonly commands: IAglynCommandsController
   readonly components: IAglynComponentsController
   readonly canvas: IAglynCanvasController
-  readonly besigner: IAglynBesignerController
+  readonly besigner?: IAglynBesignerController
   readonly deleted: boolean
 
   getName(): string

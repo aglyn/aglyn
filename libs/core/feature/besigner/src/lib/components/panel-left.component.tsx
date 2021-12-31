@@ -34,7 +34,10 @@ import {
   ElementsTreeViewComponent,
   type ElementsTreeViewComponentProps,
 } from './elements-tree-view.component'
-import {WorkspacePanelComponent, WorkspacePanelComponentProps} from './workspace-panel.component'
+import {
+  WorkspacePanelComponent,
+  type WorkspacePanelComponentProps,
+} from './workspace-panel.component'
 
 
 const TabPanelInner = styled('div', {

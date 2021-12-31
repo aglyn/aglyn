@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
-import type { ElementId } from '../types'
+import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
+import {type ElementId} from '../controllers/aglyn-components.types'
 
 
 export const isRootElementId = ($id: ElementId): $id is CANVAS_ROOT_ELEMENT_ID => {

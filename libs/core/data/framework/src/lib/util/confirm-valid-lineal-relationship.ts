@@ -18,10 +18,11 @@
 import {_isArr, _isArrEmpty} from '@aglyn/shared-util-guards'
 import {ComponentsLinealDirectiveFlag} from '../constants/components'
 import {
-  AglynComponentRenderFlags,
-  ComponentsLinealOrder,
+  type AglynComponentRenderFlags,
+  type BundleUId,
+  type ComponentId,
+  type ComponentsLinealOrder,
 } from '../controllers/aglyn-components.types'
-import {BundleUId, ComponentId} from '../types'
 
 
 export enum InvalidLinealRelationFlag {

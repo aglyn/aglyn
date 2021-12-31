@@ -16,14 +16,15 @@
  */
 
 import {
-  AglynComponentElementDataNormalizedArray,
+  type AglynComponentElementDataDenormalizedList,
   getCanvasDenormalizedElementsStore,
 } from '@aglyn/core-data-framework'
-import { useStoreMap } from 'effector-react'
-import { useAglynAppContext } from '../contexts/aglyn-app-context'
+import {useStoreMap} from 'effector-react'
+import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
-export function useAglynCanvasElementsDenormalized(): AglynComponentElementDataNormalizedArray {
-  const { getApp } = useAglynAppContext()
+
+export function useAglynCanvasElementsDenormalized(): AglynComponentElementDataDenormalizedList {
+  const {getApp} = useAglynAppContext()
   const app = getApp()
   const store = getCanvasDenormalizedElementsStore(app)
   return useStoreMap(store, (store) => store)

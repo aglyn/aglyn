@@ -16,7 +16,7 @@
  */
 
 import {
-  AglynComponentElementDataNormalizedMap,
+  type AglynComponentElementDataNormalizedMap,
   getCanvasNormalizedElementsStore,
 } from '@aglyn/core-data-framework'
 import {_isFnT} from '@aglyn/shared-util-guards'

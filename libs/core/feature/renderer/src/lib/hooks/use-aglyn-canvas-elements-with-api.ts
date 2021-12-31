@@ -16,8 +16,8 @@
  */
 
 import {
-  AglynComponentElementDataNormalizedMap,
-  ElementsDataStoreApi,
+  type AglynComponentElementDataNormalizedMap,
+  type ElementsDataStoreApi,
 } from '@aglyn/core-data-framework'
 import {useAglynCanvasApiEvents} from './use-aglyn-canvas-api-events'
 import {useAglynCanvasElementsNormalized} from './use-aglyn-canvas-elements-normalized'

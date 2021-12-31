@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type {ElementsDataStore, ElementsDataStoreApi} from '@aglyn/core-data-framework'
+import {type ElementsDataStore, type ElementsDataStoreApi} from '@aglyn/core-data-framework'
 import {createContext, useContext} from 'react'
 
 

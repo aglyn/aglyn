@@ -26,7 +26,7 @@ import {
 import {useAglynAppContext, useAglynElementData} from '@aglyn/core-feature-renderer'
 import {type KeyOf} from '@aglyn/shared-data-types'
 import MuiPopper, {type PopperProps as MuiPopperProps} from '@mui/material/Popper'
-import {ChangeEvent, forwardRef, useCallback} from 'react'
+import {type ChangeEvent, forwardRef, useCallback} from 'react'
 import {CanvasRenderedElementRefsConsumer} from '../contexts/canvas-rendered-element-refs'
 import useAglynBesignerStoreState from '../hooks/use-aglyn-besigner-store-state'
 import ElementOverlayBadgeComponent from './element-overlay-badge.component'

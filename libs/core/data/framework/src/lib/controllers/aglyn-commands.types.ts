@@ -15,36 +15,38 @@
  * limitations under the License.
  */
 
-import type {Dictionary} from '@aglyn/shared-data-types'
-import type {EmitterFn} from '@aglyn/shared-util-emitter'
-import type {
-  CommandRegisterListenerPayload,
-  CommandRemoveResolverPayload,
-  CommandsSetResolverPayload,
-  CommandTriggerPayload,
-  CommandUnregisterListenerPayload,
+import {type Dictionary} from '@aglyn/shared-data-types'
+import {type EmitterFn} from '@aglyn/shared-util-emitter'
+import {
+  type CommandsRegisterListenerPayload,
+  type CommandsRemoveResolverPayload,
+  type CommandsSetResolverPayload,
+  type CommandsTriggerPayload,
+  type CommandsUnregisterListenerPayload,
 } from '../constants/emitter'
-import type {COMMAND_LISTENER_TYPE, COMMAND_RESOLVER_TYPE, MODULE_TYPE} from '../constants/symbol'
-import type {
-  AglynModuleModelOptions,
-  AglynModuleModelT,
-  IAglynModuleModel,
+import {TYPE_KIND, TYPE_OF} from '../constants/symbol'
+import {
+  type AglynModuleModelOptions,
+  type AglynModuleModelT,
+  type IAglynModuleModel,
 } from '../models/aglyn-module.types'
-import type {AglynTypeFields, CommandUId} from '../types'
-import {IAglynAppController} from './aglyn-app.types'
+import {type IAglynAppController} from './aglyn-app.types'
 
 
-export type AglynCommandResolverTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_RESOLVER_TYPE>
-export type AglynCommandListenerTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof COMMAND_LISTENER_TYPE>
+export type CommandUId = string
 export type TriggerListenerPayload<T, U> = {payload: T, response: U}
 export type AglynCommander = EmitterFn<Record<CommandUId, TriggerListenerPayload<any, any>>>
 
-export interface AglynCommandResolver extends AglynCommandResolverTypeFields {
+export interface AglynCommandResolver {
+  readonly [TYPE_OF]?: number | symbol
+  readonly [TYPE_KIND]?: number | symbol
   commandId: CommandUId
   (data: Dictionary): any
 }
 
-export interface AglynCommandListener extends AglynCommandListenerTypeFields {
+export interface AglynCommandListener {
+  readonly [TYPE_OF]?: number | symbol
+  readonly [TYPE_KIND]?: number | symbol
   commandId: CommandUId
   (data: TriggerListenerPayload<any, any>): void
 }
@@ -58,10 +60,10 @@ export interface IAglynCommandsController extends IAglynModuleModel<AglynCommand
   readonly resolvers: Map<CommandUId, AglynCommandResolver>
 
   setResolver(data: CommandsSetResolverPayload): void
-  registerListener(data: CommandRegisterListenerPayload): void
-  removeResolver(data: CommandRemoveResolverPayload): void
-  unregisterListener(data: CommandUnregisterListenerPayload): void
-  trigger(data: CommandTriggerPayload): void
+  registerListener(data: CommandsRegisterListenerPayload): void
+  removeResolver(data: CommandsRemoveResolverPayload): void
+  unregisterListener(data: CommandsUnregisterListenerPayload): void
+  trigger(data: CommandsTriggerPayload): void
 }
 
 export interface AglynCommandsControllerT extends AglynModuleModelT<AglynCommandsControllerOptions> {

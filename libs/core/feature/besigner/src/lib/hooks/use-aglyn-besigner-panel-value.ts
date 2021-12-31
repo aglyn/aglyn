@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {BesignerPanelsState} from '@aglyn/core-data-framework'
-import {KeyOf} from '@aglyn/shared-data-types'
+import {type BesignerPanelsState} from '@aglyn/core-data-framework'
+import {type KeyOf} from '@aglyn/shared-data-types'
 import {useAglynBesignerStoreState} from './use-aglyn-besigner-store-state'
 
 

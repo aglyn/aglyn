@@ -16,7 +16,7 @@
  */
 
 import {DEFAULT_PROPS_FORM_SCHEMA} from '../constants/components'
-import {AglynComponentPropsFormSchema} from '../controllers/aglyn-components.types'
+import {type AglynComponentPropsFormSchema} from '../controllers/aglyn-components.types'
 
 
 export const buildComponentPropsFormSchema = (

@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import type {AglynLifecycleFlag} from '../constants/lifecycle'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {AglynLoadableObserver} from '../types'
-import {ExtensionUUN} from '../types'
-import type {
-  AglynModuleModelOptions,
-  AglynModuleModelT,
-  IAglynModuleModel,
+import {type AglynLifecycleFlag} from '../constants/lifecycle'
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {type ExtensionUUN} from '../controllers/aglyn-extensions.types'
+import {type AglynLoadableObserver} from '../types'
+import {
+  type AglynModuleModelOptions,
+  type AglynModuleModelT,
+  type IAglynModuleModel,
 } from './aglyn-module.types'
 
 

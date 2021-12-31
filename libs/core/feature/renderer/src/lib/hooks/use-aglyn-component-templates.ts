@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
-import type {AglynComponentElementTemplate} from '@aglyn/core-data-framework'
-import {getAllComponentsTemplateValues} from '@aglyn/core-data-framework'
+import {
+  type AglynComponentElementTemplate,
+  getAllComponentsTemplateValues,
+} from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 

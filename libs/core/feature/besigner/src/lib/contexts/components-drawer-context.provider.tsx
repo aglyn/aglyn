@@ -16,16 +16,16 @@
  */
 
 import {AglynComponentsContext} from '@aglyn/core-feature-renderer'
-import {ElementType, Fragment, ReactNode, useCallback, useState} from 'react'
+import {type ElementType, Fragment, type ReactNode, useCallback, useState} from 'react'
 import {
   ComponentsDrawerComponent,
-  ComponentsDrawerComponentProps,
+  type ComponentsDrawerComponentProps,
 } from '../components/components-drawer.component'
 import {
   buildOptions,
   DEFAULT_OPTIONS,
   ElementDrawerContext,
-  ElementDrawerOptions,
+  type ElementDrawerOptions,
 } from './element-drawer-context'
 
 

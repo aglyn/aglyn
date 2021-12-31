@@ -18,26 +18,22 @@
 import {createApi} from 'effector'
 import {persist} from 'effector-storage/local'
 import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
-import type {
-  CanvasAddElementPayload,
-  CanvasDeleteElementPayload,
-  CanvasDuplicateElementPayload,
-  CanvasGetApiEventsPayload,
-  CanvasGetElementsDenormalizedPayload,
-  CanvasGetElementsNormalizedPayload,
-  CanvasGetStorePayload,
-  CanvasMoveElementPayload,
-  CanvasRedoPayload,
-  CanvasSetElementsPayload,
-  CanvasUndoPayload,
-  CanvasUpdateElementPayload,
+import {
+  type CanvasAddElementPayload,
+  type CanvasDeleteElementPayload,
+  type CanvasDuplicateElementPayload,
+  type CanvasGetApiEventsPayload,
+  type CanvasGetElementsDenormalizedPayload,
+  type CanvasGetElementsNormalizedPayload,
+  type CanvasGetStorePayload,
+  type CanvasMoveElementPayload,
+  type CanvasRedoPayload,
+  type CanvasSetElementsPayload,
+  type CanvasUndoPayload,
+  type CanvasUpdateElementPayload,
 } from '../constants/emitter'
 import AglynModuleModel from '../models/aglyn-module.model'
-import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
-import type {
-  AglynComponentElementDataNormalizedArray,
-  AglynComponentElementDataNormalizedMap,
-} from '../types'
+import {type AglynModuleEffectListener} from '../models/aglyn-module.types'
 import {denormalizeComponentElementData} from '../util/denormalize-component-element-data'
 import {handleRedoEvent} from '../util/handle-state-modification-history-redo'
 import {handleUndoEvent} from '../util/handle-state-modification-history-undo'
@@ -51,15 +47,19 @@ import {
   handleCanvasSetElements,
   handleCanvasUpdateElement,
 } from '../util/utils.canvas'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {
-  AglynCanvasControllerOptions,
-  ElementsDataStore,
-  ElementsDataStoreApi,
-  IAglynCanvasController,
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynCanvasControllerOptions,
+  type ElementsDataStore,
+  type ElementsDataStoreApi,
+  type IAglynCanvasController,
 } from './aglyn-canvas.types'
-import type {AglynComponentElementDataDenormalized} from './aglyn-components.types'
-import {ContextDomain, ContextStore} from './aglyn-contexts.types'
+import {
+  type AglynComponentElementDataDenormalized,
+  type AglynComponentElementDataDenormalizedList,
+  type AglynComponentElementDataNormalizedMap,
+} from './aglyn-components.types'
+import {type ContextDomain, type ContextStore} from './aglyn-contexts.types'
 
 
 const TAG = 'AglynCanvas'
@@ -81,7 +81,7 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   public get events(): ElementsDataStoreApi {return this.#events}
   public get context(): ContextStore<ElementsDataStore> {return this.#context}
   public get normalizedElementsStore(): ContextStore<AglynComponentElementDataNormalizedMap> {return this.#normalizedElementsStore}
-  public get denormalizedElementsStore(): ContextStore<AglynComponentElementDataNormalizedArray> {return this.#denormalizedElementsStore}
+  public get denormalizedElementsStore(): ContextStore<AglynComponentElementDataDenormalizedList> {return this.#denormalizedElementsStore}
 
   constructor(app: IAglynAppController, options: AglynCanvasControllerOptions) {
     super(app, options)
@@ -118,47 +118,36 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   public getStore(payload?: CanvasGetStorePayload) {
     return this.#context
   }
-
   public getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload) {
     return this.#normalizedElementsStore
   }
-
   public getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload) {
     return this.#denormalizedElementsStore
   }
-
   public getApiEvents(payload?: CanvasGetApiEventsPayload) {
     return this.#events
   }
-
   public undo(payload?: CanvasUndoPayload) {
     return this.#events.undo(payload)
   }
-
   public redo(payload?: CanvasRedoPayload) {
     return this.#events.undo(payload)
   }
-
   public setElements(payload: CanvasSetElementsPayload) {
     return this.#events.setElements(payload)
   }
-
   public addElement(payload: CanvasAddElementPayload) {
     return this.#events.addElement(payload)
   }
-
   public updateElement(payload: CanvasUpdateElementPayload) {
     return this.#events.updateElement(payload)
   }
-
   public deleteElement(payload: CanvasDeleteElementPayload) {
     return this.#events.deleteElement(payload)
   }
-
   public moveElement(payload: CanvasMoveElementPayload) {
     return this.#events.deleteElement(payload)
   }
-
   public duplicateElement(payload: CanvasDuplicateElementPayload) {
     return this.#events.duplicateElement(payload)
   }

@@ -18,27 +18,27 @@
 import {_hasProperty, _isObj} from '@aglyn/shared-util-guards'
 import {getProperty} from '@aglyn/shared-util-tools'
 import {createDomain as createEffectorDomain} from 'effector'
-import type {
-  ContextsCreateEffectPayload,
-  ContextsCreateEventPayload,
-  ContextsCreateStorePayload,
-  ContextsDeleteStorePayload,
-  ContextsGetStoreApiPayload,
-  ContextsGetStorePayload,
-  ContextsSetStorePayload,
+import {
+  AglynAppEffectFlag,
+  type ContextsCreateEffectPayload,
+  type ContextsCreateEventPayload,
+  type ContextsCreateStorePayload,
+  type ContextsDeleteStorePayload,
+  type ContextsGetStoreApiPayload,
+  type ContextsGetStorePayload,
+  type ContextsSetStorePayload,
 } from '../constants/emitter'
-import {AglynAppEffectFlag} from '../constants/emitter'
 import AglynModuleModel from '../models/aglyn-module.model'
-import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
-import type {ContextStoreUid} from '../types'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {
-  AglynContextsControllerOptions,
-  ContextDomain,
-  ContextEffect,
-  ContextEvent,
-  ContextStore,
-  IAglynContextsController,
+import {type AglynModuleEffectListener} from '../models/aglyn-module.types'
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynContextsControllerOptions,
+  type ContextDomain,
+  type ContextEffect,
+  type ContextEvent,
+  type ContextStore,
+  type ContextStoreUid,
+  type IAglynContextsController,
 } from './aglyn-contexts.types'
 
 

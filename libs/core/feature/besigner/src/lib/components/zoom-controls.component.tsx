@@ -20,7 +20,7 @@ import {SrOnlyComponent} from '@aglyn/shared-ui-jsx'
 import {
   mdiFitToPage,
   MdiIcon,
-  MdiIconProps,
+  type MdiIconProps,
   mdiMagnifyMinus,
   mdiMagnifyPlus,
 } from '@aglyn/shared-ui-mdi-jsx'
@@ -30,7 +30,13 @@ import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 
 import Tooltip from '@mui/material/Tooltip'
-import React, {ChangeEvent, EventHandler, forwardRef, HTMLAttributes, useCallback} from 'react'
+import {
+  type ChangeEvent,
+  type EventHandler,
+  forwardRef,
+  type HTMLAttributes,
+  useCallback,
+} from 'react'
 
 
 const ZoomControls = styled('div', {

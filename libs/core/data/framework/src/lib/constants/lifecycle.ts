@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { bitwiseHasAttribute, bitwiseHasOnlyAttributes } from '@aglyn/shared-util-tools'
+import {bitwiseHasOnlyAttributes} from '@aglyn/shared-util-tools'
 
 
 export enum LifecycleFlag {
@@ -68,7 +68,7 @@ export function nextLifecycleIsValid(current: AglynLifecycleFlag, next: AglynLif
     case bitwiseHasOnlyAttributes(next, AglynLifecycleFlag.INITIALIZED)
     && bitwiseHasOnlyAttributes(current, AglynLifecycleFlag.INITIALIZING):
 
-      // LOADING
+    // LOADING
     case bitwiseHasOnlyAttributes(next, AglynLifecycleFlag.LOADING)
     && bitwiseHasOnlyAttributes(current, AglynLifecycleFlag.INITIALIZED):
     case bitwiseHasOnlyAttributes(next, AglynLifecycleFlag.LOADING)

@@ -23,7 +23,7 @@ import {
   getComponentElementHierarchy,
 } from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
-import {Conditional} from '@aglyn/shared-data-types'
+import {type Conditional} from '@aglyn/shared-data-types'
 import {useStoreMap} from 'effector-react'
 
 

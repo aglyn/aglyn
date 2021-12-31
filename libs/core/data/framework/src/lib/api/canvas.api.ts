@@ -16,22 +16,22 @@
  */
 
 import {_INTERNAL_CANVAS_} from '../constants/_internal'
-import type {
-  CanvasAddElementPayload,
-  CanvasDeleteElementPayload,
-  CanvasDuplicateElementPayload,
-  CanvasGetApiEventsPayload,
-  CanvasGetElementsDenormalizedPayload,
-  CanvasGetElementsNormalizedPayload,
-  CanvasGetStorePayload,
-  CanvasMoveElementPayload,
-  CanvasRedoPayload,
-  CanvasSetElementsPayload,
-  CanvasUndoPayload,
-  CanvasUpdateElementPayload,
+import {
+  type CanvasAddElementPayload,
+  type CanvasDeleteElementPayload,
+  type CanvasDuplicateElementPayload,
+  type CanvasGetApiEventsPayload,
+  type CanvasGetElementsDenormalizedPayload,
+  type CanvasGetElementsNormalizedPayload,
+  type CanvasGetStorePayload,
+  type CanvasMoveElementPayload,
+  type CanvasRedoPayload,
+  type CanvasSetElementsPayload,
+  type CanvasUndoPayload,
+  type CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {IAglynCanvasController} from '../controllers/aglyn-canvas.types'
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {type IAglynCanvasController} from '../controllers/aglyn-canvas.types'
 import {_validateAppArg} from './app.api'
 
 

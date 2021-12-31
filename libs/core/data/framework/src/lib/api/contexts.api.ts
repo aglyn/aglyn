@@ -16,20 +16,20 @@
  */
 
 import {_INTERNAL_CONTEXTS_} from '../constants/_internal'
-import type {
-  ContextsCreateEffectPayload,
-  ContextsCreateEventPayload,
-  ContextsCreateStorePayload,
-  ContextsGetStoreApiPayload,
-  ContextsGetStorePayload,
-  ContextsSetStorePayload,
+import {
+  type ContextsCreateEffectPayload,
+  type ContextsCreateEventPayload,
+  type ContextsCreateStorePayload,
+  type ContextsGetStoreApiPayload,
+  type ContextsGetStorePayload,
+  type ContextsSetStorePayload,
 } from '../constants/emitter'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {
-  ContextEffect,
-  ContextEvent,
-  ContextStore,
-  IAglynContextsController,
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {
+  type ContextEffect,
+  type ContextEvent,
+  type ContextStore,
+  type IAglynContextsController,
 } from '../controllers/aglyn-contexts.types'
 import {_validateAppArg} from './app.api'
 

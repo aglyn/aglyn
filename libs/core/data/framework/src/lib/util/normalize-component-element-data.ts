@@ -16,8 +16,11 @@
  */
 
 import {_isArr} from '@aglyn/shared-util-guards'
-import {AglynComponentElementDataDenormalized} from '../controllers/aglyn-components.types'
-import {AglynComponentElementDataNormalizedMap, ElementId} from '../types'
+import {
+  type AglynComponentElementDataDenormalized,
+  type AglynComponentElementDataNormalizedMap,
+  type ElementId,
+} from '../controllers/aglyn-components.types'
 
 
 const normalizeData = (

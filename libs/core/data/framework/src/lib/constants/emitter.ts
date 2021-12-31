@@ -15,42 +15,45 @@
  * limitations under the License.
  */
 
-import type {AnyProps, Dictionary} from '@aglyn/shared-data-types'
+import {type AnyProps, type Dictionary} from '@aglyn/shared-data-types'
 import {EmitterFn} from '@aglyn/shared-util-emitter'
-import type {
-  createEffect as createEffectorEffect,
-  createEvent as createEffectorEvent,
+import {
+  type createEffect as createEffectorEffect,
+  type createEvent as createEffectorEvent,
 } from 'effector'
-import type {
-  BesignerCanvasHoveredElement,
-  BesignerCanvasSelectedElement,
-  BesignerContextStores,
-  BesignerFlagState,
-  BesignerPanelsState,
+import {type AppUUN} from '../controllers/aglyn-app.types'
+import {
+  type BesignerCanvasHoveredElement,
+  type BesignerCanvasSelectedElement,
+  type BesignerContextStores,
+  type BesignerDndState,
+  type BesignerFlagState,
+  type BesignerPanelsState,
 } from '../controllers/aglyn-besigner.types'
-import {BesignerDndState} from '../controllers/aglyn-besigner.types'
-import type {AglynCommandListener, AglynCommandResolver} from '../controllers/aglyn-commands.types'
-import type {
-  AglynComponentElementDataDenormalized,
-  AglynComponentElementDataNormalized,
-  AglynComponentsBundle,
-  AglynComponentSchema,
-  IAglynComponent,
+import {
+  type AglynCommandListener,
+  type AglynCommandResolver,
+  type CommandUId,
+} from '../controllers/aglyn-commands.types'
+import {
+  type AglynComponentElementDataDenormalized,
+  type AglynComponentElementDataNormalized,
+  type AglynComponentElementDataNormalizedMap,
+  type AglynComponentsBundle,
+  type AglynComponentSchema,
+  type BundleUId,
+  type ComponentId,
+  type ElementId,
+  type IAglynComponent,
 } from '../controllers/aglyn-components.types'
-import type {ContextStore, ContextStoreOptions} from '../controllers/aglyn-contexts.types'
-import type {AglynExtensionLoader} from '../controllers/aglyn-extensions.types'
-import type {AglynExtensionOptions, IAglynExtension} from '../models/aglyn-extension.types'
-import type {
-  AglynComponentElementDataNormalizedMap,
-  AppUUN,
-  BundleUId,
-  CommandUId,
-  ComponentId,
-  ContextStoreUid,
-  ElementId,
-  ExtensionUUN,
-  PayloadData,
-} from '../types'
+import {
+  type ContextStore,
+  type ContextStoreOptions,
+  type ContextStoreUid,
+} from '../controllers/aglyn-contexts.types'
+import {type AglynExtensionLoader, type ExtensionUUN} from '../controllers/aglyn-extensions.types'
+import {type AglynExtensionOptions, type IAglynExtension} from '../models/aglyn-extension.types'
+import {type PayloadData} from '../types'
 
 
 export enum AglynAppEventFlag {
@@ -155,11 +158,11 @@ export enum AglynAppEffectFlag {
   CONTEXTS_SET_STORE = 'effect:contexts:set-store',
   CONTEXTS_DELETE_STORE = 'effect:contexts:delete-store',
 
-  COMMANDS_RESOLVER_SET = 'effect:command:register-resolver',
-  COMMANDS_RESOLVER_REMOVE = 'effect:command:unregister-resolver',
-  COMMANDS_LISTENER_REGISTER = 'effect:command:register-listener',
-  COMMANDS_LISTENER_UNREGISTER = 'effect:command:unregister-listener',
-  COMMANDS_TRIGGER = 'effect:command:trigger',
+  COMMANDS_RESOLVER_SET = 'effect:commands:register-resolver',
+  COMMANDS_RESOLVER_REMOVE = 'effect:commands:unregister-resolver',
+  COMMANDS_LISTENER_REGISTER = 'effect:commands:register-listener',
+  COMMANDS_LISTENER_UNREGISTER = 'effect:commands:unregister-listener',
+  COMMANDS_TRIGGER = 'effect:commands:trigger',
 
   COMPONENT_GET = 'effect:components:get-component',
   COMPONENT_SCHEMA_GET = 'effect:components:get-component-schema',
@@ -192,9 +195,9 @@ export type ContextsGetStoreApiPayload = PayloadData<{storeId: ContextStoreUid}>
 export type ContextsSetStorePayload<T = any> = PayloadData<{storeId: ContextStoreUid, store: ContextStore<T> | any}>
 export type ContextsDeleteStorePayload = PayloadData<{storeId: ContextStoreUid}>
 
-export type ComponentGetPayload = PayloadData<{componentId: CommandUId, bundleId?: BundleUId}>
-export type ComponentsGetPayload = PayloadData<{ids?: {componentId: CommandUId, bundleId?: BundleUId}[]}>
-export type ComponentSchemaGetPayload = PayloadData<{componentId: CommandUId, bundleId?: BundleUId}>
+export type ComponentGetPayload = PayloadData<{componentId: ComponentId, bundleId?: BundleUId}>
+export type ComponentsGetPayload = PayloadData<{ids?: {componentId: ComponentId, bundleId?: BundleUId}[]}>
+export type ComponentSchemaGetPayload = PayloadData<{componentId: ComponentId, bundleId?: BundleUId}>
 export type ComponentsBundleGetPayload = PayloadData<{bundleId: BundleUId}>
 export type ComponentRegisterPayload<P extends AnyProps = any> = PayloadData<{schema: AglynComponentSchema<P>, component: IAglynComponent<P>}>
 export type ComponentUnregisterPayload = PayloadData<{componentId: ComponentId, bundleId: BundleUId}>
@@ -202,10 +205,10 @@ export type ComponentsBundleRegisterPayload = PayloadData<{bundle: Omit<AglynCom
 export type ComponentsBundleUnregisterPayload = PayloadData<{bundleId: BundleUId}>
 
 export type CommandsSetResolverPayload = PayloadData<{commandId?: CommandUId, resolver: AglynCommandResolver}>
-export type CommandRemoveResolverPayload = PayloadData<{commandId: CommandUId}>
-export type CommandRegisterListenerPayload = PayloadData<{commandId?: CommandUId, listener: AglynCommandListener}>
-export type CommandUnregisterListenerPayload = PayloadData<{commandId?: CommandUId, listener: AglynCommandListener}>
-export type CommandTriggerPayload = PayloadData<{commandId: CommandUId} & Dictionary>
+export type CommandsRemoveResolverPayload = PayloadData<{commandId: CommandUId}>
+export type CommandsRegisterListenerPayload = PayloadData<{commandId?: CommandUId, listener: AglynCommandListener}>
+export type CommandsUnregisterListenerPayload = PayloadData<{commandId?: CommandUId, listener: AglynCommandListener}>
+export type CommandsTriggerPayload = PayloadData<{commandId: CommandUId} & Dictionary>
 
 export type BesignerGetStorePayload<K extends keyof BesignerContextStores = any> = PayloadData<{store: K}>
 export type BesignerFlagInteractModePayload<K extends keyof BesignerFlagState = any> = PayloadData<{flag: K, value: BesignerFlagState[K]}>
@@ -246,10 +249,10 @@ export interface AglynModuleEffectPayload extends Record<AglynAppEffectFlag, Agl
   [AglynAppEffectFlag.CONTEXTS_DELETE_STORE]: ContextsDeleteStorePayload
 
   [AglynAppEffectFlag.COMMANDS_RESOLVER_SET]: CommandsSetResolverPayload
-  [AglynAppEffectFlag.COMMANDS_RESOLVER_REMOVE]: CommandRemoveResolverPayload
-  [AglynAppEffectFlag.COMMANDS_LISTENER_REGISTER]: CommandRegisterListenerPayload
-  [AglynAppEffectFlag.COMMANDS_LISTENER_UNREGISTER]: CommandUnregisterListenerPayload
-  [AglynAppEffectFlag.COMMANDS_TRIGGER]: CommandTriggerPayload
+  [AglynAppEffectFlag.COMMANDS_RESOLVER_REMOVE]: CommandsRemoveResolverPayload
+  [AglynAppEffectFlag.COMMANDS_LISTENER_REGISTER]: CommandsRegisterListenerPayload
+  [AglynAppEffectFlag.COMMANDS_LISTENER_UNREGISTER]: CommandsUnregisterListenerPayload
+  [AglynAppEffectFlag.COMMANDS_TRIGGER]: CommandsTriggerPayload
 
   [AglynAppEffectFlag.COMPONENT_GET]: ComponentGetPayload
   [AglynAppEffectFlag.COMPONENT_SCHEMA_GET]: ComponentSchemaGetPayload

@@ -16,38 +16,40 @@
  */
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type {OrUndef} from '@aglyn/shared-data-types'
+import {type OrUndef} from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import {_isArr} from '@aglyn/shared-util-guards'
-import type {
-  ComponentGetPayload,
-  ComponentRegisterPayload,
-  ComponentsBundleGetPayload,
-  ComponentsBundleRegisterPayload,
-  ComponentsBundleUnregisterPayload,
-  ComponentUnregisterPayload,
+import {
+  AglynAppEffectFlag,
+  AglynAppEventFlag,
+  type ComponentGetPayload,
+  type ComponentRegisterPayload,
+  type ComponentsBundleGetPayload,
+  type ComponentsBundleRegisterPayload,
+  type ComponentsBundleUnregisterPayload,
+  type ComponentUnregisterPayload,
 } from '../constants/emitter'
-import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
 import {AglynModuleModel} from '../models/aglyn-module.model'
-import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
-import type {BundleUId, ComponentId} from '../types'
+import {type AglynModuleEffectListener} from '../models/aglyn-module.types'
 import {isAglynComponentElement} from '../util/aglyn-is'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {
-  AglynComponentElementTemplate,
-  AglynComponentsBundle,
-  AglynComponentSchema,
-  AglynComponentsControllerOptions,
-  ComponentsRegistryContext,
-  ComponentsRegistryEntry,
-  ComponentsRegistryKeys,
-  ComponentsRegistryValues,
-  IAglynComponent,
-  IAglynComponentsController,
-  InstanceBundles,
-  InstanceComponents,
-  InstanceSchemas,
-  InstanceTemplates,
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynComponentElementTemplate,
+  type AglynComponentsBundle,
+  type AglynComponentSchema,
+  type AglynComponentsControllerOptions,
+  type BundleUId,
+  type ComponentId,
+  type ComponentsRegistryContext,
+  type ComponentsRegistryEntry,
+  type ComponentsRegistryKeys,
+  type ComponentsRegistryValues,
+  type IAglynComponent,
+  type IAglynComponentsController,
+  type InstanceBundles,
+  type InstanceComponents,
+  type InstanceSchemas,
+  type InstanceTemplates,
 } from './aglyn-components.types'
 
 

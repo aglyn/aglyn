@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type {ElementId} from '@aglyn/core-data-framework'
-import type {AnyProps} from '@aglyn/shared-data-types'
+import {type ElementId} from '@aglyn/core-data-framework'
+import {type AnyProps} from '@aglyn/shared-data-types'
 import {_isFnT} from '@aglyn/shared-util-guards'
 import useAglynComponentSchema from './use-aglyn-component-schema'
 import {useAglynElementData} from './use-aglyn-element-data'

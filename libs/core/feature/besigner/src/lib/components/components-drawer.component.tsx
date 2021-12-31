@@ -15,24 +15,24 @@
  * limitations under the License.
  */
 
-import {AglynComponentElementTemplate} from '@aglyn/core-data-framework'
+import {type AglynComponentElementTemplate} from '@aglyn/core-data-framework'
 import {IconVariant} from '@aglyn/shared-data-brand'
-import {AnyProps} from '@aglyn/shared-data-types'
+import {type AnyProps} from '@aglyn/shared-data-types'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
   CardIconListItem,
-  FormSchema,
+  type FormSchema,
   GridList as JsxGridList,
   NavigationDrawer as JsxNavbarDrawer,
-  NavigationDrawerProps,
+  type NavigationDrawerProps,
   SrOnlyComponent,
 } from '@aglyn/shared-ui-jsx'
 import {mdiClose, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
-import {forwardRef, MouseEvent, useCallback} from 'react'
-import {ElementDrawerOptions} from '../contexts/element-drawer-context'
+import {forwardRef, type MouseEvent, useCallback} from 'react'
+import {type ElementDrawerOptions} from '../contexts/element-drawer-context'
 
 
 const ComponentsDrawer = styled(JsxNavbarDrawer, {

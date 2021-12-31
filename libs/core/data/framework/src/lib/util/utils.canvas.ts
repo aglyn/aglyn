@@ -17,21 +17,21 @@
 
 import {arrayAddAtIndex, arrayRemoveItem, arrayReorder} from '@aglyn/shared-util-tools'
 import {objectDeepMerge} from '@aglyn/shared-util-vendor'
-import type {
-  CanvasAddElementPayload,
-  CanvasDeleteElementPayload,
-  CanvasDuplicateElementPayload,
-  CanvasGetElementPayload,
-  CanvasMoveElementPayload,
-  CanvasSetElementsPayload,
-  CanvasUpdateElementPayload,
+import {
+  type CanvasAddElementPayload,
+  type CanvasDeleteElementPayload,
+  type CanvasDuplicateElementPayload,
+  type CanvasGetElementPayload,
+  type CanvasMoveElementPayload,
+  type CanvasSetElementsPayload,
+  type CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import {ElementsDataStore} from '../controllers/aglyn-canvas.types'
-import type {AglynComponentElementDataNormalizedMap} from '../types'
+import {type ElementsDataStore} from '../controllers/aglyn-canvas.types'
+import {type AglynComponentElementDataNormalizedMap} from '../controllers/aglyn-components.types'
 import {createComponentElementDataCopy} from './create-component-element-data-copy'
 import {deleteComponentElement} from './delete-component-element'
-import getComponentElementHierarchy from './get-component-element-hierarchy'
-import handleStateModificationHistoryChange from './handle-state-modification-history-change'
+import {getComponentElementHierarchy} from './get-component-element-hierarchy'
+import {handleStateModificationHistoryChange} from './handle-state-modification-history-change'
 import {normalizeComponentElementData} from './normalize-component-element-data'
 
 

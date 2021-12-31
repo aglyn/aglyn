@@ -16,7 +16,7 @@
  */
 
 import {styled} from '@aglyn/shared-feature-themes'
-import Stack, {StackProps} from '@mui/material/Stack'
+import Stack, {type StackProps} from '@mui/material/Stack'
 import {forwardRef} from 'react'
 import {AppBarPrimaryComponent} from './app-bar-primary.component'
 import {AppBarSecondaryComponent} from './app-bar-secondary.component'

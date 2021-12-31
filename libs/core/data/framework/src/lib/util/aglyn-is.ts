@@ -24,10 +24,13 @@ import {
   TYPE_KIND,
   TYPE_OF,
 } from '../constants/symbol'
-import {AglynCommandListener, AglynCommandResolver} from '../controllers/aglyn-commands.types'
-import {IAglynComponent} from '../controllers/aglyn-components.types'
-import {AglynExtension} from '../models/aglyn-extension.types'
-import type {AglynAppModule} from '../types'
+import {type AglynAppModule} from '../controllers/aglyn-app.types'
+import {
+  type AglynCommandListener,
+  type AglynCommandResolver,
+} from '../controllers/aglyn-commands.types'
+import {type IAglynComponent} from '../controllers/aglyn-components.types'
+import {type IAglynExtension} from '../models/aglyn-extension.types'
 
 
 export function typeOf(object: unknown) {
@@ -67,7 +70,7 @@ export function kindOf(object: unknown) {
 export function isAglynModule<T>(object: unknown): object is AglynAppModule {
   return typeOf(object) === MODULE_TYPE
 }
-export function isAglynExtension<T>(object: unknown): object is AglynExtension {
+export function isAglynExtension<T>(object: unknown): object is IAglynExtension {
   return kindOf(object) === EXTENSION_TYPE
 }
 

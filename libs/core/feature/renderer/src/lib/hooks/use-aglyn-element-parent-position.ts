@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import type {ElementId} from '@aglyn/core-data-framework'
-import {CANVAS_ROOT_ELEMENT_ID} from '@aglyn/core-data-framework'
+import {CANVAS_ROOT_ELEMENT_ID, type ElementId} from '@aglyn/core-data-framework'
 import {useAglynElementData} from './use-aglyn-element-data'
 
 

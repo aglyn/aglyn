@@ -43,6 +43,7 @@ export * from './api/logger.api'
 // 👇
 
 export * from './constants/_internal'
+export * from './constants/app'
 export * from './constants/canvas'
 export * from './constants/components'
 export * from './constants/besigner'

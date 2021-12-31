@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { ButtonProps } from '@mui/material/Button'
-import { DialogProps } from '@mui/material/Dialog'
-import { DialogContentTextProps } from '@mui/material/DialogContentText'
-import { DialogTitleProps } from '@mui/material/DialogTitle'
-import { createContext, useContext } from 'react'
+import {type ButtonProps} from '@mui/material/Button'
+import {type DialogProps} from '@mui/material/Dialog'
+import {type DialogContentTextProps} from '@mui/material/DialogContentText'
+import {type DialogTitleProps} from '@mui/material/DialogTitle'
+import {createContext, useContext} from 'react'
+
 
 export interface ElementDrawerOptions {
   cancellationText?: ButtonProps['children']

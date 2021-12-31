@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
-import type {
-  AglynComponentSchema,
-  AglynElementType,
-  ComponentRegisterPayload,
-  IAglynComponent,
+import {
+  type AglynComponentSchema,
+  type AglynElementType,
+  COMPONENT_ELEMENT_TYPE,
+  type ComponentRegisterPayload,
+  type IAglynComponent,
+  MODULE_TYPE,
+  TYPE_KIND,
+  TYPE_OF,
 } from '@aglyn/core-data-framework'
-import {COMPONENT_ELEMENT_TYPE, MODULE_TYPE, TYPE_KIND, TYPE_OF} from '@aglyn/core-data-framework'
-import type {AnyProps} from '@aglyn/shared-data-types'
 import {styled} from '@aglyn/shared-feature-themes'
 import {copy, getDisplayName} from '@aglyn/shared-util-tools'
 import {ChangeCase} from '@aglyn/shared-util-vendor'
 import {forwardRef} from 'react'
 import {
   ErrorBoundaryComponent,
-  ErrorBoundaryComponentProps,
+  type ErrorBoundaryComponentProps,
 } from '../components/error-boundary.component'
 
 
-export function createAglynComponent<P extends AnyProps>(
+export function createAglynComponent<P>(
   schema: AglynComponentSchema<P>,
   component: AglynElementType<P>,
   errorComponent?: ErrorBoundaryComponentProps<P>['errorComponent'],
@@ -51,7 +53,7 @@ export function createAglynComponent<P extends AnyProps>(
       })({})
       : component
 
-  const AglynComponent = forwardRef<any, any>(
+  const AglynComponent = forwardRef<any, P>(
     function RefRenderFn(props, ref) {
       return (
         <ErrorBoundaryComponent

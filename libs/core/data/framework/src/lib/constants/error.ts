@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-import { IndexOf } from '@aglyn/shared-data-types'
-import { ErrorTagMessages, NsErrorFactory } from '@aglyn/shared-util-errors'
-import { AppUUN, ExtensionUUN, PayloadData, PayloadParams } from '../types'
+import {type IndexOf} from '@aglyn/shared-data-types'
+import {type ErrorTagMessages, NsErrorFactory} from '@aglyn/shared-util-errors'
+import {type AppUUN} from '../controllers/aglyn-app.types'
+import {type ExtensionUUN} from '../controllers/aglyn-extensions.types'
+import {type PayloadData, type PayloadParams} from '../types'
 
 
 export enum AglynErrorEventFlag {
@@ -35,17 +37,17 @@ export enum AglynErrorEventFlag {
 }
 
 export interface AglynErrorEventParams extends Record<AglynErrorEventType, unknown> {
-  [AglynErrorEventFlag.APP_NONE]: PayloadData<{ appName: AppUUN }>
-  [AglynErrorEventFlag.APP_BAD_NAME]: PayloadData<{ appName: AppUUN }>
-  [AglynErrorEventFlag.APP_EXISTS]: PayloadData<{ appName: AppUUN }>
-  [AglynErrorEventFlag.APP_DELETED]: PayloadData<{ appName: AppUUN }>
-  [AglynErrorEventFlag.APP_BAD_INSTANCE]: PayloadData<{ appName: AppUUN }>
+  [AglynErrorEventFlag.APP_NONE]: PayloadData<{appName: AppUUN}>
+  [AglynErrorEventFlag.APP_BAD_NAME]: PayloadData<{appName: AppUUN}>
+  [AglynErrorEventFlag.APP_EXISTS]: PayloadData<{appName: AppUUN}>
+  [AglynErrorEventFlag.APP_DELETED]: PayloadData<{appName: AppUUN}>
+  [AglynErrorEventFlag.APP_BAD_INSTANCE]: PayloadData<{appName: AppUUN}>
 
-  [AglynErrorEventFlag.MODULE_MISSING_MEMBER]: PayloadData<{ extensionName: ExtensionUUN, memberMethod: string }>
+  [AglynErrorEventFlag.MODULE_MISSING_MEMBER]: PayloadData<{extensionName: ExtensionUUN, memberMethod: string}>
 
-  [AglynErrorEventFlag.EXTENSION_NONE]: PayloadData<{ extensionName: ExtensionUUN }>
-  [AglynErrorEventFlag.EXTENSION_BAD_MODULE_LOADER]: PayloadData<{ appName: AppUUN }>
-  [AglynErrorEventFlag.EXTENSION_BAD_MODULE]: PayloadData<{ extensionName?: ExtensionUUN, appName: AppUUN }>
+  [AglynErrorEventFlag.EXTENSION_NONE]: PayloadData<{extensionName: ExtensionUUN}>
+  [AglynErrorEventFlag.EXTENSION_BAD_MODULE_LOADER]: PayloadData<{appName: AppUUN}>
+  [AglynErrorEventFlag.EXTENSION_BAD_MODULE]: PayloadData<{extensionName?: ExtensionUUN, appName: AppUUN}>
 }
 
 export const AglynErrorEventMessageTemplates: ErrorTagMessages<IndexOf<typeof AglynErrorEventFlag>> = {

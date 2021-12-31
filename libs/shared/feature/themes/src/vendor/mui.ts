@@ -164,6 +164,7 @@ export type {
   MuiStyledOptions as StyledOptions,
   MuiStyledOptions,
   SxProps,
+  BoxProps,
 } from '@mui/system'
 
 export { visuallyHidden } from '@mui/utils'

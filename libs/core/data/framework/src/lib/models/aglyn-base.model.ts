@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-import type {Dictionary} from '@aglyn/shared-data-types'
+import {type Dictionary} from '@aglyn/shared-data-types'
 import {Timestamp} from '@aglyn/shared-util-timestamp'
 import {getStaticField} from '@aglyn/shared-util-tools'
-import {AGLYN_EMITTER, AglynEmitter} from '../constants/emitter'
-import {AGLYN_ERROR, AglynErrorFactory} from '../constants/error'
-import {AGLYN_LOGGER, AglynLogger} from '../constants/logger'
-import {AGLYN_PLATFORM, AglynPlatform} from '../constants/platform'
-import {AglynVersion, SDK_VERSION} from '../constants/version'
-import type {AglynBaseModelOptions, IAglynBaseModel} from './aglyn-base.types'
+import {AGLYN_EMITTER, type AglynEmitter} from '../constants/emitter'
+import {AGLYN_ERROR, type AglynErrorFactory} from '../constants/error'
+import {AGLYN_LOGGER, type AglynLogger} from '../constants/logger'
+import {AGLYN_PLATFORM, type AglynPlatform} from '../constants/platform'
+import {type AglynVersion, SDK_VERSION} from '../constants/version'
+import {type AglynBaseModelOptions, type IAglynBaseModel} from './aglyn-base.types'
 
 
 const TAG = 'AglynBaseModel'
@@ -97,30 +97,30 @@ export abstract class AglynBaseModel<O extends AglynBaseModelOptions = AglynBase
     }
   }
 
-  public getOptions = (): O => {
+  public getOptions(): O {
     return this.#options
   }
-  public getCreatedAt = (): Timestamp => {
+  public getCreatedAt(): Timestamp {
     return this.#created
   }
-  public getErrorFactory = (): AglynErrorFactory => {
+  public getErrorFactory(): AglynErrorFactory {
     return this.#errorFactory
   }
-  public setErrorFactory = (value: AglynErrorFactory): this => {
+  public setErrorFactory(value: AglynErrorFactory): this {
     this.#errorFactory = value
     return this
   }
-  public getEmitter = (): AglynEmitter => {
+  public getEmitter(): AglynEmitter {
     return this.#emitter
   }
-  public setEmitter = (value: AglynEmitter): this => {
+  public setEmitter(value: AglynEmitter): this {
     this.#emitter = value
     return this
   }
-  public getLogger = (): AglynLogger => {
+  public getLogger(): AglynLogger {
     return this.#logger
   }
-  public setLogger = (value: AglynLogger): this => {
+  public setLogger(value: AglynLogger): this {
     this.#logger = value
     return this
   }

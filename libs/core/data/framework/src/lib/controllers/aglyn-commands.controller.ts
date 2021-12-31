@@ -17,23 +17,24 @@
 
 import {EmitterFn} from '@aglyn/shared-util-emitter'
 import {_isFnT} from '@aglyn/shared-util-guards'
-import type {
-  CommandRegisterListenerPayload,
-  CommandRemoveResolverPayload,
-  CommandsSetResolverPayload,
-  CommandTriggerPayload,
-  CommandUnregisterListenerPayload,
+import {
+  AglynAppEffectFlag,
+  AglynAppEventFlag,
+  type CommandsRegisterListenerPayload,
+  type CommandsRemoveResolverPayload,
+  type CommandsSetResolverPayload,
+  type CommandsTriggerPayload,
+  type CommandsUnregisterListenerPayload,
 } from '../constants/emitter'
-import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
 import AglynModuleModel from '../models/aglyn-module.model'
-import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
-import type {CommandUId} from '../types'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {
-  AglynCommander,
-  AglynCommandResolver,
-  AglynCommandsControllerOptions,
-  IAglynCommandsController,
+import {type AglynModuleEffectListener} from '../models/aglyn-module.types'
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynCommander,
+  type AglynCommandResolver,
+  type AglynCommandsControllerOptions,
+  type CommandUId,
+  type IAglynCommandsController,
 } from './aglyn-commands.types'
 
 
@@ -79,7 +80,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public registerListener(payload: CommandRegisterListenerPayload): void {
+  public registerListener(payload: CommandsRegisterListenerPayload): void {
     const {listener, commandId: cId} = payload
     const commandId = listener?.commandId || cId
     if (commandId && _isFnT(listener)) {
@@ -91,7 +92,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public unregisterListener(payload: CommandUnregisterListenerPayload): void {
+  public unregisterListener(payload: CommandsUnregisterListenerPayload): void {
     const {listener, commandId: cId} = payload
     const commandId = listener?.commandId || cId
     if (commandId) {
@@ -103,7 +104,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public removeResolver(payload: CommandRemoveResolverPayload): void {
+  public removeResolver(payload: CommandsRemoveResolverPayload): void {
     const {commandId} = payload
     if (commandId) {
       this.#resolvers.delete(commandId)
@@ -114,7 +115,7 @@ export class AglynCommandsController extends AglynModuleModel<AglynCommandsContr
       // TODO: throw errorFactory error
     }
   }
-  public trigger(payload: CommandTriggerPayload): void {
+  public trigger(payload: CommandsTriggerPayload): void {
     const {commandId} = payload
     const resolver = this.#resolvers.get(commandId)
     if (_isFnT(resolver)) {

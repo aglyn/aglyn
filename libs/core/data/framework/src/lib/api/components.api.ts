@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-import type {OrUndef} from '@aglyn/shared-data-types'
+import {type OrUndef} from '@aglyn/shared-data-types'
 import {_INTERNAL_COMPONENTS_} from '../constants/_internal'
-import type {
-  ComponentGetPayload,
-  ComponentRegisterPayload,
-  ComponentsBundleGetPayload,
-  ComponentsBundleRegisterPayload,
-  ComponentsBundleUnregisterPayload,
-  ComponentSchemaGetPayload,
-  ComponentUnregisterPayload,
+import {
+  type ComponentGetPayload,
+  type ComponentRegisterPayload,
+  type ComponentsBundleGetPayload,
+  type ComponentsBundleRegisterPayload,
+  type ComponentsBundleUnregisterPayload,
+  type ComponentSchemaGetPayload,
+  type ComponentUnregisterPayload,
 } from '../constants/emitter'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {
-  AglynComponentElementTemplate,
-  AglynComponentsBundle,
-  AglynComponentSchema,
-  ComponentsRegistryEntry,
-  ComponentsRegistryKeys,
-  ComponentsRegistryValues,
-  IAglynComponent,
-  IAglynComponentsController,
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {
+  type AglynComponentElementTemplate,
+  type AglynComponentsBundle,
+  type AglynComponentSchema,
+  type ComponentsRegistryEntry,
+  type ComponentsRegistryKeys,
+  type ComponentsRegistryValues,
+  type IAglynComponent,
+  type IAglynComponentsController,
 } from '../controllers/aglyn-components.types'
 import {_validateAppArg} from './app.api'
 

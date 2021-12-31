@@ -15,27 +15,26 @@
  * limitations under the License.
  */
 
-import type {
-  ExtensionDestroyPayload,
-  ExtensionHandleLoaderPayload,
-  ExtensionInitializePayload,
-  ExtensionLoadPayload,
-  ExtensionRegisterPayload,
-  ExtensionUnloadPayload,
+import {
+  type ExtensionDestroyPayload,
+  type ExtensionHandleLoaderPayload,
+  type ExtensionInitializePayload,
+  type ExtensionLoadPayload,
+  type ExtensionRegisterPayload,
+  type ExtensionUnloadPayload,
 } from '../constants/emitter'
-import type {EXTENSION_TYPE, MODULE_TYPE} from '../constants/symbol'
-import type {AglynExtensionT, IAglynExtension} from '../models/aglyn-extension.types'
-import type {
-  AglynModuleModelOptions,
-  AglynModuleModelT,
-  IAglynModuleModel,
+import {type AglynExtensionT, type IAglynExtension} from '../models/aglyn-extension.types'
+import {
+  type AglynModuleModelOptions,
+  type AglynModuleModelT,
+  type IAglynModuleModel,
 } from '../models/aglyn-module.types'
-import type {AglynTypeFields} from '../types'
-import type {IAglynAppController} from './aglyn-app.types'
+import {type IAglynAppController} from './aglyn-app.types'
 
 
-export type AglynExtensionTypeFields = AglynTypeFields<typeof MODULE_TYPE, typeof EXTENSION_TYPE>
+export type ExtensionUUN = string
 export type AglynExtensionLoader = () => Promise<AglynExtensionT>
+export type AglynExtensionMap = Map<ExtensionUUN, IAglynExtension>
 
 export interface AglynExtensionsControllerOptions extends AglynModuleModelOptions {
   initialExtensions?: ExtensionHandleLoaderPayload[]

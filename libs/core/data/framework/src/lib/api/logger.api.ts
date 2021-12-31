@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import {Logger, LogHandler, LogLevelString} from '@aglyn/shared-util-logger'
-import {AGLYN_LOGGER, AglynLogger} from '../constants/logger'
-import AglynAppController from '../controllers/aglyn-app.controller'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
+import {Logger, type LogHandler, type  LogLevelString} from '@aglyn/shared-util-logger'
+import {AGLYN_LOGGER, type AglynLogger} from '../constants/logger'
+import {AglynAppController} from '../controllers/aglyn-app.controller'
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
 import {_validateAppArg} from './app.api'
 
 

@@ -16,10 +16,10 @@
  */
 
 import {
-  AglynComponentPropsFormSchema,
+  type AglynComponentPropsFormSchema,
   buildComponentPropsFormSchema,
-  BundleUId,
-  ComponentId,
+  type BundleUId,
+  type ComponentId,
 } from '@aglyn/core-data-framework'
 import {useAglynComponentSchema} from '@aglyn/core-feature-renderer'
 

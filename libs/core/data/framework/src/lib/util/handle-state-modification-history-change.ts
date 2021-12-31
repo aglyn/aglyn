@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ModificationHistoryState } from '../types'
+import {type ModificationHistoryState} from '../types'
 
 
 const MAX_HISTORY = 25

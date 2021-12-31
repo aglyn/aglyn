@@ -16,22 +16,22 @@
  */
 
 import {_INTERNAL_BESIGNERS_} from '../constants/_internal'
-import type {
-  BesignerClosePanelPayload,
-  BesignerFlagInteractModePayload,
-  BesignerGetStorePayload,
-  BesignerOpenPanelPayload,
-  BesignerSetCanvasHoveredPayload,
-  BesignerSetCanvasSelectedPayload,
-  BesignerSetPanelPayload,
+import {
+  type BesignerClosePanelPayload,
+  type BesignerFlagInteractModePayload,
+  type BesignerGetStorePayload,
+  type BesignerOpenPanelPayload,
+  type BesignerSetCanvasHoveredPayload,
+  type BesignerSetCanvasSelectedPayload,
+  type BesignerSetDndStatePayload,
+  type BesignerSetPanelPayload,
 } from '../constants/emitter'
-import {BesignerSetDndStatePayload} from '../constants/emitter'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {
-  BesignerContextStores,
-  IAglynBesignerController,
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {
+  type BesignerContextStores,
+  type IAglynBesignerController,
 } from '../controllers/aglyn-besigner.types'
-import type {ContextStore} from '../controllers/aglyn-contexts.types'
+import {type ContextStore} from '../controllers/aglyn-contexts.types'
 import {_validateAppArg} from './app.api'
 
 

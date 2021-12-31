@@ -15,6 +15,5 @@
  * limitations under the License.
  */
 
-
-export type AglynVersion = string
-export const SDK_VERSION = '1.0.0-beta.0'
+export const DEFAULT_APP_UUN = '[DEFAULT]'
+export type DEFAULT_APP_UUN = typeof DEFAULT_APP_UUN

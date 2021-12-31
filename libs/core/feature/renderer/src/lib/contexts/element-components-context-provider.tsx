@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {ReactNode} from 'react'
+import {type ReactNode} from 'react'
 import {useAglynComponentTemplateBlocks} from '../hooks/use-aglyn-component-templates'
 import {AglynComponentsContext} from './aglyn-components-context'
 

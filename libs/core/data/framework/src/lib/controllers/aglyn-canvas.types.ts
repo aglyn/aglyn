@@ -15,32 +15,31 @@
  * limitations under the License.
  */
 
-import type {Event as EffectorEvent} from 'effector/effector.cjs'
-import type {
-  CanvasAddElementPayload,
-  CanvasDeleteElementPayload,
-  CanvasDuplicateElementPayload,
-  CanvasGetApiEventsPayload,
-  CanvasGetElementsDenormalizedPayload,
-  CanvasGetElementsNormalizedPayload,
-  CanvasMoveElementPayload,
-  CanvasRedoPayload,
-  CanvasSetElementsPayload,
-  CanvasUndoPayload,
-  CanvasUpdateElementPayload,
+import {
+  type CanvasAddElementPayload,
+  type CanvasDeleteElementPayload,
+  type CanvasDuplicateElementPayload,
+  type CanvasGetApiEventsPayload,
+  type CanvasGetElementsDenormalizedPayload,
+  type CanvasGetElementsNormalizedPayload,
+  type CanvasMoveElementPayload,
+  type CanvasRedoPayload,
+  type CanvasSetElementsPayload,
+  type CanvasUndoPayload,
+  type CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type {
-  AglynModuleModelOptions,
-  AglynModuleModelT,
-  IAglynModuleModel,
+import {
+  type AglynModuleModelOptions,
+  type AglynModuleModelT,
+  type IAglynModuleModel,
 } from '../models/aglyn-module.types'
-import type {
-  AglynComponentElementDataNormalizedArray,
-  AglynComponentElementDataNormalizedMap,
-} from '../types'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {AglynComponentElementDataDenormalized} from './aglyn-components.types'
-import type {ContextDomain, ContextStore} from './aglyn-contexts.types'
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynComponentElementDataDenormalized,
+  type AglynComponentElementDataDenormalizedList,
+  type AglynComponentElementDataNormalizedMap,
+} from './aglyn-components.types'
+import {type ContextDomain, type ContextEvent, type ContextStore} from './aglyn-contexts.types'
 
 
 export type ElementsDataStore = {
@@ -50,14 +49,14 @@ export type ElementsDataStore = {
 }
 
 export interface ElementsDataStoreApi {
-  undo: EffectorEvent<any>
-  redo: EffectorEvent<any>
-  setElements: EffectorEvent<CanvasSetElementsPayload>
-  addElement: EffectorEvent<CanvasAddElementPayload>
-  updateElement: EffectorEvent<CanvasUpdateElementPayload>
-  deleteElement: EffectorEvent<CanvasDeleteElementPayload>
-  moveElement: EffectorEvent<CanvasMoveElementPayload>
-  duplicateElement: EffectorEvent<CanvasDuplicateElementPayload>
+  undo: ContextEvent<any>
+  redo: ContextEvent<any>
+  setElements: ContextEvent<CanvasSetElementsPayload>
+  addElement: ContextEvent<CanvasAddElementPayload>
+  updateElement: ContextEvent<CanvasUpdateElementPayload>
+  deleteElement: ContextEvent<CanvasDeleteElementPayload>
+  moveElement: ContextEvent<CanvasMoveElementPayload>
+  duplicateElement: ContextEvent<CanvasDuplicateElementPayload>
 }
 
 export interface AglynCanvasControllerOptions extends AglynModuleModelOptions {
@@ -69,14 +68,16 @@ export interface IAglynCanvasController extends IAglynModuleModel<AglynCanvasCon
   readonly events: ElementsDataStoreApi
   readonly context: ContextStore<ElementsDataStore>
   readonly normalizedElementsStore: ContextStore<AglynComponentElementDataNormalizedMap>
-  readonly denormalizedElementsStore: ContextStore<AglynComponentElementDataNormalizedArray>
+  readonly denormalizedElementsStore: ContextStore<AglynComponentElementDataDenormalizedList>
 
   getStore(payload?: CanvasGetApiEventsPayload)
+  getApiEvents(payload?: CanvasGetApiEventsPayload)
   getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload): ContextStore<AglynComponentElementDataNormalizedMap>
-  getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload): ContextStore<AglynComponentElementDataNormalizedArray>
+  getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload): ContextStore<AglynComponentElementDataDenormalizedList>
+
   undo(payload?: CanvasUndoPayload)
   redo(payload?: CanvasRedoPayload)
-  getApiEvents(payload?: CanvasGetApiEventsPayload)
+
   setElements(payload: CanvasSetElementsPayload)
   addElement(payload: CanvasAddElementPayload)
   updateElement(payload: CanvasUpdateElementPayload)

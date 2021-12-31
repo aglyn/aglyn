@@ -16,10 +16,10 @@
  */
 
 import {_INTERNAL_EXTENSIONS_} from '../constants/_internal'
-import {AglynAppEffectFlag, AglynModuleEffectPayload} from '../constants/emitter'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {IAglynExtensionsController} from '../controllers/aglyn-extensions.types'
-import type {IAglynExtension} from '../models/aglyn-extension.types'
+import {AglynAppEffectFlag, type AglynModuleEffectPayload} from '../constants/emitter'
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {type IAglynExtensionsController} from '../controllers/aglyn-extensions.types'
+import {type IAglynExtension} from '../models/aglyn-extension.types'
 import {_validateAppArg} from './app.api'
 
 

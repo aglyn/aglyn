@@ -16,14 +16,14 @@
  */
 
 import {
-  AglynComponentElementDataNormalized,
-  ElementId,
-  IAglynComponent,
+  type AglynComponentElementDataNormalized,
+  type ElementId,
+  type IAglynComponent,
 } from '@aglyn/core-data-framework'
-import {InnerRefProp} from '@aglyn/shared-data-types'
+import {type InnerRefProp} from '@aglyn/shared-data-types'
 import {getDisplayName} from '@aglyn/shared-util-tools'
 import clsx from 'clsx'
-import {ComponentType, forwardRef, PropsWithoutRef, RefAttributes} from 'react'
+import {type ComponentType, forwardRef, type PropsWithoutRef, type  RefAttributes} from 'react'
 import useAglynComponent from './use-aglyn-component'
 import {useAglynElementData} from './use-aglyn-element-data'
 import useAglynElementResolvedProps from './use-aglyn-element-resolved-props'

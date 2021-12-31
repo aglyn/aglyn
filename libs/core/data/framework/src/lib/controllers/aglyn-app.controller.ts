@@ -23,23 +23,27 @@ import {
   _INTERNAL_COMPONENTS_,
   _INTERNAL_CONTEXTS_,
   _INTERNAL_EXTENSIONS_,
-  DEFAULT_APP_UUN,
 } from '../constants/_internal'
+import {DEFAULT_APP_UUN} from '../constants/app'
 import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
 import AglynBaseModel from '../models/aglyn-base.model'
-import type {AglynAppOptions, AglynEffectOptions, IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynAppOptions,
+  type AglynEffectOptions,
+  type IAglynAppController,
+} from './aglyn-app.types'
 import AglynBesignerController from './aglyn-besigner.controller'
-import type {IAglynBesignerController} from './aglyn-besigner.types'
+import {type IAglynBesignerController} from './aglyn-besigner.types'
 import AglynCanvasController from './aglyn-canvas.controller'
-import type {IAglynCanvasController} from './aglyn-canvas.types'
+import {type IAglynCanvasController} from './aglyn-canvas.types'
 import AglynCommandsController from './aglyn-commands.controller'
-import type {IAglynCommandsController} from './aglyn-commands.types'
+import {type IAglynCommandsController} from './aglyn-commands.types'
 import AglynComponentsController from './aglyn-components.controller'
-import type {IAglynComponentsController} from './aglyn-components.types'
+import {type IAglynComponentsController} from './aglyn-components.types'
 import AglynContextsController from './aglyn-contexts.controller'
-import type {IAglynContextsController} from './aglyn-contexts.types'
+import {type IAglynContextsController} from './aglyn-contexts.types'
 import AglynExtensionsController from './aglyn-extensions.controller'
-import type {IAglynExtensionsController} from './aglyn-extensions.types'
+import {type IAglynExtensionsController} from './aglyn-extensions.types'
 
 
 const TAG = 'AglynApp'
@@ -143,14 +147,14 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> implemen
       this.#extensionsController,
     ]
 
-    modules.forEach((mod) => {
+    for (const mod of modules) {
       const moduleName = mod.moduleName
       this.getLogger().debug(AglynAppEventFlag.APP_MODULE_INITIALIZING, {moduleName})
       this.getEmitter().emit(AglynAppEventFlag.APP_MODULE_INITIALIZING, {moduleName})
       mod.aglynOnInit(this)
       this.getLogger().debug(AglynAppEventFlag.APP_MODULE_INITIALIZED, {moduleName})
       this.getEmitter().emit(AglynAppEventFlag.APP_MODULE_INITIALIZED, {moduleName})
-    })
+    }
   }
   #destroyAppModules(): void {
     const modules = [
@@ -163,14 +167,14 @@ export class AglynAppController extends AglynBaseModel<AglynAppOptions> implemen
       this.#componentsController,
     ]
 
-    modules.forEach((mod) => {
+    for (const mod of modules) {
       const moduleName = mod.moduleName
       this.getLogger().debug(AglynAppEventFlag.APP_MODULE_DESTROYING, {moduleName})
       this.getEmitter().emit(AglynAppEventFlag.APP_MODULE_DESTROYING, {moduleName})
       mod.aglynOnInit(this)
       this.getLogger().debug(AglynAppEventFlag.APP_MODULE_DESTROYED, {moduleName})
       this.getEmitter().emit(AglynAppEventFlag.APP_MODULE_DESTROYED, {moduleName})
-    })
+    }
   }
   public toString(): string {
     return `${this[Symbol.toStringTag]}(name: '${name}')`

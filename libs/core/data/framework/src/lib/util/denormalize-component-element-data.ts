@@ -17,10 +17,11 @@
 
 import {_isStrT} from '@aglyn/shared-util-guards'
 import {
-  AglynComponentElementDataDenormalized,
-  AglynComponentElementDataNormalized,
+  type AglynComponentElementDataDenormalized,
+  type AglynComponentElementDataNormalized,
+  type AglynComponentElementDataNormalizedMap,
+  type ElementId,
 } from '../controllers/aglyn-components.types'
-import {AglynComponentElementDataNormalizedMap, ElementId} from '../types'
 
 
 const denormalizeData = (

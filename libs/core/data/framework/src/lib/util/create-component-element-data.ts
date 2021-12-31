@@ -17,9 +17,9 @@
 
 import {objectDeepMergeMany} from '@aglyn/shared-util-vendor'
 import {
-  AglynComponentElementDataDenormalized,
-  AglynComponentElementTemplate,
-  AglynComponentTemplateData,
+  type AglynComponentElementDataDenormalized,
+  type AglynComponentElementTemplate,
+  type AglynComponentTemplateData,
 } from '../controllers/aglyn-components.types'
 import {createComponentElementId} from './create-component-element-id'
 

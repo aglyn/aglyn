@@ -17,7 +17,10 @@
 
 import {_isArr} from '@aglyn/shared-util-guards'
 import {arrayRemoveItem} from '@aglyn/shared-util-tools'
-import {AglynComponentElementDataNormalizedMap, ElementId} from '../types'
+import {
+  type  AglynComponentElementDataNormalizedMap,
+  type  ElementId,
+} from '../controllers/aglyn-components.types'
 
 
 export function deleteComponentElement(

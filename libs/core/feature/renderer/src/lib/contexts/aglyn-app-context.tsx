@@ -16,12 +16,12 @@
  */
 
 import {
-  AppUUN,
+  type AppUUN,
   DEFAULT_APP_UUN,
   getApp as getAglynApp,
-  IAglynAppController,
+  type IAglynAppController,
 } from '@aglyn/core-data-framework'
-import {createContext, ReactNode, useCallback, useContext} from 'react'
+import {createContext, type ReactNode, useCallback, useContext} from 'react'
 
 
 export interface IAglynAppContext {

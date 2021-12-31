@@ -20,31 +20,31 @@ import {objectDeepMerge} from '@aglyn/shared-util-vendor'
 import {createApi} from 'effector'
 import {persist} from 'effector-storage/local'
 import {BesignerPanelViewFlag, InteractionModeFlag} from '../constants/besigner'
-import type {
-  BesignerClosePanelPayload,
-  BesignerFlagInteractModePayload,
-  BesignerGetStorePayload,
-  BesignerOpenPanelPayload,
-  BesignerSetCanvasHoveredPayload,
-  BesignerSetCanvasSelectedPayload,
-  BesignerSetPanelPayload,
+import {
+  type BesignerClosePanelPayload,
+  type BesignerFlagInteractModePayload,
+  type BesignerGetStorePayload,
+  type BesignerOpenPanelPayload,
+  type BesignerSetCanvasHoveredPayload,
+  type BesignerSetCanvasSelectedPayload,
+  type BesignerSetDndStatePayload,
+  type BesignerSetPanelPayload,
 } from '../constants/emitter'
-import {BesignerSetDndStatePayload} from '../constants/emitter'
 import AglynModuleModel from '../models/aglyn-module.model'
-import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {
-  AglynBesignerControllerOptions,
-  BesignerCanvasState,
-  BesignerContext,
-  BesignerContextStores,
-  BesignerDndState,
-  BesignerFlagState,
-  BesignerNestedStores,
-  BesignerPanelsState,
-  IAglynBesignerController,
+import {type AglynModuleEffectListener} from '../models/aglyn-module.types'
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynBesignerControllerOptions,
+  type BesignerCanvasState,
+  type BesignerContext,
+  type BesignerContextStores,
+  type BesignerDndState,
+  type BesignerFlagState,
+  type BesignerNestedStores,
+  type BesignerPanelsState,
+  type IAglynBesignerController,
 } from './aglyn-besigner.types'
-import type {ContextDomain, ContextStore} from './aglyn-contexts.types'
+import {type ContextDomain, type ContextStore} from './aglyn-contexts.types'
 
 
 const DEFAULT_CONTEXT: Partial<BesignerContextStores> = {
@@ -223,10 +223,10 @@ export class AglynBesignerController extends AglynModuleModel<AglynBesignerContr
     return this.#context.stores[store]
   }
 
+
   public setFlag(payload: BesignerFlagInteractModePayload) {
     return this.#context.events.setFlag(payload)
   }
-
   public setPanels(payload: BesignerSetPanelPayload) {
     return this.#context.events.setPanels(payload)
   }

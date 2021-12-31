@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { _isArrEmpty } from '@aglyn/shared-util-guards'
-import { ModificationHistoryState } from '../types'
+import {_isArrEmpty} from '@aglyn/shared-util-guards'
+import {type ModificationHistoryState} from '../types'
 
 
 export const handleUndoEvent = <S>(state: ModificationHistoryState<S>) => {
@@ -27,7 +27,7 @@ export const handleUndoEvent = <S>(state: ModificationHistoryState<S>) => {
 }
 
 export const handleStateModificationHistoryUndo = <S>(
-  state: ModificationHistoryState<S>
+  state: ModificationHistoryState<S>,
 ): ModificationHistoryState<S> => {
   if (!_isArrEmpty(state.past)) {
     return {

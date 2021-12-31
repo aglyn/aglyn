@@ -18,10 +18,10 @@
 import {yes} from '@aglyn/shared-util-tools'
 import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
 import {
-  AglynComponentElementDataNormalizedMap,
-  AglynComponentElementHierarchy,
-  ElementId,
-} from '../types'
+  type AglynComponentElementDataNormalizedMap,
+  type AglynComponentElementHierarchy,
+  type  ElementId,
+} from '../controllers/aglyn-components.types'
 import isRootElementId from './is-root-element-id'
 
 

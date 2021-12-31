@@ -15,22 +15,13 @@
  * limitations under the License.
  */
 
-import {Dictionary, Implements, KeyValueMap} from '@aglyn/shared-data-types'
-import {CANVAS_ROOT_ELEMENT_ID} from './constants/canvas'
-import {SYMBOL_TYPE, TYPE_KIND, TYPE_OF} from './constants/symbol'
-import {
-  AglynComponentElementDataDenormalized,
-  AglynComponentElementDataNormalized,
-} from './controllers/aglyn-components.types'
-import {IAglynExtension} from './models/aglyn-extension.types'
+import {type Dictionary, type Implements} from '@aglyn/shared-data-types'
+import {type SYMBOL_TYPE, type TYPE_KIND, type TYPE_OF} from './constants/symbol'
 
 
 export type Payload<T = any> = {payload: T}
 export type PayloadData<T extends Dictionary = any> = T
 export type PayloadParams<T> = { [K in keyof T]: T[K] }
-
-export type AglynExtensionMap = Map<string, IAglynExtension>
-export type AglynAppModule<T extends AglynUniqueId = any> = T
 
 export type AglynUniqueId<T extends boolean = false> = T extends boolean
   ? T extends true
@@ -84,24 +75,6 @@ export interface AglynLoadableObserver<T1 = any, T2 = T1> extends AglynLifecycle
    */
   aglynOnUnload?(props?: T2): void
 }
-
-export type AppUUN = string
-export type ExtensionUUN = string
-export type BundleUId = string
-export type ComponentId = string
-export type TemplateId = string
-export type ElementId = string
-export type CommandUId = string
-export type ContextStoreUid = string
-
-export type AglynComponentElementDataNormalizedMap = KeyValueMap<ElementId, AglynComponentElementDataNormalized>
-export type AglynComponentElementDataNormalizedArray = AglynComponentElementDataDenormalized<any>[]
-
-export type AglynComponentElementHierarchy<$ID extends ElementId = null> =
-  $ID extends ElementId ? (
-    | [root: CANVAS_ROOT_ELEMENT_ID, $id: $ID]
-    | [root: CANVAS_ROOT_ELEMENT_ID, ...parentIds: ElementId[], $id: $ID]
-    ) : [root: CANVAS_ROOT_ELEMENT_ID]
 
 
 export interface ModificationHistoryState<T> {

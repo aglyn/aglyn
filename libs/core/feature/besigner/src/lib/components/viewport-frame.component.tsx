@@ -20,7 +20,7 @@ import {TrunkComponent, useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {styled} from '@aglyn/shared-feature-themes'
 import Box from '@mui/material/Box'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
-import {forwardRef, HTMLAttributes, MouseEvent, useCallback} from 'react'
+import {forwardRef, type HTMLAttributes, type MouseEvent, useCallback} from 'react'
 import CanvasRenderedElementRefsComponent from '../contexts/canvas-rendered-element-refs'
 import ElementLeafComponent from './element-leaf.component'
 import ElementOverlayComponent from './element-overlay.component'
@@ -50,7 +50,6 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
       setBesignerCanvasHovered(getApp(), {hovered: () => ({})})
     }, [getApp])
 
-    console.log('viewport frame')
     return (
       <ViewportFrame ref={ref} {...rest}>
         <CanvasRenderedElementRefsComponent>

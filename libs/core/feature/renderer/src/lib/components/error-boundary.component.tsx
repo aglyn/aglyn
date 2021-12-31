@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {AglynElementType} from '@aglyn/core-data-framework'
-import {AnyProps, PropsWithInnerRef} from '@aglyn/shared-data-types'
+import {type AglynElementType} from '@aglyn/core-data-framework'
+import {type AnyProps, type PropsWithInnerRef} from '@aglyn/shared-data-types'
 import {ReactIs} from '@aglyn/shared-ui-jsx'
 import {Component} from 'react'
 

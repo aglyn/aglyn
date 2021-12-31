@@ -16,15 +16,15 @@
  */
 
 import {_INTERNAL_COMMANDS_} from '../constants/_internal'
-import type {
-  CommandRegisterListenerPayload,
-  CommandRemoveResolverPayload,
-  CommandsSetResolverPayload,
-  CommandTriggerPayload,
-  CommandUnregisterListenerPayload,
+import {
+  type CommandsRegisterListenerPayload,
+  type CommandsRemoveResolverPayload,
+  type CommandsSetResolverPayload,
+  type CommandsTriggerPayload,
+  type CommandsUnregisterListenerPayload,
 } from '../constants/emitter'
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {IAglynCommandsController} from '../controllers/aglyn-commands.types'
+import {type IAglynAppController} from '../controllers/aglyn-app.types'
+import {type IAglynCommandsController} from '../controllers/aglyn-commands.types'
 import {_validateAppArg} from './app.api'
 
 
@@ -44,7 +44,7 @@ export function setCommandResolver(
 
 export function removeCommandResolver(
   app: IAglynAppController,
-  data: CommandRemoveResolverPayload,
+  data: CommandsRemoveResolverPayload,
 ): void {
   const commandController = _getCommandController(app)
   commandController.removeResolver(data)
@@ -52,7 +52,7 @@ export function removeCommandResolver(
 
 export function registerCommandListener(
   app: IAglynAppController,
-  data: CommandRegisterListenerPayload,
+  data: CommandsRegisterListenerPayload,
 ): void {
   const commandController = _getCommandController(app)
   commandController.registerListener(data)
@@ -60,7 +60,7 @@ export function registerCommandListener(
 
 export function unregisterCommandListener(
   app: IAglynAppController,
-  data: CommandUnregisterListenerPayload,
+  data: CommandsUnregisterListenerPayload,
 ): void {
   const commandController = _getCommandController(app)
   commandController.unregisterListener(data)
@@ -68,7 +68,7 @@ export function unregisterCommandListener(
 
 export function triggerCommand(
   app: IAglynAppController,
-  data: CommandTriggerPayload,
+  data: CommandsTriggerPayload,
 ): void {
   const commandController = _getCommandController(app)
   commandController.trigger(data)

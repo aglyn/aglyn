@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
-import type {MutableShallow} from '@aglyn/shared-data-types'
+import {type MutableShallow} from '@aglyn/shared-data-types'
 import {_isStrEmpty} from '@aglyn/shared-util-guards'
 import {trim} from '@aglyn/shared-util-tools'
-import {_INTERNAL_APPS_, DEFAULT_APP_UUN} from '../constants/_internal'
+import {_INTERNAL_APPS_} from '../constants/_internal'
+import {DEFAULT_APP_UUN} from '../constants/app'
 import {AGLYN_EMITTER, AglynAppEventFlag} from '../constants/emitter'
 import {AGLYN_ERROR, AglynErrorEventFlag} from '../constants/error'
 import {AGLYN_LOGGER} from '../constants/logger'
-import AglynAppController from '../controllers/aglyn-app.controller'
-import type {AglynAppOptions, IAglynAppController} from '../controllers/aglyn-app.types'
-import type {AppUUN} from '../types'
+import {AglynAppController} from '../controllers/aglyn-app.controller'
+import {
+  type AglynAppOptions,
+  type AppUUN,
+  type IAglynAppController,
+} from '../controllers/aglyn-app.types'
 
 
 export function getAllApps(): IAglynAppController[] {

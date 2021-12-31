@@ -15,29 +15,32 @@
  * limitations under the License.
  */
 
-import {AglynExtension} from '@aglyn/core-data-framework'
-import type {MutableShallow} from '@aglyn/shared-data-types'
+
+import {type MutableShallow} from '@aglyn/shared-data-types'
 import {_isCtor} from '@aglyn/shared-util-guards'
-import type {
-  ExtensionDestroyPayload,
-  ExtensionHandleLoaderPayload,
-  ExtensionInitializePayload,
-  ExtensionLoadPayload,
-  ExtensionRegisterPayload,
-  ExtensionUnloadPayload,
+import {
+  AglynAppEffectFlag,
+  AglynAppEventFlag,
+  type ExtensionDestroyPayload,
+  type ExtensionHandleLoaderPayload,
+  type ExtensionInitializePayload,
+  type ExtensionLoadPayload,
+  type ExtensionRegisterPayload,
+  type ExtensionUnloadPayload,
 } from '../constants/emitter'
-import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
 import {AGLYN_ERROR, AglynErrorEventFlag} from '../constants/error'
 import {AglynLifecycleFlag} from '../constants/lifecycle'
-import type {IAglynExtension} from '../models/aglyn-extension.types'
+import {AglynExtension} from '../models/aglyn-extension.model'
+import {type IAglynExtension} from '../models/aglyn-extension.types'
 import AglynModuleModel from '../models/aglyn-module.model'
-import type {AglynModuleEffectListener} from '../models/aglyn-module.types'
-import type {AglynExtensionMap, ExtensionUUN} from '../types'
+import {type AglynModuleEffectListener} from '../models/aglyn-module.types'
 import {isAglynExtension, isAglynModule} from '../util/aglyn-is'
-import type {IAglynAppController} from './aglyn-app.types'
-import type {
-  AglynExtensionsControllerOptions,
-  IAglynExtensionsController,
+import {type IAglynAppController} from './aglyn-app.types'
+import {
+  type AglynExtensionMap,
+  type AglynExtensionsControllerOptions,
+  type ExtensionUUN,
+  type IAglynExtensionsController,
 } from './aglyn-extensions.types'
 
 

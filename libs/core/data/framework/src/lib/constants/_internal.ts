@@ -15,18 +15,14 @@
  * limitations under the License.
  */
 
-import type {IAglynAppController} from '../controllers/aglyn-app.types'
-import type {IAglynBesignerController} from '../controllers/aglyn-besigner.types'
-import type {IAglynCanvasController} from '../controllers/aglyn-canvas.types'
-import type {IAglynCommandsController} from '../controllers/aglyn-commands.types'
-import type {IAglynComponentsController} from '../controllers/aglyn-components.types'
-import type {IAglynContextsController} from '../controllers/aglyn-contexts.types'
-import type {IAglynExtensionsController} from '../controllers/aglyn-extensions.types'
-import type {AppUUN} from '../types'
+import {type AppUUN, type IAglynAppController} from '../controllers/aglyn-app.types'
+import {type IAglynBesignerController} from '../controllers/aglyn-besigner.types'
+import {type IAglynCanvasController} from '../controllers/aglyn-canvas.types'
+import {type IAglynCommandsController} from '../controllers/aglyn-commands.types'
+import {type IAglynComponentsController} from '../controllers/aglyn-components.types'
+import {type IAglynContextsController} from '../controllers/aglyn-contexts.types'
+import {type IAglynExtensionsController} from '../controllers/aglyn-extensions.types'
 
-
-export const DEFAULT_APP_UUN = '[DEFAULT]'
-export type DEFAULT_APP_UUN = typeof DEFAULT_APP_UUN
 
 export const _INTERNAL_APPS_: Map<AppUUN, IAglynAppController> = new Map()
 export const _INTERNAL_EXTENSIONS_: Map<AppUUN, IAglynExtensionsController> = new Map()

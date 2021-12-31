@@ -16,19 +16,26 @@
  */
 
 // import {  } from '@aglyn/core-data-framework'
-import { ReactNode } from 'react'
-import { ElementsContext } from './elements-context'
+import {type ReactNode} from 'react'
+import {ElementsContext} from './elements-context'
+
 
 export interface ElementsContextProviderProps {
   children?: ReactNode
   // addElement?: (payload: AddElementPayload) => void
 }
 
-export function ElementsContextProvider(props: ElementsContextProviderProps) {
-  const { children } = props
+function ElementsContextProvider(props: ElementsContextProviderProps) {
+  const {children} = props
 
-  return <ElementsContext.Provider value={undefined}>{children}</ElementsContext.Provider>
+  return (
+    <ElementsContext.Provider value={undefined}>
+      {children}
+    </ElementsContext.Provider>
+  )
 }
 ElementsContextProvider.displayName = 'ElementsContextProvider'
 ElementsContextProvider.defaultProps = {}
+
+export {ElementsContextProvider}
 export default ElementsContextProvider

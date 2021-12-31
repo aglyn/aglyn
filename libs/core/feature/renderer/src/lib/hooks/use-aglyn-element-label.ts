@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {ElementId} from '@aglyn/core-data-framework'
+import {type ElementId} from '@aglyn/core-data-framework'
 import {useAglynComponentSchema} from './use-aglyn-component-schema'
 import {useAglynElementData} from './use-aglyn-element-data'
 

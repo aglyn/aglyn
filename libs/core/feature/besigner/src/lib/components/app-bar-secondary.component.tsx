@@ -34,7 +34,7 @@ import {
   mdiShapeSquareRoundedPlus,
   mdiUndo,
 } from '@aglyn/shared-ui-mdi-jsx'
-import MuiAppBar, {AppBarProps as MuiAppBarProps} from '@mui/material/AppBar'
+import MuiAppBar, {type AppBarProps as MuiAppBarProps} from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Stack from '@mui/material/Stack'
@@ -42,7 +42,7 @@ import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Toolbar from '@mui/material/Toolbar'
 import Tooltip from '@mui/material/Tooltip'
-import React, {forwardRef, MouseEvent, useCallback} from 'react'
+import {forwardRef, type MouseEvent, useCallback} from 'react'
 import {useAddElementCallback} from '../hooks/use-add-element-callback'
 import {useAglynBesignerStoreState} from '../hooks/use-aglyn-besigner-store-state'
 

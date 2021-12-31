@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import { alpha, generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { ZoomablePanningComponent } from '@aglyn/shared-ui-jsx'
-import { forwardRef, HTMLAttributes, Ref } from 'react'
-import { ViewportFrameComponent } from './viewport-frame.component'
+import {alpha, generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {ZoomablePanningComponent} from '@aglyn/shared-ui-jsx'
+import {forwardRef, type HTMLAttributes, type Ref} from 'react'
+import {ViewportFrameComponent} from './viewport-frame.component'
 
 
 const ViewportCanvas = styled('div', {
-  name: 'AglynViewportCanvas'
+  name: 'AglynViewportCanvas',
 })(({theme}) => ({
   flexGrow: 1,
   minHeight: '100%',
@@ -50,7 +50,7 @@ const canvasArtboardClassKeys = generateComponentClassKeys('AglynCanvasArtboard'
   'deviceXs',
 ])
 const CanvasArtboard = styled('div', {
-  name: 'AglynCanvasArtboard'
+  name: 'AglynCanvasArtboard',
 })(({theme}) => ({
   overflow: 'hidden',
   minHeight: '100%',
@@ -125,5 +125,5 @@ const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
 ViewportCanvasComponent.displayName = 'ViewportCanvasComponent'
 ViewportCanvasComponent.defaultProps = {}
 
-export { ViewportCanvasComponent }
+export {ViewportCanvasComponent}
 export default ViewportCanvasComponent

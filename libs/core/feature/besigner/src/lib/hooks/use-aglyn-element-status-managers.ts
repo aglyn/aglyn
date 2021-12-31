@@ -21,12 +21,12 @@ import {
   setBesignerCanvasSelected,
 } from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
-import {useCallback} from 'react'
+import {type ChangeEvent, useCallback} from 'react'
 
 
 export type UseAglynElementStatusManagers = [
-  handleHover: (e: MouseEvent, $id?: ElementId) => void,
-  handleSelect: (e: MouseEvent, $id?: ElementId) => void,
+  handleHover: (e: ChangeEvent<any>, $id?: ElementId) => void,
+  handleSelect: (e: ChangeEvent<any>, $id?: ElementId) => void,
 ]
 
 

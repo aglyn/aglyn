@@ -36,7 +36,10 @@ import {forwardRef, Fragment, useCallback, useMemo} from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 import ElementPropsForm from './element-props-form.component'
-import {WorkspacePanelComponent, WorkspacePanelComponentProps} from './workspace-panel.component'
+import {
+  WorkspacePanelComponent,
+  type WorkspacePanelComponentProps,
+} from './workspace-panel.component'
 
 
 const TabPanelInner = styled('div', {

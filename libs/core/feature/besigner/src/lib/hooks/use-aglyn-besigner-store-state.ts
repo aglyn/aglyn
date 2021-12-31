@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { BesignerContextStores, getBesignerStore } from '@aglyn/core-data-framework'
-import { Conditional } from '@aglyn/shared-data-types'
-import { useStoreMap } from 'effector-react'
-import { useAglynAppContext } from '@aglyn/core-feature-renderer'
+import {type BesignerContextStores, getBesignerStore} from '@aglyn/core-data-framework'
+import {type Conditional} from '@aglyn/shared-data-types'
+import {useStoreMap} from 'effector-react'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 
 
 export function useAglynBesignerStoreState<K1 extends keyof BesignerContextStores>(
@@ -27,7 +27,7 @@ export function useAglynBesignerStoreState<K1 extends keyof BesignerContextStore
 
 export function useAglynBesignerStoreState<K1 extends keyof BesignerContextStores, K2 extends keyof BesignerContextStores[K1] = null>(
   store: K1,
-  key: K2
+  key: K2,
 ): BesignerContextStores[K1][K2]
 
 export function useAglynBesignerStoreState<K1 extends keyof BesignerContextStores,

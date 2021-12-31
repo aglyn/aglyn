@@ -20,7 +20,7 @@ import {DndProvider, type DndProviderProps} from 'react-dnd'
 import {HTML5Backend} from 'react-dnd-html5-backend'
 
 
-export type BesignerDndContextProps<T, U> = DndProviderProps<T, U> & {
+export type BesignerDndContextProps<T, U> = Partial<DndProviderProps<T, U>> & {
   children?: ReactNode
 }
 

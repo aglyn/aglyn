@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { Platform, platformIdentification } from '@aglyn/shared-util-vendor'
+import {type Platform, platformIdentification} from '@aglyn/shared-util-vendor'
 
 
 export type AglynPlatform = Platform

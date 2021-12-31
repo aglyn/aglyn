@@ -17,13 +17,13 @@
 
 import {
   deleteCanvasElement,
-  ElementId,
+  type ElementId,
   setBesignerCanvasHovered,
   setBesignerCanvasSelected,
 } from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {useConfirmationContext} from '@aglyn/shared-ui-jsx'
-import {ChangeEvent, useCallback} from 'react'
+import {type ChangeEvent, useCallback} from 'react'
 
 
 export interface UseDeleteElementCallbackOptions {

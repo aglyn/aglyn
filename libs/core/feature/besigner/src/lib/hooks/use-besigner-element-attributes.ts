@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {BundleUId, ComponentId, ElementId} from '@aglyn/core-data-framework'
+import {type BundleUId, type ComponentId, type ElementId} from '@aglyn/core-data-framework'
 import {ElementAttribute} from '../constants'
 import useAglynCanvasElementStatus from './use-aglyn-canvas-element-status'
 
