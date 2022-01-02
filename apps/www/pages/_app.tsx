@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import {APP_WWW, IS_PRODUCTION} from '@aglyn/shared-data-brand'
 import {type MakeLinkElementsConfig, type MakeMetaElementsConfig} from '@aglyn/shared-ui-jsx'
 import {NextEmotionAppComponent, type NextEmotionAppComponentProps} from '@aglyn/shared-ui-next'
 import {useEffect} from 'react'
+import HsEmbedScript from '../components/hs-embed-script'
+import VisitorQueueScript from '../components/visitor-queue-script'
 import {withAppController} from '../lib/aglyn-deprecated/lib/controllers/app-controller'
 
 
@@ -57,6 +59,12 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
         ...NextAppWrapperProps,
         metaElements,
         linkElements,
+        headChildren: !IS_PRODUCTION ? null : (
+          <>
+            <HsEmbedScript />
+            <VisitorQueueScript />
+          </>
+        ),
       }}
       {...rest}
     />

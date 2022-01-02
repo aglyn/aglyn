@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,39 @@
  * limitations under the License.
  */
 
+import {BackendFactory} from 'dnd-core'
 import {type ReactNode} from 'react'
-import {DndProvider, type DndProviderProps} from 'react-dnd'
-import {HTML5Backend} from 'react-dnd-html5-backend'
+import {DndProvider} from 'react-dnd'
+import {TouchBackend} from 'react-dnd-touch-backend'
 
 
-export type BesignerDndContextProps<T, U> = Partial<DndProviderProps<T, U>> & {
+export interface BesignerDndContextProps<BackendContext, BackendOptions> {
   children?: ReactNode
+  backend?: BackendFactory
+  context?: BackendContext
+  options?: BackendOptions
+  debugMode?: boolean
 }
 
 function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
-  const {children, ...rest} = props
+  const {children, options, ...rest} = props
+  const opts = {
+    enableTouchEvents: true,
+    enableMouseEvents: true,
+    enableKeyboardEvents: true,
+    delay: 0,
+    delayTouchStart: 200,
+    delayMouseStart: 200,
+    touchSlop: 5,
+    ...options,
+  }
 
   return (
-    <DndProvider backend={HTML5Backend} {...rest}>
+    <DndProvider
+      backend={TouchBackend}
+      options={opts}
+      {...rest}
+    >
       {children}
     </DndProvider>
   )
