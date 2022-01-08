@@ -22,7 +22,7 @@ import clsx from 'clsx'
 import {type ChangeEvent, forwardRef, useCallback, useRef} from 'react'
 import {useAglynBesignerPanelValue} from '../hooks/use-aglyn-besigner-panel-value'
 import {ViewportCanvasComponent} from './viewport-canvas.component'
-import {ZoomControlsComponent} from './zoom-controls.component'
+import {ViewportZoomControlsComponent} from './viewport-zoom-controls.component'
 
 
 const classKeys = generateComponentClassKeys('AglynViewport', [
@@ -119,12 +119,17 @@ const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(
     return (
       <AglynViewport
         ref={ref}
+        id="aglyn:viewport-root"
+        aria-label="besigner viewport root"
         className={elemClassName}
+        direction="column"
+        alignItems="center"
+        spacing={0}
         // drawerWidth={left?.drawerWidth}
         {...rest}
       >
         <ViewportCanvasComponent pannerRef={pannerRef} />
-        <ZoomControlsComponent
+        <ViewportZoomControlsComponent
           onZoomReset={handleZoomReset}
           onZoomDecrease={handleZoomDecrease}
           onZoomIncrease={handleZoomIncrease}

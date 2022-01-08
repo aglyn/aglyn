@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,12 +39,12 @@ import {
 } from 'react'
 
 
-const ZoomControls = styled('div', {
-  name: 'AglynZoomControls',
+const ViewportZoomControls = styled('div', {
+  name: 'AglynViewportZoomControls',
 })(({theme}) => ({
   position: 'absolute',
   bottom: theme.spacing(1),
-  zIndex: theme.zIndex.appBar,
+  zIndex: theme.zIndex.tooltip,
   opacity: 0.32,
   transition: theme.transitions.create(['opacity', 'filter'], {
     easing: theme.transitions.easing.sharp,
@@ -59,7 +59,7 @@ const ZoomControls = styled('div', {
   },
 }))
 
-export interface ZoomControlsComponentProps extends HTMLAttributes<HTMLDivElement> {
+export interface ViewportZoomControlsComponentProps extends HTMLAttributes<HTMLDivElement> {
   disableZoomResetButton?: boolean
   disableZoomDecreaseButton?: boolean
   disableZoomIncreaseButton?: boolean
@@ -68,7 +68,7 @@ export interface ZoomControlsComponentProps extends HTMLAttributes<HTMLDivElemen
   onZoomIncrease?: EventHandler<any>
 }
 
-export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>(
+export const ViewportZoomControlsComponent = forwardRef<any, ViewportZoomControlsComponentProps>(
   function RefRenderFn(props, ref) {
     const {
       disableZoomResetButton,
@@ -159,7 +159,11 @@ export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>
     ]
 
     return (
-      <ZoomControls ref={ref} {...rest}>
+      <ViewportZoomControls
+        ref={ref}
+        id="aglyn:viewport-zoom-controls"
+        {...rest}
+      >
         <ButtonGroup variant="contained" color="primary" aria-label="zoom controls">
           {buttons.map(({id, tooltipProps, srOnlyProps, buttonProps, svgPathIconProps}) => (
             <Tooltip key={id} {...tooltipProps}>
@@ -170,12 +174,12 @@ export const ZoomControlsComponent = forwardRef<any, ZoomControlsComponentProps>
             </Tooltip>
           ))}
         </ButtonGroup>
-      </ZoomControls>
+      </ViewportZoomControls>
     )
   },
 )
 
-ZoomControlsComponent.displayName = 'ZoomControlsComponent'
-ZoomControlsComponent.defaultProps = {}
+ViewportZoomControlsComponent.displayName = 'ViewportZoomControlsComponent'
+ViewportZoomControlsComponent.defaultProps = {}
 
-export default ZoomControlsComponent
+export default ViewportZoomControlsComponent

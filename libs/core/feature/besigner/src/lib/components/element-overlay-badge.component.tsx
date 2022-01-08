@@ -111,6 +111,7 @@ const ElementOverlayBadgeComponent = forwardRef<any, ElementOverlayBadgeButtonsC
     return (
       <MuiButtonGroup
         ref={ref}
+        id="aglyn:overlay-badge"
         variant="contained"
         color="primary"
         aria-label="element controls"

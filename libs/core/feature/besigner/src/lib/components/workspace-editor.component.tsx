@@ -64,14 +64,8 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             zIndex: 1,
           }}
         >
-          <AppBarPrimaryComponent
-            id="aglyn:besigner-appbar-primary"
-            aria-label="primary app toolbar"
-          />
-          <AppBarSecondaryComponent
-            id="aglyn:besigner-appbar-secondary"
-            aria-label="secondary app toolbar"
-          />
+          <AppBarPrimaryComponent />
+          <AppBarSecondaryComponent />
         </Stack>
 
         <Stack
@@ -85,23 +79,11 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             zIndex: 0,
           }}
         >
-          <PanelLeftComponent
-            id="aglyn:besigner-panel-left"
-            aria-label="besigner left drawer"
-          />
+          <PanelLeftComponent />
 
-          <ViewportRootComponent
-            id="aglyn:besigner-viewport"
-            aria-label="besigner viewport"
-            direction="column"
-            alignItems="center"
-            spacing={0}
-          />
+          <ViewportRootComponent />
 
-          <PanelRightComponent
-            id="aglyn:besigner-panel-right"
-            aria-label="besigner toolbox right"
-          />
+          <PanelRightComponent />
         </Stack>
 
         {children}

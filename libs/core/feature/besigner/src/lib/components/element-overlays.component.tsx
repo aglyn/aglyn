@@ -28,9 +28,11 @@ function ElementOverlaysComponent(props: ElementOverlaysComponentProps) {
   return (
     <>
       <ElementOverlayPopperComponent
+        id="aglyn:element-overlay-hovered"
         variant="hoveredOverlay"
       />
       <ElementOverlayPopperComponent
+        id="aglyn:element-overlay-selected"
         variant="selectedOverlay"
       />
     </>

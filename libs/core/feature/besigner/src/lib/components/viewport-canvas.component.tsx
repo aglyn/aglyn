@@ -59,8 +59,8 @@ const canvasArtboardClassKeys = generateComponentClassKeys('AglynCanvasArtboard'
   'deviceSm',
   'deviceXs',
 ])
-const CanvasArtboard = styled('div', {
-  name: 'AglynCanvasArtboard',
+const ViewportArtboard = styled('div', {
+  name: 'AglynViewportArtboard',
 })(({theme}) => ({
   overflow: 'hidden',
   minHeight: '100%',
@@ -103,8 +103,12 @@ const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
     const {children, pannerRef, ...rest} = props
 
     return (
-      <ViewportCanvas ref={ref} {...rest}>
-        <CanvasArtboard>
+      <ViewportCanvas
+        ref={ref}
+        id="aglyn:viewport-canvas"
+        {...rest}
+      >
+        <ViewportArtboard id="aglyn:viewport-artboard">
           {/*<ViewportCanvasPanner*/}
           {/*  {...{ref: pannerRef} as any}*/}
           {/*  disableScrollZoom*/}
@@ -116,7 +120,7 @@ const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
           {/*>*/}
           <ViewportFrameComponent />
           {/*</ViewportCanvasPanner>*/}
-        </CanvasArtboard>
+        </ViewportArtboard>
 
         <Demo />
 

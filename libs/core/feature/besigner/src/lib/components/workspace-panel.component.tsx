@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import clsx from 'clsx'
-import {DEFAULT_LEFT_DRAWER_WIDTH} from '../constants'
 import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import MuiDrawer, {type DrawerProps as MuiDrawerProps} from '@mui/material/Drawer'
+import clsx from 'clsx'
 import {forwardRef, type HTMLAttributes} from 'react'
+import {DEFAULT_LEFT_DRAWER_WIDTH} from '../constants'
 
 
 const classKeys = generateComponentClassKeys('AglynWorkspacePanel', [
@@ -127,6 +127,7 @@ const WorkspacePanelComponent = forwardRef<any, WorkspacePanelComponentProps>(
       size,
       open: openProp,
       anchor,
+      id,
       ...rest
     } = props
     const open = Boolean(openProp)
@@ -142,6 +143,7 @@ const WorkspacePanelComponent = forwardRef<any, WorkspacePanelComponentProps>(
     return (
       <WorkspacePanel
         ref={ref}
+        id={id}
         size={size}
         className={className}
         {...rest}

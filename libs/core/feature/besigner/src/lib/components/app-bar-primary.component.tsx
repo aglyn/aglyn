@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,6 +39,8 @@ export const AppBarPrimaryComponent = forwardRef<any, AppBarPrimaryComponentProp
     return (
       <AppBarPrimary
         ref={ref}
+        id="aglyn:besigner-appbar-primary"
+        aria-label="primary app toolbar"
         position="static"
         color="inherit"
         elevation={0}

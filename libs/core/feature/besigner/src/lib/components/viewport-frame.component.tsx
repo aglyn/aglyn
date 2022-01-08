@@ -52,11 +52,15 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
     }, [getApp])
 
     return (
-      <ViewportFrame ref={ref} {...rest}>
+      <ViewportFrame
+        ref={ref}
+        id="aglyn:viewport-frame"
+        {...rest}
+      >
         <CanvasRenderedElementRefsComponent>
           {/*<MuiShadowDom.div>*/}
           <Box
-            id="aglyn:canvas"
+            id="aglyn:site-container"
             onMouseLeave={handleMouseLeave}
             sx={{minHeight: 1, width: 1}}
           >
@@ -68,7 +72,7 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
           {/*</MuiShadowDom.div>*/}
 
           <Box
-            id="aglyn:canvas-overlay"
+            id="aglyn:site-overlay"
             sx={{position: 'relative', zIndex: 'tooltip'}}
           >
             <ElementOverlaysComponent />

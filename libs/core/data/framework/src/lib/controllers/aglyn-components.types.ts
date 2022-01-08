@@ -163,13 +163,13 @@ export interface AglynComponentSchema<P = any> {
     // Besigner feature flags
     actions?: {disable?: boolean}
     badge?: {disable?: boolean}
-    copying?: {disable?: boolean}
+    duplication?: {disable?: boolean}
     dragging?: {disable?: boolean}
     dropping?: {disable?: boolean}
     editing?: {disable?: boolean}
     outline?: {disable?: boolean}
-    removing?: {disable?: boolean}
-    selecting?: {disable?: boolean}
+    removal?: {disable?: boolean}
+    selection?: {disable?: boolean}
   }
   // Besigner templates for modeling new elements
   templates?: AglynComponentElementTemplate[]

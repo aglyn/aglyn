@@ -84,7 +84,7 @@ export interface ElementOverlayPopperComponentProps extends Partial<MuiPopperPro
 
 const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperComponentProps>(
   function RefRenderFn(props, ref) {
-    const {variant, ...rest} = props || {}
+    const {variant, id, ...rest} = props || {}
 
 
     const {getApp} = useAglynAppContext()
@@ -154,6 +154,7 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
           return (
             <MuiPopper
               ref={ref}
+              id={id}
               anchorEl={anchorEl}
               placement="top-start"
               modifiers={modifiers}

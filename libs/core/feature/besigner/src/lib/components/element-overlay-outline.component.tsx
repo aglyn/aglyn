@@ -96,7 +96,7 @@ const ElementOverlayOutlineComponent = forwardRef<any, ElementOverlayOutlineProp
     const rect = anchorEl && getElementClientRectBounding(anchorEl)
     const style = useMemo(() => ({
       width: rect?.width,
-      height: rect?.height
+      height: rect?.height,
     }), [rect])
 
     const className = clsx({
@@ -109,6 +109,7 @@ const ElementOverlayOutlineComponent = forwardRef<any, ElementOverlayOutlineProp
     return (
       <ElementOverlayOutline
         ref={ref}
+        id="aglyn:overlay-outline"
         className={className}
         style={style}
         {...rest}

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {BesignerPanelTabFlag, setBesignerPanels} from '@aglyn/core-data-framework'
+import {BesignerPanelTabFlag, type ElementId, setBesignerPanels} from '@aglyn/core-data-framework'
 import {
   useAglynAppContext,
   useAglynComponentSchema,
@@ -62,12 +62,11 @@ const DividerSpacer = styled(Divider, {
   marginBottom: theme.spacing(2),
 }))
 
-const ElementInfo = function ElementInfo({$id, ...props}: any) {
+const ElementInfo = function ElementInfo({$id}: {$id: ElementId}) {
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
   const parentId = useAglynElementData($id, 'parentId')
-  const {metadata} = useAglynComponentSchema(componentId, bundleId) || {}
-  const {displayName, title, subtitle, description} = metadata || {}
+  const schema = useAglynComponentSchema(componentId, bundleId)
   const failoverText = 'n/a'
   const details = useMemo(() => [
     {
@@ -77,22 +76,22 @@ const ElementInfo = function ElementInfo({$id, ...props}: any) {
         {
           id: 'component-display-name',
           label: 'Type',
-          value: displayName,
+          value: schema?.displayName,
         },
         {
           id: 'component-title',
           label: 'Title',
-          value: title,
+          value: schema?.title,
         },
         {
           id: 'component-subtitle',
           label: 'Subtitle',
-          value: subtitle,
+          value: schema?.subtitle,
         },
         {
           id: 'component-description',
           label: 'Description',
-          value: description,
+          value: schema?.description,
           TypographyProps: {gutterBottom: true},
         },
       ],
@@ -124,7 +123,7 @@ const ElementInfo = function ElementInfo({$id, ...props}: any) {
         },
       ],
     },
-  ], [$id, bundleId, componentId, description, displayName, parentId, subtitle, title])
+  ], [$id, bundleId, componentId, schema, parentId])
 
   return (
     <>
@@ -185,6 +184,8 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
     return (
       <WorkspacePanelComponent
         ref={ref}
+        id="aglyn:panel-right"
+        aria-label="right toolbox panel"
         size={size}
         open={toggled}
         anchor="right"
