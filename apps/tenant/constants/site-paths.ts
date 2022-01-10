@@ -18,8 +18,8 @@
 export const API_DIR = `/api`
 export const STATIC_DIR = '/_static'
 export const NEXT_DIR = '/_next'
-export const NEXT_IMAGE_DIR = `/_next/images`
-export const STATIC_IMAGE_DIR = `${STATIC_DIR}/images`
+export const NEXT_IMAGE_DIR = `/_next/image`
+export const STATIC_IMAGE_DIR = `${STATIC_DIR}/image`
 export const STATIC_PWA_DIR = `${STATIC_DIR}/_pwa`
 export const STATIC_PWA_ICON_DIR = `${STATIC_PWA_DIR}/icons`
 

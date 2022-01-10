@@ -152,7 +152,7 @@ const AGLYN_CONFIG = {
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     loader: 'default',
     minimumCacheTTL: 60,
-    path: '/_next/images',
+    path: '/_next/image',
   },
   nx: {
     // Set this to false if you do not want to use SVGR
