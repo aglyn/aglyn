@@ -225,9 +225,6 @@ export {
   ThemeProvider,
   useTheme,
   useThemeProps,
-  withStyles,
-  makeStyles,
-  createStyles,
 } from '@mui/material/styles'
 
 
@@ -272,4 +269,7 @@ export {
   StylesProvider,
   useThemeVariants,
   withThemeCreator,
+  makeStyles,
+  withStyles,
+  createStyles,
 } from '@mui/styles'
