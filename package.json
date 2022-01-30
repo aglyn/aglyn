@@ -76,7 +76,7 @@
     "mout": "^1.2.3",
     "nanoid": "^3.1.30",
     "nanoid-dictionary": "^4.3.0",
-    "next": "12.0.7",
+    "next": "12.0.9",
     "next-api-middleware": "^1.0.1",
     "notistack": "^2.0.3",
     "php-serialize": "^4.0.2",
