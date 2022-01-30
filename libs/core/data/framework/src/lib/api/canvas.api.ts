@@ -26,6 +26,7 @@ import {
   type CanvasGetStorePayload,
   type CanvasMoveElementPayload,
   type CanvasRedoPayload,
+  CanvasSetElementPayload,
   type CanvasSetElementsPayload,
   type CanvasUndoPayload,
   type CanvasUpdateElementPayload,
@@ -49,20 +50,20 @@ export function getCanvasStore(
   return canvasController.getStore(payload)
 }
 
-export function getCanvasNormalizedElementsStore(
-  app: IAglynAppController,
-  payload?: CanvasGetElementsNormalizedPayload,
-) {
-  const canvasController = _getCanvasController(app)
-  return canvasController.getNormalizedElementsStore(payload)
-}
-
 export function getCanvasDenormalizedElementsStore(
   app: IAglynAppController,
   payload?: CanvasGetElementsDenormalizedPayload,
 ) {
   const canvasController = _getCanvasController(app)
   return canvasController.getDenormalizedElementsStore(payload)
+}
+
+export function getCanvasNormalizedElementsStore(
+  app: IAglynAppController,
+  payload?: CanvasGetElementsNormalizedPayload,
+) {
+  const canvasController = _getCanvasController(app)
+  return canvasController.getNormalizedElementsStore(payload)
 }
 
 export function getCanvasApiEvents(
@@ -112,6 +113,14 @@ export function updateCanvasElement(
 ) {
   const canvasController = _getCanvasController(app)
   return canvasController.updateElement(payload)
+}
+
+export function setCanvasElement(
+  app: IAglynAppController,
+  payload: CanvasSetElementPayload,
+) {
+  const canvasController = _getCanvasController(app)
+  return canvasController.setElement(payload)
 }
 
 export function deleteCanvasElement(

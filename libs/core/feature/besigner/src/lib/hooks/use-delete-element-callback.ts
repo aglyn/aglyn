@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  deleteCanvasElement,
-  type ElementId,
-} from '@aglyn/core-data-framework'
-import {
-  setBesignerCanvasHovered,
-  setBesignerCanvasSelected,
-} from '@aglyn/core-data-besigner'
+import {setBesignerCanvasHovered, setBesignerCanvasSelected} from '@aglyn/core-data-besigner'
+import {deleteCanvasElement, type ElementId} from '@aglyn/core-data-framework'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {useConfirmationContext} from '@aglyn/shared-ui-jsx'
 import {type ChangeEvent, useCallback} from 'react'
@@ -30,9 +24,9 @@ import {type ChangeEvent, useCallback} from 'react'
 
 export interface UseDeleteElementCallbackOptions {
   $id?: ElementId
-  onfulfilled?: (value: unknown) => void | PromiseLike<void>
-  onrejected?: (reason: any) => void | PromiseLike<void>
-  oncatch?: (error: unknown) => void | PromiseLike<void>
+  onFulfilled?: (value: unknown) => void | PromiseLike<void>
+  onRejected?: (reason: any) => void | PromiseLike<void>
+  onCatch?: (error: unknown) => void | PromiseLike<void>
 }
 
 export type UseDeleteElementCallback = {
@@ -42,7 +36,7 @@ export type UseDeleteElementCallback = {
 export const useDeleteElementCallback = (
   options?: UseDeleteElementCallbackOptions,
 ): UseDeleteElementCallback => {
-  const {$id, onfulfilled, onrejected, oncatch} = {...options}
+  const {$id, onFulfilled, onRejected, onCatch} = {...options}
   const {confirm} = useConfirmationContext()
   const {getApp} = useAglynAppContext()
 
@@ -63,22 +57,22 @@ export const useDeleteElementCallback = (
             setBesignerCanvasSelected(app, {selected: () => ({})})
             setBesignerCanvasHovered(app, {hovered: () => ({})})
             deleteCanvasElement(app, {$id: opts?.$id || $id})
-            opts?.onfulfilled && opts?.onfulfilled(res)
-            onfulfilled && onfulfilled(res)
+            opts?.onFulfilled && opts?.onFulfilled(res)
+            onFulfilled && onFulfilled(res)
           },
           (reason) => {
             console.warn('rejected', reason)
-            opts?.onrejected && opts?.onrejected(reason)
-            onrejected && onrejected(reason)
+            opts?.onRejected && opts?.onRejected(reason)
+            onRejected && onRejected(reason)
           },
         )
         .catch((e) => {
           console.error('caught error', e)
-          opts?.oncatch && opts?.oncatch(e)
-          oncatch && oncatch(e)
+          opts?.onCatch && opts?.onCatch(e)
+          onCatch && onCatch(e)
         })
 
-    }, [getApp, confirm, $id, onfulfilled, onrejected, oncatch],
+    }, [getApp, confirm, $id, onFulfilled, onRejected, onCatch],
   )
 }
 

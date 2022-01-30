@@ -15,21 +15,17 @@
  * limitations under the License.
  */
 
-import {
-  AglynElementDenormalized,
-  AglynElementNormalizedMap,
-  ElementId,
-} from '../types/aglyn-elements.types'
+import {AglynElementNormalized, AglynElementsById, ElementId} from '../types/aglyn-elements.types'
 import {createComponentElementData} from './create-component-element-data'
-import {denormalizeComponentElementData} from './denormalize-component-element-data'
+import {normalizeComponentElementData} from './normalize-component-element-data'
 
 
 export const createComponentElementDataCopy = (
   $id: ElementId,
-  state: AglynElementNormalizedMap,
-): AglynElementDenormalized => {
+  state: AglynElementsById,
+): AglynElementNormalized => {
   const element = state[$id]
-  const parentElements = denormalizeComponentElementData(state, element.parentId)
+  const parentElements = normalizeComponentElementData(state, element.parentId)
   const denormalizedElement = parentElements.find((i) => i.$id === $id)
   return createComponentElementData({data: denormalizedElement})
 }

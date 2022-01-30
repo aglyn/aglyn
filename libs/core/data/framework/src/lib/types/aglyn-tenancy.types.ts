@@ -15,50 +15,149 @@
  * limitations under the License.
  */
 
-import {type PageUid} from './aglyn-pages.types'
+import {type Conditional, type TimestampSeconds} from '@aglyn/shared-data-types'
+import {
+  type ActivityAccess,
+  type HostRedirectParams,
+  type HostRedirectStatusCode,
+  type HostScreenStatus,
+  type HostScreenVisibility,
+  type HostViewFormat,
+  type HostViewType,
+} from '../constants/tenancy'
+import {type AglynElementsById, type AglynElementsList} from './aglyn-elements.types'
 
 
-export type TenantUid = string
-export type HostUid = string
+export type UserUid = string
 export type RoleUid = string
 export type PermissionUid = string
-export type UserUid = string
+export type TenantUid = string
+export type HostUid = string
+export type ScreenUid = string
+export type VersionUid = string
+export type ViewPartUid = string
+export type HostPath = string
+export type HostMediaUid = string
 
 export interface AglynUser {
   $id: UserUid
   roleId?: RoleUid
-  superAdmin?: boolean
+  admin?: boolean
   email?: string
+  tenants?: Record<TenantUid, true>
 }
 
-export interface AglynRole {
+export interface AglynUserRole {
   $id: RoleUid
   displayName?: string
   description?: string
-  permissions?: PermissionUid[]
+  permissions?: Record<PermissionUid, true>
+  users?: Record<UserUid, true>
 }
 
-export interface AglynPermission {
+export interface AglynRolePermission {
   $id: PermissionUid
   displayName?: string
   description?: string
+  roles?: Record<RoleUid, true>
+}
+
+export interface AglynActivityAccess {
+  roles?: Record<RoleUid, ActivityAccess>
+  permissions?: Record<PermissionUid, ActivityAccess>
+  users?: Record<UserUid, ActivityAccess>
 }
 
 export interface AglynTenant {
   $id: TenantUid
   ownerId?: UserUid
   displayName?: string
-  organization?: string
+  description?: string
+  users?: Record<UserUid, true>
   hosts?: Record<HostUid, true>
-  subOwners?: Record<UserUid, true>
 }
 
-export interface AglynHost {
+export interface AglynTenantHost {
   $id: HostUid
   tenantId?: TenantUid
   cname?: string
+  pathsFile?: string
+  organization?: {
+    type?: 'organization' | 'person'
+    name?: string
+    logo?: string
+  }
   displayName?: string
+  separator?: string
   title?: string
   description?: string
-  pages?: Record<PageUid, true>
+  image?: string
+  favicon?: string
+  screens?: Record<ScreenUid, true>
+}
+
+export interface AglynHostPaths {
+  tenantId?: TenantUid
+  hostId?: HostUid
+  paths?: Record<HostPath, ScreenUid>
+  redirects?: Record<HostPath, AglynHostRedirect>
+}
+
+export type AglynHostRedirect = {
+  source?: HostPath
+  destination?: HostPath
+  statusCode?: HostRedirectStatusCode
+  params?: HostRedirectParams
+  flags?: {
+    regex?: true
+    ignoreSlash?: true
+    ignoreCase?: true
+  }
+  description?: string
+  hits?: number
+  lastAccess?: TimestampSeconds
+}
+
+export interface AglynHostScreen {
+  $id: ScreenUid
+  parentId?: ScreenUid
+  tenantId?: TenantUid
+  hostId?: HostUid
+  ownerId?: UserUid
+  slug?: string
+  versionId?: VersionUid
+  versions?: Record<VersionUid, true>
+  status?: HostScreenStatus
+  visibility?: HostScreenVisibility
+  access?: AglynActivityAccess
+  contributors?: Record<UserUid, true>
+  createdAt?: TimestampSeconds
+  updatedAt?: TimestampSeconds
+  deletedAt?: TimestampSeconds
+  schedule?: {
+    startAt?: TimestampSeconds
+    endAt?: TimestampSeconds
+    next?: VersionUid
+    previous?: VersionUid
+  }
+  displayName?: string
+  description?: string
+}
+
+export interface AglynHostViewPart<T extends HostViewFormat = HostViewFormat.NORMALIZED> {
+  $id: ViewPartUid
+  tenantId?: TenantUid
+  hostId?: HostUid
+  layout?: ViewPartUid
+  type?: HostViewType
+  contributors?: Record<UserUid, true>
+  createdAt?: TimestampSeconds
+  updatedAt?: TimestampSeconds
+  notes?: string
+  title?: string
+  description?: string
+  breadcrumb?: string
+  image?: HostMediaUid
+  format?: T
+  elements?: Conditional<T, HostViewFormat.NORMALIZED, AglynElementsList, AglynElementsById>
 }

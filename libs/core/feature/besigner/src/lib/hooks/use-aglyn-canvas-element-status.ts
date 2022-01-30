@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,12 @@
  */
 
 
+import {getBesignerStore} from '@aglyn/core-data-besigner'
 import {
   type ElementId,
-  getCanvasNormalizedElementsStore,
+  getCanvasDenormalizedElementsStore,
   getComponentElementHierarchy,
 } from '@aglyn/core-data-framework'
-import {
-  getBesignerStore,
-} from '@aglyn/core-data-besigner'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {type Conditional} from '@aglyn/shared-data-types'
 import {useStoreMap} from 'effector-react'
@@ -58,7 +56,7 @@ export function useAglynCanvasElementStatus<T extends boolean = false>(
       }
       if (!includeChildStatus) return response
 
-      const elements = getCanvasNormalizedElementsStore(getApp()).getState()
+      const elements = getCanvasDenormalizedElementsStore(getApp()).getState()
       const selectedHierarchy = getComponentElementHierarchy(store?.selected?.$id, elements)
       const hoverHierarchy = getComponentElementHierarchy(store?.hovered?.$id, elements)
       response['isChildSelected'] = Boolean($id && checkHierarchy(selectedHierarchy, $id))

@@ -20,11 +20,11 @@ import {
   type AglynComponentElementTemplate,
   type AglynComponentTemplateData,
 } from '../types/aglyn-components.types'
-import {AglynElementDenormalized} from '../types/aglyn-elements.types'
+import {AglynElementNormalized} from '../types/aglyn-elements.types'
 import {createComponentElementId} from './create-component-element-id'
 
 
-function traverseComponentTemplate(data: AglynComponentTemplateData): AglynElementDenormalized {
+function traverseComponentTemplate(data: AglynComponentTemplateData): AglynElementNormalized {
   return {
     ...data,
     $id: createComponentElementId(),
@@ -34,16 +34,16 @@ function traverseComponentTemplate(data: AglynComponentTemplateData): AglynEleme
 
 export type CreateComponentElementDataOptions =
   | AglynComponentElementTemplate
-  | {data: AglynElementDenormalized}
+  | {data: AglynElementNormalized}
 
-export const ELEMENT_DEFAULTS: Partial<AglynElementDenormalized> = {
+export const ELEMENT_DEFAULTS: Partial<AglynElementNormalized> = {
   props: {},
   elements: [],
 }
 
 export function createComponentElementData(
   options?: CreateComponentElementDataOptions,
-): AglynElementDenormalized {
+): AglynElementNormalized {
   const {data} = {...options}
 
   return objectDeepMergeFillIn({...ELEMENT_DEFAULTS}, traverseComponentTemplate(data))

@@ -15,52 +15,49 @@
  * limitations under the License.
  */
 
-import {_isStrT} from '@aglyn/shared-util-guards'
+import {_isArr} from '@aglyn/shared-util-guards'
 import {
-  AglynElementDenormalized,
-  AglynElementNormalized,
-  AglynElementNormalizedMap,
-  ElementId,
+  type AglynElementNormalized,
+  type AglynElementsById,
+  type AglynElementsList,
+  type ElementId,
 } from '../types/aglyn-elements.types'
 
 
 const denormalizeData = (
   element: AglynElementNormalized,
-  flatMap: AglynElementNormalizedMap = {},
-  elemData: AglynElementDenormalized[] = [],
-): AglynElementDenormalized => {
+  parentId: ElementId,
+  flatMap: AglynElementsById = {},
+): AglynElementsById => {
   const {elements, ...rest} = element
-
-  return {
-    ...rest,
-    elements: (elements || []).map($id => (
-      denormalizeData(flatMap[$id], flatMap, elemData)
-    )),
+  flatMap[rest.$id] = {...rest, parentId, elements: []}
+  flatMap[parentId] = {
+    ...flatMap[parentId],
+    elements: (flatMap[parentId]?.elements || []).concat(rest.$id),
   }
+  elements?.forEach((child) => {
+    denormalizeData(child, rest.$id, flatMap)
+  })
+  return flatMap
 }
 
 export function denormalizeComponentElementData(
   element: AglynElementNormalized,
-  parentId: ElementId,
-): AglynElementDenormalized[]
+  parentId?: ElementId,
+): AglynElementsById
 export function denormalizeComponentElementData(
-  elements: AglynElementNormalizedMap,
-  parentId: ElementId,
-): AglynElementDenormalized[]
+  elements: AglynElementsList,
+  parentId?: ElementId,
+): AglynElementsById
 export function denormalizeComponentElementData(
-  elements: AglynElementNormalized | AglynElementNormalizedMap,
-  parentId: ElementId,
-): AglynElementDenormalized[] {
-  const elemData: AglynElementDenormalized[] = []
-  const elems: AglynElementNormalizedMap = _isStrT(elements.$id)
-    ? {[elements.$id]: {...elements}} as AglynElementNormalizedMap
-    : {...elements} as AglynElementNormalizedMap
+  elements: AglynElementNormalized | AglynElementsList,
+  parentId?: ElementId,
+): AglynElementsById {
+  let elemData
 
-  elemData.push(
-    ...(elems[parentId].elements || []).map(($id: any) =>
-      denormalizeData(elems[$id], elems),
-    ),
-  )
+  (_isArr(elements) ? elements : [elements]).forEach((element) => {
+    elemData = denormalizeData(element, parentId, elemData)
+  })
 
   return elemData
 }

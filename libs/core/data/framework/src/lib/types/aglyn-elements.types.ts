@@ -16,26 +16,26 @@
  */
 
 import {type Conditional, type JSXElementType, type KeyValueMap} from '@aglyn/shared-data-types'
-import {type BoxProps} from '@aglyn/shared-feature-themes'
 import {type CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
 import {type BundleUId, type ComponentId} from './aglyn-components.types'
 
 
 export type ElementId = string
 export type AglynElementType<P = any> = JSXElementType<P>
-export type AglynElementDenormalized<P = any> = AglynElement<P, false>
-export type AglynElementNormalized<P = any> = AglynElement<P, true>
-export type AglynElementNormalizedMap = KeyValueMap<ElementId, AglynElementNormalized>
-export type AglynElementDenormalizedList = AglynElementDenormalized[]
+export type AglynElementNormalized<P = any> = AglynElement<P, false>
+export type AglynElementDenormalized<P = any> = AglynElement<P, true>
+export type AglynElementsById<T = AglynElementDenormalized> = KeyValueMap<ElementId, T>
+export type AglynElementsList<T = AglynElementNormalized> = Array<T>
 export type AglynElementHierarchy<$ID extends ElementId = ElementId> = [root: CANVAS_ROOT_ELEMENT_ID, ...parentIds: [...ElementId[], $ID]]
 
-export interface AglynElement<P = any, Normal extends boolean = false> {
+export interface AglynElement<P = any, Denormalized extends boolean = true, BoxProps extends {sx: any} = any> {
   readonly $id: ElementId
   readonly componentId: ComponentId
   readonly bundleId?: BundleUId
   parentId?: ElementId
   displayName?: string
   description?: string
-  props?: BoxProps<any, P>
-  elements?: Conditional<Normal, true, ElementId[], AglynElement<any, Normal>[]>
+  props?: Omit<BoxProps, 'sx'> & P
+  sx?: BoxProps['sx']
+  elements?: Conditional<Denormalized, true, AglynElementsList<ElementId>, AglynElementsList>
 }

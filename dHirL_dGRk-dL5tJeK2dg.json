@@ -1,15 +1,15 @@
 {
-  "pageId": "dHirL_dGRk-dL5tJeK2dg",
+  "$id": "dHirL_dGRk-dL5tJeK2dg",
   "tenantId": "-atN0g5dZgoDp4rfMaO_",
   "hostId": "-MtN17_cpfPPLwWjE6z4",
   "createdAt": 1642246934,
   "updatedAt": 1642246934,
-  "type": "page",
+  "type": "screen",
+  "format": 2,
   "elements": {
     "root1": {
       "$id": "root1",
       "componentId": "root",
-      "props": {},
       "parentId": "_@_",
       "elements": [
         "root22",
@@ -33,8 +33,7 @@
       "props": {
         "children": "hello"
       },
-      "parentId": "z5gl_wBT6d",
-      "elements": []
+      "parentId": "z5gl_wBT6d"
     },
     "root22": {
       "$id": "root22",
@@ -42,8 +41,7 @@
       "props": {
         "children": "hello"
       },
-      "parentId": "root1",
-      "elements": []
+      "parentId": "root1"
     },
     "root32": {
       "$id": "root32",
@@ -51,13 +49,11 @@
       "props": {
         "children": "hello"
       },
-      "parentId": "root1",
-      "elements": []
+      "parentId": "root1"
     },
     "root2": {
       "$id": "root2",
       "componentId": "root4",
-      "props": {},
       "parentId": "_@_",
       "elements": [
         "root23"
@@ -67,13 +63,12 @@
       "$id": "root13",
       "componentId": "root1",
       "props": {
-        "sx": {
-          "fontWeight": "fontWeightBold"
-        },
         "children": "hello"
       },
-      "parentId": "z5gl_wBT6d",
-      "elements": []
+      "sx": {
+        "fontWeight": "fontWeightBold"
+      },
+      "parentId": "z5gl_wBT6d"
     },
     "root23": {
       "$id": "root23",
@@ -94,15 +89,13 @@
       "props": {
         "children": "hello"
       },
-      "parentId": "_@_",
-      "elements": []
+      "parentId": "_@_"
     },
     "root3": {
       "$id": "root3",
       "componentId": "root4",
       "props": {},
-      "parentId": "_@_",
-      "elements": []
+      "parentId": "_@_"
     },
     "root14": {
       "$id": "root14",
@@ -110,8 +103,7 @@
       "props": {
         "children": "hello"
       },
-      "parentId": "_@_",
-      "elements": []
+      "parentId": "_@_"
     },
     "root24": {
       "$id": "root24",
@@ -119,8 +111,7 @@
       "props": {
         "children": "hello"
       },
-      "parentId": "_@_",
-      "elements": []
+      "parentId": "_@_"
     },
     "root34": {
       "$id": "root34",
@@ -128,11 +119,9 @@
       "props": {
         "children": "2hello"
       },
-      "parentId": "root23",
-      "elements": []
+      "parentId": "root23"
     },
     "_-cjPJSQRF": {
-      "props": {},
       "componentId": "list",
       "bundleId": "mui",
       "$id": "_-cjPJSQRF",
@@ -160,8 +149,7 @@
         "secondary": "This is the secondary"
       },
       "$id": "WoX9hOUD8i",
-      "parentId": "6MaPpIgtBj",
-      "elements": []
+      "parentId": "6MaPpIgtBj"
     },
     "2tyBF5FuWV": {
       "componentId": "list-item",
@@ -193,22 +181,17 @@
       "elements": [
         "root12",
         "root13"
-      ],
-      "props": {
-        "disableGutters": false
-      }
+      ]
     },
     "XRuRzV2ChR": {
       "props": {
         "variant": "outlined",
-        "children": "Click Me",
-        "disabled": false
+        "children": "Click Me"
       },
       "componentId": "button",
       "bundleId": "mui",
       "$id": "XRuRzV2ChR",
-      "parentId": "_@_",
-      "elements": []
+      "parentId": "_@_"
     },
     "CPWAiZyjaE": {
       "props": {
@@ -218,11 +201,9 @@
       "componentId": "list-item-text",
       "bundleId": "mui",
       "$id": "CPWAiZyjaE",
-      "parentId": "2tyBF5FuWV",
-      "elements": []
+      "parentId": "2tyBF5FuWV"
     },
     "v_unQfYCKh": {
-      "props": {},
       "componentId": "list",
       "bundleId": "mui",
       "$id": "v_unQfYCKh",
@@ -249,8 +230,7 @@
         "secondary": "This is the secondary"
       },
       "$id": "cc0QpoLPBP",
-      "parentId": "TE_PPBTPQV",
-      "elements": []
+      "parentId": "TE_PPBTPQV"
     },
     "mDxtIdYb94": {
       "componentId": "list-item",
@@ -269,8 +249,7 @@
         "secondary": "This is the secondary"
       },
       "$id": "RvSKGNqJma",
-      "parentId": "mDxtIdYb94",
-      "elements": []
+      "parentId": "mDxtIdYb94"
     }
   }
 }

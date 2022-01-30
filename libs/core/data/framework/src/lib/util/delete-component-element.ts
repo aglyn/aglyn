@@ -17,13 +17,13 @@
 
 import {_isArr} from '@aglyn/shared-util-guards'
 import {arrayRemoveItem} from '@aglyn/shared-util-tools'
-import {AglynElementNormalizedMap, ElementId} from '../types/aglyn-elements.types'
+import {AglynElementsById, ElementId} from '../types/aglyn-elements.types'
 
 
 export function deleteComponentElement(
   $id: ElementId,
-  state: AglynElementNormalizedMap,
-): AglynElementNormalizedMap {
+  state: AglynElementsById,
+): AglynElementsById {
   const {[$id]: element, ...restStore} = state
   let store = restStore
   const parent = store[element?.parentId]

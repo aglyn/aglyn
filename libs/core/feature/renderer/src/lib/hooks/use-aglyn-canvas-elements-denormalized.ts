@@ -16,17 +16,30 @@
  */
 
 import {
-  type AglynElementDenormalizedList,
+  type AglynElementsById,
   getCanvasDenormalizedElementsStore,
 } from '@aglyn/core-data-framework'
+import {_isFnT} from '@aglyn/shared-util-guards'
 import {useStoreMap} from 'effector-react'
 import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
-export function useAglynCanvasElementsDenormalized(): AglynElementDenormalizedList {
+export function useAglynCanvasElementsDenormalized(): AglynElementsById
+export function useAglynCanvasElementsDenormalized<Result>(
+  callbackFn: (state: AglynElementsById) => Result,
+): Result
+export function useAglynCanvasElementsDenormalized<Result>(
+  callbackFn?: (state: AglynElementsById) => Result,
+): Result | AglynElementsById {
   const {getApp} = useAglynAppContext()
   const app = getApp()
   const store = getCanvasDenormalizedElementsStore(app)
-  return useStoreMap(store, (store) => store)
+  return useStoreMap({
+    store,
+    keys: [callbackFn],
+    fn: (state: AglynElementsById, [callbackFn]) => {
+      return _isFnT(callbackFn) ? (callbackFn(state) as Result) : state
+    },
+  }) as Result | AglynElementsById
 }
 export default useAglynCanvasElementsDenormalized

@@ -17,16 +17,16 @@
 
 import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
 import {
-  AglynElementHierarchy,
-  AglynElementNormalizedMap,
-  ElementId,
+  type AglynElementHierarchy,
+  type AglynElementsById,
+  type ElementId,
 } from '../types/aglyn-elements.types'
 import isRootElementId from './is-root-element-id'
 
 
 export function getComponentElementHierarchy<T extends ElementId>(
   $id: T,
-  elements: AglynElementNormalizedMap,
+  elements: AglynElementsById,
 ): AglynElementHierarchy<T> {
   const hierarchy = [CANVAS_ROOT_ELEMENT_ID]
 

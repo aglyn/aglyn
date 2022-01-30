@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,30 +15,32 @@
  * limitations under the License.
  */
 
-import {getCanvasStore} from '@aglyn/core-data-framework'
-import {useAglynAppContext, useAglynCanvasApiEvents} from '@aglyn/core-feature-renderer'
+import {canvasRedo, canvasUndo, getCanvasStore} from '@aglyn/core-data-framework'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {useStoreMap} from 'effector-react'
+import {useCallback} from 'react'
 
 
 export type UseAglynCanvasHistory = [
   undo: () => void,
   redo: () => void,
-  canUndo: boolean,
-  canRedo: boolean,
+  canUndoTimes: number | false,
+  canRedoTimes: number | false,
 ]
 
 export function useAglynCanvasHistoryControls(): UseAglynCanvasHistory {
   const {getApp} = useAglynAppContext()
+  const handleUndo = useCallback(() => canvasUndo(getApp(), {}), [getApp])
+  const handleRedo = useCallback(() => canvasRedo(getApp(), {}), [getApp])
   const store = getCanvasStore(getApp())
-  const {undo, redo} = useAglynCanvasApiEvents()
-  const [canUndo, canRedo] = useStoreMap({
+  const [canUndo, canRedo]: [number | false, number | false] = useStoreMap({
     store,
     keys: [],
     fn: (state) => [
-      state.past.length > 0,
-      state.future.length > 0,
+      state.past.length > 0 ? state.past.length : false,
+      state.future.length > 0 ? state.future.length : false,
     ],
   })
-  return [undo, redo, canUndo, canRedo]
+  return [handleUndo, handleRedo, canUndo, canRedo]
 }
 export default useAglynCanvasHistoryControls

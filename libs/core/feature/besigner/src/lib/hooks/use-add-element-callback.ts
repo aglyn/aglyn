@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
-import {CANVAS_ROOT_ELEMENT_ID, createComponentElementData} from '@aglyn/core-data-framework'
-import {useAglynCanvasApiEvents} from '@aglyn/core-feature-renderer'
+import {
+  addCanvasElement,
+  CANVAS_ROOT_ELEMENT_ID,
+  createComponentElementData,
+} from '@aglyn/core-data-framework'
+import {useAglynAppContext} from '@aglyn/core-feature-renderer'
 import {type SyntheticEvent, useCallback} from 'react'
 import {
   type ElementDrawerOptions,
@@ -40,8 +44,8 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
 ): AddElementCallback<E> {
   const {onComplete, onError, drawerOptions} = {...options}
   const {elementDrawer} = useElementDrawerContext()
-  const {addElement} = useAglynCanvasApiEvents()
   const {$id} = useAglynCanvasSelected() || {}
+  const {getApp} = useAglynAppContext()
 
   return useCallback((e, opts) => {
     elementDrawer({title: 'Add New Element', ...drawerOptions, ...opts?.drawerOptions})
@@ -54,7 +58,7 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
             element: createComponentElementData(data),
           }
           console.log('addElement', newElement)
-          addElement(newElement)
+          addCanvasElement(getApp(), newElement)
         }
         else {
           console.warn('Invalid data returned for addElement callback', data)
@@ -68,7 +72,7 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
         onError && onError(e, error)
         opts?.onError && opts?.onError(e, error)
       })
-  }, [elementDrawer, drawerOptions, onComplete, $id, addElement, onError])
+  }, [$id, getApp, elementDrawer, drawerOptions, onComplete, onError])
 }
 
 export default useAddElementCallback

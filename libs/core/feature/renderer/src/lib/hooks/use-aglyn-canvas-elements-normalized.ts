@@ -15,31 +15,15 @@
  * limitations under the License.
  */
 
-import {
-  type AglynElementNormalizedMap,
-  getCanvasNormalizedElementsStore,
-} from '@aglyn/core-data-framework'
-import {_isFnT} from '@aglyn/shared-util-guards'
+import {type AglynElementsList, getCanvasNormalizedElementsStore} from '@aglyn/core-data-framework'
 import {useStoreMap} from 'effector-react'
 import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
-export function useAglynCanvasElementsNormalized(): AglynElementNormalizedMap
-export function useAglynCanvasElementsNormalized<Result>(
-  callbackFn: (state: AglynElementNormalizedMap) => Result,
-): Result
-export function useAglynCanvasElementsNormalized<Result>(
-  callbackFn?: (state: AglynElementNormalizedMap) => Result,
-): Result | AglynElementNormalizedMap {
+export function useAglynCanvasElementsNormalized(): AglynElementsList {
   const {getApp} = useAglynAppContext()
   const app = getApp()
   const store = getCanvasNormalizedElementsStore(app)
-  return useStoreMap({
-    store,
-    keys: [callbackFn],
-    fn: (state: AglynElementNormalizedMap, [callbackFn]) => {
-      return _isFnT(callbackFn) ? (callbackFn(state) as Result) : state
-    },
-  }) as Result | AglynElementNormalizedMap
+  return useStoreMap(store, (store) => store)
 }
 export default useAglynCanvasElementsNormalized

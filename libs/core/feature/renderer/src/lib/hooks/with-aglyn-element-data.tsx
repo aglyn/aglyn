@@ -16,7 +16,7 @@
  */
 
 import {
-  type AglynElementNormalized,
+  type AglynElementDenormalized,
   type ElementId,
   type IAglynComponent,
 } from '@aglyn/core-data-framework'
@@ -35,7 +35,7 @@ export interface RequiredElementDataProps {
 }
 
 export interface OptionalElementDataProps extends InnerRefProp {
-  elementData: AglynElementNormalized<any>
+  elementData: AglynElementDenormalized<any>
   component: IAglynComponent<any>
   elemProps: any
 }

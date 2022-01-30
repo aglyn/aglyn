@@ -32,7 +32,6 @@ export * from './types/aglyn-components.types'
 export * from './types/aglyn-contexts.types'
 export * from './types/aglyn-elements.types'
 export * from './types/aglyn-extensions.types'
-export * from './types/aglyn-pages.types'
 export * from './types/aglyn-tenancy.types'
 export * from './types/generic.types'
 
@@ -69,6 +68,7 @@ export * from './constants/lifecycle'
 export * from './constants/logger'
 export * from './constants/platform'
 export * from './constants/symbol'
+export * from './constants/tenancy'
 export * from './constants/version'
 
 
@@ -87,13 +87,13 @@ export * from './util/create-component-element-data-copy'
 export * from './util/create-component-element-id'
 export * from './util/create-components-bundle'
 export * from './util/delete-component-element'
-export * from './util/denormalize-component-element-data'
+export * from './util/normalize-component-element-data'
 export * from './util/get-component-element-hierarchy'
 export * from './util/handle-state-modification-history-change'
 export * from './util/handle-state-modification-history-redo'
 export * from './util/handle-state-modification-history-undo'
 export * from './util/is-root-element-id'
-export * from './util/normalize-component-element-data'
+export * from './util/denormalize-component-element-data'
 
 
 //     __  _______  ____  ________   _____

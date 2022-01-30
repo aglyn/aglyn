@@ -22,16 +22,17 @@ import {
   type CanvasDeleteElementPayload,
   type CanvasDuplicateElementPayload,
   type CanvasMoveElementPayload,
+  type CanvasSetElementPayload,
   type CanvasSetElementsPayload,
   type CanvasUpdateElementPayload,
 } from '../constants/emitter'
 import {type ElementsDataStore} from '../types/aglyn-canvas.types'
-import {AglynElementNormalizedMap} from '../types/aglyn-elements.types'
+import {type AglynElementsById} from '../types/aglyn-elements.types'
 import {createComponentElementDataCopy} from './create-component-element-data-copy'
 import {deleteComponentElement} from './delete-component-element'
+import {denormalizeComponentElementData} from './denormalize-component-element-data'
 import {getComponentElementHierarchy} from './get-component-element-hierarchy'
 import {handleStateModificationHistoryChange} from './handle-state-modification-history-change'
-import {normalizeComponentElementData} from './normalize-component-element-data'
 
 
 type CanvasApiEventHandler<S extends ElementsDataStore, P> = (
@@ -49,7 +50,7 @@ export const handleCanvasApiChangeEvent = <S extends ElementsDataStore, P>(
 
 
 export const handleCanvasSetElements = (
-  state: AglynElementNormalizedMap,
+  state: AglynElementsById,
   payload: CanvasSetElementsPayload,
 ) => {
 
@@ -57,7 +58,7 @@ export const handleCanvasSetElements = (
   return elements
 }
 export const handleCanvasAddElement = (
-  state: AglynElementNormalizedMap,
+  state: AglynElementsById,
   payload: CanvasAddElementPayload,
 ) => {
 
@@ -66,7 +67,7 @@ export const handleCanvasAddElement = (
   const newParent = state[parentId]
   if (!newParent) {throw new Error('Element must have a valid parent')}
 
-  const newData = normalizeComponentElementData(element, parentId)
+  const newData = denormalizeComponentElementData(element, parentId)
   const siblingIds = state[parentId]?.elements || []
 
   return {
@@ -86,7 +87,7 @@ export const handleCanvasAddElement = (
 
 
 export const handleCanvasUpdateElement = (
-  state: AglynElementNormalizedMap,
+  state: AglynElementsById,
   payload: CanvasUpdateElementPayload,
 ) => {
 
@@ -95,15 +96,28 @@ export const handleCanvasUpdateElement = (
     ...state,
     [element.$id]: {
       ...objectDeepMerge(state[element.$id], element),
-      parentId: state[element.$id].parentId,
-      props,
     },
-  }
+  } as ElementsDataStore['present']
+}
+
+
+export const handleCanvasSetElement = (
+  state: AglynElementsById,
+  payload: CanvasSetElementPayload,
+) => {
+
+  const {element} = payload
+  return {
+    ...state,
+    [element.$id]: {
+      ...element,
+    },
+  } as ElementsDataStore['present']
 }
 
 
 export const handleCanvasMoveElement = (
-  state: AglynElementNormalizedMap,
+  state: AglynElementsById,
   payload: CanvasMoveElementPayload,
 ) => {
 
@@ -161,7 +175,7 @@ export const handleCanvasMoveElement = (
 
 
 export const handleCanvasDuplicateElement = (
-  state: AglynElementNormalizedMap,
+  state: AglynElementsById,
   payload: CanvasDuplicateElementPayload,
 ) => {
 
@@ -177,7 +191,7 @@ export const handleCanvasDuplicateElement = (
   })
 }
 export const handleCanvasDeleteElement = (
-  state: AglynElementNormalizedMap,
+  state: AglynElementsById,
   payload: CanvasDeleteElementPayload,
 ) => {
 

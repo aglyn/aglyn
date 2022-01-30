@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-import {AglynElementDenormalized} from '@aglyn/core-data-framework'
+import {AglynElementNormalized} from '@aglyn/core-data-framework'
 
 
-export const samplePageData: AglynElementDenormalized[] = [
+export const samplePageData: AglynElementNormalized[] = [
   {
     $id: 'root1',
     componentId: 'root',
-    props: {},
     elements: [
       {
         $id: 'root12',
@@ -50,7 +49,6 @@ export const samplePageData: AglynElementDenormalized[] = [
   {
     $id: 'root2',
     componentId: 'root4',
-    props: {},
     elements: [
       {
         $id: 'root13',
@@ -79,7 +77,6 @@ export const samplePageData: AglynElementDenormalized[] = [
   {
     $id: 'root3',
     componentId: 'root4',
-    props: {},
     elements: [
       {
         $id: 'root14',

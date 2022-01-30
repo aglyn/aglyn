@@ -18,7 +18,7 @@
 import {
   type AglynElementHierarchy,
   type ElementId,
-  getCanvasNormalizedElementsStore,
+  getCanvasDenormalizedElementsStore,
   getComponentElementHierarchy,
 } from '@aglyn/core-data-framework'
 import {useStoreMap} from 'effector-react'
@@ -29,7 +29,7 @@ export function useAglynCanvasElementHierarchy<T extends ElementId>(
   $id: T,
 ): AglynElementHierarchy<T> {
   const {getApp} = useAglynAppContext()
-  const store = getCanvasNormalizedElementsStore(getApp())
+  const store = getCanvasDenormalizedElementsStore(getApp())
 
   return useStoreMap({
     store,

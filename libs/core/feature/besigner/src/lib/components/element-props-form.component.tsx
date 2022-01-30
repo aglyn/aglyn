@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {type ElementId} from '@aglyn/core-data-framework'
-import {useAglynCanvasApiEvents, useAglynElementData} from '@aglyn/core-feature-renderer'
+import {type ElementId, updateCanvasElement} from '@aglyn/core-data-framework'
+import {useAglynAppContext, useAglynElementData} from '@aglyn/core-feature-renderer'
 import {
   componentMapper,
   FormRenderer,
@@ -78,7 +78,7 @@ export interface ElementPropsFormProps extends FormRendererProps {
 const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
-    const {updateElement} = useAglynCanvasApiEvents()
+    const {getApp} = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({$id})
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
@@ -87,8 +87,8 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
 
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback((values) => {
-      updateElement({element: {$id, props: {...values}}})
-    }, [$id, updateElement])
+      updateCanvasElement(getApp(), {element: {$id, props: {...values}}})
+    }, [$id, getApp])
     const handleDeleteElement = useCallback((e: ChangeEvent<unknown>) => {
       deleteElementCallback(e)
     }, [deleteElementCallback])

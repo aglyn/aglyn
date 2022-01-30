@@ -16,9 +16,9 @@
  */
 
 import {
-  type AglynElementNormalized,
+  type AglynElementDenormalized,
   type ElementId,
-  getCanvasNormalizedElementsStore,
+  getCanvasDenormalizedElementsStore,
 } from '@aglyn/core-data-framework'
 import {type AnyProps, type Conditional, type EmptyObj} from '@aglyn/shared-data-types'
 import {useStoreMap} from 'effector-react'
@@ -26,29 +26,29 @@ import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
 export type UseAglynElementData<P = AnyProps,
-  K extends keyof AglynElementNormalized<P> = null> = Conditional<K,
-  keyof AglynElementNormalized<P>,
-  AglynElementNormalized<P>[K],
-  AglynElementNormalized<P>>
+  K extends keyof AglynElementDenormalized<P> = null> = Conditional<K,
+  keyof AglynElementDenormalized<P>,
+  AglynElementDenormalized<P>[K],
+  AglynElementDenormalized<P>>
 
 export function useAglynElementData<P = EmptyObj>(
   $id: ElementId,
-): AglynElementNormalized<P>
+): AglynElementDenormalized<P>
 
 export function useAglynElementData<P = EmptyObj,
-  K extends keyof AglynElementNormalized<P> = null>(
+  K extends keyof AglynElementDenormalized<P> = null>(
   $id: ElementId,
   key: K,
-): AglynElementNormalized<P>[K]
+): AglynElementDenormalized<P>[K]
 
 export function useAglynElementData<P = EmptyObj,
-  K extends keyof AglynElementNormalized<P> = null>(
+  K extends keyof AglynElementDenormalized<P> = null>(
   $id: ElementId,
   key?: K,
 ): UseAglynElementData<P, K> {
 
   const {getApp} = useAglynAppContext()
-  const store = getCanvasNormalizedElementsStore(getApp())
+  const store = getCanvasDenormalizedElementsStore(getApp())
   return useStoreMap({
     store,
     keys: [$id, key],

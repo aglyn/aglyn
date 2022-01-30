@@ -16,10 +16,6 @@
  */
 
 import {
-  type ElementId,
-  isRootElementId,
-} from '@aglyn/core-data-framework'
-import {
   type BesignerDndElementActive,
   type BesignerDndElementOver,
   DndDragSourceTypeFlag,
@@ -28,9 +24,9 @@ import {
   setBesignerCanvasSelected,
   setBesignerDndState,
 } from '@aglyn/core-data-besigner'
+import {type ElementId, isRootElementId, moveCanvasElement} from '@aglyn/core-data-framework'
 import {
   useAglynAppContext,
-  useAglynCanvasApiEvents,
   useAglynCanvasElementHierarchy,
   useAglynComponentSchema,
   useAglynElementData,
@@ -87,7 +83,6 @@ export function useLeafDnd(
   const {getApp} = useAglynAppContext()
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
-  const {moveElement} = useAglynCanvasApiEvents()
   const componentSchema = useAglynComponentSchema(componentId, bundleId)
   const hierarchy = componentSchema?.hierarchy
 
@@ -105,12 +100,13 @@ export function useLeafDnd(
     active: BesignerDndElementActive,
     over?: BesignerDndElementOver,
   ) => {
+    const app = getApp()
     console.log('handleDragEnd', active, over)
-    setBesignerDndState(getApp(), {dnd: () => ({})})
+    setBesignerDndState(app, {dnd: () => ({})})
     if (over?.$id && active?.$id !== over.$id) {
-      moveElement({$id: active.$id, parentId: over?.$id, index: -1})
+      moveCanvasElement(app, {$id: active.$id, parentId: over?.$id, index: -1})
     }
-  }, [getApp, moveElement])
+  }, [getApp])
 
 
   const dragItem = useMemo(() => ({

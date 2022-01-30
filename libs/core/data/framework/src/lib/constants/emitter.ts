@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {type AnyProps, type Dictionary} from '@aglyn/shared-data-types'
+import {type AnyProps, type Dictionary, RequiredPickAlt} from '@aglyn/shared-data-types'
 import {EmitterFn} from '@aglyn/shared-util-emitter'
 import {
   type createEffect as createEffectorEffect,
@@ -41,10 +41,10 @@ import {
   type ContextStoreUid,
 } from '../types/aglyn-contexts.types'
 import {
-  AglynElementDenormalized,
-  AglynElementNormalized,
-  AglynElementNormalizedMap,
-  ElementId,
+  type AglynElementDenormalized,
+  type AglynElementNormalized,
+  type AglynElementsById,
+  type ElementId,
 } from '../types/aglyn-elements.types'
 import {type AglynExtensionOptions, type IAglynExtension} from '../types/aglyn-extension.types'
 import {type AglynExtensionLoader, type ExtensionUUN} from '../types/aglyn-extensions.types'
@@ -202,13 +202,14 @@ export type CommandsTriggerPayload = PayloadData<{commandId: CommandUId} & Dicti
 export type CanvasUndoPayload = PayloadData<any>
 export type CanvasRedoPayload = PayloadData<any>
 export type CanvasGetStorePayload = PayloadData<any>
-export type CanvasSetElementsPayload = PayloadData<{elements: AglynElementNormalizedMap}>
-export type CanvasGetElementsNormalizedPayload = PayloadData<any>
+export type CanvasSetElementsPayload = PayloadData<{elements: AglynElementsById}>
 export type CanvasGetElementsDenormalizedPayload = PayloadData<any>
+export type CanvasGetElementsNormalizedPayload = PayloadData<any>
 export type CanvasGetApiEventsPayload = PayloadData<any>
-export type CanvasAddElementPayload = PayloadData<{parentId: ElementId, index: number, element: AglynElementDenormalized}>
+export type CanvasAddElementPayload = PayloadData<{parentId: ElementId, index: number, element: AglynElementNormalized}>
 export type CanvasGetElementPayload = PayloadData<{$id: ElementId}>
-export type CanvasUpdateElementPayload = PayloadData<{element: AglynElementNormalized}>
+export type CanvasUpdateElementPayload = PayloadData<{element: RequiredPickAlt<AglynElementDenormalized, '$id'>}>
+export type CanvasSetElementPayload = PayloadData<{element: AglynElementDenormalized}>
 export type CanvasDeleteElementPayload = PayloadData<{$id: ElementId}>
 export type CanvasMoveElementPayload = PayloadData<{$id: ElementId, parentId: ElementId, index: number}>
 export type CanvasDuplicateElementPayload = PayloadData<{$id: ElementId}>

@@ -28,6 +28,7 @@ import {
   type CanvasGetStorePayload,
   type CanvasMoveElementPayload,
   type CanvasRedoPayload,
+  type CanvasSetElementPayload,
   type CanvasSetElementsPayload,
   type CanvasUndoPayload,
   type CanvasUpdateElementPayload,
@@ -42,9 +43,9 @@ import {
 } from '../types/aglyn-canvas.types'
 import {type ContextDomain, type ContextStore} from '../types/aglyn-contexts.types'
 import {
-  type AglynElementDenormalized,
-  type AglynElementDenormalizedList,
-  type AglynElementNormalizedMap,
+  type AglynElementNormalized,
+  type AglynElementsById,
+  type AglynElementsList,
 } from '../types/aglyn-elements.types'
 import {type AglynModuleEffectListener} from '../types/aglyn-module.types'
 import {denormalizeComponentElementData} from '../util/denormalize-component-element-data'
@@ -57,6 +58,7 @@ import {
   handleCanvasDeleteElement,
   handleCanvasDuplicateElement,
   handleCanvasMoveElement,
+  handleCanvasSetElement,
   handleCanvasSetElements,
   handleCanvasUpdateElement,
 } from '../util/utils.canvas'
@@ -73,14 +75,14 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   #domain: ContextDomain = null
   #context: ContextStore<ElementsDataStore> = null
   #events: ElementsDataStoreApi = null
-  #normalizedElementsStore: ContextStore<AglynElementNormalizedMap> = null
-  #denormalizedElementsStore: ContextStore<AglynElementDenormalized[]> = null
+  #denormalizedElementsStore: ContextStore<AglynElementsById> = null
+  #normalizedElementsStore: ContextStore<AglynElementNormalized[]> = null
 
   public get domain(): ContextDomain {return this.#domain}
   public get events(): ElementsDataStoreApi {return this.#events}
   public get context(): ContextStore<ElementsDataStore> {return this.#context}
-  public get normalizedElementsStore(): ContextStore<AglynElementNormalizedMap> {return this.#normalizedElementsStore}
-  public get denormalizedElementsStore(): ContextStore<AglynElementDenormalizedList> {return this.#denormalizedElementsStore}
+  public get denormalizedElementsStore(): ContextStore<AglynElementsById> {return this.#denormalizedElementsStore}
+  public get normalizedElementsStore(): ContextStore<AglynElementsList> {return this.#normalizedElementsStore}
 
   protected get listeners(): AglynModuleEffectListener<any>[] {
     return []
@@ -94,16 +96,16 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
     this.#domain = this.app.contexts.domain.domain(this.namespace)
 
     this.#context = this.#domain.createStore<ElementsDataStore>({
-      past: [] as AglynElementNormalizedMap[],
-      present: normalizeComponentElementData(this.options.initialElements || [], CANVAS_ROOT_ELEMENT_ID),
-      future: [] as AglynElementNormalizedMap[],
+      past: [] as AglynElementsById[],
+      present: denormalizeComponentElementData(this.options.initialElements || [], CANVAS_ROOT_ELEMENT_ID),
+      future: [] as AglynElementsById[],
     }, {name: `${this.namespace}:canvas-elements`})
     persist({store: this.#context})
-    this.#normalizedElementsStore = this.#context.map((elements) => {
+    this.#denormalizedElementsStore = this.#context.map((elements) => {
       return elements.present
     })
-    this.#denormalizedElementsStore = this.#context.map((elements) => {
-      return denormalizeComponentElementData(elements.present, CANVAS_ROOT_ELEMENT_ID)
+    this.#normalizedElementsStore = this.#context.map((elements) => {
+      return normalizeComponentElementData(elements.present, CANVAS_ROOT_ELEMENT_ID)
     })
 
     this.#events = createApi(this.#context, {
@@ -112,6 +114,7 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
       setElements: handleCanvasApiChangeEvent(handleCanvasSetElements),
       addElement: handleCanvasApiChangeEvent(handleCanvasAddElement),
       updateElement: handleCanvasApiChangeEvent(handleCanvasUpdateElement),
+      setElement: handleCanvasApiChangeEvent(handleCanvasSetElement),
       moveElement: handleCanvasApiChangeEvent(handleCanvasMoveElement),
       duplicateElement: handleCanvasApiChangeEvent(handleCanvasDuplicateElement),
       deleteElement: handleCanvasApiChangeEvent(handleCanvasDeleteElement),
@@ -128,11 +131,11 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   public getStore(payload?: CanvasGetStorePayload): ContextStore<ElementsDataStore> {
     return this.#context
   }
-  public getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload): ContextStore<AglynElementNormalizedMap> {
-    return this.#normalizedElementsStore
-  }
-  public getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload): ContextStore<AglynElementDenormalizedList> {
+  public getDenormalizedElementsStore(payload?: CanvasGetElementsDenormalizedPayload): ContextStore<AglynElementsById> {
     return this.#denormalizedElementsStore
+  }
+  public getNormalizedElementsStore(payload?: CanvasGetElementsNormalizedPayload): ContextStore<AglynElementsList> {
+    return this.#normalizedElementsStore
   }
   public getApiEvents(payload?: CanvasGetApiEventsPayload): ElementsDataStoreApi {
     return this.#events
@@ -155,6 +158,10 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   }
   public updateElement(payload: CanvasUpdateElementPayload): this {
     this.#events.updateElement(payload)
+    return this
+  }
+  public setElement(payload: CanvasSetElementPayload): this {
+    this.#events.setElement(payload)
     return this
   }
   public deleteElement(payload: CanvasDeleteElementPayload): this {

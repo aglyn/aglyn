@@ -46,7 +46,7 @@ import {
 } from '../constants/emitter'
 import {type OF_KIND, type OF_TYPE, type SYMBOL_TYPE} from '../constants/symbol'
 import {type IAglynAppController} from './aglyn-app.types'
-import {type AglynElementNormalized} from './aglyn-elements.types'
+import {type AglynElementDenormalized} from './aglyn-elements.types'
 import {
   type AglynModuleModelOptions,
   type AglynModuleModelT,
@@ -144,7 +144,7 @@ export interface AglynComponentSchema<P = any> {
     restrictChildren?: ComponentsLinealOrder
     restrictParent?: ComponentsLinealOrder
   }
-  resolveProps?: ResolveProps<AglynElementNormalized<P>>
+  resolveProps?: ResolveProps<AglynElementDenormalized<P>>
   // Besigner feature flags
   actions?: {disable?: boolean}
   badge?: {disable?: boolean}
