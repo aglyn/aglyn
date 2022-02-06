@@ -28,9 +28,10 @@ import {NextLink, type NextLinkProps} from './next-link'
 
 export type AppLinkVariant = 'naked' | 'button' | 'text' | 'default' | undefined | never
 
-export type TextProps = MuiLinkProps<any, NextLinkProps>
-export type ButtonProps = MuiButtonProps<any, NextLinkProps>
-export type NakedProps = MuiLinkProps<any, NextLinkProps>
+type BaseLinkProps = Omit<NextLinkProps, 'as' | 'hrefTo'>
+export type TextProps = MuiLinkProps<any, BaseLinkProps>
+export type ButtonProps = MuiButtonProps<any, BaseLinkProps>
+export type NakedProps = MuiLinkProps<any, BaseLinkProps>
 export type DefaultProps = TextProps
 
 export type AppLinkProps<T = AppLinkVariant> =
@@ -82,12 +83,11 @@ const classKey = generateComponentClassKeys('AppLink', [
  */
 const AppLink = forwardRef(
   function RefRenderFn<T extends AppLinkVariant>(props: AppLinkProps<T>, ref) {
-    const {className, componentVariant: variant, ...rest} = props
+    const {className, componentVariant: variant, href, hrefAs, ...rest} = props
 
     const router = useRouter()
-    const href = rest.href
     const pathname = _isObj(href) ? href['pathname'] : href
-    const isCurrentPath = router.pathname === pathname
+    const isCurrentPath = router.pathname === pathname || router.pathname === href
 
     const isNaked = variant === 'naked',
       isButton = variant === 'button',
@@ -106,6 +106,8 @@ const AppLink = forwardRef(
         <NextLink
           ref={ref}
           className={elemClassName}
+          hrefTo={href}
+          hrefAs={hrefAs}
           {...rest}
         />
       )
@@ -116,6 +118,8 @@ const AppLink = forwardRef(
           ref={ref}
           className={elemClassName}
           component={NextLink}
+          hrefTo={href}
+          hrefAs={hrefAs}
           {...rest}
         />
       )
@@ -125,6 +129,8 @@ const AppLink = forwardRef(
         ref={ref}
         className={elemClassName}
         component={NextLink}
+        hrefTo={href}
+        hrefAs={hrefAs}
         {...rest}
       />
     )

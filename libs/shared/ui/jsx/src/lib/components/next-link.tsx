@@ -28,15 +28,17 @@ Anchor.displayName = 'Anchor'
 
 
 export interface NextLinkProps extends Omit<AnchorProps, 'href'>, Omit<LinkProps, 'as' | 'href'> {
-  href?: LinkProps['href']
+  hrefTo?: LinkProps['href']
   hrefAs?: LinkProps['as']
 }
 
 const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(
   function RefRenderFn(props, ref) {
     const {
+      as: _1,
+      href: _2,
       hrefAs,
-      href,
+      hrefTo,
       replace,
       scroll,
       passHref,
@@ -44,12 +46,12 @@ const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(
       prefetch,
       locale,
       ...rest
-    } = props
+    } = props as LinkProps & NextLinkProps
 
     return (
       <Link
         as={hrefAs}
-        href={href}
+        href={hrefTo}
         locale={locale}
         passHref={passHref}
         prefetch={prefetch}
@@ -64,6 +66,7 @@ const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(
 )
 
 NextLink.displayName = 'NextLink'
+NextLink.defaultProps = {passHref: true}
 
 export {NextLink}
 export default NextLink

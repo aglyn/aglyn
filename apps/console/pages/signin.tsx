@@ -26,8 +26,10 @@ import {
   FormSpy,
   useFormApi,
 } from '@aglyn/shared-ui-jsx'
+import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {type FormTemplateRenderProps} from '@data-driven-forms/react-form-renderer'
 import type FormSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
+import {CssBaseline, Divider} from '@mui/material'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
@@ -54,13 +56,13 @@ const FormTemplate = forwardRef<any, FormTemplateRenderProps>(
               <FormControl margin="normal" fullWidth>
                 <Button
                   color="secondary"
-                  disabled={submitting || !valid || pristine}
+                  disabled={submitting/* || !valid || pristine*/}
                   style={{marginRight: 8}}
                   type="submit"
                   variant="contained"
                   fullWidth
                 >
-                  Proceed
+                  Next
                 </Button>
               </FormControl>
             </Box>
@@ -101,9 +103,10 @@ function Signin() {
         alignItems: 'center',
         justifyContent: 'center',
         p: [2, 3],
+        color: 'common.white',
       }}
     >
-
+      <CssBaseline />
       <Stack
         direction="column"
         justifyContent="center"
@@ -146,23 +149,23 @@ function Signin() {
               spacing={1}
               sx={{pb: 3}}
             >
-              <AglynSvgIcon rounded bordered edge="start" sx={{fontSize: 32}} />
-              <AglynSvgLogo sx={{fontSize: 86}} />
+              <AglynSvgIcon rounded bordered sx={{fontSize: 20}} />
+              <AglynSvgLogo sx={{fontSize: 64}} />
             </Stack>
 
 
             <Typography
               component="h1"
-              variant="h3"
+              variant="h4"
             >
-              {'Sign in '}
+              {'Sign in'}
             </Typography>
 
             <Typography
               component="div"
               variant="h6"
             >
-              {'Using your Email and Password'}
+              {'Use your Aglyn account'}
             </Typography>
           </Stack>
 
@@ -178,27 +181,40 @@ function Signin() {
             clearOnUnmount
           />
 
+          <Divider flexItem sx={{my: 1}}>
+            {'Or'}
+          </Divider>
+
           <Stack
             direction="column"
             justifyContent="center"
-            alignItems="center"
+            alignItems="stretch"
             spacing={1}
-            sx={{mt: 2}}
           >
-            <Typography
-              component="div"
-              variant="body2"
+
+            <Button
+              // variant="contained"
+              startIcon={<MdiIcon path={mdiGoogle.path} />}
             >
-              {'Having trouble logging in? '}
-              <AppLink
-                href="account-recovery"
-              >
-                Account recovery
-              </AppLink>
-            </Typography>
+              {'Sign in with Google'}
+            </Button>
+
           </Stack>
 
         </Paper>
+
+        <Typography
+          component="div"
+          variant="body2"
+          color=""
+        >
+          {'Having trouble logging in? '}
+          <AppLink
+            href="/account-recovery"
+          >
+            Account recovery
+          </AppLink>
+        </Typography>
 
       </Stack>
 
