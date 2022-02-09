@@ -17,6 +17,22 @@
 import {type HttpStatusCode} from '@aglyn/shared-data-enums'
 
 
+/**
+ * Speed up creating a new {@link Response} object specifying the JSON header
+ * `'Content-Type': 'application/json'` and {@link JSON.stringify|serializing}
+ * JSON response data
+ * @example - pages/_middleware.ts
+ * export function middleware(req: NextRequest) {
+ *   return createJsonResponse(
+ *     HttpStatusCode.OK,
+ *     {data: 'Hello World!'},
+ *   )
+ * }
+ * @param status - the response {@link HttpStatusCode}
+ * @param data - data to serialize and return for the response
+ * @param init - optionally provide {@link ResponseInit} object to spread
+ * @returns a new {@link Response} object instance
+ */
 function createJsonResponse(status: HttpStatusCode, data: any, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     ...init,

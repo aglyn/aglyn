@@ -17,6 +17,7 @@
 
 export * from './types'
 
+export * from './create-cors-response-handler'
 export * from './create-json-response'
 export * from './get-allowed-headers'
 export * from './get-origin-headers-from-request'

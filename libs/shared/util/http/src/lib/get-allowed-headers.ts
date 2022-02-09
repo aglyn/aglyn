@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-
+/**
+ * If `allowed` param is not provided retrieves `Access-Control-Request-Headers`
+ * header value from the `req` param and returns a new {@link Headers} object
+ * @param req - HTTP {@link Request} object
+ * @param allowed - optionally override which headers to allow
+ * @returns a new {@link Headers} object instance
+ */
 function getAllowedHeaders(req: Request, allowed?: string | string[]) {
   const headers = new Headers()
 

@@ -14,22 +14,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import getOriginHeaders from './get-origin-headers'
-import {type OriginFn, type StaticOrigin} from './types'
+import handleCorsResponse from './handle-cors-response'
+import {type CorsOptions} from './types'
 
 
-async function getOriginHeadersFromRequest(
-  req: Request,
-  origin: StaticOrigin | OriginFn,
-) {
-  const reqOrigin = req.headers.get('Origin') || undefined
-  const value = typeof origin === 'function'
-    ? await origin(reqOrigin, req)
-    : origin
-
-  if (!value) return
-  return getOriginHeaders(reqOrigin, value)
+/**
+ * Curry the {@link handleCorsResponse} to handle a reusable cors config
+ * @param options - optional object of {@link CorsOptions}
+ */
+function createCorsResponseHandler(options?: CorsOptions) {
+  return (req: Request, res: Response) => handleCorsResponse(req, res, options)
 }
-
-export {getOriginHeadersFromRequest}
-export default getOriginHeadersFromRequest
+export {createCorsResponseHandler}
+export default createCorsResponseHandler

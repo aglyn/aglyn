@@ -27,6 +27,25 @@ const defaultOptions: CorsOptions = {
   optionsSuccessStatus: HttpStatusCode.NO_CONTENT,
 }
 
+/**
+ * Handle cors for HTTP requests
+ * @example - pages/_middleware.ts
+ * export function middleware(req: NextRequest) {
+ *   // `cors` also takes care of handling OPTIONS requests
+ *   return cors(
+ *     req,
+ *     new Response(JSON.stringify({ message: 'Hello World!' }), {
+ *       status: 200,
+ *       headers: { 'Content-Type': 'application/json' },
+ *     })
+ *   )
+ * }
+ * @param req - HTTP {@link Request} object
+ * @param res - HTTP {@link Response} object
+ * @param options - optional object of {@link CorsOptions}
+ * @returns the modified {@link Response} object to send answer the request
+ * @see {@link createCorsResponseHandler} when reusing same {@link CorsOptions}
+ */
 async function handleCorsResponse(
   req: Request,
   res: Response,
