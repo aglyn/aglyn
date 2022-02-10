@@ -88,6 +88,7 @@
     "react-dnd-touch-backend": "^15.1.0",
     "react-dom": "^17.0.2",
     "react-easy-panzoom": "^0.4.4",
+    "react-firebase-hooks": "^5.0.2",
     "react-frame-component": "^5.2.1",
     "react-is": "^17.0.2",
     "react-use": "^17.3.2",

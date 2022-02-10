@@ -24,7 +24,6 @@ import {
   REGEX_SPECIAL_CHARACTER,
 } from '@aglyn/shared-data-regex'
 import {FieldComponentTypeFlag, FieldValidatorTypeFlag, type FormField} from '@aglyn/shared-ui-jsx'
-import {createUid} from '@aglyn/shared-util-vendor'
 
 
 export const FIELD_SCHEMA_EMAIL: FormField = {
@@ -96,32 +95,18 @@ export const FIELD_SCHEMA_PASSWORD_CONFIRM: FormField = {
   name: 'ConfirmPasswd',
   label: 'Confirm',
   type: 'password',
-  'data-passwd-field': FIELD_SCHEMA_PASSWORD.name,
-  resolveProps: (
-    props,
-    {meta, input},
-    formOptions,
-  ) => {
-    const passwdFieldName = props['data-passwd-field'] || 'Passwd'
-    const passwdField = formOptions.getFieldState(passwdFieldName)
-
-    if (!passwdField) console.error('Error confirming password field. Missing field.')
-
-    return ({
-      required: true,
-      validate: [
-        {
-          type: FieldValidatorTypeFlag.REQUIRED,
-          message: 'Confirm your password.',
-        },
-        {
-          type: FieldValidatorTypeFlag.PATTERN,
-          pattern: RegExp(`^${passwdField?.value || createUid(2)}$`),
-          message: 'Those passwords didn\'t match. Try again.',
-        },
-      ],
-    })
-  },
+  required: true,
+  validate: [
+    {
+      type: FieldValidatorTypeFlag.REQUIRED,
+      message: 'Confirm your password.',
+    },
+    (value, values) => {
+      return values['Passwd'] !== value
+        ? 'Those passwords didn\'t match. Try again.'
+        : undefined
+    },
+  ],
 }
 
 export const FIELD_SCHEMA_FIRST_NAME: FormField = {

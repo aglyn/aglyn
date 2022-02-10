@@ -31,15 +31,31 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import type FormSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
-import {Divider} from '@mui/material'
+import {type OAuthCredential, UserCredential} from '@firebase/auth'
+import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
+import Divider from '@mui/material/Divider'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
+import {type FormApi, type SubmissionErrors} from 'final-form'
+import {
+  AuthError,
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from 'firebase/auth'
 import {useCallback, useState} from 'react'
 import AuthBaseComponent from '../components/auth-base.component'
 import AuthBasicFormComponent from '../components/auth-basic-form.component'
+import {getFirebaseAuth, googleOAuthProvider} from '../lib/firebase/firebase-app'
 
+
+const firebaseAuth = getFirebaseAuth()
+
+type ResultError = AuthError & {credential?: OAuthCredential}
+type ResultUser = UserCredential & {credential?: OAuthCredential}
+type ResultAuth = Promise<UserCredential>
 
 const formSchema: FormSchema = {
   'fields': [
@@ -50,17 +66,54 @@ const formSchema: FormSchema = {
     FIELD_SCHEMA_PASSWORD_CONFIRM,
   ],
 }
-const defaultValues = {firstName: '', lastName: '', email: '', password: '', confirmPasswd: ''}
+const defaultValues = {firstName: '', lastName: '', email: '', Passwd: '', ConfirmPasswd: ''}
 
 function Signup() {
 
-  const [values, setValues] = useState(defaultValues)
-  const handleFormCancel = useCallback(() => {
-    setValues(defaultValues)
+  const [loading, setLoading] = useState(false)
+  const [user, setUser] = useState<ResultUser>(null)
+  const [error, setError] = useState<ResultError>(null)
+
+
+  const handleGoogleOAuthSignUp = useCallback((): ResultAuth => {
+    return signInWithPopup(firebaseAuth, googleOAuthProvider)
   }, [])
-  const handleFormSubmit = useCallback((values) => {
-    setValues({...values})
+
+  const handlePasswordSignUp = useCallback((email: string, password: string): ResultAuth => {
+    return createUserWithEmailAndPassword(firebaseAuth, email, password)
   }, [])
+
+  const handleSignUp = useCallback(async (email?: any, password?: string) => {
+    if (loading) return
+    setLoading(true)
+    const result: ResultAuth = email && password
+      ? handlePasswordSignUp(email, password)
+      : handleGoogleOAuthSignUp()
+
+    await result
+      .then((result) => {
+        setUser({...result, credential: GoogleAuthProvider.credentialFromResult(result)})
+        if (error) setError(null)
+      })
+      .catch((error) => {
+        setError({...error, credential: GoogleAuthProvider.credentialFromError(error)})
+      })
+
+    setLoading(false)
+  }, [loading, handleGoogleOAuthSignUp, handlePasswordSignUp, error])
+
+  const handleFormSubmit = useCallback(async (
+    values,
+    formApi: FormApi,
+    onError: (errors?: SubmissionErrors) => void,
+  ) => {
+    await handleSignUp(values.email, values.Passwd)
+  }, [handleSignUp])
+
+  const handleGoogleButtonClick = useCallback(async () => {
+    await handleSignUp()
+  }, [handleSignUp])
+
 
   return (
     <>
@@ -74,6 +127,16 @@ function Signup() {
           maxWidth: 1,
         }}
       >
+
+        {`Loading: ${loading}`}
+        <br />
+        <br />
+        {`Error: ${JSON.stringify(error, null, 2)}`}
+        <br />
+        <br />
+        {`User: ${JSON.stringify(user, null, 2)}`}
+        <br />
+        <br />
 
         <Stack
           direction="column"
@@ -125,15 +188,34 @@ function Signup() {
         <FormRenderer
           FormTemplate={AuthBasicFormComponent}
           componentMapper={componentMapper}
-          onCancel={handleFormCancel}
-          onReset={handleFormCancel}
           onSubmit={handleFormSubmit}
-          initialValues={values}
+          initialValues={defaultValues}
           schema={formSchema}
           subscription={{values: true}}
 
           clearOnUnmount
         />
+
+        {error ? (
+          <Alert
+            sx={{my: 1}}
+            severity="error"
+          >
+            <Typography
+              component="div"
+              variant="body1"
+            >
+              <strong>ERROR: </strong>
+              {error.message}
+            </Typography>
+            <Typography
+              component="div"
+              variant="caption"
+              color="textSecondary"
+              children={error.code}
+            />
+          </Alert>
+        ) : null}
 
         <Divider flexItem sx={{my: 1}}>
           {'Or'}
@@ -148,6 +230,7 @@ function Signup() {
 
           <Button
             startIcon={<MdiIcon path={mdiGoogle.path} />}
+            onClick={handleGoogleButtonClick}
           >
             {'Sign up with Google'}
           </Button>
