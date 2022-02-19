@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { ClientRectObject } from '../types'
-import { getElementClientRectBounding } from './get-element-client-rect-bounding'
+import {ClientRectObject} from '../types'
+import {getElementClientRectBounding} from './get-element-client-rect-bounding'
 
 
 export function getElementClientRectBoundingInner(

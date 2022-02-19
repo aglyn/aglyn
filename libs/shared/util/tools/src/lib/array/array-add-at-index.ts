@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { arrayMutate, MutatedArray } from './array-mutate'
+import {arrayMutate, MutatedArray} from './array-mutate'
 
 
 /**
@@ -33,7 +33,7 @@ export function arrayAddAtIndex<T>(
   index: number,
   array: Array<T>,
   items: T | Array<T>,
-  options?: { replace?: boolean; copy?: boolean },
+  options?: {replace?: boolean; copy?: boolean},
 ): MutatedArray<T> {
   const {replace = false, copy} = {...options}
   return arrayMutate(index, array, items, {replace, copy})

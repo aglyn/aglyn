@@ -14,14 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {type HttpStatusCode} from '@aglyn/shared-data-enums'
+import type {HttpStatusCode} from '@aglyn/shared-data-enums'
+import type {NextApiRequest} from 'next'
 
 
 export type StaticOrigin = boolean | string | RegExp | (boolean | string | RegExp)[]
 
 export type OriginFn = (
-  origin: string | undefined,
-  req: Request,
+  origin: string[] | string | undefined,
+  request: Request | NextApiRequest,
 ) => StaticOrigin | Promise<StaticOrigin>
 
 export interface CorsOptions {

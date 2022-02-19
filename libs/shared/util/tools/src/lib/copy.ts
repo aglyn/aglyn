@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { PKey } from '@aglyn/shared-data-types'
+import {PKey} from '@aglyn/shared-data-types'
 
 
 export type CopyTarget<T, U, K, V, X> = T extends ReadonlyArray<U>
@@ -29,7 +29,10 @@ export type CopyTarget<T, U, K, V, X> = T extends ReadonlyArray<U>
 
 
 const getType: <T>(obj: T) => string = <T>(obj: T): string => (toString.call(obj) as string).slice(8, -1)
-const defaultAssign: <T, S>(target: T, source: S) => (T & S) = <T, S>(target: T, source: S): T & S => {
+const defaultAssign: <T, S>(target: T, source: S) => (T & S) = <T, S>(
+  target: T,
+  source: S,
+): T & S => {
   getAllKeys(source).forEach((key: string): void => {
     if (Object.prototype.hasOwnProperty.call(source, key)) {
       target[key] = source[key]
@@ -37,7 +40,18 @@ const defaultAssign: <T, S>(target: T, source: S) => (T & S) = <T, S>(target: T,
   })
   return target as T & S
 }
-const objectAssign: { <T, U>(target: T, source: U): (T & U); <T, U, V>(target: T, source1: U, source2: V): (T & U & V); <T, U, V, W>(target: T, source1: U, source2: V, source3: W): (T & U & V & W); (target: object, ...sources: any[]): any } = Object.assign ?? defaultAssign
+const objectAssign: {
+  <T, U>(target: T, source: U): (T & U); <T, U, V>(
+    target: T,
+    source1: U,
+    source2: V,
+  ): (T & U & V); <T, U, V, W>(
+    target: T,
+    source1: U,
+    source2: V,
+    source3: W,
+  ): (T & U & V & W); (target: object, ...sources: any[]): any
+} = Object.assign ?? defaultAssign
 const getAllKeys: (obj) => string[] =
   typeof Object.getOwnPropertySymbols === 'function'
     ? (obj): string[] => Object.keys(obj).concat(Object.getOwnPropertySymbols(obj) as any)

@@ -57,6 +57,7 @@
       "@aglyn/shared-util-guards": ["libs/shared/util/guards/src/index.ts"],
       "@aglyn/shared-util-http": ["libs/shared/util/http/src/index.ts"],
       "@aglyn/shared-util-logger": ["libs/shared/util/logger/src/index.ts"],
+      "@aglyn/shared-util-rest-api": ["libs/shared/util/rest-api/src/index.ts"],
       "@aglyn/shared-util-timestamp": ["libs/shared/util/timestamp/src/index.ts"],
       "@aglyn/shared-util-tools": ["libs/shared/util/tools/src/index.ts"],
       "@aglyn/shared-util-vendor": ["libs/shared/util/vendor/src/index.ts"]

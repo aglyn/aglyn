@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CrudModel, Initializable } from '@aglyn/shared-data-types'
+import {CrudModel, Initializable} from '@aglyn/shared-data-types'
 
 
 /**

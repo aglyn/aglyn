@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { ClientRectObject, getElementClientRectBounding } from '@aglyn/shared-util-dom'
-import { RefCallback, RefObject, useCallback, useRef } from 'react'
+import {ClientRectObject, getElementClientRectBounding} from '@aglyn/shared-util-dom'
+import {RefCallback, RefObject, useCallback, useRef} from 'react'
 
 
 export interface UseElementPositionOptions {

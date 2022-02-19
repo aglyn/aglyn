@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { AnyProps, EmptyObj, MapKey, PKey } from '@aglyn/shared-data-types'
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
+import {AnyProps, EmptyObj, MapKey, PKey} from '@aglyn/shared-data-types'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 import Card from '@mui/material/Card'
-import Grid, { GridProps as MuiGridProps } from '@mui/material/Grid'
+import Grid, {GridProps as MuiGridProps} from '@mui/material/Grid'
 import clsx from 'clsx'
-import { forwardRef, HTMLAttributes, HTMLProps, memo, ReactNode, useCallback, useMemo } from 'react'
-import { VirtuosoGrid, VirtuosoGridHandle, VirtuosoGridProps } from 'react-virtuoso'
+import {forwardRef, HTMLAttributes, HTMLProps, memo, ReactNode, useCallback, useMemo} from 'react'
+import {VirtuosoGrid, VirtuosoGridHandle, VirtuosoGridProps} from 'react-virtuoso'
 
 
 const classKey = generateComponentClassKeys('AglynGridList', [
@@ -66,7 +66,7 @@ const ItemWrapper = styled(forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElem
   name: 'AglynItemWrapper',
 })({})
 
-export type GridListItemData<P = any> = { id: MapKey } & P
+export type GridListItemData<P = any> = {id: MapKey} & P
 
 /* eslint-disable-next-line */
 export interface GridListProps extends Partial<VirtuosoGridProps> {
@@ -111,7 +111,7 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
             />
           </div>
         )
-      }
+      },
     ), [ListWrapperProps, GridContainerProps])
 
     const GridItem = useMemo(() => {
@@ -128,7 +128,7 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
               {...rest}
             />
           )
-        }
+        },
       )
       Component.displayName = 'GridItem'
       return Component
@@ -156,7 +156,7 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
         {...rest}
       />
     )
-  }
+  },
 )
 
 GridList.displayName = 'GridList'

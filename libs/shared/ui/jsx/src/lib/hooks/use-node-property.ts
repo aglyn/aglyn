@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { ReactNode, Ref, useEffect, useState, useCallback } from 'react'
+import {ReactNode, Ref, useEffect, useState, useCallback} from 'react'
+
 
 /**
  * Use a React Node property value from the passed property key
@@ -29,7 +30,7 @@ import { ReactNode, Ref, useEffect, useState, useCallback } from 'react'
  */
 export function useNodeProperty<U, T>(
   key: U,
-  initialState = null
+  initialState = null,
 ): [any, Ref<T>, ReactNode, (setNewKey: U) => void] {
   const [keyName, setNewKey] = useState(key)
   const [value, setPropertyValue] = useState(initialState)

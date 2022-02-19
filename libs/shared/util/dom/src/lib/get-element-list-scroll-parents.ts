@@ -16,11 +16,11 @@
  */
 
 
-import type { VisualViewport } from '../types'
-import { getElementParentNode } from './get-element-parent-node'
-import { getElementScrollParent } from './get-element-scroll-parent'
-import { getNodeWindow } from './get-node-window'
-import { isElementScrollParentElement } from './guards/node-is'
+import type {VisualViewport} from '../types'
+import {getElementParentNode} from './get-element-parent-node'
+import {getElementScrollParent} from './get-element-scroll-parent'
+import {getNodeWindow} from './get-node-window'
+import {isElementScrollParentElement} from './guards/node-is'
 
 /*
  given a DOM element, return the list of all scroll parents, up the list of ancesors

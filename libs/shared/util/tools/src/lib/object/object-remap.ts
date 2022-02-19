@@ -15,30 +15,25 @@
  * limitations under the License.
  */
 
-import { Conditional, NUN, OmitIndexOfType, PKey } from '@aglyn/shared-data-types'
+import {Conditional, NUN, OmitIndexOfType, PKey} from '@aglyn/shared-data-types'
 
-export type RemapOptions = { deleteUndefined?: boolean }
+
+export type RemapOptions = {deleteUndefined?: boolean}
 export type RemapTarget<K extends PKey, V = unknown> = Record<K, V>
 export type RemapCallback<K extends PKey, V, U = V> = {
   (value: V, key: K, target: RemapTarget<K, V>): U
 }
-export type RemapOutputDefault<T extends RemapTarget<K, V>, K extends PKey, V, U = V> = RemapTarget<
-  K,
-  U
->
-export type RemapOutputFiltered<
-  T extends RemapTarget<K, V>,
+export type RemapOutputDefault<T extends RemapTarget<K, V>, K extends PKey, V, U = V> = RemapTarget<K,
+  U>
+export type RemapOutputFiltered<T extends RemapTarget<K, V>,
   K extends PKey,
   V,
-  U = V
-> = OmitIndexOfType<RemapOutputDefault<T, K, V, U>, NUN>
-export type RemapOutput<
-  T extends RemapTarget<K, V>,
+  U = V> = OmitIndexOfType<RemapOutputDefault<T, K, V, U>, NUN>
+export type RemapOutput<T extends RemapTarget<K, V>,
   K extends PKey,
   V,
   U = V,
-  O extends RemapOptions = any
-> = O extends { deleteUndefined: true }
+  O extends RemapOptions = any> = O extends {deleteUndefined: true}
   ? RemapOutputFiltered<T, K, V, U>
   : RemapOutputDefault<T, K, V, U>
 
@@ -58,7 +53,7 @@ export function objectRemap<K extends PKey, V, U = V, T = unknown>(
 ): RemapOutput<typeof target, K, V, U, typeof options> {
   type ThisArg = Conditional<typeof thisArg, NUN, typeof target, typeof thisArg>
   type Ouput = RemapOutput<typeof target, K, V, U, typeof options>
-  const { deleteUndefined } = { ...options }
+  const {deleteUndefined} = {...options}
   const _target: Ouput = {} as Ouput
   const _thisArg: ThisArg = thisArg ?? _target
 

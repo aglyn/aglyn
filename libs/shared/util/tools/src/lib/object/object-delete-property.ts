@@ -26,7 +26,11 @@
  * @param {{ copy: boolean }} [options]
  * @returns {T}
  */
-export function objectDeleteProperty<T, K extends keyof T>(obj: T, key: K, options?: { copy: boolean }): Omit<T, K> {
+export function objectDeleteProperty<T, K extends keyof T>(
+  obj: T,
+  key: K,
+  options?: {copy: boolean},
+): Omit<T, K> {
   const {copy = false} = options ?? {}
   const _obj = copy ? {...obj} : obj
   delete _obj[key]

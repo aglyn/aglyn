@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { isNodeElement } from './guards/node-is'
+import {isNodeElement} from './guards/node-is'
 
 
 export function getElementDocumentElement(

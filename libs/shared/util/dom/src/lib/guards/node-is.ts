@@ -16,9 +16,9 @@
  */
 
 
-import { getElementComputedStyle } from '../get-element-computed-style'
-import { getElementNodeName } from '../get-element-node-name'
-import { getNodeWindow } from '../get-node-window'
+import {getElementComputedStyle} from '../get-element-computed-style'
+import {getElementNodeName} from '../get-element-node-name'
+import {getNodeWindow} from '../get-node-window'
 
 
 export function isNodeElement(node): node is Element {

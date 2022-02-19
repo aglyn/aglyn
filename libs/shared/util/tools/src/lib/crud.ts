@@ -16,7 +16,7 @@
  */
 
 
-import { CrudModel } from '@aglyn/shared-data-types'
+import {CrudModel} from '@aglyn/shared-data-types'
 
 
 /**

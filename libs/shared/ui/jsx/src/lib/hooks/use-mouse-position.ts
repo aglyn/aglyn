@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import { MouseEventHandler, useState, useCallback } from 'react'
+import {MouseEventHandler, useState, useCallback} from 'react'
+
 
 export type MouseX = MouseEvent['clientX']
 export type MouseY = MouseEvent['clientY']
-export type MousePosition = { x: MouseX; y: MouseY }
+export type MousePosition = {x: MouseX; y: MouseY}
 
 export function useMousePosition(
-  initialValue = { x: 0, y: 0 }
+  initialValue = {x: 0, y: 0},
 ): [MousePosition, MouseEventHandler<any>] {
   const [position, setPosition] = useState(initialValue)
   const handleMouseMove = useCallback(
@@ -31,7 +32,7 @@ export function useMousePosition(
         x: (event || {}).clientX,
         y: (event || {}).clientY,
       }),
-    [setPosition]
+    [setPosition],
   )
 
   return [position, handleMouseMove]

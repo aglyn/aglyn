@@ -24,6 +24,9 @@
  * @param {(Array<T> | object)} newArray
  * @returns {Array<T>}
  */
-export function arrayUpdate<T>(oldArray: Array<T>, newArray: Array<T> | Record<string, unknown>): Array<T> {
+export function arrayUpdate<T>(
+  oldArray: Array<T>,
+  newArray: Array<T> | Record<string, unknown>
+): Array<T> {
   return Object.assign([], oldArray, newArray)
 }

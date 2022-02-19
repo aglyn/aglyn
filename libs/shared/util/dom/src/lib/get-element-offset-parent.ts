@@ -16,11 +16,11 @@
  */
 
 
-import { getElementComputedStyle } from './get-element-computed-style'
-import { getElementNodeName } from './get-element-node-name'
-import { getElementParentNode } from './get-element-parent-node'
-import { getNodeWindow } from './get-node-window'
-import { isElementHTMLElement, isNodeTableElement } from './guards/node-is'
+import {getElementComputedStyle} from './get-element-computed-style'
+import {getElementNodeName} from './get-element-node-name'
+import {getElementParentNode} from './get-element-parent-node'
+import {getNodeWindow} from './get-node-window'
+import {isElementHTMLElement, isNodeTableElement} from './guards/node-is'
 
 
 function getTrueOffsetParent(element: Element): Element {

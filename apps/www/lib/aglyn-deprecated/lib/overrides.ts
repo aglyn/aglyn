@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export { }
+export {}
 
 declare global {
   interface Array<T> {

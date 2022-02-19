@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isArr } from './_is-arr'
+import {_isArr} from './_is-arr'
 
 
 /**

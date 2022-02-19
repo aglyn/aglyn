@@ -163,8 +163,8 @@ export class Timestamp {
     return formattedSeconds + '.' + formattedNanoseconds
   }
   /** Returns a JSON-serializable representation of this Timestamp. */
-  toJSON(): { seconds: number; nanoseconds: number } {
-    return { seconds: this.seconds, nanoseconds: this.nanoseconds }
+  toJSON(): {seconds: number; nanoseconds: number} {
+    return {seconds: this.seconds, nanoseconds: this.nanoseconds}
   }
   _compareTo(other: Timestamp): number {
     if (this.seconds === other.seconds) {

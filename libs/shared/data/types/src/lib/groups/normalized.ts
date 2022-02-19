@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Serializable } from './serializable'
+import {Serializable} from './serializable'
 
 
 type ID = string

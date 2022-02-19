@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-import { NextMiddleware } from 'next-api-middleware'
-import { Logger, Req, Res } from '../helpers'
-import { NextFn } from '../tools/middleware'
-import { ApiRequest, ApiResponse } from '../types'
+import type {NextMiddleware} from 'next-api-middleware'
+import {Logger, type Req, Res} from '../helpers'
+import type {NextFn} from '../tools/middleware'
+import type {ApiRequest, ApiResponse} from '../types'
 
 
 export function httpRequestMethod(allowed: Req.Method[]): NextMiddleware {
   return async (req: ApiRequest, res: ApiResponse, next: NextFn) => {
-    const { method } = req
+    const {method} = req
     if (allowed.includes(method as Req.Method)) {
       await next()
-    } else {
+    }
+    else {
       const json = Res.Error.requestMethodCheck
-      Logger.traceError(json, { method })
+      Logger.traceError(json, {method})
       res.setHeader('Allow', allowed)
       res.status(json.error.statusCode).json(json)
       res.end()

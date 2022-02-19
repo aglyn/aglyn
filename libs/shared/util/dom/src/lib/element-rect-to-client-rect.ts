@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ClientRectObject, Rect } from '../types'
+import type {ClientRectObject, Rect} from '../types'
 
 
 export function elementRectToClientRect(rect: Rect): ClientRectObject {

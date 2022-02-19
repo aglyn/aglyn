@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { _isNull } from './_is-null'
-import { _isUndT } from './_is-und-t'
+import {_isNull} from './_is-null'
+import {_isUndT} from './_is-und-t'
 
 
 /**

@@ -17,7 +17,7 @@
 import {HttpStatusCode} from '@aglyn/shared-data-enums'
 import getAllowedHeaders from './get-allowed-headers'
 import getOriginHeadersFromRequest from './get-origin-headers-from-request'
-import {type CorsOptions} from './types'
+import type {CorsOptions} from './types'
 
 
 const defaultOptions: CorsOptions = {
@@ -44,9 +44,9 @@ const defaultOptions: CorsOptions = {
  * @param res - HTTP {@link Response} object
  * @param options - optional object of {@link CorsOptions}
  * @returns the modified {@link Response} object to send answer the request
- * @see {@link createCorsResponseHandler} when reusing same {@link CorsOptions}
+ * @see {@link corsBuildResponseHandler} when reusing same {@link CorsOptions}
  */
-export async function handleCorsResponse(
+export async function corsHandleResponse(
   req: Request,
   res: Response,
   options?: CorsOptions,
@@ -102,4 +102,4 @@ export async function handleCorsResponse(
   return res
 }
 
-export default handleCorsResponse
+export default corsHandleResponse

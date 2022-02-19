@@ -15,23 +15,12 @@
  * limitations under the License.
  */
 
+export * from './auth'
+export * from './set-api-response-cookie'
+export * from './types'
 
-export function getAbsoluteURL(url: string, req: Request = null) {
-  let host
-  if (req) {
-    host = req.headers.get('host')
-  }
-  else {
-    if (typeof window === 'undefined') {
-      throw new Error(
-        'The "req" parameter must be provided if on the server side.',
-      )
-    }
-    host = window.location.host
-  }
-  const isLocalhost = host.indexOf('localhost') === 0
-  const protocol = isLocalhost ? 'http' : 'https'
-  return `${protocol}://${host}${url}`
-}
+export * from './middleware/http-request-method-middleware'
 
-export default getAbsoluteURL
+export * from './utils/initialize-middleware'
+export * from './utils/json-create-response'
+export * from './utils/json-handle-next-response'

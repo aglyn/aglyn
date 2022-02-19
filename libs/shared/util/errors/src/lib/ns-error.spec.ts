@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { NsErrorFactory } from './ns-error-factory'
+import {NsErrorFactory} from './ns-error-factory'
 
 
 describe('namespaced-error', () => {
@@ -37,7 +37,8 @@ describe('namespaced-error', () => {
     try {
       // Service: Could not file file: foo.txt (service/file-not-found).
       throw error.create(Err.FILE_NOT_FOUND, {file: 'fileName.txt'})
-    } catch (e) {
+    }
+    catch (e) {
       if (e['code'] === 'service/file-not-found') {
         console.log('Could not read file: ' + e['file'])
       }

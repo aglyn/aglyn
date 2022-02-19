@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { _isArr } from '@aglyn/shared-util-guards'
-import { NsError } from './ns-error'
-import { replaceTemplate } from './tools'
-import { ErrorPayload, ErrorTagMessages, ErrorTagPayloads, EventFlag } from './types'
+import {_isArr} from '@aglyn/shared-util-guards'
+import {NsError} from './ns-error'
+import {replaceTemplate} from './tools'
+import {ErrorPayload, ErrorTagMessages, ErrorTagPayloads, EventFlag} from './types'
 
 
 /**

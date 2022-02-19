@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { arraySafe } from './array-safe'
+import {arraySafe} from './array-safe'
 
 
 /**

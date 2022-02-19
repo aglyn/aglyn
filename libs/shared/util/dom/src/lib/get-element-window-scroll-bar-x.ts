@@ -16,9 +16,9 @@
  */
 
 
-import { getElementClientRectBounding } from './get-element-client-rect-bounding'
-import { getElementDocumentElement } from './get-element-document-element'
-import { getNodeWindowScroll } from './get-node-window-scroll'
+import {getElementClientRectBounding} from './get-element-client-rect-bounding'
+import {getElementDocumentElement} from './get-element-document-element'
+import {getNodeWindowScroll} from './get-node-window-scroll'
 
 
 export function getElementWindowScrollBarX(element: Element): number {

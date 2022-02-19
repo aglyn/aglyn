@@ -16,7 +16,7 @@
  */
 
 
-import { _hasProperty } from './_has-property'
+import {_hasProperty} from './_has-property'
 
 
 export enum Equality {

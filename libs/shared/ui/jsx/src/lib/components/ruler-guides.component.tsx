@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { _isArr, _isEqualitySameType } from '@aglyn/shared-util-guards'
-import Box, { BoxProps } from '@mui/material/Box'
-import { teal } from '@mui/material/colors'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {_isArr, _isEqualitySameType} from '@aglyn/shared-util-guards'
+import Box, {BoxProps} from '@mui/material/Box'
+import {teal} from '@mui/material/colors'
 
 import clsx from 'clsx'
 import React from 'react'

@@ -16,13 +16,16 @@
  */
 
 import type {NextApiRequest} from 'next'
+import getRequestHeader from './get-request-header'
 
 
 export function getRequestIpAddress(request: Request | NextApiRequest) {
-  const xff = request instanceof Request
-    ? request.headers.get('x-forwarded-for')
-    : request.headers['x-forwarded-for']
+  const xff = getRequestHeader(request, 'x-forwarded-for')
 
-  return xff ? (Array.isArray(xff) ? xff[0] : xff.split(',')[0]) : '127.0.0.1'
+  return xff
+    ? !Array.isArray(xff)
+      ? xff.split(',')[0]
+      : xff[0]
+    : '127.0.0.1'
 }
 export default getRequestIpAddress

@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { EventEmitter2 } from 'eventemitter2'
-import mitt, { Emitter as MittEmitterFn } from 'mitt'
+import {EventEmitter2} from 'eventemitter2'
+import mitt, {Emitter as MittEmitterFn} from 'mitt'
 
 
 export * from 'mitt'

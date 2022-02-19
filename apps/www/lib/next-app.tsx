@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import React, { ErrorInfo, FunctionComponent } from 'react'
+import React, {ErrorInfo, FunctionComponent} from 'react'
 import App from 'next/app'
-import { AppContext } from 'next/dist/pages/_app'
+import {AppContext} from 'next/dist/pages/_app'
+
 
 export type NextAppMiddleware<T = Record<string, unknown>> = {
   /**
@@ -41,7 +42,7 @@ export type ComponentDidCatchMiddlewareHandler = {
   (
     allMiddleware: any,
     error: Error,
-    _errorInfo: ErrorInfo
+    _errorInfo: ErrorInfo,
   ): void
 }
 
@@ -50,24 +51,31 @@ export type NextAppBuilderOptions = {
   middleware: NextAppMiddleware[]
 }
 
-const execDidCatchAppMiddleware: ComponentDidCatchMiddlewareHandler = (allMiddleware, error, errorInfo) => {
-  return allMiddleware.forEach(({ componentDidCatch }) => {
+const execDidCatchAppMiddleware: ComponentDidCatchMiddlewareHandler = (
+  allMiddleware,
+  error,
+  errorInfo,
+) => {
+  return allMiddleware.forEach(({componentDidCatch}) => {
     if (componentDidCatch) {
       componentDidCatch(error, errorInfo)
     }
   })
 }
 
-const renderPage = (allMiddleware, { Component: PageComponent, pageProps: { middlewareProps, ...props } }) => {
+const renderPage = (
+  allMiddleware,
+  {Component: PageComponent, pageProps: {middlewareProps, ...props}},
+) => {
   return allMiddleware
-    .filter(({ Component: MiddlewareComponent }) => !!MiddlewareComponent)
+    .filter(({Component: MiddlewareComponent}) => !!MiddlewareComponent)
     .reduceRight(
-      (nestedElement, { Component: MiddlewareComponent, id }) => (
+      (nestedElement, {Component: MiddlewareComponent, id}) => (
         <MiddlewareComponent {...props} {...middlewareProps[id]}>
           {nestedElement}
         </MiddlewareComponent>
       ),
-      <PageComponent {...props} />
+      <PageComponent {...props} />,
     )
 }
 
@@ -100,22 +108,22 @@ const renderPage = (allMiddleware, { Component: PageComponent, pageProps: { midd
  *
  * @param middleware
  */
-const nextAppBuilder: NextAppMiddlewareBuilder = ({ middleware = [] }) => {
+const nextAppBuilder: NextAppMiddlewareBuilder = ({middleware = []}) => {
   const allMiddleware = middleware.map((singleMiddleware, index) => ({
     ...singleMiddleware,
-    id: `nextAppMiddleware-${index}`
+    id: `nextAppMiddleware-${index}`,
   }))
 
   class NextAppMiddlewareComponent extends App {
 
     // TODO: FIX THE NEED TO USE getInitialProps as it disables the automatic SSR sitewide
-    static async getInitialProps({ Component, ctx, router }): Promise<{ pageProps: any }> {
+    static async getInitialProps({Component, ctx, router}): Promise<{pageProps: any}> {
       let pageProps = {}
-      const { AppTree } = ctx
+      const {AppTree} = ctx
       const extendPageProps = props => {
         pageProps = {
           ...pageProps,
-          ...props
+          ...props,
         }
       }
       if (Component.getInitialProps) {
@@ -125,12 +133,12 @@ const nextAppBuilder: NextAppMiddlewareBuilder = ({ middleware = [] }) => {
       let middlewareProps
 
       const InternalAppTree = props => {
-        const enhancedPageProps = { ...pageProps, middlewareProps, ...props }
+        const enhancedPageProps = {...pageProps, middlewareProps, ...props}
         return <AppTree pageProps={enhancedPageProps} />
       }
 
       const allInitialProps = await Promise.all(
-        allMiddleware.map(async ({ getInitialProps, id, name }) => {
+        allMiddleware.map(async ({getInitialProps, id, name}) => {
           let initialProps = {}
           if (getInitialProps) {
             try {
@@ -138,26 +146,27 @@ const nextAppBuilder: NextAppMiddlewareBuilder = ({ middleware = [] }) => {
                 Component,
                 router,
                 ctx,
-                AppTree: InternalAppTree
+                AppTree: InternalAppTree,
               })
-            } catch (error) {
+            }
+            catch (error) {
               console.warn(`getInitialProps failed for middleware with name ${name || 'unnamed'}`, error)
             }
           }
-          return { initialProps, id }
-        })
+          return {initialProps, id}
+        }),
       )
 
       middlewareProps = allInitialProps.reduce(
-        (props, { id, initialProps }) => ({
+        (props, {id, initialProps}) => ({
           ...props,
-          [id]: initialProps
+          [id]: initialProps,
         }),
-        {}
+        {},
       )
 
-      extendPageProps({ middlewareProps })
-      return { pageProps }
+      extendPageProps({middlewareProps})
+      return {pageProps}
     }
 
     componentDidCatch(error, errorInfo): void {
@@ -167,13 +176,14 @@ const nextAppBuilder: NextAppMiddlewareBuilder = ({ middleware = [] }) => {
     }
 
     render(): JSX.Element {
-      const { Component, pageProps, ...otherProps } = this.props
+      const {Component, pageProps, ...otherProps} = this.props
       return renderPage(allMiddleware, {
         Component,
-        pageProps: { ...pageProps, ...otherProps }
+        pageProps: {...pageProps, ...otherProps},
       })
     }
   }
+
   return NextAppMiddlewareComponent
 }
 

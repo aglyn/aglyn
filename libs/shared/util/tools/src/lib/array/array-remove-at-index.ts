@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { arrayMutate, MutatedArray } from './array-mutate'
+import {arrayMutate, MutatedArray} from './array-mutate'
 
 
 /**

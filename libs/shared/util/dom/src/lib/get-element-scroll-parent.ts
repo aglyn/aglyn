@@ -16,9 +16,9 @@
  */
 
 
-import { getElementNodeName } from './get-element-node-name'
-import { getElementParentNode } from './get-element-parent-node'
-import { isElementHTMLElement, isElementScrollParentElement } from './guards/node-is'
+import {getElementNodeName} from './get-element-node-name'
+import {getElementParentNode} from './get-element-parent-node'
+import {isElementHTMLElement, isElementScrollParentElement} from './guards/node-is'
 
 
 export function getElementScrollParent(node: Node): HTMLElement {

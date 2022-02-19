@@ -16,4 +16,4 @@
  */
 
 export * as JSS from 'jss'
-export { default as jssRtl } from 'jss-rtl'
+export {default as jssRtl} from 'jss-rtl'

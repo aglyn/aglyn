@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ComparisonOperator } from '@aglyn/shared-data-types'
+import {ComparisonOperator} from '@aglyn/shared-data-types'
 
 
 export function expressionEquality(

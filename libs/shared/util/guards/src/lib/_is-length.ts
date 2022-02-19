@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { ComparisonOperator } from '@aglyn/shared-data-types'
-import { expressionEquality } from '@aglyn/shared-util-tools'
-import { _isNum } from './_is-num'
+import {ComparisonOperator} from '@aglyn/shared-data-types'
+import {expressionEquality} from '@aglyn/shared-util-tools'
+import {_isNum} from './_is-num'
 
 
 /**

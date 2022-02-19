@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 
-import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar'
-import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer'
-import Toolbar, { ToolbarProps as MuiToolbarProps } from '@mui/material/Toolbar'
+import MuiAppBar, {AppBarProps as MuiAppBarProps} from '@mui/material/AppBar'
+import MuiDrawer, {DrawerProps as MuiDrawerProps} from '@mui/material/Drawer'
+import Toolbar, {ToolbarProps as MuiToolbarProps} from '@mui/material/Toolbar'
 import clsx from 'clsx'
-import { forwardRef, HTMLAttributes, ReactNode, Ref, useRef } from 'react'
+import {forwardRef, HTMLAttributes, ReactNode, Ref, useRef} from 'react'
 import useCombinedRefs from '../hooks/use-combined-refs'
 import ElevationScroll from './elevation-scroll'
 

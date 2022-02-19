@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-import { Boundary, RootBoundary, viewport } from '../enums'
-import { ClientRectObject } from '../types'
-import { elementRectToClientRect } from './element-rect-to-client-rect'
-import { getElementClientRectBoundingInner } from './get-element-client-rect-bounding-inner'
-import { getElementDocumentElement } from './get-element-document-element'
-import { getElementDocumentElementRect } from './get-element-document-element-rect'
-import { getElementListScrollParents } from './get-element-list-scroll-parents'
-import { getElementNodeName } from './get-element-node-name'
-import { getElementOffsetParent } from './get-element-offset-parent'
-import { getElementParentNode } from './get-element-parent-node'
-import { getElementViewportRect } from './get-element-viewport-rect'
-import { parentElementContainsChildElement } from './guards/event-is'
-import { isElementHTMLElement, isNodeElement } from './guards/node-is'
+import {Boundary, RootBoundary, viewport} from '../enums'
+import {ClientRectObject} from '../types'
+import {elementRectToClientRect} from './element-rect-to-client-rect'
+import {getElementClientRectBoundingInner} from './get-element-client-rect-bounding-inner'
+import {getElementDocumentElement} from './get-element-document-element'
+import {getElementDocumentElementRect} from './get-element-document-element-rect'
+import {getElementListScrollParents} from './get-element-list-scroll-parents'
+import {getElementNodeName} from './get-element-node-name'
+import {getElementOffsetParent} from './get-element-offset-parent'
+import {getElementParentNode} from './get-element-parent-node'
+import {getElementViewportRect} from './get-element-viewport-rect'
+import {parentElementContainsChildElement} from './guards/event-is'
+import {isElementHTMLElement, isNodeElement} from './guards/node-is'
 
 
 function getClientRectFromMixedType(

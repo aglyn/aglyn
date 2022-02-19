@@ -17,14 +17,14 @@
 
 //TODO: FIX ALL TYPINGS AND REFACTOR OPTIONS/PROPS
 
-import { jssPreset, StylesProvider } from '@aglyn/shared-feature-themes'
+import {jssPreset, StylesProvider} from '@aglyn/shared-feature-themes'
 
-import { create } from 'jss'
+import {create} from 'jss'
 import rtl from 'jss-rtl'
-import React, { HTMLProps, PropsWithChildren, useState } from 'react'
+import React, {HTMLProps, PropsWithChildren, useState} from 'react'
 import useCombinedRefs from '../hooks/use-combined-refs'
 
-import { createShadowDomProxy } from './shadow-dom' /* eslint-disable-next-line */
+import {createShadowDomProxy} from './shadow-dom' /* eslint-disable-next-line */
 
 /* eslint-disable-next-line */
 export interface MuiShadowDomProps {}
@@ -42,7 +42,7 @@ const MuiShadowStylesProvider = React.forwardRef<HTMLProps<HTMLDivElement>,
   return (
     <StylesProvider jss={jss}>
       {styleNode ? children : null}
-      <div ref={elemRef}/>
+      <div ref={elemRef} />
     </StylesProvider>
   )
 })

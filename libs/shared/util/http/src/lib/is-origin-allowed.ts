@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {type StaticOrigin} from './types'
+import type {StaticOrigin} from './types'
 
 
 export function isOriginAllowed(origin: string, allowed: StaticOrigin): boolean {

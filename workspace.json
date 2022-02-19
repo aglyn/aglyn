@@ -809,6 +809,21 @@
       },
       "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:feature"]
     },
+    "shared-util-rest-api": {
+      "root": "libs/shared/util/rest-api",
+      "sourceRoot": "libs/shared/util/rest-api/src",
+      "projectType": "library",
+      "targets": {
+        "lint": {
+          "executor": "@nrwl/linter:eslint",
+          "outputs": ["{options.outputFile}"],
+          "options": {
+            "lintFilePatterns": ["libs/shared/util/rest-api/**/*.ts"]
+          }
+        }
+      },
+      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:util"]
+    },
     "shared-util-timestamp": {
       "root": "libs/shared/util/timestamp",
       "sourceRoot": "libs/shared/util/timestamp/src",

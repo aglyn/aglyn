@@ -26,7 +26,7 @@
 export function arrayCopy<T, U>(
   iterable: Iterable<T> | ArrayLike<T>,
   callbackFn?: (v: T, k: number) => U,
-  thisArg?: any
+  thisArg?: any,
 ): U[] {
   return Array.from(iterable, callbackFn, thisArg)
 }

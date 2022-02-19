@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { getElementDocumentElement } from './get-element-document-element'
-import { getElementNodeName } from './get-element-node-name'
-import { isNodeShadowRoot } from './guards/node-is'
+import {getElementDocumentElement} from './get-element-document-element'
+import {getElementNodeName} from './get-element-node-name'
+import {isNodeShadowRoot} from './guards/node-is'
 
 
 export function getElementParentNode(element: Node | ShadowRoot): Node {

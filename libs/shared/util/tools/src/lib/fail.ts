@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { yes } from './yes'
+import {yes} from './yes'
 
 
 /**

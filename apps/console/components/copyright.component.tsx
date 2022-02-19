@@ -14,15 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import handleCorsResponse from './handle-cors-response'
-import {type CorsOptions} from './types'
+
+import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-brand'
+import Typography, {type TypographyProps} from '@mui/material/Typography'
 
 
-/**
- * Curry the {@link handleCorsResponse} to handle a reusable cors config
- * @param options - optional object of {@link CorsOptions}
- */
-export function createCorsResponseHandler(options?: CorsOptions) {
-  return (req: Request, res: Response) => handleCorsResponse(req, res, options)
+export interface CopyrightComponentProps extends TypographyProps {}
+
+function CopyrightComponent(props: CopyrightComponentProps) {
+  return (
+    <Typography variant="subtitle2" {...props}>
+      {CURRENT_YEAR} &copy; {BRAND.LEGAL_NAME}
+    </Typography>
+  )
 }
-export default createCorsResponseHandler
+CopyrightComponent.displayName = 'CopyrightComponent'
+
+export {CopyrightComponent}
+export default CopyrightComponent

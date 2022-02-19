@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { _isFnT } from './_is-fn-t'
-import { _isObjT } from './_is-obj-t'
+import {_isFnT} from './_is-fn-t'
+import {_isObjT} from './_is-obj-t'
 
 
 /**

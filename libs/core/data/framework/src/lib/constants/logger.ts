@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Logger } from '@aglyn/shared-util-logger'
+import {Logger} from '@aglyn/shared-util-logger'
 
 
 export type AglynLogger = Logger

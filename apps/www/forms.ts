@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { _hasProperty, _isStrT } from '@aglyn/shared-util-guards'
-import { length } from '@aglyn/shared-util-tools'
-import { Schema as DdfSchema } from '@data-driven-forms/react-form-renderer'
+import {_hasProperty, _isStrT} from '@aglyn/shared-util-guards'
+import {length} from '@aglyn/shared-util-tools'
+import {Schema as DdfSchema} from '@data-driven-forms/react-form-renderer'
 import validation from '@data-driven-forms/react-form-renderer/validation'
-import { ValidationOptions } from '@data-driven-forms/react-form-renderer/validation/validation'
+import {ValidationOptions} from '@data-driven-forms/react-form-renderer/validation/validation'
 import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types'
 import md5 from 'md5'
 

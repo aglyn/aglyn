@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { _isFnT } from './_is-fn-t'
-import { _isNum } from './_is-num'
-import { _isNumPos } from './_is-num-pos'
-import { _isObj } from './_is-obj'
+import {_isFnT} from './_is-fn-t'
+import {_isNum} from './_is-num'
+import {_isNumPos} from './_is-num-pos'
+import {_isObj} from './_is-obj'
 
 
 export type HasLenOpt<U> = {
@@ -50,9 +50,18 @@ export type HasLenOpt<U> = {
  * @param {HasLenOpt<U>} opts
  * @returns {boolean}
  */
-export function _isLengthOf<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, opts?: HasLenOpt<U>): boolean
-export function _isLengthOf<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, equalTo: number): boolean
-export function _isLengthOf<T extends Iterable<U> | ArrayLike<U> | number, U>(val: T, opts: any): boolean {
+export function _isLengthOf<T extends Iterable<U> | ArrayLike<U> | number, U>(
+  val: T,
+  opts?: HasLenOpt<U>,
+): boolean
+export function _isLengthOf<T extends Iterable<U> | ArrayLike<U> | number, U>(
+  val: T,
+  equalTo: number,
+): boolean
+export function _isLengthOf<T extends Iterable<U> | ArrayLike<U> | number, U>(
+  val: T,
+  opts: any,
+): boolean {
   const _opts = !opts || _isObj(opts) ? {...opts} : {equalTo: opts}
   const {equalTo, lessThan, moreThan, and, also} = _opts ?? {}
   const v = _isNum(val) ? Number(val) : ((val as unknown) as Iterable<T> | ArrayLike<T>)

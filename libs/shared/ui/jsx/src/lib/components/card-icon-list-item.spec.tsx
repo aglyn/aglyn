@@ -16,12 +16,13 @@
  */
 
 import React from 'react'
-import { render } from '@testing-library/react'
+import {render} from '@testing-library/react'
 import CardIconListItem from './card-icon-list-item'
+
 
 describe('CardIconListItem', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<CardIconListItem />)
+    const {baseElement} = render(<CardIconListItem />)
     expect(baseElement).toBeTruthy()
   })
 })

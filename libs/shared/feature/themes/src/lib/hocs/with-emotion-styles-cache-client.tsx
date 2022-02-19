@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import { getDisplayName } from '@aglyn/shared-util-tools'
-import { Component as ReactComponent, ComponentType } from 'react'
+import {getDisplayName} from '@aglyn/shared-util-tools'
+import {Component as ReactComponent, ComponentType} from 'react'
 import {
   CacheProvider,
   createEmotionCache,
   CreateEmotionCacheOptions,
   EmotionCache,
 } from '../../vendor/emotion'
+
 
 export type InjectableEmotionCacheProps = {
   emotionCache?: EmotionCache
@@ -34,15 +35,13 @@ export type WithClientThemeCacheOptions = {
 }
 
 export function withEmotionStylesCacheClient(options: WithClientThemeCacheOptions) {
-  const { emotionCache, emotionCacheOptions } = options
+  const {emotionCache, emotionCacheOptions} = options
   const defaultEmotionCache = emotionCache || createEmotionCache(emotionCacheOptions)
 
   return function <P>(Component: ComponentType<P>) {
     const displayName = `WithEmotionStylesCacheClient(${getDisplayName(Component)})`
 
-    return class WithEmotionStylesCacheClient extends ReactComponent<
-      P & InjectableEmotionCacheProps
-    > {
+    return class WithEmotionStylesCacheClient extends ReactComponent<P & InjectableEmotionCacheProps> {
       public static displayName: string = displayName
       public static WrappedComponent: ComponentType<P> = Component
       public static defaultEmotionCache: EmotionCache = defaultEmotionCache
@@ -54,7 +53,7 @@ export function withEmotionStylesCacheClient(options: WithClientThemeCacheOption
       }
 
       public render(): React.ReactNode {
-        const { emotionCache, ...rest } = this.props
+        const {emotionCache, ...rest} = this.props
         const cache = emotionCache || WithEmotionStylesCacheClient.defaultEmotionCache
 
         return (

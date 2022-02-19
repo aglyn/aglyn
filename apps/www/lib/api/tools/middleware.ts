@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
  */
 
 
-import { ApiHandler, ApiRequest, ApiResponse } from '../types'
-import { use } from 'next-api-middleware'
+import type {ApiHandler, ApiRequest, ApiResponse} from '../types'
+
+
+export {use as handleMiddleware} from 'next-api-middleware'
 
 
 export type ApiMiddlewareGroup = (ApiMiddleware[] | ApiMiddleware)[]
@@ -26,12 +28,4 @@ export type NextFn = () => Promise<void>
 
 export interface ApiMiddleware {
   (req: ApiRequest, res: ApiResponse, next: NextFn): Promise<void>
-}
-
-export interface UseApiMiddlewareGroup {
-  (...middleware: ApiMiddlewareGroup): UseApiMiddlewareResponse
-}
-
-export function handleMiddleware(...middleware: ApiMiddlewareGroup): UseApiMiddlewareResponse {
-  return use(...middleware)
 }

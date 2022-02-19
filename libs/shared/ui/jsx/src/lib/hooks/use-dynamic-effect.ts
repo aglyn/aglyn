@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { useEffect, useLayoutEffect} from 'react'
+import {useEffect, useLayoutEffect} from 'react'
+
 
 export const useDynamicEffect = typeof window !== 'undefined'
   ? useLayoutEffect

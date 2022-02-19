@@ -202,8 +202,8 @@ function SignIn() {
             clearOnUnmount
           />
 
-          <Divider flexItem sx={{my: 1}}>
-            {'Or'}
+          <Divider flexItem variant="middle" sx={{my: 1}}>
+            {'Or sign in with'}
           </Divider>
 
           <Stack
@@ -217,7 +217,7 @@ function SignIn() {
               startIcon={<MdiIcon path={mdiGoogle.path} />}
               onClick={handleGoogleButtonClick}
             >
-              {'Sign in with Google'}
+              {'Google'}
             </Button>
 
           </Stack>

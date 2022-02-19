@@ -17,9 +17,9 @@
 
 //TODO: FIX ALL TYPINGS AND REFACTOR OPTIONS/PROPS
 
-import { _isFnT, _isStrT } from '@aglyn/shared-util-guards'
-import { getDisplayName } from '@aglyn/shared-util-tools'
-import { ChangeCase } from '@aglyn/shared-util-vendor'
+import {_isFnT, _isStrT} from '@aglyn/shared-util-guards'
+import {getDisplayName} from '@aglyn/shared-util-tools'
+import {ChangeCase} from '@aglyn/shared-util-vendor'
 import React, {
   forwardRef,
   ForwardRefExoticComponent,
@@ -31,7 +31,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import { createPortal } from 'react-dom'
+import {createPortal} from 'react-dom'
 
 import useCombinedRefs from '../hooks/use-combined-refs'
 

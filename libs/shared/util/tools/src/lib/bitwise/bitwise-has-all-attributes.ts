@@ -16,7 +16,10 @@
  */
 
 
-export function bitwiseHasAllAttributes(value: number, attr: number): value is (typeof value | (typeof attr)) {
+export function bitwiseHasAllAttributes(
+  value: number,
+  attr: number
+): value is (typeof value | (typeof attr)) {
   return Boolean(value === (value | (attr)))
 }
 export default bitwiseHasAllAttributes

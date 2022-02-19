@@ -31,10 +31,10 @@ export function getOriginHeaders(reqOrigin: string | undefined, origin: StaticOr
     headers.append('Vary', 'Origin')
   }
   else {
-    const allowed = isOriginAllowed(reqOrigin ?? '', origin)
+    const allowed = isOriginAllowed(reqOrigin as string ?? '', origin)
 
     if (allowed && reqOrigin) {
-      headers.set('Access-Control-Allow-Origin', reqOrigin)
+      headers.set('Access-Control-Allow-Origin', reqOrigin as string)
     }
     headers.append('Vary', 'Origin')
   }

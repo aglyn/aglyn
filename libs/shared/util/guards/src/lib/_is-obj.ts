@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { _isArr } from './_is-arr'
-import { _isNull } from './_is-null'
-import { _isObjT } from './_is-obj-t'
+import {_isArr} from './_is-arr'
+import {_isNull} from './_is-null'
+import {_isObjT} from './_is-obj-t'
 
 
 /**

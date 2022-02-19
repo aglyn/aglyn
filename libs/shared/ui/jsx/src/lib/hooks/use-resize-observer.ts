@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { useRef, useCallback } from 'react'
+import {useRef, useCallback} from 'react'
 import ResizeObserver from 'resize-observer-polyfill'
+
 
 export function useResizeObserver(
   callback: ResizeObserverCallback

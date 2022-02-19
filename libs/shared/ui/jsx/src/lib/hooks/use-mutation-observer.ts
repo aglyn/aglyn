@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { useRef, useCallback } from 'react'
+import {useRef, useCallback} from 'react'
 
 // Options for the observer (which mutations to observe)
-const config = { attributes: true, childList: true, subtree: true }
+const config = {attributes: true, childList: true, subtree: true}
 
 export function useMutationObserver(
-  callback: MutationCallback
+  callback: MutationCallback,
 ): [MutationObserver['observe'], MutationObserver['disconnect'], MutationObserver['takeRecords']] {
   const ref = useRef<MutationObserver>(null)
 
@@ -41,7 +41,7 @@ export function useMutationObserver(
       const observer = getObserver()
       if (observer) observer.observe(target, options)
     },
-    [ref]
+    [ref],
   )
 
   const disconnect = useCallback(() => {

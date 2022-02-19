@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { ApiResponse } from '../types'
-import { serialize, CookieSerializeOptions } from 'cookie'
+import {type CookieSerializeOptions, serialize} from 'cookie'
+import type {NextApiResponse} from 'next'
 
 
 /**
@@ -33,8 +33,8 @@ import { serialize, CookieSerializeOptions } from 'cookie'
  * @param {unknown} cookieValue
  * @param {CookieSerializeOptions} [options={}]
  */
-export function setApiCookie(
-  res: ApiResponse,
+export function setApiResponseCookie<T>(
+  res: NextApiResponse<T>,
   cookieName: string,
   cookieValue: unknown,
   options: CookieSerializeOptions = {},
@@ -51,3 +51,5 @@ export function setApiCookie(
   }
   res.setHeader('Set-Cookie', serialize(cookieName, str, options))
 }
+
+export default setApiResponseCookie

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _s } from './_s'
+import {_s} from './_s'
 
 
 /**

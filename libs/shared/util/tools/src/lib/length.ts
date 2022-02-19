@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared-util-guards'
+import {_hasProperty} from '@aglyn/shared-util-guards'
 
 
 /**

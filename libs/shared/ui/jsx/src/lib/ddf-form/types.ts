@@ -17,8 +17,11 @@
 
 import type DdfField from '@data-driven-forms/react-form-renderer/common-types/field'
 import type DdfSchema from '@data-driven-forms/react-form-renderer/common-types/schema'
-import type { FormRendererProps as DdfFormRendererProps } from '@data-driven-forms/react-form-renderer/form-renderer'
-import type { ComponentType } from 'react'
+import type {
+  FormRendererProps as DdfFormRendererProps,
+} from '@data-driven-forms/react-form-renderer/form-renderer'
+import type {ComponentType} from 'react'
+
 
 export type FormSchema = DdfSchema
 export type FormField = DdfField

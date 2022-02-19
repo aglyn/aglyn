@@ -45,7 +45,7 @@ type GlobalStateClassesKeyClass<K extends GlobalStateClassesKey> = typeof global
 
 function generateComponentClass<C extends string>(
   componentName: C,
-  slot: string | GlobalStateClassesKey
+  slot: string | GlobalStateClassesKey,
 ) {
   if (slot in globalStateClassesKeys) {
     return globalStateClassesKeys[slot as GlobalStateClassesKey]

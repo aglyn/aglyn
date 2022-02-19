@@ -16,12 +16,13 @@
  */
 
 import React from 'react'
-import { render } from '@testing-library/react'
-import { ElementComponentsContextProvider } from './element-components-context-provider'
+import {render} from '@testing-library/react'
+import {ElementComponentsContextProvider} from './element-components-context-provider'
+
 
 describe('ElementComponentsContextProvider', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<ElementComponentsContextProvider />)
+    const {baseElement} = render(<ElementComponentsContextProvider />)
     expect(baseElement).toBeTruthy()
   })
 })

@@ -16,8 +16,8 @@
  */
 
 
-import type { Coordinates } from '../types'
-import { eventHasViewportRelativeCoordinates, isEventTouchEvent } from './guards/event-is'
+import type {Coordinates} from '../types'
+import {eventHasViewportRelativeCoordinates, isEventTouchEvent} from './guards/event-is'
 
 
 /**

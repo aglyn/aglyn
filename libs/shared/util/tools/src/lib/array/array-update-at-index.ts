@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { arrayMutate, MutatedArray } from './array-mutate'
+import {arrayMutate, MutatedArray} from './array-mutate'
 
 
 /**
@@ -28,6 +28,10 @@ import { arrayMutate, MutatedArray } from './array-mutate'
  * @param {T} item
  * @returns {MutatedArray<T>}
  */
-export function arrayUpdateAtIndex<T>(index: number | any, array: Array<T>, item: T): MutatedArray<T> {
+export function arrayUpdateAtIndex<T>(
+  index: number | any,
+  array: Array<T>,
+  item: T,
+): MutatedArray<T> {
   return arrayMutate(index, array, item)
 }

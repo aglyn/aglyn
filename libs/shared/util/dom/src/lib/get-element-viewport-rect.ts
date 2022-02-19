@@ -16,9 +16,9 @@
  */
 
 
-import { getElementDocumentElement } from './get-element-document-element'
-import { getElementWindowScrollBarX } from './get-element-window-scroll-bar-x'
-import { getNodeWindow } from './get-node-window'
+import {getElementDocumentElement} from './get-element-document-element'
+import {getElementWindowScrollBarX} from './get-element-window-scroll-bar-x'
+import {getNodeWindow} from './get-node-window'
 
 
 export function getElementViewportRect(element: Element) {

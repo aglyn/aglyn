@@ -14,9 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import {HttpRequestMethod, HttpStatusCode} from '@aglyn/shared-data-enums'
+import {httpRequestMethodMiddleware, jsonHandleNextResponse} from '@aglyn/shared-util-rest-api'
+import type {NextApiRequest, NextApiResponse} from 'next'
+import {use} from 'next-api-middleware'
 
 
-const handler = async (req, res) => {
+async function signin(request: NextApiRequest, response: NextApiResponse) {
   // try {
   //   await setAuthCookies(req, res)
   // }
@@ -25,7 +29,9 @@ const handler = async (req, res) => {
   //   console.error(e)
   //   return res.status(500).json({error: 'Unexpected error.'})
   // }
-  return res.status(200).json({status: true})
+  jsonHandleNextResponse(response, HttpStatusCode.OK, {data: {status: true}})
 }
 
-export default handler
+export default use(
+  httpRequestMethodMiddleware(HttpRequestMethod.POST),
+)(signin)

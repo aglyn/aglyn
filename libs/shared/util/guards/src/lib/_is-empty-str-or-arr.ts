@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { _isArrEmpty } from './_is-arr-empty'
-import { _isStrEmpty } from './_is-str-empty'
+import {_isArrEmpty} from './_is-arr-empty'
+import {_isStrEmpty} from './_is-str-empty'
 
 
 /**

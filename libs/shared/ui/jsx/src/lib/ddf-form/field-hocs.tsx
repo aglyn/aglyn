@@ -48,7 +48,7 @@ export function withGridItem<P>(WrappedComponent: ComponentType<P>): WithGridIte
           <WrappedComponent {...(rest as P)} />
         </FieldGridItem>
       )
-    }
+    },
   )
   WithFieldGrid.displayName = `WithFieldGrid(${displayName})`
   return WithFieldGrid

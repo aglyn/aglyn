@@ -16,7 +16,7 @@
  */
 
 import useScrollTrigger from '@mui/material/useScrollTrigger'
-import React, { cloneElement, ReactElement } from 'react'
+import React, {cloneElement, ReactElement} from 'react'
 
 /* eslint-disable-next-line */
 export interface ElevationScrollProps {
@@ -25,14 +25,14 @@ export interface ElevationScrollProps {
 }
 
 export function ElevationScroll(props: ElevationScrollProps) {
-  const { children, target } = props
+  const {children, target} = props
   const trigger = useScrollTrigger({
     disableHysteresis: true,
     threshold: 0,
     target: target ?? undefined,
   })
 
-  return cloneElement(children, { elevation: trigger ? 4 : 0 })
+  return cloneElement(children, {elevation: trigger ? 4 : 0})
 }
 
 ElevationScroll.displayName = 'ElevationScroll'

@@ -15,10 +15,14 @@
  * limitations under the License.
  */
 
-import { ErrorPayload } from './types'
+import {ErrorPayload} from './types'
 
 
-export function replaceTemplate(stringTemplate, data: ErrorPayload, replacePattern?: RegExp): string {
+export function replaceTemplate(
+  stringTemplate,
+  data: ErrorPayload,
+  replacePattern?: RegExp,
+): string {
   const pattern = replacePattern ?? replaceTemplate.DEFAULT_PATTERN
   return String(stringTemplate).replace(pattern, (_, key) => {
     const value = data[key]

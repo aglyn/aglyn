@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { FALLBACK_FONT_FAMILY } from '../constants'
+import {FALLBACK_FONT_FAMILY} from '../constants'
 
 
 export function useFontFamily(family: string): string {

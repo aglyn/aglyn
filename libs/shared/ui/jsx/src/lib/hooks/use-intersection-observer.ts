@@ -24,7 +24,7 @@ import React from 'react'
 
 export function useIntersectionObserver(
   callback: IntersectionObserverCallback,
-  options?: IntersectionObserverInit
+  options?: IntersectionObserverInit,
 ): [
   IntersectionObserver['observe'],
   IntersectionObserver['unobserve'],
@@ -47,7 +47,7 @@ export function useIntersectionObserver(
       const observer = getObserver()
       if (observer) observer.observe(target)
     },
-    [ref]
+    [ref],
   )
 
   const unobserve = React.useCallback(
@@ -55,7 +55,7 @@ export function useIntersectionObserver(
       const observer = getObserver()
       if (observer) observer.unobserve(target)
     },
-    [ref]
+    [ref],
   )
 
   const disconnect = React.useCallback(() => {

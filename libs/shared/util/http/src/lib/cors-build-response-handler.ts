@@ -14,21 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import {COOKIE_KEY_USER_TOKEN} from '@aglyn/shared-data-fbenums'
-import {type CookieSerializeOptions} from 'next/dist/server/web/types'
-import {type NextRequest, type NextResponse} from 'next/server'
+import corsHandleResponse from './cors-handle-response'
+import type {CorsOptions} from './types'
 
 
-export function setCookieUserToken(
-  request: NextRequest,
-  response: NextResponse,
-  token: string,
-  options?: CookieSerializeOptions,
-) {
-  return response.cookie(COOKIE_KEY_USER_TOKEN, token, {
-    httpOnly: true,
-    ...options,
-  })
+/**
+ * Curry the {@link corsHandleResponse} to handle a reusable cors config
+ * @param options - optional object of {@link CorsOptions}
+ */
+export function corsBuildResponseHandler(options?: CorsOptions) {
+  return (req: Request, res: Response) => corsHandleResponse(req, res, options)
 }
-export default setCookieUserToken
+export default corsBuildResponseHandler

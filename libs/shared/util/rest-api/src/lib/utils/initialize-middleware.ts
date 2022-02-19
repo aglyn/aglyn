@@ -15,11 +15,21 @@
  * limitations under the License.
  */
 
-import {COOKIE_KEY_USER_TOKEN} from '@aglyn/shared-data-fbenums'
-import {type NextRequest} from 'next/server'
-
-
-export function getUserIdTokenCookie(request: NextRequest) {
-  return request.cookies[COOKIE_KEY_USER_TOKEN]
+/**
+ * Helper method to wait for a middleware to execute before continuing and to throw an error when
+ * an error happens in a middleware
+ * @param middleware
+ */
+export function initializeMiddleware(middleware) {
+  return (req, res) =>
+    new Promise((resolve, reject) => {
+      middleware(req, res, (result) => {
+        if (result instanceof Error) {
+          return reject(result)
+        }
+        return resolve(result)
+      })
+    })
 }
-export default getUserIdTokenCookie
+
+export default initializeMiddleware

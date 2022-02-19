@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
+import type {NextRequest} from 'next/server'
+import getRequestHeader from './get-request-header'
+
+
 /**
  * If `allowed` param is not provided retrieves `Access-Control-Request-Headers`
  * header value from the `req` param and returns a new {@link Headers} object
- * @param req - HTTP {@link Request} object
+ * @param request - HTTP {@link Request} object
  * @param allowed - optionally override which headers to allow
  * @returns a new {@link Headers} object instance
  */
-export function getAllowedHeaders(req: Request, allowed?: string | string[]) {
+export function getAllowedHeaders(request: Request | NextRequest, allowed?: string | string[]) {
   const headers = new Headers()
 
   if (!allowed) {
-    allowed = req.headers.get('Access-Control-Request-Headers')!
+    allowed = getRequestHeader(request, 'Access-Control-Request-Headers')!
     headers.append('Vary', 'Access-Control-Request-Headers')
   }
   else if (Array.isArray(allowed)) {
@@ -34,7 +38,7 @@ export function getAllowedHeaders(req: Request, allowed?: string | string[]) {
     allowed = allowed.join(',')
   }
   if (allowed) {
-    headers.set('Access-Control-Allow-Headers', allowed)
+    headers.set('Access-Control-Allow-Headers', allowed as string)
   }
 
   return headers

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
+import {render} from '@testing-library/react'
 
 import BesignerComponent from './besigner.component'
 

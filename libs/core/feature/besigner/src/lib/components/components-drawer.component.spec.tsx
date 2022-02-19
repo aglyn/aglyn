@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
+import {render} from '@testing-library/react'
 import React from 'react'
 
-import { ComponentsDrawerComponent } from './components-drawer.component'
+import {ComponentsDrawerComponent} from './components-drawer.component'
 
 
 describe('BesignerComponentsDrawerComponent', () => {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isNum } from './_is-num'
+import {_isNum} from './_is-num'
 
 
 /**

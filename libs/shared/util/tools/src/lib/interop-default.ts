@@ -17,5 +17,5 @@
 
 
 export function interopDefault(mod) {
-  return mod.default || mod;
+  return mod.default || mod
 }

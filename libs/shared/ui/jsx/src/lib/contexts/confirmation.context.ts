@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import { noop } from '@aglyn/shared-util-tools'
-import { JSXNode } from '@aglyn/shared-data-types'
-import { ButtonProps } from '@mui/material/Button'
-import { DialogProps } from '@mui/material/Dialog'
-import { Context, createContext, useContext } from 'react'
+import {noop} from '@aglyn/shared-util-tools'
+import {JSXNode} from '@aglyn/shared-data-types'
+import {ButtonProps} from '@mui/material/Button'
+import {DialogProps} from '@mui/material/Dialog'
+import {Context, createContext, useContext} from 'react'
+
 
 export type ConfirmationContextConfig = {
   cancellationText?: JSXNode

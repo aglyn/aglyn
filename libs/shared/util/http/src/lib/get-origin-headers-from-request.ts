@@ -14,21 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import type {NextApiRequest} from 'next'
 import getOriginHeaders from './get-origin-headers'
-import {type OriginFn, type StaticOrigin} from './types'
+import getRequestHeader from './get-request-header'
+import type {OriginFn, StaticOrigin} from './types'
 
 
 export async function getOriginHeadersFromRequest(
-  req: Request,
+  request: Request | NextApiRequest,
   origin: StaticOrigin | OriginFn,
 ) {
-  const reqOrigin = req.headers.get('Origin') || undefined
+  const reqOrigin = getRequestHeader(request, 'Origin') || undefined
   const value = typeof origin === 'function'
-    ? await origin(reqOrigin, req)
+    ? await origin(reqOrigin, request)
     : origin
 
   if (!value) return
-  return getOriginHeaders(reqOrigin, value)
+  return getOriginHeaders(reqOrigin as string, value)
 }
 
 export default getOriginHeadersFromRequest

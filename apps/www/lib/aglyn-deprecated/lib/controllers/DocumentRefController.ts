@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { DoD } from '@aglyn/shared-data-types'
+import {DoD} from '@aglyn/shared-data-types'
 
-import { BaseRefController } from './BaseRefController'
+import {BaseRefController} from './BaseRefController'
 
 
 /**
@@ -34,7 +34,11 @@ export class DocumentRefController<S extends DoD.Schema.ModelFields> extends Bas
     super({id, schema}, {...fields})
   }
 
-  public static from<S extends DoD.Schema.ModelFields>(id: DoD.PKey, schema: S, fields?: DoD.Ref.Document<S>) {
+  public static from<S extends DoD.Schema.ModelFields>(
+    id: DoD.PKey,
+    schema: S,
+    fields?: DoD.Ref.Document<S>,
+  ) {
     return new this(id, schema, fields)
   }
 

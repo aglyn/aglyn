@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import MuiMenu, { MenuProps as MuiMenuProps } from '@mui/material/Menu'
-import MuiMenuItem, { MenuItemProps as MuiMenuItemProps } from '@mui/material/MenuItem'
+import MuiMenu, {MenuProps as MuiMenuProps} from '@mui/material/Menu'
+import MuiMenuItem, {MenuItemProps as MuiMenuItemProps} from '@mui/material/MenuItem'
 import React, {
   Children,
   cloneElement,
@@ -25,6 +25,7 @@ import React, {
   MouseEvent,
   useState,
 } from 'react'
+
 
 const ITEM_HEIGHT = 48
 
@@ -47,7 +48,7 @@ export interface MenuProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) {
-  const { children, items, context, className, MenuProps, ...rest } = props
+  const {children, items, context, className, MenuProps, ...rest} = props
 
   const [state, setState] = useState<State>(initialState)
   const handleClick = (event: MouseEvent<HTMLElement>) => {
@@ -63,14 +64,14 @@ export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) 
   const handleClose = () => setState(initialState)
   const open = Boolean(state.anchorEl || state.mouseY)
   const child = Children.only(children)
-  const cloned = cloneElement(child as any, { onClick: handleClick })
+  const cloned = cloneElement(child as any, {onClick: handleClick})
 
   return (
     <div
       ref={ref}
       onContextMenu={handleClick}
-      style={{ cursor: context ? 'context-menu' : undefined }}
-      {...(context ? { onContextMenu: handleClick } : {})}
+      style={{cursor: context ? 'context-menu' : undefined}}
+      {...(context ? {onContextMenu: handleClick} : {})}
       {...rest}
     >
       {cloned}
@@ -79,28 +80,28 @@ export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) 
           context
             ? undefined
             : {
-                style: {
-                  maxHeight: ITEM_HEIGHT * 4.5,
-                  minWidth: '20ch',
-                },
-              }
+              style: {
+                maxHeight: ITEM_HEIGHT * 4.5,
+                minWidth: '20ch',
+              },
+            }
         }
         anchorEl={context ? undefined : state.anchorEl}
         anchorOrigin={
           context
             ? undefined
             : {
-                vertical: 'top',
-                horizontal: 'left',
-              }
+              vertical: 'top',
+              horizontal: 'left',
+            }
         }
         anchorPosition={
           !context || !state.mouseY
             ? undefined
             : {
-                top: state.mouseY,
-                left: state.mouseX,
-              }
+              top: state.mouseY,
+              left: state.mouseX,
+            }
         }
         anchorReference={context ? 'anchorPosition' : undefined}
         // getContentAnchorEl={null}
@@ -109,9 +110,9 @@ export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) 
           context
             ? undefined
             : {
-                vertical: 'top',
-                horizontal: 'right',
-              }
+              vertical: 'top',
+              horizontal: 'right',
+            }
         }
         onClose={handleClose}
         {...MenuProps}

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { DoD } from '@aglyn/shared-data-types'
+import {DoD} from '@aglyn/shared-data-types'
 
-import { BaseRefController } from './BaseRefController'
+import {BaseRefController} from './BaseRefController'
 
 
 /**
@@ -28,13 +28,17 @@ import { BaseRefController } from './BaseRefController'
  * @extends {BaseRefController<DoD.Ref.Field<S>>}
  * @template S
  */
-export class FieldRefController<S extends DoD.Schema.FieldDefinition> extends BaseRefController<S, { value: DoD.Ref.Field<S> }> {
+export class FieldRefController<S extends DoD.Schema.FieldDefinition> extends BaseRefController<S, {value: DoD.Ref.Field<S>}> {
 
   constructor(id: DoD.PKey, schema: S, value?: DoD.Ref.Field<S>) {
     super({id, schema}, {value: value})
   }
 
-  public static from<S extends DoD.Schema.FieldDefinition>(id: DoD.PKey, schema: S, value: DoD.Ref.Field<S>) {
+  public static from<S extends DoD.Schema.FieldDefinition>(
+    id: DoD.PKey,
+    schema: S,
+    value: DoD.Ref.Field<S>
+  ) {
     return new this(id, schema, value)
   }
 

@@ -40,7 +40,7 @@ import Typography from '@mui/material/Typography'
 import Head from 'next/head'
 import {useRouter} from 'next/router'
 import {type ElementType, Fragment, type ReactNode} from 'react'
-// import {Breadcrumbs, BreadcrumbsProps} from '../components/Breadcrumbs'
+// import {BreadcrumbsComponent, BreadcrumbsProps} from '../components/BreadcrumbsComponent'
 import Copyright from '../components/Copyright'
 import {tailNavigation} from '../const'
 
@@ -203,8 +203,8 @@ const StyledMenu = styled(Menu, {
   '&:last-child': {paddingLeft: theme.spacing(0.75)},
 }))
 
-// const StyledBreadcrumbs = styled(Breadcrumbs, {
-//   name: 'Breadcrumbs',
+// const StyledBreadcrumbs = styled(BreadcrumbsComponent, {
+//   name: 'BreadcrumbsComponent',
 // })(({theme}) => ({
 //   marginTop: theme.spacing(1),
 //   color: darken(theme.palette.getContrastText(purple['600']), 0.12),

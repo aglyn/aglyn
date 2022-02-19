@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isStrT } from './_is-str-t'
+import {_isStrT} from './_is-str-t'
 
 
 /**

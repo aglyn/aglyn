@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { getDisplayName } from '@aglyn/shared-util-tools'
-import { ComponentType, Consumer, forwardRef, ForwardRefExoticComponent } from 'react'
+import {getDisplayName} from '@aglyn/shared-util-tools'
+import {ComponentType, Consumer, forwardRef, ForwardRefExoticComponent} from 'react'
 
 
 export const DEFAULT_INJECTED_PROP_NAME = 'ctx'

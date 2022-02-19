@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { arrayAddAtIndex } from './array-add-at-index'
-import { arrayMutate } from './array-mutate'
+import {arrayAddAtIndex} from './array-add-at-index'
+import {arrayMutate} from './array-mutate'
 
 
 /**

@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import { render } from '@testing-library/react'
+import {render} from '@testing-library/react'
 
 import ViewportCanvasComponent from './viewport-canvas.component'
 
+
 describe('ViewportCanvasComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<ViewportCanvasComponent />)
+    const {baseElement} = render(<ViewportCanvasComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

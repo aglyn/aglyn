@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { isElementWindow, isNodeObject } from './guards/node-is'
+import {isElementWindow, isNodeObject} from './guards/node-is'
 
 
 export function getNodeWindow(target?: Event['target']): typeof window {

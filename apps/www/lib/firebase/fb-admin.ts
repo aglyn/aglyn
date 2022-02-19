@@ -41,5 +41,5 @@ export let fbAdminApp: fbAdmin.app.App
   }
 })()
 
-export { fbAdmin }
+export {fbAdmin}
 export default fbAdmin

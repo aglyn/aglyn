@@ -196,30 +196,30 @@ export namespace Logger {
       else {
         instance.userLogHandler = (instance: Logger, level: LogLevel, ...args: unknown[]) => {
           const message = args
-          .map((arg) => {
-            if (arg == null) {
-              return null
-            }
-            else if (typeof arg === 'string') {
-              return arg
-            }
-            else if (typeof arg === 'number' || typeof arg === 'boolean') {
-              return arg.toString()
-            }
-            else if (arg instanceof Error) {
-              return arg.message
-            }
-            else {
-              try {
-                return JSON.stringify(arg)
-              }
-              catch (ignored) {
+            .map((arg) => {
+              if (arg == null) {
                 return null
               }
-            }
-          })
-          .filter((arg) => arg)
-          .join(' ')
+              else if (typeof arg === 'string') {
+                return arg
+              }
+              else if (typeof arg === 'number' || typeof arg === 'boolean') {
+                return arg.toString()
+              }
+              else if (arg instanceof Error) {
+                return arg.message
+              }
+              else {
+                try {
+                  return JSON.stringify(arg)
+                }
+                catch (ignored) {
+                  return null
+                }
+              }
+            })
+            .filter((arg) => arg)
+            .join(' ')
           if (level >= (customLogLevel ?? instance.logLevel)) {
             logCallback({
               level: LogLevel.toStr(level),
