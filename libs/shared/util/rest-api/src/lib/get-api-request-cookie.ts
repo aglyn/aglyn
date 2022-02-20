@@ -14,10 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import Cookie from 'js-cookie'
+import type {NextApiRequest} from 'next'
 
-export * from './types'
 
-export * from './hooks/use-continue-route-decoded'
-export * from './hooks/use-continue-route-encoded'
-
-export * from './security/csrf'
+export function getApiRequestCookie(name: string, request?: NextApiRequest) {
+  return request?.cookies?.[name] || Cookie.get(name) || ''
+}
+export default getApiRequestCookie

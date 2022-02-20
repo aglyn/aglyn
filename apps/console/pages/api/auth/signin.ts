@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 import {HttpRequestMethod, HttpStatusCode} from '@aglyn/shared-data-enums'
+import {csrfApiMiddleware} from '@aglyn/shared-util-next'
 import {httpRequestMethodMiddleware, nextHandleJsonResponse} from '@aglyn/shared-util-rest-api'
 import type {NextApiRequest, NextApiResponse} from 'next'
 import {use} from 'next-api-middleware'
@@ -33,5 +34,6 @@ async function signin(request: NextApiRequest, response: NextApiResponse) {
 }
 
 export default use(
+  csrfApiMiddleware,
   httpRequestMethodMiddleware(HttpRequestMethod.POST),
 )(signin)

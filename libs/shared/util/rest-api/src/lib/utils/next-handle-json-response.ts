@@ -14,21 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type {HttpStatusCode} from '@aglyn/shared-data-enums'
+import {HttpStatusCode} from '@aglyn/shared-data-enums'
 import type {NextApiResponse} from 'next'
 import type {JsonResponse} from '../types'
 
 
 /**
  * Speed up creating a new {@link Response} object specifying the JSON header
- * `'Content-Type': 'application/json'` and {@link JSON.stringify|serializing}
+ * `'Content-Type': 'application/json'` and {@link JSON.stringify | serializing}
  * JSON response data
  * @example - pages/_middleware.ts
- * export function middleware(req: NextRequest) {
+ * export function handler(req: NextApiRequest, res: NextApiResponse) {
  *   return createNewJsonResponse(
+ *     res,
  *     HttpStatusCode.OK,
  *     {data: 'Hello World!'},
-
+ *   )
+ * }
  * @returns a new {@link Response} object instance
  */
 export function nextHandleJsonResponse(
@@ -36,13 +38,24 @@ export function nextHandleJsonResponse(
   statusCode: HttpStatusCode,
   options?: JsonResponse,
 ) {
-  const {statusMessage, data, error} = {...options}
-  const json: JsonResponse = {statusCode, data}
-  if (error) json.error = error
-  if (statusMessage) json.statusMessage = statusMessage
+  const {
+    error,
+    errorCode,
+    status,
+    statusMessage,
+    data,
+  } = options || {}
+  const json: JsonResponse = {
+    errorCode,
+    error,
+    status: status ?? true,
+    statusCode: statusCode || HttpStatusCode.OK,
+    statusMessage: statusMessage || 'No message provided.',
+    data: data ?? null,
+  }
 
   response
-    .status(statusCode)
+    .status(json.statusCode)
     .json(json)
 }
 

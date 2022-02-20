@@ -15,27 +15,28 @@
  * limitations under the License.
  */
 
-import {NsErrorFactory} from './ns-error-factory'
-import type {ErrorPayload} from './types'
+import {HttpStatusCode} from '@aglyn/shared-data-enums'
 
 
-export class NsError extends Error {
-  readonly name = 'NsError'
+export class HttpResponseError extends Error {
+  readonly name = 'HttpResponseError'
 
   constructor(
-    public readonly code: string,
+    public readonly code: HttpStatusCode = HttpStatusCode.OK,
     public message: string,
-    public payload: ErrorPayload,
   ) {
     super(message)
+
     // Fix For ES5
     // https://github.com/Microsoft/TypeScript-wiki/blob/master/Breaking-Changes.md#extending-built-ins-like-error-array-and-map-may-no-longer-work
-    Object.setPrototypeOf(this, NsError.prototype)
+    Object.setPrototypeOf(this, HttpResponseError.prototype)
 
     // Maintains proper stack trace for where our error was thrown.
     // Only available on V8.
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NsErrorFactory.prototype.create)
+      Error.captureStackTrace(this, HttpResponseError)
     }
   }
 }
+
+export default HttpResponseError

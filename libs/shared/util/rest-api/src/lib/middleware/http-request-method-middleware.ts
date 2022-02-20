@@ -15,7 +15,16 @@
  * limitations under the License.
  */
 
-import {HttpRequestMethod, HttpStatusCode} from '@aglyn/shared-data-enums'
+import {
+  createHttpRefCode,
+  HttpRefCodeSimple,
+  HttpRefCodeSubject,
+  HttpRefCodeTopic,
+  HttpRequestMethod,
+  HttpResponseStatus,
+  HttpStatusCode,
+} from '@aglyn/shared-data-enums'
+import {HttpResponseError} from '@aglyn/shared-util-errors'
 import type {NextMiddleware} from 'next-api-middleware'
 import nextHandleJsonResponse from '../utils/next-handle-json-response'
 
@@ -44,8 +53,19 @@ export function httpRequestMethodMiddleware(
       await next()
     }
     else {
+      const err = new HttpResponseError(
+        HttpStatusCode.METHOD_NOT_ALLOWED,
+        HttpRefCodeSimple.METHOD_NOT_ALLOWED,
+      )
       nextHandleJsonResponse(res, HttpStatusCode.NOT_FOUND, {
-        status: 'error', statusMessage: 'Resource not found',
+        status: HttpResponseStatus.ERROR,
+        statusMessage: HttpRefCodeSimple.RESOURCE_NOT_FOUND,
+        error: err,
+        errorCode: createHttpRefCode(
+          HttpRefCodeSimple.METHOD_NOT_ALLOWED,
+          HttpRefCodeSubject.BAD_REQUEST,
+          HttpRefCodeTopic.METHOD_NOT_ALLOWED,
+        ),
       })
     }
   }

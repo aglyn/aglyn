@@ -16,6 +16,7 @@
  */
 
 export * from './auth'
+export * from './get-api-request-cookie'
 export * from './set-api-response-cookie'
 export * from './types'
 

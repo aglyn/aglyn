@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import type {HttpStatusCode} from '@aglyn/shared-data-enums'
+import type {HttpRefCode, HttpResponseStatus, HttpStatusCode} from '@aglyn/shared-data-enums'
 
 
 export type JsonResponse = {
-  status?: true | 'error',
+  error?: any
+  errorCode?: HttpRefCode
+  status?: HttpResponseStatus | true,
   statusCode?: HttpStatusCode,
   statusMessage?: string,
   data?: any,
-  error?: any
 }

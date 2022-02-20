@@ -14,12 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type {HttpStatusCode} from '@aglyn/shared-data-enums'
+import type {HttpResponseStatus, HttpStatusCode} from '@aglyn/shared-data-enums'
 import {JsonResponse} from '../types'
 
 
 export type JsonCreateResponseOptions = {
-  status?: true | 'error',
+  status?: HttpResponseStatus | true,
   statusCode?: HttpStatusCode,
   statusMessage?: string,
   data?: any,

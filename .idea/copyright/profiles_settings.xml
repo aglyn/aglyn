@@ -117,7 +117,7 @@
     </LanguageOptions>
     <LanguageOptions name="__TEMPLATE__">
       <option name="separateBefore" value="true" />
-      <option name="lenBefore" value="1" />
+      <option name="lenBefore" value="0" />
       <option name="filler" value="*" />
     </LanguageOptions>
   </settings>

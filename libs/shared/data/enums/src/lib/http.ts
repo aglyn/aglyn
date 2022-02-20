@@ -117,3 +117,50 @@ export enum HttpRequestMethod {
   PUT = 'PUT',
   TRACE = 'TRACE',
 }
+
+export enum HttpResponseStatus {
+  SUCCESS = 'success',
+  ERROR = 'error'
+}
+
+export enum HttpRefCodeSimple {
+  SERVER_ERROR = 'Internal server error',
+  INVALID_REQUEST = 'Unknown or invalid request',
+  NOT_AUTHENTICATED = 'Missing required authentication',
+  NOT_AUTHORIZED = 'Missing required permissions',
+  TOO_MANY_REQUESTS = 'Too many subsequent requests',
+  METHOD_NOT_ALLOWED = 'Request method not allowed',
+  RESOURCE_NOT_FOUND = 'Asset or resource not found',
+  FAILED_SECURITY = 'Failed security requirements',
+  FAILED_CLIENT_MODIFY = 'Failed to modify client',
+}
+
+export enum HttpRefCodeSubject {
+  SYSTEM_DOWN = 'system-down',
+  NOT_AUTHORIZED = 'not-authorized',
+  NOT_AUTHENTICATED = 'not-authenticated',
+  BAD_REQUEST = 'bad-request',
+  INVALID_REQUEST = 'invalid-request',
+  TOO_MANY_REQUEST = 'too-many-requests',
+}
+
+export enum HttpRefCodeTopic {
+  UNKNOWN = 'unknown',
+  NOT_FOUND = 'not-found',
+  SERVER_ERROR = 'internal-server-error',
+  FAILED_REQUIREMENTS = 'failed-requirements',
+  MISSING_HEADER = 'missing-required-header',
+  FAIL_ID_TOKEN_CHECK = 'id-token-verification-failed',
+  FAIL_CSRF_TOKEN_CHECK = 'csrf-token-verification-failed',
+  CREATE_SESSION_COOKIE = 'create-session-cookie',
+  RATE_LIMIT_EXCEEDED = 'rate-limit-exceeded',
+  METHOD_NOT_ALLOWED = 'method-not-allowed',
+}
+
+export type HttpRefCode = `${HttpRefCodeSimple} (${HttpRefCodeSubject}/${HttpRefCodeTopic})`
+
+export const createHttpRefCode = (
+  simple: HttpRefCodeSimple,
+  subject: HttpRefCodeSubject,
+  topic: HttpRefCodeTopic,
+): HttpRefCode => `${simple} (${subject}/${topic})`

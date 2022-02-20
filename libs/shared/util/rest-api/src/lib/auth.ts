@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {HttpStatusCode} from '@aglyn/shared-data-enums'
+import {HttpResponseStatus, HttpStatusCode} from '@aglyn/shared-data-enums'
 import {getRequestHeader} from '@aglyn/shared-util-http'
 import type {NextApiHandler, NextApiRequest, NextApiResponse} from 'next'
 import {createNewJsonResponse} from './rest-api'
@@ -31,7 +31,7 @@ export const requireHeader = <T = any>(
 
     if (!header) {
       return createNewJsonResponse(HttpStatusCode.BAD_REQUEST, {
-        status: 'error',
+        status: HttpResponseStatus.ERROR,
         error: Error(`Missing required header - (key: ${key})!`),
         statusMessage: 'Bad request. Failed to satisfy headers.',
       })
