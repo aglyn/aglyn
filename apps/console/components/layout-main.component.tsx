@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-brand'
+import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
   AglynSvgLogo,

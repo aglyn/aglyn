@@ -17,7 +17,7 @@
 
 import {getApp} from '@aglyn/core-data-framework'
 import {getAdminTenant} from '@aglyn/core-data-tenancy'
-import {HAS_BROWSER} from '@aglyn/shared-data-brand'
+import {HAS_BROWSER} from '@aglyn/shared-data-enums'
 import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
 import dynamic from 'next/dynamic'
 import {useEffect} from 'react'

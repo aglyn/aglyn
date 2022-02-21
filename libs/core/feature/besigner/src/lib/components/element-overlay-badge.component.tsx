@@ -17,9 +17,11 @@
 
 import {type ElementId, isRootElementId} from '@aglyn/core-data-framework'
 import {
-  ICON_VARIANT_MODIFY_EDIT, ICON_VARIANT_MODIFY_DRAG, ICON_VARIANT_MODIFY_DUPLICATE,
+  ICON_VARIANT_MODIFY_DRAG,
+  ICON_VARIANT_MODIFY_DUPLICATE,
+  ICON_VARIANT_MODIFY_EDIT,
   ICON_VARIANT_SELECT_PARENT,
-} from '@aglyn/shared-data-brand'
+} from '@aglyn/shared-data-enums'
 import {SrOnlyComponent, type SrOnlyComponentProps} from '@aglyn/shared-ui-jsx'
 import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import MuiButton, {type ButtonProps} from '@mui/material/Button'

@@ -22,7 +22,7 @@ import {
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import {ICON_VARIANT_DETAILS, ICON_VARIANT_PROPERTIES} from '@aglyn/shared-data-brand'
+import {ICON_VARIANT_DETAILS, ICON_VARIANT_PROPERTIES} from '@aglyn/shared-data-enums'
 import {alpha, handlePassSxProps, styled} from '@aglyn/shared-feature-themes'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {numberFromHexadecimal, numberToHexadecimal} from '@aglyn/shared-util-tools'

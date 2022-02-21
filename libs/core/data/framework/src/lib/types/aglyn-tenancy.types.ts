@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-import {type HttpStatusCode} from '@aglyn/shared-data-enums'
-import {type Conditional, type TimestampSeconds} from '@aglyn/shared-data-types'
-import {
-  type ActivityAccess,
-  type HostEntityType,
-  type HostRedirectParams,
-  type HostScreenStatus,
-  type HostScreenVisibility,
-  type HostViewFormat,
+import type {HttpStatusCode} from '@aglyn/shared-data-enums'
+import type {Conditional, TimestampSeconds} from '@aglyn/shared-data-types'
+import type {
+  ActivityAccess,
+  HostEntityType,
+  HostRedirectParams,
+  HostScreenStatus,
+  HostScreenVisibility,
+  HostViewFormat,
 } from '../constants/tenancy'
-import {type AglynElementsById, type AglynElementsList} from './aglyn-elements.types'
+import type {AglynElementsById, AglynElementsList} from './aglyn-elements.types'
 
 
 export type UserUid = string

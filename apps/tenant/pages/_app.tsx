@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {APP_SITE, IS_PRODUCTION} from '@aglyn/shared-data-brand'
+import {APP_TENANT, IS_PRODUCTION} from '@aglyn/shared-data-enums'
 import {NextEmotionAppComponent, type NextEmotionAppComponentProps} from '@aglyn/shared-ui-next'
 import {Fragment, useEffect, useMemo} from 'react'
 
@@ -33,7 +33,7 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
     ...nextAppWrapperProps
   } = NextAppWrapperProps || {}
   const documentTitle = useMemo(
-    () => wrapperDocumentTitle || APP_SITE.META_TITLE,
+    () => wrapperDocumentTitle || APP_TENANT.META_TITLE,
     [wrapperDocumentTitle],
   )
   const headChildren = useMemo(
@@ -48,7 +48,7 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
   const metaElements: any = useMemo(
     () => [
       ['viewport', 'width=device-width, initial-scale=1'],
-      ['description', APP_SITE.META_DESCRIPTION],
+      ['description', APP_TENANT.META_DESCRIPTION],
       ...(wrapperMetaElements || []),
     ],
     [wrapperMetaElements],

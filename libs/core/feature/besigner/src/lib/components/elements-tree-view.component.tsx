@@ -22,7 +22,7 @@ import {
   useAglynElementData,
   useAglynElementLabel,
 } from '@aglyn/core-feature-renderer'
-import {ICON_VARIANT_ENTITY_BLOCK} from '@aglyn/shared-data-brand'
+import {ICON_VARIANT_ENTITY_BLOCK} from '@aglyn/shared-data-enums'
 import {alpha, styled} from '@aglyn/shared-feature-themes'
 import {mdiChevronDown, mdiChevronRight, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {_isArr} from '@aglyn/shared-util-guards'

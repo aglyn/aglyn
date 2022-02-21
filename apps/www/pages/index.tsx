@@ -19,7 +19,7 @@ import img3 from '/public/_static/images/designer/website-designer-custom-elemen
 import img2 from '/public/_static/images/designer/website-designer-element-categories.png'
 import img4 from '/public/_static/images/designer/website-designer-functional-operations.png'
 import img1 from '/public/_static/images/designer/website-designer-preview-collage.png'
-import {ProductNames} from '@aglyn/shared-data-brand'
+import {BRAND_NAMES} from '@aglyn/shared-data-enums'
 import {GridItems} from '@aglyn/shared-ui-jsx'
 import {Image} from '@aglyn/shared-ui-next'
 import Box from '@mui/material/Box'
@@ -40,7 +40,7 @@ function Index(props) {
     <MainLayout
       title={TITLE + ' | Aglyn'}
       centerNavigationItems={mainNavigation}
-      productName={ProductNames.WWW}
+      productName={BRAND_NAMES.WWW}
     >
       <BackgroundImage
         component={'header'}

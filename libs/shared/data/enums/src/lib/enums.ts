@@ -15,5 +15,10 @@
  * limitations under the License.
  */
 
+export * from './aglyn'
+export * from './applications'
 export * from './firebase-auth'
+export * from './global'
+export * from './html-head'
 export * from './http'
+export * from './icons'

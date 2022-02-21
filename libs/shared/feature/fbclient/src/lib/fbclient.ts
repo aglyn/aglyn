@@ -16,7 +16,7 @@
  */
 
 
-import {IS_DEVELOPMENT} from '@aglyn/shared-data-brand'
+import {IS_DEVELOPMENT} from '@aglyn/shared-data-enums'
 import {type FirebaseApp, initializeApp} from 'firebase/app'
 import {type AppCheck, initializeAppCheck, ReCaptchaV3Provider} from 'firebase/app-check'
 import {

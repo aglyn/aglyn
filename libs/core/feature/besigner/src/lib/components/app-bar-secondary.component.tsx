@@ -31,7 +31,7 @@ import {
   ICON_VARIANT_MONITOR_LARGE,
   ICON_VARIANT_MONITOR_SMALL,
   ICON_VARIANT_TABLET,
-} from '@aglyn/shared-data-brand'
+} from '@aglyn/shared-data-enums'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
   mdiCursorDefault,

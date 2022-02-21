@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {APP_CONSOLE, IS_PRODUCTION} from '@aglyn/shared-data-brand'
+import {APP_CONSOLE, IS_PRODUCTION} from '@aglyn/shared-data-enums'
 import {type MakeLinkElementsConfig, type MakeMetaElementsConfig} from '@aglyn/shared-ui-jsx'
 import {NextEmotionAppComponent, type NextEmotionAppComponentProps} from '@aglyn/shared-ui-next'
 import {Fragment, useMemo} from 'react'

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-brand'
+import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-enums'
 import Typography, {type TypographyProps} from '@mui/material/Typography'
 
 
@@ -24,7 +24,7 @@ export interface CopyrightComponentProps extends TypographyProps {}
 function CopyrightComponent(props: CopyrightComponentProps) {
   return (
     <Typography variant="subtitle2" {...props}>
-      {CURRENT_YEAR} &copy; {BRAND.LEGAL_NAME}
+      {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
     </Typography>
   )
 }

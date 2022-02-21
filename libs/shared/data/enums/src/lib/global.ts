@@ -29,3 +29,4 @@ export const HAS_WINDOW = () => typeof window !== 'undefined'
 export const HAS_DOCUMENT = () => typeof document !== 'undefined'
 
 export const CURRENT_YEAR = new Date().getFullYear()
+export const CURRENT_YEAR_UTC = new Date().getUTCFullYear()

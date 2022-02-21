@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {HAS_DOCUMENT, IS_PRODUCTION} from '@aglyn/shared-data-brand'
+import {HAS_DOCUMENT, IS_PRODUCTION} from '@aglyn/shared-data-enums'
 import type {JSXElementType} from '@aglyn/shared-data-types'
 import {consoleThemeLight, withTheme} from '@aglyn/shared-feature-themes'
 import {

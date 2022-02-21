@@ -398,29 +398,6 @@
       },
       "tags": ["sc:lib", "sc:lib:core", "sc:lib:core:feature", "sc:lib:core:feature:renderer"]
     },
-    "shared-data-brand": {
-      "root": "libs/shared/data/brand",
-      "sourceRoot": "libs/shared/data/brand/src",
-      "projectType": "library",
-      "targets": {
-        "lint": {
-          "executor": "@nrwl/linter:eslint",
-          "outputs": ["{options.outputFile}"],
-          "options": {
-            "lintFilePatterns": ["libs/shared/data/brand/**/*.ts"]
-          }
-        },
-        "test": {
-          "executor": "@nrwl/jest:jest",
-          "outputs": ["coverage/libs/shared/data/brand"],
-          "options": {
-            "jestConfig": "libs/shared/data/brand/jest.config.js",
-            "passWithNoTests": true
-          }
-        }
-      },
-      "tags": ["sc:lib", "sc:lib:shared", "sc:lib:shared:data"]
-    },
     "shared-data-enums": {
       "root": "libs/shared/data/enums",
       "sourceRoot": "libs/shared/data/enums/src",

@@ -17,7 +17,7 @@
 
 import {BesignerPanelTabFlag, setBesignerPanels} from '@aglyn/core-data-besigner'
 import {useAglynAppContext} from '@aglyn/core-feature-renderer'
-import {ICON_VARIANT_TREE_VIEW} from '@aglyn/shared-data-brand'
+import {ICON_VARIANT_TREE_VIEW} from '@aglyn/shared-data-enums'
 import {styled} from '@aglyn/shared-feature-themes'
 import {MdiIcon, mdiPlus} from '@aglyn/shared-ui-mdi-jsx'
 import {numberFromHexadecimal, numberToHexadecimal} from '@aglyn/shared-util-tools'

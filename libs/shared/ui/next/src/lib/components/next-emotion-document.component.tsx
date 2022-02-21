@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {IS_PRODUCTION, LINK_PREF, LINK_PRIORITY, META_PREF} from '@aglyn/shared-data-brand'
+import {IS_PRODUCTION, LINK_PREF, LINK_PRIORITY, META_PREF} from '@aglyn/shared-data-enums'
 import {
   createEmotionCache,
   createEmotionServer,

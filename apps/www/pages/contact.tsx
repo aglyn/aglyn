@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {ProductNames} from '@aglyn/shared-data-brand'
+import {BRAND_NAMES} from '@aglyn/shared-data-enums'
 import {GridItems} from '@aglyn/shared-ui-jsx'
 import {simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {
@@ -132,7 +132,7 @@ function Contact(props) {
     <MainLayout
       title={'Contact Us | Aglyn'}
       centerNavigationItems={mainNavigation}
-      productName={ProductNames.WWW}
+      productName={BRAND_NAMES.WWW}
     >
       <main>
         <Box py={12} bgcolor={'background.paper'}>

@@ -24,11 +24,13 @@ export const APP_CONSOLE = {
   META_TITLE: 'Aglyn Console',
   META_DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
 }
-export const APP_SITE = {
+export const APP_TENANT = {
   META_TITLE: 'My website',
   META_DESCRIPTION: 'Created with Aglyn website besigner',
 }
 
-export const ProductNames = {
+export const BRAND_NAMES = {
   WWW: '.com',
+  BESIGNER: 'Besigner',
+  CONSOLE: 'App Console',
 }

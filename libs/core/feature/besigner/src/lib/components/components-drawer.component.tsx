@@ -16,7 +16,7 @@
  */
 
 import type {AglynComponentElementTemplate} from '@aglyn/core-data-framework'
-import {ICON_VARIANT_ENTITY_BLOCK} from '@aglyn/shared-data-brand'
+import {ICON_VARIANT_ENTITY_BLOCK} from '@aglyn/shared-data-enums'
 import type {AnyProps} from '@aglyn/shared-data-types'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
