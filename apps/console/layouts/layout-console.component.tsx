@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import {GridItems, type GridItemsProps} from '@aglyn/shared-ui-jsx'
+import {mergeSxProps} from '@aglyn/shared-feature-themes'
+import {BackgroundImageComponent, GridItems, type GridItemsProps} from '@aglyn/shared-ui-jsx'
 import {mdiCogOutline, MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {_s, copy} from '@aglyn/shared-util-tools'
-import {Box, Container, Typography} from '@mui/material'
+import {_isArr} from '@aglyn/shared-util-guards'
+import {Container, Typography} from '@mui/material'
 import type {ReactNode} from 'react'
 import {isElement} from 'react-is'
 // import {type CurrentUserContextType} from '../contexts/current-user-context'
@@ -28,7 +29,7 @@ import BreadcrumbsComponent from '../components/breadcrumbs.component'
 import LayoutMainComponent, {type MainLayoutProps as MainLayoutProps} from './layout-main.component'
 
 
-export const CONTENT_MAX_WIDTH = 'lg'
+export const CONTENT_MAX_WIDTH = 'xl'
 const getHeader = (first, second) => (
   <span>
     <b>{first}:</b> {second}
@@ -52,7 +53,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     aggregatedPageMeta,
     title: titleProp,
     items,
-    // breadcrumbItems: breadcrumbItemsProp,
+    breadcrumbItems: breadcrumbItemsProp,
     ContentGridItemsProps,
     children,
     currentUserContext,
@@ -69,12 +70,12 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     ),
     ...headerProp,
   }
-  const breadcrumbItems = (/*breadcrumbItemsProp ??*/ (copy(pageAncestors || []) as any[]))
-    .concat((overrideMeta ?? pageMeta) || [])
-    .map((item: any) => ({
-      href: _s(item?.id),
-      children: item?.name.plural,
-    }))
+  const breadcrumbItems = breadcrumbItemsProp || [] /*?? (copy(pageAncestors || []) as any[]))*/
+  // .concat((overrideMeta ?? pageMeta) || [])
+  // .map((item: any) => ({
+  //   href: _s(item?.id),
+  //   children: item?.name.plural,
+  // }))
   const quickActionMenus: MainLayoutProps['quickActionMenus'] = [
     {
       icon: {path: mdiCogOutline.path},
@@ -105,34 +106,60 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
   return (
     <LayoutMainComponent
       navTabItems={[]/*tabItems as any*/}
-      title={title}
-      productName={'console'}
+      title={title ? [..._isArr(title) ? title : [title], 'Secure'] : 'Secure'}
+      productName={'Console'}
       quickActionMenus={quickActionMenus}
       {...rest}
     >
-      <header>
-        <Box
-          component={'div'}
-          sx={{
-            display: 'flex',
-            width: '100%',
-            height: 96,
-          }}
-        />
+      <BackgroundImageComponent
+        component="header"
+        url="/_static/images/backgrounds/patterns/abstract-wave-lines.svg"
+        bgPosition="50% 90%"
+        sx={{
+          pt: 10,
+          bgcolor: 'background.secondary',
+          color: 'text.primary',
+          borderBottomWidth: `1px`,
+          borderBottomStyle: 'solid',
+          borderBottomColor: 'divider',
+        }}
+      >
         <Container maxWidth={CONTENT_MAX_WIDTH}>
-          <Typography component="h1" variant="h4">
+          <Typography
+            component="h1"
+            variant="h4"
+            sx={mergeSxProps({
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+            })}
+          >
             {!header?.icon || isElement(header.icon) ? header.icon : (
               <MdiIcon
-                color="secondary"
-                fontSize="inherit"
+                color="inherit"
                 {...header.icon}
+                sx={mergeSxProps({
+                  padding: 1,
+                  mr: 1.75,
+                  ml: -0.5,
+                  fontSize: `1.5em`,
+                  borderWidth: `1px`,
+                  borderStyle: 'solid',
+                  borderColor: 'tertiary.dark',
+                  color: 'quaternary.contrastText',
+                  bgcolor: 'quaternary.main',
+                  borderRadius: (theme) => theme.shape.appIconBorderRadius,
+                }, header.icon?.['sx'])}
               />
             )}
             {header?.children ?? title}
           </Typography>
-          <BreadcrumbsComponent items={breadcrumbItems as any} />
+          <BreadcrumbsComponent
+            items={breadcrumbItems as any}
+            sx={{my: 2}}
+          />
         </Container>
-      </header>
+      </BackgroundImageComponent>
       <main /*className={classes.content}*/>
         <Container maxWidth={CONTENT_MAX_WIDTH}>
           {items || ContentGridItemsProps ? (

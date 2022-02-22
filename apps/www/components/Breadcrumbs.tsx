@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
 import {AppLink, type AppLinkProps} from '@aglyn/shared-ui-jsx'
 import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import {_isLength} from '@aglyn/shared-util-guards'
-import {yes} from '@aglyn/shared-util-tools'
+import {truthy} from '@aglyn/shared-util-tools'
 import MuiBreadcrumbs, {
   type BreadcrumbsProps as MuiBreadcrumbsProps,
 } from '@mui/material/Breadcrumbs'
@@ -63,13 +63,13 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs, {
   },
 }))
 
-export interface ItemProps extends AppLinkProps<'text'> {
+export interface BreadcrumbItemProps extends AppLinkProps<'text'> {
   icon?: MdiIconProps
   disabled?: boolean
 }
 
 export interface BreadcrumbsProps extends MuiBreadcrumbsProps {
-  items: ItemProps[]
+  items: BreadcrumbItemProps[]
   centerIcons?: boolean
 }
 
@@ -78,12 +78,12 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
     const {centerIcons, children, items, ...rest} = props
 
     const MemoedItem = useMemo(() => {
-      const Component = forwardRef<any, ItemProps & {isLast: boolean}>(function RefRenderFn(
+      const Component = forwardRef<any, BreadcrumbItemProps & {isLast: boolean}>(function RefRenderFn(
         itemProps,
         ref,
       ) {
         const {icon, className, isLast, disabled, ...item} = itemProps
-        const isDisabled = yes(disabled || isLast)
+        const isDisabled = truthy(disabled || isLast)
         const itemClass = clsx(
           classKeys.item,
           {
@@ -93,12 +93,13 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
           },
           className,
         )
+        const iconClass = clsx(classKeys.icon, icon?.className)
 
         const ItemComponent = isLast ? Typography : AppLink
 
         return (
           <ItemComponent ref={ref as any} className={itemClass} {...item}>
-            {icon ? <MdiIcon className={classKeys.icon} {...icon} /> : null}
+            {icon ? <MdiIcon {...icon} className={iconClass} /> : null}
             {item.children}
           </ItemComponent>
         )

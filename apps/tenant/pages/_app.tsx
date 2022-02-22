@@ -33,7 +33,7 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
     ...nextAppWrapperProps
   } = NextAppWrapperProps || {}
   const documentTitle = useMemo(
-    () => wrapperDocumentTitle || APP_TENANT.META_TITLE,
+    () => wrapperDocumentTitle || APP_TENANT.TITLE,
     [wrapperDocumentTitle],
   )
   const headChildren = useMemo(
@@ -48,7 +48,7 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
   const metaElements: any = useMemo(
     () => [
       ['viewport', 'width=device-width, initial-scale=1'],
-      ['description', APP_TENANT.META_DESCRIPTION],
+      ['description', APP_TENANT.DESCRIPTION],
       ...(wrapperMetaElements || []),
     ],
     [wrapperMetaElements],

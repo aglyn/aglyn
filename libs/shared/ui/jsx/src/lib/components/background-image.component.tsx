@@ -15,13 +15,17 @@
  * limitations under the License.
  */
 
-import {styled} from '@aglyn/shared-feature-themes'
-import Box, {type BoxProps as MuiBoxProps} from '@mui/material/Box'
+import {CSSObject, styled} from '@aglyn/shared-feature-themes'
+import {_isEqualitySameType} from '@aglyn/shared-util-guards'
+import {Box, type BoxProps as MuiBoxProps} from '@mui/material'
 
 
 interface OverrideProps {
   url: string
   parallax?: boolean
+  bgPosition?: CSSObject['backgroundPosition']
+  bgRepeat?: CSSObject['backgroundRepeat']
+  bgSize?: CSSObject['backgroundSize']
 }
 
 export type BackgroundImageComponentProps = MuiBoxProps<any, OverrideProps>
@@ -29,18 +33,23 @@ export type BackgroundImageComponentProps = MuiBoxProps<any, OverrideProps>
 const BackgroundImageComponent = styled(Box, {
   name: 'BackgroundImage',
   shouldForwardProp(propName) {
-    return !(propName === 'url' || propName === 'parallax')
+    return !_isEqualitySameType(propName, 'url', 'parallax', 'bgPosition', 'bgSize')
   },
-})<BackgroundImageComponentProps>(({url, parallax}) => ({
+})<BackgroundImageComponentProps>(({url, parallax, bgRepeat, bgPosition, bgSize}) => ({
   backgroundColor: 'inherit',
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'bottom center',
-  backgroundSize: 'cover',
+  backgroundRepeat: bgRepeat,
+  backgroundPosition: bgPosition,
+  backgroundSize: bgSize,
   backgroundImage: `url(${url})`,
   backgroundAttachment: parallax ? 'fixed' : undefined,
 }))
 
 BackgroundImageComponent.displayName = 'BackgroundImageComponent'
+BackgroundImageComponent.defaultProps = {
+  bgPosition: 'bottom center',
+  bgRepeat: 'no-repeat',
+  bgSize: 'cover',
+}
 
 export {BackgroundImageComponent}
 export default BackgroundImageComponent

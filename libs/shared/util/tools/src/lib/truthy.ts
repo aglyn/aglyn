@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
+export type TruthyParams = unknown[]
+
 /**
- * Shortcut for Boolean(...)
- *
- * @export
- * @param {*} val
- * @returns {boolean}
+ * Shortcut for checking multiple truthy values e.g., `Boolean(i of val)`
+ * @returns return true unless any value is falsy otherwise returns false
  */
-export function yes(...val: Parameters<typeof Boolean>): boolean {
-  return Boolean(...val)
+export function truthy(...val: TruthyParams): boolean {
+  for (const i of val) {
+    if (!i) return false
+  }
+  return true
 }
+export default truthy

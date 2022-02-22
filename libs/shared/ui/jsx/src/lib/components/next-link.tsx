@@ -15,24 +15,31 @@
  * limitations under the License.
  */
 
+import type {OverrideableComponentProps, RenamedKey} from '@aglyn/shared-data-types'
 import {styled} from '@aglyn/shared-feature-themes'
 import Link, {type LinkProps} from 'next/link'
 import {type AnchorHTMLAttributes, forwardRef} from 'react'
 
 
-interface AnchorProps extends AnchorHTMLAttributes<HTMLAnchorElement> {}
+export interface NextAnchorProps extends AnchorHTMLAttributes<HTMLAnchorElement> {}
 
 // Add support for the sx prop
-const Anchor = styled('a', {name: 'AglynAnchor'})<AnchorProps>({})
-Anchor.displayName = 'Anchor'
+export const NextAnchor = styled('a', {
+  name: 'AglynNextLink',
+})<NextAnchorProps>({})
+NextAnchor.displayName = 'Anchor'
 
+export type NextLinkBaseProps =
+  Omit<NextAnchorProps, 'href'>
+  & Omit<LinkProps, 'as' | 'href'>
+  & RenamedKey<OverrideableComponentProps, 'component', 'anchorComponent'>
 
-export interface NextLinkProps extends Omit<AnchorProps, 'href'>, Omit<LinkProps, 'as' | 'href'> {
+export interface NextLinkProps extends NextLinkBaseProps, NextLinkBaseProps {
   hrefTo?: LinkProps['href']
   hrefAs?: LinkProps['as']
 }
 
-const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(
+const NextLink = forwardRef<any, NextLinkProps>(
   function RefRenderFn(props, ref) {
     const {
       as: _1,
@@ -45,6 +52,7 @@ const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(
       shallow,
       prefetch,
       locale,
+      anchorComponent: Anchor,
       ...rest
     } = props as LinkProps & NextLinkProps
 
@@ -65,8 +73,11 @@ const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(
   },
 )
 
-NextLink.displayName = 'NextLink'
-NextLink.defaultProps = {passHref: true}
+NextLink.displayName = 'AglynNextLink'
+NextLink.defaultProps = {
+  passHref: true,
+  anchorComponent: NextAnchor,
+}
 
 export {NextLink}
 export default NextLink

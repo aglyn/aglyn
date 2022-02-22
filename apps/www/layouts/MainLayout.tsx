@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
+import {APP_WWW, BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
 import {styled} from '@aglyn/shared-feature-themes'
 import {
   AglynSvgLogo,
@@ -173,7 +173,7 @@ const TabItem = styled(MuiTab, {
   name: 'AglynTab',
 })<MuiTabProps>(({theme}) => ({
   flexDirection: 'row',
-  '& > *:first-child': {
+  '& > *:first-of-type': {
     marginBottom: 0,
     marginRight: theme.spacing(1),
   },
@@ -183,7 +183,7 @@ const TabItem = styled(MuiTab, {
     paddingLeft: 0,
     paddingRight: 0,
     marginLeft: theme.spacing(4),
-    '&:first-child': {
+    '&:first-of-type': {
       marginLeft: theme.spacing(0),
     },
   },
@@ -246,7 +246,7 @@ export type NavTabItem = Partial<AppLinkProps<'text'> & MuiTabProps & {icon: Mdi
 
 export interface MainLayoutProps {
   children?: ReactNode | undefined
-  title?: string
+  title?: ReactNode[] | ReactNode
   tabBarTitle?: string
   centerNavigationItems?: Array<any>
   // breadcrumbItems?: BreadcrumbsProps['items']
@@ -314,7 +314,13 @@ function MainLayoutRaw(props: MainLayoutProps) {
   return (
     <Fragment>
       <Head>
-        <title>{`${title ?? 'Web App'}`}</title>
+        {!title
+          ? APP_WWW.TITLE
+          : [
+            ..._isArr(title) ? title : [title],
+            APP_WWW.AFFIX,
+          ].join(` ${APP_WWW.SEP} `)
+        }
       </Head>
       <AppBar component="header" elevation={3} color="transparent" position="fixed">
         <InnerAppBarTop component={'div'} elevation={0} color="primary" position="relative">

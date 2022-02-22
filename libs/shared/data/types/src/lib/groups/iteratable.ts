@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,6 @@
  */
 
 
-/**
- * Check if property exists
- * @param {string | number} key
- * @param {Record<string | number, any>} source
- * @returns {boolean}
- */
-export function _hasProperty<T>(key: keyof any, source: T): key is keyof T {
-  return Object.prototype.hasOwnProperty.call(source, key)
+export interface Lengthable {
+  readonly length: number
 }

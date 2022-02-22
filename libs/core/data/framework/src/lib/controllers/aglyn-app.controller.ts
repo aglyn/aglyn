@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {getStaticField, yes} from '@aglyn/shared-util-tools'
+import {getStaticField, truthy} from '@aglyn/shared-util-tools'
 import {
   _INTERNAL_CANVAS_,
   _INTERNAL_COMMANDS_,
@@ -28,23 +28,23 @@ import {AglynAppEffectFlag, AglynAppEventFlag} from '../constants/emitter'
 import {AGLYN_PLATFORM, AglynPlatform} from '../constants/platform'
 import {AglynVersion, SDK_VERSION} from '../constants/version'
 import {AglynBaseModel} from '../models/aglyn-base.model'
-import {IAglynModuleModel} from '../types/aglyn-module.types'
 import {
   type AglynAppOptions,
   type AglynEffectOptions,
   type AppUUN,
   type IAglynAppController,
 } from '../types/aglyn-app.types'
-import AglynCanvasController from './aglyn-canvas.controller'
 import {type IAglynCanvasController} from '../types/aglyn-canvas.types'
-import AglynCommandsController from './aglyn-commands.controller'
 import {type IAglynCommandsController} from '../types/aglyn-commands.types'
-import AglynComponentsController from './aglyn-components.controller'
 import {type IAglynComponentsController} from '../types/aglyn-components.types'
-import AglynContextsController from './aglyn-contexts.controller'
 import {type IAglynContextsController} from '../types/aglyn-contexts.types'
-import AglynExtensionsController from './aglyn-extensions.controller'
 import {type IAglynExtensionsController} from '../types/aglyn-extensions.types'
+import {IAglynModuleModel} from '../types/aglyn-module.types'
+import AglynCanvasController from './aglyn-canvas.controller'
+import AglynCommandsController from './aglyn-commands.controller'
+import AglynComponentsController from './aglyn-components.controller'
+import AglynContextsController from './aglyn-contexts.controller'
+import AglynExtensionsController from './aglyn-extensions.controller'
 
 
 const TAG = 'AglynApp'
@@ -212,7 +212,7 @@ export class AglynAppController<Options extends AglynAppOptions = AglynAppOption
     return this.#componentsController
   }
   public isDeleted(): boolean {
-    return yes(this.#deleted)
+    return truthy(this.#deleted)
   }
   public setDeleted(value: boolean): this {
     this.#deleted = Boolean(value)

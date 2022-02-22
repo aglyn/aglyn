@@ -21,7 +21,7 @@ import {
   type ValidationOptions,
   validatorTypes,
 } from '@aglyn/shared-ui-jsx-forms'
-import {_hasProperty, _isStrT} from '@aglyn/shared-util-guards'
+import {_hasOwnProperty, _isStrT} from '@aglyn/shared-util-guards'
 import {length} from '@aglyn/shared-util-tools'
 import md5 from 'md5'
 
@@ -258,7 +258,7 @@ export namespace DdfForms {
   }
 
   export function isValidFormId(id: unknown): id is string {
-    return _isStrT(id) && _hasProperty(id, rawFormIdFromId)
+    return _isStrT(id) && _hasOwnProperty(id, rawFormIdFromId)
   }
   export function getFormSchemaFromId(id: string): Schema {
     return formSchemaFromId[id]

@@ -34,7 +34,7 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
     ...nextAppWrapperProps
   } = NextAppWrapperProps || {}
   const documentTitle = useMemo(() => (
-    wrapperDocumentTitle || APP_CONSOLE.META_TITLE
+    wrapperDocumentTitle || APP_CONSOLE.TITLE
   ), [wrapperDocumentTitle])
   const headChildren = useMemo(() => (
     <Fragment>
@@ -47,7 +47,7 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
   ), [wrapperHeadChildren])
   const metaElements: MakeMetaElementsConfig = useMemo(() => ([
     ['viewport', 'width=device-width, initial-scale=1'],
-    ['description', APP_CONSOLE.META_DESCRIPTION],
+    ['description', APP_CONSOLE.DESCRIPTION],
     ...wrapperMetaElements || [],
   ]), [wrapperMetaElements])
   const linkElements: MakeLinkElementsConfig = useMemo(() => ([

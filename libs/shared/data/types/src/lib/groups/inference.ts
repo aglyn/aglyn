@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {type Dictionary, type IndexOf, type KeyOf} from './basic'
+import type { Dictionary, IndexOf, KeyOf} from './basic'
 
 
 export type Bool = boolean

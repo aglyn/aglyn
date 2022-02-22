@@ -17,20 +17,26 @@
 
 
 export const APP_WWW = {
-  META_TITLE: 'Aglyn',
-  META_DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
+  TITLE: 'Online secure website builder – Aglyn',
+  DESCRIPTION: 'Build secure no-code online website apps with Aglyn the visual besigner with drag-and-drop',
+  AFFIX: 'Aglyn',
+  SEP: '–',
 }
 export const APP_CONSOLE = {
-  META_TITLE: 'Aglyn Console',
-  META_DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
+  TITLE: 'Secure Platform Console – Aglyn',
+  DESCRIPTION: 'Contributions to the “no code” web application market by optimizing the process and necessary steps for a website to get off the ground for organizations',
+  AFFIX: 'Aglyn Platform Console',
+  SEP: '–',
 }
 export const APP_TENANT = {
-  META_TITLE: 'My website',
-  META_DESCRIPTION: 'Created with Aglyn website besigner',
+  TITLE: 'My website',
+  DESCRIPTION: 'Created with Aglyn website besigner',
+  AFFIX: 'Built with Aglyn',
+  SEP: '|',
 }
 
 export const BRAND_NAMES = {
   WWW: '.com',
   BESIGNER: 'Besigner',
-  CONSOLE: 'App Console',
+  CONSOLE: 'Console',
 }

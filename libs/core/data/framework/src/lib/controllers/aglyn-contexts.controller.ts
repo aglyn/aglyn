@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {_hasProperty, _isObj} from '@aglyn/shared-util-guards'
+import {_hasOwnProperty, _isObj} from '@aglyn/shared-util-guards'
 import {getProperty} from '@aglyn/shared-util-tools'
 import {createDomain as createEffectorDomain} from 'effector'
 import {
@@ -29,7 +29,6 @@ import {
   type ContextsSetStorePayload,
 } from '../constants/emitter'
 import {AglynModuleModel} from '../models/aglyn-module.model'
-import {type AglynModuleEffectListener} from '../types/aglyn-module.types'
 import {type IAglynAppController} from '../types/aglyn-app.types'
 import {
   type AglynContextsControllerOptions,
@@ -40,6 +39,7 @@ import {
   type ContextStoreUid,
   type IAglynContextsController,
 } from '../types/aglyn-contexts.types'
+import {type AglynModuleEffectListener} from '../types/aglyn-module.types'
 
 
 const TAG = 'AglynContexts'
@@ -78,7 +78,7 @@ export class AglynContextsController extends AglynModuleModel<AglynContextsContr
     const defaultStores = this.options.defaultStores
     if (defaultStores && _isObj(defaultStores)) {
       for (const storeId in defaultStores) {
-        if (_hasProperty(storeId, defaultStores)) {
+        if (_hasOwnProperty(storeId, defaultStores)) {
           const {options, defaultState} = getProperty(defaultStores, storeId) || {}
           const store = this.createStore({defaultState, options})
           this.setStore({storeId, store})

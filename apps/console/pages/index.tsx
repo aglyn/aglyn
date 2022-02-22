@@ -17,8 +17,9 @@
 
 import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {GridButtons} from '@aglyn/shared-ui-jsx'
-import {mdiBug, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {mdiBug, mdiHome, MdiIcon, mdiShieldLock} from '@aglyn/shared-ui-mdi-jsx'
 import styled from '@emotion/styled'
+import {Stack} from '@mui/material'
 import {useAuthState} from 'react-firebase-hooks/auth'
 import LayoutAuthenticatedComponent from '../layouts/layout-authenticated.component'
 import LayoutConsoleComponent from '../layouts/layout-console.component'
@@ -39,7 +40,49 @@ export function Index() {
    */
   return (
     <LayoutConsoleComponent
-      tabBarTitle={'Dashboard'}
+      title={'My Dashboard'}
+      tabBarTitle={(
+        <Stack
+          direction="row"
+          spacing={{sm: 0.15, md: 0.5}}
+          alignItems="center"
+          typography={'subtitle2'}
+          lineHeight={'normal'}
+          sx={{color: 'tertiary.light'}}
+        >
+          <span>
+            {'Secure'}
+          </span>
+          <MdiIcon
+            path={mdiShieldLock.path}
+            fontSize={'small'}
+            sx={{color: 'tertiary.light'}}
+          />
+        </Stack>
+      )}
+      header={{
+        children: 'My Dashboard',
+        icon: {path: mdiHome.path},
+      }}
+      breadcrumbItems={[
+        {
+          id: 'home',
+          children: 'Home',
+          href: '/',
+        },
+      ]}
+      navTabItems={[
+        {
+          id: 'dashboard',
+          label: 'Dashboard',
+          href: '/',
+        },
+        {
+          id: 'besigner',
+          label: 'Besigner',
+          href: '/besigner',
+        },
+      ]}
     >
       <StyledPage>
         <h2>Resources &amp; Tosols</h2>

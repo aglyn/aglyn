@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
+import {APP_CONSOLE, BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
 import {darken, mergeSxProps, styled} from '@aglyn/shared-feature-themes'
 import {
+  AglynSvgIcon,
   AglynSvgLogo,
   AppLink,
   type AppLinkProps,
@@ -33,6 +34,7 @@ import {
   Avatar,
   Box,
   Container,
+  Divider,
   IconButton,
   type IconButtonProps,
   Tab as MuiTab,
@@ -83,11 +85,11 @@ export interface QuickActionsMenuItem extends IconButtonProps {
   items?: QuickActionsMenuItem[]
 }
 
-export type NavTabItem = Partial<AppLinkProps<'text'> & MuiTabProps & {icon: MdiIconProps}>
+export type NavTabItem = Partial<AppLinkProps & MuiTabProps & {icon: MdiIconProps}>
 
 export interface MainLayoutProps {
   children?: ReactNode | undefined
-  title?: string
+  title?: ReactNode[] | ReactNode
   tabBarTitle?: ReactNode
   centerNavigationItems?: Array<any>
   breadcrumbItems?: BreadcrumbsProps['items']
@@ -116,11 +118,11 @@ function MainLayoutRaw(props: MainLayoutProps) {
     ? navTabItems
     .filter((i) => router.asPath.includes(i.href))
     .reduce((prev, current) => {
-      const currentHref = (_isObj(current.href) ? current.href.paths : current.href) as string
-      const prevHref = (_isObj(prev.href) ? prev.href.paths : prev.href) as string
+      const currentHref = (_isObj(current?.href) ? current?.href?.paths : current?.href) as string
+      const prevHref = (_isObj(prev?.href) ? prev?.href?.paths : prev?.href) as string
 
-      return currentHref.length > prevHref.length ? current : prev
-    }, {}).href ?? false
+      return currentHref?.length > prevHref?.length ? current : prev
+    }, {})?.href ?? false
     : false
 
   const buildIconButton = ({avatar, icon, children, ...rest}, i) => (
@@ -157,7 +159,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
         key={id + key}
         items={item.items}
         sx={{
-          padding: [0.5, 0.25],
+          p: {padding: 0.5, xs: 0.25},
           '&:last-child': {
             paddingLeft: 0.75,
           },
@@ -172,33 +174,44 @@ function MainLayoutRaw(props: MainLayoutProps) {
   return (
     <Fragment>
       <Head>
-        <title>{`${title ?? 'Web App'}`}</title>
+        <title>
+          {!title
+            ? APP_CONSOLE.TITLE
+            : [
+              ..._isArr(title) ? title : [title],
+              APP_CONSOLE.AFFIX,
+            ].join(` ${APP_CONSOLE.SEP} `)
+          }
+        </title>
       </Head>
       <ElevateOnScroll
         renderProps={(elevated) => ({elevation: elevated ? 4 : 0})}
       >
         <AppBar
           component="header"
-          color="transparent"
+          color="inherit"
           position="sticky"
           variant="elevation"
         >
           <AppBar
             component={'div'}
             elevation={0}
-            color="primary"
+            color="inherit"
             position="relative"
             sx={{
-              '&:before': {
-                content: '" "',
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: 1,
-                width: '100%',
-                position: 'absolute',
-                backgroundColor: 'divider',
-              },
+              borderBottomWidth: `1px`,
+              borderBottomStyle: 'solid',
+              borderBottomColor: 'divider',
+              // ':after': {
+              //   content: '" "',
+              //   left: 0,
+              //   right: 0,
+              //   bottom: 0,
+              //   height: 1,
+              //   width: 1,
+              //   position: 'absolute',
+              //   backgroundColor: 'divider',
+              // },
             }}
           >
             <Toolbar variant="dense">
@@ -207,14 +220,13 @@ function MainLayoutRaw(props: MainLayoutProps) {
                 sx={{
                   flexGrow: 1,
                   display: 'flex',
-                  marginLeft: -0.25,
                 }}
               >
                 <Box
                   sx={{
                     height: '36px',
                     flex: '0 0 auto',
-                    margin: [0.75, 0],
+                    my: 0.75,
                     display: 'flex',
                     alignItems: 'center',
                     '& a': {
@@ -223,53 +235,53 @@ function MainLayoutRaw(props: MainLayoutProps) {
                     },
                   }}
                 >
-                  <AppLink hrefAs="/" color="inherit" href="/" underline="none">
-                    <Box
-                      component={'span'}
+                  <AppLink
+                    color="inherit"
+                    href="/"
+                    componentVariant="button-base"
+                    anchorComponent={'button'}
+                    disableRipple
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontWeight: 'fontWeightRegular',
+                      fontFamily: 'h6.fontFamily',
+                      fontSize: (theme) => ({
+                        fontSize: theme.typography.pxToRem(18),
+                        md: theme.typography.pxToRem(20),
+                      }),
+                    }}
+                  >
+                    <AglynSvgIcon
                       sx={{
-                        display: 'flex',
-                        alignItems: 'center',
+                        fontSize: `1.75em`,
+                        borderRadius: theme => theme.shape.appIconBorderRadius,
+                        // boxShadow: theme.shadows[1],
+                        ml: -0.5, mr: 0.75,
                       }}
-                    >
-                      <AglynSvgLogo
-                        color="inherit"
-                        sx={[
-                          {
-                            // color: '#36ca94', // Hulu
-                            color: 'secondary.light',
-                            lineHeight: '22px',
-                            height: 'auto',
-                          },
-                          (theme) => ({
-                            fontSize: theme.typography.pxToRem(50),
-                            [theme.breakpoints.up('md')]: {
-                              fontSize: theme.typography.pxToRem(60),
-                            },
-                          }),
-                        ]}
-                      />
-                    </Box>
+                    />
+                    <AglynSvgLogo
+                      color="secondary"
+                      sx={{
+                        // color: '#36ca94', // Hulu
+                        transform: 'translateY(0.0265em)',
+                        height: 'auto',
+                        fontSize: '2.765em',
+                        // color: (theme) => theme.palette.mode === 'dark'
+                        //   ? 'secondary.main'
+                        //   : 'secondary.light',
+                      }}
+                    />
                     {productName && (
                       <Box
                         component={'span'}
-                        sx={[
-                          {
-                            color: 'common.white',
-                            paddingLeft: 0.75,
-                            fontWeight: 'fontWeightLight',
-                            paddingBottom: '0.2rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            lineHeight: '22px',
-                          },
-                          (theme) => ({
-                            fontSize: theme.typography.pxToRem(20),
-                            [theme.breakpoints.up('md')]: {
-                              lineHeight: '24px',
-                              fontSize: theme.typography.pxToRem(22),
-                            },
-                          }),
-                        ]}
+                        color="textPrimary"
+                        sx={{
+                          // color: 'text.primary',
+                          ml: 0.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
                       >
                         {` ${productName}`}
                       </Box>
@@ -296,8 +308,45 @@ function MainLayoutRaw(props: MainLayoutProps) {
             </Toolbar>
           </AppBar>
           {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
-            <AppBar component="div" color="primary" elevation={0} position="static">
-              <Toolbar>
+            <AppBar
+              component="div"
+              color="inherit"
+              elevation={0}
+              position="static"
+              sx={{
+                borderBottomWidth: `1px`,
+                borderBottomStyle: 'solid',
+                borderBottomColor: 'divider',
+                [`& .MuiToolbar-root`]: {
+                  minHeight: 40,
+                },
+              }}
+            >
+              <Toolbar variant="dense">
+                {tabBarTitle && (
+                  <Box
+                    component={'div'}
+                    sx={{
+                      // typography: 'h6',
+                      lineHeight: 'normal',
+                      letterSpacing: 2,
+                      fontFamily: 'h6.fontFamily',
+                      fontSize: `0.95em`,
+                      fontWeight: 'fontWeightMedium',
+                      textTransform: 'uppercase',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {tabBarTitle}
+                  </Box>
+                )}
+                <Divider
+                  orientation="vertical"
+                  sx={{ml: 1.25, mr: 1}}
+                  flexItem
+                  light
+                />
+
                 <MuiTabs
                   aria-label="area navigation"
                   indicatorColor="secondary"
@@ -306,10 +355,12 @@ function MainLayoutRaw(props: MainLayoutProps) {
                   value={tabValue ?? false}
                   variant="scrollable"
                   sx={{
-                    '& .Mui-flexContainer': {
+                    minHeight: 40,
+                    alignItems: 'center',
+                    '& .MuiTabs-flexContainer': {
                       alignItems: 'center',
                     },
-                    '& .Mui-indicator': {
+                    '& .MuiTabs-indicator': {
                       height: '3px',
                       backgroundColor: 'unset',
                       '&:after': {
@@ -320,50 +371,40 @@ function MainLayoutRaw(props: MainLayoutProps) {
                         left: 0,
                         top: 0,
                         right: 0,
-                        margin: '0 auto',
-                        width: '80%',
-                        height: '100%',
+                        mx: 'auto',
+                        width: 0.8,
+                        height: 1,
                         backgroundColor: 'secondary.light',
                       },
                     },
                   }}
                 >
-                  {tabBarTitle && (
-                    <Box
-                      component={'div'}
-                      sx={{
-                        typography: 'h6',
-                        paddingRight: 2,
-                        fontWeight: 'fontWeightLight',
-                      }}
-                    >
-                      {tabBarTitle}
-                    </Box>
-                  )}
                   {navTabItems && navTabItems.map(({icon, sx, ...item}, i) => (
                     <MuiTab
-                      key={item.id ?? item['key'] ?? i}
+                      key={item.id ?? i}
                       // disableRipple
                       color="inherit"
                       href={item.href ?? ''}
-                      icon={<MdiIcon {...icon} />}
+                      icon={(icon && ((icon.path && <MdiIcon {...icon} />) || icon))}
                       label={item.label}
                       underline="none"
                       value={item.href ?? i}
                       wrapped
+                      componentVariant="button-base"
+                      anchorComponent="button"
                       sx={mergeSxProps({
                         flexDirection: 'row',
-                        '& > *:first-child': {
+                        '& > *:first-of-type': {
                           marginBottom: 0,
                           marginRight: 1,
                         },
-                        '& .Mui-labelIcon': {
-                          minHeight: '46px',
+                        '& .MuiTab-labelIcon': {
+                          minHeight: 46,
                           minWidth: 'auto',
                           paddingLeft: 0,
                           paddingRight: 0,
                           marginLeft: 4,
-                          '&:first-child': {
+                          '&:first-of-type': {
                             marginLeft: 0,
                           },
                         },
@@ -381,10 +422,10 @@ function MainLayoutRaw(props: MainLayoutProps) {
       </ElevateOnScroll>
       <Box
         component={'main'}
-        sx={{
-          // marginTop: theme.spacing(-6),
-          marginTop: (theme) => `${theme.mixins.toolbar.minHeight}px`,
-        }}
+        // sx={{
+        //   // marginTop: theme.spacing(-6),
+        //   marginTop: (theme) => `${theme.mixins.toolbar.minHeight}px`,
+        // }}
       >
         {children}
       </Box>

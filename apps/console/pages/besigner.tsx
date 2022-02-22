@@ -23,6 +23,7 @@ import dynamic from 'next/dynamic'
 import {useEffect} from 'react'
 // import {useEffect} from 'react-hooks'
 import '../constants/app-setup'
+import LayoutAuthenticatedComponent from '../layouts/layout-authenticated.component'
 
 
 const AglynBesigner = dynamic(
@@ -45,6 +46,7 @@ function Besigner(props) {
 }
 
 Besigner.displayName = 'Page:Besigner'
+Besigner.layout = LayoutAuthenticatedComponent
 
 export default Besigner
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,22 @@
  * limitations under the License.
  */
 
-import {ComparisonOperator} from '@aglyn/shared-data-types'
+import type {ComparisonOperator} from '@aglyn/shared-data-types'
 
 
-export function expressionEquality(
-  leftOperand: unknown,
-  rightOperand: unknown,
+/**
+ * Perform comparison operation to check provided equality operator. If no
+ * operator is provided defaults to strict equality check
+ * @param left - left-hand side operand for operation
+ * @param right - right-hand side operand for operation
+ * @param operator - provide js comparison operator syntax as string literal
+ */
+export function compare(
+  left: unknown,
+  right: unknown,
   operator: ComparisonOperator = '===',
 ): boolean {
-  const left = leftOperand
-  const right = rightOperand
-
   switch (operator) {
-    case '===':
-      return left === right
     case '==':
       // noinspection EqualityComparisonWithCoercionJS
       return left == right
@@ -39,9 +41,11 @@ export function expressionEquality(
     case '>=':
       return left >= right
     case '>':
-    default:
       return left > right
+    case '===':
+    default:
+      return left === right
   }
 }
 
-export default expressionEquality
+export default compare

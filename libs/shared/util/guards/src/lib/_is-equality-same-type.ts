@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
  */
 
 
-import {_hasProperty} from './_has-property'
+import {_hasOwnProperty} from './_has-own-property'
 
 
 export enum Equality {
@@ -47,7 +47,7 @@ export function _isEqualitySameType<T, U extends T>(
   ...possibilities: IsEqualitySameTypeRestParams<T, U>
 ): value is U {
   const _lastItem = possibilities.pop(),
-    _withOptions = _hasProperty('equality', _lastItem),
+    _withOptions = _hasOwnProperty('equality', _lastItem),
     _options = {
       truthiness: Equality.DEFAULT,
       ..._withOptions ? _lastItem : undefined,

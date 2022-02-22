@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {ComparisonOperator} from '@aglyn/shared-data-types'
-import {expressionEquality} from '@aglyn/shared-util-tools'
+import type {ComparisonOperator} from '@aglyn/shared-data-types'
+import {compare} from '@aglyn/shared-util-tools'
 import {_isNum} from './_is-num'
 
 
@@ -34,7 +34,7 @@ export function _isLength<T>(
   if (leftOperand) {
     const left = _isNum(leftOperand) ? leftOperand : leftOperand['length'] || 0
     const right = _isNum(rightOperand) ? rightOperand : rightOperand['length'] || 0
-    return expressionEquality(left, right, operator)
+    return compare(left, right, operator)
   }
   return false
 }

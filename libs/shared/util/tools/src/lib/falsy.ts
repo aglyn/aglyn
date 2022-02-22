@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
+import truthy from './truthy'
+
+
+export type FalsyParams = unknown[]
 
 /**
- * Shortcut for retrieving the length property,
- * defaults to zero (0) if the property does not exist
+ * Shortcut for checking multiple falsy values e.g., `!Boolean(i of val)`
+ * @returns return true unless any value is truthy otherwise returns false
  */
-export function length(val: unknown): number {
-  if (val && (typeof val === 'object' || typeof val === 'string' || Array.isArray(val))) {
-    return val['length'] ?? 0
-  }
-  return 0
+export function falsy(...val: FalsyParams): boolean {
+  return !truthy(...val)
 }
-export default length
+export default falsy

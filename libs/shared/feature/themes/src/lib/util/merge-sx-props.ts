@@ -16,22 +16,24 @@
  */
 
 import type {OrUndef} from '@aglyn/shared-data-types'
-import {_isArr, _isArrOfArr, _isUndOrNull} from '@aglyn/shared-util-guards'
+import {_isArr, _isArrOfArr} from '@aglyn/shared-util-guards'
 import type {SxProps, Theme as DefaultTheme} from '../../vendor/mui'
 
 
 export type MergedSxProps<Theme extends object = DefaultTheme> =
   Extract<SxProps<Theme>, any[]>
+export type MergeSxParameter<Theme extends object = DefaultTheme> =
+  OrUndef<OrUndef<SxProps<Theme>>[] | SxProps<Theme>>
 
-export function mergeSxProps<Theme extends object = DefaultTheme>(
-  ...sxProps: OrUndef<SxProps<Theme>[] | SxProps<Theme>>[]
+
+export function mergeSxProps<Theme extends DefaultTheme>(
+  ...sxProps: MergeSxParameter<Theme>[]
 ): MergedSxProps<Theme> {
   const merged: MergedSxProps<Theme> = []
 
   for (const i of sxProps) {
-    if (_isUndOrNull(i)) continue
     if (_isArr(i)) merged.push(...mergeSxProps(..._isArrOfArr(i) ? i : [i]))
-    else merged.push(i)
+    else merged.push(i || false)
   }
 
   return merged

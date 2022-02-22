@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,22 @@
 
 type PFX = 'Aglyn'
 type Sep = '-'
-type ClassKey<K extends string, P extends string = PFX> = `${P}${Sep}${K}`
+export type ElementClass<ClassKey extends string, Prefix extends string = PFX> = `${Prefix}${Sep}${ClassKey}`
+export type GlobalClassKey = keyof (typeof globalClassKey)
+export type GlobalElementClass<ClassKey extends GlobalClassKey = GlobalClassKey> = ElementClass<ClassKey>
+export type ComponentClass<ClassKey extends string, Prefix extends string> =
+  ClassKey extends GlobalClassKey
+    ? GlobalElementClass<ClassKey>
+    : ElementClass<ClassKey, Prefix>
+
+export type ClassKeyMap<ClassKey extends string, Prefix extends string> = {
+  [P in ClassKey]: ComponentClass<P, Prefix>
+}
+
 const pfx: PFX = 'Aglyn'
 const sep: Sep = '-'
-const makeClassKey = <K extends string>(
-  key: K,
-  pre: PFX | string = pfx,
-): ClassKey<K, typeof pre> => `${pre}${sep}${key}`
 
-const globalStateClassesKeys = {
+export const globalClassKey = {
   active: makeClassKey('active'),
   checked: makeClassKey('checked'),
   completed: makeClassKey('completed'),
@@ -40,27 +47,33 @@ const globalStateClassesKeys = {
   selected: makeClassKey('selected'),
   wrapper: makeClassKey('wrapper'),
 }
-type GlobalStateClassesKey = keyof typeof globalStateClassesKeys
-type GlobalStateClassesKeyClass<K extends GlobalStateClassesKey> = typeof globalStateClassesKeys[K]
 
-function generateComponentClass<C extends string>(
-  componentName: C,
-  slot: string | GlobalStateClassesKey,
+function makeClassKey<ClassKey extends string, Prefix extends string>(
+  key: ClassKey,
+  pre?: Prefix,
 ) {
-  if (slot in globalStateClassesKeys) {
-    return globalStateClassesKeys[slot as GlobalStateClassesKey]
-  }
-  return makeClassKey(slot, componentName)
+  if (pre) return `${pre}${sep}${key}` as ElementClass<ClassKey, Prefix>
+  return `${pfx}${sep}${key}` as ElementClass<ClassKey, PFX>
 }
 
-export function generateComponentClassKeys<T extends string>(
-  componentName: string,
-  slots: T[],
-): Record<T, string> {
-  const result: Record<string, string> = {}
+function generateComponentClass<ClassKey extends string, Prefix extends string>(
+  key: ClassKey,
+  componentName: Prefix,
+) {
+  if (key in globalClassKey) {
+    return globalClassKey[key as GlobalClassKey] as ComponentClass<ClassKey, PFX>
+  }
+  return makeClassKey(key, componentName) as ComponentClass<ClassKey, Prefix>
+}
 
-  slots.forEach((slot) => {
-    result[slot] = generateComponentClass(componentName, slot)
+export function generateComponentClassKeys<ClassKey extends string | GlobalClassKey, Prefix extends string>(
+  componentName: Prefix,
+  classKeys: ClassKey[],
+) {
+  const result = {} as ClassKeyMap<ClassKey, Prefix>
+
+  classKeys.forEach((key) => {
+    result[key] = generateComponentClass(key, componentName) as any
   })
 
   return result

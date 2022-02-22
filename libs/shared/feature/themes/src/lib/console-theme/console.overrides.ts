@@ -45,7 +45,7 @@ export const consoleOverrides: ThemeOptions['components'] = {
     styleOverrides: {
       root: {
         '&[disabled], &.disabled': {
-          pointerEvents: 'none',
+          pointerEvents: 'default',
           textDecoration: 'none',
           filter: 'grayscale(1) opacity(0.65)',
         },
@@ -59,7 +59,7 @@ export const consoleOverrides: ThemeOptions['components'] = {
     styleOverrides: {
       root: {
         '&a[disabled], &.disabled': {
-          pointerEvents: 'none',
+          pointerEvents: 'default',
           textDecoration: 'none',
           filter: 'grayscale(1) opacity(0.65)',
         },

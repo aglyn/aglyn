@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import {type Theme} from '@mui/material/styles'
+import type {Theme} from '@mui/material/styles'
 
-import {type Shadows} from '@mui/material/styles/shadows'
-import {type WithStyles} from '@mui/styles'
+// eslint-disable-next-line no-restricted-imports
+import type {Shadows} from '@mui/material/styles/shadows'
+import type {WithStyles} from '@mui/styles'
 
-import {type ClassKeyInferable} from '@mui/styles/withStyles'
+import type {ClassKeyInferable} from '@mui/styles/withStyles'
 
-import {type ColorPropOverrides, type IActionStates} from '../lib/theme.types'
+import type {ColorPropOverrides, IActionStates} from '../lib/theme.types'
 
 
 //    _____     _______ ____  ____  ___ ____  _____ ____
@@ -132,6 +133,8 @@ declare module '@mui/material/styles' {
     insetShadows: Shadows
   }
 
+  interface DefaultTheme extends Theme {}
+
   interface PaletteOptions {
     background?: PaletteOptions['background']
     tertiary?: PaletteOptions['primary']
@@ -232,6 +235,7 @@ export {
 } from '@mui/material/styles'
 
 
+// eslint-disable-next-line no-restricted-imports
 export {
   type ColorPartial,
   type CommonColors,
@@ -239,14 +243,17 @@ export {
   type TypeText,
 } from '@mui/material/styles/createPalette'
 
+// eslint-disable-next-line no-restricted-imports
 export {
   type Shadows,
 } from '@mui/material/styles/shadows'
 
 export {
   type ClassKeyInferable,
+  type CreateCSSProperties,
 } from '@mui/styles/withStyles'
 
+// eslint-disable-next-line no-restricted-imports
 export {type Shape} from '@mui/system/createTheme/shape'
 
 export {

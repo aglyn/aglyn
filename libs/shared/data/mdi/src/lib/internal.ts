@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {_hasProperty, _isObj} from '@aglyn/shared-util-guards'
+import {_hasOwnProperty, _isObj} from '@aglyn/shared-util-guards'
 import type {Icon, IconId} from './types/icon'
 
 
@@ -26,7 +26,7 @@ export const MdiIcons: Map<IconId, Icon> = new Map<IconId, Icon>()
 if (typeof window !== 'undefined') {
   require(['../../generated/6.5.95/mdi-icons.min.json'], ({data}) => {
     Array.isArray(data) && data.forEach((value) => {
-      if (_isObj(value) && _hasProperty('path', value) && _hasProperty('id', value)) {
+      if (_isObj(value) && _hasOwnProperty('path', value) && _hasOwnProperty('id', value)) {
         MdiIcons.set(value.id as IconId, value as Icon)
       }
     })

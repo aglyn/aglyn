@@ -25,7 +25,7 @@ import {
   mdiMagnifyPlus,
 } from '@aglyn/shared-ui-mdi-jsx'
 import {_isFnT} from '@aglyn/shared-util-guards'
-import {yes} from '@aglyn/shared-util-tools'
+import {truthy} from '@aglyn/shared-util-tools'
 import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
@@ -116,7 +116,7 @@ export const ViewportZoomControlsComponent = forwardRef<any, ViewportZoomControl
           children: 'Reset zoom',
         },
         buttonProps: {
-          disabled: yes(disableZoomResetButton),
+          disabled: truthy(disableZoomResetButton),
           onClick: handleZoomReset,
         },
         svgPathIconProps: {
@@ -132,7 +132,7 @@ export const ViewportZoomControlsComponent = forwardRef<any, ViewportZoomControl
           children: 'Decrease zoom (⌘-)',
         },
         buttonProps: {
-          disabled: yes(disableZoomDecreaseButton),
+          disabled: truthy(disableZoomDecreaseButton),
           onClick: handleZoomDecrease,
         },
         svgPathIconProps: {
@@ -148,7 +148,7 @@ export const ViewportZoomControlsComponent = forwardRef<any, ViewportZoomControl
           children: 'Increase zoom (⌘+)',
         },
         buttonProps: {
-          disabled: yes(disableZoomIncreaseButton),
+          disabled: truthy(disableZoomIncreaseButton),
           onClick: handleZoomIncrease,
         },
         svgPathIconProps: {

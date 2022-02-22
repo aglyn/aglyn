@@ -53,13 +53,12 @@ export const AppBarPrimaryComponent = forwardRef<any, AppBarPrimaryComponentProp
       >
         <Toolbar>
           <AglynSvgIcon
-            sx={(theme) => ({
+            sx={{
               fontSize: `1.75em`,
-              borderRadius: theme.shape.appIconBorderRadius,
+              borderRadius: theme => theme.shape.appIconBorderRadius,
               // boxShadow: theme.shadows[1],
               ml: -1.5, mr: 0.75,
-              fontSize: `1.75em`,
-            })}
+            }}
           />
           <BesignerSvgLogo
             sx={{width: 'auto'}}
