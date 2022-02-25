@@ -16,7 +16,7 @@
  */
 
 import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
-import {LoadingLayoutComponent, useLoading} from '@aglyn/shared-ui-jsx'
+import {useLoading} from '@aglyn/shared-ui-jsx'
 import {useContinueQueryEncoded} from '@aglyn/shared-util-next'
 import {useRouter} from 'next/router'
 import {type ReactNode, useEffect} from 'react'
@@ -67,7 +67,6 @@ function LayoutAuthenticatedComponent(props: LayoutAuthenticatedComponentProps) 
   )
 }
 LayoutAuthenticatedComponent.displayName = 'LayoutAuthenticatedComponent'
-LayoutAuthenticatedComponent.layoutComponent = LoadingLayoutComponent
 
 export {LayoutAuthenticatedComponent}
 export default LayoutAuthenticatedComponent

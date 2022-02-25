@@ -16,18 +16,14 @@
  */
 
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
-import {
-  BackgroundImageComponent,
-  type BackgroundImageComponentProps,
-  LoadingLayoutComponent,
-} from '@aglyn/shared-ui-jsx'
+import {BackgroundImageComponent, type BackgroundImageComponentProps} from '@aglyn/shared-ui-jsx'
 
 
-export interface LayoutAuthAreaProps extends Partial<BackgroundImageComponentProps> {
+export interface LayoutRequestAuthenticationProps extends Partial<BackgroundImageComponentProps> {
 
 }
 
-function LayoutAuthAreaComponent(props: LayoutAuthAreaProps) {
+function LayoutRequestAuthenticationComponent(props: LayoutRequestAuthenticationProps) {
   const {children, sx, ...rest} = props
 
 
@@ -52,8 +48,7 @@ function LayoutAuthAreaComponent(props: LayoutAuthAreaProps) {
     </BackgroundImageComponent>
   )
 }
-LayoutAuthAreaComponent.displayName = 'LayoutAuthAreaComponent'
-LayoutAuthAreaComponent.layoutComponent = LoadingLayoutComponent
+LayoutRequestAuthenticationComponent.displayName = 'LayoutRequestAuthenticationComponent'
 
-export {LayoutAuthAreaComponent}
-export default LayoutAuthAreaComponent
+export {LayoutRequestAuthenticationComponent}
+export default LayoutRequestAuthenticationComponent

@@ -45,7 +45,8 @@ import {
 import {useRouter} from 'next/router'
 import {useCallback, useState} from 'react'
 import AuthFormTemplateComponent from '../components/auth-form-template.component'
-import LayoutAuthAreaComponent from '../layouts/layout-auth-area.component'
+import LayoutRequestAuthenticationComponent
+  from '../layouts/layout-request-authentication.component'
 
 
 const firebaseAuth = getFirebaseAuth()
@@ -215,6 +216,6 @@ function Signup() {
   )
 }
 Signup.displayName = 'Page:Signup'
-Signup.layoutComponent = LayoutAuthAreaComponent
+Signup.layoutComponent = LayoutRequestAuthenticationComponent
 
 export default Signup
