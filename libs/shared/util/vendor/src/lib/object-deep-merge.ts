@@ -15,18 +15,13 @@
  * limitations under the License.
  */
 
-import {
+export {
   deepmerge as objectDeepMerge,
   deepmergeCustom as objectDeepMergeCustom,
   type DeepMergeOptions as ObjectDeepMergeOptions,
 } from 'deepmerge-ts'
-import objectDeepMergeFillIn from 'mout/object/deepFillIn'
 
-
-export type {ObjectDeepMergeOptions}
-export {objectDeepMerge, objectDeepMergeCustom}
-
-export {objectDeepMergeFillIn}
+export * as objectDeepMergeFillIn from 'mout/object/deepFillIn'
 
 // export function objectDeepMerge<T>(x: Partial<T>, y: Partial<T>, options?: DeepMergeOptions): T
 // export function objectDeepMerge<T1, T2>(x: Partial<T1>, y: Partial<T2>, options?:

@@ -16,6 +16,7 @@
  */
 
 import {type AnyProps} from '@aglyn/shared-data-types'
+import {objectDeepMerge} from '@aglyn/shared-util-vendor'
 import {type NextPage} from 'next'
 import {type AppProps as NextAppProps} from 'next/app'
 import {type ReactElement} from 'react'
@@ -26,27 +27,21 @@ export type NextPageGetLayoutFn = (
   props: NextAppWithLayoutProps,
 ) => ReactElement
 
-export type NextPageMemberLayoutComponent = {
+export type NextPageMemberLayout = {
+  getLayout?: NextPageGetLayoutFn
   layoutComponent?: NextPageWithLayout
   layoutProps?: {
     [P in NextPageWithLayout['displayName']]: AnyProps
   }
 }
 
-export type NextPageMemberLayoutGetComponent = {
-  getLayout?: NextPageGetLayoutFn
-}
-
-export type NextPageLayoutMembers =
-  & NextPageMemberLayoutComponent
-  & NextPageMemberLayoutGetComponent
-
 export type NextPageWithLayout<Props = AnyProps, InitialProps = Props> =
   & NextPage<Props, InitialProps>
-  & NextPageLayoutMembers
+  & NextPageMemberLayout
 
 export type NextAppWithLayoutProps<Props = AnyProps, InitialProps = Props> = NextAppProps<Props> & {
   Component: NextPageWithLayout<Props, InitialProps>
+  mergedLayoutProps?: NextPageMemberLayout['layoutProps']
   defaultGetLayout?: NextPageGetLayoutFn,
 }
 
@@ -55,32 +50,32 @@ const GET_LAYOUT_NOOP = (page: ReactElement) => page
 export function getNextPageLayout<Props, InitialProps>(
   props: NextAppWithLayoutProps<Props, InitialProps>,
 ): NextPageGetLayoutFn {
-  const {Component, defaultGetLayout} = props
+  const {Component, mergedLayoutProps, defaultGetLayout} = props
 
   if (Component.getLayout) {
     return Component.getLayout
   }
 
   if (Component.layoutComponent) {
-    const LayoutComponent = Component.layoutComponent
-    const layoutProps = Component.layoutProps?.[LayoutComponent.displayName]
-    if (layoutProps) {
-      LayoutComponent.layoutProps = {
-        ...LayoutComponent.layoutProps,
-        ...Component.layoutProps,
-      }
-    }
+    const ComponentLayout = Component.layoutComponent
+    const layoutProps = objectDeepMerge(
+      {},
+      ComponentLayout.layoutProps || {},
+      Component.layoutProps || {},
+      mergedLayoutProps || {},
+    )
 
     return (page, props) => {
       const OuterComponent = getNextPageLayout({
-        ...props, Component: LayoutComponent,
+        ...props,
+        Component: ComponentLayout,
+        mergedLayoutProps: layoutProps,
       })
-      const children = (
-        <LayoutComponent {...layoutProps}>
+      return OuterComponent((
+        <ComponentLayout {...layoutProps[ComponentLayout.displayName] || {}}>
           {page}
-        </LayoutComponent>
-      )
-      return OuterComponent(children, props)
+        </ComponentLayout>
+      ), props)
     }
   }
 

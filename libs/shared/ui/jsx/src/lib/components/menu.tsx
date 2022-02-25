@@ -90,53 +90,34 @@ export const Menu = forwardRef<any, MenuProps>(
       <Box
         ref={ref}
         component={'div'}
-        onContextMenu={handleClick}
-        sx={mergeSxProps({
-          cursor: context ? 'context-menu' : undefined,
-        }, sx)}
-        {...(context ? {onContextMenu: handleClick} : {})}
+        onContextMenu={context && handleClick}
+        sx={mergeSxProps(context && {cursor: 'context-menu'}, sx)}
         {...rest}
       >
         {cloned}
         <MuiMenu
-          PaperProps={
-            context
-              ? undefined
-              : {
-                style: {
-                  maxHeight: ITEM_HEIGHT * 4.5,
-                  minWidth: '20ch',
-                },
-              }
-          }
           anchorEl={context ? undefined : state.anchorEl}
-          anchorOrigin={
-            context
-              ? undefined
-              : {
-                vertical: 'top',
-                horizontal: 'left',
-              }
-          }
-          anchorPosition={
-            !context || !state.mouseY
-              ? undefined
-              : {
-                top: state.mouseY,
-                left: state.mouseX,
-              }
-          }
           anchorReference={context ? 'anchorPosition' : undefined}
+          anchorOrigin={context ? undefined : {
+            vertical: 'top',
+            horizontal: 'center',
+          }}
+          anchorPosition={!context || !state.mouseY ? undefined : {
+            top: state.mouseY,
+            left: state.mouseX,
+          }}
+          transformOrigin={context ? undefined : {
+            vertical: 'top',
+            horizontal: 'center',
+          }}
+          PaperProps={context ? undefined : {
+            style: {
+              maxHeight: ITEM_HEIGHT * 4.5,
+              minWidth: '20ch',
+            },
+          }}
           // getContentAnchorEl={null}
           open={open}
-          transformOrigin={
-            context
-              ? undefined
-              : {
-                vertical: 'top',
-                horizontal: 'right',
-              }
-          }
           onClose={handleClose}
           {...MenuProps}
         >
