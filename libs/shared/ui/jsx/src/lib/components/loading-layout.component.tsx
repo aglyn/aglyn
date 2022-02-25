@@ -16,13 +16,43 @@
  */
 
 import {getDisplayName} from '@aglyn/shared-util-tools'
-import {ComponentType, forwardRef} from 'react'
-import {LoadingProviderComponent} from '../contexts/loading.context'
+import {useRouter} from 'next/router'
+import {type ComponentType, forwardRef, useEffect} from 'react'
+import {LoadingProviderComponent, useLoading} from '../contexts/loading.context'
+import {NextRouterEvent} from '../hooks/router-events'
 import {
   LoadingOverlayComponent,
   type LoadingOverlayComponentProps,
 } from './loading-overlay.component'
 
+
+function RouterLoading({children}) {
+
+  const router = useRouter()
+  const {queueLoading} = useLoading()
+  useEffect(() => {
+    const dequeue = []
+    const handleStart = (url) => {
+      dequeue.push(queueLoading())
+    }
+    const handleStop = () => {
+      if (dequeue.length > 0) dequeue.pop()()
+    }
+
+    router.events.on(NextRouterEvent.ROUTE_CHANGE_START, handleStart)
+    router.events.on(NextRouterEvent.ROUTE_CHANGE_COMPLETE, handleStop)
+    router.events.on(NextRouterEvent.ROUTE_CHANGE_ERROR, handleStop)
+    return () => {
+      router.events.off(NextRouterEvent.ROUTE_CHANGE_START, handleStart)
+      router.events.off(NextRouterEvent.ROUTE_CHANGE_COMPLETE, handleStop)
+      router.events.off(NextRouterEvent.ROUTE_CHANGE_ERROR, handleStop)
+      if (dequeue.length > 0) dequeue.forEach((i) => i())
+    }
+  }, [queueLoading, router])
+
+  return children
+}
+RouterLoading.displayName = 'RouterLoading'
 
 export interface LoadingLayoutComponentProps extends Partial<LoadingOverlayComponentProps> {
 
@@ -35,7 +65,9 @@ const LoadingLayoutComponent = forwardRef<any, LoadingLayoutComponentProps>(
     return (
       <LoadingProviderComponent>
         <LoadingOverlayComponent ref={ref} {...rest}>
-          {children}
+          <RouterLoading>
+            {children}
+          </RouterLoading>
         </LoadingOverlayComponent>
       </LoadingProviderComponent>
     )

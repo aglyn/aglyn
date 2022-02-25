@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ export const useRouterEvent = (events: EventParamType[]) => {
     return () => {
       events.map(([id, callback]) => router.events.off(id as any, callback))
     }
-  }, [router.events])
+  }, [events, router.events])
 }
 export const useOnBeforeHistoryChange = (callback: EventCallbacks[NextRouterEvent.BEFORE_HISTORY_CHANGE]) => {
   useRouterEvent([[NextRouterEvent.BEFORE_HISTORY_CHANGE, callback]])

@@ -22,16 +22,16 @@ import {
   ElementsContextProvider,
 } from '@aglyn/core-feature-renderer'
 import {consoleThemeDark, consoleThemeLight, withTheme} from '@aglyn/shared-feature-themes'
-import {LoadingOverlayComponent, ConfirmationProviderComponent} from '@aglyn/shared-ui-jsx'
+import {ConfirmationProviderComponent, LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
 import NoSsr from '@mui/material/NoSsr'
 import dynamic from 'next/dynamic'
 import {forwardRef, Fragment} from 'react'
 import {ComponentsDrawerContextProvider} from '../contexts/components-drawer-context.provider'
 import BesignerDndContext from './besigner-dnd-context.component'
-import {type WorkspaceEditorComponentProps} from './workspace-editor.component'
+import type {WorkspaceEditorComponentProps} from './workspace-editor.component'
 
 
-const WorkspaceEditorComponent = dynamic(
+const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('./workspace-editor.component').then((mod) => mod.WorkspaceEditorComponent),
   {ssr: false, loading: () => <LoadingOverlayComponent open />},
 )

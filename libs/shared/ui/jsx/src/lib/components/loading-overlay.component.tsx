@@ -16,11 +16,14 @@
  */
 
 import {alpha, styled} from '@aglyn/shared-feature-themes'
-import MuiBackdrop, {type BackdropProps as MuiBackdropProps} from '@mui/material/Backdrop'
-import CircularProgress from '@mui/material/CircularProgress'
-import LinearProgress from '@mui/material/LinearProgress'
+import {
+  Backdrop as MuiBackdrop,
+  type BackdropProps as MuiBackdropProps,
+  CircularProgress,
+  LinearProgress,
+  Typography,
+} from '@mui/material'
 import Portal, {PortalProps as MuiPortalProps} from '@mui/material/Portal'
-import Typography from '@mui/material/Typography'
 import {forwardRef} from 'react'
 import {LoadingConsumer} from '../contexts/loading.context'
 
@@ -61,7 +64,8 @@ const LoadingOverlayComponent = forwardRef<any, LoadingOverlayComponentProps>(
                 ref={ref}
                 open={open || loading}
                 mountOnEnter
-                unmountOnExit {...rest}
+                unmountOnExit
+                {...rest}
               >
                 <LoadingProgressBar color="secondary" />
                 <CircularProgress color="secondary" />

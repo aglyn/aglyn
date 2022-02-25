@@ -18,21 +18,11 @@
 import {type ConditionalNonDist} from '@aglyn/shared-data-types'
 import {noop} from '@aglyn/shared-util-tools'
 import {createUid} from '@aglyn/shared-util-vendor'
-import {useRouter} from 'next/router'
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react'
+import {createContext, type ReactNode, useContext, useRef, useState} from 'react'
 import {
   createHocWithContextConsumer,
   type InjectedContextConsumerProps,
 } from '../hocs/create-hoc-with-context-consumer'
-import {NextRouterEvent} from '../hooks/router-events'
 
 
 export type QueueId = string
@@ -110,36 +100,9 @@ export function LoadingProviderComponent(props: LoadingProviderComponentProps) {
       return localRef.current.length > 0
     },
   }))
-  const router = useRouter()
-  const [dequeueRouter, setRouterQueue] = useState<QueueResponse>(null)
-  const startRouterLoading = useCallback(() => {
-    if (dequeueRouter) {
-      dequeueRouter()
-    }
-    setRouterQueue(state.queueLoading())
-  }, [dequeueRouter, state])
-  const stopRouterLoading = useCallback(() => {
-    if (dequeueRouter) {
-      dequeueRouter()
-    }
-    setRouterQueue(null)
-  }, [dequeueRouter])
-
-  useEffect(() => {
-    router.events.on(NextRouterEvent.ROUTE_CHANGE_START, startRouterLoading)
-    router.events.on(NextRouterEvent.ROUTE_CHANGE_COMPLETE, stopRouterLoading)
-    router.events.on(NextRouterEvent.ROUTE_CHANGE_ERROR, stopRouterLoading)
-    return () => {
-      router.events.off(NextRouterEvent.ROUTE_CHANGE_START, startRouterLoading)
-      router.events.off(NextRouterEvent.ROUTE_CHANGE_COMPLETE, stopRouterLoading)
-      router.events.off(NextRouterEvent.ROUTE_CHANGE_ERROR, stopRouterLoading)
-    }
-  }, [router, startRouterLoading, stopRouterLoading])
 
   return (
-    <LoadingProvider
-      value={state}
-    >
+    <LoadingProvider value={state}>
       {children}
     </LoadingProvider>
   )

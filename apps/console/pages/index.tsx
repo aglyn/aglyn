@@ -20,7 +20,7 @@ import {GridButtons} from '@aglyn/shared-ui-jsx'
 import {mdiBug, mdiHome, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import styled from '@emotion/styled'
 import {useAuthState} from 'react-firebase-hooks/auth'
-import LayoutConsoleComponent from '../layouts/layout-console.component'
+import LayoutDashboardComponent from '../layouts/layout-dashboard.component'
 
 
 const firebaseAuth = getFirebaseAuth()
@@ -81,10 +81,12 @@ export function Index() {
   )
 }
 Index.displayName = 'Page:Index'
-Index.layoutComponent = LayoutConsoleComponent
+Index.layoutComponent = LayoutDashboardComponent
 Index.layoutProps = {
   LayoutConsoleComponent: {
     title: 'My Dashboard',
+  },
+  LayoutDashboardComponent: {
     header: {
       children: 'My Dashboard',
       icon: {path: mdiHome.path},

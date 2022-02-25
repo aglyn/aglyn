@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-import {APP_CONSOLE, BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
+import {APP_CONSOLE} from '@aglyn/shared-data-enums'
 import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
-import {darken, mergeSxProps, styled} from '@aglyn/shared-feature-themes'
+import {mergeSxProps, styled} from '@aglyn/shared-feature-themes'
 import {
   AglynSvgIcon,
   AglynSvgLogo,
   AppLink,
   type AppLinkProps,
   ElevateOnScroll,
-  GridButtons,
-  type GridButtonsProps,
   Menu,
 } from '@aglyn/shared-ui-jsx'
 import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
@@ -35,57 +33,42 @@ import {
   AppBar,
   Avatar,
   Box,
-  Container,
   Divider,
   IconButton,
   type IconButtonProps,
+  Stack,
   Tab as MuiTab,
   type TabProps as MuiTabProps,
   Tabs as MuiTabs,
   Toolbar,
-  Typography,
 } from '@mui/material'
-import {cyan, purple} from '@mui/material/colors'
+import {cyan} from '@mui/material/colors'
 import Head from 'next/head'
 import {useRouter} from 'next/router'
 import {Fragment, type ReactNode, useMemo} from 'react'
 import {useAuthState} from 'react-firebase-hooks/auth'
-import BreadcrumbsComponent, {type BreadcrumbsProps} from '../components/breadcrumbs.component'
-import CopyrightComponent from '../components/copyright.component'
-import {tailNavigation} from '../const'
 
+
+const firebaseAuth = getFirebaseAuth()
+export const TAB_HEIGHT = 40
 
 const TabItem = styled(MuiTab, {
   name: 'AglynTabItem',
 })(({theme}) => ({
   flexDirection: 'row',
+  minHeight: TAB_HEIGHT,
   '& > *:first-of-type': {
     marginBottom: 0,
     marginRight: 1,
   },
   '& .MuiTab-labelIcon': {
-    minHeight: 46,
+    minHeight: TAB_HEIGHT - 16,
     minWidth: 'auto',
     paddingLeft: 0,
     paddingRight: 0,
     marginLeft: 4,
     '&:first-of-type': {
       marginLeft: 0,
-    },
-  },
-}))
-
-const StyledBreadcrumbs = styled(BreadcrumbsComponent, {
-  name: 'BreadcrumbsComponent',
-})(({theme}) => ({
-  marginTop: theme.spacing(1),
-  color: darken(theme.palette.getContrastText(purple['600']), 0.12),
-
-  ['& .AglynBreadcrumbs-item']: {
-    color: 'inherit',
-    ['&.AglynBreadcrumbs-last']: {
-      color: theme.palette.getContrastText(purple['600']),
-      fontWeight: theme.typography.fontWeightMedium,
     },
   },
 }))
@@ -97,10 +80,6 @@ function a11yProps(index) {
   }
 }
 
-const firebaseAuth = getFirebaseAuth()
-export const NAVIGATION_MAX_WIDTH = false
-export const FOOTER_MAX_WIDTH = 'xl'
-
 export interface QuickActionsMenuItem extends IconButtonProps {
   icon?: MdiIconProps
   avatar?: any
@@ -111,21 +90,19 @@ export interface QuickActionsMenuItem extends IconButtonProps {
 
 export type NavTabItem = Partial<AppLinkProps & MuiTabProps & {icon: MdiIconProps}>
 
-export interface MainLayoutProps {
+export interface LayoutMainProps {
   children?: ReactNode | undefined
   title?: ReactNode[] | ReactNode
   tabBarTitle?: ReactNode
   centerNavigationItems?: Array<any>
-  breadcrumbItems?: BreadcrumbsProps['items']
   navTabItems?: NavTabItem[]
   quickActionMenus?: QuickActionsMenuItem[]
   productName?: string
-  footerNavItems?: GridButtonsProps['items']
   // aggregatedPageMeta: AggregatedPageMeta
   // currentUserContext: CurrentUserContextType
 }
 
-function MainLayoutRaw(props: MainLayoutProps) {
+function LayoutMainComponent(props: LayoutMainProps) {
   const {
     children,
     title,
@@ -133,9 +110,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
     tabBarTitle,
     navTabItems,
     productName,
-    footerNavItems,
     quickActionMenus: quickActions,
-    breadcrumbItems,
   } = props
   const [user] = useAuthState(firebaseAuth)
   const router = useRouter()
@@ -204,37 +179,30 @@ function MainLayoutRaw(props: MainLayoutProps) {
           }
         </title>
       </Head>
-      <ElevateOnScroll
-        renderProps={(elevated) => ({elevation: elevated ? 4 : 0})}
+      <Stack
+        alignItems="stretch"
+        flexDirection="column"
+        minHeight="100vh"
       >
-        <AppBar
-          component="header"
-          color="inherit"
-          position="sticky"
-          variant="elevation"
+        <ElevateOnScroll
+          renderProps={(elevated) => ({elevation: elevated ? 4 : 0})}
         >
           <AppBar
-            component={'div'}
-            elevation={0}
+            component="header"
             color="inherit"
-            position="relative"
-            sx={{
-              borderBottomWidth: `1px`,
-              borderBottomStyle: 'solid',
-              borderBottomColor: 'divider',
-              // ':after': {
-              //   content: '" "',
-              //   left: 0,
-              //   right: 0,
-              //   bottom: 0,
-              //   height: 1,
-              //   width: 1,
-              //   position: 'absolute',
-              //   backgroundColor: 'divider',
-              // },
-            }}
+            position="sticky"
+            variant="elevation"
           >
-            <Toolbar variant="dense">
+            <Toolbar
+              variant="dense"
+              component={'div'}
+              color="inherit"
+              sx={{
+                borderBottomWidth: `1px`,
+                borderBottomStyle: 'solid',
+                borderBottomColor: 'divider',
+              }}
+            >
               <Box
                 component={'div'}
                 sx={{
@@ -354,23 +322,18 @@ function MainLayoutRaw(props: MainLayoutProps) {
                 </Menu>
               </Box>
             </Toolbar>
-          </AppBar>
-          {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
-            <AppBar
-              component="div"
-              color="inherit"
-              elevation={0}
-              position="static"
-              sx={{
-                borderBottomWidth: `1px`,
-                borderBottomStyle: 'solid',
-                borderBottomColor: 'divider',
-                [`& .MuiToolbar-root`]: {
-                  minHeight: 40,
-                },
-              }}
-            >
-              <Toolbar variant="dense">
+            {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
+              <Toolbar
+                variant="dense"
+                component="div"
+                color="inherit"
+                sx={{
+                  minHeight: TAB_HEIGHT,
+                  borderBottomWidth: `1px`,
+                  borderBottomStyle: 'solid',
+                  borderBottomColor: 'divider',
+                }}
+              >
                 {tabBarTitle && (
                   <Box
                     component={'div'}
@@ -403,7 +366,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
                   value={tabValue || false}
                   variant="scrollable"
                   sx={{
-                    minHeight: 40,
+                    minHeight: TAB_HEIGHT,
                     alignItems: 'center',
                     '& .MuiTabs-flexContainer': {
                       alignItems: 'center',
@@ -446,78 +409,17 @@ function MainLayoutRaw(props: MainLayoutProps) {
                   ))}
                 </MuiTabs>
               </Toolbar>
-            </AppBar>
-          ) : null}
-        </AppBar>
-      </ElevateOnScroll>
-      <Box component={'main'}>
+            ) : null}
+          </AppBar>
+        </ElevateOnScroll>
         {children}
-      </Box>
-      <Box component={'footer'}>
-        <Container maxWidth={FOOTER_MAX_WIDTH}>
-          <Box
-            component={'div'}
-            sx={{
-              mt: 6,
-              pb: 1,
-              pt: 2,
-              borderTop: 1,
-              display: 'flex',
-              flexWrap: 'wrap',
-              borderColor: 'divider',
-              alignItems: 'center',
-            }}
-          >
-            <Box
-              component={'div'}
-              sx={{
-                flexGrow: 1,
-                display: 'flex',
-              }}
-            >
-              <CopyrightComponent />
-            </Box>
-            <Box
-              component={'div'}
-              sx={{display: 'flex'}}
-            >
-              <GridButtons
-                spacing={1}
-                ItemComponent={AppLink}
-                items={footerNavItems.map((i) => ({
-                  size: 'small',
-                  componentVariant: 'button',
-                  ...i,
-                }))}
-              />
-            </Box>
-
-            <Box
-              alignItems="space-around"
-              display="flex"
-              flex="1 1 auto"
-              flexBasis="100%"
-              justifyContent="center"
-            >
-              <Typography align="center" color="textSecondary" variant="overline">
-                <span>{`Version ${PACKAGE_VERSION}`}</span>
-                {' '}
-                <span>{`(${BUILD_ID})`}</span>
-              </Typography>
-            </Box>
-          </Box>
-        </Container>
-      </Box>
+      </Stack>
     </Fragment>
   )
 }
 
-MainLayoutRaw.displayName = 'LayoutMainComponent'
-MainLayoutRaw.defaultProps = {
-  footerNavItems: tailNavigation as any,
-  // aggregatedPageMeta: {} as any,
-  // currentUserContext: {} as any,
-}
+LayoutMainComponent.displayName = 'LayoutMainComponent'
+LayoutMainComponent.defaultProps = {}
 
-export const LayoutMainComponent = /*withCurrentUserContext(withAggregatedPageMeta(*/MainLayoutRaw/*))*/
+export {LayoutMainComponent}
 export default LayoutMainComponent

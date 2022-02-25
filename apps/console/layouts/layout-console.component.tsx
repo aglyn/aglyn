@@ -15,90 +15,78 @@
  * limitations under the License.
  */
 
-import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
-import {mergeSxProps} from '@aglyn/shared-feature-themes'
-import {BackgroundImageComponent, GridItems, type GridItemsProps} from '@aglyn/shared-ui-jsx'
-import {mdiCogOutline, MdiIcon, type MdiIconProps, mdiShieldLock} from '@aglyn/shared-ui-mdi-jsx'
+import {useThemeModeContext} from '@aglyn/shared-feature-themes'
+import {
+  mdiBrightness4,
+  mdiBrightness5,
+  mdiCogOutline,
+  MdiIcon,
+  mdiShieldLock,
+} from '@aglyn/shared-ui-mdi-jsx'
 import {_isArr} from '@aglyn/shared-util-guards'
-import {Container, Stack, Typography} from '@mui/material'
-import type {ReactNode} from 'react'
-import {useAuthState} from 'react-firebase-hooks/auth'
-import {isElement} from 'react-is'
+import {Stack} from '@mui/material'
+import MuiIconButton from '@mui/material/IconButton'
+import MuiTooltip from '@mui/material/Tooltip'
 // import {type CurrentUserContextType} from '../contexts/current-user-context'
 // import {type AggregatedPageMeta} from '../lib/app-pages'
 // import {tabItems} from '../lib/navigation-menus'
-import BreadcrumbsComponent from '../components/breadcrumbs.component'
 import LayoutAuthenticatedComponent from './layout-authenticated.component'
-import LayoutMainComponent, {type MainLayoutProps} from './layout-main.component'
+import LayoutMainComponent, {type LayoutMainProps} from './layout-main.component'
 
 
-const firebaseAuth = getFirebaseAuth()
-export const CONTENT_MAX_WIDTH = 'xl'
-const getHeader = (first, second) => (
-  <span>
-    <b>{first}:</b> {second}
-  </span>
-)
+function ChangeThemeMenuItem(props) {
+  const [mode, toggleThemeMode] = useThemeModeContext()
+  return (
+    <>
+      {'Theme mode'}
+      <MuiTooltip
+        aria-label="switch theme scheme colors"
+        title={
+          mode === 'dark'
+            ? 'Light mode'
+            : 'Dark mode'
+        }
+      >
+        <MuiIconButton onClick={toggleThemeMode as any}>
+          <MdiIcon
+            path={
+              mode === 'dark'
+                ? mdiBrightness4.path
+                : mdiBrightness5.path
+            }
+          />
+        </MuiIconButton>
+      </MuiTooltip>
+    </>
+  )
+}
 
-export interface LayoutConsoleProps extends MainLayoutProps {
-  ContentGridItemsProps?: GridItemsProps
-  items?: GridItemsProps['items']
-  header?: {
-    icon?: MdiIconProps | ReactNode
-    children?: ReactNode
-  }
-  aggregatedPageMeta?: any//AggregatedPageMeta
-  currentUserContext?: any//CurrentUserContextType
+export interface LayoutConsoleProps extends LayoutMainProps {
 }
 
 function LayoutConsoleComponent(props: LayoutConsoleProps) {
   const {
-    header: headerProp,
-    aggregatedPageMeta,
-    title: titleProp,
-    items,
-    breadcrumbItems: breadcrumbItemsProp,
-    ContentGridItemsProps,
+    title,
     children,
-    currentUserContext,
     ...rest
   } = props
-  const [user, loading, error] = useAuthState(firebaseAuth)
-  const {pageMeta, overrideMeta, pageAncestors} = aggregatedPageMeta || {}
-  const title = titleProp ?? (overrideMeta ?? pageMeta)?.title
-  const [rootArea, mainArea, subArea] = pageAncestors || []
-  const header = {
-    icon: {path: mainArea?.icon},
-    children: getHeader(
-      mainArea ? mainArea?.name?.default : rootArea?.name?.default,
-      subArea ? subArea?.name?.plural : (overrideMeta ?? pageMeta)?.name?.default,
-    ),
-    ...headerProp,
-  }
-  const breadcrumbItems = breadcrumbItemsProp || [] /*?? (copy(pageAncestors || []) as any[]))*/
-  // .concat((overrideMeta ?? pageMeta) || [])
-  // .map((item: any) => ({
-  //   href: _s(item?.id),
-  //   children: item?.name.plural,
-  // }))
-  const quickActionMenus: MainLayoutProps['quickActionMenus'] = [
-    {
-      icon: {path: mdiCogOutline.path},
-      // alt: '',
-      items: [
-        {
-          dense: true,
-          children: 'Change Theme',
-        },
-      ],
-    },
-  ]
 
   return (
     <LayoutMainComponent
       title={title ? [..._isArr(title) ? title : [title], 'Secure'] : 'Secure'}
       productName={'Console'}
-      quickActionMenus={quickActionMenus}
+      quickActionMenus={[
+        {
+          icon: {path: mdiCogOutline.path},
+          // alt: '',
+          items: [
+            {
+              dense: true,
+              children: <ChangeThemeMenuItem />,
+            },
+          ],
+        },
+      ]}
       tabBarTitle={(
         <Stack
           direction="row"
@@ -132,67 +120,7 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
       ]}
       {...rest}
     >
-      <BackgroundImageComponent
-        component="header"
-        url="/_static/images/backgrounds/patterns/abstract-wave-lines.svg"
-        bgPosition="50% 90%"
-        sx={{
-          pt: 10,
-          bgcolor: 'background.secondary',
-          color: 'text.primary',
-          borderBottomWidth: `1px`,
-          borderBottomStyle: 'solid',
-          borderBottomColor: 'divider',
-        }}
-      >
-        <Container maxWidth={CONTENT_MAX_WIDTH}>
-          <Typography
-            component="h1"
-            variant="h4"
-            sx={mergeSxProps({
-              display: 'flex',
-              flexDirection: 'row',
-              alignItems: 'center',
-            })}
-          >
-            {!header?.icon || isElement(header.icon) ? header.icon : (
-              <MdiIcon
-                color="inherit"
-                {...header.icon}
-                sx={mergeSxProps({
-                  padding: 1,
-                  mr: 1.75,
-                  ml: -0.5,
-                  fontSize: `1.5em`,
-                  borderWidth: `1px`,
-                  borderStyle: 'solid',
-                  borderColor: 'tertiary.dark',
-                  color: 'quaternary.contrastText',
-                  bgcolor: 'quaternary.main',
-                  borderRadius: (theme) => theme.shape.appIconBorderRadius,
-                }, header.icon?.['sx'])}
-              />
-            )}
-            {header?.children ?? title}
-          </Typography>
-          <BreadcrumbsComponent
-            items={breadcrumbItems as any}
-            sx={{my: 2}}
-          />
-        </Container>
-      </BackgroundImageComponent>
-      <main /*className={classes.content}*/>
-        <Container maxWidth={CONTENT_MAX_WIDTH}>
-          {items || ContentGridItemsProps ? (
-            <GridItems
-              items={items}
-              spacing={3}
-              {...ContentGridItemsProps}
-            />
-          ) : null}
-          {children}
-        </Container>
-      </main>
+      {children}
     </LayoutMainComponent>
   )
 }

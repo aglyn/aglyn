@@ -20,7 +20,6 @@ import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
 import Stack, {type StackProps} from '@mui/material/Stack'
 import dynamic from 'next/dynamic'
 import {forwardRef} from 'react'
-import AppBarPrimaryComponent from './app-bar-primary.component'
 import AppBarSecondaryComponent from './app-bar-secondary.component'
 
 
@@ -79,7 +78,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             zIndex: 1,
           }}
         >
-          <AppBarPrimaryComponent />
+          {/*<AppBarPrimaryComponent />*/}
           <AppBarSecondaryComponent />
         </Stack>
 

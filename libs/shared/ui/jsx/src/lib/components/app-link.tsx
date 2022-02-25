@@ -97,7 +97,7 @@ const AppLink = forwardRef(
         <NextLink
           ref={ref}
           className={elemClassName}
-          hrefTo={href || '#'}
+          hrefTo={href || ''}
           hrefAs={hrefAs}
           {...rest}
         />
@@ -109,7 +109,7 @@ const AppLink = forwardRef(
           ref={ref}
           className={elemClassName}
           component={NextLink}
-          hrefTo={href || '#'}
+          hrefTo={href || ''}
           hrefAs={hrefAs}
           {...rest}
         />
@@ -121,7 +121,7 @@ const AppLink = forwardRef(
           ref={ref}
           className={elemClassName}
           component={NextLink}
-          hrefTo={href || '#'}
+          hrefTo={href || ''}
           hrefAs={hrefAs}
           {...rest}
         />
@@ -132,7 +132,7 @@ const AppLink = forwardRef(
         ref={ref}
         className={elemClassName}
         component={NextLink}
-        hrefTo={href || '#'}
+        hrefTo={href || ''}
         hrefAs={hrefAs}
         {...rest}
       />

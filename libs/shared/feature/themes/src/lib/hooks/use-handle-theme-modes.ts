@@ -15,37 +15,47 @@
  * limitations under the License.
  */
 
+import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import Cookie from 'js-cookie'
 import {useCallback, useMemo, useState} from 'react'
 
 
-export type ThemeMode = 'light' | 'dark'
+export type ThemeMode = 'light' | 'dark' | 'system'
 export type UseThemeMode = [
-  mode: 'light' | 'dark',
+  mode: ThemeMode,
   toggleThemeMode: (mode?: ThemeMode) => void
 ]
 
+export const COOKIE_THEME_KEY = 'theme-color-scheme'
+
 export function useHandleThemeModes(defaultMode?: ThemeMode): UseThemeMode {
   const prefDark = useMediaQuery('(prefers-color-scheme: dark)')
-  const cookieMode = Cookie.get('theme-color-scheme')
-  const defaultValue = defaultMode || cookieMode || (prefDark ? 'dark' : 'light') || null
-  const [localMode, setLocalMode] = useState<string | null>(defaultValue)
-  const mode = useMemo(() => {
-    if (localMode) return localMode === 'dark' ? 'dark' : 'light'
-    return prefDark ? 'dark' : 'light'
-  }, [prefDark, localMode])
+  const cookieMode = Cookie.get(COOKIE_THEME_KEY)
+  const [localMode, setLocalMode] = useState<ThemeMode | null>(null)
 
-  const toggleThemeMode = useCallback((mode?: ThemeMode) => {
-    const override = mode === 'light' || mode === 'dark' ? mode : null
-    setLocalMode(prev => {
-      const _mode = override || (prev === 'dark' ? 'light' : 'dark')
-      Cookie.set('theme-color-scheme', _mode, {
-        expires: 365,
-      })
-      return _mode
-    })
-  }, [])
+  const mode = useMemo(() => {
+    const value = localMode
+      || cookieMode
+      || prefDark
+      || defaultMode
+    if (value === 'system') return prefDark ? 'dark' : 'light'
+    if (value === 'dark') return 'dark'
+    if (value === 'light') return 'light'
+    return 'system'
+  }, [cookieMode, defaultMode, localMode, prefDark])
+
+  const toggleThemeMode = useCallback((to?: ThemeMode) => {
+    const override = _isEqualitySameType(to, 'light', 'dark', 'system') ? to : null
+    const value = override || (
+      mode === 'light' ? 'system'
+        : mode === 'system' ? 'dark'
+          : mode === 'dark' ? 'light'
+            : 'system'
+    )
+    Cookie.set(COOKIE_THEME_KEY, value, {expires: 365})
+    setLocalMode(value)
+  }, [mode])
 
   return useMemo(() => [mode, toggleThemeMode], [mode, toggleThemeMode])
 }

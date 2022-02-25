@@ -17,16 +17,17 @@
 
 import {getApp} from '@aglyn/core-data-framework'
 import {getAdminTenant} from '@aglyn/core-data-tenancy'
+import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
 import {HAS_BROWSER} from '@aglyn/shared-data-enums'
 import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
 import dynamic from 'next/dynamic'
 import {useEffect} from 'react'
 // import {useEffect} from 'react-hooks'
 import '../constants/app-setup'
-import LayoutAuthenticatedComponent from '../layouts/layout-authenticated.component'
+import LayoutConsoleComponent from '../layouts/layout-console.component'
 
 
-const AglynBesigner = dynamic(
+const AglynBesigner = dynamic<BesignerComponentProps>(
   () => import('@aglyn/core-feature-besigner').then((mod) => mod.BesignerComponent),
   {ssr: false, loading: () => <LoadingOverlayComponent open />},
 )
@@ -42,11 +43,21 @@ function Besigner(props) {
     }
   }, [])
 
-  return <AglynBesigner />
+  return (
+    <AglynBesigner
+      sx={{flexGrow: 1, position: 'unset'}}
+    />
+  )
 }
 
 Besigner.displayName = 'Page:Besigner'
-Besigner.layout = LayoutAuthenticatedComponent
+Besigner.layoutComponent = LayoutConsoleComponent
+Besigner.layoutProps = {
+  LayoutConsoleComponent: {
+    title: 'Besigner',
+    productName: 'Besigner',
+  },
+}
 
 export default Besigner
 
