@@ -55,7 +55,7 @@ Besigner.layoutComponent = LayoutConsoleComponent
 Besigner.layoutProps = {
   LayoutConsoleComponent: {
     title: 'Besigner',
-    productName: 'Besigner',
+    appBarSuffix: 'Besigner',
   },
 }
 

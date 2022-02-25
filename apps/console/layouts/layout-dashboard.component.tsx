@@ -15,33 +15,78 @@
  * limitations under the License.
  */
 
-import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
-import {darken, mergeSxProps} from '@aglyn/shared-feature-themes'
+import {darken, mergeSxProps, styled} from '@aglyn/shared-feature-themes'
 import {
   AppLink,
+  type AppLinkProps,
   BackgroundImageComponent,
-  GridButtons,
+  ElevateOnScroll,
   GridItems,
   type GridItemsProps,
 } from '@aglyn/shared-ui-jsx'
-import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {Box, Container, Typography, TypographyProps} from '@mui/material'
-import {type ReactNode} from 'react'
+import {MdiIcon, type MdiIconProps, mdiShieldLock} from '@aglyn/shared-ui-mdi-jsx'
+import {_isArr, _isArrEmpty} from '@aglyn/shared-util-guards'
+import {
+  AppBar,
+  Container,
+  Divider,
+  Stack,
+  Tab as MuiTab,
+  type TabProps as MuiTabProps,
+  Tabs as MuiTabs,
+  Toolbar,
+  Typography,
+  type TypographyProps,
+} from '@mui/material'
+import {useRouter} from 'next/router'
+import {type ReactNode, useMemo} from 'react'
 import {isElement} from 'react-is'
 import BreadcrumbsComponent, {type BreadcrumbsProps} from '../components/breadcrumbs.component'
-import CopyrightComponent from '../components/copyright.component'
-import {tailNavigation} from '../const'
+import FooterComponent from '../components/footer.component'
 import LayoutConsoleComponent from './layout-console.component'
+import {TOP_BAR_HEIGHT} from './layout-main.component'
 
 
 export const CONTENT_MAX_WIDTH = 'xl'
-export const FOOTER_MAX_WIDTH = 'xl'
+export const TAB_HEIGHT = 40
+
+const TabItem = styled(MuiTab, {
+  name: 'AglynTabItem',
+})(({theme}) => ({
+  flexDirection: 'row',
+  minHeight: TAB_HEIGHT,
+  '& > *:first-of-type': {
+    marginBottom: 0,
+    marginRight: 1,
+  },
+  '& .MuiTab-labelIcon': {
+    minHeight: TAB_HEIGHT - 16,
+    minWidth: 'auto',
+    paddingLeft: 0,
+    paddingRight: 0,
+    marginLeft: 4,
+    '&:first-of-type': {
+      marginLeft: 0,
+    },
+  },
+}))
+
+function a11yProps(index) {
+  return {
+    id: `scrollable-auto-tab-${index}`,
+    'aria-controls': `scrollable-auto-tabpanel-${index}`,
+  }
+}
+
+export type NavTabItem = Partial<AppLinkProps & MuiTabProps & {icon: MdiIconProps}>
 
 export interface LayoutDashboardProps {
   children?: ReactNode
   ContentGridItemsProps?: GridItemsProps
   items?: GridItemsProps['items']
   breadcrumbItems?: BreadcrumbsProps['items']
+  tabBarTitle?: ReactNode
+  navTabItems?: NavTabItem[]
   header?: TypographyProps<any, any> & {
     icon?: MdiIconProps | ReactNode
   }
@@ -54,6 +99,8 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
     ContentGridItemsProps,
     breadcrumbItems,
     items,
+    tabBarTitle: tabBarTitleProp,
+    navTabItems: navTabItemsProp,
   } = props
 
   const {
@@ -63,9 +110,152 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
     ...header
   } = headerProp || {}
 
+  const tabBarTitle = tabBarTitleProp ?? (
+    <Stack
+      direction="row"
+      spacing={{sm: 0.15, md: 0.5}}
+      alignItems="center"
+      typography={'subtitle2'}
+      lineHeight={'normal'}
+      sx={{color: 'tertiary.light'}}
+    >
+      <span>{'Secure'}</span>
+      <MdiIcon
+        path={mdiShieldLock.path}
+        fontSize={'small'}
+        sx={{color: 'tertiary.light'}}
+      />
+    </Stack>
+  )
+  const navTabItems: NavTabItem[] = navTabItemsProp ?? [
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      href: '/',
+    },
+    {
+      id: 'besigner',
+      label: 'Besigner',
+      href: '/besigner',
+    },
+  ]
+  const router = useRouter()
+  const tabValue = useMemo(() => {
+    return navTabItems.find((i) => {
+      return (i?.hrefAs || i?.href || '') === router.asPath
+    })?.href || false
+  }, [router, navTabItems])
+
   return (
     <>
+
       <main /*className={classes.content}*/>
+        {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
+          <ElevateOnScroll
+            renderProps={(elevated) => ({
+              elevation: elevated ? 4 : 0,
+            })}
+            scrollTrigger={{
+              disableHysteresis: true,
+              threshold: TOP_BAR_HEIGHT,
+            }}
+          >
+            <AppBar
+              component="header"
+              color="inherit"
+              position="sticky"
+              variant="elevation"
+            >
+              <Toolbar
+                variant="dense"
+                component="div"
+                color="inherit"
+                sx={{
+                  minHeight: TAB_HEIGHT,
+                  borderBottomWidth: `1px`,
+                  borderBottomStyle: 'solid',
+                  borderBottomColor: 'divider',
+                }}
+              >
+                {tabBarTitle && (
+                  <Typography
+                    component={'div'}
+                    variant={'h6'}
+                    sx={{
+                      lineHeight: 'normal',
+                      letterSpacing: 2,
+                      fontSize: `0.95em`,
+                      fontWeight: 'fontWeightMedium',
+                      textTransform: 'uppercase',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {tabBarTitle}
+                  </Typography>
+                )}
+
+                <Divider
+                  orientation="vertical"
+                  sx={{ml: 1.25, mr: 1}}
+                  flexItem
+                  light
+                />
+
+                <MuiTabs
+                  aria-label="area navigation"
+                  indicatorColor="secondary"
+                  scrollButtons="auto"
+                  textColor="inherit"
+                  value={tabValue || false}
+                  variant="scrollable"
+                  sx={{
+                    minHeight: TAB_HEIGHT,
+                    alignItems: 'center',
+                    '& .MuiTabs-flexContainer': {
+                      alignItems: 'center',
+                    },
+                    '& .MuiTabs-indicator': {
+                      height: '3px',
+                      backgroundColor: 'unset',
+                      '&:after': {
+                        borderRadius: '3px 3px 0 0',
+                        content: '" "',
+                        display: 'block',
+                        position: 'absolute',
+                        left: 0,
+                        top: 0,
+                        right: 0,
+                        mx: 'auto',
+                        width: 0.8,
+                        height: 1,
+                        backgroundColor: 'secondary.light',
+                      },
+                    },
+                  }}
+                >
+                  {navTabItems && navTabItems.map(({icon, ...item}, index) => (
+                    <TabItem
+                      key={item.id ?? index}
+                      href={item.href ?? ''}
+                      value={item.href ?? index}
+                      icon={icon?.path && <MdiIcon {...icon} /> || icon}
+                      componentVariant="button-base"
+                      anchorComponent="button"
+                      color="inherit"
+                      underline="none"
+                      // disableRipple
+                      wrapped
+                      {...a11yProps(index)}
+                      {...{component: AppLink} as any}
+                      {...item}
+                    />
+                  ))}
+                </MuiTabs>
+              </Toolbar>
+            </AppBar>
+          </ElevateOnScroll>
+        ) : null}
+
         <BackgroundImageComponent
           component="header"
           url="/_static/images/backgrounds/patterns/abstract-wave-lines.svg"
@@ -142,66 +332,18 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
           {children}
         </Container>
       </main>
-      <footer>
-        <Container maxWidth={FOOTER_MAX_WIDTH}>
-          <Box
-            component={'div'}
-            sx={{
-              mt: 6,
-              pb: 1,
-              pt: 2,
-              borderTop: 1,
-              display: 'flex',
-              flexWrap: 'wrap',
-              borderColor: 'divider',
-              alignItems: 'center',
-            }}
-          >
-            <Box
-              component={'div'}
-              sx={{
-                flexGrow: 1,
-                display: 'flex',
-              }}
-            >
-              <CopyrightComponent />
-            </Box>
-            <Box
-              component={'div'}
-              sx={{display: 'flex'}}
-            >
-              <GridButtons
-                spacing={1}
-                ItemComponent={AppLink}
-                items={tailNavigation.map((i) => ({
-                  size: 'small',
-                  componentVariant: 'button',
-                  ...i,
-                }))}
-              />
-            </Box>
 
-            <Box
-              alignItems="space-around"
-              display="flex"
-              flex="1 1 auto"
-              flexBasis="100%"
-              justifyContent="center"
-            >
-              <Typography align="center" color="textSecondary" variant="overline">
-                <span>{`Version ${PACKAGE_VERSION}`}</span>
-                {' '}
-                <span>{`(${BUILD_ID})`}</span>
-              </Typography>
-            </Box>
-          </Box>
-        </Container>
-      </footer>
+      <FooterComponent />
     </>
   )
 }
 LayoutDashboardComponent.displayName = 'LayoutDashboardComponent'
 LayoutDashboardComponent.layoutComponent = LayoutConsoleComponent
+LayoutDashboardComponent.layoutProps = {
+  LayoutConsoleComponent: {
+    disableAppBarElevation: true,
+  },
+}
 
 export {LayoutDashboardComponent}
 export default LayoutDashboardComponent

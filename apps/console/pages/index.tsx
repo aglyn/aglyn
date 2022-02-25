@@ -41,9 +41,9 @@ export function Index() {
       <h2>Resources &amp; Tosols</h2>
       <p>Thank you for using and showing some ♥ for Nx.</p>
       <div>
-        User: <pre>{JSON.stringify(user, null, 2)}</pre>
-        Loading: <pre>{JSON.stringify(loading, null, 2)}</pre>
-        Error: <pre>{JSON.stringify(error, null, 2)}</pre>
+        User: <pre style={{overflowX: 'scroll'}}>{JSON.stringify(user, null, 2)}</pre>
+        Loading: <pre style={{overflowX: 'scroll'}}>{JSON.stringify(loading, null, 2)}</pre>
+        Error: <pre style={{overflowX: 'scroll'}}>{JSON.stringify(error, null, 2)}</pre>
       </div>
       <MdiIcon path={mdiBug.path} />
       <GridButtons

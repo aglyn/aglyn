@@ -16,18 +16,27 @@
  */
 
 import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-enums'
-import Typography, {type TypographyProps} from '@mui/material/Typography'
+import {Typography, type TypographyProps} from '@mui/material'
+import {forwardRef} from 'react'
 
 
-export interface CopyrightComponentProps extends TypographyProps {}
+export interface CopyrightProps extends TypographyProps<any, any> {}
 
-function CopyrightComponent(props: CopyrightComponentProps) {
-  return (
-    <Typography variant="subtitle2" {...props}>
-      {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
-    </Typography>
-  )
-}
+const CopyrightComponent = forwardRef<any, CopyrightProps>(
+  function RefRenderFn(props, ref) {
+    const {children, ...rest} = props
+    return (
+      <Typography
+        ref={ref}
+        variant="subtitle2"
+        {...rest}
+      >
+        {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
+        {children}
+      </Typography>
+    )
+  },
+)
 CopyrightComponent.displayName = 'CopyrightComponent'
 
 export {CopyrightComponent}
