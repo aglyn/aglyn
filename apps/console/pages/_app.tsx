@@ -22,10 +22,6 @@ import {NextEmotionAppComponent, type NextEmotionAppComponentProps} from '@aglyn
 import {Fragment, useMemo} from 'react'
 
 
-// initializeFirebaseApp()
-// initializeFirebaseAppCheck()
-// initializeFirebaseAuth()
-
 export interface _AppProps<Props, InitialProps> extends NextEmotionAppComponentProps<Props, InitialProps> {}
 
 function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {

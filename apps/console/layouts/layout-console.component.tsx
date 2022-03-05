@@ -68,7 +68,7 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
           sx: {p: 0.5},
           edge: 'end',
           avatar: {
-            src: gravatarUrlFromEmail(user?.email),
+            src: user?.photoURL || gravatarUrlFromEmail(user?.email),
           },
           items: [
             {

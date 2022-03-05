@@ -67,7 +67,7 @@ function LayoutUnauthenticatedComponent(props: LayoutRequestAuthenticationProps)
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        p: {p: 2, md: 3},
+        p: {xs: 2, md: 3},
         color: 'text.primary',
       }, sx)}
       {...rest}

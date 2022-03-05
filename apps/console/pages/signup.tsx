@@ -93,6 +93,7 @@ function Signup() {
           : handleGoogleOAuthSignUp()
       })
       .catch((error) => {
+        console.error('handleSignIn', error)
         setError({...error, credential: GoogleAuthProvider.credentialFromError(error)})
       })
       .finally(() => {

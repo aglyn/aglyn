@@ -75,6 +75,7 @@ function SignIn() {
           : handleGoogleOAuthSignIn()
       })
       .catch((error) => {
+        console.error(error, error.code)
         setError({...error, credential: GoogleAuthProvider.credentialFromError(error)})
       })
       .finally(() => {
