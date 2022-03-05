@@ -16,20 +16,18 @@
  */
 
 import {ICON_VARIANT_HOME} from '@aglyn/shared-data-enums'
-import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {GridItems} from '@aglyn/shared-ui-jsx'
 import {Container} from '@mui/material'
-import {useAuthState} from 'react-firebase-hooks/auth'
 import DataTableComponent from '../components/data-table.component'
 import WidgetCardComponent from '../components/widget-card.component'
 import {CONTENT_MAX_WIDTH} from '../constants/shared'
 import LayoutDashboardComponent from '../layouts/layout-dashboard.component'
 
 
-const firebaseAuth = getFirebaseAuth()
+export function Index(props) {
 
-export function Index() {
-  const [user, loading, error] = useAuthState(firebaseAuth)
+  console.log('index props', props)
+
 
   /*
    * Replace the elements below with your own.
@@ -56,11 +54,7 @@ export function Index() {
                     {field: 'email', headerName: 'E-Mail', width: 175, maxWidth: 200},
                     {field: 'emailVerified', headerName: 'E-Verified', maxWidth: 100},
                   ]}
-                  rows={[
-                    {
-                      ...user,
-                    },
-                  ]}
+                  rows={[]}
                 />
               </WidgetCardComponent>
             ),
@@ -75,11 +69,6 @@ export function Index() {
           },
         ]}
       />
-      <div style={{overflowX: 'scroll', display: 'none'}}>
-        User: <pre>{JSON.stringify(user, null, 2)}</pre>
-        Loading: <pre>{JSON.stringify(loading, null, 2)}</pre>
-        Error: <pre>{JSON.stringify(error, null, 2)}</pre>
-      </div>
     </Container>
   )
 }
