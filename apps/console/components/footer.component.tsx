@@ -17,10 +17,10 @@
 
 import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
 import {AppLink, GridButtons, type GridButtonsProps} from '@aglyn/shared-ui-jsx'
-import {Container, Stack, Typography} from '@mui/material'
+import {Box, Container, Stack, Typography} from '@mui/material'
 import {forwardRef, type HTMLAttributes} from 'react'
 import CopyrightComponent from '../components/copyright.component'
-import {tailNavigation} from '../const'
+import {tailNavigation} from '../constants/shared'
 
 
 export const FOOTER_MAX_WIDTH = 'xl'
@@ -33,8 +33,9 @@ const FooterComponent = forwardRef<any, FooterProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
     return (
-      <footer
+      <Box
         ref={ref}
+        component="footer"
         {...rest}
       >
         <Container maxWidth={FOOTER_MAX_WIDTH}>
@@ -91,9 +92,9 @@ const FooterComponent = forwardRef<any, FooterProps>(
             </Stack>
           </Stack>
         </Container>
-      </footer>
+      </Box>
     )
-  }
+  },
 )
 FooterComponent.displayName = 'FooterComponent'
 

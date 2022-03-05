@@ -36,12 +36,25 @@ const Breadcrumbs = styled(MuiBreadcrumbs, {
   minHeight: theme.spacing(4),
 
   [`& .${classKeys.item}`]: {
+    color: 'inherit',
     display: 'flex',
-    cursor: 'pointer',
+    fontWeight: theme.typography.fontWeightRegular,
+    transition: theme.transitions.create('color', {
+      easing: theme.transitions.easing.easeInOut,
+      duration: theme.transitions.duration.leavingScreen,
+    }),
+    ':hover': {
+      transition: theme.transitions.create('color', {
+        easing: theme.transitions.easing.sharp,
+        duration: theme.transitions.duration.shortest,
+      }),
+    },
     [`&.${classKeys.last}, &.${classKeys.disabled}`]: {
-      opacity: 0.68,
+      fontWeight: theme.typography.fontWeightMedium,
       textDecoration: 'none',
       cursor: 'default',
+      pointerEvents: 'default',
+      filter: 'grayscale(1) opacity(0.7)',
     },
     [`&.${classKeys.centered}`]: {
       alignItems: 'center',

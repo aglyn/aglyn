@@ -16,7 +16,6 @@
  */
 
 import {APP_CONSOLE} from '@aglyn/shared-data-enums'
-import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {
   AglynSvgIcon,
   AglynSvgLogo,
@@ -41,9 +40,8 @@ import {
 } from '@mui/material'
 import Head from 'next/head'
 import {Fragment, type ReactNode} from 'react'
+import {TOP_BAR_HEIGHT} from '../constants/shared'
 
-
-export const TOP_BAR_HEIGHT = 52
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
@@ -54,7 +52,6 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
     id,
     key,
     items,
-    sx,
     MenuProps,
     ...rest
   } = item
@@ -64,7 +61,6 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
       key={key}
       id={id}
       color="inherit"
-      sx={mergeSxProps({p: avatar ? 0.5 : undefined}, sx)}
       startIcon={!icon?.path ? icon : (<MdiIcon {...icon} />)}
       {...(!rest.href ? {} : {component: AppLink, componentVariant: 'button'})}
       {...rest}
@@ -75,12 +71,11 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
     <IconButton
       key={itemKey}
       color="inherit"
-      sx={sx}
       {...rest}
     >
       {!avatar
         ? !icon?.path ? icon : (<MdiIcon {...icon} />)
-        : (<Avatar {...avatar} sx={{bgcolor: 'grey.500'}} />)
+        : (<Avatar {...avatar} />)
       }
       {children}
     </IconButton>

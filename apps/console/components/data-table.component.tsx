@@ -15,22 +15,23 @@
  * limitations under the License.
  */
 
-import {type OverrideableComponentProps} from '@aglyn/shared-data-types'
-import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {generateComponentClassKeys, mergeSxProps, styled} from '@aglyn/shared-feature-themes'
+import {
+  Box,
+  type BoxProps,
+  LinearProgress,
+  type LinearProgressProps as MuiLinearProgressProps,
+} from '@mui/material'
 import {
   DataGrid,
   type DataGridProps as MuiDataGridProps,
   GridOverlay,
   type GridOverlayProps,
-} from '@material-ui/data-grid'
-import LinearProgress, {
-  type LinearProgressProps as MuiLinearProgressProps,
-} from '@mui/material/LinearProgress'
-import clsx from 'clsx'
-import {forwardRef, type  HTMLAttributes} from 'react'
+} from '@mui/x-data-grid'
+import {forwardRef} from 'react'
 
 
-const classKeys = generateComponentClassKeys('DataTable', [
+const classKeys = generateComponentClassKeys('DataTableComponent', [
   'label',
   'antEmptyImg1',
   'antEmptyImg2',
@@ -124,62 +125,67 @@ const AppLoaderOverlayView = (props: LoadingOverlayViewProps = {}) =>
     )
   }
 
-const DataTableWrapper = styled('div', {
-  name: 'DataTableWrapper',
-})({
-  height: 400,
-  width: '100%',
-  [`& .${classKeys.dataGrid}`]: {
-    border: 'none',
-    '& .MuiDataGrid-cell': {
-      '&:focus': {
-        outline: 'none',
-      },
-    },
-  },
-})
-
-export interface DataTableProps extends OverrideableComponentProps<HTMLAttributes<HTMLDivElement>> {
+export interface DataTableProps extends Partial<MuiDataGridProps> {
   rows?: MuiDataGridProps['rows']
   columns?: MuiDataGridProps['columns']
   loading?: MuiDataGridProps['loading']
-  DataGridProps?: Partial<MuiDataGridProps>
+  RootBoxProps?: Partial<BoxProps>
   LoadingOverlayViewProps?: LoadingOverlayViewProps
-  label?: string
+  noRowsLabel?: string
 }
 
-export const DataTable = forwardRef<HTMLElement, DataTableProps>(function RefRenderFn(props) {
-  const {
-    rows = [],
-    columns = [],
-    loading,
-    DataGridProps,
-    label,
-    LoadingOverlayViewProps,
-    ...rest
-  } = props
-  return (
-    <DataTableWrapper style={{height: 400, width: '100%'}} {...rest}>
-      <div style={{display: 'flex', height: '100%'}}>
-        <div style={{flexGrow: 1}}>
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            loading={loading}
-            {...DataGridProps}
-            className={clsx(classKeys.dataGrid, DataGridProps?.className)}
-            components={{
-              NoRowsOverlay: noRowsOverlay(label),
-              LoadingOverlay: AppLoaderOverlayView(LoadingOverlayViewProps),
-              ...DataGridProps?.components,
-            }}
-          />
-        </div>
-      </div>
-    </DataTableWrapper>
-  )
-})
+const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
+  function RefRenderFn(props) {
+    const {
+      rows = [],
+      columns = [],
+      loading,
+      RootBoxProps,
+      noRowsLabel,
+      LoadingOverlayViewProps,
+      children,
+      sx,
+      components,
+      ...rest
+    } = props
+    return (
+      <Box
+        sx={mergeSxProps({
+          height: 400,
+          width: '100%',
+          '& .MuiDataGrid-root': {
+            border: 'none',
+            '& .MuiDataGrid-cell': {
+              '&:focus': {
+                outline: 'none',
+              },
+            },
+          },
+        }, sx)}
+        {...RootBoxProps}
+      >
+        <Box sx={{display: 'flex', height: 1}}>
+          <Box sx={{flexGrow: 1}}>
+            <DataGrid
+              rows={rows}
+              columns={columns}
+              loading={loading}
+              components={{
+                NoRowsOverlay: noRowsOverlay(noRowsLabel),
+                LoadingOverlay: AppLoaderOverlayView(LoadingOverlayViewProps),
+                ...components,
+              }}
+              {...rest}
+            />
+            {children}
+          </Box>
+        </Box>
+      </Box>
+    )
+  },
+)
 
-DataTable.displayName = 'DataTable'
+DataTableComponent.displayName = 'AglynDataTable'
 
-export default DataTable
+export {DataTableComponent}
+export default DataTableComponent

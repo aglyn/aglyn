@@ -23,8 +23,10 @@ import IconButton from '@mui/material/IconButton'
 import {useRouter} from 'next/router'
 import {useSnackbar} from 'notistack'
 import {type ChangeEvent, Fragment, useCallback, useEffect, useState} from 'react'
-import DataTable, {type DataTableProps} from '../components/DataTable'
-import WidgetCard from '../components/WidgetCard'
+import DataTableComponent, {
+  type DataTableProps,
+} from '../../console/components/data-table.component'
+import WidgetCardComponent from '../../console/components/widget-card.component'
 import {type AppContextType, withAppContext} from '../contexts/app-context'
 import {type Fields} from '../forms'
 import ConsoleLayout from '../layouts/ConsoleLayout'
@@ -224,7 +226,7 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
             xs: 12,
             md: 9,
             children: (
-              <WidgetCard
+              <WidgetCardComponent
                 header={{
                   title: `All ${documentName.plural}`,
                   action: (
@@ -243,16 +245,16 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
                   ),
                 }}
               >
-                <DataTable
+                <DataTableComponent
                   DataGridProps={{
                     loading: loadingDocuments,
                     onRowClick: handleRowClick,
                   }}
                   columns={columns}
-                  label={documentName.plural}
+                  noRowsLabel={documentName.plural}
                   rows={rows}
                 />
-              </WidgetCard>
+              </WidgetCardComponent>
             ),
           },
         ]}

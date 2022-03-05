@@ -16,7 +16,6 @@
  */
 
 import {
-  ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_SIGN_OUT,
   ICON_VARIANT_THEME_DARK,
   ICON_VARIANT_THEME_LIGHT,
@@ -43,6 +42,7 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
     title,
     children,
     quickActions,
+    centerNavigationItems,
     ...rest
   } = props
   const [user] = useAuthState(firebaseAuth)
@@ -55,13 +55,14 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
     <LayoutMainComponent
       title={title ? [..._isArr(title) ? title : [title], 'Secure'] : 'Secure'}
       appBarSuffix="Console"
+      centerNavigationItems={[
+        {
+          children: 'Home',
+        },
+        ...centerNavigationItems || [],
+      ]}
       quickActions={[
         ...quickActions || [],
-        {
-          icon: {path: ICON_VARIANT_APP_SETTINGS.path},
-          MenuProps: {dense: true, horizontalOrigin: 'right'},
-          // alt: '',
-        },
         {
           title: 'Manage account',
           MenuProps: {dense: true, horizontalOrigin: 'right'},
@@ -98,12 +99,6 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
               icon: {path: ICON_VARIANT_SIGN_OUT.path},
             },
           ],
-        },
-      ]}
-      centerNavigationItems={[
-        ...quickActions || [],
-        {
-          children: 'Home',
         },
       ]}
       {...rest}

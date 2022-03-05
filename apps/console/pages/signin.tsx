@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type {AuthCallbackResult, AuthResultError} from '@aglyn/shared-data-enums'
+import type {AuthResultError} from '@aglyn/shared-data-enums'
 import {FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD} from '@aglyn/shared-data-forms'
 import {getFirebaseAuth, googleOAuthProvider} from '@aglyn/shared-feature-fbclient'
 import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
@@ -43,45 +43,33 @@ const firebaseAuth = getFirebaseAuth()
 const formSchema: FormSchema = {
   fields: [FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD],
 }
-const defaultValues = {
-  [FIELD_SCHEMA_EMAIL.name]: '',
-  [FIELD_SCHEMA_PASSWORD.name]: '',
-}
 
 function SignIn() {
   const {queueLoading, loading} = useLoading()
   const [error, setError] = useState<AuthResultError>(null)
-
-  const handleGoogleOAuthSignIn = useCallback((): AuthCallbackResult => {
-    return signInWithPopup(firebaseAuth, googleOAuthProvider)
-  }, [])
-  const handlePasswordSignIn = useCallback((
-    email: string,
-    password: string,
-  ): AuthCallbackResult => {
-    return signInWithEmailAndPassword(firebaseAuth, email, password)
-  }, [])
   const handleSignIn = useCallback(async (values?: any) => {
     if (loading) return
     if (error) setError(null)
     const dequeueLoading = queueLoading()
     await setPersistence(firebaseAuth, browserLocalPersistence)
       .then(() => {
-        return values
-          ? handlePasswordSignIn(
+        if (values) {
+          return signInWithEmailAndPassword(
+            firebaseAuth,
             values[FIELD_SCHEMA_EMAIL.name],
             values[FIELD_SCHEMA_PASSWORD.name],
           )
-          : handleGoogleOAuthSignIn()
+        }
+        return signInWithPopup(firebaseAuth, googleOAuthProvider)
       })
       .catch((error) => {
-        console.error(error, error.code)
+        console.error(error)
         setError({...error, credential: GoogleAuthProvider.credentialFromError(error)})
       })
       .finally(() => {
         dequeueLoading()
       })
-  }, [error, loading, queueLoading, handlePasswordSignIn, handleGoogleOAuthSignIn])
+  }, [error, loading, queueLoading])
   const handleFormSubmit = useCallback(async (
     values,
     formApi: FormApi,
@@ -125,7 +113,6 @@ function SignIn() {
         componentMapper={simpleComponentMapper}
         onSubmit={handleFormSubmit}
         schema={formSchema}
-        initialValues={defaultValues}
         subscription={{values: true}}
         clearOnUnmount
       />

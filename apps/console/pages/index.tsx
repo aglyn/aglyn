@@ -15,69 +15,72 @@
  * limitations under the License.
  */
 
+import {ICON_VARIANT_HOME} from '@aglyn/shared-data-enums'
 import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
-import {GridButtons} from '@aglyn/shared-ui-jsx'
-import {mdiBug, mdiHome, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import styled from '@emotion/styled'
+import {GridItems} from '@aglyn/shared-ui-jsx'
+import {Container} from '@mui/material'
 import {useAuthState} from 'react-firebase-hooks/auth'
+import DataTableComponent from '../components/data-table.component'
+import WidgetCardComponent from '../components/widget-card.component'
+import {CONTENT_MAX_WIDTH} from '../constants/shared'
 import LayoutDashboardComponent from '../layouts/layout-dashboard.component'
 
 
 const firebaseAuth = getFirebaseAuth()
-const StyledPage = styled.div`
-  .page {
-  }
-`
 
 export function Index() {
   const [user, loading, error] = useAuthState(firebaseAuth)
+
   /*
    * Replace the elements below with your own.
    *
    * Note: The corresponding styles are in the ./index.@emotion/styled file.
    */
   return (
-    <StyledPage>
-      <h2>Resources &amp; Tosols</h2>
-      <p>Thank you for using and showing some ♥ for Nx.</p>
-      <div>
-        User: <pre style={{overflowX: 'scroll'}}>{JSON.stringify(user, null, 2)}</pre>
-        Loading: <pre style={{overflowX: 'scroll'}}>{JSON.stringify(loading, null, 2)}</pre>
-        Error: <pre style={{overflowX: 'scroll'}}>{JSON.stringify(error, null, 2)}</pre>
-      </div>
-      <MdiIcon path={mdiBug.path} />
-      <GridButtons
+    <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
+      <GridItems
+        spacing={3}
         items={[
           {
-            GridItemProps: {
-              xs: 6,
-            },
-            children: 'Hello Button 1',
-            variant: 'contained',
-            color: 'primary',
-            fullWidth: true,
+            xs: 12, md: 6,
+            children: (
+              <WidgetCardComponent
+                header={'Users'}
+              >
+                <DataTableComponent
+                  rowHeight={40}
+                  getRowId={(row) => row.uid}
+                  columns={[
+                    {field: 'uid', headerName: 'User ID'},
+                    {field: 'displayName', headerName: 'Display Name', width: 150, maxWidth: 175},
+                    {field: 'email', headerName: 'E-Mail', width: 175, maxWidth: 200},
+                    {field: 'emailVerified', headerName: 'E-Verified', maxWidth: 100},
+                  ]}
+                  rows={[
+                    {
+                      ...user,
+                    },
+                  ]}
+                />
+              </WidgetCardComponent>
+            ),
           },
           {
-            GridItemProps: {
-              xs: 3,
-            },
-            children: 'Hello Button 1',
-            variant: 'contained',
-            color: 'primary',
-            fullWidth: true,
-          },
-          {
-            GridItemProps: {
-              xs: 3,
-            },
-            children: 'Hello Button 1',
-            variant: 'contained',
-            color: 'primary',
-            fullWidth: true,
+            xs: 12, md: 6,
+            children: (
+              <WidgetCardComponent>
+                hello
+              </WidgetCardComponent>
+            ),
           },
         ]}
       />
-    </StyledPage>
+      <div style={{overflowX: 'scroll', display: 'none'}}>
+        User: <pre>{JSON.stringify(user, null, 2)}</pre>
+        Loading: <pre>{JSON.stringify(loading, null, 2)}</pre>
+        Error: <pre>{JSON.stringify(error, null, 2)}</pre>
+      </div>
+    </Container>
   )
 }
 Index.displayName = 'Page:Index'
@@ -89,7 +92,7 @@ Index.layoutProps = {
   LayoutDashboardComponent: {
     header: {
       children: 'My Dashboard',
-      icon: {path: mdiHome.path},
+      icon: {path: ICON_VARIANT_HOME.path},
     },
     breadcrumbItems: [],
   },

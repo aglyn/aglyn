@@ -29,7 +29,9 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import {forwardRef, Fragment, useCallback, useState} from 'react'
-import WidgetCard, {type WidgetCardProps} from '../components/WidgetCard'
+import WidgetCardComponent, {
+  type WidgetCardProps,
+} from '../../console/components/widget-card.component'
 import {type AggregatedPageMeta, withAggregatedPageMeta} from '../lib/app-pages'
 
 
@@ -131,7 +133,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<any,
     })
 
   return (
-    <WidgetCard ref={ref} {...rest}>
+    <WidgetCardComponent ref={ref} {...rest}>
       <List
         subheader={
           <ListSubheader children={'Manage Navigation'} sx={{fontWeight: 'fontWeightMedium'}} />
@@ -196,7 +198,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<any,
           </Fragment>
         ))}
       </List>
-    </WidgetCard>
+    </WidgetCardComponent>
   )
 })
 

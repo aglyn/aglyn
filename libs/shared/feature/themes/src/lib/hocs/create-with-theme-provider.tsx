@@ -107,8 +107,13 @@ function createWithThemeProvider(options: WithThemeProviderOptions) {
         return (
           <ThemeContextDispatch.Provider value={ThemeModeState}>
             <ThemeProvider theme={activeTheme}>
-              {!disableCssBaseline ? <CssBaseline /> : null}
-              <WrappedComponent ref={ref} {...rest} />
+              {disableCssBaseline ? (
+                <WrappedComponent ref={ref} {...rest} />
+              ) : (
+                <CssBaseline enableColorScheme>
+                  <WrappedComponent ref={ref} {...rest} />
+                </CssBaseline>
+              )}
             </ThemeProvider>
           </ThemeContextDispatch.Provider>
         )

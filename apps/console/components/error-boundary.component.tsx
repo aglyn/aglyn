@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,20 +14,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {Component, type PropsWithChildren, type ReactNode} from 'react'
+import {Component, type ReactNode} from 'react'
 
 
 type State = {
   hasError: boolean
 }
-type Props = PropsWithChildren<{
+
+export interface ErrorBoundaryProps {
+  children?: ReactNode
   fallback?: ReactNode
-}>
+}
 
 /**
  * @see https://reactjs.org/docs/error-boundaries.html
  */
-class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundaryComponent extends Component<ErrorBoundaryProps, State> {
   constructor(props) {
     super(props)
     this.state = {hasError: false}
@@ -55,4 +57,5 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-export default ErrorBoundary
+export {ErrorBoundaryComponent}
+export default ErrorBoundaryComponent

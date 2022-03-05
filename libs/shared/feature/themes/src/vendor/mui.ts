@@ -16,13 +16,10 @@
  */
 
 import type {Theme} from '@mui/material/styles'
-
 // eslint-disable-next-line no-restricted-imports
 import type {Shadows} from '@mui/material/styles/shadows'
 import type {WithStyles} from '@mui/styles'
-
 import type {ClassKeyInferable} from '@mui/styles/withStyles'
-
 import type {ColorPropOverrides, IActionStates} from '../lib/theme.types'
 
 
@@ -51,7 +48,6 @@ declare module '@mui/material/SvgIcon' {
 declare module '@mui/material/AppBar' {
   interface AppBarPropsColorOverrides extends ColorPropOverrides {}
 }
-
 declare module '@mui/system/createTheme/shape' {
   interface Shape {
     appIconBorderRadius: number | string
@@ -176,6 +172,7 @@ export {
   type BoxProps,
 } from '@mui/system'
 
+export {darkScrollbar} from '@mui/material'
 export {visuallyHidden} from '@mui/utils'
 
 export {
@@ -232,6 +229,7 @@ export {
   ThemeProvider,
   useTheme,
   useThemeProps,
+  experimental_sx as sx,
 } from '@mui/material/styles'
 
 
