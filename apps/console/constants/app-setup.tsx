@@ -16,9 +16,10 @@
  */
 
 import {bundle as muiBundle} from '@aglyn/addons-ui-mui-bundle'
-import {initializeBesignerApp} from '@aglyn/core-data-besigner'
-import {doesAppExist, registerBundle, registerComponent} from '@aglyn/core-data-framework'
+import {doesBesignerAppExist, initializeBesignerApp} from '@aglyn/core-data-besigner'
+import {registerBundle, registerComponent} from '@aglyn/core-data-framework'
 import {createAglynComponent} from '@aglyn/core-feature-renderer'
+import {IS_PRODUCTION} from '@aglyn/shared-data-enums'
 import {samplePageData} from './sample-data'
 
 
@@ -81,7 +82,7 @@ const c5 = createAglynComponent(
 const components = [c1, c2, c3, c4, c5]
 
 try {
-  if (!doesAppExist() && typeof window !== 'undefined') {
+  if (!doesBesignerAppExist() && typeof window !== 'undefined') {
     const app = initializeBesignerApp({
       logLevel: 'debug',
       modulesOptions: {
@@ -91,7 +92,7 @@ try {
       },
     })
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !IS_PRODUCTION) {
       window['__AGLYN_APP__'] = app
     }
 

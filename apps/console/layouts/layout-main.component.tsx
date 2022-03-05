@@ -24,7 +24,8 @@ import {
   type AppLinkProps,
   ElevateOnScroll,
   Menu,
-  MenuItemProps,
+  type MenuItemProps,
+  type MenuProps,
 } from '@aglyn/shared-ui-jsx'
 import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import {_isArr} from '@aglyn/shared-util-guards'
@@ -53,6 +54,7 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
     key,
     items,
     sx,
+    MenuProps,
     ...rest
   } = item
   const itemKey = key || id || i
@@ -97,6 +99,7 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
           paddingLeft: 0.75,
         },
       }}
+      {...MenuProps}
     >
       {rendered}
     </Menu>
@@ -113,6 +116,7 @@ export interface QuickActionsMenuItem extends IconButtonProps {
   dense?: boolean
   href?: any
   items?: MenuItemProps[]
+  MenuProps?: Partial<MenuProps>
 }
 
 export interface CenterNavMenuItem extends AppLinkProps<'button'> {
@@ -120,6 +124,7 @@ export interface CenterNavMenuItem extends AppLinkProps<'button'> {
   avatar?: any
   dense?: boolean
   href?: any
+  MenuProps?: Partial<MenuProps>
   items?: MenuItemProps[]
 }
 

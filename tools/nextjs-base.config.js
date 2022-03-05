@@ -148,6 +148,9 @@ const AGLYN_CONFIG = {
     // from server-side rendering where you're pre-generating HTML on the server
     serverComponents: false,
     workerThreads: true,
+
+    // required to stop the FATAL heap crash
+    esmExternals: false,
   },
   generateEtags: true,
   headers: async () => {

@@ -45,7 +45,7 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
     ...rest
   } = props
   const [user] = useAuthState(firebaseAuth)
-  const [themeMode, toggleThemeMode, themeSetting] = useThemeMode()
+  const [, toggleThemeMode, themeSetting] = useThemeMode()
 
   return (
     <LayoutMainComponent
@@ -55,10 +55,10 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
         ...quickActions || [],
         {
           icon: {path: ICON_VARIANT_APP_SETTINGS.path},
+          MenuProps: {dense: true},
           // alt: '',
           items: [
             {
-              dense: true,
               onClick: toggleThemeMode,
               // component: 'button',
               children: themeSetting === 'light' ? 'Light theme'
@@ -76,6 +76,7 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
         },
         {
           title: 'Manage account',
+          MenuProps: {dense: true},
           sx: {p: 0.5},
           edge: 'end',
           avatar: {
@@ -83,14 +84,14 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
           },
           items: [
             {
-              dense: true,
               children: 'Settings',
               href: '/account/settings',
               icon: {path: ICON_VARIANT_USER_SETTINGS.path},
-              divider: true,
             },
             {
-              dense: true,
+              dividerOnly: true,
+            },
+            {
               children: 'Sign out',
               href: '/signout',
               icon: {path: ICON_VARIANT_SIGN_OUT.path},

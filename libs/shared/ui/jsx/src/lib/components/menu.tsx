@@ -20,6 +20,8 @@ import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import {
   Box,
   type BoxProps as MuiBoxProps,
+  Divider,
+  DividerProps,
   ListItemIcon,
   ListItemText,
   Menu as MuiMenu,
@@ -47,12 +49,15 @@ const defaultState = {
   mouseY: null,
 }
 
-export type MenuItemProps = AppLinkProps & MuiMenuItemProps & {icon?: MdiIconProps}
+type MenuItemText = AppLinkProps & MuiMenuItemProps & {icon?: MdiIconProps}
+type MenuItemDivider = DividerProps & {dividerOnly: true}
+export type MenuItemProps = | MenuItemText | MenuItemDivider
 
 /* eslint-disable-next-line */
 export interface MenuProps extends MuiBoxProps {
   items: MenuItemProps[]
   context?: boolean
+  dense?: boolean
   MenuProps?: Partial<MuiMenuProps>
   children: ReactElement
 }
@@ -65,6 +70,7 @@ export const Menu = forwardRef<any, MenuProps>(
       context,
       className,
       sx,
+      dense,
       MenuProps,
       ...rest
     } = props
@@ -101,22 +107,22 @@ export const Menu = forwardRef<any, MenuProps>(
         <MuiMenu
           anchorEl={context ? undefined : state.anchorEl}
           anchorReference={context ? 'anchorPosition' : undefined}
-          anchorOrigin={context ? undefined : {
-            vertical: 'top',
-            horizontal: 'center',
-          }}
           anchorPosition={!context || !state.mouseY ? undefined : {
             top: state.mouseY,
             left: state.mouseX,
           }}
+          anchorOrigin={context ? undefined : {
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
           transformOrigin={context ? undefined : {
             vertical: 'top',
-            horizontal: 'center',
+            horizontal: 'right',
           }}
           PaperProps={context ? undefined : {
-            style: {
+            sx: {
               maxHeight: ITEM_HEIGHT * 4.5,
-              minWidth: '20ch',
+              width: '30ch',
             },
           }}
           // getContentAnchorEl={null}
@@ -124,28 +130,43 @@ export const Menu = forwardRef<any, MenuProps>(
           onClose={handleClose}
           {...MenuProps}
         >
-          {items.map(({onClick, icon, children, ...item}, key) => (
-            <MuiMenuItem
-              key={item.id ?? item.key ?? key}
-              component={AppLink}
-              onClick={(e) => {
-                handleClose()
-                onClick && onClick(e)
-              }}
-              {...item}
-            >
-              {!icon?.path || !icon ? null : (
-                <ListItemIcon>
-                  {!icon?.path ? icon : (
-                    <MdiIcon {...icon} />
-                  )}
-                </ListItemIcon>
-              )}
-              <ListItemText>
-                {children}
-              </ListItemText>
-            </MuiMenuItem>
-          ))}
+          {items.map(({onClick, icon, children, dividerOnly, ...item}: any, key) => {
+            if (dividerOnly) {
+              return (
+                <Divider
+                  key={item.id ?? item.key ?? key}
+                  onClick={onClick}
+                  {...item as any}
+                >
+                  {children}
+                </Divider>
+              )
+            }
+
+            return (
+              <MuiMenuItem
+                key={item.id ?? item.key ?? key}
+                component={AppLink}
+                dense={dense}
+                onClick={(e) => {
+                  handleClose()
+                  onClick && onClick(e)
+                }}
+                {...item}
+              >
+                {!icon?.path || !icon ? null : (
+                  <ListItemIcon>
+                    {!icon?.path ? icon : (
+                      <MdiIcon fontSize="small" {...icon} />
+                    )}
+                  </ListItemIcon>
+                )}
+                <ListItemText>
+                  {children}
+                </ListItemText>
+              </MuiMenuItem>
+            )
+          })}
         </MuiMenu>
       </Box>
     )
