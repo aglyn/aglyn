@@ -16,7 +16,7 @@
  */
 
 import {_isArr} from '@aglyn/shared-util-guards'
-import {base64Decode, str} from '@aglyn/shared-util-tools'
+import {base64Decode} from '@aglyn/shared-util-tools'
 import {useRouter} from 'next/router'
 import {useCallback, useMemo} from 'react'
 import type {UrlObject} from 'url'
@@ -26,7 +26,7 @@ import type {ContinueRouteData} from '../types'
 export type UseContinueQueryDecodedRoutePusher = (
   url?: UrlObject | string,
   as?: UrlObject | string,
-  options?: {shallow?: boolean, locale?: string | false, scroll?: boolean}
+  options?: {shallow?: boolean, locale?: string | false, scroll?: boolean},
 ) => Promise<boolean>
 
 export type UseContinueQueryDecodedResponse = [
@@ -46,7 +46,7 @@ export function useContinueQueryDecoded(): UseContinueQueryDecodedResponse {
   const pushContinue = useCallback((
     url: UrlObject | string = '/',
     as?: UrlObject | string,
-    options?: {shallow?: boolean, locale?: string | false, scroll?: boolean}
+    options?: {shallow?: boolean, locale?: string | false, scroll?: boolean},
   ): Promise<boolean> => {
     const {href, asPath} = continueRouteData
     return router.push(href || url, href && asPath || as, options)
@@ -59,11 +59,7 @@ export function useContinueQueryDecoded(): UseContinueQueryDecodedResponse {
 }
 
 useContinueQueryDecoded.decodeContinueQuery = (query: string): ContinueRouteData => {
-  return JSON.parse(JSON.stringify(
-    base64Decode(
-      decodeURIComponent(str(query)),
-    ),
-  ))
+  return JSON.parse(base64Decode(query))
 }
 
 export default useContinueQueryDecoded

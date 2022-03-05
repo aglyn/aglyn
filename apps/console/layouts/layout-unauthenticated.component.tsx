@@ -56,7 +56,7 @@ function LayoutUnauthenticatedComponent(props: LayoutRequestAuthenticationProps)
       await pushContinue('/')
         .then((success) => {
           if (!success) {
-            console.warn('Redirecting following user auth incomplete')
+            console.warn('Redirecting following user identity confirmed')
           }
         })
         .catch((error) => {

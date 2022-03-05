@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import {base64Encode} from '@aglyn/shared-util-tools'
 import NextImage, {
   type ImageLoaderProps as NextImageLoaderProps,
   type ImageProps as NextImageProps,
@@ -31,13 +32,18 @@ export interface ImageComponentProps extends NextImageProps {
 
 function ImageComponent(props: ImageComponentProps): JSX.Element {
   const {width, height, shimmer, ...rest} = props
+  const blurDataURL = !shimmer ? undefined : (
+    ImageComponent.shimmerBlurDataUrl(
+      ImageComponent.shimmer(width, height)
+    )
+  )
 
   return (
     <NextImage
       width={width}
       height={height}
       placeholder={!shimmer ? undefined : 'blur'}
-      blurDataURL={ImageComponent.shimmerBlurDataUrl(ImageComponent.shimmer(width, height))}
+      blurDataURL={blurDataURL}
       {...rest}
     />
   )
@@ -59,14 +65,10 @@ ImageComponent.shimmer = (w?: number | string, h?: number | string) => {
 </svg>`
 }
 ImageComponent.shimmerBlurDataUrl = (shimmer?: string) => {
-  const toBase64 = (str) => typeof window === 'undefined'
-    ? Buffer.from(str).toString('base64')
-    : window.btoa(str)
-  return !shimmer ? undefined : `data:image/svg+xml;base64,${toBase64(shimmer)}`
+  return shimmer
+    ? `data:image/svg+xml;base64,${base64Encode(shimmer)}`
+    : undefined
 }
 
-export {
-  ImageComponent,
-  ImageComponent as Image,
-}
+export {ImageComponent, ImageComponent as Image}
 export default ImageComponent

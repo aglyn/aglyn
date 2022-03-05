@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-
 /**
- * Decode a base64 value to an object, safely in BOM and Node
- * @param value - the base64 encoded string
+ * Encode a unicode value to base64 string, safely in BOM and Node
+ * @param value - the unicode value to encode to base64
+ * @param encoding - character encoding of value param 'utf8'|'utf16'|'unicode'
  */
-export const base64Encode = (value: string) => {
+export function base64Encode(value: string, encoding: BufferEncoding = 'utf8'): string {
   if (typeof window === 'undefined') {
-    return Buffer.from(value).toString('base64')
+    return Buffer.from(value, encoding).toString('base64')
   }
   return window.btoa(value)
 }
+export default base64Encode

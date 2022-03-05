@@ -16,11 +16,11 @@
  */
 
 /**
- * Decode a base64 value to an object, safely in BOM and Node
- * @param value - the base64 encoded string
- * @param encoding - the character encoding 'utf8'|'utf16'|'unicode'
+ * Decode a base64 value to unicode string, safely in BOM and Node
+ * @param value - the base64 value to decode to unicode
+ * @param encoding - character encoding of return value 'utf8'|'utf16'|'unicode'
  */
-export const base64Decode = (value: any, encoding: BufferEncoding = 'utf8') => {
+export function base64Decode(value: string, encoding: BufferEncoding = 'utf8'): string {
   if (typeof window === 'undefined') {
     return Buffer.from(value, 'base64').toString(encoding)
   }

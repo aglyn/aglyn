@@ -36,13 +36,7 @@ export function useContinueQueryEncoded() {
 }
 
 useContinueQueryEncoded.encodeContinueQuery = (query: ContinueRouteData): string => {
-  return encodeURIComponent(
-    base64Encode(
-      JSON.stringify(
-        query,
-      ),
-    ),
-  )
+  return base64Encode(JSON.stringify(query))
 }
 
 export default useContinueQueryEncoded

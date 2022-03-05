@@ -19,7 +19,7 @@ import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {useLoading} from '@aglyn/shared-ui-jsx'
 import {useContinueQueryEncoded} from '@aglyn/shared-util-next'
 import {useRouter} from 'next/router'
-import {type ReactNode, useEffect} from 'react'
+import {type ReactNode, useEffect, useState} from 'react'
 import {useAuthState} from 'react-firebase-hooks/auth'
 import SecureLoadingOverlayComponent from '../components/secure-loading-overlay.component'
 
@@ -28,27 +28,46 @@ const firebaseAuth = getFirebaseAuth()
 
 export interface LayoutAuthenticatedComponentProps {
   children?: ReactNode
+  requireEmailVerification?: boolean
 }
 
 function LayoutAuthenticatedComponent(props: LayoutAuthenticatedComponentProps) {
-  const {children, ...rest} = props
+  const {children, requireEmailVerification, ...rest} = props
   const [user, authLoading, error] = useAuthState(firebaseAuth)
   const {queueLoading} = useLoading()
   const router = useRouter()
+  const [redirecting, setRedirecting] = useState(false)
   const continueRoute = useContinueQueryEncoded()
 
-  useEffect(() => {
-    // const dequeueLoading = authLoading ? queueLoading() : null
-    return () => {
-      // dequeueLoading && dequeueLoading()
-    }
-  }, [authLoading, queueLoading])
+  console.log('LayoutAuthenticatedComponent', continueRoute)
 
   useEffect(() => {
-    if (!user && !authLoading) {
-      router.push(`/signin?continue=${continueRoute}`)
+    if (authLoading || redirecting) return void 0
+    if (user && (!requireEmailVerification || user.emailVerified)) return void 0
+    if (requireEmailVerification && !user.emailVerified) {
+      return void pushToRequestAuth(`/verify-email`)
     }
-  }, [user, authLoading, continueRoute, queueLoading, router])
+
+    void pushToRequestAuth('/signin')
+
+    return void 0
+
+    async function pushToRequestAuth(path: string) {
+      setRedirecting(true)
+      await router.push(`${path}?continue=${continueRoute}`)
+        .then((success) => {
+          if (!success) {
+            console.warn('Redirecting following user identity incomplete')
+          }
+        })
+        .catch((error) => {
+          console.error(error)
+        })
+        .finally(() => {
+          setRedirecting(false)
+        })
+    }
+  }, [user, authLoading, continueRoute, queueLoading, router, redirecting, requireEmailVerification])
 
 
   return (
