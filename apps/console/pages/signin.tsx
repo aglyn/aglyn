@@ -18,11 +18,11 @@
 import type {AuthCallbackResult, AuthResultError} from '@aglyn/shared-data-enums'
 import {FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD} from '@aglyn/shared-data-forms'
 import {getFirebaseAuth, googleOAuthProvider} from '@aglyn/shared-feature-fbclient'
-import {AglynSvgIcon, AglynSvgLogo, AppLink, useLoading} from '@aglyn/shared-ui-jsx'
+import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
 import type {FormSchema} from '@aglyn/shared-ui-jsx-forms'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {Button, Divider, Paper, Stack, Typography} from '@mui/material'
+import {Button, Divider, Stack, Typography} from '@mui/material'
 import type {FormApi, SubmissionErrors} from 'final-form'
 import {
   browserLocalPersistence,
@@ -34,6 +34,7 @@ import {
 import {useCallback, useState} from 'react'
 import AuthErrorAlertComponent from '../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../components/auth-form-template.component'
+import LayoutAuthFormComponent from '../layouts/layout-auth-form.component'
 import LayoutUnauthenticatedComponent from '../layouts/layout-unauthenticated.component'
 
 
@@ -56,7 +57,7 @@ function SignIn() {
   }, [])
   const handlePasswordSignIn = useCallback((
     email: string,
-    password: string
+    password: string,
   ): AuthCallbackResult => {
     return signInWithEmailAndPassword(firebaseAuth, email, password)
   }, [])
@@ -92,103 +93,70 @@ function SignIn() {
   }, [handleSignIn])
 
   return (
-    <Stack
-      direction="column"
-      justifyContent="center"
-      alignItems="center"
-      spacing={2}
-      maxWidth={1}
-      width={440}
+    <LayoutAuthFormComponent
+      paperTop={
+        <Typography
+          component="div"
+          variant="body2"
+          alignSelf="flex-end"
+        >
+          <AppLink href="/signup">
+            {'Create account'}
+          </AppLink>
+        </Typography>
+      }
+      headingTop={'Sign in'}
+      headingBottom={'Use your Aglyn account'}
+      paperAfter={
+        <Typography
+          component="div"
+          variant="body2"
+        >
+          {'Having trouble logging in? '}
+          <AppLink href="/account-recovery">
+            {'Account recovery'}
+          </AppLink>
+        </Typography>
+      }
     >
-      <Paper
-        variant="outlined"
-        sx={{p: 2}}
+      <FormRenderer
+        FormTemplate={AuthFormTemplateComponent}
+        componentMapper={simpleComponentMapper}
+        onSubmit={handleFormSubmit}
+        schema={formSchema}
+        initialValues={defaultValues}
+        subscription={{values: true}}
+        clearOnUnmount
+      />
+      <AuthErrorAlertComponent
+        error={error as any}
+        sx={{mt: 2, mb: 1}}
+      />
+
+      <Divider
+        flexItem
+        variant="middle"
+        sx={{my: 3}}
       >
-        <Stack
-          direction="column"
-          justifyContent="center"
-          alignItems="center"
-          spacing={1}
-          marginBottom={4}
-        >
-          <Typography
-            component="div"
-            variant="body2"
-            alignSelf="flex-end"
-          >
-            <AppLink href="/signup">
-              {'Create account'}
-            </AppLink>
-          </Typography>
+        {'Or sign in with'}
+      </Divider>
 
-          <Stack
-            direction="row"
-            justifyContent="center"
-            alignItems="center"
-            spacing={1}
-            sx={{pb: 3}}
-          >
-            <AglynSvgIcon rounded bordered sx={{fontSize: 24}} />
-            <AglynSvgLogo sx={{fontSize: 64, transform: `translateY(0.12rem)`}} />
-          </Stack>
-
-          <Typography component="h1" variant="h4">
-            {'Sign in'}
-          </Typography>
-          <Typography component="div" variant="h6" align="center">
-            {'Use your Aglyn account'}
-          </Typography>
-        </Stack>
-
-        <FormRenderer
-          FormTemplate={AuthFormTemplateComponent}
-          componentMapper={simpleComponentMapper}
-          onSubmit={handleFormSubmit}
-          schema={formSchema}
-          initialValues={defaultValues}
-          subscription={{values: true}}
-          clearOnUnmount
-        />
-        <AuthErrorAlertComponent
-          error={error as any}
-          sx={{mt: 2, mb: 1}}
-        />
-
-        <Divider
-          flexItem
-          variant="middle"
-          sx={{my: 3}}
-        >
-          {'Or sign in with'}
-        </Divider>
-
-        <Stack
-          direction="column"
-          justifyContent="center"
-          alignItems="stretch"
-          spacing={1}
-          paddingBottom={2}
-        >
-          <Button
-            variant="outlined"
-            startIcon={<MdiIcon path={mdiGoogle.path} />}
-            onClick={handleGoogleButtonClick}
-          >
-            {'Google'}
-          </Button>
-        </Stack>
-      </Paper>
-
-      <Typography
-        component="div"
-        variant="body2"
+      <Stack
+        direction="column"
+        justifyContent="center"
+        alignItems="stretch"
+        spacing={1}
+        paddingBottom={2}
       >
-        {'Having trouble logging in? '}
-        <AppLink href="/account-recovery">
-          {'Account recovery'}
-        </AppLink>
-      </Typography>
-    </Stack>
+        <Button
+          variant="outlined"
+          startIcon={<MdiIcon path={mdiGoogle.path} />}
+          onClick={handleGoogleButtonClick}
+        >
+          {'Google'}
+        </Button>
+      </Stack>
+    </LayoutAuthFormComponent>
   )
 }
 SignIn.displayName = 'Page:SignIn'

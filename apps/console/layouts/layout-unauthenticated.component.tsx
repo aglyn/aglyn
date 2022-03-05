@@ -19,6 +19,7 @@ import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {BackgroundImageComponent, type BackgroundImageComponentProps} from '@aglyn/shared-ui-jsx'
 import {useContinueQueryDecoded} from '@aglyn/shared-util-next'
+import {Stack} from '@mui/material'
 import {useRouter} from 'next/router'
 import {useEffect} from 'react'
 import {useAuthState} from 'react-firebase-hooks/auth'
@@ -71,9 +72,16 @@ function LayoutUnauthenticatedComponent(props: LayoutRequestAuthenticationProps)
       }, sx)}
       {...rest}
     >
-
-      {children}
-
+      <Stack
+        direction="column"
+        justifyContent="center"
+        alignItems="center"
+        spacing={2}
+        maxWidth={1}
+        width={440}
+      >
+        {children}
+      </Stack>
     </BackgroundImageComponent>
   )
 }

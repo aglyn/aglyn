@@ -16,11 +16,11 @@
  */
 
 import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
-import {AglynSvgIcon, AglynSvgLogo, AppLink, LoadingTextComponent} from '@aglyn/shared-ui-jsx'
-import {Paper, Stack, Typography} from '@mui/material'
+import {LoadingTextComponent} from '@aglyn/shared-ui-jsx'
 import CircularProgress from '@mui/material/CircularProgress'
 import {signOut} from 'firebase/auth'
 import {useEffect} from 'react'
+import LayoutAuthFormComponent from '../layouts/layout-auth-form.component'
 import LayoutUnauthenticatedComponent from '../layouts/layout-unauthenticated.component'
 
 
@@ -33,64 +33,17 @@ function SignOut() {
   }, [])
 
   return (
-    <Stack
-      direction="column"
-      justifyContent="center"
-      alignItems="center"
-      spacing={2}
-      maxWidth={1}
-      width={440}
-    >
-      <Paper
-        variant="outlined"
-        sx={{p: 2, width: 400}}
-      >
-        <Stack
-          direction="column"
-          justifyContent="center"
-          alignItems="center"
-          spacing={1}
-          marginBottom={4}
-        >
-          <Typography
-            component="div"
-            variant="body2"
-            alignSelf="flex-end"
-          >
-            <AppLink href="/signup">
-              {'Create account'}
-            </AppLink>
-          </Typography>
-
-          <Stack
-            direction="row"
-            justifyContent="center"
-            alignItems="center"
-            spacing={1}
-            sx={{pb: 3}}
-          >
-            <AglynSvgIcon rounded bordered sx={{fontSize: 24}} />
-            <AglynSvgLogo sx={{fontSize: 64, transform: `translateY(0.12rem)`}} />
-          </Stack>
-
-          <Typography
-            component="h1"
-            variant="h4"
-          >
-            {'Signing out'}
-          </Typography>
-          <LoadingTextComponent
-            component="div"
-            variant="h6"
-            align="center"
-            sx={{pb: 4}}
-          >
-            {'Please wait'}
-          </LoadingTextComponent>
-          <CircularProgress color="secondary" />
-        </Stack>
-      </Paper>
-    </Stack>
+    <LayoutAuthFormComponent
+      headingTop={'Signing out'}
+      headingBottom={'Please wait'}
+      headingBottomProps={{
+        sx: {pb: 4},
+        component: LoadingTextComponent,
+      }}
+      headingAfter={
+        <CircularProgress color="secondary" />
+      }
+    />
   )
 }
 SignOut.displayName = 'Page:SignOut'
