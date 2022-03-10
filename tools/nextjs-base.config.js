@@ -263,6 +263,7 @@ function withAglyn(nextConfig = {}) {
       //   : userConfig.webpack5,
 
       generateBuildId: async () => {
+        console.log('merged?.generateBuildId', merged?.generateBuildId())
         return await (
           typeof merged?.generateBuildId === 'function'
           && merged.generateBuildId()
@@ -329,5 +330,5 @@ function getCommitRef() {
     || process.env.VERCEL_GIT_COMMIT_SHA
     || process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA
     || ''
-  ).slice(0, 6) || undefined
+  ).slice(0, 6) || null
 }
