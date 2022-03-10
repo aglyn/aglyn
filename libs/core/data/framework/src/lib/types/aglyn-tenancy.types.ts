@@ -42,7 +42,11 @@ export type ScreenUid = string
 export type VersionUid = string
 export type LayoutUid = string
 
-export interface AglynUser {
+export interface AglynDocument {
+  [field: string]: any
+}
+
+export interface AglynUser extends AglynDocument {
   $id: UserUid
   roleId?: RoleUid
   admin?: boolean
@@ -50,7 +54,7 @@ export interface AglynUser {
   tenants?: Record<TenantUid, true>
 }
 
-export interface AglynUserRole {
+export interface AglynUserRole extends AglynDocument {
   $id: RoleUid
   displayName?: string
   description?: string
@@ -58,21 +62,21 @@ export interface AglynUserRole {
   users?: Record<UserUid, true>
 }
 
-export interface AglynRolePermission {
+export interface AglynRolePermission extends AglynDocument {
   $id: PermissionUid
   displayName?: string
   description?: string
   roles?: Record<RoleUid, true>
 }
 
-export interface AglynAccessRule {
+export interface AglynAccessRule extends AglynDocument {
   roles?: Record<RoleUid, ActivityAccess>
   permissions?: Record<PermissionUid, ActivityAccess>
   users?: Record<UserUid, ActivityAccess>
 }
 
 /** Hosted in master catalog */
-export interface AglynTenant {
+export interface AglynTenant extends AglynDocument {
   $id: TenantUid
   ownerId?: UserUid
   displayName?: string
@@ -82,7 +86,7 @@ export interface AglynTenant {
 }
 
 /** Hosted in master catalog */
-export interface AglynTenantHost {
+export interface AglynTenantHost extends AglynDocument {
   $id: HostUid
   tenantId?: TenantUid
   projectId?: ProjectUid
@@ -93,7 +97,7 @@ export interface AglynTenantHost {
 }
 
 /** Hosted in tenants' host project */
-export interface AglynTenantHostEntry {
+export interface AglynTenantHostEntry extends AglynDocument {
   $id: HostUid
   screens?: Record<ScreenUid, true>
   redirects?: Record<RedirectUid, true>
@@ -111,7 +115,7 @@ export interface AglynTenantHostEntry {
 }
 
 /** Hosted in tenants' host project */
-export interface AglynTenantHostRedirect {
+export interface AglynTenantHostRedirect extends AglynDocument {
   $id: RedirectUid
   hostId?: HostUid
   sourcePath?: HostPath
@@ -131,7 +135,7 @@ export interface AglynTenantHostRedirect {
 }
 
 /** Hosted in tenants' host project */
-export interface AglynTenantHostScreen {
+export interface AglynTenantHostScreen extends AglynDocument {
   $id: ScreenUid
   parentId?: ScreenUid
   hostId?: HostUid
@@ -172,7 +176,7 @@ export interface AglynTenantHostLayout {
 }
 
 /** Hosted in tenants' host project */
-export interface AglynTenantHostScreenVersion<T extends HostViewFormat = HostViewFormat.NORMALIZED> {
+export interface AglynTenantHostScreenVersion<T extends HostViewFormat = HostViewFormat.NORMALIZED> extends AglynDocument {
   $id: VersionUid
   hostId?: HostUid
   screenId?: ScreenUid
@@ -188,7 +192,7 @@ export interface AglynTenantHostScreenVersion<T extends HostViewFormat = HostVie
 }
 
 /** Hosted in tenants' host project */
-export interface AglynTenantHostLayoutVersion<T extends HostViewFormat = HostViewFormat.NORMALIZED> {
+export interface AglynTenantHostLayoutVersion<T extends HostViewFormat = HostViewFormat.NORMALIZED> extends AglynDocument {
   $id: VersionUid
   hostId?: HostUid
   contributors?: Array<UserUid>

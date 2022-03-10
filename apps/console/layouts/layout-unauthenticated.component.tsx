@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {BackgroundImageComponent, type BackgroundImageComponentProps} from '@aglyn/shared-ui-jsx'
 import {useContinueQueryDecoded} from '@aglyn/shared-util-next'
 import {Stack} from '@mui/material'
 import {useRouter} from 'next/router'
 import {useEffect} from 'react'
-import {useAuthState} from 'react-firebase-hooks/auth'
+import {useSigninCheck} from 'reactfire'
+import LayoutFirebaseAppComponent from './layout-firebase-app.component'
 
-
-const firebaseAuth = getFirebaseAuth()
 
 export interface LayoutRequestAuthenticationProps extends Partial<BackgroundImageComponentProps> {
   requireEmailVerification?: boolean
@@ -41,21 +39,29 @@ function LayoutUnauthenticatedComponent(props: LayoutRequestAuthenticationProps)
     ...rest
   } = props
   const router = useRouter()
-  const [user, userAuthLoading] = useAuthState(firebaseAuth)
+  const {status, data: signInCheckResult} = useSigninCheck()
+  const authLoading = status === 'loading'
+  const signedIn = signInCheckResult?.signedIn === true
+  const emailVerified = signInCheckResult?.user?.emailVerified
   const [, pushContinue] = useContinueQueryDecoded()
 
   useEffect(() => {
-    if (userAuthLoading) return void 0
-    if (isSignOut && user) return void 0
-    if (!user && !isSignOut) return void 0
-    if (isSignOut) {
-      return void router.push('/signin')
-    }
-    if (requireEmailVerification && !user.emailVerified) {
-      return void router.push('/validate-email')
-    }
+    if (authLoading) return void 0
+    if (isSignOut && signedIn) return void 0
+    if (!signedIn && !isSignOut) return void 0
+    if (isSignOut) return void router.push('/signin')
+    if (requireEmailVerification && !emailVerified) return void router.push('/validate-email')
+
     return void pushContinue('/')
-  }, [user, userAuthLoading, pushContinue, requireEmailVerification, router, isSignOut])
+  }, [
+    authLoading,
+    emailVerified,
+    isSignOut,
+    pushContinue,
+    requireEmailVerification,
+    router,
+    signedIn,
+  ])
 
   return (
     <BackgroundImageComponent
@@ -85,7 +91,8 @@ function LayoutUnauthenticatedComponent(props: LayoutRequestAuthenticationProps)
     </BackgroundImageComponent>
   )
 }
-LayoutUnauthenticatedComponent.displayName = 'LayoutUnauthenticatedComponent'
+LayoutUnauthenticatedComponent.displayName = 'AglynLayoutUnauthenticated'
+LayoutUnauthenticatedComponent.layoutComponent = LayoutFirebaseAppComponent
 
 export {LayoutUnauthenticatedComponent}
 export default LayoutUnauthenticatedComponent

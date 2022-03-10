@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
+import type {AglynTenantHostScreen} from '@aglyn/core-data-framework'
 import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_EDIT,
   ICON_VARIANT_PAGES,
 } from '@aglyn/shared-data-enums'
-import {firestoreDb} from '@aglyn/shared-feature-fbclient'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {Container} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
-import {collection} from 'firebase/firestore'
-import {useCollection} from 'react-firebase-hooks/firestore'
+import {collection, orderBy, query} from 'firebase/firestore'
+import {useFirestore, useFirestoreCollectionData} from 'reactfire'
 import DataTableComponent from '../components/data-table.component'
 import WidgetCardComponent from '../components/widget-card.component'
 import {CONTENT_MAX_WIDTH} from '../constants/shared'
@@ -55,13 +55,17 @@ const columns: GridColumns = [
   {field: 'createdAt', headerName: 'Created', type: 'date'},
 ]
 
-export function Pages(props) {
+export function Screens(props) {
 
-  const [value, loading, error] = useCollection(
-    collection(firestoreDb, 'pages'),
-  )
+  const firestore = useFirestore()
+  const screensCollection = collection(firestore, 'screens')
+  const screensQuery = query(screensCollection, orderBy('createdAt', 'desc'))
 
-  console.log('Pages props', props, value, loading, error)
+  const {status, data: screens} = useFirestoreCollectionData(screensQuery, {
+    idField: '$id', // this field will be added to the object created from each document
+  }) as unknown as {status: string, data: AglynTenantHostScreen[]}
+
+  console.log('Screens props', props, status, screens)
   return (
     <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
 
@@ -70,8 +74,9 @@ export function Pages(props) {
           rowHeight={40}
           getRowId={(row) => row.id}
           columns={columns}
-          noRowsLabel="No pages"
-          rows={value?.docs || []}
+          noRowsLabel="No screens"
+          rows={screens || []}
+          loading={status === 'loading'}
         />
       </WidgetCardComponent>
 
@@ -79,23 +84,23 @@ export function Pages(props) {
     </Container>
   )
 }
-Pages.displayName = 'Page:Pages'
-Pages.layoutComponent = LayoutDashboardComponent
-Pages.layoutProps = {
+Screens.displayName = 'Page:Screens'
+Screens.layoutComponent = LayoutDashboardComponent
+Screens.layoutProps = {
   LayoutConsoleComponent: {
-    title: 'My Pages',
+    title: 'App Screens',
   },
   LayoutDashboardComponent: {
     header: {
-      children: 'Pages',
+      children: 'Application Screens',
       icon: {path: ICON_VARIANT_PAGES.path},
     },
     breadcrumbItems: [
       {
-        children: 'Pages',
+        children: 'Screens',
       },
     ],
   },
 }
 
-export default Pages
+export default Screens

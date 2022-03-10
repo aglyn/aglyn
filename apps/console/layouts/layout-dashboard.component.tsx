@@ -81,9 +81,9 @@ const defaultNavTabItems = [
     href: '/',
   },
   {
-    id: 'nav-tab-pages',
-    label: 'Pages',
-    href: '/pages',
+    id: 'nav-tab-screens',
+    label: 'Screens',
+    href: '/screens',
   },
 ]
 
@@ -97,13 +97,20 @@ const defaultBreadcrumbs = [
 ]
 
 const defaultTabBarTitle = (
-  <Box sx={{color: 'tertiary.light'}}>
+  <Stack
+    direction="row"
+    spacing={{sm: 0.15, md: 0.5}}
+    alignItems="center"
+    typography={'subtitle2'}
+    lineHeight={'normal'}
+    sx={{color: 'tertiary.light'}}
+  >
     <span>{'Secure'}</span>
     <MdiIcon
       path={mdiShieldLock.path}
       fontSize={'small'}
     />
-  </Box>
+  </Stack>
 )
 
 export type NavTabItem = Partial<AppLinkProps & MuiTabProps & {icon: MdiIconProps}>
@@ -189,15 +196,7 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
                   color: 'text.secondary',
                 }}
               >
-                <Stack
-                  direction="row"
-                  spacing={{sm: 0.15, md: 0.5}}
-                  alignItems="center"
-                  typography={'subtitle2'}
-                  lineHeight={'normal'}
-                >
-                  {tabBarTitleProp ?? defaultTabBarTitle}
-                </Stack>
+                {tabBarTitleProp ?? defaultTabBarTitle}
               </Typography>
 
               <Divider

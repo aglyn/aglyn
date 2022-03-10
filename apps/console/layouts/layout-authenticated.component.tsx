@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {SecureLoadingOverlayComponent, useLoading} from '@aglyn/shared-ui-jsx'
 import {useContinueQueryEncoded} from '@aglyn/shared-util-next'
 import {useRouter} from 'next/router'
-import {type ReactNode, useEffect} from 'react'
-import {useAuthState} from 'react-firebase-hooks/auth'
+import {Fragment, type ReactNode, useEffect} from 'react'
+import {useSigninCheck} from 'reactfire'
+import LayoutFirebaseAppComponent from './layout-firebase-app.component'
 
-
-const firebaseAuth = getFirebaseAuth()
 
 export interface LayoutAuthenticatedComponentProps {
   children?: ReactNode
@@ -31,38 +29,45 @@ export interface LayoutAuthenticatedComponentProps {
 }
 
 function LayoutAuthenticatedComponent(props: LayoutAuthenticatedComponentProps) {
-  const {children, requireEmailVerification, ...rest} = props
-  const [user, authLoading, error] = useAuthState(firebaseAuth)
+  const {children, requireEmailVerification} = props
   const {queueLoading} = useLoading()
   const router = useRouter()
   const continueRoute = useContinueQueryEncoded()
+  const {status, data: signInCheckResult} = useSigninCheck()
+  const authLoading = status === 'loading'
+  const signedIn = signInCheckResult?.signedIn === true
+  const emailVerified = signInCheckResult?.user?.emailVerified
+  const invalidAuth = authLoading || !signedIn || (requireEmailVerification && !emailVerified)
 
   useEffect(() => {
     if (authLoading) return void 0
-    if (!user) {
-      return void pushToRequestAuth(`/signin`)
-    }
-    if (user && requireEmailVerification && !user.emailVerified) {
-      return void pushToRequestAuth(`/verify-email`)
-    }
+    if (!signedIn) return void pushToRequestAuth(`/signin`)
+    if (requireEmailVerification && !emailVerified) return void pushToRequestAuth(`/verify-email`)
 
     return void 0
 
     function pushToRequestAuth(path: string) {
       return void router.push(`${path}?continue=${continueRoute}`)
     }
-  }, [user, authLoading, continueRoute, queueLoading, router, requireEmailVerification])
+  }, [
+    authLoading,
+    continueRoute,
+    emailVerified,
+    queueLoading,
+    requireEmailVerification,
+    router,
+    signedIn,
+  ])
 
 
   return (
-    <>
-      {authLoading || !user
-        ? (<SecureLoadingOverlayComponent />)
-        : children}
-    </>
+    <Fragment>
+      {!invalidAuth ? children : <SecureLoadingOverlayComponent />}
+    </Fragment>
   )
 }
-LayoutAuthenticatedComponent.displayName = 'LayoutAuthenticatedComponent'
+LayoutAuthenticatedComponent.displayName = 'AglynLayoutAuthenticated'
+LayoutAuthenticatedComponent.layoutComponent = LayoutFirebaseAppComponent
 
 export {LayoutAuthenticatedComponent}
 export default LayoutAuthenticatedComponent

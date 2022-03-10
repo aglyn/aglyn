@@ -22,17 +22,14 @@ import {
   ICON_VARIANT_THEME_SYSTEM,
   ICON_VARIANT_USER_SETTINGS,
 } from '@aglyn/shared-data-enums'
-import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {useThemeMode} from '@aglyn/shared-feature-themes'
 import {AppLink} from '@aglyn/shared-ui-jsx'
 import {_isArr} from '@aglyn/shared-util-guards'
 import {gravatarUrlFromEmail} from '@aglyn/shared-util-tools'
-import {useAuthState} from 'react-firebase-hooks/auth'
+import {useUser} from 'reactfire'
 import LayoutAuthenticatedComponent from './layout-authenticated.component'
 import LayoutMainComponent, {type LayoutMainProps} from './layout-main.component'
 
-
-const firebaseAuth = getFirebaseAuth()
 
 export interface LayoutConsoleProps extends LayoutMainProps {
 }
@@ -45,7 +42,7 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
     centerNavigationItems,
     ...rest
   } = props
-  const [user] = useAuthState(firebaseAuth)
+  const {data: user} = useUser()
   const [, toggleThemeMode, themeSetting] = useThemeMode()
   const friendlyThemeMode = themeSetting === 'light' || themeSetting === 'dark'
     ? themeSetting

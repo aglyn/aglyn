@@ -15,18 +15,12 @@
  * limitations under the License.
  */
 
-import {getFirebaseAuth} from '@aglyn/shared-feature-fbclient'
 import {FormSpy, type FormTemplateRenderProps, useFormApi} from '@aglyn/shared-ui-jsx-forms'
-import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
-import FormControl from '@mui/material/FormControl'
-import Grid from '@mui/material/Grid'
+import {Box, Button, FormControl, Grid} from '@mui/material'
 import {forwardRef} from 'react'
-import {useAuthState} from 'react-firebase-hooks/auth'
+import {useSigninCheck} from 'reactfire'
 import AuthErrorAlertComponent from './auth-error-alert.component'
 
-
-const firebaseAuth = getFirebaseAuth()
 
 export interface AuthFormTemplateComponentProps extends FormTemplateRenderProps {}
 
@@ -34,7 +28,8 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
   function RefRenderFn(props, ref) {
     const {formFields, schema, ...rest} = props
     const {handleSubmit} = useFormApi()
-    const [, loading, error] = useAuthState(firebaseAuth)
+    const {status, error} = useSigninCheck()
+    const isLoading = status === 'loading'
     return (
       <form ref={ref} onSubmit={handleSubmit} noValidate {...rest}>
         {schema.title}
@@ -51,7 +46,7 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
               <FormControl margin="normal" fullWidth>
                 <Button
                   color="secondary"
-                  disabled={submitting/* || !valid || pristine*/ || loading}
+                  disabled={submitting/* || !valid || pristine*/ || isLoading}
                   style={{marginRight: 8}}
                   type="submit"
                   variant="contained"

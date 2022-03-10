@@ -17,13 +17,11 @@
 
 import type {AuthResultError} from '@aglyn/shared-data-enums'
 import {FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD} from '@aglyn/shared-data-forms'
-import {getFirebaseAuth, googleOAuthProvider} from '@aglyn/shared-feature-fbclient'
 import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
 import type {FormSchema} from '@aglyn/shared-ui-jsx-forms'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {Button, Divider, Stack, Typography} from '@mui/material'
-import type {FormApi, SubmissionErrors} from 'final-form'
 import {
   browserLocalPersistence,
   GoogleAuthProvider,
@@ -32,13 +30,14 @@ import {
   signInWithPopup,
 } from 'firebase/auth'
 import {useCallback, useState} from 'react'
+import {useAuth} from 'reactfire'
 import AuthErrorAlertComponent from '../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../components/auth-form-template.component'
 import LayoutAuthFormComponent from '../layouts/layout-auth-form.component'
 import LayoutUnauthenticatedComponent from '../layouts/layout-unauthenticated.component'
 
 
-const firebaseAuth = getFirebaseAuth()
+const googleOAuthProvider = new GoogleAuthProvider()
 
 const formSchema: FormSchema = {
   fields: [FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD],
@@ -46,7 +45,9 @@ const formSchema: FormSchema = {
 
 function SignIn() {
   const {queueLoading, loading} = useLoading()
+  const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
+
   const handleSignIn = useCallback(async (values?: any) => {
     if (loading) return
     if (error) setError(null)
@@ -69,12 +70,9 @@ function SignIn() {
       .finally(() => {
         dequeueLoading()
       })
-  }, [error, loading, queueLoading])
-  const handleFormSubmit = useCallback(async (
-    values,
-    formApi: FormApi,
-    onError: (errors?: SubmissionErrors) => void,
-  ) => {
+  }, [error, firebaseAuth, loading, queueLoading])
+
+  const handleFormSubmit = useCallback(async (values) => {
     await handleSignIn(values)
   }, [handleSignIn])
   const handleGoogleButtonClick = useCallback(async () => {

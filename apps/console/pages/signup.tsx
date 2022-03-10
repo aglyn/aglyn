@@ -23,13 +23,11 @@ import {
   FIELD_SCHEMA_PASSWORD,
   FIELD_SCHEMA_PASSWORD_CONFIRM,
 } from '@aglyn/shared-data-forms'
-import {getFirebaseAuth, googleOAuthProvider} from '@aglyn/shared-feature-fbclient'
 import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
 import type {FormSchema} from '@aglyn/shared-ui-jsx-forms'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {Button, Divider, Stack, Typography} from '@mui/material'
-import type {FormApi, SubmissionErrors} from 'final-form'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
@@ -38,13 +36,14 @@ import {
   signInWithPopup,
 } from 'firebase/auth'
 import {useCallback, useState} from 'react'
+import {useAuth} from 'reactfire'
 import AuthErrorAlertComponent from '../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../components/auth-form-template.component'
 import LayoutAuthFormComponent from '../layouts/layout-auth-form.component'
 import LayoutUnauthenticatedComponent from '../layouts/layout-unauthenticated.component'
 
 
-const firebaseAuth = getFirebaseAuth()
+const googleOAuthProvider = new GoogleAuthProvider()
 
 const formSchema: FormSchema = {
   fields: [
@@ -58,7 +57,9 @@ const formSchema: FormSchema = {
 
 function Signup() {
   const {queueLoading, loading} = useLoading()
+  const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
+
   const handleSignUp = useCallback(async (values?: any) => {
     if (loading) return
     if (error) setError(null)
@@ -66,7 +67,7 @@ function Signup() {
     await setPersistence(firebaseAuth, browserLocalPersistence)
       .then(() => {
         if (values) {
-          createUserWithEmailAndPassword(
+          return createUserWithEmailAndPassword(
             firebaseAuth,
             values[FIELD_SCHEMA_EMAIL.name],
             values[FIELD_SCHEMA_PASSWORD.name],
@@ -81,12 +82,9 @@ function Signup() {
       .finally(() => {
         dequeueLoading()
       })
-  }, [error, loading, queueLoading])
-  const handleFormSubmit = useCallback(async (
-    values,
-    formApi: FormApi,
-    onError: (errors?: SubmissionErrors) => void,
-  ) => {
+  }, [error, firebaseAuth, loading, queueLoading])
+
+  const handleFormSubmit = useCallback(async (values) => {
     await handleSignUp(values)
   }, [handleSignUp])
   const handleGoogleButtonClick = useCallback(async () => {
