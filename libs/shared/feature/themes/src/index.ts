@@ -22,7 +22,6 @@ export * from './vendor/mui'
 export * from './lib/theme.types'
 export * from './lib/constants'
 
-export * from './lib/besigner-theme'
 export * from './lib/console-theme'
 
 export * from './lib/hocs/create-with-emotion-client-cache'

@@ -16,7 +16,7 @@
  */
 
 import {LoadingTextComponent} from '@aglyn/shared-ui-jsx'
-import CircularProgress from '@mui/material/CircularProgress'
+import {CircularProgress} from '@mui/material'
 import {signOut} from 'firebase/auth'
 import {useEffect} from 'react'
 import {useAuth} from 'reactfire'

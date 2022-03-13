@@ -80,8 +80,8 @@ export const consoleOverrides: ThemeOptions['components'] = {
     styleOverrides: {
       root: ({theme}) => ({
         [theme.breakpoints.up('sm')]: {
-          paddingLeft: theme.spacing(2),
-          paddingRight: theme.spacing(2),
+          paddingLeft: theme.spacing(3),
+          paddingRight: theme.spacing(3),
         },
       }),
     },

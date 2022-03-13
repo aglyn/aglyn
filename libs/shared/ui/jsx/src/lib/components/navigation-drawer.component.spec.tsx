@@ -15,9 +15,15 @@
  * limitations under the License.
  */
 
-import {type SpacingOptions} from '../../vendor/mui'
+import {render} from '@testing-library/react'
+import React from 'react'
+
+import NavigationDrawerComponent from './navigation-drawer.component'
 
 
-export const besignerSpacing: SpacingOptions = 10
-
-export default besignerSpacing
+describe('NavigationDrawerComponent', () => {
+  it('should render successfully', () => {
+    const {baseElement} = render(<NavigationDrawerComponent />)
+    expect(baseElement).toBeTruthy()
+  })
+})

@@ -21,15 +21,20 @@ import {
   ICON_VARIANT_MODIFY_EDIT,
   ICON_VARIANT_PAGES,
 } from '@aglyn/shared-data-enums'
+import {ContainerComponent, NavigationDrawerComponent} from '@aglyn/shared-ui-jsx'
+import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {Container} from '@mui/material'
+import {Container, Typography} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
 import {collection, orderBy, query} from 'firebase/firestore'
+import {useCallback, useState} from 'react'
 import {useFirestore, useFirestoreCollectionData} from 'reactfire'
-import DataTableComponent from '../components/data-table.component'
-import WidgetCardComponent from '../components/widget-card.component'
-import {CONTENT_MAX_WIDTH} from '../constants/shared'
-import LayoutDashboardComponent from '../layouts/layout-dashboard.component'
+import AuthErrorAlertComponent from '../../components/auth-error-alert.component'
+import AuthFormTemplateComponent from '../../components/auth-form-template.component'
+import DataTableComponent from '../../components/data-table.component'
+import WidgetCardComponent from '../../components/widget-card.component'
+import {CONTENT_MAX_WIDTH} from '../../constants/shared'
+import LayoutDashboardComponent from '../../layouts/layout-dashboard.component'
 
 
 const columns: GridColumns = [
@@ -51,12 +56,14 @@ const columns: GridColumns = [
     ],
   },
   {field: 'id', headerName: 'ID', type: 'string'},
-  {field: 'updatedAt', headerName: 'Updated', type: 'date'},
+  {field: 'updatedAt', headerName: 'Last Updated', type: 'date'},
   {field: 'createdAt', headerName: 'Created', type: 'date'},
 ]
 
 export function Screens(props) {
 
+  const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(true)
+  const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
   const screensCollection = collection(firestore, 'screens')
   const screensQuery = query(screensCollection, orderBy('createdAt', 'desc'))
@@ -65,6 +72,10 @@ export function Screens(props) {
     idField: '$id', // this field will be added to the object created from each document
   }) as unknown as {status: string, data: AglynTenantHostScreen[]}
 
+  const error = useState(null)
+  const handleFormSubmit = useCallback(async (values) => {
+
+  }, [])
   console.log('Screens props', props, status, screens)
   return (
     <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
@@ -77,12 +88,64 @@ export function Screens(props) {
           noRowsLabel="No screens"
           rows={screens || []}
           loading={status === 'loading'}
+          pageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          rowsPerPageOptions={[5, 10, 15]}
+          pagination
         />
       </WidgetCardComponent>
 
+      <NavigationDrawerComponent
+        open={quickDrawerOpen}
+        anchor="right"
+        appBarLeft={
+          <Typography variant="h6" component="div">
+            {'Create new screen'}
+          </Typography>
+        }
+      >
+        <ContainerComponent gutterY>
+          <FormRenderer
+            FormTemplate={AuthFormTemplateComponent}
+            componentMapper={simpleComponentMapper}
+            onSubmit={handleFormSubmit}
+            schema={formSchema}
+            subscription={{values: true}}
+            clearOnUnmount
+          />
+          <AuthErrorAlertComponent
+            error={error as any}
+            sx={{mt: 2, mb: 1}}
+          />
+        </ContainerComponent>
+
+      </NavigationDrawerComponent>
 
     </Container>
   )
+}
+const formSchema = {
+  'fields': [
+    {
+      'component': 'text-field',
+      'name': 'displayName ',
+      'helperText': 'Friendly name for internal reference',
+      'type': 'text', 'label': 'Display name',
+      'isRequired': true,
+      'validate': [
+        {'type': 'required', 'message': 'Provide a display name'},
+        {'type': 'max-length', 'threshold': 25, 'message': 'Must not exceed 25 characters'},
+      ],
+    }, {
+      'component': 'textarea',
+      'name': 'description',
+      'label': 'Description',
+      'helperText': 'Brief description for internal reference',
+      'validate': [
+        {'type': 'max-length', 'threshold': 80, 'message': 'Must not exceed 80 characters'},
+      ],
+    },
+  ],
 }
 Screens.displayName = 'Page:Screens'
 Screens.layoutComponent = LayoutDashboardComponent
@@ -92,7 +155,7 @@ Screens.layoutProps = {
   },
   LayoutDashboardComponent: {
     header: {
-      children: 'Application Screens',
+      children: 'App Screens',
       icon: {path: ICON_VARIANT_PAGES.path},
     },
     breadcrumbItems: [

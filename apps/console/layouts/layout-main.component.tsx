@@ -124,6 +124,7 @@ export interface LayoutMainProps {
   children?: ReactNode | undefined
   title?: ReactNode[] | ReactNode
   centerNavigationItems?: CenterNavMenuItem[]
+  customCenter?: ReactNode
   quickActions?: QuickActionsMenuItem[]
   appBarSuffix?: ReactNode
   disableAppBarElevation?: boolean
@@ -134,6 +135,7 @@ function LayoutMainComponent(props: LayoutMainProps) {
     children,
     title,
     centerNavigationItems,
+    customCenter,
     appBarSuffix,
     quickActions,
     disableAppBarElevation,
@@ -239,17 +241,19 @@ function LayoutMainComponent(props: LayoutMainProps) {
                   </AppLink>
                 </Stack>
 
-                {_isArrEmpty(centerNavigationItems) ? null : (
-                  <Stack
-                    component="nav"
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="flex-start"
-                    flexBasis="72%"
-                    flexGrow={1}
-                  >
-                    {(centerNavigationItems ?? []).map(buildNav('text'))}
-                  </Stack>
+                {customCenter ?? (
+                  _isArrEmpty(centerNavigationItems) || customCenter ? null : (
+                    <Stack
+                      component="nav"
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="flex-start"
+                      flexBasis="72%"
+                      flexGrow={1}
+                    >
+                      {(centerNavigationItems ?? []).map(buildNav('text'))}
+                    </Stack>
+                  )
                 )}
 
                 {_isArrEmpty(quickActions) ? null : (

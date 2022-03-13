@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {type PaletteOptions} from '../../vendor/mui'
-import {type IActionStates} from '../theme.types'
+import type {PaletteOptions} from '../../vendor/mui'
+import type {IActionStates} from '../theme.types'
 
 
 export type ColorVariant = 'light' | 'dark'

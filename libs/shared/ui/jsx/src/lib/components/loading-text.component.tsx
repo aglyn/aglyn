@@ -39,28 +39,27 @@ const LoadingTextComponent = forwardRef(
     }, animationDelay)
 
 
-
     return (
       <Typography
         sx={mergeSxProps({
           ':after': {
             // display: 'block',
             content: `"${[...new Array(count)].map(i => '.').join('')}"`,
-            position: 'absolute'
-          }
+            position: 'absolute',
+          },
         }, sx)}
         {...rest}
       >
         {children}
       </Typography>
     )
-  }
+  },
 )
 LoadingTextComponent.displayName = 'LoadingTextComponent'
 LoadingTextComponent.defaultProps = {
   maxEllipsis: 3,
   minEllipsis: 0,
-  animationDelay: 1000
+  animationDelay: 1000,
 }
 
 export {LoadingTextComponent}

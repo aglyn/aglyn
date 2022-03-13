@@ -289,6 +289,7 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
               }, headerSx)}
               {...header}
             >
+
               {!headerIcon || isElement(headerIcon) ? headerIcon : (
                 <MdiIcon
                   color="inherit"
@@ -302,12 +303,13 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
                     borderColor: 'tertiary.dark',
                     color: 'quaternary.contrastText',
                     bgcolor: 'quaternary.main',
-                    borderRadius: (theme) => theme.shape.appIconBorderRadius,
+                    borderRadius: (theme) => `${theme.shape.appIconBorderRadius}`,
                   }, headerIcon['sx'])}
                 />
               )}
               {headerChildren}
             </Typography>
+
             {disableBreadcrumbs ? null : (
               <BreadcrumbsComponent
                 items={breadcrumbs}

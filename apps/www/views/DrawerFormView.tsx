@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import {
   type ExtendPropsOfWithStyles,
   withStyles,
 } from '@aglyn/shared-feature-themes'
-import {NavigationDrawer, type NavigationDrawerProps} from '@aglyn/shared-ui-jsx'
+import {NavigationDrawerComponent, type NavigationDrawerProps} from '@aglyn/shared-ui-jsx'
 import {mdiClose, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
 import {_isStrT} from '@aglyn/shared-util-guards'
 import {objectRemap} from '@aglyn/shared-util-tools'
@@ -30,7 +30,7 @@ import Container from '@mui/material/Container'
 import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
-import {forwardRef, Fragment, MouseEventHandler, ChangeEventHandler} from 'react'
+import {ChangeEventHandler, forwardRef, Fragment, MouseEventHandler} from 'react'
 import FieldSet from '../components/FieldSet'
 import {Fields} from '../forms'
 
@@ -86,7 +86,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn
   const actionLabel = isCreating ? 'Create' : 'Update'
 
   return (
-    <NavigationDrawer
+    <NavigationDrawerComponent
       ref={ref}
       appBarLeft={
         <Fragment>
@@ -149,7 +149,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn
           )}
         </Container>
       </div>
-    </NavigationDrawer>
+    </NavigationDrawerComponent>
   )
 })
 

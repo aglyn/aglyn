@@ -23,7 +23,10 @@ import emotionCache, {
 
 export type {CreateEmotionCacheOptions, EmotionCache}
 
-export * from '@emotion/react'
+export {
+  CacheProvider,
+  withEmotionCache,
+} from '@emotion/react'
 
 export {default as createEmotionServer, type EmotionServer} from '@emotion/server/create-instance'
 

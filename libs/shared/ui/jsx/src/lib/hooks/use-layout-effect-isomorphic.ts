@@ -15,22 +15,11 @@
  * limitations under the License.
  */
 
-import {type PaletteOptions} from '../../vendor/mui'
-import {type ColorVariant, consolePalette} from '../console-theme/console.palette'
+import {useEffect, useLayoutEffect} from 'react'
 
 
-export const besignerPalette: Record<Uppercase<ColorVariant>, PaletteOptions> = {
-  LIGHT: {
-    ...consolePalette.LIGHT,
-    primary: {main: '#0091EA'},
-    secondary: {main: '#E040FB'},
-    tertiary: {main: '#37474F'},
-  },
-  DARK: {
-    ...consolePalette.DARK,
-    primary: {main: '#37474F'},
-    secondary: {main: '#E040FB'},
-    tertiary: {main: '#0091EA'},
-  },
-}
-export default besignerPalette
+export const useLayoutEffectIsomorphic = typeof window !== 'undefined'
+  ? useLayoutEffect
+  : useEffect
+
+export default useLayoutEffectIsomorphic

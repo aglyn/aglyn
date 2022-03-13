@@ -196,7 +196,7 @@ const AGLYN_CONFIG = {
   nx: {
     // Set this to false if you do not want to use SVGR
     // See: https://github.com/gregberge/svgr
-    svgr: true,
+    svgr: false,
   },
   onDemandEntries: {
     // period (in ms) where the server will keep pages in the buffer

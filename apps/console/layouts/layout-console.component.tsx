@@ -39,7 +39,6 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
     title,
     children,
     quickActions,
-    centerNavigationItems,
     ...rest
   } = props
   const {data: user} = useUser()
@@ -52,19 +51,6 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
     <LayoutMainComponent
       title={title ? [..._isArr(title) ? title : [title], 'Secure'] : 'Secure'}
       appBarSuffix="Console"
-      centerNavigationItems={[
-        {
-          id: 'center-nav-home',
-          children: 'Home',
-          href: '/',
-        },
-        {
-          id: 'center-nav-besigner',
-          children: 'Besigner',
-          href: '/besigner',
-        },
-        ...centerNavigationItems || [],
-      ]}
       quickActions={[
         ...quickActions || [],
         {
@@ -113,7 +99,20 @@ function LayoutConsoleComponent(props: LayoutConsoleProps) {
 }
 
 LayoutConsoleComponent.displayName = 'LayoutConsoleComponent'
-LayoutConsoleComponent.defaultProps = {}
+LayoutConsoleComponent.defaultProps = {
+  centerNavigationItems: [
+    {
+      id: 'center-nav-home',
+      children: 'Home',
+      href: '/',
+    },
+    {
+      id: 'center-nav-besigner',
+      children: 'Besigner',
+      href: '/besigner',
+    },
+  ],
+}
 LayoutConsoleComponent.layoutComponent = LayoutAuthenticatedComponent
 
 export {LayoutConsoleComponent}

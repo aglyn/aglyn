@@ -24,6 +24,7 @@ import {
   type BoxProps,
   Drawer,
   type DrawerProps,
+  Stack,
   Toolbar,
   type ToolbarProps,
 } from '@mui/material'
@@ -44,7 +45,7 @@ export interface NavigationDrawerProps extends Partial<DrawerProps> {
   AppBarRightProps?: BoxProps
 }
 
-const NavigationDrawer = forwardRef<any, NavigationDrawerProps>(
+const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
   function RefRenderFn(props, ref) {
     const {
       children,
@@ -95,33 +96,19 @@ const NavigationDrawer = forwardRef<any, NavigationDrawerProps>(
               )}
             >
               <Toolbar {...ToolbarProps}>
-                <Box
-                  {...AppBarLeftProps}
-                  sx={mergeSxProps(
-                    {
-                      flexGrow: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      position: 'relative',
-                    },
-                    AppBarLeftProps?.sx,
-                  )}
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  spacing={2}
                 >
-                  {appBarLeft}
-                </Box>
-                <Box
-                  {...AppBarRightProps}
-                  sx={mergeSxProps(
-                    {
-                      display: 'flex',
-                      alignItems: 'center',
-                      position: 'relative',
-                    },
-                    AppBarRightProps?.sx,
-                  )}
-                >
-                  {appBarRight}
-                </Box>
+                  <Box {...AppBarLeftProps}>
+                    {appBarLeft}
+                  </Box>
+                  <Box {...AppBarRightProps}>
+                    {appBarRight}
+                  </Box>
+                </Stack>
               </Toolbar>
             </AppBar>
           )}
@@ -145,8 +132,8 @@ const NavigationDrawer = forwardRef<any, NavigationDrawerProps>(
   },
 )
 
-NavigationDrawer.displayName = 'AglynNavigationDrawer'
-NavigationDrawer.defaultProps = {}
+NavigationDrawerComponent.displayName = 'AglynNavigationDrawer'
+NavigationDrawerComponent.defaultProps = {}
 
-export {NavigationDrawer}
-export default NavigationDrawer
+export {NavigationDrawerComponent}
+export default NavigationDrawerComponent

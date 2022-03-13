@@ -22,7 +22,7 @@ import {styled} from '@aglyn/shared-feature-themes'
 import {
   CardIconListItem,
   GridList as JsxGridList,
-  NavigationDrawer as JsxNavbarDrawer,
+  NavigationDrawerComponent as JsxNavbarDrawer,
   type NavigationDrawerProps,
   SrOnlyComponent,
 } from '@aglyn/shared-ui-jsx'

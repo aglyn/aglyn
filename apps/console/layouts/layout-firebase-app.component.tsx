@@ -20,6 +20,7 @@ import {DEFAULT_RECAPTCHA_API_KEY, defaultFirebaseAppOptions} from '@aglyn/share
 import {SecureLoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
 import {getDisplayName} from '@aglyn/shared-util-tools'
 import {NoSsr} from '@mui/material'
+import {getAnalytics} from 'firebase/analytics'
 import type {FirebaseApp, FirebaseOptions} from 'firebase/app'
 import {initializeAppCheck, ReCaptchaV3Provider} from 'firebase/app-check'
 import {connectAuthEmulator, getAuth} from 'firebase/auth'
@@ -31,6 +32,7 @@ import {
 } from 'firebase/firestore'
 import type {ReactNode} from 'react'
 import {
+  AnalyticsProvider,
   AppCheckProvider,
   AuthProvider,
   DatabaseProvider,
@@ -149,20 +151,29 @@ function GetInnerLayout({children}) {
   catch (error) {
     console.error(error)
   }
+  let analytics
+  try {
+    analytics = getAnalytics(app)
+  }
+  catch (error) {
+    console.error(error)
+  }
 
   if (status === 'loading') {
     return (<SecureLoadingOverlayComponent />)
   }
 
   return (
-    <AuthProvider sdk={auth}>
-      <AppCheckProvider sdk={appCheck}>
-        <DatabaseProvider sdk={database}>
-          <FirestoreProvider sdk={store}>
-            {children}
-          </FirestoreProvider>
-        </DatabaseProvider>
-      </AppCheckProvider>
-    </AuthProvider>
+    <AnalyticsProvider sdk={analytics}>
+      <AuthProvider sdk={auth}>
+        <AppCheckProvider sdk={appCheck}>
+          <DatabaseProvider sdk={database}>
+            <FirestoreProvider sdk={store}>
+              {children}
+            </FirestoreProvider>
+          </DatabaseProvider>
+        </AppCheckProvider>
+      </AuthProvider>
+    </AnalyticsProvider>
   )
 }
