@@ -29,6 +29,7 @@ import {
   Box,
   Container,
   Divider,
+  Grid,
   Stack,
   Tab as MuiTab,
   type TabProps as MuiTabProps,
@@ -43,7 +44,6 @@ import {isElement} from 'react-is'
 import BreadcrumbsComponent, {type BreadcrumbsProps} from '../components/breadcrumbs.component'
 import FooterComponent from '../components/footer.component'
 import {CONTENT_MAX_WIDTH, TAB_HEIGHT, TOP_BAR_HEIGHT} from '../constants/shared'
-import LayoutConsoleComponent from './layout-console.component'
 
 
 const TabItem = styled(MuiTab, {
@@ -126,6 +126,7 @@ export interface LayoutDashboardProps {
   header?: TypographyProps<any, any> & {
     icon?: MdiIconProps | ReactNode
   }
+  headerRight?: ReactNode
 }
 
 function LayoutDashboardComponent(props: LayoutDashboardProps) {
@@ -137,6 +138,7 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
     disableDefaultBreadcrumb,
     tabBarTitle: tabBarTitleProp,
     navTabItems,
+    headerRight,
   } = props
   const router = useRouter()
 
@@ -279,53 +281,73 @@ function LayoutDashboardComponent(props: LayoutDashboardProps) {
           }}
         >
           <Container maxWidth={CONTENT_MAX_WIDTH}>
-            <Typography
-              component="h1"
-              variant="h4"
-              sx={mergeSxProps({
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-              }, headerSx)}
-              {...header}
+            <Grid
+              container
+              direction="row"
+              justifyContent="space-between"
+              alignItems="center"
+              spacing={2}
             >
-
-              {!headerIcon || isElement(headerIcon) ? headerIcon : (
-                <MdiIcon
-                  color="inherit"
-                  {...headerIcon}
+              <Grid
+                item
+              >
+                <Typography
+                  component="h1"
+                  variant="h4"
                   sx={mergeSxProps({
-                    padding: 1,
-                    mr: 1.75,
-                    fontSize: `1.5em`,
-                    borderWidth: `1px`,
-                    borderStyle: 'solid',
-                    borderColor: 'tertiary.dark',
-                    color: 'quaternary.contrastText',
-                    bgcolor: 'quaternary.main',
-                    borderRadius: (theme) => `${theme.shape.appIconBorderRadius}`,
-                  }, headerIcon['sx'])}
-                />
-              )}
-              {headerChildren}
-            </Typography>
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }, headerSx)}
+                  {...header}
+                >
 
-            {disableBreadcrumbs ? null : (
-              <BreadcrumbsComponent
-                items={breadcrumbs}
-                sx={{
-                  my: 2,
-                  marginTop: 1,
-                  color: 'text.primary',
-                  'a': {
-                    textDecoration: 'none',
-                    ':hover': {
-                      color: 'secondary.main',
-                    },
-                  },
-                }}
-              />
-            )}
+                  {!headerIcon || isElement(headerIcon) ? headerIcon : (
+                    <MdiIcon
+                      color="inherit"
+                      {...headerIcon}
+                      sx={mergeSxProps({
+                        padding: 1,
+                        mr: 1.75,
+                        fontSize: `1.5em`,
+                        borderWidth: `1px`,
+                        borderStyle: 'solid',
+                        borderColor: 'tertiary.dark',
+                        color: 'quaternary.contrastText',
+                        bgcolor: 'quaternary.main',
+                        borderRadius: (theme) => `${theme.shape.appIconBorderRadius}`,
+                      }, headerIcon['sx'])}
+                    />
+                  )}
+                  {headerChildren}
+                </Typography>
+
+                {disableBreadcrumbs ? null : (
+                  <BreadcrumbsComponent
+                    items={breadcrumbs}
+                    sx={{
+                      my: 2,
+                      marginTop: 1,
+                      color: 'text.primary',
+                      'a': {
+                        textDecoration: 'none',
+                        ':hover': {
+                          color: 'secondary.main',
+                        },
+                      },
+                    }}
+                  />
+                )}
+              </Grid>
+
+              {headerRight && (
+                <Grid
+                  item
+                >
+                  {headerRight}
+                </Grid>
+              )}
+            </Grid>
           </Container>
         </BackgroundImageComponent>
 
@@ -342,12 +364,6 @@ LayoutDashboardComponent.defaultProps = {
   breadcrumbItems: [],
   disableBreadcrumbs: false,
   disableDefaultBreadcrumb: false,
-}
-LayoutDashboardComponent.layoutComponent = LayoutConsoleComponent
-LayoutDashboardComponent.layoutProps = {
-  LayoutConsoleComponent: {
-    disableAppBarElevation: true,
-  },
 }
 
 export {LayoutDashboardComponent}

@@ -158,8 +158,6 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
           '& .MuiDataGrid-root': {
             border: 'none',
             '& .MuiDataGrid-cell': {
-
-
               '&:focus': {
                 outline: 'none',
               },

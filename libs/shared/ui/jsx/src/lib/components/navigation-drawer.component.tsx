@@ -25,10 +25,11 @@ import {
   Drawer,
   type DrawerProps,
   Stack,
+  type StackProps,
   Toolbar,
   type ToolbarProps,
 } from '@mui/material'
-import {forwardRef, type ReactNode, type Ref, useRef} from 'react'
+import {forwardRef, type ReactNode, type Ref, useState} from 'react'
 import useCombinedRefs from '../hooks/use-combined-refs'
 import ElevateOnScroll from './elevate-on-scroll'
 
@@ -41,8 +42,8 @@ export interface NavigationDrawerProps extends Partial<DrawerProps> {
   AppBarProps?: Partial<AppBarProps>
   ToolbarProps?: Partial<ToolbarProps>
   ContentProps?: BoxProps
-  AppBarLeftProps?: BoxProps
-  AppBarRightProps?: BoxProps
+  AppBarLeftProps?: StackProps
+  AppBarRightProps?: StackProps
 }
 
 const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
@@ -61,7 +62,8 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
       ...rest
     } = props
 
-    const localContentRef = useRef<any>()
+    // const localContentRef = useRef<any>()
+    const [localContentRef, setLocalContentRef] = useState<any>()
 
     return (
       <Drawer
@@ -77,7 +79,7 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
         )}
         {...rest}
       >
-        <ElevateOnScroll target={localContentRef.current}>
+        <ElevateOnScroll target={localContentRef}>
           {({activeWithoutHysteresis}) => (
             <AppBar
               color="default"
@@ -101,20 +103,21 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
                   justifyContent="space-between"
                   alignItems="center"
                   spacing={2}
+                  width={1}
                 >
-                  <Box {...AppBarLeftProps}>
+                  <Stack {...AppBarLeftProps}>
                     {appBarLeft}
-                  </Box>
-                  <Box {...AppBarRightProps}>
+                  </Stack>
+                  <Stack {...AppBarRightProps}>
                     {appBarRight}
-                  </Box>
+                  </Stack>
                 </Stack>
               </Toolbar>
             </AppBar>
           )}
         </ElevateOnScroll>
         <Box
-          ref={useCombinedRefs(localContentRef, contentRef)}
+          ref={useCombinedRefs(setLocalContentRef, contentRef)}
           {...ContentProps}
           sx={mergeSxProps(
             {

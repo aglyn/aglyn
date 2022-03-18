@@ -30,6 +30,7 @@ import {useFirestore, useFirestoreCollectionData} from 'reactfire'
 import DataTableComponent from '../../../components/data-table.component'
 import WidgetCardComponent from '../../../components/widget-card.component'
 import {CONTENT_MAX_WIDTH} from '../../../constants/shared'
+import LayoutConsoleComponent from '../../../layouts/layout-console.component'
 import LayoutDashboardComponent from '../../../layouts/layout-dashboard.component'
 
 
@@ -69,42 +70,44 @@ export function ScreenDetails(props) {
 
   console.log('Screens props', props, status, screens)
   return (
-    <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
+    <LayoutDashboardComponent
+      breadcrumbItems={[
+        {
+          children: 'Details',
+        },
+      ]}
+      header={{
+        children: 'Screen Details',
+        icon: {path: ICON_VARIANT_PAGES.path},
+      }}
+    >
+      <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
 
-      <WidgetCardComponent>
-        <DataTableComponent
-          rowHeight={40}
-          getRowId={(row) => row.id}
-          columns={columns}
-          noRowsLabel="No screens"
-          rows={screens || []}
-          loading={status === 'loading'}
-          pageSize={pageSize}
-          onPageSizeChange={setPageSize}
-          rowsPerPageOptions={[5, 10, 15]}
-          pagination
-        />
-      </WidgetCardComponent>
+        <WidgetCardComponent>
+          <DataTableComponent
+            rowHeight={40}
+            getRowId={(row) => row.id}
+            columns={columns}
+            noRowsLabel="No screens"
+            rows={screens || []}
+            loading={status === 'loading'}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            rowsPerPageOptions={[5, 10, 15]}
+            pagination
+          />
+        </WidgetCardComponent>
 
-    </Container>
+      </Container>
+    </LayoutDashboardComponent>
   )
 }
 ScreenDetails.displayName = 'Page:ScreenDetails'
-ScreenDetails.layoutComponent = LayoutDashboardComponent
+ScreenDetails.layoutComponent = LayoutConsoleComponent
 ScreenDetails.layoutProps = {
   LayoutConsoleComponent: {
     title: 'Screen Details',
-  },
-  LayoutDashboardComponent: {
-    header: {
-      children: 'Screen Details',
-      icon: {path: ICON_VARIANT_PAGES.path},
-    },
-    breadcrumbItems: [
-      {
-        children: 'Details',
-      },
-    ],
+    disableAppBarElevation: true,
   },
 }
 

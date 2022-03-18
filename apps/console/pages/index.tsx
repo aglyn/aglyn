@@ -21,6 +21,7 @@ import {Container} from '@mui/material'
 import DataTableComponent from '../components/data-table.component'
 import WidgetCardComponent from '../components/widget-card.component'
 import {CONTENT_MAX_WIDTH} from '../constants/shared'
+import LayoutConsoleComponent from '../layouts/layout-console.component'
 import LayoutDashboardComponent from '../layouts/layout-dashboard.component'
 
 
@@ -29,56 +30,62 @@ export function Index(props) {
   console.log('index props', props)
 
   return (
-    <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
-      <GridItems
-        spacing={3}
-        items={[
-          {
-            xs: 12, md: 6,
-            children: (
-              <WidgetCardComponent
-                header={'Users'}
-              >
-                <DataTableComponent
-                  rowHeight={40}
-                  getRowId={(row) => row.uid}
-                  columns={[
-                    {field: 'uid', headerName: 'User ID', type: 'string'},
-                    {field: 'displayName', headerName: 'Display Name', type: 'string', width: 150, maxWidth: 175},
-                    {field: 'email', headerName: 'E-Mail', type: 'string', width: 175, maxWidth: 200},
-                    {field: 'emailVerified', headerName: 'E-Verified', type: 'boolean', maxWidth: 100},
-                    {field: 'created', headerName: 'Created', type: 'date', maxWidth: 100},
-                  ]}
-                  rows={[]}
-                />
-              </WidgetCardComponent>
-            ),
-          },
-          {
-            xs: 12, md: 6,
-            children: (
-              <WidgetCardComponent contentGutterX>
-                hello
-              </WidgetCardComponent>
-            ),
-          },
-        ]}
-      />
-    </Container>
+    <LayoutDashboardComponent
+      breadcrumbItems={[
+        {
+          children: 'Details',
+        },
+      ]}
+      header={{
+        children: 'My Dashboard',
+        icon: {path: ICON_VARIANT_HOME.path},
+      }}
+    >
+      <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
+        <GridItems
+          spacing={3}
+          items={[
+            {
+              xs: 12, md: 6,
+              children: (
+                <WidgetCardComponent
+                  header={'Users'}
+                >
+                  <DataTableComponent
+                    rowHeight={40}
+                    getRowId={(row) => row.uid}
+                    columns={[
+                      {field: 'uid', headerName: 'User ID', type: 'string'},
+                      {field: 'displayName', headerName: 'Display Name', type: 'string', width: 150, maxWidth: 175},
+                      {field: 'email', headerName: 'E-Mail', type: 'string', width: 175, maxWidth: 200},
+                      {field: 'emailVerified', headerName: 'E-Verified', type: 'boolean', maxWidth: 100},
+                      {field: 'created', headerName: 'Created', type: 'date', maxWidth: 100},
+                    ]}
+                    rows={[]}
+                  />
+                </WidgetCardComponent>
+              ),
+            },
+            {
+              xs: 12, md: 6,
+              children: (
+                <WidgetCardComponent contentGutterX>
+                  hello
+                </WidgetCardComponent>
+              ),
+            },
+          ]}
+        />
+      </Container>
+    </LayoutDashboardComponent>
   )
 }
 Index.displayName = 'Page:Index'
-Index.layoutComponent = LayoutDashboardComponent
+Index.layoutComponent = LayoutConsoleComponent
 Index.layoutProps = {
   LayoutConsoleComponent: {
     title: 'My Dashboard',
-  },
-  LayoutDashboardComponent: {
-    header: {
-      children: 'My Dashboard',
-      icon: {path: ICON_VARIANT_HOME.path},
-    },
-    breadcrumbItems: [],
+    disableAppBarElevation: true,
   },
 }
 

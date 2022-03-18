@@ -104,6 +104,7 @@ function GetInnerLayout({children}) {
   const auth = getAuth(app)
   const database = getDatabase(app)
   const store = getFirestore(app)
+  let status
 
 
   // Set up development emulators

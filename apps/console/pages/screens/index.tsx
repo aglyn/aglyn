@@ -24,7 +24,7 @@ import {
 import {ContainerComponent, NavigationDrawerComponent} from '@aglyn/shared-ui-jsx'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {Container, Typography} from '@mui/material'
+import {Button, Container, Typography} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
 import {collection, orderBy, query} from 'firebase/firestore'
 import {useCallback, useState} from 'react'
@@ -34,6 +34,7 @@ import AuthFormTemplateComponent from '../../components/auth-form-template.compo
 import DataTableComponent from '../../components/data-table.component'
 import WidgetCardComponent from '../../components/widget-card.component'
 import {CONTENT_MAX_WIDTH} from '../../constants/shared'
+import LayoutConsoleComponent from '../../layouts/layout-console.component'
 import LayoutDashboardComponent from '../../layouts/layout-dashboard.component'
 
 
@@ -62,7 +63,7 @@ const columns: GridColumns = [
 
 export function Screens(props) {
 
-  const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(true)
+  const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(false)
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
   const screensCollection = collection(firestore, 'screens')
@@ -76,52 +77,88 @@ export function Screens(props) {
   const handleFormSubmit = useCallback(async (values) => {
 
   }, [])
+  const handleFormOpen = useCallback(() => {
+    setQuickDrawerOpen(true)
+  }, [])
+  const handleFormClose = useCallback(() => {
+    setQuickDrawerOpen(false)
+  }, [])
   console.log('Screens props', props, status, screens)
   return (
-    <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
+    <LayoutDashboardComponent
+      breadcrumbItems={[
+        {
+          children: 'Screens',
+        },
+      ]}
+      header={{
+        children: 'App Screens',
+        icon: {path: ICON_VARIANT_PAGES.path},
+      }}
+      headerRight={(
+        <Button
+          variant="outlined"
+          color="primary"
+          onClick={handleFormOpen}
+        >
+          {'Add New Screen'}
+        </Button>
+      )}
+    >
+      <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
 
-      <WidgetCardComponent>
-        <DataTableComponent
-          rowHeight={40}
-          getRowId={(row) => row.id}
-          columns={columns}
-          noRowsLabel="No screens"
-          rows={screens || []}
-          loading={status === 'loading'}
-          pageSize={pageSize}
-          onPageSizeChange={setPageSize}
-          rowsPerPageOptions={[5, 10, 15]}
-          pagination
-        />
-      </WidgetCardComponent>
-
-      <NavigationDrawerComponent
-        open={quickDrawerOpen}
-        anchor="right"
-        appBarLeft={
-          <Typography variant="h6" component="div">
-            {'Create new screen'}
-          </Typography>
-        }
-      >
-        <ContainerComponent gutterY>
-          <FormRenderer
-            FormTemplate={AuthFormTemplateComponent}
-            componentMapper={simpleComponentMapper}
-            onSubmit={handleFormSubmit}
-            schema={formSchema}
-            subscription={{values: true}}
-            clearOnUnmount
+        <WidgetCardComponent>
+          <DataTableComponent
+            rowHeight={40}
+            getRowId={(row) => row.id}
+            columns={columns}
+            noRowsLabel="No screens"
+            rows={screens || []}
+            loading={status === 'loading'}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            rowsPerPageOptions={[5, 10, 15]}
+            pagination
           />
-          <AuthErrorAlertComponent
-            error={error as any}
-            sx={{mt: 2, mb: 1}}
-          />
-        </ContainerComponent>
+        </WidgetCardComponent>
 
-      </NavigationDrawerComponent>
+        <NavigationDrawerComponent
+          open={quickDrawerOpen}
+          anchor="right"
+          appBarLeft={
+            <Typography variant="h6" component="div">
+              {'Create new screen'}
+            </Typography>
+          }
+          appBarRight={
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleFormClose}
+            >
+              {'Cancel'}
+            </Button>
+          }
+        >
+          <ContainerComponent gutterY>
+            <FormRenderer
+              FormTemplate={AuthFormTemplateComponent}
+              componentMapper={simpleComponentMapper}
+              onSubmit={handleFormSubmit}
+              schema={formSchema}
+              subscription={{values: true}}
+              clearOnUnmount
+            />
+            <AuthErrorAlertComponent
+              error={error as any}
+              sx={{mt: 2, mb: 1}}
+            />
+          </ContainerComponent>
 
-    </Container>
+        </NavigationDrawerComponent>
+
+      </Container>
+    </LayoutDashboardComponent>
   )
 }
 const formSchema = {
@@ -148,21 +185,11 @@ const formSchema = {
   ],
 }
 Screens.displayName = 'Page:Screens'
-Screens.layoutComponent = LayoutDashboardComponent
+Screens.layoutComponent = LayoutConsoleComponent
 Screens.layoutProps = {
   LayoutConsoleComponent: {
     title: 'App Screens',
-  },
-  LayoutDashboardComponent: {
-    header: {
-      children: 'App Screens',
-      icon: {path: ICON_VARIANT_PAGES.path},
-    },
-    breadcrumbItems: [
-      {
-        children: 'Screens',
-      },
-    ],
+    disableAppBarElevation: true,
   },
 }
 
