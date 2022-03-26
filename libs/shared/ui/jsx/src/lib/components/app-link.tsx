@@ -113,17 +113,8 @@ const AppLink = forwardRef(
         asPathIsAncestor = asPath.startsWith(hrefPath) || asPath.startsWith(hrefAs),
         currentlyNested = pathname.lastIndexOf('/') > 0 || asPath.lastIndexOf('/') > 0,
         isSpecified = truthy(hrefPath || hrefAs)
-
-
-      console.log('isNestedHref', hrefPath, hrefAs, pathname, asPath, currentlyNested)
-      console.log('pathIsAncestor', pathIsAncestor)
-      console.log('asPathIsAncestor', asPathIsAncestor)
-      console.log('isSpecified', isSpecified)
-      console.log('isRootHref', isRootHref)
       const active = isSpecified && (samePath || sameAsPath)
       const activeAsAncestor = isSpecified && !isRootHref && currentlyNested && (pathIsAncestor || asPathIsAncestor)
-      console.log('active', active)
-      console.log('activeAsAncestor', activeAsAncestor)
       return [active, !active && activeAsAncestor]
     }, [asPath, href, hrefAs, pathname])
 
