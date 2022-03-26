@@ -16,8 +16,8 @@
  */
 
 import {styled} from '@aglyn/shared-feature-themes'
-import {AglynSvgLogo} from '@aglyn/shared-ui-jsx'
-import {Box, Container, Slide, Typography} from '@mui/material'
+import {AglynSvgLogo, ContainerComponent} from '@aglyn/shared-ui-jsx'
+import {Box, Slide, Typography} from '@mui/material'
 import {forwardRef, useEffect, useState} from 'react'
 import BackgroundImage, {type BackgroundImageProps} from '../components/BackgroundImage'
 import Copyright from '../components/Copyright'
@@ -81,7 +81,7 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(
         {...rest}
       >
         <Box alignItems="center" display="flex" flexGrow={1}>
-          <Container maxWidth="lg">
+          <ContainerComponent maxWidth="lg">
             <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
               <div>
                 <AuthLayoutLogo />
@@ -89,11 +89,11 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(
               </div>
             </Slide>
             <AuthLayoutCopyright />
-          </Container>
+          </ContainerComponent>
         </Box>
         <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
           <Box alignItems="center" bgcolor="common.white" display="flex" width={450}>
-            <Container>{children}</Container>
+            <ContainerComponent>{children}</ContainerComponent>
           </Box>
         </Slide>
       </AuthLayoutBackground>

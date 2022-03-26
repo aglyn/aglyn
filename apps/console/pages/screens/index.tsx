@@ -30,7 +30,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {Button, Container, Typography} from '@mui/material'
+import {Button, Typography} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
 import {collection, deleteDoc, doc, limit, query, setDoc, Timestamp} from 'firebase/firestore'
 import {useCallback, useState} from 'react'
@@ -181,7 +181,7 @@ export function Screens(props) {
         </NavigationDrawerComponent>
       )}
     >
-      <Container variant="boxed" maxWidth={CONTENT_MAX_WIDTH}>
+      <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <WidgetCardComponent>
           <DataTableComponent
             rowHeight={TABLE_ROW_HEIGHT}
@@ -196,7 +196,7 @@ export function Screens(props) {
             pagination
           />
         </WidgetCardComponent>
-      </Container>
+      </ContainerComponent>
     </LayoutDashboardComponent>
   )
 }

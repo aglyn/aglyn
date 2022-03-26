@@ -16,10 +16,10 @@
  */
 
 import {styled} from '@aglyn/shared-feature-themes'
-import {GridItems, type GridItemsProps} from '@aglyn/shared-ui-jsx'
+import {ContainerComponent, GridItems, type GridItemsProps} from '@aglyn/shared-ui-jsx'
 import {mdiCogOutline, MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
 import {copy, str} from '@aglyn/shared-util-tools'
-import {Container, Typography} from '@mui/material'
+import {Typography} from '@mui/material'
 import {type ReactNode} from 'react'
 import {isElement} from 'react-is'
 import Breadcrumbs from '../components/Breadcrumbs'
@@ -121,7 +121,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     >
       <header>
         <StyledNavBarSpacer />
-        <Container maxWidth={CONTENT_MAX_WIDTH}>
+        <ContainerComponent maxWidth={CONTENT_MAX_WIDTH}>
           <Typography component="h1" variant="h4">
             {!header?.icon || isElement(header.icon) ? header.icon : (
               <MdiIcon
@@ -133,15 +133,15 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
             {header?.children ?? title}
           </Typography>
           <Breadcrumbs items={breadcrumbItems} />
-        </Container>
+        </ContainerComponent>
       </header>
       <main /*className={classes.content}*/>
-        <Container maxWidth={CONTENT_MAX_WIDTH}>
+        <ContainerComponent maxWidth={CONTENT_MAX_WIDTH}>
           {items || ContentGridItemsProps ? (
             <GridItems items={items} spacing={3} {...ContentGridItemsProps} />
           ) : null}
           {children}
-        </Container>
+        </ContainerComponent>
       </main>
     </MainLayout>
   )

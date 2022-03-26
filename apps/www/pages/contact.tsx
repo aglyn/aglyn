@@ -16,7 +16,7 @@
  */
 
 import {BRAND_NAMES} from '@aglyn/shared-data-enums'
-import {GridItems} from '@aglyn/shared-ui-jsx'
+import {ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
 import {
   FormRenderer,
   FormSpy,
@@ -24,14 +24,7 @@ import {
   simpleComponentMapper,
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
-import Alert from '@mui/material/Alert'
-import AlertTitle from '@mui/material/AlertTitle'
-import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
-import Container from '@mui/material/Container'
-import Grid from '@mui/material/Grid'
-import LinearProgress from '@mui/material/LinearProgress'
-import Typography from '@mui/material/Typography'
+import {Alert, AlertTitle, Box, Button, Grid, LinearProgress, Typography} from '@mui/material'
 import {useCallback} from 'react'
 import {mainNavigation} from '../const'
 import {DdfForms} from '../forms'
@@ -136,7 +129,7 @@ function Contact(props) {
     >
       <main>
         <Box py={12} bgcolor={'background.paper'}>
-          <Container maxWidth={'lg'} sx={{py: 4}}>
+          <ContainerComponent maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
               direction="column"
@@ -175,19 +168,19 @@ function Contact(props) {
                   xs: 12,
                   md: 9,
                   children: (
-                    <Container maxWidth="sm">
+                    <ContainerComponent maxWidth="sm">
                       <FormRenderer
                         FormTemplate={FormTemplate}
                         componentMapper={simpleComponentMapper}
                         schema={DdfForms.ContactFormSchema}
                         onSubmit={handleSubmit}
                       />
-                    </Container>
+                    </ContainerComponent>
                   ),
                 },
               ]}
             />
-          </Container>
+          </ContainerComponent>
         </Box>
       </main>
       <SiteFooterView />

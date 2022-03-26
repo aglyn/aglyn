@@ -125,7 +125,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn
           </Fragment>
         )}
 
-        <Container>
+        <ContainerComponent>
           <br />
           {error && (_isStrT(error) ? error : 'Error loading...')}
           {!error && (
@@ -147,7 +147,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn
               </Box>
             </Fragment>
           )}
-        </Container>
+        </ContainerComponent>
       </div>
     </NavigationDrawerComponent>
   )

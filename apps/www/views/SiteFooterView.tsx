@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,8 @@
  */
 
 import {styled} from '@aglyn/shared-feature-themes'
-import {AppLink, GridItems} from '@aglyn/shared-ui-jsx'
-import Box from '@mui/material/Box'
-import Container from '@mui/material/Container'
-import MuiLink from '@mui/material/Link'
-import Typography from '@mui/material/Typography'
+import {AppLink, ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
+import {Box, MuiLink, Typography} from '@mui/material'
 import NextImage from 'next/image'
 import {type ElementType, forwardRef, type HTMLAttributes} from 'react'
 import {footerNavigation} from '../const'
@@ -45,8 +42,8 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(function 
   return (
     <FooterElement ref={ref} {...rest}>
       <Box sx={{pt: 4}}>
-        {children && <Container maxWidth="lg">{children}</Container>}
-        <Container maxWidth="lg">
+        {children && <ContainerComponent maxWidth="lg">{children}</ContainerComponent>}
+        <ContainerComponent maxWidth="lg">
           <GridItems
             spacing={2}
             justifyContent="space-between"
@@ -101,7 +98,7 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(function 
               })),
             ]}
           />
-        </Container>
+        </ContainerComponent>
       </Box>
     </FooterElement>
   )

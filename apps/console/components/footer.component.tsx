@@ -16,8 +16,8 @@
  */
 
 import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
-import {AppLink, GridButtons, type GridButtonsProps} from '@aglyn/shared-ui-jsx'
-import {Box, Container, Stack, Typography} from '@mui/material'
+import {AppLink, ContainerComponent, GridButtons, type GridButtonsProps} from '@aglyn/shared-ui-jsx'
+import {Box, Stack, Typography} from '@mui/material'
 import {forwardRef, type HTMLAttributes} from 'react'
 import CopyrightComponent from '../components/copyright.component'
 import {tailNavigation} from '../constants/shared'
@@ -38,7 +38,7 @@ const FooterComponent = forwardRef<any, FooterProps>(
         component="footer"
         {...rest}
       >
-        <Container maxWidth={FOOTER_MAX_WIDTH}>
+        <ContainerComponent maxWidth={FOOTER_MAX_WIDTH}>
           <Stack
             marginTop={6}
             paddingBottom={1}
@@ -91,7 +91,7 @@ const FooterComponent = forwardRef<any, FooterProps>(
               </Typography>
             </Stack>
           </Stack>
-        </Container>
+        </ContainerComponent>
       </Box>
     )
   },

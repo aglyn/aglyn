@@ -21,6 +21,7 @@ import {
   AglynSvgLogo,
   AppLink,
   type AppLinkProps,
+  ContainerComponent,
   GridButtons,
   type GridButtonsProps,
   Menu,
@@ -32,7 +33,6 @@ import {
   type AppBarProps,
   Avatar,
   Box,
-  Container,
   IconButton,
   type IconButtonProps,
   Tab as MuiTab,
@@ -324,7 +324,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
       </Head>
       <AppBar component="header" elevation={3} color="transparent" position="fixed">
         <InnerAppBarTop component={'div'} elevation={0} color="primary" position="relative">
-          <Container maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
+          <ContainerComponent maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
             <Toolbar>
               <StyledLeft>
                 <StyledLogoWrapper>
@@ -343,11 +343,11 @@ function MainLayoutRaw(props: MainLayoutProps) {
               </StyledCenter>
               <StyledRight>{(quickActions ?? []).map(buildNav('qa', buildIconButton))}</StyledRight>
             </Toolbar>
-          </Container>
+          </ContainerComponent>
         </InnerAppBarTop>
         {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
           <AppBar component="div" color="primary" elevation={0} position="static">
-            <Container maxWidth={NAVIGATION_MAX_WIDTH}>
+            <ContainerComponent maxWidth={NAVIGATION_MAX_WIDTH}>
               <Tabs
                 aria-label="area navigation"
                 indicatorColor="secondary"
@@ -374,13 +374,13 @@ function MainLayoutRaw(props: MainLayoutProps) {
                   />
                 ))}
               </Tabs>
-            </Container>
+            </ContainerComponent>
           </AppBar>
         ) : null}
       </AppBar>
       <StyledContent>{children}</StyledContent>
       <footer>
-        <Container maxWidth={FOOTER_MAX_WIDTH}>
+        <ContainerComponent maxWidth={FOOTER_MAX_WIDTH}>
           <Box
             component={'div'}
             sx={{
@@ -423,7 +423,7 @@ function MainLayoutRaw(props: MainLayoutProps) {
               </Typography>
             </Box>
           </Box>
-        </Container>
+        </ContainerComponent>
       </footer>
     </Fragment>
   )

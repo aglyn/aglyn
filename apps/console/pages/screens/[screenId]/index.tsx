@@ -16,9 +16,9 @@
  */
 
 import {ICON_VARIANT_BESIGNER, ICON_VARIANT_PAGES} from '@aglyn/shared-data-enums'
-import {AppLink, GridItems} from '@aglyn/shared-ui-jsx'
+import {AppLink, ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {Container, ListItemText} from '@mui/material'
+import {ListItemText} from '@mui/material'
 import {doc} from 'firebase/firestore'
 import {useRouter} from 'next/router'
 import {useFirestore, useFirestoreDocDataOnce} from 'reactfire'
@@ -92,7 +92,7 @@ export function ScreenDetails(props) {
         </AppLink>
       )}
     >
-      <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
+      <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
 
         <GridItems
           spacing={3}
@@ -131,7 +131,7 @@ export function ScreenDetails(props) {
         />
 
 
-      </Container>
+      </ContainerComponent>
     </LayoutDashboardComponent>
   )
 }

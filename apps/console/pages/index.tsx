@@ -16,8 +16,7 @@
  */
 
 import {ICON_VARIANT_HOME} from '@aglyn/shared-data-enums'
-import {GridItems} from '@aglyn/shared-ui-jsx'
-import {Container} from '@mui/material'
+import {ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
 import DataTableComponent from '../components/data-table.component'
 import WidgetCardComponent from '../components/widget-card.component'
 import {CONTENT_MAX_WIDTH} from '../constants/shared'
@@ -41,7 +40,7 @@ export function Index(props) {
         icon: {path: ICON_VARIANT_HOME.path},
       }}
     >
-      <Container sx={{py: 3}} maxWidth={CONTENT_MAX_WIDTH}>
+      <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <GridItems
           spacing={3}
           items={[
@@ -76,7 +75,7 @@ export function Index(props) {
             },
           ]}
         />
-      </Container>
+      </ContainerComponent>
     </LayoutDashboardComponent>
   )
 }

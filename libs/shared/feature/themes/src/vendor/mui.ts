@@ -66,6 +66,9 @@ declare module '@mui/material/SvgIcon' {
 declare module '@mui/material/AppBar' {
   interface AppBarPropsColorOverrides extends ColorPropOverrides {}
 }
+declare module '@mui/material/IconButton' {
+  interface AppBarPropsColorOverrides extends ColorPropOverrides {}
+}
 declare module '@mui/system/createTheme/shape' {
   interface Shape {
     appIconBorderRadius: number | string
@@ -84,6 +87,11 @@ declare module '@mui/material/styles/createPalette' {
   interface PaletteOptions {
     tertiary?: PaletteOptions['primary']
     quaternary?: PaletteOptions['primary']
+  }
+}
+declare module '@mui/material/styles/zIndex' {
+  interface ZIndex {
+    blocking: number
   }
 }
 declare module '@mui/material/styles' {
@@ -132,6 +140,16 @@ declare module '@mui/material/styles' {
    * END EXAMPLE – MODULE AUGMENTATION ↑
    */
 
+  interface PaletteOptions {
+    background?: PaletteOptions['background']
+    tertiary?: PaletteOptions['primary']
+    quaternary?: PaletteOptions['primary']
+    svgBackground?: IActionStates
+    svgFilled?: IActionStates
+    svgStroke?: IActionStates
+    text?: PaletteOptions['text']
+  }
+
   interface Palette {
     background: Palette['background']
     tertiary: Palette['primary']
@@ -149,15 +167,6 @@ declare module '@mui/material/styles' {
 
   interface DefaultTheme extends Theme {}
 
-  interface PaletteOptions {
-    background?: PaletteOptions['background']
-    tertiary?: PaletteOptions['primary']
-    quaternary?: PaletteOptions['primary']
-    svgBackground?: IActionStates
-    svgFilled?: IActionStates
-    svgStroke?: IActionStates
-    text?: PaletteOptions['text']
-  }
 
   type ExtendPropsOfWithStyles<P extends {classes?: ClassNameMap<string>},
     StylesType extends ClassKeyInferable<any, any>,

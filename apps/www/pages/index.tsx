@@ -20,7 +20,7 @@ import img2 from '/public/_static/images/designer/website-designer-element-categ
 import img4 from '/public/_static/images/designer/website-designer-functional-operations.png'
 import img1 from '/public/_static/images/designer/website-designer-preview-collage.png'
 import {APP_WWW, BRAND_NAMES} from '@aglyn/shared-data-enums'
-import {GridItems} from '@aglyn/shared-ui-jsx'
+import {ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
 import {Image} from '@aglyn/shared-ui-next'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
@@ -47,9 +47,9 @@ function Index(props) {
         url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
       >
         <Box py={6}>
-          <Container
+          <ContainerComponent
             maxWidth={'lg'}
-            sx={{py: 4}}
+            gutterY
           >
             <GridItems
               alignItems="center"
@@ -107,7 +107,7 @@ function Index(props) {
                 },
               ]}
             />
-          </Container>
+          </ContainerComponent>
         </Box>
       </BackgroundImage>
       <main>

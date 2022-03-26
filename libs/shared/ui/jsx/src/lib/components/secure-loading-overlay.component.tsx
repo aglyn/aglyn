@@ -33,8 +33,8 @@ const SecureLoadingOverlayComponent = forwardRef<any, SecureLoadingOverlayProps>
         ref={ref}
         open
         sx={mergeSxProps({
-          zIndex: 9999999,
-          color: theme => theme.palette.text.primary,
+          zIndex: 'blocking',
+          color: 'text.primary',
 
           '& .MuiBackdrop-root': {
             backgroundColor: theme => theme.palette.background.paper,

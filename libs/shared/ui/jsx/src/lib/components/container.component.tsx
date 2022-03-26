@@ -18,37 +18,58 @@
 import {styled} from '@aglyn/shared-feature-themes'
 import {_isEqualitySameType} from '@aglyn/shared-util-guards'
 import {Container, type ContainerProps as MuiContainerProps} from '@mui/material'
+// eslint-disable-next-line no-restricted-imports
+import type {Spacing} from '@mui/system/createTheme/createSpacing'
 
 
 export interface ContainerProps extends MuiContainerProps {
-  gutterY?: boolean,
   gutterMode?: 'margin' | 'padding'
-  gutterBottom?: number
-  gutterTop?: number
+  gutterY?: Parameters<Spacing> | boolean
+}
+
+const isBoolean = (value: unknown) => {
+  return typeof value === 'boolean'
 }
 
 const ContainerComponent = styled(Container, {
   name: 'AglynContainer',
-  shouldForwardProp: (propName) => (
-    !_isEqualitySameType(propName, 'gutterY', 'gutterMode', 'gutterBottom', 'gutterTop')
+  shouldForwardProp: (propName) => !_isEqualitySameType(
+    propName,
+    'gutterMode',
+    'gutterY',
   ),
 })<ContainerProps>(({
-  theme,
-  gutterY,
+  disableGutters,
   gutterMode,
-  gutterTop,
-  gutterBottom,
+  gutterY,
+  theme,
 }) => {
-  if (gutterY) {
-    const mode = gutterMode === 'margin' ? 'margin' : 'padding'
+  if (disableGutters) return {}
+
+  const mode = gutterMode === 'margin' ? 'margin' : 'padding'
+
+  if (isBoolean(gutterY) && gutterY) {
     return ({
-      [`${mode}Top`]: theme.spacing(gutterTop ?? 2),
-      [`${mode}Bottom`]: theme.spacing(gutterBottom ?? 2),
+      [`${mode}Top`]: theme.spacing(2),
+      [`${mode}Bottom`]: theme.spacing(2),
+      [theme.breakpoints.up('md')]: {
+        [`${mode}Top`]: theme.spacing(3),
+        [`${mode}Bottom`]: theme.spacing(3),
+      },
+    })
+  }
+  else if (!isBoolean(gutterY) && gutterY) {
+    const space = theme.spacing(
+      ...(Array.isArray(gutterY) ? gutterY : [gutterY]) as Parameters<Spacing>
+    )
+    return ({
+      [`${mode}Top`]: space,
+      [`${mode}Bottom`]: space,
     })
   }
   return {}
 })
-ContainerComponent.displayName = 'ContainerComponent'
+ContainerComponent.displayName = 'AglynContainerComponent'
 
 export {ContainerComponent}
 export default ContainerComponent

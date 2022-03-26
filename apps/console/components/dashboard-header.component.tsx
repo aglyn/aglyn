@@ -16,9 +16,13 @@
  */
 
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
-import {BackgroundImageComponent, type BackgroundImageComponentProps} from '@aglyn/shared-ui-jsx'
+import {
+  BackgroundImageComponent,
+  type BackgroundImageComponentProps,
+  ContainerComponent,
+} from '@aglyn/shared-ui-jsx'
 import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {Container, Grid, Typography, type TypographyProps} from '@mui/material'
+import {Grid, Typography, type TypographyProps} from '@mui/material'
 import {type ReactNode, useMemo} from 'react'
 import {isElement} from 'react-is'
 import BreadcrumbsComponent, {type BreadcrumbsProps} from '../components/breadcrumbs.component'
@@ -72,7 +76,7 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
       }}
       {...rest}
     >
-      <Container maxWidth={CONTENT_MAX_WIDTH}>
+      <ContainerComponent maxWidth={CONTENT_MAX_WIDTH}>
         <Grid
           container
           direction="row"
@@ -139,7 +143,7 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
           )}
         </Grid>
         {children}
-      </Container>
+      </ContainerComponent>
     </BackgroundImageComponent>
   )
 }

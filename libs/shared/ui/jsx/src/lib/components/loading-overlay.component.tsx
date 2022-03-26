@@ -44,8 +44,8 @@ const LoadingOverlayComponent = forwardRef<any, LoadingOverlayComponentProps>(
               ref={ref}
               open={open || loading}
               sx={mergeSxProps({
-                zIndex: 9999999,
-                color: theme => theme.palette.text.primary,
+                zIndex: 'blocking',
+                color: 'text.primary',
 
                 '& .MuiBackdrop-root': {
                   backdropFilter: 'blur(5px)',

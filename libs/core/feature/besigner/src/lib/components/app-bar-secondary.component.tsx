@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import {styled} from '@aglyn/shared-feature-themes'
+import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {
   AppBar as MuiAppBar,
   type AppBarProps as MuiAppBarProps,
-  Box,
+  Stack,
   Toolbar as MuiToolbar,
 } from '@mui/material'
 import {forwardRef} from 'react'
@@ -30,54 +30,46 @@ import InteractControlsComponent from './interact-controls.component'
 import PanelControlsComponent from './panel-controls.component'
 
 
-const AppBarSecondary = styled(MuiAppBar, {
-  name: 'AglynAppBarSecondary',
-})<MuiAppBarProps>(({theme}) => ({
-  top: 0,
-  borderBottom: `1px solid ${theme.palette.divider}`,
-  [`& .MuiToolbar-root`]: {
-    minHeight: 40,
-  },
-}))
-
 export interface AppBarSecondaryComponentProps extends Partial<MuiAppBarProps> {}
 
 const AppBarSecondaryComponent = forwardRef<any, AppBarSecondaryComponentProps>(
   function RefRenderFn(props, ref) {
-    const {children, ...rest} = props
+    const {children, sx, ...rest} = props
 
     return (
-      <AppBarSecondary
+      <MuiAppBar
         ref={ref}
         id="aglyn:besigner-appbar-secondary"
         aria-label="secondary app toolbar"
         position="static"
         color="inherit"
         elevation={0}
+        sx={mergeSxProps({
+          top: 0,
+          borderBottomWidth: '1px',
+          borderBottomStyle: 'solid',
+          borderBottomColor: 'divider',
+          [`& .MuiToolbar-root`]: {minHeight: 40},
+        }, sx)}
         {...rest}
       >
         <MuiToolbar variant="dense">
-          <AddControlsComponent />
-
-          <Box sx={{mx: 0.25}} />
-
-          <HistoryControlsComponent />
-
-          <Box sx={{flexGrow: 1}} />
-
-          <DevicePreviewControlsComponent />
-
-          <Box sx={{mx: 1}} />
-
-          <InteractControlsComponent />
-
-          <Box sx={{mx: 1}} />
-
-          <PanelControlsComponent />
-
-          {children}
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            width={1}
+            spacing={1}
+          >
+            <AddControlsComponent />
+            <HistoryControlsComponent sx={{flexGrow: 1}} />
+            <DevicePreviewControlsComponent />
+            <InteractControlsComponent />
+            <PanelControlsComponent />
+            {children}
+          </Stack>
         </MuiToolbar>
-      </AppBarSecondary>
+      </MuiAppBar>
     )
   },
 )
