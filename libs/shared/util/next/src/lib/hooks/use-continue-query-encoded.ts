@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import {base64Encode} from '@aglyn/shared-util-tools'
 import {useRouter} from 'next/router'
 import {useMemo} from 'react'
 import type {ContinueRouteData} from '../types'
@@ -26,7 +25,7 @@ export function useContinueQueryEncoded() {
 
   return useMemo(() => {
     const href = typeof location !== 'undefined'
-        ? location.href
+        ? location.pathname
         : router.pathname,
       asPath = router.asPath
 
@@ -35,7 +34,7 @@ export function useContinueQueryEncoded() {
 }
 
 useContinueQueryEncoded.encodeContinueQuery = (query: ContinueRouteData): string => {
-  return base64Encode(JSON.stringify(query))
+  return encodeURIComponent(JSON.stringify(query))
 }
 
 export default useContinueQueryEncoded

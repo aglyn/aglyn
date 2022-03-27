@@ -15,43 +15,24 @@
  * limitations under the License.
  */
 
-import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {Typography, type TypographyProps} from '@mui/material'
-import {ElementType, forwardRef, useState} from 'react'
-import {useInterval} from 'react-use'
+import {ElementType, forwardRef} from 'react'
+import EllipsisPulseComponent from './ellipsis-pulse.component'
 
 
-export type LoadingTextProps<C extends ElementType> = TypographyProps<C, {component?: C}> & {
-  maxEllipsis: number
-  minEllipsis: number
-  animationDelay: number
-}
+export type LoadingTextProps<C extends ElementType> = TypographyProps<C, {component?: C}> & {}
 
 const LoadingTextComponent = forwardRef(
   function RefRenderFn<C extends ElementType>(props: LoadingTextProps<C>, ref) {
-    const {children, maxEllipsis, minEllipsis, animationDelay, sx, ...rest} = props
-    const [count, setCount] = useState(maxEllipsis)
-    // const ellipsis =
-
-    useInterval(() => {
-      if (count >= maxEllipsis) setCount(minEllipsis)
-      else setCount(count + 1)
-    }, animationDelay)
-
+    const {children, ...rest} = props
 
     return (
       <Typography
         ref={ref}
-        sx={mergeSxProps({
-          ':after': {
-            // display: 'block',
-            content: `"${[...new Array(count)].map(i => '.').join('')}"`,
-            position: 'absolute',
-          },
-        }, sx)}
         {...rest}
       >
         {children}
+        <EllipsisPulseComponent />
       </Typography>
     )
   },

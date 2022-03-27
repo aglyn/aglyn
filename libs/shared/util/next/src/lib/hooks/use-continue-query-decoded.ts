@@ -16,7 +16,6 @@
  */
 
 import {_isArr} from '@aglyn/shared-util-guards'
-import {base64Decode} from '@aglyn/shared-util-tools'
 import {useRouter} from 'next/router'
 import {useCallback, useMemo} from 'react'
 import type {UrlObject} from 'url'
@@ -59,7 +58,7 @@ export function useContinueQueryDecoded(): UseContinueQueryDecodedResponse {
 }
 
 useContinueQueryDecoded.decodeContinueQuery = (query: string): ContinueRouteData => {
-  return JSON.parse(base64Decode(query || '') || '{}')
+  return JSON.parse(decodeURIComponent(query || '') || '{}')
 }
 
 export default useContinueQueryDecoded
