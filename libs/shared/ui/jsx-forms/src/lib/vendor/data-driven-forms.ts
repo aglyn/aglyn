@@ -19,13 +19,11 @@ export {
   type ActionMapper,
   type ActionResolution,
   type AnyObject,
-  Common,
   type CommonTypes,
   type ComponentMapper,
   type ComponentType,
   componentTypes,
   composeValidators,
-  Condition,
   type ConditionDefinition,
   type ConditionProp,
   type ConditionProps,
@@ -50,14 +48,9 @@ export {
   type FormRendererProps,
   FormSpy,
   type FormTemplateRenderProps,
-  getConditionTriggers,
-  getValidates,
-  getVisibleFields,
   type InnerWhenFunction,
   type Input,
   type LenghtOptions,
-  memoize,
-  type MessageObject,
   type MessageTypes,
   type Meta,
   type NumericalityOptions,
@@ -65,8 +58,6 @@ export {
   type ParseCondition,
   type PartialValidator,
   type PatternOptions,
-  prepareComponentProps,
-  prepareMsg,
   RendererContext,
   type RendererContextValue,
   type ResolvePropsFunction,
@@ -77,20 +68,44 @@ export {
   type UseFieldApiConfig,
   type UseFieldApiProps,
   useFormApi,
-  validation,
   type Validator,
   type ValidatorConfiguration,
   type ValidatorFunction,
   type ValidatorMapper,
   validatorMapper,
-  Validators,
   type ValidatorType,
   validatorTypes,
   type WhenFunction,
-  WizardContext,
   type WizardContextValue,
 } from '@data-driven-forms/react-form-renderer'
 
 export {
-  ValidationOptions,
+  default as validation,
+  type ValidationOptions,
 } from '@data-driven-forms/react-form-renderer/validation/validation'
+
+export {
+  prepareMsg,
+  type MessageObject,
+  memoize,
+} from '@data-driven-forms/react-form-renderer/common'
+
+export {
+  default as prepareComponentProps,
+} from '@data-driven-forms/react-form-renderer/prepare-component-props'
+
+export {
+  default as getVisibleFields,
+} from '@data-driven-forms/react-form-renderer/get-visible-fields'
+
+export {
+  default as getValidates,
+} from '@data-driven-forms/react-form-renderer/get-validates'
+
+export {
+  default as getConditionTriggers,
+} from '@data-driven-forms/react-form-renderer/get-condition-triggers'
+
+export {
+  default as Condition,
+} from '@data-driven-forms/react-form-renderer/condition'
