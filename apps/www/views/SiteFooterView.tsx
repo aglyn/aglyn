@@ -17,7 +17,7 @@
 
 import {styled} from '@aglyn/shared-feature-themes'
 import {AppLink, ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
-import {Box, MuiLink, Typography} from '@mui/material'
+import {Box, Link as MuiLink, Typography} from '@mui/material'
 import NextImage from 'next/image'
 import {type ElementType, forwardRef, type HTMLAttributes} from 'react'
 import {footerNavigation} from '../const'
