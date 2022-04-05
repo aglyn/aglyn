@@ -22,7 +22,9 @@ import {buildRoute, Route} from '../../../../../constants/route-links'
 export default () => null
 
 export const getServerSideProps = (context: GetServerSidePropsContext) => {
-  const {query:{screenId, versionId}} = context
+  const {query} = context
+  const screenId = `${query.screenId}`
+  const versionId = `${query.versionId}`
   return {
     redirect: {
       permanent: true,

@@ -18,6 +18,7 @@
 export * from './lib/str'
 export * from './lib/apply-mixins'
 export * from './lib/copy'
+export * from './lib/create-chained-function'
 export * from './lib/crud'
 export * from './lib/css'
 export * from './lib/operator/compare'

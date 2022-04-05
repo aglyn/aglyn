@@ -22,7 +22,6 @@ import {buildRoute, Route} from '../../constants/route-links'
 export default () => null
 
 export const getServerSideProps = (context: GetServerSidePropsContext) => {
-  const {} = context
   return {
     redirect: {
       permanent: true,
