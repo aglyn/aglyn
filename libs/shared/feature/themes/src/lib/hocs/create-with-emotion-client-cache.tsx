@@ -16,6 +16,7 @@
  */
 
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import type {ComponentType} from 'react'
 import {
   CacheProvider,
@@ -52,6 +53,7 @@ export function createWithEmotionClientCache(options: WithEmotionClientCacheOpti
       )
     }
     WithEmotionClientCache.displayName = `WithEmotionClientCache(${displayName})`
+    hoistNonReactStatics(WithEmotionClientCache, WrappedComponent)
 
     return WithEmotionClientCache
 

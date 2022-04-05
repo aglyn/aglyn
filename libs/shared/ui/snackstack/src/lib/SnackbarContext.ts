@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-export * from './lib/change-case'
-export * from './lib/deep-equal'
-export * from './lib/fuse'
-export * from './lib/hoist-non-react-statics'
-export * from './lib/mitt-emitter'
-export * from './lib/object-deep-merge'
-export * from './lib/object-flatten'
-export * from './lib/platform-identification'
-export * from './lib/unique-identification'
-export * from './lib/use-debounce'
+import {createContext} from 'react'
+import {type ProviderContext} from './types'
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+export const SnackbarContext = createContext<ProviderContext>()
+SnackbarContext.displayName = 'SnackbarContext'
+
+export default SnackbarContext

@@ -16,6 +16,7 @@
  */
 
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import {useRouter} from 'next/router'
 import {type ComponentType, forwardRef, useEffect} from 'react'
 import {LoadingProviderComponent, useLoading} from '../contexts/loading.context'
@@ -90,6 +91,7 @@ export function withLoadingLayoutComponent<P>(
     },
   )
   WithLoadingLayoutComponent.displayName = `WithLoadingLayoutComponent(${displayName})`
+  hoistNonReactStatics(WithLoadingLayoutComponent, WrappedComponent)
   return WithLoadingLayoutComponent
 }
 

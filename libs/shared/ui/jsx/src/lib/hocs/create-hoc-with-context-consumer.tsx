@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
  */
 
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import {ComponentType, Consumer, forwardRef, ForwardRefExoticComponent} from 'react'
 
 
@@ -56,7 +57,7 @@ export function createHocWithContextConsumer<T, K extends string = 'ctx'>(
   function withContextConsumer<P>(
     Component: ComponentType<P & Record<K, T>>,
   ): ForwardRefExoticComponent<Omit<P, K>> {
-    const displayName = `WithContext(${getDisplayName(Component)})`
+    const displayName = getDisplayName(Component)
 
     const DecoratedComponent = forwardRef<any, P>(
       function RefRenderFn(props, ref) {
@@ -74,7 +75,8 @@ export function createHocWithContextConsumer<T, K extends string = 'ctx'>(
       },
     )
 
-    DecoratedComponent.displayName = displayName
+    DecoratedComponent.displayName = `WithContext(${displayName})`
+    hoistNonReactStatics(DecoratedComponent, Component)
     return DecoratedComponent as ForwardRefExoticComponent<Omit<P, K>>
   }
 

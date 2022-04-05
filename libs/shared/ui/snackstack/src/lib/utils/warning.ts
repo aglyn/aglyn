@@ -15,13 +15,20 @@
  * limitations under the License.
  */
 
-export * from './lib/change-case'
-export * from './lib/deep-equal'
-export * from './lib/fuse'
-export * from './lib/hoist-non-react-statics'
-export * from './lib/mitt-emitter'
-export * from './lib/object-deep-merge'
-export * from './lib/object-flatten'
-export * from './lib/platform-identification'
-export * from './lib/unique-identification'
-export * from './lib/use-debounce'
+/* eslint-disable */
+const __DEV__ = process.env.NODE_ENV !== 'production'
+
+export const warning = (message: string) => {
+  if (!__DEV__) return
+
+  if (typeof console !== 'undefined') {
+    console.error(message)
+  }
+  try {
+    throw new Error(message)
+  }
+  catch (x) { }
+
+}
+
+export default warning

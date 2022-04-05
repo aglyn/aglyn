@@ -22,6 +22,7 @@ import {
 } from '@aglyn/core-data-framework'
 import {type InnerRefProp} from '@aglyn/shared-data-types'
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import clsx from 'clsx'
 import {type ComponentType, forwardRef, type PropsWithoutRef, type  RefAttributes} from 'react'
 import useAglynComponent from './use-aglyn-component'
@@ -75,6 +76,7 @@ export function withAglynElementData<U = any, T = any>(
     },
   )
   WithAglynElementData.displayName = `WithAglynElementData(${displayName})`
+  hoistNonReactStatics(WithAglynElementData, WrappedComponent)
   return WithAglynElementData as DecoratedComponent<U, T>
 }
 

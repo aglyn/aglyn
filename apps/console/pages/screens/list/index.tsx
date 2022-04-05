@@ -32,10 +32,11 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {Button, IconButton, Typography} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
 import {collection, doc, limit, query, setDoc, Timestamp} from 'firebase/firestore'
-import {useCallback, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import {useFirestore, useFirestoreCollectionData} from 'reactfire'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
@@ -60,8 +61,19 @@ function Screens(props) {
   const screensQuery = query(screensCollection, limit(pageSize))
   const {status, data} = useFirestoreCollectionData(screensQuery, {idField: '$id'})
   const screens = data || []
+  const {enqueueSnackbar, closeSnackbar} = useSnackbar()
 
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (status === 'error') {
+      enqueueSnackbar("An error has occurred", {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [status])
+
   const handleFormSubmit = useCallback(async (values) => {
     if (loading) return
     if (error) setError(null)
@@ -88,10 +100,16 @@ function Screens(props) {
       .catch((error) => {
         console.error(error)
         setError({...error})
+        enqueueSnackbar("An error has occurred", {
+          variant: 'error',
+          allowDuplicate: true,
+        })
       })
-    handleFormClose()
-    dequeueLoading()
-  }, [firestore, error, loading, queueLoading, handleFormClose])
+      .finally(() => {
+        handleFormClose()
+        dequeueLoading()
+      })
+  }, [loading, error, queueLoading, firestore, handleFormClose, enqueueSnackbar])
 
   const handleDeleteScreen = useCallback((id: string, versionId: string) => async () => {
     let dequeueLoading

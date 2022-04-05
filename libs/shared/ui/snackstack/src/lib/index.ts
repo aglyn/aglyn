@@ -15,13 +15,8 @@
  * limitations under the License.
  */
 
-export * from './lib/change-case'
-export * from './lib/deep-equal'
-export * from './lib/fuse'
-export * from './lib/hoist-non-react-statics'
-export * from './lib/mitt-emitter'
-export * from './lib/object-deep-merge'
-export * from './lib/object-flatten'
-export * from './lib/platform-identification'
-export * from './lib/unique-identification'
-export * from './lib/use-debounce'
+export * from './types'
+export * from './SnackbarProvider'
+export * from './SnackbarContent'
+export * from './withSnackbar'
+export * from './useSnackbar'

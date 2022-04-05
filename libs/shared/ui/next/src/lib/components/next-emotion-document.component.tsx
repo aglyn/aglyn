@@ -23,6 +23,7 @@ import {
 } from '@aglyn/shared-feature-themes'
 import {makeLinkElements, makeMetaElements} from '@aglyn/shared-ui-jsx'
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import crypto from 'crypto'
 import NextDocument, {
   type DocumentContext,
@@ -95,12 +96,13 @@ class NextEmotionDocumentComponent<P extends NextEmotionDocumentComponentProps> 
     ctx.renderPage = () =>
       originalRenderPage({
         enhanceApp: (App: any) => {
-          const displayName = `EmotionCachedApp(${getDisplayName(App)})`
-          const component = (props: unknown) => (
+          const displayName = getDisplayName(App)
+          const Component = (props: unknown) => (
             <App emotionCache={cache} {...props} />
           )
-          component.displayName = displayName
-          return component
+          Component.displayName = `EmotionCachedApp(${displayName})`
+          hoistNonReactStatics(Component, App)
+          return Component
         },
       })
 

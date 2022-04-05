@@ -17,6 +17,7 @@
 
 import {mdiHome, type MdiIconProps, mdiVectorPolylineEdit} from '@aglyn/shared-ui-mdi-jsx'
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import {type NextRouter, Router, useRouter} from 'next/router'
 import {type ComponentType, forwardRef} from 'react'
 import {Normalized} from './aglyn-deprecated'
@@ -350,5 +351,6 @@ export function withAggregatedPageMeta<P>(
     },
   )
   WithAggregatedPageMeta.displayName = `WithAggregatedPageMeta(${displayName})`
+  hoistNonReactStatics(WithAggregatedPageMeta, WrappedComponent)
   return WithAggregatedPageMeta
 }

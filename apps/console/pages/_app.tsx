@@ -19,6 +19,7 @@ import {APP_CONSOLE, IS_PRODUCTION} from '@aglyn/shared-data-enums'
 import type {MakeLinkElementsConfig, MakeMetaElementsConfig} from '@aglyn/shared-ui-jsx'
 import {ConfirmationProviderComponent, LoadingLayoutComponent} from '@aglyn/shared-ui-jsx'
 import {NextEmotionAppComponent, type NextEmotionAppComponentProps} from '@aglyn/shared-ui-next'
+import {SnackbarProvider} from '@aglyn/shared-ui-snackstack'
 import {Fragment, useMemo} from 'react'
 import LayoutFirebaseAppComponent from '../layouts/layout-firebase-app.component'
 import './styles.css'
@@ -28,13 +29,15 @@ const MainWrapper = (props) => {
   const {children} = props
 
   return (
-        <LayoutFirebaseAppComponent>
-    <LoadingLayoutComponent>
-      <ConfirmationProviderComponent>
-        {children}
-      </ConfirmationProviderComponent>
-    </LoadingLayoutComponent>
-        </LayoutFirebaseAppComponent>
+    <LayoutFirebaseAppComponent>
+      <LoadingLayoutComponent>
+        <ConfirmationProviderComponent>
+          <SnackbarProvider>
+            {children}
+          </SnackbarProvider>
+        </ConfirmationProviderComponent>
+      </LoadingLayoutComponent>
+    </LayoutFirebaseAppComponent>
   )
 }
 

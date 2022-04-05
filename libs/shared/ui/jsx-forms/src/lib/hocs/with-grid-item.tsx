@@ -18,6 +18,7 @@
 import type {EmptyObj} from '@aglyn/shared-data-types'
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import MuiGrid, {type GridProps as MuiGridProps} from '@mui/material/Grid'
 import {
   type ComponentType,
@@ -60,5 +61,6 @@ export function withGridItem<P>(WrappedComponent: ComponentType<P>): GridWrapped
     },
   )
   WithGridItem.displayName = `WithGridItem(${displayName})`
+  hoistNonReactStatics(WithGridItem, WrappedComponent)
   return WithGridItem
 }

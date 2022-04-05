@@ -15,13 +15,21 @@
  * limitations under the License.
  */
 
-export * from './lib/change-case'
-export * from './lib/deep-equal'
-export * from './lib/fuse'
-export * from './lib/hoist-non-react-statics'
-export * from './lib/mitt-emitter'
-export * from './lib/object-deep-merge'
-export * from './lib/object-flatten'
-export * from './lib/platform-identification'
-export * from './lib/unique-identification'
-export * from './lib/use-debounce'
+import {type Snack} from '../SnackbarProvider'
+
+
+const DIRECTION = {
+  right: 'left',
+  left: 'right',
+  bottom: 'up',
+  top: 'down',
+}
+
+export type DirectionType = typeof DIRECTION[keyof typeof DIRECTION]
+
+export const getTransitionDirection = (anchorOrigin: Snack['anchorOrigin']): DirectionType => {
+  if (anchorOrigin.horizontal !== 'center') {
+    return DIRECTION[anchorOrigin.horizontal]
+  }
+  return DIRECTION[anchorOrigin.vertical]
+}

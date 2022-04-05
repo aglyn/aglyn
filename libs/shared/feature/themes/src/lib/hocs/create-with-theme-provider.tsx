@@ -18,6 +18,7 @@
 import type {JSXComponentType} from '@aglyn/shared-data-types'
 import {_isArr, _isNull, _isStrT} from '@aglyn/shared-util-guards'
 import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import {CssBaseline, useMediaQuery} from '@mui/material'
 import {get as getCookie, set as setCookie} from 'js-cookie'
 import {
@@ -120,6 +121,7 @@ function createWithThemeProvider(options: WithThemeProviderOptions) {
       },
     )
     WithThemeProvider.displayName = `WithThemeProvider(${displayName})`
+    hoistNonReactStatics(WithThemeProvider, WrappedComponent)
 
     return WithThemeProvider
   }

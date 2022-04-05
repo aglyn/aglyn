@@ -18,11 +18,12 @@
 import {ICON_VARIANT_BESIGNER, ICON_VARIANT_PAGES} from '@aglyn/shared-data-enums'
 import {AppLink, ContainerComponent, GridItems, useLoading} from '@aglyn/shared-ui-jsx'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {ListItemText} from '@mui/material'
 import {doc} from 'firebase/firestore'
 import {useRouter} from 'next/router'
 import {useEffect} from 'react'
-import {useFirestore, useFirestoreDocData} from 'reactfire'
+import {useFirestore, useFirestoreDoc, useFirestoreDocData} from 'reactfire'
 import WidgetCardComponent from '../../../../../../components/widget-card.component'
 import {buildRoute, Route} from '../../../../../../constants/route-links'
 import {CONTENT_MAX_WIDTH} from '../../../../../../constants/shared'
@@ -38,8 +39,14 @@ function ScreenDetails(props) {
   const firestore = useFirestore()
   const screenRef = doc(firestore, 'screens', screenId)
   const {queueLoading} = useLoading()
-  const {status, data: screen} = useFirestoreDocData(screenRef, {idField: '$id'})
+  const docData2 = useFirestoreDoc(screenRef, {idField: '$id'})
+  const docData = useFirestoreDocData(screenRef, {idField: '$id'})
+  const {status, data: screen, hasEmitted} = docData
   const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, {screenId, versionId})
+  const {enqueueSnackbar, closeSnackbar} = useSnackbar()
+
+  console.log('docData', docData)
+  console.log('docData2', docData2)
 
   useEffect(() => {
     if (status === 'loading') {
@@ -47,6 +54,15 @@ function ScreenDetails(props) {
       return () => dequeue && dequeue()
     }
   }, [status, queueLoading])
+
+  useEffect(() => {
+    if (status === 'error' || (status === 'success' && !screen)) {
+      enqueueSnackbar("An error has occurred", {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [closeSnackbar, enqueueSnackbar, status, screen])
 
   const details = [
     {
@@ -118,6 +134,7 @@ function ScreenDetails(props) {
           componentVariant="fab"
           href={besignerUrl}
           title={'Open with besigner'}
+          disabled={status !== 'success' || !screen}
         >
           <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} sx={{mr: 0.5}} />
           Besigner

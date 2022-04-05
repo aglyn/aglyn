@@ -52,6 +52,7 @@
       "@aglyn/shared-ui-jsx-forms": ["libs/shared/ui/jsx-forms/src/index.ts"],
       "@aglyn/shared-ui-mdi-jsx": ["libs/shared/ui/mdi-jsx/src/index.ts"],
       "@aglyn/shared-ui-next": ["libs/shared/ui/next/src/index.ts"],
+      "@aglyn/shared-ui-snackstack": ["libs/shared/ui/snackstack/src/index.ts"],
       "@aglyn/shared-util-dom": ["libs/shared/util/dom/src/index.ts"],
       "@aglyn/shared-util-emitter": ["libs/shared/util/emitter/src/index.ts"],
       "@aglyn/shared-util-errors": ["libs/shared/util/errors/src/index.ts"],

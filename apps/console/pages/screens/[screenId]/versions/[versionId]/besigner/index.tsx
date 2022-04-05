@@ -19,6 +19,7 @@ import {getApp} from '@aglyn/core-data-framework'
 import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
 import {HAS_BROWSER} from '@aglyn/shared-data-enums'
 import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
+import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {Stack, Typography} from '@mui/material'
 import {doc} from 'firebase/firestore'
 import dynamic from 'next/dynamic'
@@ -38,8 +39,9 @@ function Besigner(props) {
   const {query: {screenId, versionId}} = useRouter()
   const firestore = useFirestore()
   const screenRef = doc(firestore, 'screen', `${screenId}`, 'version', `${versionId}`)
-  const {status, data: screen} = useFirestoreDocDataOnce(screenRef, {idField: '$id'})
+  const {status, data: screen, hasEmitted} = useFirestoreDocDataOnce(screenRef, {idField: '$id'})
   const elements = screen?.elements || {}
+  const {enqueueSnackbar, closeSnackbar} = useSnackbar()
 
   console.log('Besigner,', props.tenant, props)
   console.log('Besigner data,', status, screen)
@@ -50,6 +52,15 @@ function Besigner(props) {
       console.log('page:/besigner app', getApp())
     }
   }, [])
+
+  useEffect(() => {
+    if (status === 'error' || (status === 'success' && !screen)) {
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [closeSnackbar, enqueueSnackbar, status, screen])
 
   return status === 'error' ? (
     <Stack
