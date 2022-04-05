@@ -32,11 +32,14 @@ import LayoutDashboardComponent from '../../../../../../layouts/layout-dashboard
 
 function ScreenDetails(props) {
 
-  const {query: {screenId, versionId}} = useRouter()
+  const {query} = useRouter()
+  const screenId = `${query.screenId}`
+  const versionId = `${query.versionId}`
   const firestore = useFirestore()
-  const screenRef = doc(firestore, 'screen', `${screenId}`)
+  const screenRef = doc(firestore, 'screens', screenId)
   const {queueLoading} = useLoading()
   const {status, data: screen} = useFirestoreDocData(screenRef, {idField: '$id'})
+  const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, {screenId, versionId})
 
   useEffect(() => {
     if (status === 'loading') {
@@ -50,41 +53,47 @@ function ScreenDetails(props) {
       key: 'id',
       id: 'details-id',
       primary: 'Unique ID:',
-      secondary: `${screen?.$id ?? ''}`,
+      secondary: `${screen?.$id ?? ' '}`,
     },
     {
       key: 'displayName',
       id: 'details-dname',
       primary: 'Display name:',
-      secondary: `${screen?.displayName ?? ''}`,
+      secondary: `${screen?.displayName ?? ' '}`,
     },
     {
       key: 'description',
       id: 'details-desc',
       primary: 'Description:',
-      secondary: `${screen?.description ?? ''}`,
+      secondary: `${screen?.description ?? ' '}`,
     },
     {
       key: 'dateCreated',
       id: 'details-datec',
       primary: 'Date created:',
-      secondary: `${screen?.createdAt?.toDate?.() || ''}`,
+      secondary: `${screen?.createdAt?.toDate?.() || ' '}`,
     },
     {
       key: 'dateUpdated',
       id: 'details-dateu',
       primary: 'Date updated:',
-      secondary: `${screen?.updatedAt?.toDate?.() || ''}`,
+      secondary: `${screen?.updatedAt?.toDate?.() || ' '}`,
+    },
+    {
+      key: 'dateDeleted',
+      id: 'details-dated',
+      primary: 'Date deleted:',
+      secondary: `${screen?.deletedAt?.toDate?.() || ' '}`,
     },
     {
       key: 'versionId',
       id: 'details-vers',
       primary: 'Version ID:',
-      secondary: `${screen?.versionId || ''}`,
+      secondary: `${screen?.versionId || ' '}`,
     },
   ]
 
-  console.log('Screens props', props, status, screen)
+  console.log('Screens props', besignerUrl, props, status, screen)
 
   return (
     <LayoutDashboardComponent
@@ -107,9 +116,7 @@ function ScreenDetails(props) {
           size="small"
           variant="extended"
           componentVariant="fab"
-          href={buildRoute(Route.SCREEN_BESIGNER, {
-            screenId: screen?.id, versionId: screen?.versionId
-          })}
+          href={besignerUrl}
           title={'Open with besigner'}
         >
           <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} sx={{mr: 0.5}} />

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {createResourceUid} from '@aglyn/core-data-framework'
+import {CANVAS_ROOT_ELEMENT_ID, createResourceUid} from '@aglyn/core-data-framework'
 import {
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,
@@ -67,15 +67,30 @@ function Screens(props) {
     if (error) setError(null)
     const dequeueLoading = queueLoading()
     const newId = createResourceUid()
+    const newVersionId = createResourceUid()
     const timestamp = Timestamp.now()
-    const newValues = {...values, createdAt: timestamp, updatedAt: timestamp}
-    await setDoc(doc(firestore, 'screens', newId), newValues)
-      .then(() => {handleFormClose()})
+    const newValues = {
+      ...values,
+      versionId: newVersionId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    const newVersionValue = {
+      screenId: newId,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      elements: {[CANVAS_ROOT_ELEMENT_ID]: {elements: []}}
+    }
+    await Promise.all([
+      setDoc(doc(firestore, 'screens', newId), newValues),
+      setDoc(doc(firestore, 'screens', newId, 'versions', newVersionId), newVersionValue)
+    ])
       .catch((error) => {
         console.error(error)
         setError({...error})
       })
-      .finally(() => {dequeueLoading()})
+    handleFormClose()
+    dequeueLoading()
   }, [firestore, error, loading, queueLoading, handleFormClose])
 
   const handleDeleteScreen = useCallback((id: string, versionId: string) => async () => {
@@ -87,9 +102,9 @@ function Screens(props) {
       confirmationButtonProps: {color: 'error'},
     })
       .then(() => {dequeueLoading = queueLoading()})
-      .then(() => {return setDoc(doc(firestore, 'screens', id, 'deletedAt'), Timestamp.now())})
+      .then(() => setDoc(doc(firestore, 'screens', id, 'deletedAt'), Timestamp.now()))
       .catch(() => {})
-      .finally(() => {dequeueLoading && dequeueLoading()})
+    dequeueLoading && dequeueLoading()
   }, [confirm, firestore, queueLoading])
 
 
