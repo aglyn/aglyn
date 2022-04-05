@@ -159,6 +159,7 @@ class NextEmotionDocumentComponent<P extends NextEmotionDocumentComponentProps> 
 }
 
 NextEmotionDocumentComponent.displayName = 'NextEmotionDocumentComponent'
+NextEmotionDocumentComponent.aglyn = true
 
 export {NextEmotionDocumentComponent}
 export default NextEmotionDocumentComponent

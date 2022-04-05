@@ -38,6 +38,7 @@ const MdiSvgIcon = forwardRef<any, MdiSvgIconProps>(
 )
 
 MdiSvgIcon.displayName = 'MdiSvgIcon'
+MdiSvgIcon.aglyn = true
 
 export {MdiSvgIcon}
 export default MdiSvgIcon

@@ -306,6 +306,7 @@ function MainLayout(props: MainLayoutProps) {
 }
 
 MainLayout.displayName = 'MainLayout'
+MainLayout.aglyn = true
 MainLayout.defaultProps = {}
 
 export {MainLayout}

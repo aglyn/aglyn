@@ -97,7 +97,8 @@ const BreadcrumbsComponent = forwardRef<any, BreadcrumbsProps>(
   },
 )
 
-BreadcrumbsComponent.displayName = 'AglynBreadcrumbsComponent'
+BreadcrumbsComponent.displayName = 'BreadcrumbsComponent'
+BreadcrumbsComponent.aglyn = true
 BreadcrumbsComponent.defaultProps = {
   items: [],
 }

@@ -257,5 +257,6 @@ function Index(props) {
 }
 
 Index.displayName = 'Index'
+Index.aglyn = true
 
 export default Index

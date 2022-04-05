@@ -34,6 +34,7 @@ function ElementsContextProvider(props: ElementsContextProviderProps) {
   )
 }
 ElementsContextProvider.displayName = 'ElementsContextProvider'
+ElementsContextProvider.aglyn = true
 ElementsContextProvider.defaultProps = {}
 
 export {ElementsContextProvider}

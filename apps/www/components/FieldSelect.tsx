@@ -41,5 +41,6 @@ function FieldSelect(props: FieldSelectProps) {
 }
 
 FieldSelect.displayName = 'FieldSelect'
+FieldSelect.aglyn = true
 export {FieldSelect}
 export default FieldSelect

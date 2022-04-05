@@ -72,5 +72,6 @@ const PopupDialog = forwardRef<any, PopupDialogProps>(
 )
 
 PopupDialog.displayName = 'PopupDialog'
+PopupDialog.aglyn = true
 
 export default PopupDialog

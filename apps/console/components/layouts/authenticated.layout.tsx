@@ -66,6 +66,7 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   )
 }
 AuthenticatedLayout.displayName = 'AuthenticatedLayout'
+AuthenticatedLayout.aglyn = true
 
 export {AuthenticatedLayout}
 export default AuthenticatedLayout

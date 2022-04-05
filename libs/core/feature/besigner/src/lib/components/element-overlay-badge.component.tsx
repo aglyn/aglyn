@@ -168,6 +168,7 @@ const ElementOverlayBadgeComponent = forwardRef<any, ElementOverlayBadgeButtonsC
   },
 )
 ElementOverlayBadgeComponent.displayName = 'ElementOverlayBadgeComponent'
+ElementOverlayBadgeComponent.aglyn = true
 
 export {ElementOverlayBadgeComponent}
 export default ElementOverlayBadgeComponent

@@ -52,6 +52,7 @@ const BranchComponent = forwardRef<any, BranchComponentProps>(
 )
 
 BranchComponent.displayName = 'BranchComponent'
+BranchComponent.aglyn = true
 BranchComponent.defaultProps = {
   component: Fragment,
   children: null,

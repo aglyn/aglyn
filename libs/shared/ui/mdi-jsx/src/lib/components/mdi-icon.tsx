@@ -40,6 +40,7 @@ const MdiIcon = forwardRef<any, MdiIconProps>(
 )
 
 MdiIcon.displayName = 'MdiIcon'
+MdiIcon.aglyn = true
 
 export {MdiIcon}
 export default MdiIcon

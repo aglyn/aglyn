@@ -31,6 +31,7 @@ function HsEmbedScript() {
   )
 }
 HsEmbedScript.displayName = 'HsEmbedScript'
+HsEmbedScript.aglyn = true
 
 export {HsEmbedScript}
 export default HsEmbedScript

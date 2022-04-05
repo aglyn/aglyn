@@ -147,7 +147,8 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
   )
 }
 
-ConsoleLayoutRaw.displayName = 'ConsoleLayout'
+ConsoleLayoutRaw.displayName = 'ConsoleLayoutRaw'
+ConsoleLayoutRaw.aglyn = true
 ConsoleLayoutRaw.defaultProps = {}
 
 export const ConsoleLayout = withCurrentUserContext(withAggregatedPageMeta(ConsoleLayoutRaw))

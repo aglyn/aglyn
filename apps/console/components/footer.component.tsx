@@ -97,6 +97,7 @@ const FooterComponent = forwardRef<any, FooterProps>(
   },
 )
 FooterComponent.displayName = 'FooterComponent'
+FooterComponent.aglyn = true
 
 export {FooterComponent}
 export default FooterComponent

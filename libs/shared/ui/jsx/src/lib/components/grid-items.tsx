@@ -47,6 +47,7 @@ export const GridItems = forwardRef<any, GridItemsProps>(
 )
 
 GridItems.displayName = 'GridItems'
+GridItems.aglyn = true
 GridItems.defaultProps = {
   items: [],
   itemComponent: MuiGrid,

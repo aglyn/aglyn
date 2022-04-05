@@ -250,5 +250,6 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>(
 )
 
 IconSelectComponent.displayName = 'IconSelectComponent'
+IconSelectComponent.aglyn = true
 
 export default IconSelectComponent

@@ -72,5 +72,6 @@ const TextFieldComponent = forwardRef<any, TextFieldProps>(
 )
 
 TextFieldComponent.displayName = 'TextFieldComponent'
+TextFieldComponent.aglyn = true
 
 export default TextFieldComponent

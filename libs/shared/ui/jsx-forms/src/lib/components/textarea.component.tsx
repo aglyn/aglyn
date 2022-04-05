@@ -73,5 +73,6 @@ const TextareaComponent = forwardRef<any, TextareaProps>(
 )
 
 TextareaComponent.displayName = 'TextareaComponent'
+TextareaComponent.aglyn = true
 
 export default TextareaComponent

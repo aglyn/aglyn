@@ -68,7 +68,8 @@ const BesignerComponentRaw = forwardRef<any, BesignerComponentProps>(
   },
 )
 
-BesignerComponentRaw.displayName = 'BesignerComponent'
+BesignerComponentRaw.displayName = 'BesignerComponentRaw'
+BesignerComponentRaw.aglyn = true
 BesignerComponentRaw.defaultProps = {}
 
 export const BesignerComponent = BesignerComponentRaw /*createWithThemeProvider({

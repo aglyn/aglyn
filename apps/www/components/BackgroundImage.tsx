@@ -55,6 +55,7 @@ const BackgroundImage = forwardRef<any, BackgroundImageProps>(
 )
 
 BackgroundImage.displayName = 'BackgroundImage'
+BackgroundImage.aglyn = true
 
 export {BackgroundImage}
 export default BackgroundImage

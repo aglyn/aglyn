@@ -57,6 +57,7 @@ export const LOADING_CONTEXT_DEFAULT_VALUE: LoadingContextType = {
 
 export const LoadingContext = createContext<LoadingContextType>(LOADING_CONTEXT_DEFAULT_VALUE)
 LoadingContext.displayName = 'LoadingContext'
+LoadingContext.aglyn = true
 
 export const {
   Provider: LoadingProvider,

@@ -54,6 +54,7 @@ function RouterLoading({children}) {
   return children
 }
 RouterLoading.displayName = 'RouterLoading'
+RouterLoading.aglyn = true
 
 export interface LoadingLayoutComponentProps extends Partial<LoadingOverlayComponentProps> {
 
@@ -75,6 +76,7 @@ const LoadingLayoutComponent = forwardRef<any, LoadingLayoutComponentProps>(
   },
 )
 LoadingLayoutComponent.displayName = 'LoadingLayoutComponent'
+LoadingLayoutComponent.aglyn = true
 
 export function withLoadingLayoutComponent<P>(
   WrappedComponent: ComponentType<P>,

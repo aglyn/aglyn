@@ -46,6 +46,7 @@ export const CanvasRenderedElementRefsContext = createContext<CanvasRenderedElem
   (() => {}) as any,
 ])
 CanvasRenderedElementRefsContext.displayName = 'CanvasRenderedElementRefsContext'
+CanvasRenderedElementRefsContext.aglyn = true
 
 export const {
   displayName,
@@ -85,6 +86,7 @@ function CanvasRenderedElementRefsComponent(props: CanvasRenderedElementRefsComp
 }
 
 CanvasRenderedElementRefsComponent.displayName = 'CanvasRenderedElementRefsComponent'
+CanvasRenderedElementRefsComponent.aglyn = true
 CanvasRenderedElementRefsComponent.defaultProps = {}
 
 export {CanvasRenderedElementRefsComponent}

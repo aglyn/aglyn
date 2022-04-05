@@ -72,6 +72,7 @@ function ElevateOnScroll<P>(props: ElevationOnScrollProps<P>) {
 }
 
 ElevateOnScroll.displayName = 'ElevateOnScroll'
+ElevateOnScroll.aglyn = true
 ElevateOnScroll.defaultProps = {
   disableHysteresis: false,
 }

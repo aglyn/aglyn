@@ -84,6 +84,7 @@ function ComponentsDrawerContextProvider(props: ComponentsDrawerContextProviderP
   )
 }
 ComponentsDrawerContextProvider.displayName = 'ComponentsDrawerContextProvider'
+ComponentsDrawerContextProvider.aglyn = true
 ComponentsDrawerContextProvider.defaultProps = {
   defaultOptions: {},
 }

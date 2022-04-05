@@ -75,6 +75,7 @@ const SecureLoadingOverlayComponent = forwardRef<any, SecureLoadingOverlayProps>
   },
 )
 SecureLoadingOverlayComponent.displayName = 'SecureLoadingOverlayComponent'
+SecureLoadingOverlayComponent.aglyn = true
 
 export {SecureLoadingOverlayComponent}
 export default SecureLoadingOverlayComponent

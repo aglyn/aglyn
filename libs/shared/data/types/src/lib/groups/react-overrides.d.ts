@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-enums'
-import Typography, {type TypographyProps} from '@mui/material/Typography'
-
-
-function Copyright(props: Props) {
-  return (
-    <Typography variant="subtitle2" {...props}>
-      {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
-    </Typography>
-  )
+declare module 'react' {
+  interface Context {aglyn?: boolean}
+  interface ExoticComponent {aglyn?: boolean}
+  interface FunctionComponent {aglyn?: boolean}
+  interface VoidFunctionComponent {aglyn?: boolean}
+  interface ForwardRefRenderFunction {aglyn?: boolean}
+  interface ComponentClass {aglyn?: boolean}
+  interface Mixin {aglyn?: boolean}
 }
 
-Copyright.displayName = 'Copyright'
-Copyright.aglyn = true
+declare global {
+  namespace JSX {
 
-export interface Props extends TypographyProps {}
+  }
+}
 
-export default Copyright
+export {}

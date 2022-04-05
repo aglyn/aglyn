@@ -102,5 +102,6 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(
 )
 
 AuthLayout.displayName = 'AuthLayout'
+AuthLayout.aglyn = true
 
 export default AuthLayout

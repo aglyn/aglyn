@@ -202,7 +202,8 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<any,
   )
 })
 
-AreaManageNavigationListWidgetViewRaw.displayName = 'AreaManageNavigationListWidgetView'
+AreaManageNavigationListWidgetViewRaw.displayName = 'AreaManageNavigationListWidgetViewRaw'
+AreaManageNavigationListWidgetViewRaw.aglyn = true
 export const AreaManageNavigationListWidgetView = withAggregatedPageMeta(
   AreaManageNavigationListWidgetViewRaw,
 )

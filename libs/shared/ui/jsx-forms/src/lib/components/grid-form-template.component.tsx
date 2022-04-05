@@ -69,4 +69,5 @@ export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
   },
 )
 GridFormTemplateComponent.displayName = 'GridFormTemplateComponent'
+GridFormTemplateComponent.aglyn = true
 export default GridFormTemplateComponent

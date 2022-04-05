@@ -19,7 +19,7 @@
 
 import {_isFnT} from '@aglyn/shared-util-guards'
 import {getDisplayName} from '@aglyn/shared-util-tools'
-import {ChangeCase, hoistNonReactStatics} from '@aglyn/shared-util-vendor'
+import {hoistNonReactStatics, paramCase} from '@aglyn/shared-util-vendor'
 import React, {
   forwardRef,
   ForwardRefExoticComponent,
@@ -140,7 +140,7 @@ export function createShadowDomProxy(target = {}, options?: CreateShadowDomFacto
 
   return new Proxy(target, {
     get: (_, name: string) => {
-      const component = ChangeCase.paramCase(name) ?? 'div'
+      const component = paramCase(name) ?? 'div'
       const key = `${keyPrefix ?? 'default'}-${name}`
       if (!components.has(key)) {
         const root = createShadowDomRoot({render}, component)

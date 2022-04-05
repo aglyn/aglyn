@@ -149,7 +149,8 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
           )
         },
       )
-      Component.displayName = 'GridItem'
+      Component.displayName = 'Component'
+Component.aglyn = true
       return Component
     }, [GridItemProps])
 
@@ -179,6 +180,7 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
 )
 
 GridList.displayName = 'GridList'
+GridList.aglyn = true
 GridList.defaultProps = {
   renderItemContent: (item) => item,
 }

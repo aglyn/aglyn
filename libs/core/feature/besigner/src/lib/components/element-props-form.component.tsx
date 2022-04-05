@@ -69,6 +69,7 @@ const FormTemplate = forwardRef<any, FormTemplateRenderProps>(
   },
 )
 FormTemplate.displayName = 'FormTemplate'
+FormTemplate.aglyn = true
 
 export interface ElementPropsFormProps extends FormRendererProps {
   $id?: ElementId
@@ -117,6 +118,7 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
   },
 )
 ElementPropsForm.displayName = 'ElementPropsForm'
+ElementPropsForm.aglyn = true
 
 export {ElementPropsForm}
 export default ElementPropsForm

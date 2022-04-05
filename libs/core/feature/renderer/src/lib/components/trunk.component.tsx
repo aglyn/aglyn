@@ -49,6 +49,7 @@ const TrunkComponent = forwardRef<any, TrunkComponentProps>(
 )
 
 TrunkComponent.displayName = 'TrunkComponent'
+TrunkComponent.aglyn = true
 TrunkComponent.defaultProps = {
   component: 'div',
   $id: CANVAS_ROOT_ELEMENT_ID,

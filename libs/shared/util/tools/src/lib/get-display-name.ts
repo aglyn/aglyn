@@ -54,7 +54,8 @@ export const getWrappedComponentName = (outerType, innerType, wrapperName) => {
  * @example getDisplayName(class MyComp {displayName = 'My'}) => 'My'
  * @example
  * MyComp = () => {...};
- * MyComp.displayName = 'My';
+ * MyComp.displayName = 'MyComp'
+MyComp.aglyn = true;
  * MyComp = forwardRef(MyComp)
  * getDisplayName(MyComp) => 'My'
  */

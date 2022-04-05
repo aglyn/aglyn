@@ -27,7 +27,7 @@ import {
 } from '@aglyn/core-data-framework'
 import {styled} from '@aglyn/shared-feature-themes'
 import {copy, getDisplayName} from '@aglyn/shared-util-tools'
-import {ChangeCase} from '@aglyn/shared-util-vendor'
+import {pascalCase} from '@aglyn/shared-util-vendor'
 import {forwardRef} from 'react'
 import {
   ErrorBoundaryComponent,
@@ -42,7 +42,7 @@ export function createAglynComponent<P>(
 ): ComponentRegisterPayload<P> {
   const {componentId, bundleId, emotion} = schema
 
-  const displayName = getDisplayName(component, ChangeCase.pascalCase(componentId))
+  const displayName = getDisplayName(component, pascalCase(componentId))
 
   const ComponentElement =
     !emotion?.disable

@@ -38,6 +38,7 @@ const LoadingTextComponent = forwardRef(
   },
 )
 LoadingTextComponent.displayName = 'LoadingTextComponent'
+LoadingTextComponent.aglyn = true
 LoadingTextComponent.defaultProps = {}
 
 export {LoadingTextComponent}

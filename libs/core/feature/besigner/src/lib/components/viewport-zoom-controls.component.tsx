@@ -191,6 +191,7 @@ export const ViewportZoomControlsComponent = forwardRef<any, ViewportZoomControl
 )
 
 ViewportZoomControlsComponent.displayName = 'ViewportZoomControlsComponent'
+ViewportZoomControlsComponent.aglyn = true
 ViewportZoomControlsComponent.defaultProps = {}
 
 export default ViewportZoomControlsComponent

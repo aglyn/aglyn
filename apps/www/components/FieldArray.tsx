@@ -62,6 +62,7 @@ function FieldArrayItem(props: ArrayItemProps) {
   return <FormFields items={fields} {...rest} />
 }
 FieldArrayItem.displayName = 'FieldArrayItem'
+FieldArrayItem.aglyn = true
 
 interface ArrayItemProps extends FormFieldsProps {
   value: [index: number, schema: {type: symbol}]
@@ -107,6 +108,7 @@ function FieldArray(props: Props) {
 }
 
 FieldArray.displayName = 'FieldArray'
+FieldArray.aglyn = true
 
 export interface Props extends FormFieldsProps {
   value: any

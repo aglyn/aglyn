@@ -139,6 +139,7 @@ const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(
 )
 
 ViewportRootComponent.displayName = 'ViewportRootComponent'
+ViewportRootComponent.aglyn = true
 ViewportRootComponent.defaultProps = {}
 
 export {ViewportRootComponent}

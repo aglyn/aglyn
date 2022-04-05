@@ -58,6 +58,7 @@ function AuthErrorAlertComponent(props: AuthErrorAlertComponentProps) {
   )
 }
 AuthErrorAlertComponent.displayName = 'AuthErrorAlertComponent'
+AuthErrorAlertComponent.aglyn = true
 
 export {AuthErrorAlertComponent}
 export default AuthErrorAlertComponent

@@ -53,6 +53,7 @@ function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
   )
 }
 BesignerDndContext.displayName = 'BesignerDndContext'
+BesignerDndContext.aglyn = true
 
 export {BesignerDndContext}
 export default BesignerDndContext

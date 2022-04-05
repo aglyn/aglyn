@@ -29,6 +29,7 @@ export type CurrentUserContextType = {
 
 export const CurrentUserContext = createContext<CurrentUserContextType>(null)
 CurrentUserContext.displayName = 'CurrentUserContext'
+CurrentUserContext.aglyn = true
 
 export const {
   displayName,

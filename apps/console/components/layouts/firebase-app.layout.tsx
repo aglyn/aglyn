@@ -204,6 +204,7 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
   )
 }
 FirebaseAppLayout.displayName = 'FirebaseAppLayout'
+FirebaseAppLayout.aglyn = true
 
 export {FirebaseAppLayout}
 export default FirebaseAppLayout

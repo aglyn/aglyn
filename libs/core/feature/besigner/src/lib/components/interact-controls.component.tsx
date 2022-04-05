@@ -76,7 +76,8 @@ const InteractControlsComponent = forwardRef<any, InteractControlsProps>(
     )
   },
 )
-InteractControlsComponent.displayName = 'AglynInteractControlsComponent'
+InteractControlsComponent.displayName = 'InteractControlsComponent'
+InteractControlsComponent.aglyn = true
 
 export {InteractControlsComponent}
 export default InteractControlsComponent

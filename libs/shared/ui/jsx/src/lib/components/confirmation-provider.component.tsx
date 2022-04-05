@@ -97,6 +97,7 @@ export function ConfirmationProviderComponent(props: ConfirmationProviderCompone
   )
 }
 ConfirmationProviderComponent.displayName = 'ConfirmationProviderComponent'
+ConfirmationProviderComponent.aglyn = true
 ConfirmationProviderComponent.defaultProps = {
   component: DialogConfirm,
 }

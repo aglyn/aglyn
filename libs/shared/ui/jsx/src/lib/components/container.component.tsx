@@ -69,7 +69,8 @@ const ContainerComponent = styled(Container, {
   }
   return {}
 })
-ContainerComponent.displayName = 'AglynContainerComponent'
+ContainerComponent.displayName = 'ContainerComponent'
+ContainerComponent.aglyn = true
 
 export {ContainerComponent}
 export default ContainerComponent

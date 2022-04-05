@@ -63,6 +63,7 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
   },
 )
 AuthFormTemplateComponent.displayName = 'AuthFormTemplateComponent'
+AuthFormTemplateComponent.aglyn = true
 
 export {AuthFormTemplateComponent}
 export default AuthFormTemplateComponent

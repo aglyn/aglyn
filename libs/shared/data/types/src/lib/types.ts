@@ -16,9 +16,9 @@
  */
 
 
+export * as DoD from './groups/dod'
 export * from './groups/basic'
 export * from './groups/crud'
-export * as DoD from './groups/dod'
 export * from './groups/fallback'
 export * from './groups/inference'
 export * from './groups/initializable'
@@ -27,6 +27,7 @@ export * from './groups/jsx'
 export * from './groups/lifecycle'
 export * from './groups/normalized'
 export * from './groups/operators'
+export * from './groups/react-overrides.d'
 export * from './groups/semantic'
 export * from './groups/serializable'
 export * from './groups/string-like'

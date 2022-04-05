@@ -59,6 +59,7 @@ ThemeProviderComponent.defaultProps = {
   selector: '#jss-server-side',
 }
 ThemeProviderComponent.displayName = 'ThemeProviderComponent'
+ThemeProviderComponent.aglyn = true
 
 export type Props = MuiThemeProviderProps & {selector?: string}
 export type ThemeProviderElement<T> = ReactElement<MuiThemeProviderProps<T>>

@@ -45,6 +45,7 @@ const SnackbarContent = forwardRef<HTMLDivElement, SnackbarContentProps>(
   },
 )
 SnackbarContent.displayName = 'SnackbarContent'
+SnackbarContent.aglyn = true
 
 
 export {SnackbarContent}

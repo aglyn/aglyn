@@ -32,6 +32,7 @@ export const AglynComponentsContext = createContext<AglynComponentsContextType>(
   DEFAULT_COMPONENTS_CONTEXT,
 )
 AglynComponentsContext.displayName = 'AglynComponentsContext'
+AglynComponentsContext.aglyn = true
 
 export const useAglynComponentsContext: UseElementComponentsContextType = () => {
   return useContext(AglynComponentsContext)

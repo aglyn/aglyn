@@ -101,7 +101,8 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
     )
   },
 )
-PanelControlsComponent.displayName = 'AglynPanelControlsComponent'
+PanelControlsComponent.displayName = 'PanelControlsComponent'
+PanelControlsComponent.aglyn = true
 
 export {PanelControlsComponent}
 export default PanelControlsComponent

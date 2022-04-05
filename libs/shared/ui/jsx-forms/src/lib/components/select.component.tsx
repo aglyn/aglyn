@@ -118,6 +118,7 @@ const SelectComponent = forwardRef<any, SelectProps>(
 )
 
 SelectComponent.displayName = 'SelectComponent'
+SelectComponent.aglyn = true
 SelectComponent.defaultProps = {
   FormControlProps: {},
 }

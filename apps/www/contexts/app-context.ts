@@ -24,6 +24,7 @@ export type AppContextType = AppController
 
 export const AppContext = createContext<AppContextType>(null)
 AppContext.displayName = 'AppContext'
+AppContext.aglyn = true
 
 export const {
   displayName,

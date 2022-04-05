@@ -128,6 +128,7 @@ const PopperStyledComponent = styled(MuiPopper, {
 }))
 
 PopperStyledComponent.displayName = 'PopperStyledComponent'
+PopperStyledComponent.aglyn = true
 PopperStyledComponent.defaultProps = {
   arrowGap: 2,
 }

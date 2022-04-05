@@ -40,6 +40,7 @@ function ElementOverlaysComponent(props: ElementOverlaysComponentProps) {
 }
 
 ElementOverlaysComponent.displayName = 'ElementOverlaysComponent'
+ElementOverlaysComponent.aglyn = true
 
 export {ElementOverlaysComponent}
 export default ElementOverlaysComponent

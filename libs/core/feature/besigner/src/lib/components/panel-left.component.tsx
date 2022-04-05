@@ -132,6 +132,7 @@ const PanelLeftComponent = forwardRef<any, PanelLeftComponentProps>(
 )
 
 PanelLeftComponent.displayName = 'PanelLeftComponent'
+PanelLeftComponent.aglyn = true
 PanelLeftComponent.defaultProps = {}
 
 export {PanelLeftComponent}

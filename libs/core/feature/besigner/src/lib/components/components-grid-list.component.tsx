@@ -145,7 +145,8 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
   },
 )
 
-ComponentsGridListComponent.displayName = 'AglynComponentsGridListComponent'
+ComponentsGridListComponent.displayName = 'ComponentsGridListComponent'
+ComponentsGridListComponent.aglyn = true
 ComponentsGridListComponent.defaultProps = {
   items: [],
 }

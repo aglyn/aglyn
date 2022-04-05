@@ -72,6 +72,7 @@ export const DialogConfirm = forwardRef<any, DialogConfirmProps>(function RefRen
 })
 
 DialogConfirm.displayName = 'DialogConfirm'
+DialogConfirm.aglyn = true
 DialogConfirm.defaultProps = {
   options: {
     cancellationText: 'Cancel',

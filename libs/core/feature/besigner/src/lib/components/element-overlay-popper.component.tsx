@@ -205,6 +205,7 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
   },
 )
 ElementOverlayPopperComponent.displayName = 'ElementOverlayPopperComponent'
+ElementOverlayPopperComponent.aglyn = true
 ElementOverlayPopperComponent.defaultProps = {
   variant: 'hoveredOverlay',
 }

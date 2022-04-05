@@ -29,4 +29,5 @@ export const SrOnlyComponent = styled(Box, {
   ...visuallyHidden
 })
 SrOnlyComponent.displayName = 'SrOnlyComponent'
+SrOnlyComponent.aglyn = true
 export default SrOnlyComponent

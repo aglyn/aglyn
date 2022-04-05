@@ -109,6 +109,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
 )
 
 WorkspaceEditorComponent.displayName = 'WorkspaceEditorComponent'
+WorkspaceEditorComponent.aglyn = true
 WorkspaceEditorComponent.defaultProps = {}
 
 export {WorkspaceEditorComponent}

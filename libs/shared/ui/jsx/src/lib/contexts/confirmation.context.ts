@@ -78,6 +78,7 @@ export const ConfirmationContext: ConfirmationContext = createContext<Confirmati
   DEFAULT_CONTEXT_VALUE,
 )
 ConfirmationContext.displayName = 'ConfirmationContext'
+ConfirmationContext.aglyn = true
 
 export function useConfirmationContext(): ConfirmationContextType {
   return useContext(ConfirmationContext)

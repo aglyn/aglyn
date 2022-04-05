@@ -143,6 +143,7 @@ const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
 )
 
 ViewportCanvasComponent.displayName = 'ViewportCanvasComponent'
+ViewportCanvasComponent.aglyn = true
 ViewportCanvasComponent.defaultProps = {}
 
 export {ViewportCanvasComponent}

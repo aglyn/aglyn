@@ -148,6 +148,7 @@ export const SandboxFrame = forwardRef<HTMLIFrameElement, SandboxFrameProps>(fun
 })
 
 SandboxFrame.displayName = 'SandboxFrame'
+SandboxFrame.aglyn = true
 SandboxFrame.defaultProps = {
   // Global styles for frame document
   baseStyles: 'html, body, .frame-root, .frame-content { width: 100%; height: 100%; }',

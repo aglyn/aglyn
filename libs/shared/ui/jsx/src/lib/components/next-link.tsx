@@ -25,7 +25,8 @@ export interface NextAnchorProps extends AnchorHTMLAttributes<HTMLAnchorElement>
 
 // Add support for the sx prop
 export const NextAnchor = styled('a', {name: 'AglynNextLink'})<NextAnchorProps>({})
-NextAnchor.displayName = 'Anchor'
+NextAnchor.displayName = 'NextAnchor'
+NextAnchor.aglyn = true
 
 export type NextLinkBaseProps =
   Omit<NextAnchorProps, 'href'>
@@ -71,7 +72,8 @@ const NextLink = forwardRef<any, NextLinkProps>(
   },
 )
 
-NextLink.displayName = 'AglynNextLink'
+NextLink.displayName = 'NextLink'
+NextLink.aglyn = true
 NextLink.defaultProps = {
   passHref: true,
   anchorComponent: NextAnchor,

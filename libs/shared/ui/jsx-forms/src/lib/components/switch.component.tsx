@@ -119,5 +119,6 @@ const SwitchComponent = forwardRef<any, SwitchProps>(
 )
 
 SwitchComponent.displayName = 'SwitchComponent'
+SwitchComponent.aglyn = true
 
 export default SwitchComponent

@@ -80,5 +80,6 @@ const PromoSectionView = forwardRef<any, PromoSectionViewProps>(
 )
 
 PromoSectionView.displayName = 'PromoSectionView'
+PromoSectionView.aglyn = true
 export {PromoSectionView}
 export default PromoSectionView

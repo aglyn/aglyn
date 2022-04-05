@@ -143,7 +143,8 @@ const DevicePreviewControlsComponent = forwardRef<any, DevicePreviewControlsProp
     )
   },
 )
-DevicePreviewControlsComponent.displayName = 'AglynDevicePreviewControlsComponent'
+DevicePreviewControlsComponent.displayName = 'DevicePreviewControlsComponent'
+DevicePreviewControlsComponent.aglyn = true
 
 export {DevicePreviewControlsComponent}
 export default DevicePreviewControlsComponent

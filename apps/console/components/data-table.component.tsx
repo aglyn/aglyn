@@ -184,7 +184,8 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
   },
 )
 
-DataTableComponent.displayName = 'AglynDataTable'
+DataTableComponent.displayName = 'DataTableComponent'
+DataTableComponent.aglyn = true
 
 export {DataTableComponent}
 export default DataTableComponent

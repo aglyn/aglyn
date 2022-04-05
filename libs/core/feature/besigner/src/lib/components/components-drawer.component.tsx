@@ -142,7 +142,8 @@ const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerProps>(
   },
 )
 
-ComponentsDrawerComponent.displayName = 'AglynComponentsDrawerComponent'
+ComponentsDrawerComponent.displayName = 'ComponentsDrawerComponent'
+ComponentsDrawerComponent.aglyn = true
 ComponentsDrawerComponent.defaultProps = {
   items: [],
 }

@@ -82,6 +82,7 @@ function NextEmotionAppComponent<Props, InitialProps>(props: NextEmotionAppCompo
   )
 }
 NextEmotionAppComponent.displayName = 'NextEmotionAppComponent'
+NextEmotionAppComponent.aglyn = true
 
 export {NextEmotionAppComponent}
 export default NextEmotionAppComponent

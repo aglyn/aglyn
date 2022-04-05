@@ -276,7 +276,8 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
   )
 }
 
-AreaManageViewRaw.displayName = 'AreaManageView'
+AreaManageViewRaw.displayName = 'AreaManageViewRaw'
+AreaManageViewRaw.aglyn = true
 AreaManageViewRaw.defaultProps = {}
 
 export const AreaManageView = withAppContext(AreaManageViewRaw)

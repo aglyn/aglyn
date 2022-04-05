@@ -119,6 +119,7 @@ const ElementOverlayOutlineComponent = forwardRef<any, ElementOverlayOutlineProp
 )
 
 ElementOverlayOutlineComponent.displayName = 'ElementOverlayOutlineComponent'
+ElementOverlayOutlineComponent.aglyn = true
 ElementOverlayOutlineComponent.defaultProps = {}
 
 export {ElementOverlayOutlineComponent}

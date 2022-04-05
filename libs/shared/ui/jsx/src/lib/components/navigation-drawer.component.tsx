@@ -164,7 +164,8 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
   },
 )
 
-NavigationDrawerComponent.displayName = 'AglynNavigationDrawer'
+NavigationDrawerComponent.displayName = 'NavigationDrawerComponent'
+NavigationDrawerComponent.aglyn = true
 NavigationDrawerComponent.defaultProps = {}
 
 export {NavigationDrawerComponent}

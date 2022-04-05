@@ -148,6 +148,7 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
   )
 }
 DashboardHeaderComponent.displayName = 'DashboardHeaderComponent'
+DashboardHeaderComponent.aglyn = true
 DashboardHeaderComponent.defaultProps = {
   breadcrumbItems: [],
   disableBreadcrumbs: false,

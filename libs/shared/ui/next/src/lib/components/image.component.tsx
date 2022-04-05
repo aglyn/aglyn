@@ -49,6 +49,7 @@ function ImageComponent(props: ImageComponentProps): JSX.Element {
   )
 }
 ImageComponent.displayName = 'ImageComponent'
+ImageComponent.aglyn = true
 ImageComponent.shimmer = (w?: number | string, h?: number | string) => {
   return `
 <svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">

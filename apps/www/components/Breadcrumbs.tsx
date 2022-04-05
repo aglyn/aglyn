@@ -104,7 +104,8 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
           </ItemComponent>
         )
       })
-      Component.displayName = 'BreadcrumbItem'
+      Component.displayName = 'Component'
+Component.aglyn = true
       return Component
     }, [centerIcons])
 
@@ -124,5 +125,6 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
 )
 
 Breadcrumbs.displayName = 'Breadcrumbs'
+Breadcrumbs.aglyn = true
 
 export default Breadcrumbs

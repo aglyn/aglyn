@@ -35,5 +35,6 @@ function FormFields(props: Props) {
 }
 
 FormFields.displayName = 'FormFields'
+FormFields.aglyn = true
 
 export default FormFields

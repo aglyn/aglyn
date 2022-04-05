@@ -134,6 +134,7 @@ export const CardIconListItem = forwardRef<any, CardIconListItemProps>(
 )
 
 CardIconListItem.displayName = 'CardIconListItem'
+CardIconListItem.aglyn = true
 CardIconListItem.defaultProps = {}
 
 export default CardIconListItem

@@ -64,7 +64,8 @@ const EllipsisPulseComponent = styled('span', {
     },
   })
 })
-EllipsisPulseComponent.displayName = 'AglynEllipsisPulseComponent'
+EllipsisPulseComponent.displayName = 'EllipsisPulseComponent'
+EllipsisPulseComponent.aglyn = true
 
 export {EllipsisPulseComponent}
 export default EllipsisPulseComponent

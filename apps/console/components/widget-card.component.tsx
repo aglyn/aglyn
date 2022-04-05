@@ -16,6 +16,7 @@
  */
 
 import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
+import {ErrorBoundaryComponent} from '@aglyn/shared-ui-jsx'
 import {
   Card as MuiCard,
   CardActions as MuiCardActions,
@@ -28,7 +29,6 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import {forwardRef, type ReactNode} from 'react'
-import ErrorBoundaryComponent from './error-boundary.component'
 
 
 const classKeys = generateComponentClassKeys('AglynWidgetCard', [
@@ -157,7 +157,8 @@ const WidgetCardComponent = forwardRef<any, WidgetCardProps>(
   },
 )
 
-WidgetCardComponent.displayName = 'AglynWidgetCard'
+WidgetCardComponent.displayName = 'WidgetCardComponent'
+WidgetCardComponent.aglyn = true
 
 export {WidgetCardComponent}
 export default WidgetCardComponent

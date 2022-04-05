@@ -23,6 +23,7 @@ function VisitorQueueScript() {
   )
 }
 VisitorQueueScript.displayName = 'VisitorQueueScript'
+VisitorQueueScript.aglyn = true
 
 export {VisitorQueueScript}
 export default VisitorQueueScript

@@ -164,6 +164,7 @@ const WorkspacePanelComponent = forwardRef<any, WorkspacePanelComponentProps>(
 )
 
 WorkspacePanelComponent.displayName = 'WorkspacePanelComponent'
+WorkspacePanelComponent.aglyn = true
 WorkspacePanelComponent.defaultProps = {
   anchor: 'left',
 }

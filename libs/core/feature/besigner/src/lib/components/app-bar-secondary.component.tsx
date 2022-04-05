@@ -75,6 +75,7 @@ const AppBarSecondaryComponent = forwardRef<any, AppBarSecondaryComponentProps>(
 )
 
 AppBarSecondaryComponent.displayName = 'AppBarSecondaryComponent'
+AppBarSecondaryComponent.aglyn = true
 AppBarSecondaryComponent.defaultProps = {}
 
 export {AppBarSecondaryComponent}

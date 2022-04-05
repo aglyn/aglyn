@@ -76,7 +76,8 @@ function NextAppWrapperComponentRaw(props: NextAppWrapperComponentProps) {
     </Wrapper>
   )
 }
-NextAppWrapperComponentRaw.displayName = 'NextAppWrapperComponent'
+NextAppWrapperComponentRaw.displayName = 'NextAppWrapperComponentRaw'
+NextAppWrapperComponentRaw.aglyn = true
 NextAppWrapperComponentRaw.defaultProps = {
   metaElements: [],
   linkElements: [],

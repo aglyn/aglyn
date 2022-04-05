@@ -46,6 +46,7 @@ export const GridButtons = forwardRef<any, GridButtonsProps<any>>(
 )
 
 GridButtons.displayName = 'GridButtons'
+GridButtons.aglyn = true
 GridButtons.defaultProps = {
   items: [],
   ItemComponent: Button,

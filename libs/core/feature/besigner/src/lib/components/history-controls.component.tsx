@@ -68,7 +68,8 @@ const HistoryControlsComponent = forwardRef<any, HistoryControlsProps>(
     )
   },
 )
-HistoryControlsComponent.displayName = 'AglynHistoryControlsComponent'
+HistoryControlsComponent.displayName = 'HistoryControlsComponent'
+HistoryControlsComponent.aglyn = true
 
 export {HistoryControlsComponent}
 export default HistoryControlsComponent

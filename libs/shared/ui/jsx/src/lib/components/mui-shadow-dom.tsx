@@ -47,6 +47,7 @@ const MuiShadowStylesProvider = React.forwardRef<HTMLProps<HTMLDivElement>,
   )
 })
 MuiShadowStylesProvider.displayName = 'MuiShadowStylesProvider'
+MuiShadowStylesProvider.aglyn = true
 
 export const MuiShadowDom = createShadowDomProxy(
   {},

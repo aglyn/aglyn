@@ -105,5 +105,6 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(function 
 })
 
 SiteFooterView.displayName = 'SiteFooterView'
+SiteFooterView.aglyn = true
 export {SiteFooterView}
 export default SiteFooterView

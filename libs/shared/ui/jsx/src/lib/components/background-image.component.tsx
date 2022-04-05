@@ -45,6 +45,7 @@ const BackgroundImageComponent = styled(Box, {
 }))
 
 BackgroundImageComponent.displayName = 'BackgroundImageComponent'
+BackgroundImageComponent.aglyn = true
 BackgroundImageComponent.defaultProps = {
   bgPosition: 'bottom center',
   bgRepeat: 'no-repeat',

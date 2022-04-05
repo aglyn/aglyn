@@ -90,7 +90,8 @@ function UnauthenticatedLayout(props: UnauthenticatedLayoutProps) {
     </BackgroundImageComponent>
   )
 }
-UnauthenticatedLayout.displayName = 'AglynLayoutUnauthenticated'
+UnauthenticatedLayout.displayName = 'UnauthenticatedLayout'
+UnauthenticatedLayout.aglyn = true
 
 export {UnauthenticatedLayout}
 export default UnauthenticatedLayout

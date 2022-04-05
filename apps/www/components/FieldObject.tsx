@@ -60,6 +60,7 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
   )
 }
 FieldObjectProperty.displayName = 'FieldObjectProperty'
+FieldObjectProperty.aglyn = true
 
 interface ObjectPropertyProps extends Omit<FormFieldsProps, 'items'> {
   value: [key: string | number, property: {type: symbol}]
@@ -106,6 +107,7 @@ function FieldObject(props: Props) {
 }
 
 FieldObject.displayName = 'FieldObject'
+FieldObject.aglyn = true
 
 export interface Props extends Omit<FormFieldsProps, 'items'> {
   value: any

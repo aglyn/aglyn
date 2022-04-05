@@ -91,6 +91,7 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
 )
 
 ViewportFrameComponent.displayName = 'ViewportFrameComponent'
+ViewportFrameComponent.aglyn = true
 ViewportFrameComponent.defaultProps = {}
 
 export {ViewportFrameComponent}

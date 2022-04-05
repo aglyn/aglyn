@@ -34,6 +34,7 @@ export const AglynAppContext = createContext<IAglynAppContext>({
   getApp: getAglynApp,
 })
 AglynAppContext.displayName = 'AglynAppContext'
+AglynAppContext.aglyn = true
 
 export const {
   Provider: AglynAppContextProvider,
@@ -72,6 +73,7 @@ function AglynAppContextComponent(props: AglynAppContextComponentProps) {
   )
 }
 AglynAppContextComponent.displayName = 'AglynAppContextComponent'
+AglynAppContextComponent.aglyn = true
 AglynAppContextComponent.defaultProps = {
   appName: DEFAULT_APP_UUN,
 }

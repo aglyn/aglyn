@@ -99,6 +99,7 @@ const LoadingOverlayComponent = forwardRef<any, LoadingOverlayComponentProps>(
 )
 
 LoadingOverlayComponent.displayName = 'LoadingOverlayComponent'
+LoadingOverlayComponent.aglyn = true
 
 export {LoadingOverlayComponent}
 export default LoadingOverlayComponent

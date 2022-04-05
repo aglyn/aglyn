@@ -102,6 +102,7 @@ function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
   )
 }
 SecondaryAppBarComponent.displayName = 'SecondaryAppBarComponent'
+SecondaryAppBarComponent.aglyn = true
 SecondaryAppBarComponent.defaultProps = {
   navTabItems: undefined,
 }

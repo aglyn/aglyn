@@ -431,7 +431,8 @@ function MainLayoutRaw(props: MainLayoutProps) {
   )
 }
 
-MainLayoutRaw.displayName = 'MainLayout'
+MainLayoutRaw.displayName = 'MainLayoutRaw'
+MainLayoutRaw.aglyn = true
 MainLayoutRaw.defaultProps = {
   footerNavItems: tailNavigation as any,
   // aggregatedPageMeta: {} as any,

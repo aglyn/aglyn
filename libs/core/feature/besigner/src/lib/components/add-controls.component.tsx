@@ -50,7 +50,8 @@ const AddControlsComponent = forwardRef<any, AddControlsProps>(
     )
   },
 )
-AddControlsComponent.displayName = 'AglynAddControlsComponent'
+AddControlsComponent.displayName = 'AddControlsComponent'
+AddControlsComponent.aglyn = true
 
 export {AddControlsComponent}
 export default AddControlsComponent

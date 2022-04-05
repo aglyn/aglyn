@@ -165,6 +165,7 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
 )
 
 ElementsTreeViewComponent.displayName = 'ElementsTreeViewComponent'
+ElementsTreeViewComponent.aglyn = true
 ElementsTreeViewComponent.defaultProps = {}
 
 export default ElementsTreeViewComponent

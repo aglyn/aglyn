@@ -133,6 +133,7 @@ function DashboardLayout(props: DashboardLayoutProps) {
   )
 }
 DashboardLayout.displayName = 'DashboardLayout'
+DashboardLayout.aglyn = true
 DashboardLayout.defaultProps = {}
 
 export {DashboardLayout}

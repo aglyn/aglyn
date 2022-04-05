@@ -70,6 +70,7 @@ export const RulerComponent = styled(({variant, className, ...props}: RulerCompo
   },
 }))
 RulerComponent.displayName = 'RulerComponent'
+RulerComponent.aglyn = true
 RulerComponent.defaultProps = {
   component: 'div',
 }
@@ -127,6 +128,7 @@ const GuideComponent = styled(({variant, className, ...props}: GuideComponentPro
   },
 }))
 GuideComponent.displayName = 'GuideComponent'
+GuideComponent.aglyn = true
 GuideComponent.defaultProps = {
   component: 'div',
 }
@@ -170,6 +172,7 @@ export const RulerGuidesComponent = React.forwardRef<any, RulerGuidesProps>(
 )
 
 RulerGuidesComponent.displayName = 'RulerGuidesComponent'
+RulerGuidesComponent.aglyn = true
 RulerGuidesComponent.defaultProps = {
   component: 'div',
 }

@@ -112,5 +112,6 @@ const AuthFormComponent = forwardRef<any, AuthFormProps>(
   }
 )
 AuthFormComponent.displayName = 'AuthFormComponent'
+AuthFormComponent.aglyn = true
 
 export default AuthFormComponent

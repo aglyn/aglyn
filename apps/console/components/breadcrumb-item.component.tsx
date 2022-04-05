@@ -76,7 +76,8 @@ const BreadcrumbItemComponent = forwardRef(
     )
   },
 )
-BreadcrumbItemComponent.displayName = 'AglynBreadcrumbItemComponent'
+BreadcrumbItemComponent.displayName = 'BreadcrumbItemComponent'
+BreadcrumbItemComponent.aglyn = true
 BreadcrumbItemComponent.defaultProps = {}
 
 export {BreadcrumbItemComponent}

@@ -38,6 +38,7 @@ export const ElementsContext = createContext<ElementsContextType>({
   updateElement: (() => {}) as any,
 })
 ElementsContext.displayName = 'ElementsContext'
+ElementsContext.aglyn = true
 
 // export const {
 //   Provider: ElementsContextProvider,

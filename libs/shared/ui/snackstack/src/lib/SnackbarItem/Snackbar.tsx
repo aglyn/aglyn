@@ -140,7 +140,8 @@ const Snackbar = forwardRef<any, SnackbarProps>(
     )
   },
 )
-Snackbar.displayName = 'AglynSnackbar'
+Snackbar.displayName = 'Snackbar'
+Snackbar.aglyn = true
 
 export {Snackbar}
 export default Snackbar

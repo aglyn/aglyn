@@ -22,5 +22,6 @@ import {type ProviderContext} from './types'
 // @ts-ignore
 export const SnackbarContext = createContext<ProviderContext>()
 SnackbarContext.displayName = 'SnackbarContext'
+SnackbarContext.aglyn = true
 
 export default SnackbarContext

@@ -35,6 +35,7 @@ export function ElementComponentsContextProvider(props: ElementComponentsContext
   )
 }
 ElementComponentsContextProvider.displayName = 'ElementComponentsContextProvider'
+ElementComponentsContextProvider.aglyn = true
 ElementComponentsContextProvider.defaultProps = {
   elementComponents: [],
 }

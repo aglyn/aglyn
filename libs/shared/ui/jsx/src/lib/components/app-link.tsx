@@ -203,6 +203,7 @@ const AppLink = forwardRef(
   },
 )
 AppLink.displayName = 'AppLink'
+AppLink.aglyn = true
 
 type AppLink = typeof AppLink
 export {AppLink}

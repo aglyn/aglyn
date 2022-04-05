@@ -38,6 +38,7 @@ const CopyrightComponent = forwardRef<any, CopyrightProps>(
   },
 )
 CopyrightComponent.displayName = 'CopyrightComponent'
+CopyrightComponent.aglyn = true
 
 export {CopyrightComponent}
 export default CopyrightComponent

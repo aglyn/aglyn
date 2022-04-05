@@ -40,6 +40,7 @@ export const AglynSvgLogo = styled(MuiSvgIcon, {name: 'AglynSvgLogo'})({
   height: 'unset',
 })
 AglynSvgLogo.displayName = 'AglynSvgLogo'
+AglynSvgLogo.aglyn = true
 AglynSvgLogo.defaultProps = {
   'aria-label': 'aglyn',
   viewBox: AGLYN_SVG_LOGO.viewBox,
@@ -51,6 +52,7 @@ export const BesignerSvgLogo = styled(MuiSvgIcon, {name: 'BesignerSvgLogo'})({
   // height: 'unset',
 })
 BesignerSvgLogo.displayName = 'BesignerSvgLogo'
+BesignerSvgLogo.aglyn = true
 BesignerSvgLogo.defaultProps = {
   'aria-label': 'besigner',
   viewBox: BESIGNER_SVG_LOGO.viewBox,
@@ -162,3 +164,4 @@ export const AglynSvgIcon = styled(forwardRef<any, AglynSvgIconProps>(
   },
 }))
 AglynSvgIcon.displayName = 'AglynSvgIcon'
+AglynSvgIcon.aglyn = true

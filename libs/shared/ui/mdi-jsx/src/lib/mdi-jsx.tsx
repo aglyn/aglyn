@@ -33,3 +33,4 @@ export * from './components/mdi-svg-icon'
 //   {loading: () => (<span />)},
 // )
 // MdiSvgIcon.displayName = 'MdiSvgIcon'
+MdiSvgIcon.aglyn = true

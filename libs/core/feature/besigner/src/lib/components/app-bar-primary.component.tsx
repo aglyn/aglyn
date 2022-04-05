@@ -97,6 +97,7 @@ export const AppBarPrimaryComponent = forwardRef<any, AppBarPrimaryComponentProp
 )
 
 AppBarPrimaryComponent.displayName = 'AppBarPrimaryComponent'
+AppBarPrimaryComponent.aglyn = true
 AppBarPrimaryComponent.defaultProps = {}
 
 export default AppBarPrimaryComponent

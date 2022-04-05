@@ -145,6 +145,7 @@ const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
   }
 )
 AppLinkTabsComponent.displayName = 'AppLinkTabsComponent'
+AppLinkTabsComponent.aglyn = true
 AppLinkTabsComponent.defaultProps = {
   items: [],
 }

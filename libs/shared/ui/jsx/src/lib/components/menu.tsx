@@ -235,6 +235,7 @@ export const Menu = forwardRef<any, MenuProps>(
 )
 
 Menu.displayName = 'Menu'
+Menu.aglyn = true
 Menu.defaultProps = {
   items: [],
 }

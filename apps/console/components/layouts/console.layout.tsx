@@ -99,6 +99,7 @@ function ConsoleLayout(props: ConsoleLayoutProps) {
 }
 
 ConsoleLayout.displayName = 'ConsoleLayout'
+ConsoleLayout.aglyn = true
 ConsoleLayout.defaultProps = {
   disableAppBarElevation: true,
   centerNavigationItems: [
