@@ -37,6 +37,7 @@
       "@aglyn/core-data-framework": ["libs/core/data/framework/src/index.ts"],
       "@aglyn/core-data-tenancy": ["libs/core/data/tenancy/src/index.ts"],
       "@aglyn/core-feature-besigner": ["libs/core/feature/besigner/src/index.ts"],
+      "@aglyn/core-feature-canvas-designer": ["libs/core/feature/canvas-designer/src/index.ts"],
       "@aglyn/core-feature-renderer": ["libs/core/feature/renderer/src/index.ts"],
       "@aglyn/shared-data-brand": ["libs/shared/data/brand/src/index.ts"],
       "@aglyn/shared-data-enums": ["libs/shared/data/enums/src/index.ts"],

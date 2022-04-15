@@ -1,0 +1,35 @@
+{
+  "root": "libs/core/feature/canvas-designer",
+  "sourceRoot": "libs/core/feature/canvas-designer/src",
+  "projectType": "library",
+  "tags": ["sc:lib", "sc:lib:core", "sc:lib:core:feature", "sc:lib:core:feature:paid"],
+  "targets": {
+    "build": {
+      "executor": "@nrwl/web:rollup",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/core/feature/canvas-designer",
+        "tsConfig": "libs/core/feature/canvas-designer/tsconfig.lib.json",
+        "project": "libs/core/feature/canvas-designer/package.json",
+        "entryFile": "libs/core/feature/canvas-designer/src/index.ts",
+        "external": ["react/jsx-runtime"],
+        "rollupConfig": "@nrwl/react/plugins/bundle-rollup",
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/core/feature/canvas-designer/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["libs/core/feature/canvas-designer/**/*.{ts,tsx,js,jsx}"]
+      }
+    }
+  }
+}

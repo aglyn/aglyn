@@ -375,6 +375,7 @@
       },
       "tags": ["sc:lib", "sc:lib:core", "sc:lib:core:feature", "sc:lib:core:feature:besigner"]
     },
+    "core-feature-canvas-designer": "libs/core/feature/canvas-designer",
     "core-feature-renderer": {
       "root": "libs/core/feature/renderer",
       "sourceRoot": "libs/core/feature/renderer/src",
