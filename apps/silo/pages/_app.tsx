@@ -25,6 +25,7 @@ import {ConfirmationProviderComponent, LoadingLayoutComponent} from '@aglyn/shar
 import {_AppComponent, type _AppProps} from '@aglyn/shared-ui-next'
 import {SnackbarProvider} from '@aglyn/shared-ui-snackstack'
 import {Fragment} from 'react'
+import './styles.css'
 
 
 const withThemeProvider = createWithThemeProvider({

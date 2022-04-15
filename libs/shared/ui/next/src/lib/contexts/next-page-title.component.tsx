@@ -39,7 +39,7 @@ export interface NextPageTitleContextValue {
 }
 
 export const NextPageTitleContext = createContext<NextPageTitleContextValue>({
-  title: 'My App',
+  title: 'Aglyn App',
   setScreenName,
   setScreenSeparator,
   setScreenSuffix,
@@ -61,13 +61,6 @@ export const useNextPageTitle = (values: PageTitleObject) => {
   }, [values, setScreenTitle])
 
   return title
-}
-
-export const NextPageTitle = () => {
-  const title = useObservable($pageTitle)
-  return (
-    <title>{title}</title>
-  )
 }
 
 export interface NextPageTitleContextProps {

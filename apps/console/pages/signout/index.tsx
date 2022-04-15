@@ -16,6 +16,7 @@
  */
 
 import {LoadingTextComponent} from '@aglyn/shared-ui-jsx'
+import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {CircularProgress} from '@mui/material'
 import {signOut} from 'firebase/auth'
 import {useEffect} from 'react'
@@ -25,6 +26,7 @@ import UnauthenticatedLayout from '../../components/layouts/unauthenticated.layo
 
 
 function SignOut() {
+  useNextPageTitle({screen: 'Sign out'})
 
   const firebaseAuth = useAuth()
 

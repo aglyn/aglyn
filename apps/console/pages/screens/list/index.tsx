@@ -32,6 +32,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {Button, IconButton, Typography} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
@@ -51,6 +52,7 @@ import {CONTENT_MAX_WIDTH, TABLE_ROW_HEIGHT} from '../../../constants/shared'
 
 function Screens(props) {
 
+  useNextPageTitle({screen: 'App Screens'})
   const {queueLoading, loading} = useLoading()
   const {confirm} = useConfirmationContext()
   const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(false)
@@ -68,7 +70,7 @@ function Screens(props) {
 
   useEffect(() => {
     if (status === 'error') {
-      enqueueSnackbar("An error has occurred", {
+      enqueueSnackbar('An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
@@ -92,16 +94,16 @@ function Screens(props) {
       screenId: newId,
       createdAt: timestamp,
       updatedAt: timestamp,
-      elements: {[CANVAS_ROOT_ELEMENT_ID]: {elements: []}}
+      elements: {[CANVAS_ROOT_ELEMENT_ID]: {elements: []}},
     }
     await Promise.all([
       setDoc(doc(firestore, 'screens', newId), newValues),
-      setDoc(doc(firestore, 'screens', newId, 'versions', newVersionId), newVersionValue)
+      setDoc(doc(firestore, 'screens', newId, 'versions', newVersionId), newVersionValue),
     ])
       .catch((error) => {
         console.error(error)
         setError({...error})
-        enqueueSnackbar("An error has occurred", {
+        enqueueSnackbar('An error has occurred', {
           variant: 'error',
           allowDuplicate: true,
         })

@@ -22,7 +22,7 @@ import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
 import dynamic from 'next/dynamic'
 import {useEffect} from 'react'
-import '../constants/app-setup'
+import '../../../../constants/app-setup'
 
 
 const AglynBesigner = dynamic<BesignerComponentProps>(
@@ -34,7 +34,7 @@ export interface BesignerProps extends BesignerComponentProps {}
 
 
 function BesignerComponent(props: BesignerProps) {
-  const {sx,...rest} = props
+  const {sx, ...rest} = props
 
 
   useEffect(() => {
@@ -53,4 +53,5 @@ function BesignerComponent(props: BesignerProps) {
 
 BesignerComponent.displayName = 'BesignerComponent'
 
+export {BesignerComponent}
 export default BesignerComponent

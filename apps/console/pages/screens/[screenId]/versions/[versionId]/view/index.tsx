@@ -25,6 +25,7 @@ import {
 } from '@aglyn/shared-data-enums'
 import {AppLink, ContainerComponent, GridItems, useLoading} from '@aglyn/shared-ui-jsx'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {List, ListItem, ListItemIcon, ListItemText} from '@mui/material'
 import {doc} from 'firebase/firestore'
@@ -42,6 +43,7 @@ import {CONTENT_MAX_WIDTH} from '../../../../../../constants/shared'
 const whiteSpace = '--'
 
 function ScreenDetails(props) {
+  useNextPageTitle({screen: 'Screen Details'})
 
   const {query} = useRouter()
   const screenId = `${query.screenId}`
@@ -67,7 +69,7 @@ function ScreenDetails(props) {
 
   useEffect(() => {
     if (status === 'error' || (status === 'success' && !screen)) {
-      enqueueSnackbar("An error has occurred", {
+      enqueueSnackbar('An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
@@ -80,49 +82,49 @@ function ScreenDetails(props) {
       id: 'details-id',
       primary: 'Screen ID:',
       secondary: screen?.$id,
-      icon: {path: ICON_VARIANT_PRIMARY_KEY.path}
+      icon: {path: ICON_VARIANT_PRIMARY_KEY.path},
     },
     {
       key: 'displayName',
       id: 'details-dname',
       primary: 'Display name:',
       secondary: screen?.displayName,
-      icon: {path: ICON_VARIANT_TEXT.path}
+      icon: {path: ICON_VARIANT_TEXT.path},
     },
     {
       key: 'description',
       id: 'details-desc',
       primary: 'Description:',
       secondary: screen?.description,
-      icon: {path: ICON_VARIANT_TEXT.path}
+      icon: {path: ICON_VARIANT_TEXT.path},
     },
     {
       key: 'dateCreated',
       id: 'details-datec',
       primary: 'Date created:',
       secondary: screen?.createdAt?.toDate?.()?.toLocaleString(),
-      icon: {path: ICON_VARIANT_DATE_TIME.path}
+      icon: {path: ICON_VARIANT_DATE_TIME.path},
     },
     {
       key: 'dateUpdated',
       id: 'details-dateu',
       primary: 'Last updated:',
       secondary: screen?.updatedAt?.toDate?.()?.toLocaleString(),
-      icon: {path: ICON_VARIANT_DATE_TIME.path}
+      icon: {path: ICON_VARIANT_DATE_TIME.path},
     },
     {
       key: 'dateDeleted',
       id: 'details-dated',
       primary: 'Date deleted:',
       secondary: screen?.deletedAt?.toDate?.()?.toLocaleString(),
-      icon: {path: ICON_VARIANT_DATE_TIME.path}
+      icon: {path: ICON_VARIANT_DATE_TIME.path},
     },
     {
       key: 'versionId',
       id: 'details-vers',
       primary: 'Version ID:',
       secondary: screen?.versionId,
-      icon: {path: ICON_VARIANT_IDENTIFIER.path}
+      icon: {path: ICON_VARIANT_IDENTIFIER.path},
     },
   ]
 
@@ -190,10 +192,10 @@ function ScreenDetails(props) {
                             borderRadius: 1,
                             minWidth: 'unset',
                             marginRight: 2,
-                            color: 'tertiary.main'
+                            color: 'tertiary.main',
                           }}
                         >
-                          <MdiIcon {...icon}/>
+                          <MdiIcon {...icon} />
                         </ListItemIcon>
                         <ListItemText
                           primary={primary || whiteSpace}

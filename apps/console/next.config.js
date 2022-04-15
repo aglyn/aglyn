@@ -26,6 +26,9 @@ const isProduction = process.env.NODE_ENV === 'production'
  * @type {import('/tools/nextjs-base.config').WithAglynOptions}
  **/
 module.exports = withAglyn({
+  env: {
+    AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
+  },
   async headers() {
     return [
       {

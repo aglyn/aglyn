@@ -30,6 +30,18 @@ const IS_DEVELOPMENT = NODE_ENV === 'development'
 const IS_PRODUCTION = NODE_ENV === 'production'
 const IS_TEST = NODE_ENV === 'test'
 
+const SECURE_HEADER_DOMAINS = [
+  'https://*.aglyn.com',
+  'https://aglyn.com',
+  IS_DEVELOPMENT && 'http://localhost:4000',
+  IS_DEVELOPMENT && 'http://localhost:4100',
+  IS_DEVELOPMENT && 'http://localhost:4200',
+  IS_DEVELOPMENT && 'http://localhost:4210',
+  IS_DEVELOPMENT && 'http://localhost:4300',
+  IS_DEVELOPMENT && 'http://localhost:4400',
+  IS_DEVELOPMENT && 'http://localhost:4500',
+].filter(i => Boolean(i)).join(' ')
+
 const SECURITY_HEADERS = [
   /**
    * This header controls DNS prefetching, allowing browsers to proactively perform domain name
@@ -44,7 +56,10 @@ const SECURITY_HEADERS = [
    * This can prevent against clickjacking attacks. This header has been superseded by CSP's
    * frame-ancestors option, which has better support in modern browsers.
    */
-  {key: 'X-Frame-Options', value: 'SAMEORIGIN'},
+  {
+    key: 'X-Frame-Options',
+    value: `allow-from ${SECURE_HEADER_DOMAINS}`,
+  },
 
   /**
    * This header prevents the browser from attempting to guess the type of content if the
@@ -73,6 +88,16 @@ const SECURITY_HEADERS = [
    * to all deployments.
    */
   {key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload'},
+
+  /**
+   * This header helps prevent cross-site scripting (XSS), clickjacking and other code injection
+   * attacks. Content Security Policy (CSP) can specify allowed origins for content including
+   * scripts, stylesheets, images, fonts, objects, media (audio, video), iframes, and more.
+   */
+  {
+    key: 'Content-Security-Policy',
+    value: `frame-ancestors ${SECURE_HEADER_DOMAINS}`,
+  },
 ]
 
 const BRAND_HEADERS = [

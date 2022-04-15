@@ -19,7 +19,8 @@
       "executor": "@nrwl/next:server",
       "options": {
         "buildTarget": "silo:build",
-        "dev": true
+        "dev": true,
+        "port": 4210
       },
       "configurations": {
         "production": {

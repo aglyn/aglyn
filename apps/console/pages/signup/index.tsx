@@ -27,6 +27,7 @@ import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
 import type {FormSchema} from '@aglyn/shared-ui-jsx-forms'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {Button, Divider, Stack, Typography} from '@mui/material'
 import {logEvent} from 'firebase/analytics'
 import {
@@ -57,6 +58,7 @@ const formSchema: FormSchema = {
 }
 
 function SignUp() {
+  useNextPageTitle({screen: 'Sign up'})
   const {queueLoading, loading} = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)

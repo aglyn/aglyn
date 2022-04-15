@@ -15,25 +15,21 @@
  * limitations under the License.
  */
 
-import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
 import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
+import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {Stack, Typography} from '@mui/material'
 import {doc} from 'firebase/firestore'
-import dynamic from 'next/dynamic'
 import {useRouter} from 'next/router'
 import {useEffect} from 'react'
 import {useFirestore, useFirestoreDocDataOnce} from 'reactfire'
+import BesignerIframeComponent from '../../../../../../components/besigner-iframe.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
 
 
-const BesignerComponent = dynamic<BesignerComponentProps>(
-  () => import('../../../../../../components/besigner.component').then((mod) => mod.default),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
-)
-
 function Besigner(props) {
+  useNextPageTitle({screen: 'Besigner'})
   const {query} = useRouter()
   const screenId = `${query.screenId}`
   const versionId = `${query.versionId}`
@@ -67,8 +63,9 @@ function Besigner(props) {
   ) : status === 'loading' ? (
     LOADING_OVERLAY_ELEMENT
   ) : (
-    <BesignerComponent
-      canvasElements={{elements: elements, type: 'denormal'}}
+    <BesignerIframeComponent
+      screenId={screenId}
+      versionId={versionId}
     />
   )
 }
