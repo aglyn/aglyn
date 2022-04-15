@@ -62,6 +62,7 @@ export * from './lib/hooks/use-tag-name'
 export * from './lib/hooks/use-timeout'
 export * from './lib/hooks/use-timeout-delay'
 
+export * from './lib/const/prebuilt-components'
 export * from './lib/const/svg-icons'
 
 export * from './lib/hocs/with-hoc'

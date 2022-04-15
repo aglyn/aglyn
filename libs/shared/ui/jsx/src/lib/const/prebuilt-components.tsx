@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-export * from './types'
+import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
 
-export * from './hooks/use-continue-url'
 
-export * from './security/csrf'
+export const LOADING_OVERLAY_ELEMENT = (
+  <LoadingOverlayComponent open />
+)

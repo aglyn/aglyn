@@ -17,7 +17,7 @@
 
 import {BesignerDeviceFlag} from '@aglyn/core-data-besigner'
 import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
-import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 // import {ZoomablePanningComponent} from '@aglyn/shared-ui-jsx'
@@ -27,7 +27,7 @@ import useAglynBesignerStoreState from '../hooks/use-aglyn-besigner-store-state'
 
 const ViewportFrameComponent = dynamic(
   () => import('./viewport-frame.component').then((mod) => mod.ViewportFrameComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 const ViewportCanvas = styled('div', {

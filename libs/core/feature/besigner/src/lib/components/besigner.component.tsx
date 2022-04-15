@@ -21,7 +21,7 @@ import {
   ElementComponentsContextProvider,
   ElementsContextProvider,
 } from '@aglyn/core-feature-renderer'
-import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
 import {NoSsr} from '@mui/material'
 import dynamic from 'next/dynamic'
 import {forwardRef, Fragment} from 'react'
@@ -32,7 +32,7 @@ import type {WorkspaceEditorComponentProps} from './workspace-editor.component'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('./workspace-editor.component').then((mod) => mod.WorkspaceEditorComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 export interface BesignerComponentProps extends WorkspaceEditorComponentProps {
@@ -43,12 +43,20 @@ export interface BesignerComponentProps extends WorkspaceEditorComponentProps {
 
 const BesignerComponent = forwardRef<any, BesignerComponentProps>(
   function RefRenderFn(props, ref) {
-    const {noSsr, appName, canvasElements, ...rest} = props
+    const {
+      noSsr,
+      appName,
+      canvasElements,
+      ...rest
+    } = props
     const Wrapper = noSsr ? NoSsr : Fragment
 
     return (
       <Wrapper>
-        <AglynAppContextComponent canvasElements={canvasElements} appName={appName}>
+        <AglynAppContextComponent
+          canvasElements={canvasElements}
+          appName={appName}
+        >
           <BesignerDndContext>
             <ElementComponentsContextProvider>
               <ElementsContextProvider>

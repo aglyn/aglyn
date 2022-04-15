@@ -18,7 +18,7 @@
 import {getApp} from '@aglyn/core-data-framework'
 import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
 import {HAS_BROWSER} from '@aglyn/shared-data-enums'
-import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
 import dynamic from 'next/dynamic'
 import {useEffect} from 'react'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
@@ -29,7 +29,7 @@ import '../../constants/app-setup'
 
 const AglynBesigner = dynamic<BesignerComponentProps>(
   () => import('@aglyn/core-feature-besigner').then((mod) => mod.BesignerComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 function Besigner(props) {

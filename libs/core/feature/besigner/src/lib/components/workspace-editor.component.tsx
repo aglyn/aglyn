@@ -16,7 +16,7 @@
  */
 
 import {styled} from '@aglyn/shared-feature-themes'
-import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
 import {Stack, type StackProps} from '@mui/material'
 import dynamic from 'next/dynamic'
 import {forwardRef} from 'react'
@@ -25,17 +25,17 @@ import AppBarSecondaryComponent from './app-bar-secondary.component'
 
 const PanelLeftComponent = dynamic(
   () => import('./panel-left.component').then((mod) => mod.PanelLeftComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 const PanelRightComponent = dynamic(
   () => import('./panel-right.component').then((mod) => mod.PanelRightComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 const ViewportRootComponent = dynamic(
   () => import('./viewport-root.component').then((mod) => mod.ViewportRootComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 const WorkspaceEditor = styled(Stack, {

@@ -17,7 +17,7 @@
 
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {BackgroundImageComponent, type BackgroundImageComponentProps} from '@aglyn/shared-ui-jsx'
-import {useNextUrl} from '@aglyn/shared-util-next'
+import {useContinueUrl} from '@aglyn/shared-util-next'
 import {Stack} from '@mui/material'
 import {useRouter} from 'next/router'
 import {useEffect} from 'react'
@@ -42,7 +42,7 @@ function UnauthenticatedLayout(props: UnauthenticatedLayoutProps) {
   const authLoading = status === 'loading'
   const signedIn = signInCheckResult?.signedIn === true
   const emailVerified = signInCheckResult?.user?.emailVerified
-  const [, , pushNext] = useNextUrl()
+  const [, , pushNext] = useContinueUrl()
 
   useEffect(() => {
     if (authLoading) return void 0

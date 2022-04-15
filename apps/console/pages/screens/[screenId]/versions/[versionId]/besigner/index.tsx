@@ -15,10 +15,8 @@
  * limitations under the License.
  */
 
-import {getApp} from '@aglyn/core-data-framework'
 import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
-import {HAS_BROWSER} from '@aglyn/shared-data-enums'
-import {LoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {Stack, Typography} from '@mui/material'
 import {doc} from 'firebase/firestore'
@@ -28,12 +26,11 @@ import {useEffect} from 'react'
 import {useFirestore, useFirestoreDocDataOnce} from 'reactfire'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
-import '../../../../../../constants/app-setup'
 
 
-const AglynBesigner = dynamic<BesignerComponentProps>(
-  () => import('@aglyn/core-feature-besigner').then((mod) => mod.BesignerComponent),
-  {ssr: false, loading: () => <LoadingOverlayComponent open />},
+const BesignerComponent = dynamic<BesignerComponentProps>(
+  () => import('../../../../../../components/besigner.component').then((mod) => mod.default),
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 function Besigner(props) {
@@ -48,13 +45,6 @@ function Besigner(props) {
 
   console.log('Besigner,', props.tenant, props)
   console.log('Besigner data,', status, screen)
-
-
-  useEffect(() => {
-    if (HAS_BROWSER()) {
-      console.log('page:/besigner app', getApp())
-    }
-  }, [])
 
   useEffect(() => {
     if (status === 'error' || (status === 'success' && !screen)) {
@@ -75,11 +65,10 @@ function Besigner(props) {
       </Typography>
     </Stack>
   ) : status === 'loading' ? (
-    <LoadingOverlayComponent open />
+    LOADING_OVERLAY_ELEMENT
   ) : (
-    <AglynBesigner
-      sx={{flexGrow: 1, position: 'unset'}}
-      canvasElements={{elements: elements}}
+    <BesignerComponent
+      canvasElements={{elements: elements, type: 'denormal'}}
     />
   )
 }

@@ -21,27 +21,27 @@ import {useCallback, useMemo} from 'react'
 import type {UrlObject} from 'url'
 
 
-export type UseNextUrlDecodedRoutePusher = (
+export type UseContinueUrlDecodedRoutePusher = (
   url?: UrlObject | string,
   as?: UrlObject | string,
   options?: {shallow?: boolean, locale?: string | false, scroll?: boolean},
 ) => Promise<boolean>
 
-export type UseNextUrlDecodedResponse = [
+export type UseContinueUrlDecodedResponse = [
   decoded: string,
-  pushNext: UseNextUrlDecodedRoutePusher
+  pushNext: UseContinueUrlDecodedRoutePusher
 ]
 
-export type UseNextUrlResponse = [
+export type UseContinueUrlResponse = [
   encoded: string,
   decoded: string,
-  pushNext: UseNextUrlDecodedRoutePusher
+  pushNext: UseContinueUrlDecodedRoutePusher
 ]
 
-export const NextParamName = 'next'
-export const nextParam = (value: string) => `${NextParamName}=${value}`
+export const ContinueParamName = 'continue'
+export const continueParam = (value: string) => `${ContinueParamName}=${value}`
 
-export function useNextUrlDecoded(): UseNextUrlDecodedResponse {
+export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
   const router = useRouter()
 
   const nextUrl = useMemo(() => {
@@ -64,7 +64,7 @@ export function useNextUrlDecoded(): UseNextUrlDecodedResponse {
   }, [nextUrl, pushNext])
 }
 
-export function useNextUrlEncoded() {
+export function useContinueUrlEncoded() {
   const router = useRouter()
 
   return useMemo(() => {
@@ -73,9 +73,9 @@ export function useNextUrlEncoded() {
   }, [router])
 }
 
-export function useNextUrl(): UseNextUrlResponse {
-  const encoded = useNextUrlEncoded()
-  const [decoded, pushNext] = useNextUrlDecoded()
+export function useContinueUrl(): UseContinueUrlResponse {
+  const encoded = useContinueUrlEncoded()
+  const [decoded, pushNext] = useContinueUrlDecoded()
 
   return useMemo(() => [
     encoded,
@@ -88,4 +88,4 @@ export function useNextUrl(): UseNextUrlResponse {
   ])
 }
 
-export default useNextUrl
+export default useContinueUrl
