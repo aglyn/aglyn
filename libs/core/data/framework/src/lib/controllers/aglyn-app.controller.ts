@@ -28,18 +28,21 @@ import {AglynEventStateFlag, AglynEventTriggerFlag} from '../constants/emitter'
 import {AGLYN_PLATFORM, AglynPlatform} from '../constants/platform'
 import {AglynVersion, SDK_VERSION} from '../constants/version'
 import {AglynBaseModel} from '../models/aglyn-base.model'
-import {
-  type AglynAppOptions,
-  type AglynEffectOptions,
-  type AppUUN,
-  type IAglynAppController,
+import AglynDependencyManager from '../models/aglyn-depends.model'
+import type {
+  AglynAppOptions,
+  AglynEffectOptions,
+  AppUUN,
+  IAglynAppController,
 } from '../types/aglyn-app.types'
-import {type IAglynCanvasController} from '../types/aglyn-canvas.types'
-import {type IAglynCommandsController} from '../types/aglyn-commands.types'
-import {type IAglynComponentsController} from '../types/aglyn-components.types'
-import {type IAglynContextsController} from '../types/aglyn-contexts.types'
-import {type IAglynExtensionsController} from '../types/aglyn-extensions.types'
-import {IAglynModuleModel} from '../types/aglyn-module.types'
+import type {AglynBaseModelT} from '../types/aglyn-base.types'
+import type {IAglynCanvasController} from '../types/aglyn-canvas.types'
+import type {IAglynCommandsController} from '../types/aglyn-commands.types'
+import type {IAglynComponentsController} from '../types/aglyn-components.types'
+import type {IAglynContextsController} from '../types/aglyn-contexts.types'
+import type {IAglynDependencyManager} from '../types/aglyn-depends.types'
+import type {IAglynExtensionsController} from '../types/aglyn-extensions.types'
+import type {IAglynModuleModel} from '../types/aglyn-module.types'
 import AglynCanvasController from './aglyn-canvas.controller'
 import AglynCommandsController from './aglyn-commands.controller'
 import AglynComponentsController from './aglyn-components.controller'
@@ -47,10 +50,13 @@ import AglynContextsController from './aglyn-contexts.controller'
 import AglynExtensionsController from './aglyn-extensions.controller'
 
 
+type BaseAppT = <T extends AglynBaseModelT>(model: T) => new<Options>(...any: ConstructorParameters<T>) => AglynBaseModel<Options> & IAglynDependencyManager
+const BaseApp: ReturnType<BaseAppT> = AglynDependencyManager(AglynBaseModel)
+
 const TAG = 'AglynApp'
 const NS = 'aglyn.core.data.framework.controller.app'
 
-export class AglynAppController<Options extends AglynAppOptions = AglynAppOptions> extends AglynBaseModel<Options> implements IAglynAppController<Options> {
+export class AglynAppController<Options extends AglynAppOptions = AglynAppOptions> extends BaseApp<Options> implements IAglynAppController<Options> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly namespace: string = NS
@@ -175,7 +181,7 @@ export class AglynAppController<Options extends AglynAppOptions = AglynAppOption
     }
   }
 
-  public onInitialize(): void {
+  public onInitialize(): this {
     this.logger.debug(AglynEventStateFlag.APP_INITIALIZING, {appName: this.#appName})
     this.emitter.emit(AglynEventStateFlag.APP_INITIALIZING, {appName: this.#appName})
 
@@ -183,8 +189,9 @@ export class AglynAppController<Options extends AglynAppOptions = AglynAppOption
 
     this.logger.debug(AglynEventStateFlag.APP_INITIALIZED, {appName: this.#appName})
     this.emitter.emit(AglynEventStateFlag.APP_INITIALIZED, {appName: this.#appName})
+    return this
   }
-  public onDestroy(): void {
+  public onDestroy(): this {
     this.logger.debug(AglynEventStateFlag.APP_DESTROYING, {appName: this.#appName})
     this.emitter.emit(AglynEventStateFlag.APP_DESTROYING, {appName: this.#appName})
 
@@ -192,6 +199,7 @@ export class AglynAppController<Options extends AglynAppOptions = AglynAppOption
 
     this.logger.debug(AglynEventStateFlag.APP_DESTROYED, {appName: this.#appName})
     this.emitter.emit(AglynEventStateFlag.APP_DESTROYED, {appName: this.#appName})
+    return this
   }
 
   public getName(): AppUUN {

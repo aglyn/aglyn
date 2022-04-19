@@ -26,7 +26,7 @@ import {type AglynBaseModelOptions, type IAglynBaseModel} from '../types/aglyn-b
 const TAG = 'AglynBaseModel'
 const NS = 'aglyn.core.data.framework.model.base'
 
-export abstract class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOptions> implements IAglynBaseModel<O> {
+export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOptions> implements IAglynBaseModel<O> {
 
   public static readonly [Symbol.toStringTag]: string = TAG
   public static readonly namespace: string = NS
@@ -45,7 +45,7 @@ export abstract class AglynBaseModel<O extends AglynBaseModelOptions = AglynBase
   public get logger(): AglynLogger {return this.#logger}
   public get emitter(): AglynEmitter {return this.#emitter}
 
-  protected constructor(options: O) {
+  constructor(options: O) {
     this.#options = options
     this.#createdAt = Timestamp.now()
     this.#setup()

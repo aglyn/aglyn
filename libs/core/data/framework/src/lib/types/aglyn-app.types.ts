@@ -15,29 +15,26 @@
  * limitations under the License.
  */
 
-import {type AglynEventTriggerFlag} from '../constants/emitter'
-import {type AglynPlatform} from '../constants/platform'
-import {type AglynVersion} from '../constants/version'
-import {
-  type AglynBaseModelOptions,
-  type AglynBaseModelT,
-  type IAglynBaseModel,
-} from './aglyn-base.types'
-import {type AglynCanvasControllerOptions, type IAglynCanvasController} from './aglyn-canvas.types'
-import {type IAglynCommandsController} from './aglyn-commands.types'
-import {
-  type AglynComponentsControllerOptions,
-  type IAglynComponentsController,
+import type {AglynEventTriggerFlag} from '../constants/emitter'
+import type {AglynPlatform} from '../constants/platform'
+import type {AglynVersion} from '../constants/version'
+import type {AglynBaseModelOptions, AglynBaseModelT, IAglynBaseModel} from './aglyn-base.types'
+import type {AglynCanvasControllerOptions, IAglynCanvasController} from './aglyn-canvas.types'
+import type {IAglynCommandsController} from './aglyn-commands.types'
+import type {
+  AglynComponentsControllerOptions,
+  IAglynComponentsController,
 } from './aglyn-components.types'
-import {
-  type AglynContextsControllerOptions,
-  type IAglynContextsController,
+import type {
+  AglynContextsControllerOptions,
+  IAglynContextsController,
 } from './aglyn-contexts.types'
-import {
-  type AglynExtensionsControllerOptions,
-  type IAglynExtensionsController,
+import type {IAglynDependencyManager} from './aglyn-depends.types'
+import type {
+  AglynExtensionsControllerOptions,
+  IAglynExtensionsController,
 } from './aglyn-extensions.types'
-import {type AglynUniqueId, type Payload} from './generic.types'
+import type {AglynUniqueId, Payload} from './generic.types'
 
 
 export type AppUUN = string
