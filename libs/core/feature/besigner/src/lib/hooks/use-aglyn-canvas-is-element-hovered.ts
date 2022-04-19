@@ -22,8 +22,8 @@ import {useStoreMap} from 'effector-react'
 
 
 export function useAglynCanvasElementIsHovered($id: ElementId): boolean {
-  const {getApp} = useAglynAppContext()
-  const dndStore = getBesignerStore(getApp(), {store: 'canvas'})
+  const app = useAglynAppContext()
+  const dndStore = getBesignerStore(app, {store: 'canvas'})
   return useStoreMap({
     store: dndStore,
     keys: [$id],

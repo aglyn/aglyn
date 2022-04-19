@@ -28,7 +28,7 @@ export function useAglynComponentSchema(
   componentId: ComponentId,
   bundleId?: BundleUId,
 ): AglynComponentSchema {
-  const {getApp} = useAglynAppContext()
-  return getComponentSchema(getApp(), {componentId, bundleId})
+  const app = useAglynAppContext()
+  return getComponentSchema(app, {componentId, bundleId})
 }
 export default useAglynComponentSchema

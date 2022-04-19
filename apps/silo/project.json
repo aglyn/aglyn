@@ -43,5 +43,5 @@
       }
     }
   },
-  "tags": ["sc:app", "sc:app:private"]
+  "tags": ["scope:app", "scope:private"]
 }

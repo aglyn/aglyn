@@ -329,12 +329,12 @@ export function withAppController(options: Partial<AppControllerConfig> = defaul
       if (analytics) {
         return analytics
       }
-      return analytics = getFbAnalytics(app ?? getApp())
+      return analytics = getFbAnalytics(app ?? app)
     }
     return null
   }
   const getAuth = (): FbAuth => {
-    const auth = getFbAuth(app ?? getApp())
+    const auth = getFbAuth(app ?? app)
     return !setAuth && !existingApp && auth ? setupAuth(auth) : auth
   }
   const getFirestore = (): FbFirestore => {

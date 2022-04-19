@@ -37,7 +37,7 @@ export interface PanelControlsProps extends StackProps {}
 
 const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
   function RefRenderFn(props, ref) {
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const panels = useAglynBesignerStoreState('panels')
     const openPanels = Object.values(panels)
       .filter((i) => Boolean(i?.toggled))
@@ -45,7 +45,7 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
 
     const handlePanelToggle = useCallback(
       (event: MouseEvent<HTMLElement>, value: BesignerPanelViewFlag[]) => {
-        setBesignerPanels(getApp(), {
+        setBesignerPanels(app, {
           panels: (panels) => ({
             panelLeft: {
               ...panels.panelLeft,
@@ -62,7 +62,7 @@ const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
           }),
         })
       },
-      [getApp],
+      [app],
     )
 
     return (

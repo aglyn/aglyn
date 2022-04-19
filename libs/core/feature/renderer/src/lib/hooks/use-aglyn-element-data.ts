@@ -47,8 +47,8 @@ export function useAglynElementData<P = EmptyObj,
   key?: K,
 ): UseAglynElementData<P, K> {
 
-  const {getApp} = useAglynAppContext()
-  const store = getCanvasDenormalizedElementsStore(getApp())
+  const app = useAglynAppContext()
+  const store = getCanvasDenormalizedElementsStore(app)
   return useStoreMap({
     store,
     keys: [$id, key],

@@ -43,20 +43,20 @@ export function useAglynCanvasElementStatus<T extends boolean = false>(
   $id: ElementId,
   includeChildStatus: T = false as T,
 ): AglynCanvasElementStatus<T> {
-  const {getApp} = useAglynAppContext()
-  const canvasStore = getBesignerStore(getApp(), {store: 'canvas'})
+  const app = useAglynAppContext()
+  const canvasStore = getBesignerStore(app, {store: 'canvas'})
 
   return useStoreMap({
     store: canvasStore,
-    keys: [$id, includeChildStatus, getApp],
-    fn: (store, [$id, includeChildStatus, getApp]) => {
+    keys: [$id, includeChildStatus, app],
+    fn: (store, [$id, includeChildStatus, app]) => {
       const response: AglynCanvasElementStatus<T> = {
         isSelfHovered: Boolean($id && store.hovered?.$id === $id),
         isSelfSelected: Boolean($id && store.selected?.$id === $id),
       }
       if (!includeChildStatus) return response
 
-      const elements = getCanvasDenormalizedElementsStore(getApp()).getState()
+      const elements = getCanvasDenormalizedElementsStore(app).getState()
       const selectedHierarchy = getComponentElementHierarchy(store?.selected?.$id, elements)
       const hoverHierarchy = getComponentElementHierarchy(store?.hovered?.$id, elements)
       response['isChildSelected'] = Boolean($id && checkHierarchy(selectedHierarchy, $id))

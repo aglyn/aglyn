@@ -29,10 +29,10 @@ export type UseAglynCanvasHistory = [
 ]
 
 export function useAglynCanvasHistoryControls(): UseAglynCanvasHistory {
-  const {getApp} = useAglynAppContext()
-  const handleUndo = useCallback(() => canvasUndo(getApp(), {}), [getApp])
-  const handleRedo = useCallback(() => canvasRedo(getApp(), {}), [getApp])
-  const store = getCanvasStore(getApp())
+  const app = useAglynAppContext()
+  const handleUndo = useCallback(() => canvasUndo(app, {}), [app])
+  const handleRedo = useCallback(() => canvasRedo(app, {}), [app])
+  const store = getCanvasStore(app)
   const [canUndo, canRedo]: [number | false, number | false] = useStoreMap({
     store,
     keys: [],

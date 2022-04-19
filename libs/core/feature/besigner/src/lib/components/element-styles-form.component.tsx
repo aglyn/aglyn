@@ -33,7 +33,7 @@ export interface ElementStylesFormProps extends FormRendererProps {
 const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({$id})
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
@@ -42,8 +42,8 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
 
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback((values) => {
-      updateCanvasElement(getApp(), {element: {$id, sx: {...values}}})
-    }, [$id, getApp])
+      updateCanvasElement(app, {element: {$id, sx: {...values}}})
+    }, [$id, app])
     const handleDeleteElement = useCallback((e: ChangeEvent<unknown>) => {
       deleteElementCallback(e)
     }, [deleteElementCallback])
@@ -88,9 +88,9 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
                   {value: 'none', label: 'None'},
                   {value: 'initial', label: 'Initial'},
                   {value: 'unset', label: 'Unset'},
-                ]
-              }
-            ]
+                ],
+              },
+            ],
           }}
           clearOnUnmount
           subscription={{values: true}}

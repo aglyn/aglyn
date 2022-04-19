@@ -76,7 +76,7 @@ export interface DevicePreviewControlsProps extends Partial<MenuProps> {}
 const DevicePreviewControlsComponent = forwardRef<any, DevicePreviewControlsProps>(
   function RefRenderFn(props, ref) {
     const {...rest} = props
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
 
     const devicePreview = useAglynBesignerStoreState('flags', 'devicePreview')
     const [anchorEl, setAnchorEl] = useState<Element>(null)
@@ -92,7 +92,7 @@ const DevicePreviewControlsComponent = forwardRef<any, DevicePreviewControlsProp
       setDevicesMenuOpen(true)
     }, [])
     const handleMenuClick = (device: BesignerDeviceFlag) => (event: MouseEvent<HTMLElement>) => {
-      setBesignerFlag(getApp(), {flag: 'devicePreview', value: device})
+      setBesignerFlag(app, {flag: 'devicePreview', value: device})
       setDevicesMenuOpen(false)
     }
 

@@ -45,7 +45,7 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
   const {onComplete, onError, drawerOptions} = {...options}
   const {elementDrawer} = useElementDrawerContext()
   const {$id} = useAglynCanvasSelected() || {}
-  const {getApp} = useAglynAppContext()
+  const app = useAglynAppContext()
 
   return useCallback((e, opts) => {
     elementDrawer({title: 'Add New Element', ...drawerOptions, ...opts?.drawerOptions})
@@ -58,7 +58,7 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
             element: createComponentElementData(data),
           }
           console.log('addElement', newElement)
-          addCanvasElement(getApp(), newElement)
+          addCanvasElement(app, newElement)
         }
         else {
           console.warn('Invalid data returned for addElement callback', data)
@@ -72,7 +72,7 @@ export function useAddElementCallback<E extends SyntheticEvent<any>>(
         onError && onError(e, error)
         opts?.onError && opts?.onError(e, error)
       })
-  }, [$id, getApp, elementDrawer, drawerOptions, onComplete, onError])
+  }, [$id, app, elementDrawer, drawerOptions, onComplete, onError])
 }
 
 export default useAddElementCallback

@@ -38,7 +38,7 @@ export const useDeleteElementCallback = (
 ): UseDeleteElementCallback => {
   const {$id, onFulfilled, onRejected, onCatch} = {...options}
   const {confirm} = useConfirmationContext()
-  const {getApp} = useAglynAppContext()
+  const app = useAglynAppContext()
 
   return useCallback((e: ChangeEvent<unknown>, opts?: UseDeleteElementCallbackOptions) => {
 
@@ -53,7 +53,6 @@ export const useDeleteElementCallback = (
       })
         .then(
           (res) => {
-            const app = getApp()
             setBesignerCanvasSelected(app, {selected: () => ({})})
             setBesignerCanvasHovered(app, {hovered: () => ({})})
             deleteCanvasElement(app, {$id: opts?.$id || $id})
@@ -72,7 +71,7 @@ export const useDeleteElementCallback = (
           onCatch && onCatch(e)
         })
 
-    }, [getApp, confirm, $id, onFulfilled, onRejected, onCatch],
+    }, [app, confirm, $id, onFulfilled, onRejected, onCatch],
   )
 }
 

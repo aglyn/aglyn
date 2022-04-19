@@ -28,8 +28,8 @@ export type AglynDndElementStatus = [
 ]
 
 export function useAglynDndElementStatus($id: ElementId): AglynDndElementStatus {
-  const {getApp} = useAglynAppContext()
-  const dndStore = getBesignerStore(getApp(), {store: 'dnd'})
+  const app = useAglynAppContext()
+  const dndStore = getBesignerStore(app, {store: 'dnd'})
   return useStoreMap({
     store: dndStore,
     keys: [$id],

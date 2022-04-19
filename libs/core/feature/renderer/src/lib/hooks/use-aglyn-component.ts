@@ -29,7 +29,7 @@ export function useAglynComponent<P, T>(
   componentId: CommandUId,
   bundleId?: BundleUId,
 ): OrUndef<IAglynComponent<P, T>> {
-  const {getApp} = useAglynAppContext()
-  return getComponent(getApp(), {componentId, bundleId}) as IAglynComponent<P, T>
+  const app = useAglynAppContext()
+  return getComponent(app, {componentId, bundleId}) as IAglynComponent<P, T>
 }
 export default useAglynComponent

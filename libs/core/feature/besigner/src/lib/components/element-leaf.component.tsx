@@ -22,7 +22,7 @@ import {
 } from '@aglyn/core-feature-renderer'
 import {useCombinedRefs} from '@aglyn/shared-ui-jsx'
 import {type ChangeEvent, forwardRef, useCallback, useEffect, useRef} from 'react'
-import {useCanvasRenderedElementRefs} from '../contexts/canvas-rendered-element-refs'
+import {useRenderedCanvasElements} from '../contexts/rendered-canvas-elements'
 import useAglynCanvasElementStatusManagers from '../hooks/use-aglyn-canvas-element-status-managers'
 import useAglynCanvasElementIsSelected from '../hooks/use-aglyn-canvas-is-element-selected'
 import useLeafDnd from '../hooks/use-leaf-dnd'
@@ -39,7 +39,7 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
     const isSelected = useAglynCanvasElementIsSelected($id)
     const [handleHover, handleSelect] = useAglynCanvasElementStatusManagers($id)
     const [dragHandleRef, dragPreviewRef, dropRef] = useLeafDnd($id)
-    const [setElementRef, deleteElementRef] = useCanvasRenderedElementRefs()
+    const [setElementRef, deleteElementRef] = useRenderedCanvasElements()
     const elemRef = useRef<Element>(null)
     setElementRef($id, {$id, element: elemRef, dragHandle: dragHandleRef})
     useEffect(() => () => {deleteElementRef($id)}, [$id, deleteElementRef])

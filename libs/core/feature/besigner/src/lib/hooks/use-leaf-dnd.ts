@@ -80,7 +80,7 @@ export function useLeafDnd(
     dropType = DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
   } = {...options}
 
-  const {getApp} = useAglynAppContext()
+  const app = useAglynAppContext()
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
   const componentSchema = useAglynComponentSchema(componentId, bundleId)
@@ -89,24 +89,23 @@ export function useLeafDnd(
 
   const handleDragStart = useCallback((active: BesignerDndElementActive) => {
     console.log('handleDragStart', $id, active)
-    setBesignerCanvasSelected(getApp(), {selected: () => ({$id: active.$id})})
-    setBesignerDndState(getApp(), {dnd: () => ({active})})
-  }, [$id, getApp])
+    setBesignerCanvasSelected(app, {selected: () => ({$id: active.$id})})
+    setBesignerDndState(app, {dnd: () => ({active})})
+  }, [$id, app])
   const handleDragOver = useCallback((over?: BesignerDndElementOver) => {
-    setBesignerCanvasHovered(getApp(), {hovered: () => ({$id: over?.$id})})
-    setBesignerDndState(getApp(), {dnd: (prev) => ({...prev, over})})
-  }, [getApp])
+    setBesignerCanvasHovered(app, {hovered: () => ({$id: over?.$id})})
+    setBesignerDndState(app, {dnd: (prev) => ({...prev, over})})
+  }, [app])
   const handleDragEnd = useCallback((
     active: BesignerDndElementActive,
     over?: BesignerDndElementOver,
   ) => {
-    const app = getApp()
     console.log('handleDragEnd', active, over)
     setBesignerDndState(app, {dnd: () => ({})})
     if (over?.$id && active?.$id !== over.$id) {
       moveCanvasElement(app, {$id: active.$id, parentId: over?.$id, index: -1})
     }
-  }, [getApp])
+  }, [app])
 
 
   const dragItem = useMemo(() => ({

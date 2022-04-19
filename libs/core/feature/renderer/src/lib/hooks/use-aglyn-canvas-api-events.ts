@@ -20,7 +20,7 @@ import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
 export function useAglynCanvasApiEvents(): ElementsDataStoreApi {
-  const {getApp} = useAglynAppContext()
-  return getCanvasApiEvents(getApp())
+  const app = useAglynAppContext()
+  return getCanvasApiEvents(app)
 }
 export default useAglynCanvasApiEvents

@@ -27,7 +27,7 @@ import {useAglynAppContext, useAglynElementData} from '@aglyn/core-feature-rende
 import {type KeyOf} from '@aglyn/shared-data-types'
 import MuiPopper, {type PopperProps as MuiPopperProps} from '@mui/material/Popper'
 import {type ChangeEvent, forwardRef, useCallback} from 'react'
-import {CanvasRenderedElementRefsConsumer} from '../contexts/canvas-rendered-element-refs'
+import {RenderedCanvasElementsContext} from '../contexts/rendered-canvas-elements'
 import useAglynBesignerStoreState from '../hooks/use-aglyn-besigner-store-state'
 import ElementOverlayBadgeComponent from './element-overlay-badge.component'
 import ElementOverlayOutlineComponent from './element-overlay-outline.component'
@@ -87,7 +87,7 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
     const {variant, id, ...rest} = props || {}
 
 
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const store = variantToStoreName[variant]
     const state = useAglynBesignerStoreState('canvas', store)
     const $id = state?.$id
@@ -97,12 +97,12 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
 
 
     const handleDuplicateClick = useCallback((e: ChangeEvent<unknown>) => {
-      duplicateCanvasElement(getApp(), {$id})
-    }, [$id, getApp])
+      duplicateCanvasElement(app, {$id})
+    }, [$id, app])
 
 
     const handleModifyClick = useCallback((e: ChangeEvent<unknown>) => {
-      setBesignerPanels(getApp(), {
+      setBesignerPanels(app, {
         panels: (panels) => ({
           ...panels,
           panelRight: {
@@ -112,40 +112,40 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
           },
         }),
       })
-    }, [getApp])
+    }, [app])
 
 
     const handleSelectParentClick = useCallback((e: ChangeEvent<unknown>) => {
-      setBesignerCanvasSelected(getApp(), {
+      setBesignerCanvasSelected(app, {
         selected: (prev) => ({
           ...prev,
           $id: parentId,
         }),
       })
-    }, [getApp, parentId])
+    }, [app, parentId])
 
 
     const handleHoverParent = useCallback((e: ChangeEvent<unknown>) => {
-      setBesignerCanvasHovered(getApp(), {
+      setBesignerCanvasHovered(app, {
         hovered: (prev) => ({
           ...prev,
           $id: parentId,
         }),
       })
-    }, [getApp, parentId])
+    }, [app, parentId])
 
 
     const handleHoverParentLeave = useCallback((e: ChangeEvent<unknown>) => {
-      setBesignerCanvasHovered(getApp(), {
+      setBesignerCanvasHovered(app, {
         hovered: (prev) => ({
           ...prev,
           $id: null,
         }),
       })
-    }, [getApp])
+    }, [app])
 
     return (
-      <CanvasRenderedElementRefsConsumer>
+      <RenderedCanvasElementsContext.Consumer>
         {([, , getElementRef]) => {
           const data = getElementRef($id)
           const anchorEl = data?.element?.current || virtualElement,
@@ -200,7 +200,7 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
             </MuiPopper>
           )
         }}
-      </CanvasRenderedElementRefsConsumer>
+      </RenderedCanvasElementsContext.Consumer>
     )
   },
 )

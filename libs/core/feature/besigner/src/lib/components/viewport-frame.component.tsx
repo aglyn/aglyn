@@ -21,9 +21,9 @@ import {createTheme, styled, ThemeProvider} from '@aglyn/shared-feature-themes'
 import Box from '@mui/material/Box'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
 import {forwardRef, type HTMLAttributes, type MouseEvent, useCallback} from 'react'
-import CanvasRenderedElementRefsComponent from '../contexts/canvas-rendered-element-refs'
+import RenderedCanvasElementsProvider from '../contexts/rendered-canvas-elements'
 import ElementLeafComponent from './element-leaf.component'
-import ElementOverlaysComponent from './element-overlays.component'
+import ElementOverlayPopperComponent from './element-overlay-popper.component'
 
 
 const hostTheme = createTheme({palette: {}})
@@ -49,11 +49,11 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
     const {children, ...rest} = props
 
 
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const handleMouseLeave = useCallback((e: MouseEvent) => {
       e.stopPropagation()
-      setBesignerCanvasHovered(getApp(), {hovered: () => ({})})
-    }, [getApp])
+      setBesignerCanvasHovered(app, {hovered: () => ({})})
+    }, [app])
 
     return (
       <ViewportFrame
@@ -61,7 +61,7 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
         id="aglyn:viewport-frame"
         {...rest}
       >
-        <CanvasRenderedElementRefsComponent>
+        <RenderedCanvasElementsProvider>
           {/*<MuiShadowDom.div>*/}
           <ThemeProvider theme={hostTheme}>
             <Box
@@ -81,9 +81,16 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
             id="aglyn:site-overlay"
             sx={{position: 'relative', zIndex: 'tooltip'}}
           >
-            <ElementOverlaysComponent />
+            <ElementOverlayPopperComponent
+              id="aglyn:element-overlay-hovered"
+              variant="hoveredOverlay"
+            />
+            <ElementOverlayPopperComponent
+              id="aglyn:element-overlay-selected"
+              variant="selectedOverlay"
+            />
           </Box>
-        </CanvasRenderedElementRefsComponent>
+        </RenderedCanvasElementsProvider>
         {children}
       </ViewportFrame>
     )

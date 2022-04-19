@@ -31,8 +31,7 @@ export function useAglynCanvasElementsDenormalized<Result>(
 export function useAglynCanvasElementsDenormalized<Result>(
   callbackFn?: (state: AglynElementsById) => Result,
 ): Result | AglynElementsById {
-  const {getApp} = useAglynAppContext()
-  const app = getApp()
+  const app = useAglynAppContext()
   const store = getCanvasDenormalizedElementsStore(app)
   return useStoreMap({
     store,

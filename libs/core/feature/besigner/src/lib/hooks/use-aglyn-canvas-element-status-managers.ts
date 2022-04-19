@@ -35,17 +35,17 @@ export type UseAglynCanvasElementStatusManagers = [
 export function useAglynCanvasElementStatusManagers(
   $id: ElementId = null,
 ): UseAglynCanvasElementStatusManagers {
-  const {getApp} = useAglynAppContext()
+  const app = useAglynAppContext()
   const handleHover = useCallback(($idOverride: ElementId = null) => {
-    setBesignerCanvasHovered(getApp(), {
+    setBesignerCanvasHovered(app, {
       hovered: (prev) => ({...prev, $id: $idOverride || $id}),
     })
-  }, [$id, getApp])
+  }, [$id, app])
   const handleSelect = useCallback(($idOverride: ElementId = null) => {
-    setBesignerCanvasSelected(getApp(), {
+    setBesignerCanvasSelected(app, {
       selected: (prev) => ({...prev, $id: $idOverride || $id}),
     })
-  }, [$id, getApp])
+  }, [$id, app])
 
   return [handleHover, handleSelect]
 }

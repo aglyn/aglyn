@@ -185,11 +185,11 @@ const tabs = [
   {
     value: BesignerPanelTabFlag.ELEMENT_INFO,
     tab: {
-      icon: {path: ICON_VARIANT_ELEMENT_DETAILS.path}
+      icon: {path: ICON_VARIANT_ELEMENT_DETAILS.path},
     },
     panel: {
       Component: ElementInfo,
-    }
+    },
   },
   {
     value: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
@@ -198,7 +198,7 @@ const tabs = [
     },
     panel: {
       Component: ElementPropsForm,
-    }
+    },
   },
   {
     value: BesignerPanelTabFlag.ELEMENT_STYLES,
@@ -207,7 +207,7 @@ const tabs = [
     },
     panel: {
       Component: ElementStylesForm,
-    }
+    },
   },
 ]
 
@@ -217,14 +217,14 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const selected = useAglynCanvasSelected()
     const toggled = useAglynBesignerPanelValue('panelRight', 'toggled')
     const tab = useAglynBesignerPanelValue('panelRight', 'tab')
     const size = useAglynBesignerPanelValue('panelRight', 'size')
     const value = tab || BesignerPanelTabFlag.ELEMENT_INFO
     const handleTabChange = useCallback((e, val) => {
-      setBesignerPanels(getApp(), {
+      setBesignerPanels(app, {
         panels: (panels) => ({
           ...panels,
           panelRight: {
@@ -233,7 +233,7 @@ export const PanelRightComponent = forwardRef<any, PanelRightComponentProps>(
           },
         }),
       })
-    }, [getApp])
+    }, [app])
 
     return (
       <WorkspacePanelComponent

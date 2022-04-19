@@ -36,7 +36,8 @@ import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
 
 /**
- * @TODO ⚠️ remove and reimplement following PR merge https://github.com/data-driven-forms/react-forms/pull/1218
+ * @TODO ⚠️ remove and reimplement following PR merge
+ *   https://github.com/data-driven-forms/react-forms/pull/1218
  */
 export const ElementPropsFormTemplate = forwardRef<any, FormTemplateRenderProps>(
   function RefRenderFn(props, ref) {
@@ -81,7 +82,7 @@ export interface ElementPropsFormProps extends FormRendererProps {
 const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
   function RefRenderFn(props, ref) {
     const {$id, ...rest} = props
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({$id})
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
@@ -90,8 +91,8 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
 
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback((values) => {
-      updateCanvasElement(getApp(), {element: {$id, props: {...values}}})
-    }, [$id, getApp])
+      updateCanvasElement(app, {element: {$id, props: {...values}}})
+    }, [$id, app])
     const handleDeleteElement = useCallback((e: ChangeEvent<unknown>) => {
       deleteElementCallback(e)
     }, [deleteElementCallback])

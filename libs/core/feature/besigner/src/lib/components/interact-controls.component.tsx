@@ -38,14 +38,14 @@ export interface InteractControlsProps extends StackProps {}
 const InteractControlsComponent = forwardRef<any, InteractControlsProps>(
   function RefRenderFn(props, ref) {
     const {...rest} = props
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const interactMode = useAglynBesignerStoreState('flags', 'interactMode')
     const handleInteractModeClick = useCallback((event: MouseEvent<HTMLElement>, value: any) => {
-      setBesignerFlag(getApp(), {
+      setBesignerFlag(app, {
         flag: 'interactMode',
         value: InteractionModeFlag[InteractionModeFlag[value]],
       })
-    }, [getApp])
+    }, [app])
 
     return (
       <MuiStack ref={ref} direction="row" spacing={1} {...rest}>

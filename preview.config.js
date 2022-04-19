@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import {type AglynElementsList, getCanvasNormalizedElementsStore} from '@aglyn/core-data-framework'
-import {useStoreMap} from 'effector-react'
-import {useAglynAppContext} from '../contexts/aglyn-app-context'
+const {reactFrameworkPlugin} = require('@previewjs/plugin-react')
 
-
-export function useAglynCanvasElementsNormalized(): AglynElementsList {
-  const app = useAglynAppContext()
-  const store = getCanvasNormalizedElementsStore(app)
-  return useStoreMap(store, (store) => store)
+/** @type {import('@previewjs/config').PreviewConfig} */
+module.exports = {
+  publicDir: 'public',
+  frameworkPlugin: reactFrameworkPlugin.create({
+    svgr: {
+      componentName: 'default',
+    },
+  }),
 }
-export default useAglynCanvasElementsNormalized

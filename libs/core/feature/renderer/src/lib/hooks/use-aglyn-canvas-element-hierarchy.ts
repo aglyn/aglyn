@@ -28,8 +28,8 @@ import {useAglynAppContext} from '../contexts/aglyn-app-context'
 export function useAglynCanvasElementHierarchy<T extends ElementId>(
   $id: T,
 ): AglynElementHierarchy<T> {
-  const {getApp} = useAglynAppContext()
-  const store = getCanvasDenormalizedElementsStore(getApp())
+  const app = useAglynAppContext()
+  const store = getCanvasDenormalizedElementsStore(app)
 
   return useStoreMap({
     store,

@@ -75,12 +75,12 @@ const PanelLeftComponent = forwardRef<any, PanelLeftComponentProps>(
   function RefRenderFn(props, ref) {
     const {children, ...rest} = props
 
-    const {getApp} = useAglynAppContext()
+    const app = useAglynAppContext()
     const {toggled, tab, size} = useAglynBesignerStoreState('panels', 'panelLeft') || {}
     const value = tab || BesignerPanelTabFlag.ELEMENTS_TREE
 
     const handleTabChange = useCallback((e, val) => {
-      setBesignerPanels(getApp(), {
+      setBesignerPanels(app, {
         panels: (panels) => ({
           ...panels,
           panelLeft: {
@@ -89,7 +89,7 @@ const PanelLeftComponent = forwardRef<any, PanelLeftComponentProps>(
           },
         }),
       })
-    }, [getApp])
+    }, [app])
 
     return (
       <WorkspacePanelComponent

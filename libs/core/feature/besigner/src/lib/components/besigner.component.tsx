@@ -17,7 +17,7 @@
 
 import type {AppUUN, CanvasSetElementsPayload} from '@aglyn/core-data-framework'
 import {
-  AglynAppContextComponent,
+  AglynAppProvider,
   ElementComponentsContextProvider,
   ElementsContextProvider,
 } from '@aglyn/core-feature-renderer'
@@ -53,7 +53,7 @@ const BesignerComponent = forwardRef<any, BesignerComponentProps>(
 
     return (
       <Wrapper>
-        <AglynAppContextComponent
+        <AglynAppProvider
           canvasElements={canvasElements}
           appName={appName}
         >
@@ -66,7 +66,7 @@ const BesignerComponent = forwardRef<any, BesignerComponentProps>(
               </ElementsContextProvider>
             </ElementComponentsContextProvider>
           </BesignerDndContext>
-        </AglynAppContextComponent>
+        </AglynAppProvider>
       </Wrapper>
     )
   },

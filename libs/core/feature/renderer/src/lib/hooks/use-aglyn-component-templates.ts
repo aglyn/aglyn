@@ -23,7 +23,7 @@ import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
 
 export function useAglynComponentTemplateBlocks(): AglynComponentElementTemplate[] {
-  const {getApp} = useAglynAppContext()
-  return getAllComponentsTemplateValues(getApp())
+  const app = useAglynAppContext()
+  return getAllComponentsTemplateValues(app)
 }
 export default useAglynComponentTemplateBlocks
