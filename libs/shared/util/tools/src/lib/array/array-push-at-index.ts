@@ -17,9 +17,13 @@
 
 
 /**
- * Push an item onto the array at the provided zero index
+ * Mutates the existing array by adding new items onto the array at the provided
+ * zero-based index. When the index is -1, new items will be pushed onto the end
+ * of the array. When the index is greater than or equal to 0, new items will be
+ * pushed to the that index while any existing items previously located at or
+ * following the index will be shifted to right. Returns the mutated array.
  * @param array - The array to mutate and push the new elements onto
- * @param index - The zero index to start the new elements
+ * @param index - The zero index to start the new elements.
  * @param items - New items to push onto the array
  */
 export function arrayPushAtIndex<T>(
@@ -27,7 +31,8 @@ export function arrayPushAtIndex<T>(
   index: number,
   ...items: T[]
 ): Array<T> {
-  array.splice(index, 0, ...items)
+  if (index === -1) array.push(...items)
+  else array.splice(index, 0, ...items)
   return array
 }
 export default arrayPushAtIndex

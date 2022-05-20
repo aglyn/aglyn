@@ -57,8 +57,8 @@ export const samplePageData: AglynElementsNormalized = [
       {
         $id: 'root13',
         componentId: 'root1',
+        sx: {fontWeight: 'fontWeightBold'},
         props: {
-          sx: {fontWeight: 'fontWeightBold'},
           children: 'hello',
         },
       },

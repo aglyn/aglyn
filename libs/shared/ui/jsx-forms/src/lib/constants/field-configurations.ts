@@ -36,67 +36,65 @@ import {
 } from './dynamic-fields'
 
 
+export const fieldSharedOptions = {
+  size: 'small',
+  color: 'secondary',
+}
+
 export const FIELD_MAP_SELECT: FieldComponentMap = {
+  size: fieldSharedOptions.size,
   component: FieldSelect,
   isClearable: true,
-  size: 'small',
   variant: 'outlined',
   TextFieldProps: {
-    color: 'secondary',
+    color: fieldSharedOptions.color,
   },
   isOptionEqualToValue: optionIsEqualToValue,
 }
 export const FIELD_MAP_SWITCH: FieldComponentMap = {
-  component: FieldSwitch,
+  color: fieldSharedOptions.color,
   size: 'medium',
-  color: 'secondary',
+  component: FieldSwitch,
 }
 export const FIELD_MAP_TEXT_FIELD: FieldComponentMap = {
+  ...fieldSharedOptions,
+  size: 'medium',
   component: FieldTextField,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_TEXTAREA: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldTextarea,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_PLAIN_TEXT: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldPlainText,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_SLIDER: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldSlider,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_TIME_PICKER: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldTimePicker,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_DATE_PICKER: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldDatePicker,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_RADIO: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldRadio,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_CHECKBOX: FieldComponentMap = {
+  ...fieldSharedOptions,
   component: FieldCheckbox,
-  size: 'small',
-  color: 'secondary',
 }
 export const FIELD_MAP_FIELD_ARRAY: FieldComponentMap = {
   component: FieldFieldArray,
 }
 export const FIELD_MAP_TABS: FieldComponentMap = {
+  color: fieldSharedOptions.color,
   component: FieldTabs,
-  color: 'secondary',
 }
 export const FIELD_MAP_WIZARD: FieldComponentMap = {
   component: FieldWizard,
@@ -105,8 +103,8 @@ export const FIELD_MAP_DUAL_LIST_SELECT: FieldComponentMap = {
   component: FieldDualListSelect,
 }
 export const FIELD_MAP_ICON_PICKER: FieldComponentMap = {
+  size: fieldSharedOptions.size,
   component: FieldIconSelect,
   isClearable: true,
-  size: 'small',
   isOptionEqualToValue: optionIsEqualToValue,
 }

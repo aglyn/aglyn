@@ -16,7 +16,8 @@
  */
 
 
-import {CrudModel} from '@aglyn/shared-data-types'
+// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
+import type {CrudModel} from '@aglyn/shared-data-types'
 
 
 /**
@@ -37,24 +38,27 @@ export abstract class Crud<T = any> implements CrudModel<T> {
   constructor(public model: T = {} as any) { }
 
   /** @inheritdoc */
-  toJSON(): T { return this.model }
+  public toJSON(): T { return this.model }
 
   /** @inheritdoc */
-  set<K extends keyof T>(id: K, value: any): this {
+  public set<K extends keyof T>(id: K, value: any): this {
     this.model[id] = value
     return this
   }
 
   /** @inheritdoc */
-  get<K extends keyof T>(id: K): T[K] | null { return this.model[id] }
+  public get<K extends keyof T>(id: K): T[K] | null { return this.model[id] }
 
   /** @inheritdoc */
-  has<K extends keyof T>(id: K): boolean { return Object.prototype.hasOwnProperty.call(this.model, id) }
+  public has<K extends keyof T>(id: K): boolean { return this.hasOwnProperty.call(this.model, id) }
 
   /** @inheritdoc */
-  delete<K extends keyof T>(id: K): this {
+  public delete<K extends keyof T>(id: K): this {
     delete this.model[id]
     return this
   }
 
+  private get hasOwnProperty() {
+    return Object.prototype.hasOwnProperty
+  }
 }

@@ -31,7 +31,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import Grid from '@mui/material/Grid'
-import {type ChangeEvent, forwardRef, useCallback} from 'react'
+import {type ChangeEvent, forwardRef, type ReactNode, useCallback} from 'react'
 import useComponentFormSchema from '../hooks/use-component-form-schema'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
@@ -48,7 +48,7 @@ export const ElementPropsFormTemplate = forwardRef<any, FormTemplateRenderProps>
       <form ref={ref} onSubmit={handleSubmit} noValidate {...rest}>
         {schema.title}
         <Grid spacing={2} container>
-          {formFields}
+          {formFields as unknown as ReactNode}
         </Grid>
         <FormSpy>
           {({submitting, pristine, valid}) => (

@@ -16,7 +16,12 @@
  */
 
 import {_hasOwnProperty} from '@aglyn/shared-util-guards'
-import {arrayMoveAtIndex, arrayPushAtIndex, arrayRemoveItem, copy} from '@aglyn/shared-util-tools'
+import {
+  arrayMoveAtIndex,
+  arrayPushAtIndex,
+  arrayRemoveItem,
+  copyShallow,
+} from '@aglyn/shared-util-tools'
 import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
 import type {
   CanvasAddElementPayload,
@@ -86,9 +91,7 @@ export const handleCanvasAddElement = (
     state[$id] = element
   }
   // Add the new element to the parents' elements property
-  const parentElements = state[parentId].elements ||= []
-  if (index === -1) parentElements.push(element.$id)
-  else arrayPushAtIndex(state[parentId].elements ||= [], index, element.$id)
+  arrayPushAtIndex(state[parentId].elements ||= [], index, element.$id)
   return state
 }
 
@@ -115,40 +118,40 @@ export const handleCanvasMoveElement = (
   state: AglynElementsDenormalized,
   payload: CanvasMoveElementPayload,
 ): AglynElementsDenormalized => {
-  const {$id, index} = payload
-  if (!state[$id]) return state
-  let parentId: ElementId = null
-
-  if (_hasOwnProperty(payload.parentId, state)) {
-    parentId = payload.parentId
+  const element = state[payload.$id]
+  if (!element || element.$id === CANVAS_ROOT_ELEMENT_ID) {
+    console.error('Failed duplicating. Non-existent or forbidden move.')
+    return state
   }
+
+  let parentId: ElementId = null
+  if (_hasOwnProperty(payload.parentId, state)) parentId = payload.parentId
   else {
     console.error('Element must have a valid parent, falling back to root')
     parentId = CANVAS_ROOT_ELEMENT_ID
   }
 
   const parentHierarchy = getComponentElementHierarchy(parentId, state)
-  if (parentHierarchy.indexOf($id) >= 0) {
+  if (getComponentElementHierarchy(parentId, state).indexOf(payload.$id) >= 0)
     throw new Error('New parent is same or a child of the element')
-  }
 
-  const currentParentId = copy(state[$id].parentId)
+
+  const currentParentId = copyShallow(state[payload.$id].parentId)
 
   if (parentId === currentParentId && state[parentId]) {
     console.log('reordering')
     const parentElements = state[parentId].elements ||= []
     // Move current index
-    arrayMoveAtIndex(parentElements, parentElements.indexOf($id), index)
+    arrayMoveAtIndex(parentElements, parentElements.indexOf(payload.$id), payload.index)
   }
   else {
     console.log('moving')
     // Update element parentId property
-    state[$id].parentId = parentId
+    state[payload.$id].parentId = parentId
     // Remove from current parent
-    arrayRemoveItem(state[currentParentId]?.elements || [], $id)
+    arrayRemoveItem(state[currentParentId]?.elements || [], payload.$id)
     // Add to new parent
-    if (index === -1) (state[parentId]?.elements || []).push($id)
-    else arrayPushAtIndex(state[parentId]?.elements || [], index, $id)
+    arrayPushAtIndex(state[parentId]?.elements || [], payload.index, payload.$id)
   }
 
   return state
@@ -159,14 +162,15 @@ export const handleCanvasDuplicateElement = (
   state: AglynElementsDenormalized,
   payload: CanvasDuplicateElementPayload,
 ): AglynElementsDenormalized => {
-  const {$id} = payload
-  const element = state[$id]
-  const parent = state[element?.parentId]
-  const elementCopy = createComponentElementDataCopy(element?.$id, state)
+  const element = state[payload.$id]
+  if (!element || element.$id === CANVAS_ROOT_ELEMENT_ID) {
+    throw new Error('Failed duplicating. Non-existent or forbidden duplication.')
+  }
+  const parent = state[element.parentId]
   return handleCanvasAddElement(state, {
-    element: elementCopy,
+    element: createComponentElementDataCopy(element.$id, state),
     parentId: parent?.$id,
-    index: (parent?.elements || []).indexOf($id) + 1,
+    index: (parent?.elements || []).indexOf(element.$id) + 1,
   })
 }
 
@@ -174,9 +178,10 @@ export const handleCanvasDeleteElement = (
   state: AglynElementsDenormalized,
   payload: CanvasDeleteElementPayload,
 ): AglynElementsDenormalized => {
-  const {$id} = payload
-  const element = state[$id]
-  if (!element) return state
+  const element = state[payload.$id]
+  if (!element || element.$id === CANVAS_ROOT_ELEMENT_ID) {
+    throw new Error('Failed deleting. Non-existent or forbidden deletion.')
+  }
   // Remove all child elements first
   for (const childId in (element.elements ||= [])) {
     handleCanvasDeleteElement(state, {$id: childId})

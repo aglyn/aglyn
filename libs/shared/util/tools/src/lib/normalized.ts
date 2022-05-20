@@ -215,7 +215,7 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @memberof Normalized
    */
   public has(id: ID): boolean {
-    return Object.prototype.hasOwnProperty.call(this.byId, id)
+    return this.hasOwnProperty.call(this.byId, id)
   }
 
   /**
@@ -240,5 +240,10 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    */
   public get(id: ID): undefined | T {
     return Normalized.get(id, this)
+  }
+
+  /** @ignore */
+  private get hasOwnProperty() {
+    return Object.prototype.hasOwnProperty
   }
 }

@@ -20,7 +20,7 @@ import {
   type ElementId,
   getCanvasDenormalizedElementsStore,
 } from '@aglyn/core-data-framework'
-import type {AnyProps, Conditional, EmptyObj} from '@aglyn/shared-data-types'
+import type {AnyProps, Conditional} from '@aglyn/shared-data-types'
 import {useSubscribable} from '@aglyn/shared-ui-jsx'
 import {useAglynAppContext} from '../contexts/aglyn-app-context'
 
@@ -32,15 +32,15 @@ export type UseAglynElementData<P = AnyProps,
   AglynElementDenormalized<P>>
 
 
-export function useAglynElementData<P = EmptyObj>(
+export function useAglynElementData<P>(
   $id: ElementId,
 ): AglynElementDenormalized<P>
-export function useAglynElementData<P = EmptyObj,
+export function useAglynElementData<P,
   K extends keyof AglynElementDenormalized<P> = null>(
   $id: ElementId,
   property: K,
 ): AglynElementDenormalized<P>[K]
-export function useAglynElementData<P = EmptyObj,
+export function useAglynElementData<P,
   K extends keyof AglynElementDenormalized<P> = null>(
   $id: ElementId,
   property?: K,

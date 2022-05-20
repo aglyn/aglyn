@@ -16,6 +16,8 @@
  */
 
 
+const hasOwnProperty = Object.prototype.hasOwnProperty
+
 /**
  * Check if property exists
  * @param {string | number} key
@@ -23,6 +25,6 @@
  * @returns {boolean}
  */
 export function _hasOwnProperty<T>(key: keyof any, source: T): key is keyof T {
-  return Object.prototype.hasOwnProperty.call(source, key)
+  return hasOwnProperty.call(source, key)
 }
 export default _hasOwnProperty

@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+const hasOwnProperty = Object.prototype.hasOwnProperty
+
 export function getIframeDocument(element: HTMLIFrameElement): Document {
-  if (Object.prototype.hasOwnProperty.call(element, 'contentDocument')) {
+  if (hasOwnProperty.call(element, 'contentDocument')) {
     return element.contentDocument
   }
-  if (Object.prototype.hasOwnProperty.call(element, 'contentWindow')) {
+  if (hasOwnProperty.call(element, 'contentWindow')) {
     return element.contentWindow.document
   }
 

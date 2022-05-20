@@ -49,3 +49,11 @@ export enum FieldValidatorType {
   PATTERN = 'pattern',
   URL = 'url',
 }
+
+export enum FieldDataType {
+  INTEGER = 'integer',
+  FLOAT = 'float',
+  NUMBER = 'number',
+  BOOLEAN = 'boolean',
+  STRING = 'string'
+}

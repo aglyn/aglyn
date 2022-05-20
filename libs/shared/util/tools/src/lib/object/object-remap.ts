@@ -44,6 +44,9 @@ export type RemapOutput<T extends RemapTarget<K, V>,
   ? RemapOutputFiltered<T, K, V, U>
   : RemapOutputDefault<T, K, V, U>
 
+
+const hasOwnProperty = Object.prototype.hasOwnProperty
+
 /**
  * Map an object keys and values
  * @param {RemapTarget<K, V>} target
@@ -68,7 +71,7 @@ export function objectRemap<K extends PKey, V, U = V, T = RemapTarget<K, V>>(
   const _thisArg = (thisArg ?? remapped) as ThisArg
 
   for (const key in target) {
-    if (Object.prototype.hasOwnProperty.call(target, key)) {
+    if (hasOwnProperty.call(target, key)) {
       const value = callbackFn.call(_thisArg, target[key], key, target)
       if (options?.remove && _isUndT(value)) delete remapped[key]
       else remapped[key] = value

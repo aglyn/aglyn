@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+const toString = Object.prototype.toString
+
 export function isElementWindow(element): element is typeof window {
-  return Object.prototype.toString.call(element) === '[object Window]'
+  return toString.call(element) === '[object Window]'
 }
 
 export default isElementWindow

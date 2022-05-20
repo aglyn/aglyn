@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
+import {_isArr} from '@aglyn/shared-util-guards'
 import {copy} from '@aglyn/shared-util-tools'
+import defaultsDeep from 'lodash-es/defaultsDeep'
+import mergeWith from 'lodash-es/mergeWith'
 import {DEFAULT_PROPS_FORM_SCHEMA} from '../constants/components'
-import {type AglynComponentPropsFormSchema} from '../types/aglyn-components.types'
+import type {AglynComponentPropsFormSchema} from '../types/aglyn-components.types'
 
 
 export const buildComponentPropsFormSchema = (
-  formSchema?: AglynComponentPropsFormSchema,
+  schema?: AglynComponentPropsFormSchema,
+  defaults: AglynComponentPropsFormSchema = DEFAULT_PROPS_FORM_SCHEMA,
 ): AglynComponentPropsFormSchema => {
-  const defaults = copy(DEFAULT_PROPS_FORM_SCHEMA)
-  const schema = copy(formSchema)
-  return {
-    ...defaults,
-    ...schema,
-    fields: [
-      ...defaults.fields,
-      ...schema?.fields || [],
-    ],
-  }
+  const _defaults = defaultsDeep(schema, copy(defaults))
+  return mergeWith(schema, _defaults, (target, source) => {
+    if (_isArr(target)) return target.concat(source)
+  })
 }
 
 export default buildComponentPropsFormSchema

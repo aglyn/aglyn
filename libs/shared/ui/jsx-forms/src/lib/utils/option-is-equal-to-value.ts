@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export function optionIsEqualToValue(option: any, value: any) {
-  return option.value == value
+export function optionIsEqualToValue<T, U extends {value?: unknown}>(option: U, value: T) {
+  return option?.value === value
 }
 export default optionIsEqualToValue

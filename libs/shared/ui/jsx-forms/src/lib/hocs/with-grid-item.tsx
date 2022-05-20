@@ -16,6 +16,7 @@
  */
 
 import type {EmptyObj} from '@aglyn/shared-data-types'
+// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import {mergeSxProps} from '@aglyn/shared-feature-themes'
 import {getDisplayName} from '@aglyn/shared-util-tools'
 import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'

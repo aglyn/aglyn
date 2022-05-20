@@ -18,8 +18,7 @@
 import type {ComponentId} from '@aglyn/core-data-framework'
 import {ReactIs} from '@aglyn/shared-ui-jsx'
 import {_isArrEmpty} from '@aglyn/shared-util-guards'
-import {Box} from '@mui/material'
-import type {BoxProps} from '@mui/material/Box'
+import {Box, type BoxProps} from '@mui/material'
 import clsx from 'clsx'
 import {forwardRef, useMemo} from 'react'
 import useAglynElementComponent from '../hooks/use-aglyn-element-component'
@@ -43,33 +42,30 @@ const LeafComponent = forwardRef<any, LeafComponentProps>(
       ...rest
     } = props
 
-
+    const leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
+    const {className: resolvedClassName, ...resolved} = useAglynElementResolvedProps($id)
+    const elements = useAglynElementData($id, 'elements')
     const component = useAglynElementComponent<any, any>($id)
     const Component = useMemo(() => {
-      console.log('ReactIs.isValidElementType(component)', ReactIs.isValidElementType(component), component)
+      console.log('ReactIs.isValidElementType(component)', $id, ReactIs.isValidElementType(component), component)
       return component && ReactIs.isValidElementType(component) ? component : Box
     }, [component])
-    const elements = useAglynElementData($id, 'elements')
-    const {
-      children: resolvedPropsChildren,
-      className: resolvedPropsClassName,
-      ...elemProps
-    } = useAglynElementResolvedProps($id)
 
     return (
       <Component
         ref={ref}
-        key={$id}
-        className={clsx(className, resolvedPropsClassName)}
-        {...elemProps}
+        key={`element-leaf-${$id}`}
+        id={`element-leaf-${$id}`}
+        className={clsx(className, resolvedClassName)}
         {...rest}
+        {...resolved}
       >
         {children}
-        {resolvedPropsChildren}
+        {resolved.children}
         {_isArrEmpty(elements) ? null : (
           <BranchComponent
-            key={`${$id}-branch`}
-            leafComponent={leafComponent || LeafComponent}
+            key={`element-branch-${$id}`}
+            leafComponent={leaf}
             elements={elements}
           />
         )}
