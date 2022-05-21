@@ -47,6 +47,7 @@ function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
       backend={TouchBackend}
       options={opts}
       {...rest}
+      debugMode
     >
       {children}
     </DndProvider>

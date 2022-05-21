@@ -33,8 +33,7 @@ import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
-import {
-  WorkspacePanelComponent,
+import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
 } from './workspace-panel.component'
 

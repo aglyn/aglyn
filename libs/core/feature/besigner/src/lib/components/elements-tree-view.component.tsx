@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import {DndDragSourceTypeFlag} from '@aglyn/core-data-besigner'
 import {CANVAS_ROOT_ELEMENT_ID, type ElementId} from '@aglyn/core-data-framework'
 import {
   useAglynCanvasElementHierarchy,
@@ -26,11 +27,12 @@ import {
   ICON_VARIANT_COLLAPSABLE_CLOSE,
   ICON_VARIANT_COLLAPSABLE_OPEN,
   ICON_VARIANT_ENTITY_BLOCK,
+  ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
-import {alpha, styled} from '@aglyn/shared-feature-themes'
-import {isReactElement} from '@aglyn/shared-ui-jsx'
+import {alpha, mergeSxProps, styled} from '@aglyn/shared-feature-themes'
+import {isReactElement, useCombinedRefs} from '@aglyn/shared-ui-jsx'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {_isArr, _isObjT} from '@aglyn/shared-util-guards'
+import {_isObjT} from '@aglyn/shared-util-guards'
 import {
   type SingleSelectTreeViewProps,
   TreeItem as MuiTreeItem,
@@ -38,10 +40,11 @@ import {
   type TreeItemProps,
   TreeView as MuiTreeView,
 } from '@mui/lab'
-import {Box, Stack} from '@mui/material'
-import {forwardRef, useCallback, useMemo, useState} from 'react'
+import {Box, Button, Stack, Typography} from '@mui/material'
+import {ChangeEvent, forwardRef, useCallback, useMemo, useRef, useState} from 'react'
 import {useAglynCanvasSetHovered} from '../hooks/use-aglyn-canvas-hovered'
-import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
+import useAglynCanvasSelected, {useAglynCanvasSetSelected} from '../hooks/use-aglyn-canvas-selected'
+import useLeafDnd from '../hooks/use-leaf-dnd'
 
 
 const TreeItem = styled(MuiTreeItem, {name: 'AglynTreeItem'})(({theme}) => ({
@@ -68,20 +71,27 @@ interface ElementsTreeItemComponentProps extends Partial<TreeItemProps> {
   $id: ElementId
 }
 
-const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps>(
+const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps & {dragHandleRef?: any}>(
   function RefRenderFn(props, ref) {
-    const {$id, ...rest} = props,
+    const {$id, dragHandleRef, ...rest} = props,
       elements = useAglynElementData($id, 'elements') || [],
       componentId = useAglynElementData($id, 'componentId'),
       bundleId = useAglynElementData($id, 'bundleId'),
       label = useAglynElementLabel($id),
       icon = useAglynComponentSchema(componentId, bundleId)?.icon
     const setHovered = useAglynCanvasSetHovered()
+    const setSelected = useAglynCanvasSetSelected()
 
     const handleOnMouseOver = useCallback((e) => {
       e.stopPropagation()
       setHovered({$id})
     }, [$id, setHovered])
+
+    const handleOnMouseDown = useCallback((e: ChangeEvent<any>) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setSelected((prev) => ({$id: $id && prev?.$id === $id ? undefined : $id}))
+    }, [$id, setSelected])
 
     const itemIcon = useMemo(() => {
       if (!icon?.path && icon && (!_isObjT(icon) || isReactElement(icon))) {
@@ -91,24 +101,21 @@ const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps
       return (
         <Box
           component="div"
-          sx={[
-            {
-              fontSize: 14,
-              marginLeft: -0.5,
-              marginRight: 0.75,
-              padding: 0.2,
-              borderRadius: '0.25em',
-              backgroundColor: 'background.default',
-              border: 1,
-              borderColor: 'divider',
-              boxShadow: 1,
-              color: 'quaternary',
-              display: 'flex',
-              alignItems: 'center',
-              flexDirection: 'column',
-            },
-            ...(_isArr(icon?.sx) ? icon.sx : [icon?.sx]),
-          ]}
+          sx={mergeSxProps({
+            fontSize: 14,
+            marginLeft: -0.5,
+            marginRight: 0.75,
+            padding: 0.2,
+            borderRadius: '0.25em',
+            backgroundColor: 'background.default',
+            border: 1,
+            borderColor: 'divider',
+            boxShadow: 1,
+            color: 'quaternary',
+            display: 'flex',
+            alignItems: 'center',
+            flexDirection: 'column',
+          }, icon?.sx)}
         >
           <MdiIcon
             color="quaternary"
@@ -130,20 +137,66 @@ const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps
         label={
           <Stack direction="row" alignItems="center">
             {itemIcon}
-            <div>
+            <Typography
+              component="div"
+              sx={{flexGrow: 1}}
+            >
               {label}
-            </div>
+            </Typography>
+
+            <Button
+              component="div"
+              color="inherit"
+              ref={dragHandleRef}
+              onMouseDown={handleOnMouseDown}
+              sx={{
+                fontSize: 16,
+                padding: 0.5,
+                marginLeft: 0.5,
+                backgroundColor: 'transparent',
+                color: 'tertiary.main',
+                display: 'flex',
+                alignItems: 'center',
+                flexDirection: 'column',
+                minWidth: 'unset',
+              }}
+            >
+              <MdiIcon
+                color="inherit"
+                fontSize="inherit"
+                path={ICON_VARIANT_MODIFY_DRAG.path}
+              />
+            </Button>
           </Stack>
         }
         {...rest}
       >
         {elements.map(($id) => (
-          <ElementsTreeItemComponent key={$id} $id={$id} />
+          <DraggableTreeItemComponent key={$id} $id={$id} />
         ))}
       </TreeItem>
     )
   },
 )
+
+const DraggableTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {$id, ...rest} = props
+    const elemRef = useRef<Element>(null)
+    const [dragHandleRef, dragPreviewRef, dropRef] = useLeafDnd($id, {
+      dragType: DndDragSourceTypeFlag.TREE_ELEMENT,
+    })
+    return (
+      <ElementsTreeItemComponent
+        ref={useCombinedRefs(ref, elemRef, dragHandleRef, dragPreviewRef, dropRef)}
+        dragHandleRef={dragHandleRef}
+        $id={$id}
+        {...rest}
+      />
+    )
+  },
+)
+DraggableTreeItemComponent.displayName = 'DraggableTreeItemComponent'
 
 export interface ElementsTreeViewComponentProps extends Partial<SingleSelectTreeViewProps> {}
 
@@ -190,7 +243,7 @@ export const ElementsTreeViewComponent = forwardRef<any, ElementsTreeViewCompone
         {...rest}
       >
         {children}
-        <ElementsTreeItemComponent
+        <DraggableTreeItemComponent
           key={CANVAS_ROOT_ELEMENT_ID}
           $id={CANVAS_ROOT_ELEMENT_ID}
         />

@@ -31,7 +31,7 @@ import {
 } from '@aglyn/core-feature-renderer'
 import {useDebouncedTransition} from '@aglyn/shared-ui-jsx'
 import {numberToHexadecimal} from '@aglyn/shared-util-tools'
-import {useCallback, useEffect, useMemo} from 'react'
+import {useCallback, useEffect} from 'react'
 import {
   type DragElementWrapper,
   type DragPreviewOptions,
@@ -78,8 +78,8 @@ export function useLeafDnd(
   options?: UseLeafDndOptions,
 ): UseLeafDnd {
 
-  const dragType = options?.dragType || DndDragSourceTypeFlag.CANVAS_ELEMENT
-  const dropType = options?.dropType || DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE
+  const dragType = options?.dragType ?? DndDragSourceTypeFlag.CANVAS_ELEMENT
+  const dropType = options?.dropType ?? DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE
 
   const [, debounceUpdate] = useDebouncedTransition(200, {trailing: true, leading: false}, [])
 
@@ -95,46 +95,40 @@ export function useLeafDnd(
 
 
   const handleDragStart = useCallback((active: BesignerDndElementActive) => {
-    debounceUpdate(() => {
-      console.log('handleDragStart', $id, active)
-      setSelected({$id})
-      setDndActive(active)
-    })
-  }, [$id, setDndActive, setSelected, debounceUpdate])
+    console.log('handleDragStart', $id, active)
+    setSelected({$id})
+    setDndActive(active)
+  }, [$id, setDndActive, setSelected])
   const handleDragOver = useCallback((over?: BesignerDndElementOver) => {
-    debounceUpdate(() => {
-      setHovered({$id})
-      setDndOver(over)
-    })
-  }, [$id, setDndOver, setHovered, debounceUpdate])
+    setHovered({$id})
+    setDndOver(over)
+  }, [$id, setDndOver, setHovered])
   const handleDragEnd = useCallback((
     active: BesignerDndElementActive,
     over?: BesignerDndElementOver,
     monitor?: DropTargetMonitor,
   ) => {
-    debounceUpdate(() => {
-      console.log('handleDragEnd', active, over)
-      setDndActive(undefined)
-      setDndOver(undefined)
-      setBesignerDnd(app, {dnd: () => ({})})
-      if (over?.$id && active?.$id !== over.$id) {
-        moveCanvasElement(app, {$id: active.$id, parentId: over?.$id, index: -1})
-      }
-    })
-  }, [app, setDndActive, setDndOver, debounceUpdate])
+    console.log('handleDragEnd', active, over)
+    setDndActive(undefined)
+    setDndOver(undefined)
+    setBesignerDnd(app, {dnd: () => ({})})
+    if (over?.$id && active?.$id !== over.$id) {
+      moveCanvasElement(app, {$id: active.$id, parentId: over?.$id, index: -1})
+    }
+  }, [app, setDndActive, setDndOver])
 
-
-  const dragItem = useMemo(() => ({
-    $id,
-    type: dragType,
-    componentId,
-    bundleId,
-    hierarchy,
-  }), [$id, dragType, bundleId, componentId, hierarchy])
 
   const draggable = useDrag<BesignerDndElementActive, BesignerDndElementOver, DragCollected>(() => ({
     type: numberToHexadecimal(dragType),
     item: () => {
+      const dragItem = ({
+        $id,
+        type: dragType,
+        componentId,
+        bundleId,
+        hierarchy,
+      })
+      console.log('draggable item', dragItem)
       handleDragStart(dragItem)
       return dragItem
     },
@@ -145,7 +139,7 @@ export function useLeafDnd(
       // dropItem: monitor.getDropResult(),
       // active: monitor.getItem(),
     }),
-  }))
+  }), [$id, dragType, bundleId, componentId, hierarchy])
 
   const [{isDragging}, dragHandleRef, dragPreviewRef] = draggable
   const trail = useAglynCanvasElementHierarchy($id)
@@ -169,37 +163,43 @@ export function useLeafDnd(
   }, [$id, isDragging, trail])
 
 
-  const dropItem: BesignerDndElementOver = useMemo(() => ({
-    $id,
-    type: dropType,
-    componentId,
-    bundleId,
-    hierarchy,
-  }), [$id, dropType, bundleId, componentId, hierarchy])
-
   const droppable = useDrop<BesignerDndElementActive, BesignerDndElementOver, DropCollected>(() => ({
     accept: [
       numberToHexadecimal(DndDragSourceTypeFlag.CANVAS_ELEMENT),
       numberToHexadecimal(DndDragSourceTypeFlag.COMPONENT_TEMPLATE),
+      numberToHexadecimal(DndDragSourceTypeFlag.TREE_ELEMENT),
     ],
     drop: (active, monitor) => {
+      const dropItem: BesignerDndElementOver = ({
+        $id,
+        type: dropType,
+        componentId,
+        bundleId,
+        hierarchy,
+      })
       if (monitor.didDrop()) return undefined
       if (monitor.isOver({shallow: true})) {
-        debounceUpdate(() => {
-          console.log('drop collection', active, dropItem)
-          handleDragEnd(active, dropItem, monitor)
-        })
+        console.log('drop collection', active, dropItem)
+        handleDragEnd(active, dropItem, monitor)
       }
       return dropItem
     },
     collect: dropCollector,
-  }), [])
+  }), [$id, dropType, bundleId, componentId, hierarchy])
 
   const [{isOverSelf}, dropRef] = droppable
 
   useEffect(() => {
+    const dropItem: BesignerDndElementOver = ({
+      $id,
+      type: dropType,
+      componentId,
+      bundleId,
+      hierarchy,
+    })
     isOverSelf && handleDragOver(dropItem)
-  }, [handleDragOver, isOverSelf, dropItem])
+    console.log('useEffect isOverSelf', dropItem, isOverSelf)
+  }, [$id, bundleId, componentId, dropType, handleDragOver, hierarchy, isOverSelf])
 
   return [dragHandleRef, dragPreviewRef, dropRef]
 }

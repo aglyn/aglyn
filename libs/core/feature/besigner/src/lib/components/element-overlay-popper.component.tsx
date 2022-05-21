@@ -166,50 +166,121 @@ const ElementOverlayPopperComponent = forwardRef<any, ElementOverlayPopperCompon
                 data-aglyn-overlay-type="outline"
               >
 
+
                 {{
                   'selectedOverlay': (
-                    <ElementOverlayBadgeComponent
-                      $id={$id}
+
+                    <MuiPopper
+                      anchorEl={anchorEl}
+                      // placement="top"
+                      modifiers={[
+                        {
+                          name: 'flip',
+                          enabled: true,
+                          options: {
+                            altBoundary: true,
+                            rootBoundary: 'viewport',
+                            padding: 8,
+                          },
+                        },
+                        {
+                          name: 'preventOverflow',
+                          enabled: true,
+                          options: {
+                            altAxis: true,
+                            altBoundary: true,
+                            tether: true,
+                            rootBoundary: 'viewport',
+                            padding: 8,
+                          },
+                        },
+                      ]}
                       data-aglyn-overlay-id={$id}
                       data-aglyn-overlay-variant={variant}
-                      data-aglyn-overlay-type="badge-actions"
-                      dragHandleRef={dragHandleRef}
-                      onModifyClick={handleModifyClick}
-                      onDuplicateClick={handleDuplicateClick}
-                      onSelectParentClick={handleSelectParentClick}
-                      onHoverParent={handleHoverParent}
-                      onHoverParentLeave={handleHoverParentLeave}
-                      sx={{
-                        boxShadow: 4,
-                        pointerEvents: 'auto',
-                        marginTop: `-2.1em`,
-                        position: 'absolute',
-                      }}
-                    />
+                      data-aglyn-overlay-type="popper"
+                      open={Boolean(anchorEl)}
+                      keepMounted
+                      disablePortal
+                      {...rest}
+                    >
+                      <div>
+                        <ElementOverlayBadgeComponent
+                          $id={$id}
+                          data-aglyn-overlay-id={$id}
+                          data-aglyn-overlay-variant={variant}
+                          data-aglyn-overlay-type="badge-actions"
+                          dragHandleRef={dragHandleRef}
+                          onModifyClick={handleModifyClick}
+                          onDuplicateClick={handleDuplicateClick}
+                          onSelectParentClick={handleSelectParentClick}
+                          onHoverParent={handleHoverParent}
+                          onHoverParentLeave={handleHoverParentLeave}
+                          sx={{
+                            boxShadow: 4,
+                            pointerEvents: 'auto',
+                          }}
+                        />
+                      </div>
+                    </MuiPopper>
                   ),
                   'hoveredOverlay': (
-                    <Box
+
+                    <MuiPopper
+                      anchorEl={anchorEl}
+                      placement="top-start"
+                      modifiers={[
+                        {
+                          name: 'flip',
+                          enabled: true,
+                          options: {
+                            altBoundary: true,
+                            rootBoundary: 'viewport',
+                            padding: 8,
+                          },
+                        },
+                        {
+                          name: 'preventOverflow',
+                          enabled: true,
+                          options: {
+                            altAxis: true,
+                            altBoundary: true,
+                            tether: true,
+                            rootBoundary: 'viewport',
+                            padding: 8,
+                          },
+                        },
+                      ]}
                       data-aglyn-overlay-id={$id}
                       data-aglyn-overlay-variant={variant}
-                      data-aglyn-overlay-type="badge-label"
-                      sx={{
-                        pointerEvents: 'none',
-                        marginTop: '-20px',
-                        marginLeft: '-2px',
-                        position: 'absolute',
-                        bgcolor: 'secondary.main',
-                        color: 'secondary.contrastText',
-                        whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
-                        overflow: 'hidden',
-                        px: 0.6, py: 0.4,
-                        lineHeight: 1,
-                        maxWidth: 120,
-                        fontSize: 12,
-                      }}
+                      data-aglyn-overlay-type="popper"
+                      open={Boolean(anchorEl)}
+                      keepMounted
+                      disablePortal
+                      {...rest}
                     >
-                      {badgeLabel}
-                    </Box>
+                      <Box
+                        data-aglyn-overlay-id={$id}
+                        data-aglyn-overlay-variant={variant}
+                        data-aglyn-overlay-type="badge-label"
+                        sx={{
+                          pointerEvents: 'none',
+                          marginTop: '-20px',
+                          marginLeft: '-2px',
+                          position: 'absolute',
+                          bgcolor: 'secondary.main',
+                          color: 'secondary.contrastText',
+                          whiteSpace: 'nowrap',
+                          textOverflow: 'ellipsis',
+                          overflow: 'hidden',
+                          px: 0.6, py: 0.4,
+                          lineHeight: 1,
+                          maxWidth: 120,
+                          fontSize: 12,
+                        }}
+                      >
+                        {badgeLabel}
+                      </Box>
+                    </MuiPopper>
                   ),
                 }[variant]}
               </ElementOverlayOutlineComponent>

@@ -92,8 +92,6 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             <AppBarSecondaryComponent />
 
             <ViewportRootComponent />
-
-
           </Stack>
 
           <PanelRightComponent />

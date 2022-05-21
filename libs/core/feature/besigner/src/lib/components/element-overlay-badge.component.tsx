@@ -59,11 +59,12 @@ export const BadgeButton = forwardRef<any, BadgeButtonProps>(
         <MuiButton
           {...ButtonProps}
           sx={mergeSxProps({
-            px: 0.8,
-            '&.MuiButtonGroup-grouped': {minWidth: 32},
+            pt: 0.5, pb: 0.5, pl: 0.585, pr: 0.585,
+            fontSize: 16,
+            '&.MuiButtonGroup-grouped': {minWidth: 30},
           }, ButtonProps?.sx)}
         >
-          <MdiIcon fontSize="small" {...icon} />
+          <MdiIcon fontSize="inherit" {...icon} />
           <SrOnlyComponent component="span" {...SrOnlyProps}>
             {children}
           </SrOnlyComponent>
@@ -136,12 +137,11 @@ const ElementOverlayBadgeComponent = forwardRef<any, ElementOverlayBadgeButtonsC
           <BadgeButton
             title="Drag"
             children="drag"
-            ButtonProps={{ref: dragHandleRef}}
-            icon={{path: ICON_VARIANT_MODIFY_DRAG.path, color: 'secondary'}}
-            sx={{
-              pl: 0.75, pr: 0.5,
-              '&:hover': {cursor: 'move'},
+            ButtonProps={{
+              ref: dragHandleRef,
+              sx: {'&, &:hover': {cursor: 'move'}},
             }}
+            icon={{path: ICON_VARIANT_MODIFY_DRAG.path, color: 'secondary'}}
           />
         )}
 

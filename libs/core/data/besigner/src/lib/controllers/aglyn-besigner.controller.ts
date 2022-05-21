@@ -85,12 +85,12 @@ export class AglynBesignerController extends AglynModuleModel<AglynBesignerContr
           panelLeft: {
             id: BesignerPanelViewFlag.PANEL_LEFT,
             size: 290,
-            toggled: false,
+            toggled: true,
           },
           panelRight: {
             id: BesignerPanelViewFlag.PANEL_RIGHT,
             size: 375,
-            toggled: false,
+            toggled: true,
           },
           panelBottom: {
             id: BesignerPanelViewFlag.PANEL_BOTTOM,

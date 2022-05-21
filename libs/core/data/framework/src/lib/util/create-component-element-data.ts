@@ -27,7 +27,8 @@ import createComponentElementId from './create-component-element-id'
 
 
 function traverseComponentTemplate(data: AglynComponentTemplateData): AglynElementNormalized {
-  const response = (data || {}) as AglynElementNormalized
+  const response = {...data} as AglynElementNormalized
+
   ;(response as MutableKeys<AglynElementNormalized, '$id' | 'elements'>).$id =
     createComponentElementId()
 
@@ -52,7 +53,7 @@ export function createComponentElementData(
   options?: CreateComponentElementDataOptions,
 ): AglynElementNormalized {
   return defaultsDeep(
-    traverseComponentTemplate(options?.data),
+    traverseComponentTemplate(copy(options?.data)),
     copy(ELEMENT_DEFAULTS),
   )
 }
