@@ -110,6 +110,9 @@ export const FIELD_MAP_ICON_PICKER: FieldComponentMap = {
   isOptionEqualToValue: optionIsEqualToValue,
 }
 export const FIELD_MAP_COLOR_PICKER: FieldComponentMap = {
-  size: fieldSharedOptions.size,
+  ...fieldSharedOptions,
   component: FieldColorPicker,
+  FormControlProps: {
+    ...fieldSharedOptions,
+  },
 }

@@ -17,14 +17,25 @@
 
 import {FormFieldGrid, validationError} from '@data-driven-forms/mui-component-mapper'
 import {useFieldApi, type UseFieldApiComponentConfig} from '@data-driven-forms/react-form-renderer'
-import {type GridProps, TextField as MuiTextField, type TextFieldProps} from '@mui/material'
-import {useCallback, useState} from 'react'
+import {
+  Box,
+  FormControl,
+  FormControlProps as MuiFormControlProps,
+  FormHelperText,
+  type GridProps,
+  InputLabel,
+  Select,
+  Stack,
+  type TextFieldProps,
+} from '@mui/material'
+import {useCallback, useId, useState} from 'react'
 import {SketchPicker, SketchPickerProps} from 'react-color'
 
 
 type InternalColorPickerProps = Partial<TextFieldProps> & {
   FormFieldGridProps: GridProps;
   ColorPickerProps: Partial<SketchPickerProps>
+  FormControlProps: Partial<MuiFormControlProps>
 }
 
 export type ColorPickerProps = InternalColorPickerProps & UseFieldApiComponentConfig
@@ -44,6 +55,7 @@ const ColorPickerComponent = (props: ColorPickerProps) => {
     meta,
     inputProps,
     FormFieldGridProps,
+    FormControlProps,
     ColorPickerProps,
     defaultValue,
     onChange,
@@ -51,6 +63,7 @@ const ColorPickerComponent = (props: ColorPickerProps) => {
   } = useFieldApi(props as any)
   console.log('defaultValue', rest, defaultValue, input)
   const invalid = validationError(meta, validateOnMount)
+  const hasError = Boolean(invalid)
   const [value, setValue] = useState(defaultValue || '')
   const handleChange = useCallback((value: string, e: any) => {
     console.log('handleChange', value, e)
@@ -58,38 +71,85 @@ const ColorPickerComponent = (props: ColorPickerProps) => {
     input?.onChange && input?.onChange(value)
     inputProps?.onChange && inputProps?.onChange(e)
     onChange && onChange(e)
-  }, [])
+  }, [input, inputProps, onChange])
   const handleTextChange = useCallback((e: any) => {
     handleChange(e.target.value, e)
-  }, [])
+  }, [handleChange])
   const handleColorChange = useCallback((color: any, e: any) => {
     handleChange(color.hex, e)
-  }, [])
+  }, [handleChange])
+
+  const $id = `color-picker-${useId()}`
 
   return (
     <FormFieldGrid {...FormFieldGridProps}>
-      <MuiTextField
-        {...input}
-        fullWidth
-        error={!!invalid}
-        helperText={invalid || ((meta.touched || validateOnMount) && meta.warning) || helperText || description}
-        disabled={isDisabled}
-        label={label}
-        placeholder={placeholder}
-        required={isRequired}
-        inputProps={{
-          readOnly: isReadOnly,
-          ...inputProps,
-        }}
-        {...rest}
-        onChange={handleTextChange}
-        value={value}
-      />
-      <SketchPicker
-        {...ColorPickerProps}
-        color={value}
-        onChangeComplete={handleColorChange}
-      />
+      <FormControl {...FormControlProps} fullWidth error={hasError}>
+        <InputLabel id={$id + '-label'}>
+          {label}
+        </InputLabel>
+        <Select
+          {...input}
+          fullWidth
+          error={hasError}
+          disabled={isDisabled}
+          label={label}
+          labelId={$id + '-label'}
+          id={$id + '-select'}
+          placeholder={placeholder}
+          required={isRequired}
+          inputProps={{
+            readOnly: isReadOnly,
+            ...inputProps,
+          }}
+          {...rest}
+          onChange={handleTextChange}
+          value={value}
+          MenuProps={{
+            // disablePortal: true,
+            PaperProps: {
+              sx: {
+                minWidth: 'auto',
+                px: 0, py: 0,
+              },
+            },
+            MenuListProps: {
+              disablePadding: true,
+              ...{component: 'div'} as any,
+              sx: {
+                px: 0, py: 0,
+              },
+            },
+          }}
+          renderValue={(value) => (
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Box
+                width={22}
+                height={22}
+                borderRadius={1}
+                borderWidth={1}
+                borderColor="divider"
+                borderStyle="solid"
+                display="flex"
+                backgroundColor={value}
+              />
+              <div>
+                {value}
+              </div>
+            </Stack>
+          )}
+        >
+          <SketchPicker
+            {...ColorPickerProps}
+            width={320}
+            style={{boxShadow: 'none'}}
+            color={value}
+            onChangeComplete={handleColorChange}
+          />
+        </Select>
+        <FormHelperText>
+          {invalid || ((meta.touched || validateOnMount) && meta.warning) || helperText || description}
+        </FormHelperText>
+      </FormControl>
     </FormFieldGrid>
   )
 }
