@@ -84,12 +84,12 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
             sx={{position: 'relative', zIndex: 'tooltip'}}
           >
             <ElementOverlayPopperComponent
-              id="aglyn:element-overlay-hovered"
-              variant="hoveredOverlay"
-            />
-            <ElementOverlayPopperComponent
               id="aglyn:element-overlay-selected"
               variant="selectedOverlay"
+            />
+            <ElementOverlayPopperComponent
+              id="aglyn:element-overlay-hovered"
+              variant="hoveredOverlay"
             />
           </Box>
         </RenderedCanvasElementsProvider>

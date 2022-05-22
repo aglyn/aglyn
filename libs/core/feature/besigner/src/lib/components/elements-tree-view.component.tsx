@@ -41,7 +41,8 @@ import {
   TreeView as MuiTreeView,
 } from '@mui/lab'
 import {Box, Button, Stack, Typography} from '@mui/material'
-import {ChangeEvent, forwardRef, useCallback, useMemo, useRef, useState} from 'react'
+import {ChangeEvent, forwardRef, useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {getEmptyImage} from 'react-dnd-html5-backend'
 import {useAglynCanvasSetHovered} from '../hooks/use-aglyn-canvas-hovered'
 import useAglynCanvasSelected, {useAglynCanvasSetSelected} from '../hooks/use-aglyn-canvas-selected'
 import useLeafDnd from '../hooks/use-leaf-dnd'
@@ -71,9 +72,9 @@ interface ElementsTreeItemComponentProps extends Partial<TreeItemProps> {
   $id: ElementId
 }
 
-const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps & {dragHandleRef?: any}>(
+const ElementsTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProps & {dragHandleRef?: any, dragPreviewRef?: any}>(
   function RefRenderFn(props, ref) {
-    const {$id, dragHandleRef, ...rest} = props,
+    const {$id, dragHandleRef, dragPreviewRef, ...rest} = props,
       elements = useAglynElementData($id, 'elements') || [],
       componentId = useAglynElementData($id, 'componentId'),
       bundleId = useAglynElementData($id, 'bundleId'),
@@ -186,10 +187,15 @@ const DraggableTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProp
     const [dragHandleRef, dragPreviewRef, dropRef] = useLeafDnd($id, {
       dragType: DndDragSourceTypeFlag.TREE_ELEMENT,
     })
+
+    useEffect(() => {
+      dragPreviewRef(getEmptyImage(), {captureDraggingState: true})
+    }, [dragPreviewRef])
     return (
       <ElementsTreeItemComponent
-        ref={useCombinedRefs(ref, elemRef, dragHandleRef, dragPreviewRef, dropRef)}
-        dragHandleRef={dragHandleRef}
+        ref={useCombinedRefs(ref, elemRef, dragHandleRef, dropRef)}
+        // dragPreviewRef={dragPreviewRef}
+        // dragHandleRef={dragHandleRef}
         $id={$id}
         {...rest}
       />
