@@ -1,5 +1,6 @@
-module.exports = {
-  displayName: 'core-data-besigner',
+/* eslint-disable */
+export default {
+  displayName: 'shared-util-guards',
   preset: '../../../../jest.preset.js',
   globals: {
     'ts-jest': {
@@ -11,5 +12,5 @@ module.exports = {
     '^.+\\.[tj]sx?$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../../coverage/libs/core/data/besigner',
+  coverageDirectory: '../../../../coverage/libs/shared/util/guards',
 }

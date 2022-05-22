@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-const {getJestProjects} = require('@nrwl/jest')
+const { getJestProjects } = require('@nrwl/jest')
 
-module.exports = {
+export default {
   projects: [
     ...getJestProjects(),
     // '<rootDir>/libs/addons/ui/mui-bundle',

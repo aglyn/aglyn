@@ -1,5 +1,6 @@
-module.exports = {
-  displayName: 'shared-util-guards',
+/* eslint-disable */
+export default {
+  displayName: 'shared-ui-mdi-jsx',
   preset: '../../../../jest.preset.js',
   globals: {
     'ts-jest': {
@@ -11,5 +12,5 @@ module.exports = {
     '^.+\\.[tj]sx?$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../../coverage/libs/shared/util/guards',
+  coverageDirectory: '../../../../coverage/libs/shared/ui/mdi-jsx',
 }

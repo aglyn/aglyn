@@ -1,5 +1,6 @@
-module.exports = {
-  displayName: 'shared-data-mdi',
+/* eslint-disable */
+export default {
+  displayName: 'core-data-framework',
   preset: '../../../../jest.preset.js',
   globals: {
     'ts-jest': { tsconfig: '<rootDir>/tsconfig.spec.json' },
@@ -8,5 +9,5 @@ module.exports = {
     '^.+\\.[tj]sx?$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../../coverage/libs/shared/data/mdi',
+  coverageDirectory: '../../../../coverage/libs/core/data/framework',
 }

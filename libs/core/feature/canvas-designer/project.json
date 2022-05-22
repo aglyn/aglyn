@@ -1,5 +1,4 @@
 {
-  "root": "libs/core/feature/canvas-designer",
   "sourceRoot": "libs/core/feature/canvas-designer/src",
   "projectType": "library",
   "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:canvas-designer"],

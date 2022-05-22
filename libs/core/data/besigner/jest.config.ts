@@ -1,5 +1,6 @@
-module.exports = {
-  displayName: 'shared-data-types',
+/* eslint-disable */
+export default {
+  displayName: 'core-data-besigner',
   preset: '../../../../jest.preset.js',
   globals: {
     'ts-jest': {
@@ -11,5 +12,5 @@ module.exports = {
     '^.+\\.[tj]sx?$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../../coverage/libs/shared/data/types',
+  coverageDirectory: '../../../../coverage/libs/core/data/besigner',
 }

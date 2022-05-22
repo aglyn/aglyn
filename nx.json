@@ -16,7 +16,7 @@
   "npmScope": "aglyn",
   "tasksRunnerOptions": {
     "default": {
-      "runner": "nx/tasks-runners/default",
+      "runner": "@nrwl/nx-cloud",
       "options": {
         "cacheableOperations": [
           "build",
@@ -25,7 +25,8 @@
           "e2e"
         ],
         "parallel": 1,
-        "useDaemonProcess": true
+        "useDaemonProcess": true,
+        "accessToken": "MmI2Y2NlN2MtNjM4NC00NTQ0LTgxODItNGI3YzMwZTQyZTM1fHJlYWQtd3JpdGU="
       }
     }
   },

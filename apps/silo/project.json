@@ -1,5 +1,4 @@
 {
-  "root": "apps/silo",
   "sourceRoot": "apps/silo",
   "projectType": "application",
   "targets": {
@@ -12,7 +11,8 @@
         "outputPath": "dist/apps/silo"
       },
       "configurations": {
-        "production": {}
+        "production": {},
+        "development": {}
       }
     },
     "serve": {
@@ -26,8 +26,13 @@
         "production": {
           "buildTarget": "silo:build:production",
           "dev": false
+        },
+        "development": {
+          "buildTarget": "silo:build:development",
+          "dev": true
         }
-      }
+      },
+      "defaultConfiguration": "development"
     },
     "export": {
       "executor": "@nrwl/next:export",

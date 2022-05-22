@@ -1,4 +1,5 @@
-module.exports = {
+/* eslint-disable */
+export default {
   displayName: 'shared-util-dom',
   preset: '../../../../jest.preset.js',
   globals: {

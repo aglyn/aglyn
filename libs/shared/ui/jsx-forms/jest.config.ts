@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * @license
  * Copyright 2022 Aglyn LLC
@@ -15,12 +16,12 @@
  * limitations under the License.
  */
 
-module.exports = {
-  displayName: 'shared-ui-jsx',
+export default {
+  displayName: 'shared-ui-jsx-forms',
   preset: '../../../../jest.preset.js',
   transform: {
-    '^.+\\.[tj]sx?$': 'babel-jest',
+    '^.+\\.[tj]sx?$': ['@swc/jest', { jsc: { transform: { react: { runtime: 'automatic' } } } }],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../../../coverage/libs/shared/ui/jsx',
+  coverageDirectory: '../../../../coverage/libs/shared/ui/jsx-forms',
 }

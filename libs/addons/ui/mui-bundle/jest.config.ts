@@ -1,4 +1,5 @@
-module.exports = {
+/* eslint-disable */
+export default {
   displayName: 'addons-ui-mui-bundle',
   preset: '../../../../jest.preset.js',
   transform: {

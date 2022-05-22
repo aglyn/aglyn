@@ -1,10 +1,11 @@
-module.exports = {
-  displayName: 'www',
+/* eslint-disable */
+export default {
+  displayName: 'tenant',
   preset: '../../jest.preset.js',
   transform: {
     '^(?!.*\\.(js|jsx|ts|tsx|css|json)$)': '@nrwl/react/plugins/jest',
     '^.+\\.[tj]sx?$': ['babel-jest', { presets: ['@nrwl/next/babel'] }],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../coverage/apps/www',
+  coverageDirectory: '../../coverage/apps/tenant',
 }
