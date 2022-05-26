@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, mergeSxProps } from '@aglyn/shared-ui-theme'
+import {generateComponentClassKeys, mergeSxProps} from '@aglyn/shared-ui-theme'
 
 import {
   AppBar,
@@ -30,9 +30,10 @@ import {
   type ToolbarProps,
 } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, type ReactNode, type Ref, useState } from 'react'
+import {forwardRef, type ReactNode, type Ref, useState} from 'react'
 import useCombinedRefs from '../hooks/use-combined-refs'
 import ElevateOnScroll from './elevate-on-scroll'
+
 
 const classKeys = generateComponentClassKeys('AglynNavigationDrawer', [
   'root',
@@ -57,7 +58,7 @@ export interface NavigationDrawerProps extends Partial<DrawerProps> {
 
 const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(function RefRenderFn(
   props,
-  ref
+  ref,
 ) {
   const {
     children,
@@ -91,12 +92,12 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(functio
             maxWidth: '100%',
           },
         },
-        sx
+        sx,
       )}
       {...rest}
     >
       <ElevateOnScroll target={localContentRef}>
-        {({ activeWithoutHysteresis }) => (
+        {({activeWithoutHysteresis}) => (
           <AppBar
             color="inherit"
             position="relative"
@@ -111,7 +112,7 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(functio
                 borderBottomStyle: 'solid',
                 borderBottomColor: 'divider',
               },
-              AppBarProps?.sx
+              AppBarProps?.sx,
             )}
           >
             <Toolbar {...ToolbarProps} className={clsx(classKeys.toolbar, ToolbarProps?.className)}>
@@ -155,7 +156,7 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(functio
             width: '100%',
             overflow: 'auto',
           },
-          ContentProps?.sx
+          ContentProps?.sx,
         )}
       >
         {children}
@@ -168,5 +169,5 @@ NavigationDrawerComponent.displayName = 'NavigationDrawerComponent'
 NavigationDrawerComponent.aglyn = true
 NavigationDrawerComponent.defaultProps = {}
 
-export { NavigationDrawerComponent }
+export {NavigationDrawerComponent}
 export default NavigationDrawerComponent

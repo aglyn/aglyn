@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import { alpha, generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
-import { _isFnT } from '@aglyn/shared-util-guards'
-import { Stack, type StackProps as MuiStackProps } from '@mui/material'
+import {alpha, generateComponentClassKeys, styled} from '@aglyn/shared-ui-theme'
+import {_isFnT} from '@aglyn/shared-util-guards'
+import {Stack, type StackProps as MuiStackProps} from '@mui/material'
 import clsx from 'clsx'
-import { type ChangeEvent, forwardRef, useCallback, useRef } from 'react'
+import {type ChangeEvent, forwardRef, useCallback, useRef} from 'react'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import ViewportCanvasComponent from './viewport-canvas.component'
 import ViewportZoomControlsComponent from './viewport-zoom-controls.component'
+
 
 const classKeys = generateComponentClassKeys('AglynViewport', [
   'panelLeftOpen',
@@ -33,7 +34,7 @@ const classKeys = generateComponentClassKeys('AglynViewport', [
 const AglynViewport = styled(Stack, {
   name: 'AglynViewport',
   // shouldForwardProp(propName) {return propName !== 'panelLeftWidth'},
-})<ViewportRootComponentProps>(({ theme }) => {
+})<ViewportRootComponentProps>(({theme}) => {
   const o = 'transparent'
   const bg = theme.palette.background.default
   const base = theme.palette.divider
@@ -92,7 +93,7 @@ const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(functi
   props,
   ref
 ) {
-  const { children, className, ...rest } = props
+  const {children, className, ...rest} = props
 
   const pannerRef = useRef<any>()
 
@@ -118,14 +119,11 @@ const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(functi
   const [rightToggled] = useAglynBesignerPanelValue('panelRight', 'toggled')
   const [bottomToggled] = useAglynBesignerPanelValue('panelBottom', 'toggled')
 
-  const elemClassName = clsx(
-    {
-      [classKeys.panelLeftOpen]: Boolean(leftToggled),
-      [classKeys.panelRightOpen]: Boolean(rightToggled),
-      [classKeys.panelBottomOpen]: Boolean(bottomToggled),
-    },
-    className
-  )
+  const elemClassName = clsx({
+    [classKeys.panelLeftOpen]: Boolean(leftToggled),
+    [classKeys.panelRightOpen]: Boolean(rightToggled),
+    [classKeys.panelBottomOpen]: Boolean(bottomToggled),
+  }, className)
 
   return (
     <AglynViewport
@@ -140,7 +138,9 @@ const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(functi
       // drawerWidth={left?.drawerWidth}
       {...rest}
     >
-      <ViewportCanvasComponent pannerRef={pannerRef} />
+      <ViewportCanvasComponent
+        // pannerRef={pannerRef}
+      />
       <ViewportZoomControlsComponent
         onZoomReset={handleZoomReset}
         onZoomDecrease={handleZoomDecrease}
@@ -155,5 +155,5 @@ ViewportRootComponent.displayName = 'ViewportRootComponent'
 ViewportRootComponent.aglyn = true
 ViewportRootComponent.defaultProps = {}
 
-export { ViewportRootComponent }
+export {ViewportRootComponent}
 export default ViewportRootComponent

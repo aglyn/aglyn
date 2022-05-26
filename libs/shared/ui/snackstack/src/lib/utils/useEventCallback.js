@@ -18,11 +18,11 @@
 import {useCallback, useEffect, useLayoutEffect, useRef} from 'react'
 
 
-const useEnhancedEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 export default function useEventCallback(fn) {
   const ref = useRef(fn)
-  useEnhancedEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     ref.current = fn
   })
   return useCallback(

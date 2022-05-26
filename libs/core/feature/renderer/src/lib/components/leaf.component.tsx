@@ -63,9 +63,6 @@ const LeafComponent = forwardRef<any, LeafComponentProps>(
         {children}
         <ReactMarkdown
           children={resolved.children}
-          remarkRehypeOptions={{
-            // passThrough: ['p'],
-          }}
           components={{
             p: Fragment,
           }}

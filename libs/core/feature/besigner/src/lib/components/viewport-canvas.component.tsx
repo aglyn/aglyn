@@ -15,20 +15,25 @@
  * limitations under the License.
  */
 
-import { BesignerDeviceFlag } from '@aglyn/core-data-besigner'
-import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
-import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
+import {BesignerDeviceFlag} from '@aglyn/core-data-besigner'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
+import {generateComponentClassKeys, styled} from '@aglyn/shared-ui-theme'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 // import {ZoomablePanningComponent} from '@aglyn/shared-ui-jsx'
-import { forwardRef, type HTMLAttributes, type Ref } from 'react'
+import {ComponentProps, forwardRef, type Ref} from 'react'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
-import type { ViewportFrameComponentProps } from './viewport-frame.component'
+import type {ViewportFrameComponentProps} from './viewport-frame.component'
 
-const ViewportFrameComponent = dynamic<ViewportFrameComponentProps>(
-  () => import('./viewport-frame.component').then((mod) => mod.ViewportFrameComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT }
-)
+
+const canvasArtboardClassKeys = generateComponentClassKeys('AglynCanvasArtboard', [
+  'responsive',
+  'deviceXs',
+  'deviceSm',
+  'deviceMd',
+  'deviceLg',
+  'deviceXl',
+])
 
 const ViewportCanvas = styled('div', {
   name: 'AglynViewportCanvas',
@@ -41,17 +46,9 @@ const ViewportCanvas = styled('div', {
   // display: 'flex',
 })
 
-const canvasArtboardClassKeys = generateComponentClassKeys('AglynCanvasArtboard', [
-  'responsive',
-  'deviceXs',
-  'deviceSm',
-  'deviceMd',
-  'deviceLg',
-  'deviceXl',
-])
 const ViewportArtboard = styled('div', {
   name: 'AglynViewportArtboard',
-})(({ theme }) => ({
+})(({theme}) => ({
   overflow: 'hidden',
   minHeight: '100%',
   padding: theme.spacing(3),
@@ -64,83 +61,54 @@ const ViewportArtboard = styled('div', {
     duration: theme.transitions.duration.leavingScreen,
   }),
   width: '100%',
-  [`&, &.${canvasArtboardClassKeys.responsive}`]: { width: '100%' },
-  [`&.${canvasArtboardClassKeys.deviceXs}`]: { width: 390 },
-  [`&.${canvasArtboardClassKeys.deviceSm}`]: { width: theme.breakpoints.values.sm },
-  [`&.${canvasArtboardClassKeys.deviceMd}`]: { width: theme.breakpoints.values.md },
-  [`&.${canvasArtboardClassKeys.deviceLg}`]: { width: theme.breakpoints.values.lg },
-  [`&.${canvasArtboardClassKeys.deviceXl}`]: { width: theme.breakpoints.values.xl },
+  [`&, &.${canvasArtboardClassKeys.responsive}`]: {width: '100%'},
+  [`&.${canvasArtboardClassKeys.deviceXs}`]: {width: 390},
+  [`&.${canvasArtboardClassKeys.deviceSm}`]: {width: theme.breakpoints.values.sm},
+  [`&.${canvasArtboardClassKeys.deviceMd}`]: {width: theme.breakpoints.values.md},
+  [`&.${canvasArtboardClassKeys.deviceLg}`]: {width: theme.breakpoints.values.lg},
+  [`&.${canvasArtboardClassKeys.deviceXl}`]: {width: theme.breakpoints.values.xl},
 }))
 
-// const ArtboardPanner = styled(ZoomablePanningComponent, {name: 'AglynArtboardPanner'})(
-//   ({theme}) => ({
-//     overflow: 'hidden',
-//     padding: theme.spacing(3),
-//     height: '100%',
-//     width: theme.breakpoints.values.lg,
-//     marginLeft: 'auto',
-//     marginRight: 'auto',
-//     ['& > div']: {
-//       flexGrow: 1,
-//       display: 'flex',
-//       height: '100%',
-//       width: '100%',
-//     },
-//   }),
-// )
+const ViewportFrameComponent = dynamic<ViewportFrameComponentProps>(
+  () => import('./viewport-frame.component').then((mod) => mod.ViewportFrameComponent),
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+)
 
-export interface ViewportCanvasComponentProps extends HTMLAttributes<HTMLDivElement> {
+export interface ViewportCanvasComponentProps extends ComponentProps<typeof ViewportCanvas> {
   pannerRef?: Ref<any>
 }
 
-const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(function RefRenderFn(
-  props,
-  ref
-) {
-  const { children, pannerRef, ...rest } = props
+const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
+  function RefRenderFn(props, ref) {
+    const {...rest} = props
 
-  const [devicePreview, setDevicePreview] = useAglynBesignerFlag('devicePreview')
-  const artboardClass = clsx({
-    [canvasArtboardClassKeys.responsive]: BesignerDeviceFlag.RESPONSIVE === devicePreview,
-    [canvasArtboardClassKeys.deviceXs]: BesignerDeviceFlag.XS === devicePreview,
-    [canvasArtboardClassKeys.deviceSm]: BesignerDeviceFlag.SM === devicePreview,
-    [canvasArtboardClassKeys.deviceMd]: BesignerDeviceFlag.MD === devicePreview,
-    [canvasArtboardClassKeys.deviceLg]: BesignerDeviceFlag.LG === devicePreview,
-    [canvasArtboardClassKeys.deviceXl]: BesignerDeviceFlag.XL === devicePreview,
-  })
+    const [devicePreview] = useAglynBesignerFlag('devicePreview')
+    const artboardClass = clsx({
+      [canvasArtboardClassKeys.responsive]: BesignerDeviceFlag.RESPONSIVE === devicePreview,
+      [canvasArtboardClassKeys.deviceXs]: BesignerDeviceFlag.XS === devicePreview,
+      [canvasArtboardClassKeys.deviceSm]: BesignerDeviceFlag.SM === devicePreview,
+      [canvasArtboardClassKeys.deviceMd]: BesignerDeviceFlag.MD === devicePreview,
+      [canvasArtboardClassKeys.deviceLg]: BesignerDeviceFlag.LG === devicePreview,
+      [canvasArtboardClassKeys.deviceXl]: BesignerDeviceFlag.XL === devicePreview,
+    })
 
-  return (
-    <ViewportCanvas ref={ref} id="aglyn:viewport-canvas" {...rest}>
-      <ViewportArtboard id="aglyn:viewport-artboard" className={artboardClass}>
-        {/*<ViewportCanvasPanner*/}
-        {/*  {...{ref: pannerRef} as any}*/}
-        {/*  disableScrollZoom*/}
-        {/*  disableDoubleClickZoom*/}
-        {/*  // autoCenter*/}
-        {/*  enableBoundingBox*/}
-        {/*  noStateUpdate*/}
-        {/*  disabled*/}
-        {/*>*/}
-        <ViewportFrameComponent />
-        {/*</ViewportCanvasPanner>*/}
-      </ViewportArtboard>
-
-      {/*<RulerComponent*/}
-      {/*  variant="vertical"*/}
-      {/*  sx={{position: 'relative', mt: '-16px', ml: '-22px'}}*/}
-      {/*/>*/}
-      {/*<RulerComponent*/}
-      {/*  variant="horizontal"*/}
-      {/*  sx={{position: 'relative', ml: '-11px', mt: '-20px'}}*/}
-      {/*/>*/}
-      {children}
-    </ViewportCanvas>
-  )
-})
+    return (
+      <ViewportCanvas
+        ref={ref}
+        id="aglyn:viewport-canvas"
+        {...rest}
+      >
+        <ViewportArtboard id="aglyn:viewport-artboard" className={artboardClass}>
+          <ViewportFrameComponent />
+        </ViewportArtboard>
+      </ViewportCanvas>
+    )
+  },
+)
 
 ViewportCanvasComponent.displayName = 'ViewportCanvasComponent'
 ViewportCanvasComponent.aglyn = true
 ViewportCanvasComponent.defaultProps = {}
 
-export { ViewportCanvasComponent }
+export {ViewportCanvasComponent}
 export default ViewportCanvasComponent

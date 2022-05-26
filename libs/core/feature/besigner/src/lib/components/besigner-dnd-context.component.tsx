@@ -18,7 +18,8 @@
 import type {BackendFactory} from 'dnd-core'
 import {type ReactNode} from 'react'
 import {DndProvider} from 'react-dnd'
-import {TouchBackend} from 'react-dnd-touch-backend'
+// import {TouchBackend} from 'react-dnd-touch-backend'
+import {HTML5Backend} from 'react-dnd-html5-backend'
 
 
 export interface BesignerDndContextProps<BackendContext, BackendOptions> {
@@ -44,10 +45,10 @@ function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
 
   return (
     <DndProvider
-      backend={TouchBackend}
+      backend={HTML5Backend}
       options={opts}
       {...rest}
-      // debugMode
+      debugMode
     >
       {children}
     </DndProvider>

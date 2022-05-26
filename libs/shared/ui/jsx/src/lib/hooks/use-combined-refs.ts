@@ -15,47 +15,54 @@
  * limitations under the License.
  */
 
-import {_isFnT} from '@aglyn/shared-util-guards'
-import {type MutableRefObject, type Ref, type RefCallback, useCallback} from 'react'
+import {_isFnT, _isObj} from '@aglyn/shared-util-guards'
+import {
+  type MutableRefObject,
+  type Ref,
+  type RefCallback,
+  type RefObject,
+  useCallback,
+  useRef,
+} from 'react'
 
 
-function isRefCallback<T>(val): val is RefCallback<T> {
-  return _isFnT(val)
-}
+export type CombinedRefsResult<T> = [
+  setRef: RefCallback<T>,
+  ref: RefObject<T>,
+]
+
+export const isRefCallback = <T, >(val: unknown): val is RefCallback<T> => _isFnT(val)
+export const isRefObject = <T, >(val: unknown): val is RefObject<T> => _isObj(val)
 
 /**
  * Assign a React ref object, could be a RefCallback or RefObject
- * @param {React.Ref<T>} ref- RefCallback or RefObject or null, to assign value
- * @param {T} value - new ref value
- * @returns {Ref<T>} - the same passed ref
  */
-function assignRefValue<T>(ref: Ref<T>, value: T): Ref<T> {
-  if (!ref) return null
-  if (isRefCallback(ref)) {
-    ref(value)
-  }
-  else {
-    (ref as MutableRefObject<T>).current = value
-  }
-  return ref
-}
-
-function handleMultipleRefs<T>(...refs: Ref<T>[]): (element: T) => T {
-  return (element: T) => {
-    refs.forEach((ref) => assignRefValue(ref, element))
-    return element
-  }
+export function assignRefValue<T>(ref: Ref<T>, value: T): T {
+  if (isRefCallback(ref)) ref(value)
+  else if (isRefObject(ref)) (ref as MutableRefObject<T>).current = value
+  return value
 }
 
 /**
  * Combines multiple RefCallback|RefObject into one.
- * @param {React.Ref<T>} refs - 1 or more refs to be assigned
- * @returns {React.RefCallback<T>} - callback to pass to elem ref prop
  */
-export function useCombinedRefs<T>(...refs: Ref<T>[]): (element: T) => T {
-  return useCallback((element: T) => {
-    return handleMultipleRefs(...refs)(element)
-  }, [refs])
+export function useCombinedRefs<T>(
+  ref: Ref<T>,
+  ...others: Ref<T>[]
+): RefCallback<T> {
+  const local = useRef<T>()
+  const setRef = useCallback((instance: T) => {
+    const all = [local, ref, ...others]
+    return all.reduceRight((accumulator, ref) => {
+      return assignRefValue(ref, accumulator)
+    }, instance)
+    // for (const ref of all) {
+    //   assignRefValue(ref, instance)
+    // }
+    // return instance
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return setRef
 }
 
 export default useCombinedRefs

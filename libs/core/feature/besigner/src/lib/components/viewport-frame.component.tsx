@@ -19,24 +19,41 @@ import {setBesignerCanvasHovered} from '@aglyn/core-data-besigner'
 import {CANVAS_ROOT_ELEMENT_ID} from '@aglyn/core-data-framework'
 import {useAglynAppContext, useAglynSiteTheme} from '@aglyn/core-feature-renderer'
 import {styled, ThemeProvider} from '@aglyn/shared-ui-theme'
-import Box from '@mui/material/Box'
+import {Box, BoxProps} from '@mui/material'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
 import {type ComponentProps, forwardRef, useCallback} from 'react'
 import ElementLeafComponent from './element-leaf.component'
 import ElementOverlayPopperComponent from './element-overlay-popper.component'
 
 
-const Overlays = () => {
+const ViewportFrame = styled('div', {
+  name: 'AglynViewportFrame',
+})(({theme}) => ({
+  flexGrow: 1,
+  minHeight: '100%',
+  width: '100%',
+  background: theme.palette.background.paper,
+  borderColor: theme.palette.divider,
+  borderWidth: `0.3em`,
+  borderStyle: 'solid',
+  display: 'flex',
+  // position: 'relative',
+}))
+
+const SiteContainer = (props: Partial<BoxProps>) => {
+  const {...rest} = props
   return (
-    <Box id="aglyn:site-overlay" sx={{position: 'relative', zIndex: 'tooltip'}}>
-      <ElementOverlayPopperComponent
-        id="aglyn:element-overlay-selected"
-        variant="selectedOverlay"
-      />
-      <ElementOverlayPopperComponent
-        id="aglyn:element-overlay-hovered"
-        variant="hoveredOverlay"
-      />
+    <Box
+      key="aglyn:site-container"
+      id="aglyn:site-container"
+      sx={{
+        minHeight: 1,
+        width: 1,
+        bgcolor: 'background.paper',
+      }}
+      {...rest}
+    >
+      <ThemedElementContainer />
     </Box>
   )
 }
@@ -60,26 +77,39 @@ const ThemedElementContainer = () => {
   )
 }
 
+const Overlays = (props: Partial<BoxProps>) => {
+  const {...rest} = props
+  return (
+    <Box
+      key="aglyn:site-overlay"
+      id="aglyn:site-overlay"
+      sx={{
+        position: 'relative',
+        zIndex: 'tooltip',
+      }}
+      {...rest}
+    >
+      <ElementOverlayPopperComponent
+        key="aglyn:element-overlay-selected"
+        id="aglyn:element-overlay-selected"
+        variant="selectedOverlay"
+      />
+      <ElementOverlayPopperComponent
+        key="aglyn:element-overlay-hovered"
+        id="aglyn:element-overlay-hovered"
+        variant="hoveredOverlay"
+      />
+    </Box>
+  )
+}
 
-const ViewportFrame = styled('div', {
-  name: 'AglynViewportFrame',
-})(({theme}) => ({
-  flexGrow: 1,
-  minHeight: '100%',
-  width: '100%',
-  background: theme.palette.background.paper,
-  borderColor: theme.palette.divider,
-  borderWidth: `0.3em`,
-  borderStyle: 'solid',
-  display: 'flex',
-  // position: 'relative',
-}))
+export interface ViewportFrameComponentProps extends ComponentProps<typeof ViewportFrame> {
 
-export interface ViewportFrameComponentProps extends ComponentProps<typeof ViewportFrame> {}
+}
 
 const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
   function RefRenderFn(props, ref) {
-    const {children, onMouseLeave, ...rest} = props
+    const {onMouseLeave, ...rest} = props
 
     const app = useAglynAppContext()
     const handleMouseLeave = useCallback((e) => {
@@ -95,17 +125,8 @@ const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
         onMouseLeave={handleMouseLeave}
         {...rest}
       >
-        {/*<MuiShadowDom.div>*/}
-        <Box
-          id="aglyn:site-container"
-          sx={{minHeight: 1, width: 1, bgcolor: 'background.paper'}}
-        >
-          <ThemedElementContainer />
-        </Box>
-        {/*</MuiShadowDom.div>*/}
-
+        <SiteContainer />
         <Overlays />
-        {children}
       </ViewportFrame>
     )
   },
