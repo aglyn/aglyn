@@ -15,26 +15,24 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-ui-theme'
-import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
-import { Stack, type StackProps } from '@mui/material'
+import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
+import {styled} from '@aglyn/shared-ui-theme'
+import {Stack, type StackProps} from '@mui/material'
 import dynamic from 'next/dynamic'
-import { forwardRef } from 'react'
+import {forwardRef} from 'react'
+import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import AppBarSecondaryComponent from './app-bar-secondary.component'
+import type {AsidePanelComponentProps} from './aside-panel.component'
 
-const PanelLeftComponent = dynamic(
-  () => import('./panel-left.component').then((mod) => mod.PanelLeftComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT }
-)
 
-const PanelRightComponent = dynamic(
-  () => import('./panel-right.component').then((mod) => mod.PanelRightComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT }
+const PanelLeftComponent = dynamic<AsidePanelComponentProps>(
+  () => import('./aside-panel.component').then((mod) => mod.AsidePanelComponent),
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 const ViewportRootComponent = dynamic(
   () => import('./viewport-root.component').then((mod) => mod.ViewportRootComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT }
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 const WorkspaceEditor = styled(Stack, {
@@ -54,7 +52,7 @@ export interface WorkspaceEditorComponentProps extends StackProps {}
 
 const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
   function RefRenderFn(props, ref) {
-    const { children, ...rest } = props
+    const {children, ...rest} = props
 
     return (
       <WorkspaceEditor
@@ -74,9 +72,9 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
           component="main"
           flexGrow={1}
           spacing={0}
-          sx={{ overflow: 'hidden', zIndex: 0 }}
+          sx={{overflow: 'hidden', zIndex: 0}}
         >
-          <PanelLeftComponent />
+          <PanelLeftComponent panel={'panelLeft'} />
 
           <Stack
             direction="column"
@@ -86,25 +84,27 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             component="main"
             flexGrow={1}
             spacing={0}
-            sx={{ overflow: 'hidden', zIndex: 0 }}
+            sx={{overflow: 'hidden', zIndex: 0}}
           >
             <AppBarSecondaryComponent />
 
             <ViewportRootComponent />
+
+            <AppBarBreadcrumbsComponent />
           </Stack>
 
-          <PanelRightComponent />
+          <PanelLeftComponent panel={'panelRight'} />
         </Stack>
 
         {children}
       </WorkspaceEditor>
     )
-  }
+  },
 )
 
 WorkspaceEditorComponent.displayName = 'WorkspaceEditorComponent'
 WorkspaceEditorComponent.aglyn = true
 WorkspaceEditorComponent.defaultProps = {}
 
-export { WorkspaceEditorComponent }
+export {WorkspaceEditorComponent}
 export default WorkspaceEditorComponent

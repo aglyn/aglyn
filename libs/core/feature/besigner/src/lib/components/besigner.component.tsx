@@ -26,6 +26,7 @@ import {NoSsr} from '@mui/material'
 import dynamic from 'next/dynamic'
 import {forwardRef, Fragment} from 'react'
 import ComponentsDrawerContextProvider from '../contexts/components-drawer-context.provider'
+import RenderedCanvasElementsProvider from '../contexts/rendered-canvas-elements'
 import BesignerDndContext from './besigner-dnd-context.component'
 import type {WorkspaceEditorComponentProps} from './workspace-editor.component'
 
@@ -60,9 +61,11 @@ const BesignerComponent = forwardRef<any, BesignerComponentProps>(
           <BesignerDndContext>
             <ElementComponentsContextProvider>
               <ElementsContextProvider>
-                <ComponentsDrawerContextProvider>
-                  <WorkspaceEditorComponent ref={ref} {...rest} />
-                </ComponentsDrawerContextProvider>
+                <RenderedCanvasElementsProvider>
+                  <ComponentsDrawerContextProvider>
+                    <WorkspaceEditorComponent ref={ref} {...rest} />
+                  </ComponentsDrawerContextProvider>
+                </RenderedCanvasElementsProvider>
               </ElementsContextProvider>
             </ElementComponentsContextProvider>
           </BesignerDndContext>

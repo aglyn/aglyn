@@ -48,6 +48,7 @@ import {
   mdiDrag,
   mdiFileTree,
   mdiFormDropdown,
+  mdiGroup,
   mdiHomeVariant,
   mdiIdentifier,
   mdiInformationVariant,
@@ -127,10 +128,11 @@ export const ICON_VARIANT_SIGN_OUT = mdiLogoutVariant
 export const ICON_VARIANT_USER_SETTINGS = mdiAccountSettings
 
 // Views + Panels
+export const ICON_VARIANT_ELEMENT_BROWSE = mdiGroup
 export const ICON_VARIANT_ELEMENT_DETAILS = mdiInformationVariant
 export const ICON_VARIANT_ELEMENT_PROPERTIES = mdiFormDropdown
-export const ICON_VARIANT_ELEMENT_TREE_VIEW = mdiFileTree
 export const ICON_VARIANT_ELEMENT_STYLES = mdiPaletteOutline
+export const ICON_VARIANT_ELEMENT_TREE_VIEW = mdiFileTree
 
 // Theme mode
 export const ICON_VARIANT_THEME_DARK = mdiWeatherNight

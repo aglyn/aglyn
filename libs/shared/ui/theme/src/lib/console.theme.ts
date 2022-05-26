@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
-import { buildFontFamilyList } from './constants'
-import type { IActionStates } from './theme.types'
+import type {PaletteOptions, Theme, ThemeOptions} from '../vendor/mui'
+import {buildFontFamilyList} from './constants'
+import type {IActionStates} from './theme.types'
 import createResponsiveTheme from './util/create-responsive-theme'
+
 
 export type ColorVariant = 'light' | 'dark'
 export type BackgroundRecord = PaletteOptions['background']
@@ -139,16 +140,16 @@ export const ordinalQuaternaryDark: QuaternaryRecord = {
 }
 
 export const ordinalLight: OrdinalRecord = {
-  primary: { ...ordinalPrimaryLight },
-  secondary: { ...ordinalSecondaryLight },
-  tertiary: { ...ordinalTertiaryLight },
-  quaternary: { ...ordinalQuaternaryLight },
+  primary: {...ordinalPrimaryLight},
+  secondary: {...ordinalSecondaryLight},
+  tertiary: {...ordinalTertiaryLight},
+  quaternary: {...ordinalQuaternaryLight},
 }
 export const ordinalDark: OrdinalRecord = {
-  primary: { ...ordinalPrimaryDark },
-  secondary: { ...ordinalSecondaryDark },
-  tertiary: { ...ordinalTertiaryDark },
-  quaternary: { ...ordinalQuaternaryDark },
+  primary: {...ordinalPrimaryDark},
+  secondary: {...ordinalSecondaryDark},
+  tertiary: {...ordinalTertiaryDark},
+  quaternary: {...ordinalQuaternaryDark},
 }
 
 export const actionSvgBgLight: IActionStates = {
@@ -234,7 +235,7 @@ const baseOptions: ThemeOptions = {
       styleOverrides: {
         root: {
           '&a[disabled], &.disabled': {
-            pointerEvents: 'default',
+            pointerEvents: 'none',
             textDecoration: 'none',
             filter: 'grayscale(1) opacity(0.65)',
           },
@@ -252,14 +253,14 @@ const baseOptions: ThemeOptions = {
       },
       // color: 'inherit', // Default color to inherit
       styleOverrides: {
-        root: ({ theme }) => ({
+        root: ({theme}) => ({
           padding: theme.spacing(1),
         }),
       },
       variants: [
         {
-          props: { variant: 'outlined' } as any, // @TODO ⚠️ fix typing
-          style: ({ theme }) => ({
+          props: {variant: 'outlined'} as any, // @TODO ⚠️ fix typing
+          style: ({theme}) => ({
             border: `1px solid`,
             borderColor: `inherit`,
           }),
@@ -273,7 +274,7 @@ const baseOptions: ThemeOptions = {
       styleOverrides: {
         root: {
           '&[disabled], &.disabled': {
-            pointerEvents: 'default',
+            pointerEvents: 'none',
             textDecoration: 'none',
             filter: 'grayscale(1) opacity(0.65)',
           },
@@ -283,7 +284,7 @@ const baseOptions: ThemeOptions = {
     MuiMenu: {},
     MuiToolbar: {
       styleOverrides: {
-        root: ({ theme }) => ({
+        root: ({theme}) => ({
           [theme.breakpoints.up('sm')]: {
             paddingLeft: theme.spacing(3),
             paddingRight: theme.spacing(3),
@@ -441,8 +442,8 @@ export const consoleOptions: ThemeOptions = {
   ...baseOptions,
   palette: {
     mode: 'light',
-    background: { ...backgroundsLight },
-    grey: { ...shadesOfGrey },
+    background: {...backgroundsLight},
+    grey: {...shadesOfGrey},
     ...ordinalLight,
     ...actionsLight,
     ...status,
@@ -452,8 +453,8 @@ export const consoleOptionsDark: ThemeOptions = {
   ...baseOptions,
   palette: {
     mode: 'dark',
-    background: { ...backgroundsDark },
-    grey: { ...shadesOfGrey },
+    background: {...backgroundsDark},
+    grey: {...shadesOfGrey},
     ...ordinalDark,
     ...actionsDark,
     ...status,
@@ -461,10 +462,10 @@ export const consoleOptionsDark: ThemeOptions = {
 }
 
 export const consoleThemeLight: Theme = createResponsiveTheme({
-  themeOptions: { ...consoleOptions },
+  themeOptions: {...consoleOptions},
 })
 export const consoleThemeDark: Theme = createResponsiveTheme({
-  themeOptions: { ...consoleOptionsDark },
+  themeOptions: {...consoleOptionsDark},
 })
 export const getConsoleTheme = (mode: 'light' | 'dark' = 'light') => {
   const theme = {

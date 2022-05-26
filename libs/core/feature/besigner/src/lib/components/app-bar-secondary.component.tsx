@@ -67,7 +67,7 @@ const AppBarSecondaryComponent = forwardRef<any, AppBarSecondaryComponentProps>(
             <AddControlsComponent />
             <HistoryControlsComponent sx={{ flexGrow: 1 }} />
             <DevicePreviewControlsComponent />
-            <InteractControlsComponent />
+            {/*<InteractControlsComponent />*/}
             <PanelControlsComponent />
             {children}
           </Stack>
