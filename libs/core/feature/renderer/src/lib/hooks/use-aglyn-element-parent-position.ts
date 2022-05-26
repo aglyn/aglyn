@@ -38,7 +38,7 @@ export function useAglynElementParentPosition(
   const [isFirst, isLast] = useMemo(() => {
     return [
       indexInParent === 0,
-      indexInParent === length + 1,
+      length === indexInParent + 1,
     ]
   }, [indexInParent, length])
 

@@ -16,7 +16,7 @@
  */
 
 import {ElementId} from '@aglyn/core-data-framework'
-import {useAglynElementLabel} from '@aglyn/core-feature-renderer'
+import {useAglynCanvasElementHierarchy, useAglynElementLabel} from '@aglyn/core-feature-renderer'
 import {mergeSxProps} from '@aglyn/shared-ui-theme'
 import {
   AppBar as MuiAppBar,
@@ -28,7 +28,6 @@ import {
   Toolbar as MuiToolbar,
 } from '@mui/material'
 import {forwardRef, useCallback} from 'react'
-import useAglynCanvasElementHierarchy from '../hooks/use-aglyn-canvas-element-hierarchy'
 import {useAglynCanvasSetHovered} from '../hooks/use-aglyn-canvas-hovered'
 import useAglynCanvasSelected, {useAglynCanvasSetSelected} from '../hooks/use-aglyn-canvas-selected'
 

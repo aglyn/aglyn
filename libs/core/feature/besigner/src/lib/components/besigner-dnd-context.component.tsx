@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {BackendFactory} from 'dnd-core'
+import type {BackendFactory} from 'dnd-core'
 import {type ReactNode} from 'react'
 import {DndProvider} from 'react-dnd'
 import {TouchBackend} from 'react-dnd-touch-backend'
@@ -38,7 +38,7 @@ function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
     delay: 0,
     delayTouchStart: 0,
     delayMouseStart: 0,
-    touchSlop: 5,
+    touchSlop: 2,
     ...options,
   }
 
@@ -47,7 +47,7 @@ function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
       backend={TouchBackend}
       options={opts}
       {...rest}
-      debugMode
+      // debugMode
     >
       {children}
     </DndProvider>

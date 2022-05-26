@@ -44,7 +44,6 @@ export const ElementPropsFormTemplate = forwardRef<any, FormTemplateRenderProps>
   function RefRenderFn(props, ref) {
     const {formFields, schema, ...rest} = props
     const {handleSubmit} = useFormApi()
-    console.log('form rest', rest)
     return (
       <form
         ref={ref}

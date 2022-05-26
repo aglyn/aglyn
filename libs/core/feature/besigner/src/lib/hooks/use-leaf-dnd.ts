@@ -29,8 +29,6 @@ import {
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import {useDebouncedTransition} from '@aglyn/shared-ui-jsx'
-import {numberToHexadecimal} from '@aglyn/shared-util-tools'
 import {useCallback, useEffect} from 'react'
 import {
   type DragElementWrapper,
@@ -81,8 +79,6 @@ export function useLeafDnd(
   const dragType = options?.dragType ?? DndDragSourceTypeFlag.CANVAS_ELEMENT
   const dropType = options?.dropType ?? DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE
 
-  const [, debounceUpdate] = useDebouncedTransition(200, {trailing: true, leading: false}, [])
-
   const app = useAglynAppContext()
   const setHovered = useAglynCanvasSetHovered()
   const setSelected = useAglynCanvasSetSelected()
@@ -119,7 +115,7 @@ export function useLeafDnd(
 
 
   const draggable = useDrag<BesignerDndElementActive, BesignerDndElementOver, DragCollected>(() => ({
-    type: numberToHexadecimal(dragType),
+    type: dragType,
     item: () => {
       const dragItem = ({
         $id,
@@ -160,14 +156,15 @@ export function useLeafDnd(
       isOverChildOfSameDrag,
       isDragging,
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [$id, isDragging, trail])
 
 
   const droppable = useDrop<BesignerDndElementActive, BesignerDndElementOver, DropCollected>(() => ({
     accept: [
-      numberToHexadecimal(DndDragSourceTypeFlag.CANVAS_ELEMENT),
-      numberToHexadecimal(DndDragSourceTypeFlag.COMPONENT_TEMPLATE),
-      numberToHexadecimal(DndDragSourceTypeFlag.TREE_ELEMENT),
+      DndDragSourceTypeFlag.CANVAS_ELEMENT,
+      DndDragSourceTypeFlag.COMPONENT_TEMPLATE,
+      DndDragSourceTypeFlag.TREE_ELEMENT,
     ],
     drop: (active, monitor) => {
       const dropItem: BesignerDndElementOver = ({
@@ -205,7 +202,7 @@ export function useLeafDnd(
     dropType,
     handleDragOver,
     hierarchy,
-    isOverSelf
+    isOverSelf,
   ])
 
   return [dragHandleRef, dragPreviewRef, dropRef]
