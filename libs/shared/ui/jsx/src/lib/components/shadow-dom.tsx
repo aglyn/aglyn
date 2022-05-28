@@ -33,7 +33,7 @@ import React, {
 } from 'react'
 import {createPortal} from 'react-dom'
 
-import useCombinedRefs from '../hooks/use-combined-refs'
+import {useForkedRefs} from '../hooks/use-ref-forked'
 
 
 declare global {
@@ -88,7 +88,7 @@ export function createShadowDomRoot<T, P>(
         ...rest
       } = props
       const localRef = useRef<T>(null)
-      const elemRef = useCombinedRefs(localRef, ref)
+      const elemRef = useForkedRefs(localRef, ref)
       const [shadowRoot, setShadowRoot] = useState<ShadowRoot>(null)
       const key = `node_${mode}${delegatesFocus}`
 

@@ -17,15 +17,15 @@
 
 
 import type {Coordinates} from '../dom'
-import {eventHasViewportRelativeCoordinates} from './guards/event-has-viewport-coordinates'
-import {isEventTouchEvent} from './guards/is-touch-event'
+import {eventHasViewportCoordinates} from './guards/event-has-viewport-coordinates'
+import {isTouchEvent} from './guards/is-touch-event'
 
 
 /**
  * Returns the normalized x and y coordinates for mouse and touch events.
  */
 export function getEventCoordinates(event: Event): Coordinates {
-  if (isEventTouchEvent(event)) {
+  if (isTouchEvent(event)) {
     if (event.touches && event.touches.length) {
       const {clientX: x, clientY: y} = event.touches[0]
 
@@ -44,7 +44,7 @@ export function getEventCoordinates(event: Event): Coordinates {
     }
   }
 
-  if (eventHasViewportRelativeCoordinates(event)) {
+  if (eventHasViewportCoordinates(event)) {
     return {
       x: event.clientX,
       y: event.clientY,

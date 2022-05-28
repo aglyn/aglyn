@@ -26,7 +26,7 @@ import {getElementOffsetParent} from './get-element-offset-parent'
 import {getElementParentNode} from './get-element-parent-node'
 import {getElementRectAsClientRect} from './get-element-rect-as-client-rect'
 import {getElementViewportRect} from './get-element-viewport-rect'
-import {parentElementContainsChildElement} from './guards/element-contains-child-element'
+import {elementContainsChildElement} from './guards/element-contains-child-element'
 import {isElementHTMLElement} from './guards/is-element-html-element'
 import {isNodeElement} from './guards/is-node-element'
 
@@ -61,7 +61,7 @@ function getElementClippingParents(element: Element): Array<Element> {
   return clippingParents.filter(
     (clippingParent) =>
       isNodeElement(clippingParent) &&
-      parentElementContainsChildElement(clippingParent as Element, clipperElement as Element) &&
+      elementContainsChildElement(clippingParent as Element, clipperElement as Element) &&
       getElementNodeName(clippingParent as Element) !== 'body',
   ) as Element[]
 }

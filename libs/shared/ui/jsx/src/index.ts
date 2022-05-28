@@ -48,7 +48,7 @@ export * from './lib/contexts/loading.context'
 
 export * from './lib/hooks/router-events'
 export * from './lib/hooks/use-client-rect'
-export * from './lib/hooks/use-combined-refs'
+export * from './lib/hooks/use-ref-forked'
 export * from './lib/hooks/use-debounce'
 export * from './lib/hooks/use-debounced-transition'
 export * from './lib/hooks/use-effect-post-mount'

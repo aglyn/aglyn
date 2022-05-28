@@ -20,7 +20,7 @@ import {
   type LeafComponentProps,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import {useCombinedRefs, useIsomorphicLayoutEffect} from '@aglyn/shared-ui-jsx'
+import {useForkedRefs, useIsomorphicLayoutEffect} from '@aglyn/shared-ui-jsx'
 import {type ChangeEvent, forwardRef, useCallback, useMemo, useRef} from 'react'
 import {useRenderedCanvasElements} from '../contexts/rendered-canvas-elements'
 import {useAglynCanvasSetHovered} from '../hooks/use-aglyn-canvas-hovered'
@@ -89,7 +89,7 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
     }, [])
     return (
       <InnerLeafComponent
-        ref={useCombinedRefs(ref, element, dragPreview, dropRef)}
+        ref={useForkedRefs(ref, element, dragPreview, dropRef)}
         $id={$id}
         {...rest}
       />

@@ -34,7 +34,7 @@ import React, {
 } from 'react'
 import ReactFrameComponent from 'react-frame-component'
 
-import useCombinedRefs from '../hooks/use-combined-refs'
+import {useForkedRefs} from '../hooks/use-ref-forked'
 
 export type FrameComponentProps = InferElementTypeProps<typeof ReactFrameComponent>
 export type SandboxFrameDocument = HTMLIFrameElement['contentDocument']
@@ -83,7 +83,7 @@ export const SandboxFrame = forwardRef<HTMLIFrameElement, SandboxFrameProps>(fun
   // Reference for frame context
   const styleRef = useRef(null)
   const frameRef = useRef(null)
-  const rootRef = useCombinedRefs(frameRef, ref)
+  const rootRef = useForkedRefs(frameRef, ref)
   const head = useMemo(
     () => (
       <Fragment>

@@ -22,7 +22,7 @@ import { jssPreset, StylesProvider } from '@aglyn/shared-ui-theme'
 import { create } from 'jss'
 import rtl from 'jss-rtl'
 import React, { HTMLProps, PropsWithChildren, useState } from 'react'
-import useCombinedRefs from '../hooks/use-combined-refs'
+import {useForkedRefs} from '../hooks/use-ref-forked'
 
 import { createShadowDomProxy } from './shadow-dom' /* eslint-disable-next-line */
 
@@ -35,7 +35,7 @@ const MuiShadowStylesProvider = React.forwardRef<
 >(function RefRenderFn(props, ref) {
   const { children } = props
   const [styleNode, setStyleNode] = useState(null)
-  const elemRef = useCombinedRefs(setStyleNode, ref)
+  const elemRef = useForkedRefs(setStyleNode, ref)
   const jss = create({
     plugins: [...jssPreset().plugins, rtl()],
     insertionPoint: styleNode,

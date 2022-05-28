@@ -30,7 +30,7 @@ import {
   ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
 import { alpha, mergeSxProps, styled } from '@aglyn/shared-ui-theme'
-import { isReactElement, useCombinedRefs } from '@aglyn/shared-ui-jsx'
+import { isReactElement, useForkedRefs } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { _isObjT } from '@aglyn/shared-util-guards'
 import {
@@ -197,7 +197,7 @@ const DraggableTreeItemComponent = forwardRef<any, ElementsTreeItemComponentProp
     }, [dragPreviewRef])
     return (
       <ElementsTreeItemComponent
-        ref={useCombinedRefs(ref, elemRef, dragHandleRef, dropRef)}
+        ref={useForkedRefs(ref, elemRef, dragHandleRef, dropRef)}
         // dragPreviewRef={dragPreviewRef}
         // dragHandleRef={dragHandleRef}
         $id={$id}

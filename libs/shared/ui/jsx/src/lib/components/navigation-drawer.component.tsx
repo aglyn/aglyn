@@ -31,7 +31,7 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import {forwardRef, type ReactNode, type Ref, useState} from 'react'
-import useCombinedRefs from '../hooks/use-combined-refs'
+import {useForkedRefs} from '../hooks/use-ref-forked'
 import ElevateOnScroll from './elevate-on-scroll'
 
 
@@ -147,7 +147,7 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(functio
         )}
       </ElevateOnScroll>
       <Box
-        ref={useCombinedRefs(setLocalContentRef, contentRef)}
+        ref={useForkedRefs(setLocalContentRef, contentRef)}
         {...ContentProps}
         className={clsx(classKeys.content, ContentProps?.className)}
         sx={mergeSxProps(
