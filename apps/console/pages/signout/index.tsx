@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import {APP_CONSOLE} from '@aglyn/shared-data-enums'
 import {LoadingTextComponent} from '@aglyn/shared-ui-jsx'
 import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {CircularProgress} from '@mui/material'
@@ -26,7 +27,11 @@ import UnauthenticatedLayout from '../../components/layouts/unauthenticated.layo
 
 
 function SignOut() {
-  useNextPageTitle({screen: 'Sign out'})
+  useNextPageTitle({
+    screen: 'Sign out',
+    suffix: APP_CONSOLE.AFFIX,
+    separator: ` ${APP_CONSOLE.SEP} `,
+  })
 
   const firebaseAuth = useAuth()
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import {APP_CONSOLE} from '@aglyn/shared-data-enums'
 import type {AuthResultError} from '@aglyn/shared-data-enums'
 import {FIELD_SCHEMA_EMAIL, FIELD_SCHEMA_PASSWORD} from '@aglyn/shared-data-forms'
 import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
@@ -46,7 +47,11 @@ const formSchema: FormSchema = {
 }
 
 function SignIn() {
-  useNextPageTitle({screen: 'Sign out'})
+  useNextPageTitle({
+    screen: 'Sign in',
+    suffix: APP_CONSOLE.AFFIX,
+    separator: ` ${APP_CONSOLE.SEP} `,
+  })
   const {queueLoading, loading} = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)

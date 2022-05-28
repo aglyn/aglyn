@@ -43,7 +43,7 @@ function buildScreenTitle(values: PageTitleObject): string {
   const newTitle = arraySafe(screen, [screen])
     .concat(!number ? null : ` - Page ${number}`, suffix)
     .filter(i => !_isUndOrNull(i) && !_isStrEmpty(i))
-    .join(separator)
+    .join(separator || ' – ')
 
   return newTitle
 }

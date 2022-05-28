@@ -28,7 +28,7 @@ import {
   GridOverlay,
   type GridOverlayProps,
 } from '@mui/x-data-grid'
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 
 const classKeys = generateComponentClassKeys('DataTableComponent', [
   'label',
@@ -128,6 +128,7 @@ export interface DataTableProps extends Partial<MuiDataGridProps> {
   RootBoxProps?: Partial<BoxProps>
   LoadingOverlayViewProps?: LoadingOverlayViewProps
   noRowsLabel?: string
+  children?: ReactNode
 }
 
 const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(function RefRenderFn(
