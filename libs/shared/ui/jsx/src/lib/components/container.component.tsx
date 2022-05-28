@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-ui-theme'
-import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import { Container, type ContainerProps as MuiContainerProps } from '@mui/material'
+import {styled} from '@aglyn/shared-ui-theme'
+import {_isEqualitySameType} from '@aglyn/shared-util-guards'
+import {Container, type ContainerProps as MuiContainerProps} from '@mui/material'
 // eslint-disable-next-line no-restricted-imports
-import type { Spacing } from '@mui/system/createTheme/createSpacing'
+import type {Spacing} from '@mui/system/createTheme/createSpacing'
+
 
 export interface ContainerProps extends MuiContainerProps {
   gutterMode?: 'margin' | 'padding'
   gutterY?: Parameters<Spacing> | boolean
+  dense?: boolean
 }
 
 const isBoolean = (value: unknown) => {
@@ -32,14 +34,23 @@ const isBoolean = (value: unknown) => {
 
 const ContainerComponent = styled(Container, {
   name: 'AglynContainer',
-  shouldForwardProp: (propName) => !_isEqualitySameType(propName, 'gutterMode', 'gutterY'),
-})<ContainerProps>(({ disableGutters, gutterMode, gutterY, theme }) => {
-  if (disableGutters) return {}
+  shouldForwardProp: (propName) => !_isEqualitySameType(propName, 'gutterMode', 'gutterY', 'dense'),
+})<ContainerProps>(({disableGutters, gutterMode, gutterY, theme, dense}) => {
+  const base = !dense ? {} : {
+    [`paddingLeft`]: theme.spacing(2),
+    [`paddingRight`]: theme.spacing(2),
+    [theme.breakpoints.up('sm')]: {
+      [`paddingLeft`]: theme.spacing(2),
+      [`paddingRight`]: theme.spacing(2),
+    },
+  }
+  if (disableGutters) return base
 
   const mode = gutterMode === 'margin' ? 'margin' : 'padding'
 
   if (isBoolean(gutterY) && gutterY) {
     return {
+      ...base,
       [`${mode}Top`]: theme.spacing(2),
       [`${mode}Bottom`]: theme.spacing(2),
       [theme.breakpoints.up('md')]: {
@@ -47,19 +58,21 @@ const ContainerComponent = styled(Container, {
         [`${mode}Bottom`]: theme.spacing(3),
       },
     }
-  } else if (!isBoolean(gutterY) && gutterY) {
+  }
+  else if (!isBoolean(gutterY) && gutterY) {
     const space = theme.spacing(
-      ...((Array.isArray(gutterY) ? gutterY : [gutterY]) as Parameters<Spacing>)
+      ...((Array.isArray(gutterY) ? gutterY : [gutterY]) as Parameters<Spacing>),
     )
     return {
+      ...base,
       [`${mode}Top`]: space,
       [`${mode}Bottom`]: space,
     }
   }
-  return {}
+  return base
 })
 ContainerComponent.displayName = 'ContainerComponent'
 ContainerComponent.aglyn = true
 
-export { ContainerComponent }
+export {ContainerComponent}
 export default ContainerComponent

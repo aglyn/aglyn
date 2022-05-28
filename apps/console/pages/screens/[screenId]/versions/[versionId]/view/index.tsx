@@ -148,15 +148,20 @@ function ScreenDetails(props) {
       }}
       headerRight={(
         <AppLink
-          size="small"
-          variant="extended"
-          componentVariant="fab"
+          size="large"
+          variant="contained"
+          componentVariant="button"
           href={besignerUrl}
           title={'Open with besigner'}
           disabled={status !== 'success' || !screen}
+          startIcon={
+            <MdiIcon
+              color="inherit"
+              path={ICON_VARIANT_BESIGNER.path}
+            />
+          }
         >
-          <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} sx={{mr: 0.5}} />
-          Besigner
+          Open Besigner
         </AppLink>
       )}
     >

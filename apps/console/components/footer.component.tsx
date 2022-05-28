@@ -17,7 +17,7 @@
 
 import {BUILD_ID, PACKAGE_VERSION} from '@aglyn/shared-data-enums'
 import {AppLink, ContainerComponent, GridButtons, type GridButtonsProps} from '@aglyn/shared-ui-jsx'
-import {Box, Stack, Typography} from '@mui/material'
+import {Box, Divider, Stack, Typography} from '@mui/material'
 import {forwardRef, type HTMLAttributes} from 'react'
 import CopyrightComponent from '../components/copyright.component'
 import {tailNavigation} from '../constants/shared'
@@ -38,59 +38,50 @@ const FooterComponent = forwardRef<any, FooterProps>(
         component="footer"
         {...rest}
       >
-        <ContainerComponent maxWidth={FOOTER_MAX_WIDTH}>
-          <Stack
-            marginTop={6}
-            paddingBottom={1}
-            paddingTop={2}
-            borderTop={1}
-            flexWrap="wrap"
-            borderColor="divider"
-            alignItems="center"
-            direction="row"
-            // sx={{
-            //   mt: 6,
-            //   pb: 1,
-            //   pt: 2,
-            //   borderTop: 1,
-            //   display: 'flex',
-            //   flexWrap: 'wrap',
-            //   borderColor: 'divider',
-            //   alignItems: 'center',
-            // }}
-          >
+        <ContainerComponent
+          maxWidth={FOOTER_MAX_WIDTH}
+          sx={{mt: 6, pb: 1}}
+        >
+          <Divider sx={{mb: 2}} />
+          <ContainerComponent dense maxWidth={false}>
             <Stack
-              component="div"
-              flexGrow={1}
+              flexWrap="wrap"
+              alignItems="center"
+              direction="row"
             >
-              <CopyrightComponent />
-            </Stack>
+              <Stack
+                component="div"
+                flexGrow={1}
+              >
+                <CopyrightComponent />
+              </Stack>
 
-            <Stack display="flex">
-              <GridButtons
-                spacing={1}
-                ItemComponent={AppLink}
-                items={tailNavigation.map((i) => ({
-                  size: 'small',
-                  componentVariant: 'button',
-                  ...i,
-                }))}
-              />
-            </Stack>
+              <Stack display="flex">
+                <GridButtons
+                  spacing={1}
+                  ItemComponent={AppLink}
+                  items={tailNavigation.map((i) => ({
+                    size: 'small',
+                    componentVariant: 'button',
+                    ...i,
+                  }))}
+                />
+              </Stack>
 
-            <Stack
-              alignItems="space-around"
-              flex="1 1 auto"
-              flexBasis="100%"
-              justifyContent="center"
-            >
-              <Typography align="center" color="textSecondary" variant="overline">
-                <span>{`Version ${PACKAGE_VERSION}`}</span>
-                {' '}
-                <span>{`(${BUILD_ID})`}</span>
-              </Typography>
+              <Stack
+                alignItems="space-around"
+                flex="1 1 auto"
+                flexBasis="100%"
+                justifyContent="center"
+              >
+                <Typography align="center" color="textSecondary" variant="overline">
+                  <span>{`Version ${PACKAGE_VERSION}`}</span>
+                  {' '}
+                  <span>{`(${BUILD_ID})`}</span>
+                </Typography>
+              </Stack>
             </Stack>
-          </Stack>
+          </ContainerComponent>
         </ContainerComponent>
       </Box>
     )
