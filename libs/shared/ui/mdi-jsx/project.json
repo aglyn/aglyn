@@ -5,19 +5,29 @@
   "targets": {
     "lint": {
       "executor": "@nrwl/linter:eslint",
-      "outputs": ["{options.outputFile}"],
+      "outputs": [
+        "{options.outputFile}"
+      ],
       "options": {
-        "lintFilePatterns": ["libs/shared/ui/mdi-jsx/**/*.ts"]
+        "lintFilePatterns": [
+          "libs/shared/ui/mdi-jsx/**/*.ts"
+        ]
       }
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/ui/mdi-jsx"],
+      "outputs": [
+        "coverage/libs/shared/ui/mdi-jsx"
+      ],
       "options": {
         "jestConfig": "libs/shared/ui/mdi-jsx/jest.config.ts",
         "passWithNoTests": true
       }
     }
   },
-  "tags": ["scope:lib", "scope:shared", "scope:ui"]
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:ui"
+  ]
 }

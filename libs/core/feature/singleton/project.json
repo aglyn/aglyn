@@ -5,11 +5,20 @@
   "targets": {
     "lint": {
       "executor": "@nrwl/linter:eslint",
-      "outputs": ["{options.outputFile}"],
+      "outputs": [
+        "{options.outputFile}"
+      ],
       "options": {
-        "lintFilePatterns": ["libs/core/feature/singleton/**/*.ts"]
+        "lintFilePatterns": [
+          "libs/core/feature/singleton/**/*.ts"
+        ]
       }
     }
   },
-  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:framework"]
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:feature",
+    "aglyn:framework"
+  ]
 }

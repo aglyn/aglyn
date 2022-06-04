@@ -2,18 +2,28 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/ui/jsx-forms/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:shared", "scope:ui"],
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:ui"
+  ],
   "targets": {
     "lint": {
       "executor": "@nrwl/linter:eslint",
-      "outputs": ["{options.outputFile}"],
+      "outputs": [
+        "{options.outputFile}"
+      ],
       "options": {
-        "lintFilePatterns": ["libs/shared/ui/jsx-forms/**/*.{ts,tsx,js,jsx}"]
+        "lintFilePatterns": [
+          "libs/shared/ui/jsx-forms/**/*.{ts,tsx,js,jsx}"
+        ]
       }
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/ui/jsx-forms"],
+      "outputs": [
+        "coverage/libs/shared/ui/jsx-forms"
+      ],
       "options": {
         "jestConfig": "libs/shared/ui/jsx-forms/jest.config.ts",
         "passWithNoTests": true

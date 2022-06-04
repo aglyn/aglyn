@@ -6,18 +6,28 @@
     "lint": {
       "executor": "@nrwl/linter:eslint",
       "options": {
-        "lintFilePatterns": ["libs/shared/data/mdi/**/*.ts"]
+        "lintFilePatterns": [
+          "libs/shared/data/mdi/**/*.ts"
+        ]
       },
-      "outputs": ["{options.outputFile}"]
+      "outputs": [
+        "{options.outputFile}"
+      ]
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/data/mdi"],
+      "outputs": [
+        "coverage/libs/shared/data/mdi"
+      ],
       "options": {
         "jestConfig": "libs/shared/data/mdi/jest.config.ts",
         "passWithNoTests": true
       }
     }
   },
-  "tags": ["scope:lib", "scope:shared", "scope:data"]
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:data"
+  ]
 }

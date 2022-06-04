@@ -5,11 +5,19 @@
   "targets": {
     "lint": {
       "executor": "@nrwl/linter:eslint",
-      "outputs": ["{options.outputFile}"],
+      "outputs": [
+        "{options.outputFile}"
+      ],
       "options": {
-        "lintFilePatterns": ["libs/shared/util/fbclient/**/*.ts"]
+        "lintFilePatterns": [
+          "libs/shared/util/fbclient/**/*.ts"
+        ]
       }
     }
   },
-  "tags": ["scope:lib", "scope:shared", "scope:util"]
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:util"
+  ]
 }

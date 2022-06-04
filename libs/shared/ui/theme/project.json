@@ -6,18 +6,28 @@
     "lint": {
       "executor": "@nrwl/linter:eslint",
       "options": {
-        "lintFilePatterns": ["libs/shared/ui/theme/**/*.ts"]
+        "lintFilePatterns": [
+          "libs/shared/ui/theme/**/*.ts"
+        ]
       },
-      "outputs": ["{options.outputFile}"]
+      "outputs": [
+        "{options.outputFile}"
+      ]
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/ui/theme"],
+      "outputs": [
+        "coverage/libs/shared/ui/theme"
+      ],
       "options": {
         "jestConfig": "libs/shared/ui/theme/jest.config.ts",
         "passWithNoTests": true
       }
     }
   },
-  "tags": ["scope:lib", "scope:shared", "scope:ui"]
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:ui"
+  ]
 }
