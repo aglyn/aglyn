@@ -18,6 +18,7 @@
 import {getStaticField} from '@aglyn/shared-util-tools'
 import {MODULE_TYPE, OF_KIND, OF_TYPE} from '../constants/symbol'
 import type {IAglynAppController} from '../types/aglyn-app.types'
+import type {AglynDependency} from '../types/aglyn-depends.types'
 import type {
   AglynModuleEffectListener,
   AglynModuleModelOptions,
@@ -31,7 +32,7 @@ const NS = 'com.aglyn.core.data.framework.model.module'
 
 export abstract class AglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions>
   extends AglynBaseModel<O>
-  implements IAglynModuleModel<O> {
+  implements IAglynModuleModel<O>, AglynDependency {
 
   public static get [Symbol.toStringTag](): string {return TAG}
   public static get [OF_TYPE](): number | symbol {return MODULE_TYPE}
@@ -49,6 +50,17 @@ export abstract class AglynModuleModel<O extends AglynModuleModelOptions = Aglyn
     super(options)
   }
 
+  public load(...args): void {
+    this.__initialize__()
+    this.__activate__()
+    this.setupListeners()
+  }
+  public destroy(...args): void {
+    this.breakdownListeners()
+    this.__deactivate__()
+    this.__destroy__()
+  }
+
   public setupListeners(): this {
     this.listeners.forEach(
       ([flag, method]) => this.app.getEmitter().on(flag, method),
@@ -64,13 +76,11 @@ export abstract class AglynModuleModel<O extends AglynModuleModelOptions = Aglyn
 
   public onInitialize(): this {
     super.onInitialize()
-    this.setupListeners()
     return this
   }
 
   public onDestroy(): this {
     super.onInitialize()
-    this.breakdownListeners()
     return this
   }
 

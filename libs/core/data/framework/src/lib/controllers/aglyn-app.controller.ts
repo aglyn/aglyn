@@ -104,59 +104,41 @@ export class AglynAppController<Options extends AglynAppOptions = AglynAppOption
       AglynEventStateFlag.APP_CREATING,
       AglynEventStateFlag.APP_CREATED,
     ], {appName: this.#appName}, () => {
-      _INTERNAL_CONTEXTS_.set(
-        this.#appName,
-        this.#contextsController = new AglynContextsController(this, {
-          ...this.options.modulesOptions?.contexts,
-        }),
-      )
-      _INTERNAL_COMMANDS_.set(
-        this.#appName,
-        this.#commandsController = new AglynCommandsController(this, {
-          ...this.options.modulesOptions?.commands,
-        }),
-      )
-      _INTERNAL_COMPONENTS_.set(
-        this.#appName,
-        this.#componentsController = new AglynComponentsController(this, {
-          ...this.options.modulesOptions?.components,
-        }),
-      )
-      _INTERNAL_CANVAS_.set(
-        this.#appName,
-        this.#canvasController = new AglynCanvasController(this, {
-          ...this.options.modulesOptions?.canvas,
-        }),
-      )
+      this.#contextsController = new AglynContextsController(this, {
+        ...this.options.modulesOptions?.contexts,
+      })
+      this.#commandsController = new AglynCommandsController(this, {
+        ...this.options.modulesOptions?.commands,
+      })
+      this.#componentsController = new AglynComponentsController(this, {
+        ...this.options.modulesOptions?.components,
+      })
+      this.#canvasController = new AglynCanvasController(this, {
+        ...this.options.modulesOptions?.canvas,
+      })
+      _INTERNAL_CONTEXTS_.set(this.#appName, this.#contextsController)
+      _INTERNAL_COMMANDS_.set(this.#appName, this.#commandsController)
+      _INTERNAL_COMPONENTS_.set(this.#appName, this.#componentsController)
+      _INTERNAL_CANVAS_.set(this.#appName, this.#canvasController)
     })
     return this
   }
   public setupExtensions() {
-    _INTERNAL_EXTENSIONS_.set(
-      this.#appName,
-      this.#extensionsController = new AglynExtensionsController(this, {
-        ...this.options.modulesOptions?.extensions,
-      }),
-    )
+    this.#extensionsController = new AglynExtensionsController(this, {
+      ...this.options.modulesOptions?.extensions,
+    })
+    _INTERNAL_EXTENSIONS_.set(this.#appName, this.#extensionsController)
     return this
   }
 
   #initializeAppModules(): void {
     for (const mod of this.modules) {
-      const namespace = mod.namespace
-      this.handleEvent([
-        AglynEventStateFlag.MODULE_INITIALIZING,
-        AglynEventStateFlag.MODULE_INITIALIZED
-      ], {namespace}, () => {mod.onInitialize(this)})
+      this.addDependency(mod)
     }
   }
   #destroyAppModules(): void {
     for (const mod of this.modules) {
-      const namespace = mod.namespace
-      this.handleEvent([
-        AglynEventStateFlag.MODULE_DESTROYING,
-        AglynEventStateFlag.MODULE_DESTROYED
-      ], {namespace}, () => {mod.onDestroy(this)})
+      this.removeDependency(mod.namespace)
     }
   }
 

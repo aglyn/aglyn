@@ -23,6 +23,7 @@ import {
   type AglynBaseModelT,
   type IAglynBaseModel,
 } from './aglyn-base.types'
+import {AglynDependency} from './aglyn-depends.types'
 
 
 export type AglynModuleEffectListener<Effect extends AglynEventTriggerFlag> = [
@@ -35,7 +36,7 @@ export interface AglynModuleModelOptions extends AglynBaseModelOptions {
 }
 
 export interface IAglynModuleModel<O extends AglynModuleModelOptions = AglynModuleModelOptions>
-  extends IAglynBaseModel<O, IAglynAppController> {
+  extends IAglynBaseModel<O, IAglynAppController>, AglynDependency {
 
   readonly [OF_TYPE]: number | symbol
   readonly [OF_KIND]: number | symbol

@@ -32,23 +32,27 @@ export type AglynDependents = Record<AglynDependencyUid, true>
 export type AglynDependencyDependents = Record<AglynDependencyUid, AglynDependents>
 
 export interface AglynDependency {
-  id: AglynDependencyUid
+  namespace: AglynDependencyUid
   dependencies?: AglynDependencyDependencies
   load(...args: any[]): void
   destroy(...args: any[]): void
 }
 
 export interface AglynDependencyMap {
-  status: AglynDependencyStatuses
-  dependents: AglynDependencyDependents
+  statusByDependencyId: AglynDependencyStatuses
+  dependentsByDependencyId: AglynDependencyDependents
   __: AglynDependenciesById
 }
 
 export interface IAglynDependencyManager {
   dependencies?: AglynDependencyMap
-  dependencyLoaded(id: AglynDependencyUid): boolean
-  dependencyWaiting(id: AglynDependencyUid): boolean
-  addDependency(dependency: AglynDependency): this
   dependency(id: AglynDependencyUid): AglynDependency | undefined
+  dependencyWaiting(id: AglynDependencyUid): boolean
+  dependencyLoading(id: AglynDependencyUid): boolean
+  dependencyUnloading(id: AglynDependencyUid): boolean
+  dependencyLoaded(id: AglynDependencyUid): boolean
+  addDependency(dependency: AglynDependency): this
+  loadDependency(id: AglynDependencyUid): this
+  unloadDependency(id: AglynDependencyUid): this
   removeDependency(id: AglynDependencyUid): this
 }

@@ -69,12 +69,13 @@ export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOpti
   }
 
   #doEvent<F extends AglynEventStateFlag>(flag: F, payload?: AglynEventPayloads[F]): this {
-    this.logger.debug(flag, {
-      namespace: this.namespace,
-      timestamp: Timestamp.now().valueOf(),
-      ...payload || {namespace: this.namespace},
-    })
-    this.emitter.emit(flag, payload || {namespace: this.namespace})
+    const mergedPayload = {
+      ...payload,
+      __event_timestamp__: Timestamp.now().toJSON(),
+      __event_controller__: this.toJSON(),
+    }
+    this.logger.debug(flag, mergedPayload)
+    this.emitter.emit(flag, mergedPayload)
     return this
   }
   #handleEvent<F1 extends AglynEventStateFlag, F2 extends AglynEventStateFlag>(
@@ -114,7 +115,7 @@ export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOpti
     this.handleEvent([
       AglynEventStateFlag.MODULE_INITIALIZING,
       AglynEventStateFlag.MODULE_INITIALIZED,
-    ], undefined, () => {this.onInitialize()})
+    ], {namespace: this.namespace}, () => {this.onInitialize()})
     return this
   }
 
@@ -126,7 +127,7 @@ export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOpti
     this.handleEvent([
       AglynEventStateFlag.MODULE_ACTIVATING,
       AglynEventStateFlag.MODULE_ACTIVATED,
-    ], undefined, () => {this.onActivate()})
+    ], {namespace: this.namespace}, () => {this.onActivate()})
     return this
   }
 
@@ -138,7 +139,7 @@ export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOpti
     this.handleEvent([
       AglynEventStateFlag.MODULE_DEACTIVATING,
       AglynEventStateFlag.MODULE_DEACTIVATED,
-    ], undefined, () => {this.onDeactivate()})
+    ], {namespace: this.namespace}, () => {this.onDeactivate()})
     return this
   }
 
@@ -150,7 +151,7 @@ export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOpti
     this.handleEvent([
       AglynEventStateFlag.MODULE_DESTROYING,
       AglynEventStateFlag.MODULE_DESTROYED,
-    ], undefined, () => {this.onDestroy()})
+    ], {namespace: this.namespace}, () => {this.onDestroy()})
     return this
   }
 

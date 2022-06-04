@@ -102,16 +102,16 @@ const createCachedMixin = (mixin) => cacheMixin(mixinHasInstance(createMixin(mix
 const AglynDependencyManager = createCachedMixin((superclass) => class extends superclass implements IAglynDependencyManager {
 
   readonly #dependencies: AglynDependencyMap = {
-    status: {},
-    dependents: {},
+    statusByDependencyId: {},
+    dependentsByDependencyId: {},
     __: {},
   }
 
   public get dependencies(): ImmutableSlightlyDeep<AglynDependencyMap> {
-    const {status, dependents, __} = this.#dependencies
+    const {statusByDependencyId, dependentsByDependencyId, __} = this.#dependencies
     return {
-      status: {...status},
-      dependents: {...dependents},
+      statusByDependencyId: {...statusByDependencyId},
+      dependentsByDependencyId: {...dependentsByDependencyId},
       __: {...__},
     }
   }
@@ -120,10 +120,10 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
     return this.dependencies.__[dependencyId]
   }
   #dependents(dependencyId: AglynDependencyUid): AglynDependents | undefined {
-    return this.dependencies.dependents[dependencyId]
+    return this.dependencies.dependentsByDependencyId[dependencyId]
   }
   #dependencyStatus(dependencyId: AglynDependencyUid): AglynDependencyStatus | undefined {
-    return this.dependencies.status[dependencyId]
+    return this.dependencies.statusByDependencyId[dependencyId]
   }
   #hasDependency(dependencyId: AglynDependencyUid): boolean {
     return Boolean(dependencyId && this.#dependency(dependencyId))
@@ -154,8 +154,8 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
     dependencyId: AglynDependencyUid,
     dependency: AglynDependency,
   ): this {
-    this.#dependencies.status[dependencyId] = AglynDependencyStatus.WAITING
-    this.#dependencies.dependents[dependencyId] ||= {}
+    this.#dependencies.statusByDependencyId[dependencyId] = AglynDependencyStatus.WAITING
+    this.#dependencies.dependentsByDependencyId[dependencyId] ||= {}
     this.#dependencies.__[dependencyId] = dependency
     return this
   }
@@ -163,7 +163,7 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
     dependencyId: AglynDependencyUid,
   ): this {
     for (const dependentId of Object.keys(this.#dependency(dependencyId)?.dependencies || {})) {
-      const dependents = this.#dependencies.dependents[dependentId] ||= {}
+      const dependents = this.#dependencies.dependentsByDependencyId[dependentId] ||= {}
       dependents[dependencyId] = true
     }
     return this
@@ -182,9 +182,9 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
     dependencyId: AglynDependencyUid,
   ): this {
     if (this.#dependencyWaiting(dependencyId)) {
-      this.#dependencies.status[dependencyId] = AglynDependencyStatus.LOADING
-      this.dependency(dependencyId)?.load?.()
-      this.#dependencies.status[dependencyId] = AglynDependencyStatus.LOADED
+      this.#dependencies.statusByDependencyId[dependencyId] = AglynDependencyStatus.LOADING
+      this.#dependency(dependencyId)?.load?.()
+      this.#dependencies.statusByDependencyId[dependencyId] = AglynDependencyStatus.LOADED
     }
     return this
   }
@@ -200,17 +200,17 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
     dependencyId: AglynDependencyUid,
   ): this {
     if (this.#dependencyLoaded(dependencyId)) {
-      this.#dependencies.status[dependencyId] = AglynDependencyStatus.UNLOADING
-      this.dependency(dependencyId)?.destroy?.()
-      this.#dependencies.status[dependencyId] = AglynDependencyStatus.WAITING
+      this.#dependencies.statusByDependencyId[dependencyId] = AglynDependencyStatus.UNLOADING
+      this.#dependency(dependencyId)?.destroy?.()
+      this.#dependencies.statusByDependencyId[dependencyId] = AglynDependencyStatus.WAITING
     }
     return this
   }
   #removeSelfDependencyProperties(
     dependencyId: AglynDependencyUid,
   ): this {
-    delete this.#dependencies.dependents[dependencyId]
-    delete this.#dependencies.status[dependencyId]
+    delete this.#dependencies.dependentsByDependencyId[dependencyId]
+    delete this.#dependencies.statusByDependencyId[dependencyId]
     delete this.#dependencies.__[dependencyId]
     return this
   }
@@ -218,7 +218,7 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
     dependencyId: AglynDependencyUid,
   ): this {
     for (const dependentId of Object.keys(this.#dependency(dependencyId)?.dependencies || {})) {
-      delete this.#dependencies.dependents[dependentId]?.[dependencyId]
+      delete this.#dependencies.dependentsByDependencyId[dependentId]?.[dependencyId]
     }
     return this
   }
@@ -340,7 +340,7 @@ const AglynDependencyManager = createCachedMixin((superclass) => class extends s
    * Step 3: Load dependencies waiting with all requirements met
    */
   public addDependency(dependency: AglynDependency): this {
-    return this.#handleAddingDependencyAndDependents(dependency?.id, dependency)
+    return this.#handleAddingDependencyAndDependents(dependency?.namespace, dependency)
   }
 
   /**
