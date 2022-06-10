@@ -23,33 +23,36 @@ import {
   type createEvent as createEffectorEvent,
 } from 'effector'
 
-import {type AppUUN} from '../types/aglyn-app.types'
-import {CanvasContext} from '../types/aglyn-canvas.types'
+import {type AppUUN} from '../definitions/aglyn-app.types'
+import {CanvasContext} from '../definitions/aglyn-canvas.types'
 import {
   type AglynCommandListener,
   type AglynCommandResolver,
   type CommandUId,
-} from '../types/aglyn-commands.types'
+} from '../definitions/aglyn-commands.types'
 import {
   type AglynComponentsBundle,
   type AglynComponentSchema,
   type BundleUId,
   type ComponentId,
   type IAglynComponent,
-} from '../types/aglyn-components.types'
+} from '../definitions/aglyn-components.types'
 import {
   type ContextStore,
   type ContextStoreOptions,
   type ContextStoreUid,
-} from '../types/aglyn-contexts.types'
+} from '../definitions/aglyn-contexts.types'
 import {
   type AglynElementDenormalized,
   type AglynElementNormalized,
   type ElementId,
-} from '../types/aglyn-elements.types'
-import {type AglynExtensionOptions, type IAglynExtension} from '../types/aglyn-extension.types'
-import {type AglynExtensionLoader, type ExtensionUUN} from '../types/aglyn-extensions.types'
-import {type PayloadData} from '../types/generic.types'
+} from '../definitions/aglyn-elements.types'
+import {
+  type AglynExtensionOptions,
+  type IAglynExtension,
+} from '../definitions/aglyn-extension.types'
+import {type AglynExtensionLoader, type ExtensionUUN} from '../definitions/aglyn-extensions.types'
+import {type PayloadData} from '../definitions/generic.types'
 
 
 export enum AglynEventStateFlag {

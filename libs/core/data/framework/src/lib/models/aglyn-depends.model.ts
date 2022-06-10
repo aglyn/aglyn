@@ -24,7 +24,7 @@ import {
   type AglynDependencyUid,
   AglynDependents,
   type IAglynDependencyManager,
-} from '../types/aglyn-depends.types'
+} from '../definitions/aglyn-depends.types'
 
 
 type Mixin<S, T, C extends new (...args: any[]) => T> = {

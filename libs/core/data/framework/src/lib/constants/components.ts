@@ -18,7 +18,11 @@
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import {FieldComponentType} from '@aglyn/shared-ui-jsx-forms'
-import {type AglynComponentPropsFormSchema} from '../types/aglyn-components.types'
+import type {AppUUN} from '../definitions/aglyn-app.types'
+import type {
+  AglynComponentPropsFormSchema,
+  IAglynComponentsController,
+} from '../definitions/aglyn-components.types'
 
 
 export {FieldComponentType}
@@ -28,6 +32,7 @@ export enum ComponentsLinealDirectiveFlag {
   DISALLOW = 0x02,
 }
 
+export const _INTERNAL_COMPONENTS_: Map<AppUUN, IAglynComponentsController> = new Map()
 export const ELEMENT_ID_LENGTH = 10
 
 

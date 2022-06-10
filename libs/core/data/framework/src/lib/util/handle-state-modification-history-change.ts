@@ -16,7 +16,7 @@
  */
 
 import {copy} from '@aglyn/shared-util-tools'
-import type {ModificationHistoryState} from '../types/generic.types'
+import type {ModificationHistoryState} from '../definitions/generic.types'
 
 
 const MAX_HISTORY = 25

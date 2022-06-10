@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import {_INTERNAL_EXTENSIONS_} from '../constants/_internal'
 import {AglynEventTriggerFlag, type AglynEventTriggerPayload} from '../constants/emitter'
-import {type IAglynAppController} from '../types/aglyn-app.types'
-import {type IAglynExtension} from '../types/aglyn-extension.types'
-import {type IAglynExtensionsController} from '../types/aglyn-extensions.types'
+import {_INTERNAL_EXTENSIONS_} from '../constants/extensions'
+import {type IAglynAppController} from '../definitions/aglyn-app.types'
+import {type IAglynExtension} from '../definitions/aglyn-extension.types'
+import {type IAglynExtensionsController} from '../definitions/aglyn-extensions.types'
 import {_validateAppArg} from './app.api'
 
 

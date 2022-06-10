@@ -24,13 +24,13 @@ import {
   OF_KIND,
   OF_TYPE,
 } from '../constants/symbol'
-import {type AglynAppModule} from '../types/aglyn-app.types'
+import {type AglynAppModule} from '../definitions/aglyn-app.types'
 import {
   type AglynCommandListener,
   type AglynCommandResolver,
-} from '../types/aglyn-commands.types'
-import {type IAglynComponent} from '../types/aglyn-components.types'
-import {type IAglynExtension} from '../types/aglyn-extension.types'
+} from '../definitions/aglyn-commands.types'
+import {type IAglynComponent} from '../definitions/aglyn-components.types'
+import {type IAglynExtension} from '../definitions/aglyn-extension.types'
 
 
 export function typeOf(object: unknown) {

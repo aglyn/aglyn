@@ -20,7 +20,7 @@ import {
   type AglynElementHierarchy,
   type AglynElementsDenormalized,
   type ElementId,
-} from '../types/aglyn-elements.types'
+} from '../definitions/aglyn-elements.types'
 import isRootElementId from './is-root-element-id'
 
 

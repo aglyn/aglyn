@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {_INTERNAL_CONTEXTS_} from '../constants/_internal'
+import {_INTERNAL_CONTEXTS_} from '../constants/contexts'
 import {
   type ContextsCreateEffectPayload,
   type ContextsCreateEventPayload,
@@ -24,13 +24,13 @@ import {
   type ContextsGetStorePayload,
   type ContextsSetStorePayload,
 } from '../constants/emitter'
-import {type IAglynAppController} from '../types/aglyn-app.types'
+import {type IAglynAppController} from '../definitions/aglyn-app.types'
 import {
   type ContextEffect,
   type ContextEvent,
   type ContextStore,
   type IAglynContextsController,
-} from '../types/aglyn-contexts.types'
+} from '../definitions/aglyn-contexts.types'
 import {_validateAppArg} from './app.api'
 
 

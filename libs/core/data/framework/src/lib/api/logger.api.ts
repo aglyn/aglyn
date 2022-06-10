@@ -18,7 +18,7 @@
 import {Logger, type LogHandler, type  LogLevelString} from '@aglyn/shared-util-logger'
 import {AGLYN_LOGGER, type AglynLogger} from '../constants/logger'
 import {AglynAppController} from '../controllers/aglyn-app.controller'
-import {type IAglynAppController} from '../types/aglyn-app.types'
+import {type IAglynAppController} from '../definitions/aglyn-app.types'
 import {_validateAppArg} from './app.api'
 
 

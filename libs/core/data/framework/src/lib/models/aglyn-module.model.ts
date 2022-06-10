@@ -17,13 +17,13 @@
 
 import {getStaticField} from '@aglyn/shared-util-tools'
 import {MODULE_TYPE, OF_KIND, OF_TYPE} from '../constants/symbol'
-import type {IAglynAppController} from '../types/aglyn-app.types'
-import type {AglynDependency} from '../types/aglyn-depends.types'
+import type {IAglynAppController} from '../definitions/aglyn-app.types'
+import type {AglynDependency} from '../definitions/aglyn-depends.types'
 import type {
   AglynModuleEffectListener,
   AglynModuleModelOptions,
   IAglynModuleModel,
-} from '../types/aglyn-module.types'
+} from '../definitions/aglyn-module.types'
 import {AglynBaseModel} from './aglyn-base.model'
 
 

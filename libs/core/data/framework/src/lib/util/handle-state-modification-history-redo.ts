@@ -17,7 +17,7 @@
 
 import {_isArrEmpty} from '@aglyn/shared-util-guards'
 import {copy} from '@aglyn/shared-util-tools'
-import type {ModificationHistoryState} from '../types/generic.types'
+import type {ModificationHistoryState} from '../definitions/generic.types'
 
 
 export function handleStateModificationHistoryRedo<S>(

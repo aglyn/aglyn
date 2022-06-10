@@ -26,7 +26,7 @@ import {
 } from '../constants/emitter'
 import {AGLYN_ERROR, type AglynErrorFactory} from '../constants/error'
 import {AGLYN_LOGGER, type AglynLogger} from '../constants/logger'
-import type {AglynBaseModelOptions, IAglynBaseModel} from '../types/aglyn-base.types'
+import type {AglynBaseModelOptions, IAglynBaseModel} from '../definitions/aglyn-base.types'
 
 
 const TAG = 'AglynBaseModel'

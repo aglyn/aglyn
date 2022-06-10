@@ -30,17 +30,17 @@ import {
 } from '../constants/emitter'
 import {AGLYN_ERROR, AglynErrorEventFlag} from '../constants/error'
 import {AglynLifecycleFlag} from '../constants/lifecycle'
-import {AglynExtension} from '../models/aglyn-extension.model'
-import {AglynModuleModel} from '../models/aglyn-module.model'
-import type {IAglynAppController} from '../types/aglyn-app.types'
-import type {IAglynExtension} from '../types/aglyn-extension.types'
+import type {IAglynAppController} from '../definitions/aglyn-app.types'
+import type {IAglynExtension} from '../definitions/aglyn-extension.types'
 import type {
   AglynExtensionMap,
   AglynExtensionsControllerOptions,
   ExtensionUUN,
   IAglynExtensionsController,
-} from '../types/aglyn-extensions.types'
-import type {AglynModuleEffectListener} from '../types/aglyn-module.types'
+} from '../definitions/aglyn-extensions.types'
+import type {AglynModuleEffectListener} from '../definitions/aglyn-module.types'
+import {AglynExtension} from '../models/aglyn-extension.model'
+import {AglynModuleModel} from '../models/aglyn-module.model'
 import {isAglynExtension, isAglynModule} from '../util/aglyn-is'
 
 

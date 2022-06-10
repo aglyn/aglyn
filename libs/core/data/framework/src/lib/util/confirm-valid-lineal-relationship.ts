@@ -22,7 +22,7 @@ import {
   type BundleUId,
   type ComponentId,
   type ComponentsLinealOrder,
-} from '../types/aglyn-components.types'
+} from '../definitions/aglyn-components.types'
 
 
 export enum InvalidLinealRelationFlag {

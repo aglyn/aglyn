@@ -15,21 +15,6 @@
  * limitations under the License.
  */
 
-import {type AppUUN, type IAglynAppController} from '../types/aglyn-app.types'
-import {type IAglynCanvasController} from '../types/aglyn-canvas.types'
-import {type IAglynCommandsController} from '../types/aglyn-commands.types'
-import {type IAglynComponentsController} from '../types/aglyn-components.types'
-import {type IAglynContextsController} from '../types/aglyn-contexts.types'
-import {type IAglynExtensionsController} from '../types/aglyn-extensions.types'
-
-
-export const _INTERNAL_APPS_: Map<AppUUN, IAglynAppController> = new Map()
-export const _INTERNAL_EXTENSIONS_: Map<AppUUN, IAglynExtensionsController> = new Map()
-export const _INTERNAL_COMMANDS_: Map<AppUUN, IAglynCommandsController> = new Map()
-export const _INTERNAL_COMPONENTS_: Map<AppUUN, IAglynComponentsController> = new Map()
-export const _INTERNAL_CANVAS_: Map<AppUUN, IAglynCanvasController> = new Map()
-export const _INTERNAL_CONTEXTS_: Map<AppUUN, IAglynContextsController> = new Map()
-
 
 const y = new Date().getFullYear()
 export const CONSOLE_GREETING_STYLES = 'font-family:"Courier New",monospace;color:#E040FB;font-size:12px;'

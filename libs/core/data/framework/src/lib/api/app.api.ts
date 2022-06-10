@@ -16,13 +16,12 @@
  */
 
 import {_isObj, _isStrEmpty} from '@aglyn/shared-util-guards'
-import {_INTERNAL_APPS_} from '../constants/_internal'
-import {DEFAULT_APP_UUN} from '../constants/app'
+import {_INTERNAL_APPS_, DEFAULT_APP_UUN} from '../constants/app'
 import {AGLYN_EMITTER, AglynEventStateFlag} from '../constants/emitter'
 import {AGLYN_ERROR, AglynErrorEventFlag} from '../constants/error'
 import {AGLYN_LOGGER} from '../constants/logger'
 import {AglynAppController} from '../controllers/aglyn-app.controller'
-import type {AglynAppOptions, AppUUN, IAglynAppController} from '../types/aglyn-app.types'
+import type {AglynAppOptions, AppUUN, IAglynAppController} from '../definitions/aglyn-app.types'
 
 
 export function getAllApps(): IAglynAppController[] {

@@ -40,15 +40,15 @@ import type {
   CanvasUndoPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import {AglynModuleModel} from '../models/aglyn-module.model'
-import type {IAglynAppController} from '../types/aglyn-app.types'
+import type {IAglynAppController} from '../definitions/aglyn-app.types'
 import type {
   AglynCanvasControllerOptions,
   CanvasContext,
   IAglynCanvasController,
-} from '../types/aglyn-canvas.types'
-import type {AglynElementsDenormalized} from '../types/aglyn-elements.types'
-import type {AglynModuleEffectListener} from '../types/aglyn-module.types'
+} from '../definitions/aglyn-canvas.types'
+import type {AglynElementsDenormalized} from '../definitions/aglyn-elements.types'
+import type {AglynModuleEffectListener} from '../definitions/aglyn-module.types'
+import {AglynModuleModel} from '../models/aglyn-module.model'
 import denormalizeComponentElementData from '../util/denormalize-component-element-data'
 import handleStateModificationHistoryChange from '../util/handle-state-modification-history-change'
 import handleStateModificationHistoryRedo from '../util/handle-state-modification-history-redo'

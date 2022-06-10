@@ -28,8 +28,7 @@ import {
   type ContextsGetStorePayload,
   type ContextsSetStorePayload,
 } from '../constants/emitter'
-import {AglynModuleModel} from '../models/aglyn-module.model'
-import type {IAglynAppController} from '../types/aglyn-app.types'
+import type {IAglynAppController} from '../definitions/aglyn-app.types'
 import type {
   AglynContextsControllerOptions,
   ContextDomain,
@@ -38,8 +37,9 @@ import type {
   ContextStore,
   ContextStoreUid,
   IAglynContextsController,
-} from '../types/aglyn-contexts.types'
-import type {AglynModuleEffectListener} from '../types/aglyn-module.types'
+} from '../definitions/aglyn-contexts.types'
+import type {AglynModuleEffectListener} from '../definitions/aglyn-module.types'
+import {AglynModuleModel} from '../models/aglyn-module.model'
 
 
 const TAG = 'AglynContexts'

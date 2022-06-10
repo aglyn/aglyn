@@ -14,12 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {CANVAS_ROOT_ELEMENT_ID} from '../constants/canvas'
-import {ElementId} from '../definitions/aglyn-elements.types'
+
+import type {AppUUN} from '../definitions/aglyn-app.types'
+import type {IAglynExtensionsController} from '../definitions/aglyn-extensions.types'
 
 
-export const isRootElementId = ($id: ElementId): $id is CANVAS_ROOT_ELEMENT_ID => {
-  return $id === CANVAS_ROOT_ELEMENT_ID
-}
-
-export default isRootElementId
+export const _INTERNAL_EXTENSIONS_: Map<AppUUN, IAglynExtensionsController> = new Map()

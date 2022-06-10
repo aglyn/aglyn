@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,5 +15,10 @@
  * limitations under the License.
  */
 
+import type {AppUUN} from '../definitions/aglyn-app.types'
+import type {IAglynCanvasController} from '../definitions/aglyn-canvas.types'
+
+
+export const _INTERNAL_CANVAS_: Map<AppUUN, IAglynCanvasController> = new Map()
 export const CANVAS_ROOT_ELEMENT_ID = '_@_'
 export type CANVAS_ROOT_ELEMENT_ID = typeof CANVAS_ROOT_ELEMENT_ID

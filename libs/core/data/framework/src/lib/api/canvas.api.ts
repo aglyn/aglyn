@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {_INTERNAL_CANVAS_} from '../constants/_internal'
+import {_INTERNAL_CANVAS_} from '../constants/canvas'
 import type {
   CanvasAddElementPayload,
   CanvasDeleteElementPayload,
@@ -31,8 +31,8 @@ import type {
   CanvasUndoPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type {IAglynAppController} from '../types/aglyn-app.types'
-import type {IAglynCanvasController} from '../types/aglyn-canvas.types'
+import type {IAglynAppController} from '../definitions/aglyn-app.types'
+import type {IAglynCanvasController} from '../definitions/aglyn-canvas.types'
 import {_validateAppArg} from './app.api'
 
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {_INTERNAL_COMMANDS_} from '../constants/_internal'
+import {_INTERNAL_COMMANDS_} from '../constants/commands'
 import type {
   CommandsRegisterListenerPayload,
   CommandsRemoveResolverPayload,
@@ -23,8 +23,8 @@ import type {
   CommandsTriggerPayload,
   CommandsUnregisterListenerPayload,
 } from '../constants/emitter'
-import type {IAglynAppController} from '../types/aglyn-app.types'
-import type {IAglynCommandsController} from '../types/aglyn-commands.types'
+import type {IAglynAppController} from '../definitions/aglyn-app.types'
+import type {IAglynCommandsController} from '../definitions/aglyn-commands.types'
 import {_validateAppArg} from './app.api'
 
 

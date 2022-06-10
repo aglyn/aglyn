@@ -23,7 +23,7 @@ import type {
   AglynElementsDenormalized,
   AglynElementsNormalized,
   ElementId,
-} from '../types/aglyn-elements.types'
+} from '../definitions/aglyn-elements.types'
 
 
 const normalizeData = (

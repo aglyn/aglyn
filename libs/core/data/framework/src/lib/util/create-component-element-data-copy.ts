@@ -19,7 +19,7 @@ import type {
   AglynElementNormalized,
   AglynElementsDenormalized,
   ElementId,
-} from '../types/aglyn-elements.types'
+} from '../definitions/aglyn-elements.types'
 import createComponentElementData from './create-component-element-data'
 import normalizeComponentElementData from './normalize-component-element-data'
 

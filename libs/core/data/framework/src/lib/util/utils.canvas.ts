@@ -32,8 +32,8 @@ import type {
   CanvasSetElementsPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type {CanvasContext} from '../types/aglyn-canvas.types'
-import type {AglynElementsDenormalized, ElementId} from '../types/aglyn-elements.types'
+import type {CanvasContext} from '../definitions/aglyn-canvas.types'
+import type {AglynElementsDenormalized, ElementId} from '../definitions/aglyn-elements.types'
 import {createComponentElementDataCopy} from './create-component-element-data-copy'
 import {denormalizeComponentElementData} from './denormalize-component-element-data'
 import {getComponentElementHierarchy} from './get-component-element-hierarchy'

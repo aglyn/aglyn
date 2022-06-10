@@ -16,33 +16,31 @@
  */
 
 import {getStaticField, truthy} from '@aglyn/shared-util-tools'
-import {
-  _INTERNAL_CANVAS_,
-  _INTERNAL_COMMANDS_,
-  _INTERNAL_COMPONENTS_,
-  _INTERNAL_CONTEXTS_,
-  _INTERNAL_EXTENSIONS_,
-} from '../constants/_internal'
 import {DEFAULT_APP_UUN} from '../constants/app'
+import {_INTERNAL_CANVAS_} from '../constants/canvas'
+import {_INTERNAL_COMMANDS_} from '../constants/commands'
+import {_INTERNAL_COMPONENTS_} from '../constants/components'
+import {_INTERNAL_CONTEXTS_} from '../constants/contexts'
 import {AglynEventStateFlag, AglynEventTriggerFlag} from '../constants/emitter'
+import {_INTERNAL_EXTENSIONS_} from '../constants/extensions'
 import {AGLYN_PLATFORM, AglynPlatform} from '../constants/platform'
 import {AglynVersion, SDK_VERSION} from '../constants/version'
-import {AglynBaseModel} from '../models/aglyn-base.model'
-import AglynDependencyManager from '../models/aglyn-depends.model'
 import type {
   AglynAppOptions,
   AglynEffectOptions,
   AppUUN,
   IAglynAppController,
-} from '../types/aglyn-app.types'
-import type {AglynBaseModelT} from '../types/aglyn-base.types'
-import type {IAglynCanvasController} from '../types/aglyn-canvas.types'
-import type {IAglynCommandsController} from '../types/aglyn-commands.types'
-import type {IAglynComponentsController} from '../types/aglyn-components.types'
-import type {IAglynContextsController} from '../types/aglyn-contexts.types'
-import type {IAglynDependencyManager} from '../types/aglyn-depends.types'
-import type {IAglynExtensionsController} from '../types/aglyn-extensions.types'
-import type {IAglynModuleModel} from '../types/aglyn-module.types'
+} from '../definitions/aglyn-app.types'
+import type {AglynBaseModelT} from '../definitions/aglyn-base.types'
+import type {IAglynCanvasController} from '../definitions/aglyn-canvas.types'
+import type {IAglynCommandsController} from '../definitions/aglyn-commands.types'
+import type {IAglynComponentsController} from '../definitions/aglyn-components.types'
+import type {IAglynContextsController} from '../definitions/aglyn-contexts.types'
+import type {IAglynDependencyManager} from '../definitions/aglyn-depends.types'
+import type {IAglynExtensionsController} from '../definitions/aglyn-extensions.types'
+import type {IAglynModuleModel} from '../definitions/aglyn-module.types'
+import {AglynBaseModel} from '../models/aglyn-base.model'
+import AglynDependencyManager from '../models/aglyn-depends.model'
 import AglynCanvasController from './aglyn-canvas.controller'
 import AglynCommandsController from './aglyn-commands.controller'
 import AglynComponentsController from './aglyn-components.controller'

@@ -16,7 +16,7 @@
  */
 
 import {type OrUndef} from '@aglyn/shared-data-types'
-import {_INTERNAL_COMPONENTS_} from '../constants/_internal'
+import {_INTERNAL_COMPONENTS_} from '../constants/components'
 import {
   type ComponentGetPayload,
   type ComponentRegisterPayload,
@@ -26,7 +26,7 @@ import {
   type ComponentSchemaGetPayload,
   type ComponentUnregisterPayload,
 } from '../constants/emitter'
-import {type IAglynAppController} from '../types/aglyn-app.types'
+import {type IAglynAppController} from '../definitions/aglyn-app.types'
 import {
   type AglynComponentElementTemplate,
   type AglynComponentsBundle,
@@ -36,7 +36,7 @@ import {
   type ComponentsRegistryValues,
   type IAglynComponent,
   type IAglynComponentsController,
-} from '../types/aglyn-components.types'
+} from '../definitions/aglyn-components.types'
 import {_validateAppArg} from './app.api'
 
 

@@ -21,8 +21,8 @@ import defaultsDeep from 'lodash-es/defaultsDeep'
 import type {
   AglynComponentElementTemplate,
   AglynComponentTemplateData,
-} from '../types/aglyn-components.types'
-import type {AglynElementNormalized} from '../types/aglyn-elements.types'
+} from '../definitions/aglyn-components.types'
+import type {AglynElementNormalized} from '../definitions/aglyn-elements.types'
 import createComponentElementId from './create-component-element-id'
 
 
