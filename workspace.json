@@ -23,6 +23,7 @@
     "shared-data-types": "libs/shared/data/types",
     "shared-feature-fbclient": "libs/shared/feature/fbclient",
     "shared-feature-fbserver": "libs/shared/feature/fbserver",
+    "shared-ui-color-picker": "libs/shared/ui/color-picker",
     "shared-ui-jsx": "libs/shared/ui/jsx",
     "shared-ui-jsx-forms": "libs/shared/ui/jsx-forms",
     "shared-ui-mdi-jsx": "libs/shared/ui/mdi-jsx",

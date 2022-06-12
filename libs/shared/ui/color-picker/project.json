@@ -1,0 +1,57 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/ui/color-picker/src",
+  "projectType": "library",
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:ui"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nrwl/web:rollup",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/shared/ui/color-picker",
+        "tsConfig": "libs/shared/ui/color-picker/tsconfig.lib.json",
+        "project": "libs/shared/ui/color-picker/package.json",
+        "entryFile": "libs/shared/ui/color-picker/src/index.ts",
+        "external": [
+          "@emotion/react/jsx-runtime"
+        ],
+        "rollupConfig": "@nrwl/react/plugins/bundle-rollup",
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/shared/ui/color-picker/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": [
+        "{options.outputFile}"
+      ],
+      "options": {
+        "lintFilePatterns": [
+          "libs/shared/ui/color-picker/**/*.{ts,tsx,js,jsx}"
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nrwl/jest:jest",
+      "outputs": [
+        "coverage/libs/shared/ui/color-picker"
+      ],
+      "options": {
+        "jestConfig": "libs/shared/ui/color-picker/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

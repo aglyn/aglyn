@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+import {
+  ColorPicker as AglynColorPicker,
+  type ColorPickerProps as AglynColorPickerProps,
+} from '@aglyn/shared-ui-color-picker'
 import {styled} from '@aglyn/shared-ui-theme'
 import {FormFieldGrid, validationError} from '@data-driven-forms/mui-component-mapper'
 import {useFieldApi, type UseFieldApiComponentConfig} from '@data-driven-forms/react-form-renderer'
@@ -33,7 +37,6 @@ import {
   type TextFieldProps,
 } from '@mui/material'
 import {forwardRef, useCallback, useId, useMemo, useRef, useState} from 'react'
-import {RGBColor, SketchPicker, SketchPickerProps} from 'react-color'
 
 
 interface TextFieldColorSwatchProps extends Partial<InputAdornmentProps> {
@@ -80,27 +83,10 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
 )
 TextFieldColorSwatch.displayName = 'AglynTextFieldColorSwatch'
 
-const FieldColorPicker = forwardRef<any, Partial<SketchPickerProps>>(
-  function RefRenderFn(props, ref) {
-    const {...rest} = props
-
-    return (
-      <SketchPicker
-        ref={ref}
-        width={null}
-        styles={{
-          // picker: {boxShadow: 'none'} as any,
-        }}
-        {...rest}
-      />
-    )
-  },
-)
-FieldColorPicker.displayName = 'AglynFieldColorPicker'
 
 type InternalColorPickerProps = Partial<TextFieldProps> & {
-  FormFieldGridProps?: GridProps;
-  ColorPickerProps?: Partial<SketchPickerProps>
+  FormFieldGridProps?: Partial<GridProps>
+  ColorPickerProps?: Partial<AglynColorPickerProps>
   FormControlProps?: Partial<MuiFormControlProps>
   PopperProps?: Partial<PopperProps>
   presetColors?: string[]
@@ -108,6 +94,12 @@ type InternalColorPickerProps = Partial<TextFieldProps> & {
 
 export type ColorPickerProps = InternalColorPickerProps & UseFieldApiComponentConfig
 
+type RGBColor = {
+  r: number
+  g: number
+  b: number
+  a: number
+}
 
 const getStrValue = (value: RGBColor | string) => {
   if (typeof value === 'string') return value
@@ -219,8 +211,9 @@ const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
               disablePortal
               {...PopperProps}
             >
-              <FieldColorPicker
+              <AglynColorPicker
                 {...ColorPickerProps}
+                width={null}
                 color={value}
                 onChange={handleColorChange}
                 presetColors={presetColors}
@@ -234,9 +227,6 @@ const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
 )
 
 ColorPickerComponent.defaultProps = {
-  FormFieldGridProps: {},
-  PopperProps: {},
-  ColorPickerProps: {},
 }
 
 export {ColorPickerComponent}
