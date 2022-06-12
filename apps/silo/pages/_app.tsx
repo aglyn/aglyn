@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-import { APP_CONSOLE, IS_PRODUCTION } from '@aglyn/shared-data-enums'
-import {
-  consoleThemeDark,
-  consoleThemeLight,
-  createWithThemeProvider,
-} from '@aglyn/shared-ui-theme'
-import { ConfirmationProviderComponent, LoadingLayoutComponent } from '@aglyn/shared-ui-jsx'
-import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
-import { SnackbarProvider } from '@aglyn/shared-ui-snackstack'
-import { Fragment } from 'react'
+import {APP_CONSOLE, IS_PRODUCTION} from '@aglyn/shared-data-enums'
+import {ConfirmationProviderComponent, LoadingLayoutComponent} from '@aglyn/shared-ui-jsx'
+import {_AppComponent, type _AppProps} from '@aglyn/shared-ui-next'
+import {SnackbarProvider} from '@aglyn/shared-ui-snackstack'
+import {consoleThemeDark, consoleThemeLight, createWithThemeProvider} from '@aglyn/shared-ui-theme'
+import {Fragment} from 'react'
 import './styles.css'
+
 
 const withThemeProvider = createWithThemeProvider({
   theme: [consoleThemeLight, consoleThemeDark],
@@ -37,7 +34,9 @@ const MainComponent = withThemeProvider((props: any) => {
   return (
     <LoadingLayoutComponent>
       <ConfirmationProviderComponent>
-        <SnackbarProvider>{children}</SnackbarProvider>
+        <SnackbarProvider>
+          {children}
+        </SnackbarProvider>
       </ConfirmationProviderComponent>
     </LoadingLayoutComponent>
   )

@@ -15,20 +15,58 @@
  * limitations under the License.
  */
 
+import {getApp, getCanvasDenormalizedElementsStore} from '@aglyn/core-data-framework'
+import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
+import {useBesignerAppContext} from '@aglyn/core-feature-besigner'
 import '@aglyn/core-feature-singleton'
-import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
+import {HAS_BROWSER} from '@aglyn/shared-data-enums'
+import {LOADING_OVERLAY_ELEMENT, useLoading} from '@aglyn/shared-ui-jsx'
 import {useNextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
-import {Stack, Typography} from '@mui/material'
+import {encode} from '@msgpack/msgpack'
+import {Button, Stack, Typography} from '@mui/material'
 import {doc} from 'firebase/firestore'
+import dynamic from 'next/dynamic'
 import {useRouter} from 'next/router'
-import {useEffect} from 'react'
+import {useCallback, useEffect} from 'react'
 import {useFirestore, useFirestoreDocDataOnce} from 'reactfire'
-import BesignerIframeComponent from '../../../../../../components/besigner-iframe.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
+import '../../../../../../constants/app-setup'
 
 
+const AglynBesigner = dynamic<BesignerComponentProps>(
+  () => import('@aglyn/core-feature-besigner').then((mod) => mod.BesignerComponent),
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+)
+
+
+function InnerBesigner(props: {screen}) {
+  const {screen} = props
+  const elements = screen?.elements
+  const app = useBesignerAppContext()
+  const {queueLoading} = useLoading()
+  const handleClick = useCallback(async () => {
+    const dequeueLoading = queueLoading()
+    // const elements = app?.canvas?.denormalizedElements
+    const elements = getCanvasDenormalizedElementsStore(app).getValue()
+    console.log('elements pre-encode', elements)
+    const encoded = encode(elements)
+    console.log('elements encoded', encoded)
+    dequeueLoading()
+  }, [app, queueLoading])
+
+
+  return (
+    <>
+      <Button
+        onClick={handleClick}
+      >
+        Save
+      </Button>
+    </>
+  )
+}
 function Besigner(props) {
   useNextPageTitle({screen: 'Besigner'})
   const {query} = useRouter()
@@ -39,6 +77,12 @@ function Besigner(props) {
   const {status, data: screen} = useFirestoreDocDataOnce(screenRef, {idField: '$id'})
   const elements = screen?.elements
   const {enqueueSnackbar, closeSnackbar} = useSnackbar()
+
+  useEffect(() => {
+    if (HAS_BROWSER()) {
+      console.log('page:/besigner app', getApp())
+    }
+  }, [])
 
   console.log('Besigner,', props.tenant, props)
   console.log('Besigner data,', status, screen)
@@ -64,10 +108,11 @@ function Besigner(props) {
   ) : status === 'loading' ? (
     LOADING_OVERLAY_ELEMENT
   ) : (
-    <BesignerIframeComponent
-      screenId={screenId}
-      versionId={versionId}
-    />
+    <AglynBesigner sx={{flexGrow: 1, position: 'unset'}}>
+      <InnerBesigner
+        screen={screen}
+      />
+    </AglynBesigner>
   )
 }
 

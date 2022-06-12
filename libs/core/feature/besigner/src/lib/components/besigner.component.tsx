@@ -48,6 +48,7 @@ const BesignerComponent = forwardRef<any, BesignerComponentProps>(
       noSsr,
       appName,
       canvasElements,
+      children,
       ...rest
     } = props
     const Wrapper = noSsr ? NoSsr : Fragment
@@ -64,6 +65,7 @@ const BesignerComponent = forwardRef<any, BesignerComponentProps>(
                 <RenderedCanvasElementsProvider>
                   <ComponentsDrawerContextProvider>
                     <WorkspaceEditorComponent ref={ref} {...rest} />
+                    {children}
                   </ComponentsDrawerContextProvider>
                 </RenderedCanvasElementsProvider>
               </ElementsContextProvider>

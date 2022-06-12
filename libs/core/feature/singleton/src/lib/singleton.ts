@@ -40,7 +40,7 @@ console.log('_ global this ', globalThis)
     console.log('set aglyn', _.Aglyn, _)
   }
   else {
-    console.log('Aglyn already set', _.Aglyn, _)
+    // console.log('Aglyn already set', _.Aglyn, _)
   }
   return Aglyn
 })()

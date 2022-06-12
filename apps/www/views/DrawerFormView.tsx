@@ -18,7 +18,7 @@
 import {
   alpha,
   createStyles,
-  type ExtendPropsOfWithStyles,
+  // type ExtendPropsOfWithStyles,
   withStyles,
 } from '@aglyn/shared-ui-theme'
 import { NavigationDrawerComponent, type NavigationDrawerProps } from '@aglyn/shared-ui-jsx'
@@ -50,8 +50,8 @@ export const drawerFormViewStyles = (theme) =>
 
 export type FormVariant = 'creating' | 'updating'
 
-export interface DrawerFormViewProps
-  extends ExtendPropsOfWithStyles<Partial<NavigationDrawerProps>, typeof drawerFormViewStyles> {
+export interface DrawerFormViewProps {
+  // extends ExtendPropsOfWithStyles<Partial<NavigationDrawerProps>, typeof drawerFormViewStyles> {
   id: string
   fields: Fields.FieldGroup
   label: string

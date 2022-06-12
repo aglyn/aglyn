@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * @license
  * Copyright 2022 Aglyn LLC
@@ -16,6 +15,7 @@
  * limitations under the License.
  */
 
+/* eslint-disable */
 export default {
   displayName: 'shared-ui-jsx',
   preset: '../../../../jest.preset.js',

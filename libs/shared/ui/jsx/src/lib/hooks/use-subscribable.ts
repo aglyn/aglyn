@@ -28,24 +28,27 @@ export type MapObservable<V, R> = (newValue: V, prevValue: R) => R
 
 export interface Observable<T> {
   subscribe: (listener: (value: T) => void) => {
-    unsubscribe: RxJsUnsubscribable;
-  };
+    unsubscribe: () => void
+  }
+  pipe?(...args): any
 }
 
 
-export function useSubscribable<T>($subscribable: SubscribableLike<T>): T | undefined
+export function useSubscribable<T>(subscribable: SubscribableLike<T>): T | undefined
+
 export function useSubscribable<T,
   U = any,
   M extends MapObservable<U, U | T | undefined> = MapObservable<U, U | T | undefined>>(
-  $subscribable: SubscribableLike<U>,
+  subscribable: SubscribableLike<U>,
   initialValue: U | T,
   mapValue?: M,
   dependencies?: DependencyList,
 ): U | T
+
 export function useSubscribable<T,
   U = any,
   M extends MapObservable<U, U | T | undefined> = MapObservable<U, U | T | undefined>>(
-  $subscribable: SubscribableLike<U>,
+  subscribable: SubscribableLike<U>,
   initialValue?: U | T,
   mapValue?: M,
   dependencies: DependencyList = [],
@@ -67,14 +70,15 @@ export function useSubscribable<T,
       })
     }
 
-    const subscriber: RxJsUnsubscribable = (
-      $subscribable?.['pipe']
-        ? (<any>$subscribable).pipe(distinctUntilChanged(isEqual))
-        : $subscribable
-    ).subscribe(handleChange)
+    let $subscribable: SubscribableLike<U> = subscribable
+    if (!$subscribable) return
 
+    if (typeof subscribable?.pipe === 'function') {
+      $subscribable = $subscribable?.pipe(distinctUntilChanged(isEqual))
+    }
+    const subscriber: RxJsUnsubscribable = $subscribable?.subscribe(handleChange)
     return () => subscriber?.unsubscribe?.()
-  }, [$subscribable, mapUpdate])
+  }, [subscribable, mapUpdate])
 
   return value
 }

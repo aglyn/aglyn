@@ -29,7 +29,7 @@ const c1 = createAglynComponent(
     displayName: 'Root Element',
     title: 'Root element',
   },
-  'span',
+  'div',
 )
 
 const c2 = createAglynComponent(
@@ -38,7 +38,7 @@ const c2 = createAglynComponent(
     displayName: 'Root Element',
     title: 'Root element',
   },
-  'span',
+  'div',
 )
 
 const c3 = createAglynComponent(
@@ -47,7 +47,7 @@ const c3 = createAglynComponent(
     displayName: 'Root Element',
     title: 'Root element',
   },
-  'span',
+  'div',
 )
 
 const c4 = createAglynComponent(
