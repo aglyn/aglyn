@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import { APP_CONSOLE, ICON_VARIANT_MENU_DOWN } from '@aglyn/shared-data-enums'
-import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import {APP_CONSOLE, ICON_VARIANT_MENU_DOWN} from '@aglyn/shared-data-enums'
 import {
   AglynSvgIcon,
   AglynSvgLogo,
@@ -27,9 +26,10 @@ import {
   type MenuItemProps,
   type MenuProps,
 } from '@aglyn/shared-ui-jsx'
-import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { useNextPageTitle } from '@aglyn/shared-ui-next'
-import { _isArrEmpty } from '@aglyn/shared-util-guards'
+import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
+import {NextPageTitle} from '@aglyn/shared-ui-next'
+import {mergeSxProps} from '@aglyn/shared-ui-theme'
+import {_isArrEmpty} from '@aglyn/shared-util-guards'
 import {
   AppBar,
   Avatar,
@@ -38,15 +38,16 @@ import {
   IconButton,
   type IconButtonProps,
   Stack,
+  type StackProps,
   Toolbar,
   Typography,
 } from '@mui/material'
-import { Fragment, type ReactNode } from 'react'
-import { DRAWER_WIDTH, TOP_BAR_HEIGHT } from '../../constants/shared'
+import {Fragment, type ReactNode} from 'react'
+import {DRAWER_WIDTH, TOP_BAR_HEIGHT} from '../../constants/shared'
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
-  const { avatar, icon, children, id, key, items, MenuProps, ...rest } = item
+  const {avatar, icon, children, id, key, items, MenuProps, ...rest} = item
   const isMenu = !_isArrEmpty(items)
   const itemKey = key || id || i
   const rendered =
@@ -83,12 +84,12 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
       {...MenuProps}
       sx={mergeSxProps(
         {
-          p: { padding: 0.5, xs: 0.25 },
+          p: {padding: 0.5, xs: 0.25},
           '&:last-child': {
             paddingLeft: 0.75,
           },
         },
-        MenuProps?.sx
+        MenuProps?.sx,
       )}
     >
       {rendered}
@@ -97,6 +98,147 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
     <Fragment key={itemKey}>{rendered}</Fragment>
   )
 }
+
+
+export interface TopAppBarProps {
+  appBarSuffix?: ReactNode
+  centerNavigationItems?: CenterNavMenuItem[]
+  customCenter?: ReactNode
+  disableAppBarElevation?: boolean
+  quickActions?: QuickActionsMenuItem[]
+}
+
+const TopAppBar = (props: TopAppBarProps) => {
+  const {
+    appBarSuffix,
+    centerNavigationItems,
+    customCenter,
+    disableAppBarElevation,
+    quickActions,
+  } = props
+
+  return (
+    <ElevateOnScroll>
+      {({activeWithoutHysteresis}) => (
+        <AppBar
+          component="header"
+          color="inherit"
+          variant="elevation"
+          elevation={!disableAppBarElevation && activeWithoutHysteresis ? 4 : 0}
+          position={disableAppBarElevation ? 'relative' : 'sticky'}
+          sx={{
+            height: `${TOP_BAR_HEIGHT - 1}px`,
+            borderBottomWidth: `1px`,
+            borderBottomStyle: 'solid',
+            borderBottomColor: 'divider',
+            zIndex: (theme) => theme.zIndex.appBar + 5,
+          }}
+        >
+          <Toolbar
+            component={Stack}
+            variant="dense"
+            alignItems="center"
+            justifyContent="flex-start"
+            direction="row"
+            sx={{paddingLeft: {xs: 0, md: 0}}}
+            divider={<Divider orientation="vertical" variant="middle" flexItem light />}
+          >
+            <Stack
+              alignItems="center"
+              direction="row"
+              justifyContent="flex-start"
+              color="inherit"
+              width={DRAWER_WIDTH}
+              maxWidth={{xs: '100%'}}
+              sx={{paddingLeft: {xs: 2, md: 3}}}
+            >
+              <AppLink href="/" componentVariant="button-base" color="inherit" disableRipple>
+                <Stack
+                  component="span"
+                  alignItems="center"
+                  direction="row"
+                  justifyContent="flex-start"
+                  spacing={0.75}
+                  sx={{
+                    fontWeight: 'fontWeightRegular',
+                    fontFamily: 'h6.fontFamily',
+                    fontSize: (theme) => ({
+                      fontSize: theme.typography.pxToRem(18),
+                      md: theme.typography.pxToRem(20),
+                    }),
+                  }}
+                >
+                  <AglynSvgIcon
+                    sx={{
+                      ml: -0.15,
+                      height: '32px',
+                      width: '32px',
+                    }}
+                    bordered
+                    rounded
+                  />
+                  <AglynSvgLogo
+                    color="secondary"
+                    sx={{
+                      transform: 'translateY(0.0265em)',
+                      height: 'auto',
+                      fontSize: '2.765em',
+                    }}
+                  />
+                  {appBarSuffix && (
+                    <Typography
+                      component="span"
+                      fontWeight="inherit"
+                      fontSize="inherit"
+                      lineHeight="inherit"
+                      color="textPrimary"
+                      display="flex"
+                      alignItems="center"
+                    >
+                      {appBarSuffix}
+                    </Typography>
+                  )}
+                </Stack>
+              </AppLink>
+            </Stack>
+
+            <Stack
+              alignItems="center"
+              justifyContent="flex-start"
+              direction="row"
+              flexGrow={1}
+              sx={{paddingLeft: 6}}
+            >
+              {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
+                <Stack
+                  component="nav"
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="flex-start"
+                  // flexBasis="72%"
+                >
+                  {customCenter || centerNavigationItems.map(buildNav('text'))}
+                </Stack>
+              )}
+            </Stack>
+            {_isArrEmpty(quickActions) ? null : (
+              <Stack
+                component="nav"
+                direction="row"
+                alignItems="center"
+                justifyContent="flex-start"
+                spacing={0.5}
+              >
+                {(quickActions ?? []).map(buildNav('icon'))}
+              </Stack>
+            )}
+          </Toolbar>
+        </AppBar>
+      )}
+    </ElevateOnScroll>
+  )
+}
+TopAppBar.displayName = 'TopAppBar'
 
 export interface QuickActionsMenuItem extends IconButtonProps {
   icon?: MdiIconProps
@@ -116,154 +258,43 @@ export interface CenterNavMenuItem extends Omit<AppLinkProps<'button'>, 'compone
   items?: MenuItemProps[]
 }
 
-export interface MainLayoutProps {
+export interface MainLayoutProps extends Omit<StackProps, 'title'>, TopAppBarProps {
   children?: ReactNode | undefined
-  title?: ReactNode[] | ReactNode
-  centerNavigationItems?: CenterNavMenuItem[]
-  customCenter?: ReactNode
-  quickActions?: QuickActionsMenuItem[]
-  appBarSuffix?: ReactNode
-  disableAppBarElevation?: boolean
+  title?: string[] | string
 }
 
 function MainLayout(props: MainLayoutProps) {
   const {
     children,
     title,
+    appBarSuffix,
     centerNavigationItems,
     customCenter,
-    appBarSuffix,
-    quickActions,
     disableAppBarElevation,
+    quickActions,
+    ...rest
   } = props
-
-  useNextPageTitle({
-    screen: title || APP_CONSOLE.TITLE,
-    suffix: APP_CONSOLE.AFFIX,
-    separator: ` ${APP_CONSOLE.SEP} `,
-  })
 
   return (
     <Fragment>
-      <Stack alignItems="stretch" flexDirection="column" minHeight="100vh">
-        <ElevateOnScroll>
-          {({ activeWithoutHysteresis }) => (
-            <AppBar
-              component="header"
-              color="inherit"
-              variant="elevation"
-              elevation={!disableAppBarElevation && activeWithoutHysteresis ? 4 : 0}
-              position={disableAppBarElevation ? 'relative' : 'sticky'}
-              sx={{
-                height: `${TOP_BAR_HEIGHT - 1}px`,
-                borderBottomWidth: `1px`,
-                borderBottomStyle: 'solid',
-                borderBottomColor: 'divider',
-                zIndex: (theme) => theme.zIndex.appBar + 5,
-              }}
-            >
-              <Toolbar
-                component={Stack}
-                variant="dense"
-                alignItems="center"
-                justifyContent="flex-start"
-                direction="row"
-                sx={{ paddingLeft: { xs: 0, md: 0 } }}
-                divider={<Divider orientation="vertical" variant="middle" flexItem light />}
-              >
-                <Stack
-                  alignItems="center"
-                  direction="row"
-                  justifyContent="flex-start"
-                  color="inherit"
-                  width={DRAWER_WIDTH}
-                  maxWidth={{ xs: '100%' }}
-                  sx={{ paddingLeft: { xs: 2, md: 3 } }}
-                >
-                  <AppLink href="/" componentVariant="button-base" color="inherit" disableRipple>
-                    <Stack
-                      component="span"
-                      alignItems="center"
-                      direction="row"
-                      justifyContent="flex-start"
-                      spacing={0.75}
-                      sx={{
-                        fontWeight: 'fontWeightRegular',
-                        fontFamily: 'h6.fontFamily',
-                        fontSize: (theme) => ({
-                          fontSize: theme.typography.pxToRem(18),
-                          md: theme.typography.pxToRem(20),
-                        }),
-                      }}
-                    >
-                      <AglynSvgIcon
-                        sx={{
-                          ml: -0.15,
-                          height: '32px',
-                          width: '32px',
-                        }}
-                        bordered
-                        rounded
-                      />
-                      <AglynSvgLogo
-                        color="secondary"
-                        sx={{
-                          transform: 'translateY(0.0265em)',
-                          height: 'auto',
-                          fontSize: '2.765em',
-                        }}
-                      />
-                      {appBarSuffix && (
-                        <Typography
-                          component="span"
-                          fontWeight="inherit"
-                          fontSize="inherit"
-                          lineHeight="inherit"
-                          color="textPrimary"
-                          display="flex"
-                          alignItems="center"
-                        >
-                          {appBarSuffix}
-                        </Typography>
-                      )}
-                    </Stack>
-                  </AppLink>
-                </Stack>
-
-                <Stack
-                  alignItems="center"
-                  justifyContent="flex-start"
-                  direction="row"
-                  flexGrow={1}
-                  sx={{ paddingLeft: 6 }}
-                >
-                  {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
-                    <Stack
-                      component="nav"
-                      direction="row"
-                      alignItems="center"
-                      justifyContent="flex-start"
-                      // flexBasis="72%"
-                    >
-                      {customCenter || centerNavigationItems.map(buildNav('text'))}
-                    </Stack>
-                  )}
-                </Stack>
-                {_isArrEmpty(quickActions) ? null : (
-                  <Stack
-                    component="nav"
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="flex-start"
-                    spacing={0.5}
-                  >
-                    {(quickActions ?? []).map(buildNav('icon'))}
-                  </Stack>
-                )}
-              </Toolbar>
-            </AppBar>
-          )}
-        </ElevateOnScroll>
+      <NextPageTitle
+        screen={title || APP_CONSOLE.TITLE}
+        suffix={APP_CONSOLE.AFFIX}
+        separator={` ${APP_CONSOLE.SEP} `}
+      />
+      <Stack
+        alignItems="stretch"
+        flexDirection="column"
+        height="100vh"
+        {...rest}
+      >
+        <TopAppBar
+          centerNavigationItems={centerNavigationItems}
+          customCenter={customCenter}
+          appBarSuffix={appBarSuffix}
+          quickActions={quickActions}
+          disableAppBarElevation={disableAppBarElevation}
+        />
         {children}
       </Stack>
     </Fragment>

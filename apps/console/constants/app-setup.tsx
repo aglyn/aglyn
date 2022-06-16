@@ -25,53 +25,53 @@ import {IS_PRODUCTION} from '@aglyn/shared-data-enums'
 
 const c1 = createAglynComponent(
   {
-    componentId: 'root',
-    displayName: 'Root Element',
-    title: 'Root element',
+    componentId: 'sample-element',
+    displayName: 'Sample Element',
+    title: 'Sample Element',
   },
   'div',
 )
 
 const c2 = createAglynComponent(
   {
-    componentId: 'root1',
-    displayName: 'Root Element',
-    title: 'Root element',
+    componentId: 'sample-element-1',
+    displayName: 'Sample Element 1',
+    title: 'Sample Element 1',
   },
   'div',
 )
 
 const c3 = createAglynComponent(
   {
-    componentId: 'root2',
-    displayName: 'Root Element',
-    title: 'Root element',
+    componentId: 'sample-element-2',
+    displayName: 'Sample Element 2',
+    title: 'Sample Element 2',
   },
   'div',
 )
 
 const c4 = createAglynComponent(
   {
-    componentId: 'root3',
-    displayName: 'Root Element',
-    title: 'Root element',
+    componentId: 'sample-element-3',
+    displayName: 'Sample Element 3',
+    title: 'Sample Element 3',
   },
   'span',
 )
 
 const c5 = createAglynComponent(
   {
-    componentId: 'root4',
-    displayName: 'Root Element',
-    title: 'Root element',
+    componentId: 'sample-element-4',
+    displayName: 'Sample Element 4',
+    title: 'Sample Element 4',
     templates: [
       {
-        id: 'root4:1',
-        label: 'Root 4',
+        id: 'sample-element-4',
+        label: 'Sample Element 4',
         data: {
-          componentId: 'root4',
+          componentId: 'sample-element-4',
           props: {
-            children: 'First Root4',
+            children: 'Sample Element 4',
           },
         },
       },

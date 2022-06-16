@@ -25,7 +25,7 @@ import {
 } from '@aglyn/shared-data-enums'
 import {AppLink, ContainerComponent, GridItems, useLoading} from '@aglyn/shared-ui-jsx'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {useNextPageTitle} from '@aglyn/shared-ui-next'
+import {NextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {List, ListItem, ListItemIcon, ListItemText} from '@mui/material'
 import {doc} from 'firebase/firestore'
@@ -43,18 +43,17 @@ import {CONTENT_MAX_WIDTH} from '../../../../../../constants/shared'
 const whiteSpace = '--'
 
 function ScreenDetails(props) {
-  useNextPageTitle({screen: 'Screen Details'})
 
   const {query} = useRouter()
   const screenId = `${query.screenId}`
   const versionId = `${query.versionId}`
+  const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, {screenId, versionId})
   const firestore = useFirestore()
   const screenRef = doc(firestore, 'screens', screenId)
   const {queueLoading} = useLoading()
   const docData2 = useFirestoreDoc(screenRef, {idField: '$id'})
   const docData = useFirestoreDocData(screenRef, {idField: '$id'})
   const {status, data: screen} = docData
-  const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, {screenId, versionId})
   const {enqueueSnackbar, closeSnackbar} = useSnackbar()
 
   console.log('docData', docData)
@@ -124,109 +123,113 @@ function ScreenDetails(props) {
   // console.log('Screens props', besignerUrl, props, status, screen)
 
   return (
-    <DashboardLayout
-      activeTab={buildRoute(Route.SCREEN_LIST)}
-      breadcrumbItems={[
-        {
-          children: 'Screens',
-          href: buildRoute(Route.SCREEN_LIST),
-        },
-        {
-          children: `${screen?.displayName || 'Not Found'}`,
-        },
-      ]}
-      header={{
-        children: `${screen?.displayName || 'Not Found'}`,
-        icon: {path: ICON_VARIANT_PAGES.path},
-      }}
-      headerRight={(
-        <AppLink
-          size="large"
-          variant="contained"
-          componentVariant="button"
-          href={besignerUrl}
-          title={'Open with besigner'}
-          disabled={status !== 'success' || !screen}
-          startIcon={
-            <MdiIcon
-              color="inherit"
-              path={ICON_VARIANT_BESIGNER.path}
-            />
-          }
-        >
-          Open Besigner
-        </AppLink>
-      )}
-    >
-      <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
+    <>
 
-        <GridItems
-          spacing={3}
-          items={[
-            {
-              xs: 12, md: 6, lg: 4,
-              children: (
-                <WidgetCardComponent
-                  header={'Basic Details'}
-                  // contentGutterX
-                  contentGutterY
-                  contentBordered
-                >
-                  <List
-                    dense
-                    disablePadding
+      <NextPageTitle screen={'Screen Details'} />
+      <DashboardLayout
+        activeTab={buildRoute(Route.SCREEN_LIST)}
+        breadcrumbItems={[
+          {
+            children: 'Screens',
+            href: buildRoute(Route.SCREEN_LIST),
+          },
+          {
+            children: `${screen?.displayName || 'Not Found'}`,
+          },
+        ]}
+        header={{
+          children: `${screen?.displayName || 'Not Found'}`,
+          icon: {path: ICON_VARIANT_PAGES.path},
+        }}
+        headerRight={(
+          <AppLink
+            size="large"
+            variant="contained"
+            componentVariant="button"
+            href={besignerUrl}
+            title={'Open with besigner'}
+            disabled={status !== 'success' || !screen}
+            startIcon={
+              <MdiIcon
+                color="inherit"
+                path={ICON_VARIANT_BESIGNER.path}
+              />
+            }
+          >
+            Open Besigner
+          </AppLink>
+        )}
+      >
+        <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
+
+          <GridItems
+            spacing={3}
+            items={[
+              {
+                xs: 12, md: 6, lg: 4,
+                children: (
+                  <WidgetCardComponent
+                    header={'Basic Details'}
+                    // contentGutterX
+                    contentGutterY
+                    contentBordered
                   >
-                    {details.map(({primary, secondary, icon, ...item}, key) => (
-                      <ListItem
-                        key={item['key'] ?? item['id'] ?? key}
-                        alignItems="flex-start"
-                        dense
-                      >
-                        <ListItemIcon
-                          sx={{
-                            border: `1px solid`,
-                            borderColor: 'divider',
-                            padding: 1,
-                            borderRadius: 1,
-                            minWidth: 'unset',
-                            marginRight: 2,
-                            color: 'tertiary.main',
-                          }}
+                    <List
+                      dense
+                      disablePadding
+                    >
+                      {details.map(({primary, secondary, icon, ...item}, key) => (
+                        <ListItem
+                          key={item['key'] ?? item['id'] ?? key}
+                          alignItems="flex-start"
+                          dense
                         >
-                          <MdiIcon {...icon} />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={primary || whiteSpace}
-                          secondary={secondary || whiteSpace}
-                          {...item}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </WidgetCardComponent>
-              ),
-            },
-            {
-              xs: 12, md: 6, lg: 8,
-              children: (
-                <WidgetCardComponent
-                  header={'Raw JSON'}
-                  contentGutterX
-                  contentGutterY
-                  contentBordered
-                >
+                          <ListItemIcon
+                            sx={{
+                              border: `1px solid`,
+                              borderColor: 'divider',
+                              padding: 1,
+                              borderRadius: 1,
+                              minWidth: 'unset',
+                              marginRight: 2,
+                              color: 'tertiary.main',
+                            }}
+                          >
+                            <MdiIcon {...icon} />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={primary || whiteSpace}
+                            secondary={secondary || whiteSpace}
+                            {...item}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </WidgetCardComponent>
+                ),
+              },
+              {
+                xs: 12, md: 6, lg: 8,
+                children: (
+                  <WidgetCardComponent
+                    header={'Raw JSON'}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered
+                  >
                   <pre>
                   {JSON.stringify(screen, null, 2)}
                   </pre>
-                </WidgetCardComponent>
-              ),
-            },
-          ]}
-        />
+                  </WidgetCardComponent>
+                ),
+              },
+            ]}
+          />
 
 
-      </ContainerComponent>
-    </DashboardLayout>
+        </ContainerComponent>
+      </DashboardLayout>
+    </>
   )
 }
 ScreenDetails.displayName = 'Page:ScreenDetails'

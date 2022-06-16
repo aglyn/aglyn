@@ -30,6 +30,8 @@ const IS_DEVELOPMENT = NODE_ENV === 'development'
 const IS_PRODUCTION = NODE_ENV === 'production'
 const IS_TEST = NODE_ENV === 'test'
 
+const ANALYZE_BUNDLE = process.env.NEXT_ANALYZE_BUNDLE === 'true'
+
 const SECURE_HEADER_DOMAINS = [
   'https://*.aglyn.com',
   'https://aglyn.com',
@@ -111,7 +113,7 @@ const BRAND_HEADERS = [
  **/
 const AGLYN_CONFIG = {
   aglyn: {
-    analyzeBundle: process.env.NEXT_ANALYZE_BUNDLE === 'true' && !IS_PRODUCTION,
+    analyzeBundle: ANALYZE_BUNDLE && !IS_PRODUCTION,
     analyzerOptions: {},
   },
   compiler: {
@@ -129,16 +131,21 @@ const AGLYN_CONFIG = {
      */
     reactRemoveProperties: {properties: ['^data-test']},
 
-    // ssr and displayName are configured by default
+    /**
+     * ssr and displayName are configured by default
+     */
     // styledComponents: true,
   },
-  // Next.js provides gzip compression to compress rendered content and static
-  // files. In general, you will want to enable compression on a HTTP proxy like
-  // nginx, to offload load from the Node.js process.
+
+
+  /**
+   * Next.js provides gzip compression to compress rendered content and static
+   * files. In general, you will want to enable compression on a HTTP proxy like
+   * nginx, to offload load from the Node.js process.
+   */
   compress: IS_PRODUCTION,
-  // Opt-in to using the Next.js compiler for minification. This is 7x faster
-  // than Terser.
-  crossOrigin: 'anonymous',
+
+  crossOrigin: IS_PRODUCTION ? 'anonymous' : undefined,
   env: {
     AGLYN_HOST: process.env.AGLYN_HOST,
     AGLYN_HOSTNAME: process.env.AGLYN_HOSTNAME,
@@ -160,21 +167,29 @@ const AGLYN_CONFIG = {
   experimental: {
     optimizeImages: IS_PRODUCTION,
     // optimizeCss: true,
-    // Next.js can automatically create a standalone folder which copies only
-    // the necessary files for a production deployment including select files in
-    // node_modules
+    /**
+     * Next.js can automatically create a standalone folder which copies only
+     * the necessary files for a production deployment including select files in
+     * node_modules
+     */
     outputStandalone: false,
-    // Concurrent features in React 18 include built-in support for server-side
-    // Suspense and SSR streaming support, allowing you to server-render pages
-    // using HTTP streaming
+    /**
+     * Concurrent features in React 18 include built-in support for server-side
+     * Suspense and SSR streaming support, allowing you to server-render pages
+     * using HTTP streaming
+     */
     concurrentFeatures: false,
-    // React Server Components allow us to render everything, including the
-    // components themselves, on the server. This is fundamentally different
-    // from server-side rendering where you're pre-generating HTML on the server
+    /**
+     * React Server Components allow us to render everything, including the
+     * components themselves, on the server. This is fundamentally different
+     * from server-side rendering where you're pre-generating HTML on the server
+     */
     serverComponents: false,
     workerThreads: true,
 
-    // required to stop the FATAL heap crash
+    /**
+     * required to stop the FATAL heap crash
+     */
     esmExternals: false,
   },
   generateEtags: true,
@@ -191,7 +206,10 @@ const AGLYN_CONFIG = {
   },
   httpAgentOptions: {keepAlive: true},
   images: {
-    // DEFAULT [640, 750, 828, 1080, 1200, 1920, 2048, 3840]
+    /**
+     * deviceSizes
+     * DEFAULT [640, 750, 828, 1080, 1200, 1920, 2048, 3840]
+     */
     deviceSizes: [600, 768, 900, 1080, 1200, 1536, 1920, 2560],
     disableStaticImages: false,
     domains: [
@@ -210,8 +228,12 @@ const AGLYN_CONFIG = {
       'host.aglyn.com',
       'hostname.aglyn.com',
       'www.aglyn.com',
+      'aglyn.app',
     ],
-    // DEFAULT: [16, 32, 48, 64, 96, 128, 256, 384]
+    /**
+     * imageSizes
+     * DEFAULT: [16, 32, 48, 64, 96, 128, 256, 384]
+     */
     imageSizes: [24, 40, 64, 96, 144, 256, 390, 512],
     formats: ['image/avif', 'image/webp'],
     loader: 'default',
@@ -219,32 +241,53 @@ const AGLYN_CONFIG = {
     path: '/_next/image',
   },
   nx: {
-    // Set this to false if you do not want to use SVGR
-    // See: https://github.com/gregberge/svgr
+    /**
+     * Set this to false if you do not want to use SVGR
+     * @see https://github.com/gregberge/svgr
+     */
     svgr: false,
   },
   onDemandEntries: {
-    // period (in ms) where the server will keep pages in the buffer
+    /**
+     * period (in ms) where the server will keep pages in the buffer
+     */
     maxInactiveAge: 1000 * 30,
-    // number of pages that should be kept simultaneously without being disposed
+    /**
+     * number of pages that should be kept simultaneously without being disposed
+     */
     pagesBufferLength: 2,
   },
   optimizeFonts: IS_PRODUCTION,
   // outputFileTracing: true,
   productionBrowserSourceMaps: false,
   poweredByHeader: !IS_PRODUCTION,
-  // Available on both server and client
+  /**
+   * Available on both server and client
+   */
   publicRuntimeConfig: {
     staticFolder: '/_static',
   },
   reactStrictMode: !IS_PRODUCTION,
-  // Available on server only
+  /**
+   * Available on server only
+   */
   serverRuntimeConfig: {},
   staticPageGenerationTimeout: 15,
+
+  /**
+   * Opt-in to using the Next.js compiler for minification. This is 7x faster than Terser.
+   */
   swcMinify: IS_PRODUCTION,
+
+  /**
+   * Include a trailing slash for page paths
+   */
   trailingSlash: false,
+
   typescript: {
-    // Motivated by https://github.com/zeit/next.js/issues/7687
+    /**
+     * Motivated by https://github.com/zeit/next.js/issues/7687
+     */
     // ignoreDevErrors: IS_PRODUCTION,
     ignoreBuildErrors: IS_PRODUCTION,
   },

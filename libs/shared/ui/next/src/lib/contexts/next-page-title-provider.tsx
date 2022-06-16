@@ -63,11 +63,30 @@ export const useNextPageTitle = (values: PageTitleObject) => {
   return title
 }
 
+export interface NextPageTitleProps extends PageTitleObject {
+  children?: ReactNode
+}
+
+export const NextPageTitle = (props: NextPageTitleProps) => {
+  const {
+    children,
+    ...rest
+  } = props
+
+  useNextPageTitle(rest)
+
+  return (
+    <>
+      {children}
+    </>
+  )
+}
+
 export interface NextPageTitleContextProps {
   children?: ReactNode
 }
 
-const NextPageTitleComponent = (props: NextPageTitleContextProps) => {
+const NextPageTitleProvider = (props: NextPageTitleContextProps) => {
   const {
     children,
   } = props
@@ -92,13 +111,13 @@ const NextPageTitleComponent = (props: NextPageTitleContextProps) => {
     </NextPageTitleContext.Provider>
   )
 }
-NextPageTitleComponent.displayName = 'NextPageTitleComponent'
-NextPageTitleComponent.aglyn = true
-NextPageTitleComponent.defaultProps = {
+NextPageTitleProvider.displayName = 'NextPageTitleComponent'
+NextPageTitleProvider.aglyn = true
+NextPageTitleProvider.defaultProps = {
   initialScreen: 'Welcome',
   initialSuffix: 'My App',
   initialSeparator: ' – ',
 }
 
-export {NextPageTitleComponent}
-export default NextPageTitleComponent
+export {NextPageTitleProvider}
+export default NextPageTitleProvider

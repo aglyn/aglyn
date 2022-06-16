@@ -20,27 +20,27 @@ import type {AglynElementsNormalized} from '@aglyn/core-data-framework'
 
 export const samplePageData: AglynElementsNormalized = [
   {
-    $id: 'root1',
-    componentId: 'root',
+    $id: 'sample-element-1',
+    componentId: 'sample-element',
     props: {},
     elements: [
       {
-        $id: 'root12',
-        componentId: 'root1',
+        $id: 'sample-element-11',
+        componentId: 'sample-element-1',
         props: {
           children: 'hello',
         },
       },
       {
-        $id: 'root22',
-        componentId: 'root2',
+        $id: 'sample-element-21',
+        componentId: 'sample-element-2',
         props: {
           children: 'hello',
         },
       },
       {
-        $id: 'root32',
-        componentId: 'root3',
+        $id: 'sample-element-31',
+        componentId: 'sample-element-3',
         props: {
           children: 'hello',
         },
@@ -48,28 +48,28 @@ export const samplePageData: AglynElementsNormalized = [
     ],
   },
   {
-    $id: 'root2',
-    componentId: 'root4',
+    $id: 'sample-element-2',
+    componentId: 'sample-element-4',
     props: {},
     elements: [
       {
-        $id: 'root13',
-        componentId: 'root1',
+        $id: 'sample-element-13',
+        componentId: 'sample-element-1',
         sx: {fontWeight: 'fontWeightBold'},
         props: {
           children: 'hello',
         },
       },
       {
-        $id: 'root23',
-        componentId: 'root2',
+        $id: 'sample-element-23',
+        componentId: 'sample-element-2',
         props: {
           children: 'hello',
         },
       },
       {
-        $id: 'root33',
-        componentId: 'root3',
+        $id: 'sample-element-33',
+        componentId: 'sample-element-3',
         props: {
           children: 'hello',
         },
@@ -77,27 +77,27 @@ export const samplePageData: AglynElementsNormalized = [
     ],
   },
   {
-    $id: 'root3',
-    componentId: 'root4',
+    $id: 'sample-element-3',
+    componentId: 'sample-element-4',
     props: {},
     elements: [
       {
-        $id: 'root14',
-        componentId: 'root1',
+        $id: 'sample-element-14',
+        componentId: 'sample-element-1',
         props: {
           children: 'hello',
         },
       },
       {
-        $id: 'root24',
-        componentId: 'root2',
+        $id: 'sample-element-24',
+        componentId: 'sample-element-2',
         props: {
           children: 'hello',
         },
       },
       {
-        $id: 'root34',
-        componentId: 'root3',
+        $id: 'sample-element-34',
+        componentId: 'sample-element-3',
         props: {
           children: 'hello',
         },

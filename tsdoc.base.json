@@ -8,6 +8,10 @@
     {
       "tagName": "@ignore",
       "syntaxKind": "modifier"
+    },
+    {
+      "tagName": "@private",
+      "syntaxKind": "modifier"
     }
   ]
 }

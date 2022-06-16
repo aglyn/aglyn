@@ -22,7 +22,7 @@ import {makeLinkElements, makeMetaElements} from '@aglyn/shared-ui-jsx'
 import {arraySafe} from '@aglyn/shared-util-tools'
 import Head from 'next/head'
 import {Fragment, type ReactNode, useEffect, useMemo} from 'react'
-import NextPageTitleComponent from '../contexts/next-page-title.component'
+import NextPageTitleProvider from '../contexts/next-page-title-provider'
 import NextEmotionAppComponent, {
   type NextEmotionAppComponentProps,
 } from './next-emotion-app.component'
@@ -69,7 +69,7 @@ function _AppComponent<Props, InitialProps>(props: _AppProps<Props, InitialProps
 
   return (
     <NextEmotionAppComponent emotionCache={emotionCache}>
-      <NextPageTitleComponent>
+      <NextPageTitleProvider>
         <Head>
           {makeMetaElements(metaElementsMemoed)}
           {makeLinkElements(linkElementsMemoed)}
@@ -78,7 +78,7 @@ function _AppComponent<Props, InitialProps>(props: _AppProps<Props, InitialProps
         <MainComponent>
           <NextPageDecoratedLayoutComponent {...rest} />
         </MainComponent>
-      </NextPageTitleComponent>
+      </NextPageTitleProvider>
     </NextEmotionAppComponent>
   )
 }

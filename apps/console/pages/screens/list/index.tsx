@@ -32,7 +32,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
 import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {useNextPageTitle} from '@aglyn/shared-ui-next'
+import {NextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
 import {Button, IconButton, Typography} from '@mui/material'
 import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
@@ -51,8 +51,6 @@ import {CONTENT_MAX_WIDTH, TABLE_ROW_HEIGHT} from '../../../constants/shared'
 
 
 function Screens(props) {
-
-  useNextPageTitle({screen: 'App Screens'})
   const {queueLoading, loading} = useLoading()
   const {confirm} = useConfirmationContext()
   const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(false)
@@ -144,7 +142,7 @@ function Screens(props) {
             key="action-detail"
             icon={<MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} />}
             label="detail"
-            component={AppLink}
+            LinkComponent={AppLink}
             componentVariant="naked"
             href={buildRoute(Route.SCREEN_DETAILS, {screenId, versionId})}
           />,
@@ -168,93 +166,96 @@ function Screens(props) {
   // console.log('Screens props', props, data, status, screens)
 
   return (
-    <DashboardLayout
-      activeTab={buildRoute(Route.SCREEN_LIST)}
-      breadcrumbItems={[
-        {
-          children: 'Screens',
-          href: buildRoute(Route.SCREEN_LIST),
-        },
-      ]}
-      header={{
-        children: 'App Screens',
-        icon: {path: ICON_VARIANT_PAGES.path},
-      }}
-      headerRight={(
-        <Button
-          size="small"
-          variant="contained"
-          onClick={handleFormOpen}
-        >
-          {'Create New Screen'}
-        </Button>
-      )}
-      aside={(
-        <NavigationDrawerComponent
-          open={quickDrawerOpen}
-          anchor="right"
-          variant="temporary"
-          onClose={handleFormClose}
-          appBarLeft={(
-            <>
-              <IconButton
+    <>
+      <NextPageTitle screen={'App Screens'} />
+      <DashboardLayout
+        activeTab={buildRoute(Route.SCREEN_LIST)}
+        breadcrumbItems={[
+          {
+            children: 'Screens',
+            href: buildRoute(Route.SCREEN_LIST),
+          },
+        ]}
+        header={{
+          children: 'App Screens',
+          icon: {path: ICON_VARIANT_PAGES.path},
+        }}
+        headerRight={(
+          <Button
+            size="small"
+            variant="contained"
+            onClick={handleFormOpen}
+          >
+            {'Create New Screen'}
+          </Button>
+        )}
+        aside={(
+          <NavigationDrawerComponent
+            open={quickDrawerOpen}
+            anchor="right"
+            variant="temporary"
+            onClose={handleFormClose}
+            appBarLeft={(
+              <>
+                <IconButton
+                  color="inherit"
+                  edge="start"
+                  onClick={handleFormClose}
+                  sx={{mr: 2}}
+                >
+                  <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+                  <SrOnlyComponent>close drawer</SrOnlyComponent>
+                </IconButton>
+                <Typography variant="h6" component="div">
+                  {'Create new screen'}
+                </Typography>
+              </>
+            )}
+            appBarRight={
+              <Button
+                variant="outlined"
                 color="inherit"
-                edge="start"
                 onClick={handleFormClose}
-                sx={{mr: 2}}
               >
-                <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-                <SrOnlyComponent>close drawer</SrOnlyComponent>
-              </IconButton>
-              <Typography variant="h6" component="div">
-                {'Create new screen'}
-              </Typography>
-            </>
-          )}
-          appBarRight={
-            <Button
-              variant="outlined"
-              color="inherit"
-              onClick={handleFormClose}
-            >
-              {'Cancel'}
-            </Button>
-          }
-        >
-          <ContainerComponent gutterY>
-            <FormRenderer
-              FormTemplate={AuthFormTemplateComponent}
-              componentMapper={simpleComponentMapper}
-              onSubmit={handleFormSubmit}
-              schema={formSchema}
-              subscription={{values: true}}
-              clearOnUnmount
+                {'Cancel'}
+              </Button>
+            }
+          >
+            <ContainerComponent gutterY>
+              <FormRenderer
+                FormTemplate={AuthFormTemplateComponent}
+                componentMapper={simpleComponentMapper}
+                onSubmit={handleFormSubmit}
+                schema={formSchema}
+                subscription={{values: true}}
+                clearOnUnmount
+              />
+              <AuthErrorAlertComponent
+                error={error as any}
+                sx={{mt: 2, mb: 1}}
+              />
+            </ContainerComponent>
+          </NavigationDrawerComponent>
+        )}
+      >
+        <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          <WidgetCardComponent>
+            <DataTableComponent
+              rowHeight={TABLE_ROW_HEIGHT}
+              getRowId={(row) => row.$id}
+              columns={columns}
+              noRowsLabel="No screens"
+              rows={screens}
+              loading={status === 'loading'}
+              pageSize={pageSize}
+              onPageSizeChange={setPageSize}
+              rowsPerPageOptions={[5, 10, 15]}
+              pagination
             />
-            <AuthErrorAlertComponent
-              error={error as any}
-              sx={{mt: 2, mb: 1}}
-            />
-          </ContainerComponent>
-        </NavigationDrawerComponent>
-      )}
-    >
-      <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <WidgetCardComponent>
-          <DataTableComponent
-            rowHeight={TABLE_ROW_HEIGHT}
-            getRowId={(row) => row.$id}
-            columns={columns}
-            noRowsLabel="No screens"
-            rows={screens}
-            loading={status === 'loading'}
-            pageSize={pageSize}
-            onPageSizeChange={setPageSize}
-            rowsPerPageOptions={[5, 10, 15]}
-            pagination
-          />
-        </WidgetCardComponent>
-      </ContainerComponent>
-    </DashboardLayout>
+          </WidgetCardComponent>
+        </ContainerComponent>
+      </DashboardLayout>
+    </>
   )
 }
 const formSchema = {

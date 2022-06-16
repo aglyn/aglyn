@@ -71,8 +71,8 @@ export class AglynBaseModel<O extends AglynBaseModelOptions = AglynBaseModelOpti
   #doEvent<F extends AglynEventStateFlag>(flag: F, payload?: AglynEventPayloads[F]): this {
     const mergedPayload = {
       ...payload,
-      __event_timestamp__: Timestamp.now().toJSON(),
-      __event_controller__: this.toJSON(),
+      __eventTimestamp__: Timestamp.now().toJSON(),
+      __eventController__: this.toJSON(),
     }
     this.logger.debug(flag, mergedPayload)
     this.emitter.emit(flag, mergedPayload)

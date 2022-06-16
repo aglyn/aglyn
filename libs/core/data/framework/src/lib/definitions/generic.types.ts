@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {type Dictionary} from '@aglyn/shared-data-types'
+import type {Dictionary} from '@aglyn/shared-data-types'
 
 
 export type Payload<T = any> = {payload: T}

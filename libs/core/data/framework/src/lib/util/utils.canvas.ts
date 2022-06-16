@@ -33,7 +33,11 @@ import type {
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
 import type {CanvasContext} from '../definitions/aglyn-canvas.types'
-import type {AglynElementsDenormalized, ElementId} from '../definitions/aglyn-elements.types'
+import type {
+  AglynElementsDenormalized,
+  AglynElementsNormalized,
+  ElementId,
+} from '../definitions/aglyn-elements.types'
 import {createComponentElementDataCopy} from './create-component-element-data-copy'
 import {denormalizeComponentElementData} from './denormalize-component-element-data'
 import {getComponentElementHierarchy} from './get-component-element-hierarchy'
@@ -55,10 +59,18 @@ export const handleCanvasApiChangeEvent = <S extends CanvasContext, P>(
 
 
 export const handleCanvasSetElements = (
-  state: AglynElementsDenormalized,
+  state: AglynElementsDenormalized | AglynElementsNormalized,
   payload: CanvasSetElementsPayload,
 ) => {
-  const {elements} = payload || {}
+  const {elements, type} = payload || {}
+
+  if (type === 'normal' && Array.isArray(state)) {
+    return denormalizeComponentElementData(
+      elements as unknown as AglynElementsNormalized,
+      CANVAS_ROOT_ELEMENT_ID,
+    )
+  }
+
   return elements || {}
 }
 export const handleCanvasAddElement = (

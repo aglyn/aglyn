@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys } from '@aglyn/shared-ui-theme'
-import { _isObj } from '@aglyn/shared-util-guards'
-import { truthy } from '@aglyn/shared-util-tools'
+import {generateComponentClassKeys} from '@aglyn/shared-ui-theme'
+import {_isObj} from '@aglyn/shared-util-guards'
+import {truthy} from '@aglyn/shared-util-tools'
 import {
   Button as MuiButton,
   ButtonBase as MuiButtonBase,
@@ -31,9 +31,10 @@ import {
   type LinkProps as MuiLinkProps,
 } from '@mui/material'
 import clsx from 'clsx'
-import { useRouter } from 'next/router'
-import { forwardRef, useMemo } from 'react'
-import { NextLink, type NextLinkProps } from './next-link'
+import {useRouter} from 'next/router'
+import {forwardRef, useMemo} from 'react'
+import {NextLink, type NextLinkProps} from './next-link'
+
 
 export type AppLinkVariant =
   | 'naked'
@@ -136,7 +137,12 @@ const AppLink = forwardRef(function RefRenderFn<T extends AppLinkVariant>(
 
   if (variant === 'naked') {
     return (
-      <NextLink ref={ref} className={elemClassName} hrefTo={href || ''} hrefAs={hrefAs} {...rest} />
+      <NextLink
+        ref={ref}
+        className={elemClassName}
+        hrefTo={href || ''}
+        hrefAs={hrefAs} {...rest}
+      />
     )
   }
   if (variant === 'button') {

@@ -15,28 +15,33 @@
  * limitations under the License.
  */
 
-import {getApp} from '@aglyn/core-data-framework'
+import {getApp, setCanvasElements} from '@aglyn/core-data-framework'
 import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
 import {useBesignerAppContext} from '@aglyn/core-feature-besigner'
-import {
-  useAglynCanvasElementsDenormalized,
-  useAglynCanvasElementsNormalized,
-} from '@aglyn/core-feature-renderer'
+import {useAglynCanvasElementsNormalized} from '@aglyn/core-feature-renderer'
 // import '@aglyn/core-feature-singleton'
-import {HAS_BROWSER} from '@aglyn/shared-data-enums'
-import {LOADING_OVERLAY_ELEMENT, useLoading} from '@aglyn/shared-ui-jsx'
-import {useNextPageTitle} from '@aglyn/shared-ui-next'
+import {HAS_BROWSER, ICON_VARIANT_LEFT} from '@aglyn/shared-data-enums'
+import {
+  AppLink,
+  LOADING_OVERLAY_ELEMENT,
+  useIsomorphicLayoutEffect,
+  useLoading,
+} from '@aglyn/shared-ui-jsx'
+import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import {NextPageTitle} from '@aglyn/shared-ui-next'
 import {useSnackbar} from '@aglyn/shared-ui-snackstack'
-import {encode} from '@msgpack/msgpack'
+import {decode, encode} from '@msgpack/msgpack'
 import {Button, Stack, Typography} from '@mui/material'
-import {doc} from 'firebase/firestore'
+import {Bytes, doc, setDoc} from 'firebase/firestore'
 import dynamic from 'next/dynamic'
 import {useRouter} from 'next/router'
 import {useCallback, useEffect} from 'react'
 import {useFirestore, useFirestoreDocDataOnce} from 'reactfire'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
+import SecondaryAppBarComponent from '../../../../../../components/secondary-app-bar.component'
 import '../../../../../../constants/app-setup'
+import {buildRoute, Route} from '../../../../../../constants/route-links'
 
 
 const AglynBesigner = dynamic<BesignerComponentProps>(
@@ -45,25 +50,37 @@ const AglynBesigner = dynamic<BesignerComponentProps>(
 )
 
 
-function InnerBesigner(props: {screen}) {
-  const {screen} = props
+function InnerBesigner(props: any) {
+  const {screen, screenRef} = props
   const elements = screen?.elements
-  const denormalized = useAglynCanvasElementsDenormalized()
-  const normalized = useAglynCanvasElementsNormalized()
   const app = useBesignerAppContext()
+  const {enqueueSnackbar} = useSnackbar()
   const {queueLoading} = useLoading()
+  const normalized = useAglynCanvasElementsNormalized()
+
+  useIsomorphicLayoutEffect(() => {
+    if (elements && elements instanceof Bytes) {
+      const decoded: any = decode(elements.toUint8Array())
+      console.log('decoded update', decoded)
+      setCanvasElements(app, {elements: decoded, type: 'normal'})
+    }
+  }, [app, elements])
+
   const handleClick = useCallback(async () => {
     const dequeueLoading = queueLoading()
-    // const elements = app?.canvas?.denormalizedElements
-    console.log('elements denormalized pre-encode', denormalized)
-    const encodedDenormal = encode(denormalized)
-    console.log('elements denormalized encoded', encodedDenormal)
-    console.log('elements normalized pre-encode', normalized)
-    const encodedNormal = encode(normalized)
-    console.log('elements normalized encoded', encodedNormal)
+    const encodedNormal = Bytes.fromUint8Array(encode(normalized))
+    await setDoc(
+      screenRef,
+      {elements: encodedNormal},
+      {merge: true},
+    ).catch((e) => {
+      enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    })
     dequeueLoading()
-  }, [denormalized, normalized, queueLoading])
-
+  }, [enqueueSnackbar, normalized, queueLoading, screenRef])
 
   return (
     <>
@@ -76,17 +93,16 @@ function InnerBesigner(props: {screen}) {
   )
 }
 function Besigner(props) {
-  useNextPageTitle({screen: 'Besigner'})
   const {query} = useRouter()
   const screenId = `${query.screenId}`
   const versionId = `${query.versionId}`
+  const detailUrl = buildRoute(Route.SCREEN_DETAILS, {screenId, versionId})
   const firestore = useFirestore()
   const screenRef = doc(firestore, 'screens', screenId, 'versions', versionId)
   const {status, data: screen, error} = useFirestoreDocDataOnce(screenRef, {idField: '$id'})
   const hasError = status === 'error'
   const notFound = status === 'success' && !screen
-  const elements = screen?.elements
-  const {enqueueSnackbar, closeSnackbar} = useSnackbar()
+  const {enqueueSnackbar} = useSnackbar()
 
   useEffect(() => {
     if (HAS_BROWSER()) {
@@ -94,8 +110,12 @@ function Besigner(props) {
     }
   }, [])
 
-  console.log('Besigner,', props.tenant, props)
-  console.log('Besigner data,', status, screen)
+  useEffect(() => {
+    if (HAS_BROWSER()) {
+      console.log('Besigner props.tenant,', props.tenant, props)
+      console.log('Besigner status screen,', status, screen)
+    }
+  }, [props, screen, status])
 
   useEffect(() => {
     if (hasError) {
@@ -110,10 +130,45 @@ function Besigner(props) {
         allowDuplicate: true,
       })
     }
-  }, [closeSnackbar, enqueueSnackbar, hasError, error, notFound])
+  }, [enqueueSnackbar, hasError, error, notFound])
+
 
   return (
     <>
+      <NextPageTitle screen={'Besigner'} />
+      <SecondaryAppBarComponent
+        tabBarTitle={
+          <Stack
+            direction="row"
+            spacing={{sm: 0.15, md: 0.5}}
+            alignItems="center"
+            typography={'subtitle2'}
+            lineHeight={'normal'}
+            sx={{color: 'tertiary.light'}}
+            component={AppLink}
+            componentVariant={'text'}
+            underline="none"
+            href={detailUrl}
+          >
+            <MdiIcon
+              path={ICON_VARIANT_LEFT.path}
+              fontSize={'small'}
+            />
+            <span>{'Details'}</span>
+          </Stack>
+        }
+        // navTabItems={[
+        //   {
+        //     key: 'go-back',
+        //     icon: {
+        //       path: ICON_VARIANT_LEFT.path,
+        //     },
+        //     href: detailUrl,
+        //     label: 'Details',
+        //   },
+        // ]}
+        // activeTab={activeTab}
+      />
       {error || notFound ? (
         <Stack
           alignItems="center"
@@ -129,6 +184,7 @@ function Besigner(props) {
         <AglynBesigner sx={{flexGrow: 1, position: 'unset'}}>
           <InnerBesigner
             screen={screen}
+            screenRef={screenRef}
           />
         </AglynBesigner>
       )}
