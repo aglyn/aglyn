@@ -21,38 +21,11 @@ import {
   type BesignerPanelsState,
   setBesignerPanel,
 } from '@aglyn/core-data-besigner'
+import {useSubscribable} from '@aglyn/shared-ui-jsx'
 import {_isFnT} from '@aglyn/shared-util-guards'
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback} from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
-
-export function useAglynBesignerPanel(
-  name: BesignerPanelKey,
-): [
-  value: BesignerPanelItem | undefined,
-  setValue: (
-    panel: BesignerPanelItem | ((
-      prev: BesignerPanelItem,
-      panels: BesignerPanelsState,
-    ) => BesignerPanelItem),
-  ) => void
-] {
-
-  const app = useBesignerAppContext()
-  const [value, setValue] = useState<BesignerPanelItem | undefined>(undefined)
-  const setPanel = useAglynBesignerSetPanel().bind(null, name)
-
-  useEffect(() => {
-    const subscription = app?.besigner?.__store__.panels?.subscribe((panels) => {
-      setValue(panels?.[name])
-    })
-    return () => subscription.unsubscribe()
-  }, [app, name])
-
-  return [value, setPanel]
-}
-
-export default useAglynBesignerPanel
 
 export function useAglynBesignerSetPanel(): (
   name: BesignerPanelKey,
@@ -76,3 +49,30 @@ export function useAglynBesignerSetPanel(): (
     })
   }, [app])
 }
+
+
+export function useAglynBesignerPanel(
+  name: BesignerPanelKey,
+): [
+  value: BesignerPanelItem | undefined,
+  setValue: (
+    panel: BesignerPanelItem | ((
+      prev: BesignerPanelItem,
+      panels: BesignerPanelsState,
+    ) => BesignerPanelItem),
+  ) => void
+] {
+
+  const app = useBesignerAppContext()
+  const value = useSubscribable<BesignerPanelItem | undefined>(
+    app?.besigner?.panels,
+    undefined,
+    (panels) => panels?.[name],
+    [name, app],
+  )
+  const setPanel = useAglynBesignerSetPanel().bind(null, name)
+
+  return [value, setPanel]
+}
+
+export default useAglynBesignerPanel

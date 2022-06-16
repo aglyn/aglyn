@@ -15,10 +15,14 @@
  * limitations under the License.
  */
 
-import {getApp, getCanvasDenormalizedElementsStore} from '@aglyn/core-data-framework'
+import {getApp} from '@aglyn/core-data-framework'
 import type {BesignerComponentProps} from '@aglyn/core-feature-besigner'
 import {useBesignerAppContext} from '@aglyn/core-feature-besigner'
-import '@aglyn/core-feature-singleton'
+import {
+  useAglynCanvasElementsDenormalized,
+  useAglynCanvasElementsNormalized,
+} from '@aglyn/core-feature-renderer'
+// import '@aglyn/core-feature-singleton'
 import {HAS_BROWSER} from '@aglyn/shared-data-enums'
 import {LOADING_OVERLAY_ELEMENT, useLoading} from '@aglyn/shared-ui-jsx'
 import {useNextPageTitle} from '@aglyn/shared-ui-next'
@@ -44,17 +48,21 @@ const AglynBesigner = dynamic<BesignerComponentProps>(
 function InnerBesigner(props: {screen}) {
   const {screen} = props
   const elements = screen?.elements
+  const denormalized = useAglynCanvasElementsDenormalized()
+  const normalized = useAglynCanvasElementsNormalized()
   const app = useBesignerAppContext()
   const {queueLoading} = useLoading()
   const handleClick = useCallback(async () => {
     const dequeueLoading = queueLoading()
     // const elements = app?.canvas?.denormalizedElements
-    const elements = getCanvasDenormalizedElementsStore(app).getValue()
-    console.log('elements pre-encode', elements)
-    const encoded = encode(elements)
-    console.log('elements encoded', encoded)
+    console.log('elements denormalized pre-encode', denormalized)
+    const encodedDenormal = encode(denormalized)
+    console.log('elements denormalized encoded', encodedDenormal)
+    console.log('elements normalized pre-encode', normalized)
+    const encodedNormal = encode(normalized)
+    console.log('elements normalized encoded', encodedNormal)
     dequeueLoading()
-  }, [app, queueLoading])
+  }, [denormalized, normalized, queueLoading])
 
 
   return (
@@ -74,7 +82,9 @@ function Besigner(props) {
   const versionId = `${query.versionId}`
   const firestore = useFirestore()
   const screenRef = doc(firestore, 'screens', screenId, 'versions', versionId)
-  const {status, data: screen} = useFirestoreDocDataOnce(screenRef, {idField: '$id'})
+  const {status, data: screen, error} = useFirestoreDocDataOnce(screenRef, {idField: '$id'})
+  const hasError = status === 'error'
+  const notFound = status === 'success' && !screen
   const elements = screen?.elements
   const {enqueueSnackbar, closeSnackbar} = useSnackbar()
 
@@ -88,31 +98,41 @@ function Besigner(props) {
   console.log('Besigner data,', status, screen)
 
   useEffect(() => {
-    if (status === 'error' || (status === 'success' && !screen)) {
-      enqueueSnackbar('An error has occurred', {
+    if (hasError) {
+      enqueueSnackbar(`Error: ${error?.message}`, {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [closeSnackbar, enqueueSnackbar, status, screen])
+    else if (notFound) {
+      enqueueSnackbar('404: Screen not found', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [closeSnackbar, enqueueSnackbar, hasError, error, notFound])
 
-  return status === 'error' ? (
-    <Stack
-      alignItems="center"
-      justifyContent="center"
-    >
-      <Typography>
-        {'Not found'}
-      </Typography>
-    </Stack>
-  ) : status === 'loading' ? (
-    LOADING_OVERLAY_ELEMENT
-  ) : (
-    <AglynBesigner sx={{flexGrow: 1, position: 'unset'}}>
-      <InnerBesigner
-        screen={screen}
-      />
-    </AglynBesigner>
+  return (
+    <>
+      {error || notFound ? (
+        <Stack
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Typography>
+            {'Not found'}
+          </Typography>
+        </Stack>
+      ) : status === 'loading' ? (
+        LOADING_OVERLAY_ELEMENT
+      ) : (
+        <AglynBesigner sx={{flexGrow: 1, position: 'unset'}}>
+          <InnerBesigner
+            screen={screen}
+          />
+        </AglynBesigner>
+      )}
+    </>
   )
 }
 

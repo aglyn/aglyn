@@ -29,8 +29,6 @@ declare global {
   }
 }
 
-console.log('_ global this ', globalThis)
-
 ;(function main() {
   const _ = globalThis
   // eslint-disable-next-line no-var
