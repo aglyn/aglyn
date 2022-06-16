@@ -52,6 +52,13 @@ import {
 } from 'reactfire'
 // import {getDatabase, connectDatabaseEmulator} from 'firebase/database'
 
+AuthProvider['displayName'] = 'AuthProvider'
+AppCheckProvider['displayName'] = 'AppCheckProvider'
+AnalyticsProvider['displayName'] = 'AnalyticsProvider'
+DatabaseProvider['displayName'] = 'DatabaseProvider'
+FirebaseAppProvider['displayName'] = 'FirebaseAppProvider'
+FirestoreProvider['displayName'] = 'FirestoreProvider'
+
 function AnalyticsGlobalEvents({children}) {
   const analytics = useAnalytics()
   const router = useRouter()
@@ -170,13 +177,13 @@ function GetInnerLayout({children}) {
   return (
     <AnalyticsProvider sdk={analytics}>
       <AuthProvider sdk={auth}>
-        <AppCheckProvider sdk={appCheck}>
+        {/*<AppCheckProvider sdk={appCheck}>*/}
           <DatabaseProvider sdk={database}>
             <FirestoreProvider sdk={store}>
               {children}
             </FirestoreProvider>
           </DatabaseProvider>
-        </AppCheckProvider>
+        {/*</AppCheckProvider>*/}
       </AuthProvider>
     </AnalyticsProvider>
   )

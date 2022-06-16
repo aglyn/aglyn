@@ -42,7 +42,7 @@ export const MdiIcons = new Map<IconId, Icon>()
         }
       })
       .catch((error) => {
-        console.error('Error loading icons', error)
+        console.warn('Error loading icons', error)
       })
   }
 })()
