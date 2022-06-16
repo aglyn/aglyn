@@ -89,11 +89,27 @@ const stylesSchema = (presetColors) => ({
       component: FieldComponentType.SELECT,
       name: 'float',
       label: 'Float',
+      description: 'The float property is used for positioning and formatting content e.g. let an image float left to the text in a container.',
       options: [
-        {value: '', label: 'Default'},
-        {value: 'none', label: 'None'},
-        {value: 'left', label: 'Left'},
-        {value: 'right', label: 'Right'},
+        {
+          value: '', label: 'Default',
+        },
+        {
+          value: 'inherit', label: 'Inherit',
+          description: 'The element inherits the float value of its parent',
+        },
+        {
+          value: 'none', label: 'None',
+          description: 'The element does not float (will be displayed just where it occurs in the text)',
+        },
+        {
+          value: 'left', label: 'Left',
+          description: 'The element floats to the left of its container',
+        },
+        {
+          value: 'right', label: 'Right',
+          description: 'The element floats to the right of its container',
+        },
       ],
     },
   ],

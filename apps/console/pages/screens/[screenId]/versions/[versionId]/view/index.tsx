@@ -79,49 +79,42 @@ function ScreenDetails(props) {
   const details = [
     {
       key: 'id',
-      id: 'details-id',
       primary: 'Screen ID:',
       secondary: screen?.$id,
       icon: {path: ICON_VARIANT_PRIMARY_KEY.path},
     },
     {
       key: 'displayName',
-      id: 'details-dname',
       primary: 'Display name:',
       secondary: screen?.displayName,
       icon: {path: ICON_VARIANT_TEXT.path},
     },
     {
       key: 'description',
-      id: 'details-desc',
       primary: 'Description:',
       secondary: screen?.description,
       icon: {path: ICON_VARIANT_TEXT.path},
     },
     {
       key: 'dateCreated',
-      id: 'details-datec',
       primary: 'Date created:',
       secondary: screen?.createdAt?.toDate?.()?.toLocaleString(),
       icon: {path: ICON_VARIANT_DATE_TIME.path},
     },
     {
       key: 'dateUpdated',
-      id: 'details-dateu',
       primary: 'Last updated:',
       secondary: screen?.updatedAt?.toDate?.()?.toLocaleString(),
       icon: {path: ICON_VARIANT_DATE_TIME.path},
     },
     {
       key: 'dateDeleted',
-      id: 'details-dated',
       primary: 'Date deleted:',
       secondary: screen?.deletedAt?.toDate?.()?.toLocaleString(),
       icon: {path: ICON_VARIANT_DATE_TIME.path},
     },
     {
       key: 'versionId',
-      id: 'details-vers',
       primary: 'Version ID:',
       secondary: screen?.versionId,
       icon: {path: ICON_VARIANT_IDENTIFIER.path},
@@ -185,7 +178,7 @@ function ScreenDetails(props) {
                   >
                     {details.map(({primary, secondary, icon, ...item}, key) => (
                       <ListItem
-                        key={item.key ?? item.id ?? key}
+                        key={item['key'] ?? item['id'] ?? key}
                         alignItems="flex-start"
                         dense
                       >

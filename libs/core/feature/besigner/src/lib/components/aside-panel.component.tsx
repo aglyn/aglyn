@@ -23,6 +23,7 @@ import {
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import {
+  ICON_VARIANT_COLLAPSABLE_OPEN,
   ICON_VARIANT_ELEMENT_BROWSE,
   ICON_VARIANT_ELEMENT_DETAILS,
   ICON_VARIANT_ELEMENT_PROPERTIES,
@@ -37,8 +38,19 @@ import {
   TabList as MuiTabList,
   TabPanel as MuiTabPanel,
 } from '@mui/lab'
-import {Box, Button, Divider, Tab as MuiTab, Typography} from '@mui/material'
-import {forwardRef, Fragment, useCallback, useMemo} from 'react'
+import {
+  Accordion as MuiAccordion,
+  AccordionDetails as MuiAccordionDetails,
+  type AccordionProps,
+  AccordionSummary as MuiAccordionSummary,
+  type AccordionSummaryProps,
+  Box,
+  Button,
+  Divider,
+  Tab as MuiTab,
+  Typography,
+} from '@mui/material'
+import {forwardRef, SyntheticEvent, useCallback, useMemo, useState} from 'react'
 import useAddElementCallback from '../hooks/use-add-element-callback'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
@@ -73,6 +85,44 @@ const DividerSpacer = styled(Divider, {
   marginTop: theme.spacing(2),
   marginBottom: theme.spacing(2),
 }))
+const Accordion = styled((props: AccordionProps) => (
+  <MuiAccordion disableGutters elevation={0} square {...props} />
+))(({theme}) => ({
+  border: `1px solid ${theme.palette.divider}`,
+  borderLeft: 0,
+  borderRight: 0,
+  '&:not(:last-child)': {
+    borderBottom: 0,
+  },
+  '&:before': {
+    display: 'none',
+  },
+}))
+const AccordionSummary = styled((props: AccordionSummaryProps) => (
+  <MuiAccordionSummary
+    expandIcon={
+      <MdiIcon
+        path={ICON_VARIANT_COLLAPSABLE_OPEN.path}
+        sx={{fontSize: '0.9rem'}}
+      />
+    }
+    {...props}
+  />
+))(({theme}) => ({
+  backgroundColor: 'transparent',
+  flexDirection: 'row-reverse',
+  '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
+    transform: 'rotate(90deg)',
+  },
+  '& .MuiAccordionSummary-content': {
+    marginLeft: theme.spacing(1),
+  },
+}))
+
+const AccordionDetails = styled(MuiAccordionDetails)(({theme}) => ({
+  padding: theme.spacing(2),
+  borderTop: '1px solid rgba(0, 0, 0, .125)',
+}))
 
 const ElementInfo = function ElementInfo({$id}: {$id: ElementId}) {
   const componentId = useAglynElementData($id, 'componentId')
@@ -80,100 +130,110 @@ const ElementInfo = function ElementInfo({$id}: {$id: ElementId}) {
   const parentId = useAglynElementData($id, 'parentId')
   const schema = useAglynComponentSchema(componentId, bundleId)
   const failoverText = 'n/a'
-  const details = useMemo(
-    () => [
-      {
-        key: 'element-overview',
-        label: 'Element Overview',
-        items: [
-          {
-            key: 'component-display-name',
-            label: 'Type',
-            value: schema?.displayName,
-          },
-          {
-            key: 'component-title',
-            label: 'Title',
-            value: schema?.title,
-          },
-          {
-            key: 'component-subtitle',
-            label: 'Subtitle',
-            value: schema?.subtitle,
-          },
-          {
-            key: 'component-description',
-            label: 'Description',
-            value: schema?.description,
-            TypographyProps: {gutterBottom: true},
-          },
-        ],
-      },
-      {
-        key: 'unique-identifiers',
-        label: 'Unique Identifiers',
-        items: [
-          {
-            key: 'element-id',
-            label: 'Element ID',
-            value: $id,
-          },
-          {
-            key: 'parent-id',
-            label: 'Parent Element ID',
-            value: parentId,
-          },
-          {
-            key: 'component-id',
-            label: 'Component ID',
-            value: componentId,
-          },
-          {
-            key: 'bundle-id',
-            label: 'Bundle ID',
-            value: bundleId,
-            ValueTypographyProps: {},
-          },
-        ],
-      },
-    ],
-    [$id, bundleId, componentId, schema, parentId],
-  )
+  const details = useMemo(() => [
+    {
+      key: 'element-overview',
+      label: 'Element Overview',
+      items: [
+        {
+          key: 'component-display-name',
+          label: 'Type',
+          value: schema?.displayName,
+        },
+        {
+          key: 'component-title',
+          label: 'Title',
+          value: schema?.title,
+        },
+        {
+          key: 'component-subtitle',
+          label: 'Subtitle',
+          value: schema?.subtitle,
+        },
+        {
+          key: 'component-description',
+          label: 'Description',
+          value: schema?.description,
+          TypographyProps: {gutterBottom: true},
+        },
+      ],
+    },
+    {
+      key: 'unique-identifiers',
+      label: 'Unique Identifiers',
+      items: [
+        {
+          key: 'element-id',
+          label: 'Element ID',
+          value: $id,
+        },
+        {
+          key: 'parent-id',
+          label: 'Parent Element ID',
+          value: parentId,
+        },
+        {
+          key: 'component-id',
+          label: 'Component ID',
+          value: componentId,
+        },
+        {
+          key: 'bundle-id',
+          label: 'Bundle ID',
+          value: bundleId,
+          ValueTypographyProps: {},
+        },
+      ],
+    },
+  ], [schema, $id, parentId, componentId, bundleId])
+  const [expanded, setExpanded] = useState<string | false>(details[0].key)
+  const handleChange = (panel: string) => (event: SyntheticEvent, newExpanded: boolean) => {
+    setExpanded(newExpanded ? panel : false)
+  }
 
-  return details.map(({label, items, ...item}) => (
-    <Fragment key={item.key}>
-      <Typography variant="subtitle1" component="div" sx={{mb: 2}}>
-        {label}
-      </Typography>
-      {items.map(({label, value, TypographyProps, ValueTypographyProps, ...item}: any) => (
-        <Typography key={item.key} component="div" {...TypographyProps}>
-          <Typography variant="caption" display="inline" sx={{textTransform: 'uppercase'}}>
-            <b>{label}:</b>
-          </Typography>{' '}
-          <Typography
-            variant="body1"
-            display="inline"
-            {...ValueTypographyProps}
-            sx={mergeSxProps(
-              (theme) => ({
-                bgcolor: alpha(theme.palette.secondary.light, 0.18),
-                border: `1px solid ${alpha(theme.palette.secondary.light, 0.72)}`,
-                borderRadius: '0.3em',
-                px: 0.5,
-                py: 0.15,
-                wordBreak: 'break-word',
-                fontSize: '0.8rem',
-              }),
-              ValueTypographyProps?.sx,
-            )}
-          >
-            {value || <i>{failoverText}</i>}
-          </Typography>
-        </Typography>
+  return (
+    <TabPanelInner>
+      {details.map(({label, items, ...item}) => (
+        <Accordion
+          key={item.key}
+          expanded={expanded === item.key}
+          onChange={handleChange(item.key)}
+        >
+          <AccordionSummary aria-controls={`${item.key}-content`} id={`${item.key}-header`}>
+            <Typography>{label}</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            {items.map(({label, value, TypographyProps, ValueTypographyProps, ...item}: any) => (
+              <Typography key={item.key} component="div" {...TypographyProps}>
+                <Typography variant="caption" display="inline" sx={{textTransform: 'uppercase'}}>
+                  <b>{label}:</b>
+                </Typography>{' '}
+                <Typography
+                  variant="body1"
+                  display="inline"
+                  {...ValueTypographyProps}
+                  sx={mergeSxProps(
+                    (theme) => ({
+                      bgcolor: alpha(theme.palette.secondary.light, 0.18),
+                      border: `1px solid ${alpha(theme.palette.secondary.light, 0.72)}`,
+                      borderRadius: '0.3em',
+                      px: 0.5,
+                      py: 0.15,
+                      wordBreak: 'break-word',
+                      fontSize: '0.8rem',
+                    }),
+                    ValueTypographyProps?.sx,
+                  )}
+                >
+                  {value || <i>{failoverText}</i>}
+                </Typography>
+              </Typography>
+            ))}
+          </AccordionDetails>
+        </Accordion>
       ))}
-      <DividerSpacer variant="middle" />
-    </Fragment>
-  ))
+    </TabPanelInner>
+  )
 }
 
 const defaultTabContent = (
@@ -185,9 +245,15 @@ const defaultTabContent = (
 const withSelectedElement = (Component) => () => {
   const [selected] = useAglynCanvasSelected()
   const $id = selected?.$id
+  return !$id
+    ? (<TabPanelInner sx={{p: 2}}>{defaultTabContent}</TabPanelInner>)
+    : <Component $id={$id} />
+}
+
+const withTabPanelInner = (Component) => (props: any) => {
   return (
     <TabPanelInner sx={{p: 2}}>
-      {!$id ? defaultTabContent : <Component $id={$id} />}
+      <Component {...props} />
     </TabPanelInner>
   )
 }
@@ -290,7 +356,7 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           label: 'Attributes',
         },
         panel: {
-          Component: withSelectedElement(ElementPropsForm),
+          Component: withSelectedElement(withTabPanelInner(ElementPropsForm)),
         },
       },
       {
@@ -300,7 +366,7 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           label: 'Styles',
         },
         panel: {
-          Component: withSelectedElement(ElementStylesForm),
+          Component: withSelectedElement(withTabPanelInner(ElementStylesForm)),
         },
       },
     ],
