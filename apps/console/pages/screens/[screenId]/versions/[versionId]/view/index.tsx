@@ -23,33 +23,31 @@ import {
   ICON_VARIANT_PRIMARY_KEY,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
-import {useScreen} from '@aglyn/shared-feature-fb-client'
-import {AppLink, ContainerComponent, GridItems, useLoading} from '@aglyn/shared-ui-jsx'
-import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {NextPageTitle} from '@aglyn/shared-ui-next'
-import {useSnackbar} from '@aglyn/shared-ui-snackstack'
-import {List, ListItem, ListItemIcon, ListItemText} from '@mui/material'
-import {useRouter} from 'next/router'
-import {useEffect} from 'react'
+import { useScreen } from '@aglyn/core-data-fire'
+import { AppLink, ContainerComponent, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { NextPageTitle } from '@aglyn/shared-ui-next'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { List, ListItem, ListItemIcon, ListItemText } from '@mui/material'
+import { useRouter } from 'next/router'
+import { useEffect } from 'react'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
 import WidgetCardComponent from '../../../../../../components/widget-card.component'
-import {buildRoute, Route} from '../../../../../../constants/route-links'
-import {CONTENT_MAX_WIDTH} from '../../../../../../constants/shared'
-
+import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
 
 const whiteSpace = '--'
 
 function ScreenDetails(props) {
-
-  const {query} = useRouter()
+  const { query } = useRouter()
   const screenId = `${query.screenId}`
   const versionId = `${query.versionId}`
-  const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, {screenId, versionId})
-  const {queueLoading} = useLoading()
-  const {enqueueSnackbar, closeSnackbar} = useSnackbar()
-  const [{status, data: screen}] = useScreen<any>({screenId})
+  const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, { screenId, versionId })
+  const { queueLoading } = useLoading()
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar()
+  const [{ status, data: screen }] = useScreen<any>({ screenId })
 
   useEffect(() => {
     if (status === 'loading') {
@@ -72,43 +70,43 @@ function ScreenDetails(props) {
       key: 'id',
       primary: 'Screen ID:',
       secondary: screen?.$id,
-      icon: {path: ICON_VARIANT_PRIMARY_KEY.path},
+      icon: { path: ICON_VARIANT_PRIMARY_KEY.path },
     },
     {
       key: 'displayName',
       primary: 'Display name:',
       secondary: screen?.displayName,
-      icon: {path: ICON_VARIANT_TEXT.path},
+      icon: { path: ICON_VARIANT_TEXT.path },
     },
     {
       key: 'description',
       primary: 'Description:',
       secondary: screen?.description,
-      icon: {path: ICON_VARIANT_TEXT.path},
+      icon: { path: ICON_VARIANT_TEXT.path },
     },
     {
       key: 'dateCreated',
       primary: 'Date created:',
       secondary: screen?.createdAt?.toDate?.()?.toLocaleString(),
-      icon: {path: ICON_VARIANT_DATE_TIME.path},
+      icon: { path: ICON_VARIANT_DATE_TIME.path },
     },
     {
       key: 'dateUpdated',
       primary: 'Last updated:',
       secondary: screen?.updatedAt?.toDate?.()?.toLocaleString(),
-      icon: {path: ICON_VARIANT_DATE_TIME.path},
+      icon: { path: ICON_VARIANT_DATE_TIME.path },
     },
     {
       key: 'dateDeleted',
       primary: 'Date deleted:',
       secondary: screen?.deletedAt?.toDate?.()?.toLocaleString(),
-      icon: {path: ICON_VARIANT_DATE_TIME.path},
+      icon: { path: ICON_VARIANT_DATE_TIME.path },
     },
     {
       key: 'versionId',
       primary: 'Version ID:',
       secondary: screen?.versionId,
-      icon: {path: ICON_VARIANT_IDENTIFIER.path},
+      icon: { path: ICON_VARIANT_IDENTIFIER.path },
     },
   ]
 
@@ -116,7 +114,6 @@ function ScreenDetails(props) {
 
   return (
     <>
-
       <NextPageTitle screen={'Screen Details'} />
       <DashboardLayout
         activeTab={buildRoute(Route.SCREEN_LIST)}
@@ -131,9 +128,9 @@ function ScreenDetails(props) {
         ]}
         header={{
           children: `${screen?.displayName || 'Not Found'}`,
-          icon: {path: ICON_VARIANT_PAGES.path},
+          icon: { path: ICON_VARIANT_PAGES.path },
         }}
-        headerRight={(
+        headerRight={
           <AppLink
             size="large"
             variant="contained"
@@ -141,24 +138,20 @@ function ScreenDetails(props) {
             href={besignerUrl}
             title={'Open with besigner'}
             disabled={status !== 'success' || !screen}
-            startIcon={
-              <MdiIcon
-                color="inherit"
-                path={ICON_VARIANT_BESIGNER.path}
-              />
-            }
+            startIcon={<MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />}
           >
             Open Besigner
           </AppLink>
-        )}
+        }
       >
         <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
-
           <GridItems
             spacing={3}
             items={[
               {
-                xs: 12, md: 6, lg: 4,
+                xs: 12,
+                md: 6,
+                lg: 4,
                 children: (
                   <WidgetCardComponent
                     header={'Basic Details'}
@@ -166,11 +159,8 @@ function ScreenDetails(props) {
                     contentGutterY
                     contentBordered
                   >
-                    <List
-                      dense
-                      disablePadding
-                    >
-                      {details.map(({primary, secondary, icon, ...item}, key) => (
+                    <List dense disablePadding>
+                      {details.map(({ primary, secondary, icon, ...item }, key) => (
                         <ListItem
                           key={item['key'] ?? item['id'] ?? key}
                           alignItems="flex-start"
@@ -201,7 +191,9 @@ function ScreenDetails(props) {
                 ),
               },
               {
-                xs: 12, md: 6, lg: 8,
+                xs: 12,
+                md: 6,
+                lg: 8,
                 children: (
                   <WidgetCardComponent
                     header={'Raw JSON'}
@@ -209,16 +201,12 @@ function ScreenDetails(props) {
                     contentGutterY
                     contentBordered
                   >
-                  <pre>
-                  {JSON.stringify(screen, null, 2)}
-                  </pre>
+                    <pre>{JSON.stringify(screen, null, 2)}</pre>
                   </WidgetCardComponent>
                 ),
               },
             ]}
           />
-
-
         </ContainerComponent>
       </DashboardLayout>
     </>

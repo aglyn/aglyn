@@ -197,7 +197,7 @@ export interface JSXForwardRefExoticComponent<P> extends JSXNamedExoticComponent
 }
 
 export interface ResolveProps<P = any> {
-  <OUT = P>(inProps: P): OUT
+  <OUT = P>(inProps: P): OUT | Promise<OUT>
 }
 
 export type InnerRefProp<T = any> = {innerRef?: JSXRef<T>}

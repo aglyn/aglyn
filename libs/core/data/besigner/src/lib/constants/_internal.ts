@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {type AppUUN} from '@aglyn/core-data-framework'
-import {type IAglynBesignerController} from '../controllers/aglyn-besigner.types'
+import type {AppUUN} from '@aglyn/core-data-framework'
+import type {IAglynBesignerController} from '../controllers/aglyn-besigner.types'
 
 
 export const _INTERNAL_BESIGNERS_: Map<AppUUN, IAglynBesignerController> = new Map()

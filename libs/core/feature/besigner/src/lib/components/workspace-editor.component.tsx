@@ -21,7 +21,6 @@ import {Stack, type StackProps} from '@mui/material'
 import dynamic from 'next/dynamic'
 import {forwardRef} from 'react'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
-import AppBarSecondaryComponent from './app-bar-secondary.component'
 import type {AsidePanelComponentProps} from './aside-panel.component'
 
 
@@ -38,7 +37,7 @@ const ViewportRootComponent = dynamic(
 const WorkspaceEditor = styled(Stack, {
   name: 'AglynWorkspaceEditor',
 })({
-  position: 'absolute',
+  // position: 'absolute',
   left: 0,
   right: 0,
   top: 0,
@@ -86,10 +85,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             spacing={0}
             sx={{overflow: 'hidden', zIndex: 0}}
           >
-            <AppBarSecondaryComponent />
-
             <ViewportRootComponent />
-
             <AppBarBreadcrumbsComponent />
           </Stack>
 

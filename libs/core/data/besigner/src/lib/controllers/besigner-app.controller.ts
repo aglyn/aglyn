@@ -15,33 +15,36 @@
  * limitations under the License.
  */
 
-import {AglynAppController, type IAglynModuleModel} from '@aglyn/core-data-framework'
-import {_INTERNAL_BESIGNERS_} from '../constants/_internal'
-import {AglynBesignerController} from './aglyn-besigner.controller'
-import type {IAglynBesignerController} from './aglyn-besigner.types'
-import type {BesignerAppOptions, IBesignerAppController} from './besigner-app.types'
-
+import { AglynAppController, type IAglynModuleModel } from '@aglyn/core-data-framework'
+import { _INTERNAL_BESIGNERS_ } from '../constants/_internal'
+import { AglynBesignerController } from './aglyn-besigner.controller'
+import type { IAglynBesignerController } from './aglyn-besigner.types'
+import type { BesignerAppOptions, IBesignerAppController } from './besigner-app.types'
 
 const TAG = 'BesignerApp'
 const NS = 'com.aglyn.core.data.besigner.controller.app'
 
-export class BesignerAppController extends AglynAppController<BesignerAppOptions> implements IBesignerAppController {
-
-  public static get [Symbol.toStringTag](): string {return TAG}
-  public static get namespace(): string {return NS}
+export class BesignerAppController
+  extends AglynAppController<BesignerAppOptions>
+  implements IBesignerAppController
+{
+  public static get [Symbol.toStringTag](): string {
+    return TAG
+  }
+  public static get namespace(): string {
+    return NS
+  }
 
   #besignerController: IAglynBesignerController = null
 
-  public get besigner(): IAglynBesignerController {return this.#besignerController}
+  public get besigner(): IAglynBesignerController {
+    return this.#besignerController
+  }
 
   protected get modules(): IAglynModuleModel[] {
     const modules = super.modules,
       extModule = modules.pop()
-    return [
-      ...modules,
-      this.#besignerController,
-      extModule,
-    ]
+    return [...modules, this.#besignerController, extModule]
   }
 
   constructor(options: BesignerAppOptions) {
@@ -52,9 +55,9 @@ export class BesignerAppController extends AglynAppController<BesignerAppOptions
     super.setupExtensions()
     _INTERNAL_BESIGNERS_.set(
       this.appName,
-      this.#besignerController = new AglynBesignerController(this, {
+      (this.#besignerController = new AglynBesignerController(this, {
         ...this.options.modulesOptions?.besigner,
-      }),
+      }))
     )
     return this
   }

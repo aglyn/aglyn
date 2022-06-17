@@ -15,36 +15,34 @@
  * limitations under the License.
  */
 
-
 import {
   type BesignerFlagKey,
   type BesignerFlagsState,
   type BesignerFlagValue,
   setBesignerFlag,
-} from '@aglyn/core-data-besigner'
-import {useSubscribable} from '@aglyn/shared-ui-jsx'
-import {_isFnT} from '@aglyn/shared-util-guards'
-import {useCallback} from 'react'
+} from '@aglyn/besigner-data'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
+import { _isFnT } from '@aglyn/shared-util-guards'
+import { useCallback } from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
-
 export function useAglynBesignerFlag<K extends BesignerFlagKey>(
-  flag: K,
+  flag: K
 ): [
   value: BesignerFlagValue<K>,
   setValue: (
-    value: BesignerFlagValue<K> | ((
-      prev: BesignerFlagValue<K>,
-      flags: BesignerFlagsState,
-    ) => BesignerFlagValue<K>),
+    value:
+      | BesignerFlagValue<K>
+      | ((prev: BesignerFlagValue<K>, flags: BesignerFlagsState) => BesignerFlagValue<K>)
   ) => void
 ] {
   const app = useBesignerAppContext()
   const setFlag = useAglynBesignerSetFlag().bind(null, flag)
   const value = useSubscribable<BesignerFlagValue<K>>(
-    app.besigner?.flags, undefined,
+    app.besigner?.flags,
+    undefined,
     (flags) => flags?.[flag],
-    [flag, app],
+    [flag, app]
   )
 
   return [value, setFlag]
@@ -54,22 +52,23 @@ export default useAglynBesignerFlag
 
 export function useAglynBesignerSetFlag<K extends BesignerFlagKey>(): (
   flag: K,
-  value: BesignerFlagValue<K> | ((
-    prev: BesignerFlagValue<K>,
-    flags: BesignerFlagsState,
-  ) => BesignerFlagValue<K>),
+  value:
+    | BesignerFlagValue<K>
+    | ((prev: BesignerFlagValue<K>, flags: BesignerFlagsState) => BesignerFlagValue<K>)
 ) => void {
   const app = useBesignerAppContext()
-  return useCallback((
-    flag: K,
-    value: BesignerFlagValue<K> | ((
-      prev: BesignerFlagValue<K>,
-      flags: BesignerFlagsState,
-    ) => BesignerFlagValue<K>),
-  ) => {
-    setBesignerFlag(app, {
-      flag: flag,
-      value: (prev, flags) => (_isFnT(value) ? value(prev, flags) : value),
-    })
-  }, [app])
+  return useCallback(
+    (
+      flag: K,
+      value:
+        | BesignerFlagValue<K>
+        | ((prev: BesignerFlagValue<K>, flags: BesignerFlagsState) => BesignerFlagValue<K>)
+    ) => {
+      setBesignerFlag(app, {
+        flag: flag,
+        value: (prev, flags) => (_isFnT(value) ? value(prev, flags) : value),
+      })
+    },
+    [app]
+  )
 }

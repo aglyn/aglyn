@@ -59,9 +59,9 @@ export const handleCanvasApiChangeEvent = <S extends CanvasContext, P>(
 
 
 export const handleCanvasSetElements = (
-  state: AglynElementsDenormalized | AglynElementsNormalized,
+  state: AglynElementsDenormalized,
   payload: CanvasSetElementsPayload,
-) => {
+): AglynElementsDenormalized => {
   const {elements, type} = payload || {}
 
   if (type === 'normal' && Array.isArray(state)) {
@@ -71,7 +71,7 @@ export const handleCanvasSetElements = (
     )
   }
 
-  return elements || {}
+  return (elements || {}) as AglynElementsDenormalized
 }
 export const handleCanvasAddElement = (
   state: AglynElementsDenormalized,

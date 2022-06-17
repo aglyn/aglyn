@@ -21,50 +21,63 @@ import {
   ElementComponentsContextProvider,
   ElementsContextProvider,
 } from '@aglyn/core-feature-renderer'
-import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
+import {getDisplayName} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
 import {NoSsr} from '@mui/material'
-import dynamic from 'next/dynamic'
-import {forwardRef, Fragment} from 'react'
+import {type ComponentType, Fragment, type ReactNode} from 'react'
 import ComponentsDrawerContextProvider from '../contexts/components-drawer-context.provider'
 import RenderedCanvasElementsProvider from '../contexts/rendered-canvas-elements'
 import BesignerDndContext from './besigner-dnd-context.component'
-import type {WorkspaceEditorComponentProps} from './workspace-editor.component'
 
 
-const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
-  () => import('./workspace-editor.component').then((mod) => mod.WorkspaceEditorComponent),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
-)
-
-export interface BesignerComponentProps extends WorkspaceEditorComponentProps {
+export interface BesignerComponentProps {
   noSsr?: boolean
   appName?: AppUUN
   canvasElements?: CanvasSetElementsPayload
+  children?: ReactNode
 }
 
-const BesignerComponent = forwardRef<any, BesignerComponentProps>(
-  function RefRenderFn(props, ref) {
+export const withBesignerContext = <P, >(Component: ComponentType<P>) => {
+  const displayName = getDisplayName(Component)
+  const WithBesignerContext = (props: BesignerComponentProps & P) => {
     const {
       noSsr,
       appName,
       canvasElements,
-      children,
       ...rest
     } = props
-    const Wrapper = noSsr ? NoSsr : Fragment
-
     return (
-      <Wrapper>
-        <AglynAppProvider
-          canvasElements={canvasElements}
-          appName={appName}
-        >
-          <BesignerDndContext>
-            <ElementComponentsContextProvider>
-              <ElementsContextProvider>
-                <RenderedCanvasElementsProvider>
-                  <ComponentsDrawerContextProvider>
-                    <WorkspaceEditorComponent ref={ref} {...rest} />
+      <BesignerComponent>
+        <Component {...rest as P} />
+      </BesignerComponent>
+    )
+  }
+  WithBesignerContext.displayName = `WithBesignerComponent(${displayName})`
+  hoistNonReactStatics(WithBesignerContext, Component)
+  return WithBesignerContext
+}
+
+const BesignerComponent = (props: BesignerComponentProps) => { /*forwardRef<any, BesignerComponentProps>(
+ function RefRenderFn(props, ref) {*/
+  const {
+    noSsr,
+    appName,
+    canvasElements,
+    children,
+  } = props
+  const Wrapper = noSsr ? NoSsr : Fragment
+
+  return (
+    <Wrapper>
+      <AglynAppProvider
+        canvasElements={canvasElements}
+        appName={appName}
+      >
+        <BesignerDndContext>
+          <ElementComponentsContextProvider>
+            <ElementsContextProvider>
+              <RenderedCanvasElementsProvider>
+                <ComponentsDrawerContextProvider>
                     {children}
                   </ComponentsDrawerContextProvider>
                 </RenderedCanvasElementsProvider>
@@ -74,8 +87,7 @@ const BesignerComponent = forwardRef<any, BesignerComponentProps>(
         </AglynAppProvider>
       </Wrapper>
     )
-  },
-)
+}
 
 BesignerComponent.displayName = 'BesignerComponent'
 BesignerComponent.aglyn = true

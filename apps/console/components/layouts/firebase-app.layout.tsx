@@ -24,21 +24,21 @@ import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   RECAPTCHA_API_KEY,
-} from '@aglyn/shared-feature-fb-client'
-import {NextRouterEvent, SecureLoadingOverlayComponent} from '@aglyn/shared-ui-jsx'
-import {NoSsr} from '@mui/material'
-import {getAnalytics, logEvent, setUserId, setUserProperties} from 'firebase/analytics'
-import {initializeAppCheck, ReCaptchaV3Provider} from 'firebase/app-check'
-import {connectAuthEmulator, getAuth} from 'firebase/auth'
-import {connectDatabaseEmulator, getDatabase} from 'firebase/database'
+} from '@aglyn/core-data-fire'
+import { NextRouterEvent, SecureLoadingOverlayComponent } from '@aglyn/shared-ui-jsx'
+import { NoSsr } from '@mui/material'
+import { getAnalytics, logEvent, setUserId, setUserProperties } from 'firebase/analytics'
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
+import { connectAuthEmulator, getAuth } from 'firebase/auth'
+import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
 import {
   connectFirestoreEmulator,
   enableMultiTabIndexedDbPersistence,
   getFirestore,
 } from 'firebase/firestore'
-import {useRouter} from 'next/router'
-import type {ReactNode} from 'react'
-import {useEffect} from 'react'
+import { useRouter } from 'next/router'
+import type { ReactNode } from 'react'
+import { useEffect } from 'react'
 import {
   AnalyticsProvider,
   AppCheckProvider,
@@ -59,7 +59,7 @@ DatabaseProvider['displayName'] = 'DatabaseProvider'
 FirebaseAppProvider['displayName'] = 'FirebaseAppProvider'
 FirestoreProvider['displayName'] = 'FirestoreProvider'
 
-function AnalyticsGlobalEvents({children}) {
+function AnalyticsGlobalEvents({ children }) {
   const analytics = useAnalytics()
   const router = useRouter()
   const user = useUser()
@@ -86,13 +86,15 @@ function AnalyticsGlobalEvents({children}) {
   }, [router, analytics])
 
   useEffect(() => {
-    const {uid, emailVerified, providerId, tenantId} = user?.data || {}
+    const { uid, emailVerified, providerId, tenantId } = user?.data || {}
     const setAnalyticsUserId = () => {
       setUserId(analytics, uid)
     }
     const setAnalyticsUserProperties = () => {
       setUserProperties(analytics, {
-        emailVerified, providerId, tenantId,
+        emailVerified,
+        providerId,
+        tenantId,
       })
     }
     if (uid) {
@@ -101,7 +103,6 @@ function AnalyticsGlobalEvents({children}) {
     }
   }, [analytics, user])
 
-
   return children
 }
 
@@ -109,13 +110,12 @@ let connectedFirestore = null
 let connectedDatabase = null
 let connectedAuth = null
 
-function GetInnerLayout({children}) {
+function GetInnerLayout({ children }) {
   const app = useFirebaseApp()
   const auth = getAuth(app)
   const database = getDatabase(app)
   const store = getFirestore(app)
   let status
-
 
   // Set up development emulators
   if (!connectedFirestore) {
@@ -125,8 +125,7 @@ function GetInnerLayout({children}) {
       }
       void enableMultiTabIndexedDbPersistence(store)
       connectedFirestore = true
-    }
-    catch (error) {
+    } catch (error) {
       console.error(error)
     }
   }
@@ -136,8 +135,7 @@ function GetInnerLayout({children}) {
         connectDatabaseEmulator(database, 'localhost', 9000)
       }
       connectedDatabase = true
-    }
-    catch (error) {
+    } catch (error) {
       console.error(error)
     }
   }
@@ -147,42 +145,38 @@ function GetInnerLayout({children}) {
         connectAuthEmulator(auth, 'http://localhost:9099')
       }
       connectedAuth = true
-    }
-    catch (error) {
+    } catch (error) {
       console.error(error)
     }
   }
   let appCheck
   try {
+    console.log('RECAPTCHA_API_KEY sitekey', RECAPTCHA_API_KEY)
     appCheck = initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(RECAPTCHA_API_KEY),
       isTokenAutoRefreshEnabled: true,
     })
-  }
-  catch (error) {
+  } catch (error) {
     console.error(error)
   }
   let analytics
   try {
     analytics = getAnalytics(app)
-  }
-  catch (error) {
+  } catch (error) {
     console.error(error)
   }
 
   if (status === 'loading') {
-    return (<SecureLoadingOverlayComponent />)
+    return <SecureLoadingOverlayComponent />
   }
 
   return (
     <AnalyticsProvider sdk={analytics}>
       <AuthProvider sdk={auth}>
         {/*<AppCheckProvider sdk={appCheck}>*/}
-          <DatabaseProvider sdk={database}>
-            <FirestoreProvider sdk={store}>
-              {children}
-            </FirestoreProvider>
-          </DatabaseProvider>
+        <DatabaseProvider sdk={database}>
+          <FirestoreProvider sdk={store}>{children}</FirestoreProvider>
+        </DatabaseProvider>
         {/*</AppCheckProvider>*/}
       </AuthProvider>
     </AnalyticsProvider>
@@ -194,18 +188,13 @@ export interface FirebaseAppLayoutProps {
 }
 
 function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
-  const {children} = props
+  const { children } = props
 
   return (
-    <FirebaseAppProvider
-      firebaseConfig={fbClientAppOptions}
-      appName={FIREBASE_CLIENT_APP_NAME}
-    >
+    <FirebaseAppProvider firebaseConfig={fbClientAppOptions} appName={FIREBASE_CLIENT_APP_NAME}>
       <NoSsr>
         <GetInnerLayout>
-          <AnalyticsGlobalEvents>
-            {children}
-          </AnalyticsGlobalEvents>
+          <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
         </GetInnerLayout>
       </NoSsr>
     </FirebaseAppProvider>
@@ -214,5 +203,5 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
 FirebaseAppLayout.displayName = 'FirebaseAppLayout'
 FirebaseAppLayout.aglyn = true
 
-export {FirebaseAppLayout}
+export { FirebaseAppLayout }
 export default FirebaseAppLayout

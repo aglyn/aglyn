@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-import {BesignerDeviceFlag} from '@aglyn/core-data-besigner'
-import {LOADING_OVERLAY_ELEMENT} from '@aglyn/shared-ui-jsx'
-import {generateComponentClassKeys, styled} from '@aglyn/shared-ui-theme'
+import { BesignerDeviceFlag } from '@aglyn/besigner-data'
+import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 // import {ZoomablePanningComponent} from '@aglyn/shared-ui-jsx'
-import {ComponentProps, forwardRef, type Ref} from 'react'
+import { ComponentProps, forwardRef, type Ref } from 'react'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
-import type {ViewportFrameComponentProps} from './viewport-frame.component'
-
+import type { ViewportFrameComponentProps } from './viewport-frame.component'
 
 const canvasArtboardClassKeys = generateComponentClassKeys('AglynCanvasArtboard', [
   'responsive',
@@ -48,7 +47,7 @@ const ViewportCanvas = styled('div', {
 
 const ViewportArtboard = styled('div', {
   name: 'AglynViewportArtboard',
-})(({theme}) => ({
+})(({ theme }) => ({
   overflow: 'hidden',
   minHeight: '100%',
   padding: theme.spacing(3),
@@ -61,54 +60,51 @@ const ViewportArtboard = styled('div', {
     duration: theme.transitions.duration.leavingScreen,
   }),
   width: '100%',
-  [`&, &.${canvasArtboardClassKeys.responsive}`]: {width: '100%'},
-  [`&.${canvasArtboardClassKeys.deviceXs}`]: {width: 390},
-  [`&.${canvasArtboardClassKeys.deviceSm}`]: {width: theme.breakpoints.values.sm},
-  [`&.${canvasArtboardClassKeys.deviceMd}`]: {width: theme.breakpoints.values.md},
-  [`&.${canvasArtboardClassKeys.deviceLg}`]: {width: theme.breakpoints.values.lg},
-  [`&.${canvasArtboardClassKeys.deviceXl}`]: {width: theme.breakpoints.values.xl},
+  [`&, &.${canvasArtboardClassKeys.responsive}`]: { width: '100%' },
+  [`&.${canvasArtboardClassKeys.deviceXs}`]: { width: 390 },
+  [`&.${canvasArtboardClassKeys.deviceSm}`]: { width: theme.breakpoints.values.sm },
+  [`&.${canvasArtboardClassKeys.deviceMd}`]: { width: theme.breakpoints.values.md },
+  [`&.${canvasArtboardClassKeys.deviceLg}`]: { width: theme.breakpoints.values.lg },
+  [`&.${canvasArtboardClassKeys.deviceXl}`]: { width: theme.breakpoints.values.xl },
 }))
 
 const ViewportFrameComponent = dynamic<ViewportFrameComponentProps>(
   () => import('./viewport-frame.component').then((mod) => mod.ViewportFrameComponent),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT }
 )
 
 export interface ViewportCanvasComponentProps extends ComponentProps<typeof ViewportCanvas> {
   pannerRef?: Ref<any>
 }
 
-const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
-  function RefRenderFn(props, ref) {
-    const {...rest} = props
+const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(function RefRenderFn(
+  props,
+  ref
+) {
+  const { ...rest } = props
 
-    const [devicePreview] = useAglynBesignerFlag('devicePreview')
-    const artboardClass = clsx({
-      [canvasArtboardClassKeys.responsive]: BesignerDeviceFlag.RESPONSIVE === devicePreview,
-      [canvasArtboardClassKeys.deviceXs]: BesignerDeviceFlag.XS === devicePreview,
-      [canvasArtboardClassKeys.deviceSm]: BesignerDeviceFlag.SM === devicePreview,
-      [canvasArtboardClassKeys.deviceMd]: BesignerDeviceFlag.MD === devicePreview,
-      [canvasArtboardClassKeys.deviceLg]: BesignerDeviceFlag.LG === devicePreview,
-      [canvasArtboardClassKeys.deviceXl]: BesignerDeviceFlag.XL === devicePreview,
-    })
+  const [devicePreview] = useAglynBesignerFlag('devicePreview')
+  const artboardClass = clsx({
+    [canvasArtboardClassKeys.responsive]: BesignerDeviceFlag.RESPONSIVE === devicePreview,
+    [canvasArtboardClassKeys.deviceXs]: BesignerDeviceFlag.XS === devicePreview,
+    [canvasArtboardClassKeys.deviceSm]: BesignerDeviceFlag.SM === devicePreview,
+    [canvasArtboardClassKeys.deviceMd]: BesignerDeviceFlag.MD === devicePreview,
+    [canvasArtboardClassKeys.deviceLg]: BesignerDeviceFlag.LG === devicePreview,
+    [canvasArtboardClassKeys.deviceXl]: BesignerDeviceFlag.XL === devicePreview,
+  })
 
-    return (
-      <ViewportCanvas
-        ref={ref}
-        id="aglyn:viewport-canvas"
-        {...rest}
-      >
-        <ViewportArtboard id="aglyn:viewport-artboard" className={artboardClass}>
-          <ViewportFrameComponent />
-        </ViewportArtboard>
-      </ViewportCanvas>
-    )
-  },
-)
+  return (
+    <ViewportCanvas ref={ref} id="aglyn:viewport-canvas" {...rest}>
+      <ViewportArtboard id="aglyn:viewport-artboard" className={artboardClass}>
+        <ViewportFrameComponent />
+      </ViewportArtboard>
+    </ViewportCanvas>
+  )
+})
 
 ViewportCanvasComponent.displayName = 'ViewportCanvasComponent'
 ViewportCanvasComponent.aglyn = true
 ViewportCanvasComponent.defaultProps = {}
 
-export {ViewportCanvasComponent}
+export { ViewportCanvasComponent }
 export default ViewportCanvasComponent

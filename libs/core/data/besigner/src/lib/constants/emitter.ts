@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-
-import type {PayloadData} from '@aglyn/core-data-framework'
+import type { PayloadData } from '@aglyn/core-data-framework'
 import type {
   BesignerCanvasHoveredElement,
   BesignerCanvasSelectedElement,
@@ -36,7 +35,6 @@ import {
   BesignerPanelValue,
 } from '../controllers/aglyn-besigner.types'
 
-
 export enum BesignerAppEffectFlag {
   BESIGNER_GET_STORE = 'effect:besigner:get-store',
   BESIGNER_SET_FLAG = 'effect:besigner:set-flag',
@@ -45,49 +43,53 @@ export enum BesignerAppEffectFlag {
   BESIGNER_CLOSE_PANEL = 'effect:besigner:close-panel',
 }
 
-
-export type BesignerGetStorePayload<K extends keyof BesignerContext = any> = PayloadData<{store: K}>
+export type BesignerGetStorePayload<K extends keyof BesignerContext = any> = PayloadData<{
+  store: K
+}>
 export type BesignerSetFlagPayload<K extends keyof BesignerFlagsState = any> = PayloadData<{
-  flag: K, value: (
-    prev: BesignerFlagValue<K>,
-    flags: BesignerFlagsState,
-  ) => BesignerFlagValue<K>
+  flag: K
+  value: (prev: BesignerFlagValue<K>, flags: BesignerFlagsState) => BesignerFlagValue<K>
 }>
-export type BesignerSetFlagsPayload = PayloadData<{flags: (prev: BesignerFlagsState) => BesignerFlagsState}>
+export type BesignerSetFlagsPayload = PayloadData<{
+  flags: (prev: BesignerFlagsState) => BesignerFlagsState
+}>
 export type BesignerSetPanelPayload<K extends BesignerPanelKey = any> = PayloadData<{
-  panel: K, value: (
-    prev: BesignerPanelValue<K>,
-    panels: BesignerPanelsState,
-  ) => BesignerPanelValue<K>
+  panel: K
+  value: (prev: BesignerPanelValue<K>, panels: BesignerPanelsState) => BesignerPanelValue<K>
 }>
-export type BesignerSetPanelsPayload = PayloadData<{panels: (prev: BesignerPanelsState) => BesignerPanelsState}>
-export type BesignerTogglePanelPayload = PayloadData<{panel: BesignerPanelKey}>
-export type BesignerOpenPanelPayload = PayloadData<{panel: BesignerPanelKey}>
-export type BesignerClosePanelPayload = PayloadData<{panel: BesignerPanelKey}>
-export type BesignerSetDndPayload = PayloadData<{dnd: (prev: BesignerDndState) => BesignerDndState}>
+export type BesignerSetPanelsPayload = PayloadData<{
+  panels: (prev: BesignerPanelsState) => BesignerPanelsState
+}>
+export type BesignerTogglePanelPayload = PayloadData<{ panel: BesignerPanelKey }>
+export type BesignerOpenPanelPayload = PayloadData<{ panel: BesignerPanelKey }>
+export type BesignerClosePanelPayload = PayloadData<{ panel: BesignerPanelKey }>
+export type BesignerSetDndPayload = PayloadData<{
+  dnd: (prev: BesignerDndState) => BesignerDndState
+}>
 export type BesignerSetDndItemPayload<K extends BesignerDndItemKey = any> = PayloadData<{
-  item: K, value: (
-    prev: BesignerDndItemValue<K>,
-    dnd: BesignerDndState,
-  ) => BesignerDndItemValue<K>
+  item: K
+  value: (prev: BesignerDndItemValue<K>, dnd: BesignerDndState) => BesignerDndItemValue<K>
 }>
-export type BesignerSetCanvasPayload = PayloadData<{canvas: (prev: BesignerCanvasState) => BesignerCanvasState}>
+export type BesignerSetCanvasPayload = PayloadData<{
+  canvas: (prev: BesignerCanvasState) => BesignerCanvasState
+}>
 export type BesignerSetCanvasItemPayload<K extends BesignerCanvasItemKey = any> = PayloadData<{
-  item: K, value: (
+  item: K
+  value: (
     prev: BesignerCanvasItemValue<K>,
-    canvas: BesignerCanvasState,
+    canvas: BesignerCanvasState
   ) => BesignerCanvasItemValue<K>
 }>
 export type BesignerSetCanvasSelectedPayload = PayloadData<{
   selected: (
     prev: BesignerCanvasSelectedElement,
-    canvas: BesignerCanvasState,
+    canvas: BesignerCanvasState
   ) => BesignerCanvasSelectedElement
 }>
 export type BesignerSetCanvasHoveredPayload = PayloadData<{
   hovered: (
     prev: BesignerCanvasHoveredElement,
-    canvas: BesignerCanvasState,
+    canvas: BesignerCanvasState
   ) => BesignerCanvasHoveredElement
 }>
 

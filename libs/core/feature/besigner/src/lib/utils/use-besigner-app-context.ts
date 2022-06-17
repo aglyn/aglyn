@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-import type {IBesignerAppController} from '@aglyn/core-data-besigner'
-import {useAglynAppContext} from '@aglyn/core-feature-renderer'
+import type { IBesignerAppController } from '@aglyn/besigner-data'
+import { useAglynAppContext } from '@aglyn/core-feature-renderer'
 
-
-export function useBesignerAppContext(...args: Parameters<typeof useAglynAppContext>): IBesignerAppController {
+export function useBesignerAppContext(
+  ...args: Parameters<typeof useAglynAppContext>
+): IBesignerAppController {
   return useAglynAppContext<IBesignerAppController>(...args)
 }
 

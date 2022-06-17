@@ -39,5 +39,5 @@ export interface IBesignerAppController extends IAglynAppController<BesignerAppO
 }
 
 export interface BesignerAppControllerT extends AglynAppControllerT<BesignerAppOptions> {
-  new(options: BesignerAppOptions): IBesignerAppController
+  new (options: BesignerAppOptions): IBesignerAppController
 }

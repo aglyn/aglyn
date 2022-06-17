@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { DndDragSourceTypeFlag } from '@aglyn/core-data-besigner'
+import { DndDragSourceTypeFlag } from '@aglyn/besigner-data'
 import { CANVAS_ROOT_ELEMENT_ID, type ElementId } from '@aglyn/core-data-framework'
 import {
   useAglynCanvasElementHierarchy,

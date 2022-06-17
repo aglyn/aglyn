@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,24 +20,5 @@ const { getJestProjects } = require('@nrwl/jest')
 export default {
   projects: [
     ...getJestProjects(),
-    // '<rootDir>/libs/addons/ui/mui-bundle',
-    // '<rootDir>/libs/core/data/framework',
-    // '<rootDir>/libs/core/feature/besigner',
-    // '<rootDir>/libs/core/feature/renderer',
-    // '<rootDir>/libs/shared/data/brand',
-    // '<rootDir>/libs/shared/data/mdi',
-    // '<rootDir>/libs/shared/data/types',
-    // '<rootDir>/libs/shared/ui/theme',
-    // '<rootDir>/libs/shared/ui/jsx',
-    // '<rootDir>/libs/shared/ui/mdi-jsx',
-    // '<rootDir>/libs/shared/ui/next',
-    // '<rootDir>/libs/shared/util/dom',
-    // '<rootDir>/libs/shared/util/emitter',
-    // '<rootDir>/libs/shared/util/errors',
-    // '<rootDir>/libs/shared/util/guards',
-    // '<rootDir>/libs/shared/util/logger',
-    // '<rootDir>/libs/shared/util/timestamp',
-    // '<rootDir>/libs/shared/util/tools',
-    // '<rootDir>/libs/shared/util/vendor',
   ],
 }

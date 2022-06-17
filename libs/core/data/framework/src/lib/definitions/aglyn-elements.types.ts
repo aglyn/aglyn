@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type {Conditional} from '@aglyn/shared-data-types'
+import type {AnyObj, Conditional} from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type {BoxProps} from '@aglyn/shared-ui-theme'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
@@ -68,4 +68,18 @@ export interface AglynElement<
   props?: Omit<BoxProps<D, P>, 'sx'>
   sx?: BoxProps['sx']
   elements?: Conditional<Denormalized, true, ElementId[], AglynElementsNormalized>
+}
+
+/**
+ * @TODO ⚠️ Migrate to simplified interface
+ */
+export interface AglynNode {
+  $id: ElementId
+  kind?: 'element'
+  bundle?: BundleUId
+  type?: ComponentId
+  tag?: keyof JSX.IntrinsicElements | string
+  sx?: AnyObj
+  props?: AnyObj
+  children?: AglynNode[]
 }

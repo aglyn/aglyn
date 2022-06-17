@@ -15,31 +15,34 @@
  * limitations under the License.
  */
 
-
 import {
   type BesignerCanvasHoveredElement,
   type BesignerCanvasState,
   setBesignerCanvasHovered,
-} from '@aglyn/core-data-besigner'
-import {useSubscribable} from '@aglyn/shared-ui-jsx'
-import {_isFnT} from '@aglyn/shared-util-guards'
-import {useCallback} from 'react'
+} from '@aglyn/besigner-data'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
+import { _isFnT } from '@aglyn/shared-util-guards'
+import { useCallback } from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
-
 export type AglynCanvasSetHovered = (hovered: AglynCanvasHovered) => void
-export type AglynCanvasHovered = BesignerCanvasHoveredElement | ((
-  prev: BesignerCanvasHoveredElement,
-  canvas: BesignerCanvasState,
-) => BesignerCanvasHoveredElement)
+export type AglynCanvasHovered =
+  | BesignerCanvasHoveredElement
+  | ((
+      prev: BesignerCanvasHoveredElement,
+      canvas: BesignerCanvasState
+    ) => BesignerCanvasHoveredElement)
 
 export function useAglynCanvasSetHovered(): AglynCanvasSetHovered {
   const app = useBesignerAppContext()
-  return useCallback((hovered: AglynCanvasHovered) => {
-    setBesignerCanvasHovered(app, {
-      hovered: (prev, canvas) => _isFnT(hovered) ? hovered(prev, canvas) : hovered,
-    })
-  }, [app])
+  return useCallback(
+    (hovered: AglynCanvasHovered) => {
+      setBesignerCanvasHovered(app, {
+        hovered: (prev, canvas) => (_isFnT(hovered) ? hovered(prev, canvas) : hovered),
+      })
+    },
+    [app]
+  )
 }
 
 export function useAglynCanvasHovered(): [
@@ -49,9 +52,10 @@ export function useAglynCanvasHovered(): [
   const app = useBesignerAppContext()
   const setHovered = useAglynCanvasSetHovered()
   const value = useSubscribable<BesignerCanvasHoveredElement>(
-    app.besigner?.canvas, undefined,
+    app.besigner?.canvas,
+    undefined,
     (canvas) => canvas?.hovered,
-    [app],
+    [app]
   )
   return [value, setHovered]
 }

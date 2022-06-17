@@ -23,7 +23,7 @@ import {
   type StackProps,
   Tooltip as MuiTooltip,
 } from '@mui/material'
-import {forwardRef, useCallback} from 'react'
+import {forwardRef} from 'react'
 import useAglynCanvasHistoryControls from '../hooks/use-aglyn-elements-history'
 
 
@@ -33,20 +33,13 @@ const HistoryControlsComponent = forwardRef<any, HistoryControlsProps>(
   function RefRenderFn(props, ref) {
     const [undo, redo, canUndo, canRedo] = useAglynCanvasHistoryControls()
 
-    const handleUndoClick = useCallback(() => {
-      undo()
-    }, [undo])
-    const handleRedoClick = useCallback(() => {
-      redo()
-    }, [redo])
-
     return (
       <MuiStack ref={ref} direction="row" spacing={0.25} {...props}>
         <MuiTooltip title={'Undo (⌘Z)'}>
         <span>
           <MuiIconButton
             aria-label="undo action"
-            onClick={handleUndoClick}
+            onClick={undo}
             disabled={!canUndo}
           >
             <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_UNDO.path} />
@@ -57,7 +50,7 @@ const HistoryControlsComponent = forwardRef<any, HistoryControlsProps>(
         <span>
           <MuiIconButton
             aria-label="redo action"
-            onClick={handleRedoClick}
+            onClick={redo}
             disabled={!canRedo}
           >
             <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_REDO.path} />

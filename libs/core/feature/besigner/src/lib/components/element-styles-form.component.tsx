@@ -112,6 +112,34 @@ const stylesSchema = (presetColors) => ({
         },
       ],
     },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'paddingTop',
+      label: 'Top',
+      title: 'Padding top',
+      FormFieldGridProps: {xs: 3},
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'paddingRight',
+      label: 'Right',
+      title: 'Padding right',
+      FormFieldGridProps: {xs: 3},
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'paddingBottom',
+      label: 'Bottom',
+      title: 'Padding bottom',
+      FormFieldGridProps: {xs: 3},
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'paddingLeft',
+      label: 'Left',
+      title: 'Padding left',
+      FormFieldGridProps: {xs: 3},
+    },
   ],
 })
 

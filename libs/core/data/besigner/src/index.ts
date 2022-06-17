@@ -15,5 +15,4 @@
  * limitations under the License.
  */
 
-export * from './lib/besigner'
-export {_INTERNAL_BESIGNERS_} from './lib/constants/_internal'
+export * from './besigner'

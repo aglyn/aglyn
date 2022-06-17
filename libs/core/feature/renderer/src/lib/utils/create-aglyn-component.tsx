@@ -19,26 +19,30 @@ import {
   type AglynComponentSchema,
   COMPONENT_ELEMENT_TYPE,
   type ComponentRegisterPayload,
+  FEATURE_FLAG,
   type IAglynComponent,
   MODULE_TYPE,
   OF_KIND,
   OF_TYPE,
 } from '@aglyn/core-data-framework'
-import { styled } from '@aglyn/shared-ui-theme'
-import { type ErrorBoundaryProps, withErrorBoundary } from '@aglyn/shared-ui-jsx'
-import { copy } from '@aglyn/shared-util-tools'
-import { hoistNonReactStatics, pascalCase } from '@aglyn/shared-util-vendor'
-import { forwardRef } from 'react'
+import {type ErrorBoundaryProps, withErrorBoundary} from '@aglyn/shared-ui-jsx'
+import {styled} from '@aglyn/shared-ui-theme'
+import {copy} from '@aglyn/shared-util-tools'
+import {hoistNonReactStatics, pascalCase} from '@aglyn/shared-util-vendor'
+import {forwardRef} from 'react'
+
 
 export function createAglynComponent<P = any, C = any>(
   schema: AglynComponentSchema<P>,
   component: C | any,
-  options?: Partial<ErrorBoundaryProps>
+  options?: Partial<ErrorBoundaryProps>,
 ): ComponentRegisterPayload<P> {
-  const { componentId, bundleId, emotion } = schema
+  const {componentId, bundleId, features, styledOptions} = schema
   const pascalId = `${bundleId ? pascalCase(bundleId) + '-' : ''}${pascalCase(componentId)}`
 
-  const Component = emotion?.disable ? component : styled(component, emotion?.options)({})
+  const Component = features?.emotion === FEATURE_FLAG.DISABLED
+    ? component
+    : styled(component, styledOptions)({})
 
   const AglynComponent = forwardRef<any, P>(function RefRenderFn(props, ref) {
     return <Component ref={ref} {...props} />

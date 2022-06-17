@@ -23,7 +23,12 @@
 
 <p align="center">
   <a href="https://aglyn.com" title="Go to aglyn.com">
-    <img src="https://aglyn.com/_static/images/icons/icon.svg" alt="aglyn-logo" width="120px" height="120px"/>
+    <img 
+      src="static/icons/aglyn-1/icon.svg" 
+      alt="aglyn-logo"
+      width="120px" 
+      height="120px"
+    />
   </a>
   <br>
   <i>Aglyn is a website builder platform for your business goals
@@ -118,10 +123,6 @@ A utility library contains low-level utilities used by many libraries and applic
 │  └─ 🌐 www
 │
 ├─ libs/
-│  ├─ addon/
-│  │  ├─ ui/
-│  │  │  └─ 📚 mui-bundle
-│  │
 │  ├─ core/
 │  │  ├─ data/
 │  │  │  └─ 📚 components
@@ -130,6 +131,10 @@ A utility library contains low-level utilities used by many libraries and applic
 │  ├─ feature/
 │  │  ├─ 📚 besigner
 │  │  └─ 📚 renderer
+│  │
+│  ├─ plugins/
+│  │  ├─ ui/
+│  │  │  └─ 📚 mui-bundle
 │  │
 │  ├─ shared/
 │  │  ├─ data/
@@ -269,7 +274,7 @@ account or application instance. Subjectively and simultaneously, adding logical
 features, solutions and other capabilities. Extensions are created by third-parties (community) and
 occasionally by an official first-party;
 
-### Add-ons
+### Plugin / Add-on
 
 Personalizing, pluggable account or application modules and features. Intended to contribute
 supports and integral adoptions, respecting the symbolical architecture and behavior of the account

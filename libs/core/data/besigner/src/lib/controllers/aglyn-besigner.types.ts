@@ -26,8 +26,8 @@ import type {
   IAglynModuleModel,
 } from '@aglyn/core-data-framework'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type {LogLevelString} from '@aglyn/shared-util-logger'
-import type {BehaviorSubject} from 'rxjs'
+import type { LogLevelString } from '@aglyn/shared-util-logger'
+import type { BehaviorSubject } from 'rxjs'
 import type {
   BesignerDeviceFlag,
   BesignerPanelTabFlag,
@@ -52,7 +52,6 @@ import type {
   BesignerSetPanelsPayload,
   BesignerTogglePanelPayload,
 } from '../constants/emitter'
-
 
 export type BesignerContext = {
   flags: {
@@ -87,15 +86,18 @@ export type BesignerFlagKey = keyof BesignerFlagsState
 export type BesignerFlagValue<K extends BesignerFlagKey = BesignerFlagKey> = BesignerFlagsState[K]
 export type BesignerCanvasState = BesignerContext['canvas']
 export type BesignerCanvasItemKey = keyof BesignerCanvasState
-export type BesignerCanvasItemValue<K extends BesignerCanvasItemKey = BesignerCanvasItemKey> = BesignerCanvasState[K]
+export type BesignerCanvasItemValue<K extends BesignerCanvasItemKey = BesignerCanvasItemKey> =
+  BesignerCanvasState[K]
 export type BesignerCanvasSelectedElement = BesignerCanvasItemValue<'selected'>
 export type BesignerCanvasHoveredElement = BesignerCanvasItemValue<'hovered'>
 export type BesignerPanelsState = BesignerContext['panels']
 export type BesignerPanelKey = keyof BesignerPanelsState
-export type BesignerPanelValue<K extends BesignerPanelKey = BesignerPanelKey> = BesignerPanelsState[K]
+export type BesignerPanelValue<K extends BesignerPanelKey = BesignerPanelKey> =
+  BesignerPanelsState[K]
 export type BesignerDndState = BesignerContext['dnd']
 export type BesignerDndItemKey = keyof BesignerDndState
-export type BesignerDndItemValue<K extends BesignerDndItemKey = BesignerDndItemKey> = BesignerDndState[K]
+export type BesignerDndItemValue<K extends BesignerDndItemKey = BesignerDndItemKey> =
+  BesignerDndState[K]
 export type BesignerDndElementActive = BesignerContext['dnd']['active']
 export type BesignerDndElementOver = BesignerContext['dnd']['over']
 export type BesignerPanelItem = {
@@ -116,7 +118,8 @@ export interface AglynBesignerControllerOptions extends AglynModuleModelOptions 
   defaults?: Partial<BesignerContext>
 }
 
-export interface IAglynBesignerController extends IAglynModuleModel<AglynBesignerControllerOptions> {
+export interface IAglynBesignerController
+  extends IAglynModuleModel<AglynBesignerControllerOptions> {
   readonly __store__: {
     [K in keyof BesignerContext]: BehaviorSubject<BesignerContext[K]>
   }
@@ -125,7 +128,9 @@ export interface IAglynBesignerController extends IAglynModuleModel<AglynBesigne
   readonly flags: this['__store__']['flags']
   readonly panels: this['__store__']['panels']
 
-  getStore<K extends keyof BesignerContext>(payload: BesignerGetStorePayload<K>): BehaviorSubject<BesignerContext[K]>
+  getStore<K extends keyof BesignerContext>(
+    payload: BesignerGetStorePayload<K>
+  ): BehaviorSubject<BesignerContext[K]>
 
   closePanel(payload: BesignerClosePanelPayload): this
   openPanel(payload: BesignerOpenPanelPayload): this
@@ -142,6 +147,7 @@ export interface IAglynBesignerController extends IAglynModuleModel<AglynBesigne
   togglePanel(payload: BesignerTogglePanelPayload): this
 }
 
-export interface AglynBesignerControllerT extends AglynModuleModelT<AglynBesignerControllerOptions> {
-  new(app: IAglynAppController, options: AglynBesignerControllerOptions): IAglynBesignerController
+export interface AglynBesignerControllerT
+  extends AglynModuleModelT<AglynBesignerControllerOptions> {
+  new (app: IAglynAppController, options: AglynBesignerControllerOptions): IAglynBesignerController
 }

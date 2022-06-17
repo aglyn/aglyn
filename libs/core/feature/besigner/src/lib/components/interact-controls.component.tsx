@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import {InteractionModeFlag} from '@aglyn/core-data-besigner'
+import { InteractionModeFlag } from '@aglyn/besigner-data'
 import {
   ICON_VARIANT_MODIFY_MODE_REARRANGE,
   ICON_VARIANT_MODIFY_MODE_SELECT,
 } from '@aglyn/shared-data-enums'
-import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import {
   Stack as MuiStack,
   type StackProps,
@@ -28,51 +28,54 @@ import {
   ToggleButtonGroup as MuiToggleButtonGroup,
   Tooltip as MuiTooltip,
 } from '@mui/material'
-import {forwardRef, MouseEvent, useCallback} from 'react'
+import { forwardRef, MouseEvent, useCallback } from 'react'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
-
 
 export interface InteractControlsProps extends StackProps {}
 
-const InteractControlsComponent = forwardRef<any, InteractControlsProps>(
-  function RefRenderFn(props, ref) {
-    const {...rest} = props
-    const [interactMode, setInteractMode] = useAglynBesignerFlag('interactMode')
-    const handleInteractModeClick = useCallback((event: MouseEvent<HTMLElement>, value: any) => {
+const InteractControlsComponent = forwardRef<any, InteractControlsProps>(function RefRenderFn(
+  props,
+  ref
+) {
+  const { ...rest } = props
+  const [interactMode, setInteractMode] = useAglynBesignerFlag('interactMode')
+  const handleInteractModeClick = useCallback(
+    (event: MouseEvent<HTMLElement>, value: any) => {
       setInteractMode(InteractionModeFlag[InteractionModeFlag[value]])
-    }, [setInteractMode])
+    },
+    [setInteractMode]
+  )
 
-    return (
-      <MuiStack ref={ref} direction="row" spacing={1} {...rest}>
-        <MuiToggleButtonGroup
-          size="small"
-          value={interactMode}
-          onChange={handleInteractModeClick}
-          exclusive
-        >
-          <MuiTooltip title={'Direct selection'}>
-            <MuiToggleButton
-              selected={interactMode === InteractionModeFlag.SELECT}
-              value={InteractionModeFlag.SELECT}
-            >
-              <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_MODE_SELECT.path} />
-            </MuiToggleButton>
-          </MuiTooltip>
-          <MuiTooltip title={'Rearrange'}>
-            <MuiToggleButton
-              selected={interactMode === InteractionModeFlag.REARRANGE}
-              value={InteractionModeFlag.REARRANGE}
-            >
-              <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_MODE_REARRANGE.path} />
-            </MuiToggleButton>
-          </MuiTooltip>
-        </MuiToggleButtonGroup>
-      </MuiStack>
-    )
-  },
-)
+  return (
+    <MuiStack ref={ref} direction="row" spacing={1} {...rest}>
+      <MuiToggleButtonGroup
+        size="small"
+        value={interactMode}
+        onChange={handleInteractModeClick}
+        exclusive
+      >
+        <MuiTooltip title={'Direct selection'}>
+          <MuiToggleButton
+            selected={interactMode === InteractionModeFlag.SELECT}
+            value={InteractionModeFlag.SELECT}
+          >
+            <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_MODE_SELECT.path} />
+          </MuiToggleButton>
+        </MuiTooltip>
+        <MuiTooltip title={'Rearrange'}>
+          <MuiToggleButton
+            selected={interactMode === InteractionModeFlag.REARRANGE}
+            value={InteractionModeFlag.REARRANGE}
+          >
+            <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_MODE_REARRANGE.path} />
+          </MuiToggleButton>
+        </MuiTooltip>
+      </MuiToggleButtonGroup>
+    </MuiStack>
+  )
+})
 InteractControlsComponent.displayName = 'InteractControlsComponent'
 InteractControlsComponent.aglyn = true
 
-export {InteractControlsComponent}
+export { InteractControlsComponent }
 export default InteractControlsComponent

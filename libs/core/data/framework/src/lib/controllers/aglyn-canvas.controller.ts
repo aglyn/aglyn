@@ -158,12 +158,15 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
   private handleStateModification<P>(
     callback: (present: AglynElementsDenormalized, payload?: P) => AglynElementsDenormalized,
     payload?: P,
+    clear = false
   ) {
     const state = this.getState()
     const prev = state.present
     const now = callback(copy(prev), payload)
     const updated = handleStateModificationHistoryChange(state, now)
-    !this.isDeepEqual(prev, now) && this.nextState(updated)
+    if (this.isDeepEqual(prev, now)) return this
+    if (clear) this.nextState({past: [], present: updated.present, future: []})
+    else this.nextState(updated)
     return this
   }
   private isDeepEqual<T>(prev: unknown, now: T): prev is T {
@@ -233,7 +236,7 @@ export class AglynCanvasController extends AglynModuleModel<AglynCanvasControlle
     return this.handleStateModification(handleCanvasSetElement, payload)
   }
   public setElements(payload: CanvasSetElementsPayload): this {
-    return this.handleStateModification(handleCanvasSetElements, payload)
+    return this.handleStateModification(handleCanvasSetElements, payload, true)
   }
   public updateElement(payload: CanvasUpdateElementPayload): this {
     return this.handleStateModification(handleCanvasUpdateElement, payload)

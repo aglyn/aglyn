@@ -17,7 +17,7 @@
 
 import {canvasRedo, canvasUndo} from '@aglyn/core-data-framework'
 import {useSubscribable} from '@aglyn/shared-ui-jsx'
-import {useCallback} from 'react'
+import {useMemo} from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
 
@@ -30,18 +30,23 @@ export type UseAglynCanvasHistory = [
 
 export function useAglynCanvasHistoryControls(): UseAglynCanvasHistory {
   const app = useBesignerAppContext()
-  const canUndo = useSubscribable<number | false>(
-    app.canvas?.pastElements, false,
-    (past) => past?.length > 0 ? past.length : false,
+  const undoCount = useSubscribable<number | 0>(
+    app.canvas?.pastElements, 0,
+    (past) => past?.length || 0,
     [app],
   )
-  const canRedo = useSubscribable<number | false>(
-    app.canvas?.futureElements, false,
-    (future) => future?.length > 0 ? future.length : false,
+  const redoCount = useSubscribable<number | 0>(
+    app.canvas?.futureElements, 0,
+    (future) => future?.length || 0,
     [app],
   )
-  const handleUndo = useCallback(() => canvasUndo(app, {}), [app])
-  const handleRedo = useCallback(() => canvasRedo(app, {}), [app])
-  return [handleUndo, handleRedo, canUndo, canRedo]
+  return useMemo(() => {
+    return [
+      () => canvasUndo(app, {}),
+      () => canvasRedo(app, {}),
+      undoCount > 0 ? undoCount : false,
+      redoCount > 0 ? redoCount : false,
+    ]
+  }, [undoCount, redoCount, app])
 }
 export default useAglynCanvasHistoryControls

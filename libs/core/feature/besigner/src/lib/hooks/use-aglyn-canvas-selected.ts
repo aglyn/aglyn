@@ -15,32 +15,34 @@
  * limitations under the License.
  */
 
-
 import {
   type BesignerCanvasSelectedElement,
   type BesignerCanvasState,
   setBesignerCanvasSelected,
-} from '@aglyn/core-data-besigner'
-import {useSubscribable} from '@aglyn/shared-ui-jsx'
-import {_isFnT} from '@aglyn/shared-util-guards'
-import {useCallback} from 'react'
+} from '@aglyn/besigner-data'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
+import { _isFnT } from '@aglyn/shared-util-guards'
+import { useCallback } from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
-
 export type BesignerCanvasSetSelected = (selected: BesignerCanvasSelected) => void
-export type BesignerCanvasSelected = BesignerCanvasSelectedElement | ((
-  prev: BesignerCanvasSelectedElement,
-  canvas: BesignerCanvasState,
-) => BesignerCanvasSelectedElement)
-
+export type BesignerCanvasSelected =
+  | BesignerCanvasSelectedElement
+  | ((
+      prev: BesignerCanvasSelectedElement,
+      canvas: BesignerCanvasState
+    ) => BesignerCanvasSelectedElement)
 
 export function useAglynCanvasSetSelected(): BesignerCanvasSetSelected {
   const app = useBesignerAppContext()
-  return useCallback((selected: BesignerCanvasSelected) => {
-    setBesignerCanvasSelected(app, {
-      selected: (prev, canvas) => _isFnT(selected) ? selected(prev, canvas) : selected,
-    })
-  }, [app])
+  return useCallback(
+    (selected: BesignerCanvasSelected) => {
+      setBesignerCanvasSelected(app, {
+        selected: (prev, canvas) => (_isFnT(selected) ? selected(prev, canvas) : selected),
+      })
+    },
+    [app]
+  )
 }
 
 export function useAglynCanvasSelected(): [
@@ -49,9 +51,10 @@ export function useAglynCanvasSelected(): [
 ] {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerCanvasSelectedElement>(
-    app.besigner?.canvas, undefined,
+    app.besigner?.canvas,
+    undefined,
     (canvas) => canvas?.selected,
-    [app],
+    [app]
   )
   const setSelected = useAglynCanvasSetSelected()
 
