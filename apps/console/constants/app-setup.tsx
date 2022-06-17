@@ -17,9 +17,9 @@
 
 import { bundle as muiBundle } from '@aglyn/plugins-ui-mui'
 import { doesBesignerAppExist, initializeBesignerApp } from '@aglyn/besigner-data'
-import { registerBundle, registerComponent } from '@aglyn/core-data-framework'
-import { samplePageData } from '@aglyn/core-feature-besigner'
-import { createAglynComponent } from '@aglyn/core-feature-renderer'
+import { registerBundle, registerComponent } from '@aglyn/foundation-data-core'
+import { samplePageData } from '@aglyn/foundation-feature-besigner'
+import { createAglynComponent } from '@aglyn/foundation-feature-renderer'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 
 const c1 = createAglynComponent(

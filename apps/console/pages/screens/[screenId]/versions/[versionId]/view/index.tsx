@@ -23,7 +23,7 @@ import {
   ICON_VARIANT_PRIMARY_KEY,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
-import { useScreen } from '@aglyn/core-data-fire'
+import { useScreen } from '@aglyn/foundation-data-fire'
 import { AppLink, ContainerComponent, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'

@@ -1,9 +1,0 @@
-{
-  "name": "@aglyn/core-data-framework",
-  "version": "0.0.1",
-  "type": "commonjs",
-  "dependencies": {
-    "@swc/helpers": "~0.3.3"
-  },
-  "devDependencies": {}
-}

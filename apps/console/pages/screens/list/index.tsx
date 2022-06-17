@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {CANVAS_ROOT_ELEMENT_ID, createResourceUid} from '@aglyn/core-data-framework'
+import { CANVAS_ROOT_ELEMENT_ID, createResourceUid } from '@aglyn/foundation-data-core'
 import {
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,
@@ -30,15 +30,15 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
-import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {NextPageTitle} from '@aglyn/shared-ui-next'
-import {useSnackbar} from '@aglyn/shared-ui-snackstack'
-import {Button, IconButton, Typography} from '@mui/material'
-import {GridActionsCellItem, type GridColumns} from '@mui/x-data-grid'
-import {collection, doc, limit, query, setDoc, Timestamp, updateDoc} from 'firebase/firestore'
-import {useCallback, useEffect, useState} from 'react'
-import {useFirestore, useFirestoreCollectionData} from 'reactfire'
+import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { NextPageTitle } from '@aglyn/shared-ui-next'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Button, IconButton, Typography } from '@mui/material'
+import { GridActionsCellItem, type GridColumns } from '@mui/x-data-grid'
+import { collection, doc, limit, query, setDoc, Timestamp, updateDoc } from 'firebase/firestore'
+import { useCallback, useEffect, useState } from 'react'
+import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import DataTableComponent from '../../../components/data-table.component'
@@ -46,23 +46,26 @@ import AuthenticatedLayout from '../../../components/layouts/authenticated.layou
 import ConsoleLayout from '../../../components/layouts/console.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import WidgetCardComponent from '../../../components/widget-card.component'
-import {buildRoute, Route} from '../../../constants/route-links'
-import {CONTENT_MAX_WIDTH, TABLE_ROW_HEIGHT} from '../../../constants/shared'
-
+import { buildRoute, Route } from '../../../constants/route-links'
+import { CONTENT_MAX_WIDTH, TABLE_ROW_HEIGHT } from '../../../constants/shared'
 
 function Screens(props) {
-  const {queueLoading, loading} = useLoading()
-  const {confirm} = useConfirmationContext()
+  const { queueLoading, loading } = useLoading()
+  const { confirm } = useConfirmationContext()
   const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(false)
-  const handleFormOpen = useCallback(() => {setQuickDrawerOpen(true)}, [])
-  const handleFormClose = useCallback(() => {setQuickDrawerOpen(false)}, [])
+  const handleFormOpen = useCallback(() => {
+    setQuickDrawerOpen(true)
+  }, [])
+  const handleFormClose = useCallback(() => {
+    setQuickDrawerOpen(false)
+  }, [])
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
   const screensCollection = collection(firestore, 'screens')
   const screensQuery = query(screensCollection, limit(pageSize))
-  const {status, data} = useFirestoreCollectionData(screensQuery, {idField: '$id'})
+  const { status, data } = useFirestoreCollectionData(screensQuery, { idField: '$id' })
   const screens = data || []
-  const {enqueueSnackbar, closeSnackbar} = useSnackbar()
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar()
 
   const [error, setError] = useState(null)
 
@@ -75,66 +78,74 @@ function Screens(props) {
     }
   }, [status])
 
-  const handleFormSubmit = useCallback(async (values) => {
-    if (loading) return
-    if (error) setError(null)
-    const dequeueLoading = queueLoading()
-    const newId = createResourceUid()
-    const newVersionId = createResourceUid()
-    const timestamp = Timestamp.now()
-    const newValues = {
-      ...values,
-      versionId: newVersionId,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    const newVersionValue = {
-      screenId: newId,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      elements: {[CANVAS_ROOT_ELEMENT_ID]: {elements: []}},
-    }
-    await Promise.all([
-      setDoc(doc(firestore, 'screens', newId), newValues),
-      setDoc(doc(firestore, 'screens', newId, 'versions', newVersionId), newVersionValue),
-    ])
-      .catch((error) => {
-        console.error(error)
-        setError({...error})
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
+  const handleFormSubmit = useCallback(
+    async (values) => {
+      if (loading) return
+      if (error) setError(null)
+      const dequeueLoading = queueLoading()
+      const newId = createResourceUid()
+      const newVersionId = createResourceUid()
+      const timestamp = Timestamp.now()
+      const newValues = {
+        ...values,
+        versionId: newVersionId,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      const newVersionValue = {
+        screenId: newId,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        elements: { [CANVAS_ROOT_ELEMENT_ID]: { elements: [] } },
+      }
+      await Promise.all([
+        setDoc(doc(firestore, 'screens', newId), newValues),
+        setDoc(doc(firestore, 'screens', newId, 'versions', newVersionId), newVersionValue),
+      ])
+        .catch((error) => {
+          console.error(error)
+          setError({ ...error })
+          enqueueSnackbar('An error has occurred', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
         })
-      })
-      .finally(() => {
-        handleFormClose()
-        dequeueLoading()
-      })
-  }, [loading, error, queueLoading, firestore, handleFormClose, enqueueSnackbar])
+        .finally(() => {
+          handleFormClose()
+          dequeueLoading()
+        })
+    },
+    [loading, error, queueLoading, firestore, handleFormClose, enqueueSnackbar]
+  )
 
-  const handleDeleteScreen = useCallback((id: string, versionId: string) => async () => {
-    let dequeueLoading
-    await confirm({
-      title: 'Are you sure?',
-      description: 'You are about to delete a screen from the application, please confirm the desired option. Press \'Delete\' to confirm and delete the item. Press \'Cancel\' to void the operation and close this dialog.',
-      confirmationText: 'Delete',
-      confirmationButtonProps: {color: 'error'},
-    })
-      .then(() => {dequeueLoading = queueLoading()})
-      .then(() => updateDoc(doc(firestore, 'screens', id), {deletedAt: Timestamp.now()}))
-      .catch(() => {})
-      .finally(() => {
-        dequeueLoading && dequeueLoading()
+  const handleDeleteScreen = useCallback(
+    (id: string, versionId: string) => async () => {
+      let dequeueLoading
+      await confirm({
+        title: 'Are you sure?',
+        description:
+          "You are about to delete a screen from the application, please confirm the desired option. Press 'Delete' to confirm and delete the item. Press 'Cancel' to void the operation and close this dialog.",
+        confirmationText: 'Delete',
+        confirmationButtonProps: { color: 'error' },
       })
-  }, [confirm, firestore, queueLoading])
-
+        .then(() => {
+          dequeueLoading = queueLoading()
+        })
+        .then(() => updateDoc(doc(firestore, 'screens', id), { deletedAt: Timestamp.now() }))
+        .catch(() => {})
+        .finally(() => {
+          dequeueLoading && dequeueLoading()
+        })
+    },
+    [confirm, firestore, queueLoading]
+  )
 
   const columns: GridColumns = [
     {
       field: 'actions',
       type: 'actions',
       width: 100,
-      getActions: ({id, row}) => {
+      getActions: ({ id, row }) => {
         const screenId = id as string
         const versionId = row.versionId as string
         return [
@@ -144,7 +155,7 @@ function Screens(props) {
             label="detail"
             LinkComponent={AppLink}
             componentVariant="naked"
-            href={buildRoute(Route.SCREEN_DETAILS, {screenId, versionId})}
+            href={buildRoute(Route.SCREEN_DETAILS, { screenId, versionId })}
           />,
           <GridActionsCellItem
             key="action-delete"
@@ -156,11 +167,25 @@ function Screens(props) {
         ]
       },
     },
-    {field: '$id', headerName: 'ID', type: 'string', minWidth: 150},
-    {field: 'displayName', headerName: 'Display name', minWidth: 220, type: 'string'},
-    {field: 'description', headerName: 'Description', flex: 1, minWidth: 275, type: 'string'},
-    {field: 'updatedAt', headerName: 'Updated', flex: 1, minWidth: 150, type: 'date', valueFormatter: ({value}: any) => value?.toDate?.().toLocaleTimeString() || '--'},
-    {field: 'createdAt', headerName: 'Created', flex: 1, minWidth: 150, type: 'date', valueFormatter: ({value}: any) => value?.toDate?.().toLocaleTimeString() || '--'},
+    { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
+    { field: 'displayName', headerName: 'Display name', minWidth: 220, type: 'string' },
+    { field: 'description', headerName: 'Description', flex: 1, minWidth: 275, type: 'string' },
+    {
+      field: 'updatedAt',
+      headerName: 'Updated',
+      flex: 1,
+      minWidth: 150,
+      type: 'date',
+      valueFormatter: ({ value }: any) => value?.toDate?.().toLocaleTimeString() || '--',
+    },
+    {
+      field: 'createdAt',
+      headerName: 'Created',
+      flex: 1,
+      minWidth: 150,
+      type: 'date',
+      valueFormatter: ({ value }: any) => value?.toDate?.().toLocaleTimeString() || '--',
+    },
   ]
 
   // console.log('Screens props', props, data, status, screens)
@@ -178,31 +203,22 @@ function Screens(props) {
         ]}
         header={{
           children: 'App Screens',
-          icon: {path: ICON_VARIANT_PAGES.path},
+          icon: { path: ICON_VARIANT_PAGES.path },
         }}
-        headerRight={(
-          <Button
-            size="small"
-            variant="contained"
-            onClick={handleFormOpen}
-          >
+        headerRight={
+          <Button size="small" variant="contained" onClick={handleFormOpen}>
             {'Create New Screen'}
           </Button>
-        )}
-        aside={(
+        }
+        aside={
           <NavigationDrawerComponent
             open={quickDrawerOpen}
             anchor="right"
             variant="temporary"
             onClose={handleFormClose}
-            appBarLeft={(
+            appBarLeft={
               <>
-                <IconButton
-                  color="inherit"
-                  edge="start"
-                  onClick={handleFormClose}
-                  sx={{mr: 2}}
-                >
+                <IconButton color="inherit" edge="start" onClick={handleFormClose} sx={{ mr: 2 }}>
                   <MdiIcon path={ICON_VARIANT_CLOSE.path} />
                   <SrOnlyComponent>close drawer</SrOnlyComponent>
                 </IconButton>
@@ -210,13 +226,9 @@ function Screens(props) {
                   {'Create new screen'}
                 </Typography>
               </>
-            )}
+            }
             appBarRight={
-              <Button
-                variant="outlined"
-                color="inherit"
-                onClick={handleFormClose}
-              >
+              <Button variant="outlined" color="inherit" onClick={handleFormClose}>
                 {'Cancel'}
               </Button>
             }
@@ -227,16 +239,13 @@ function Screens(props) {
                 componentMapper={simpleComponentMapper}
                 onSubmit={handleFormSubmit}
                 schema={formSchema}
-                subscription={{values: true}}
+                subscription={{ values: true }}
                 clearOnUnmount
               />
-              <AuthErrorAlertComponent
-                error={error as any}
-                sx={{mt: 2, mb: 1}}
-              />
+              <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
             </ContainerComponent>
           </NavigationDrawerComponent>
-        )}
+        }
       >
         <ContainerComponent gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <WidgetCardComponent>
@@ -259,25 +268,25 @@ function Screens(props) {
   )
 }
 const formSchema = {
-  'fields': [
+  fields: [
     {
-      'component': 'text-field',
-      'name': 'displayName',
-      'helperText': 'Friendly name for internal reference',
-      'type': 'text', 'label': 'Display name',
-      'isRequired': true,
-      'validate': [
-        {'type': 'required', 'message': 'Provide a display name'},
-        {'type': 'max-length', 'threshold': 25, 'message': 'Must not exceed 25 characters'},
+      component: 'text-field',
+      name: 'displayName',
+      helperText: 'Friendly name for internal reference',
+      type: 'text',
+      label: 'Display name',
+      isRequired: true,
+      validate: [
+        { type: 'required', message: 'Provide a display name' },
+        { type: 'max-length', threshold: 25, message: 'Must not exceed 25 characters' },
       ],
-    }, {
-      'component': 'textarea',
-      'name': 'description',
-      'label': 'Description',
-      'helperText': 'Brief description for internal reference',
-      'validate': [
-        {'type': 'max-length', 'threshold': 80, 'message': 'Must not exceed 80 characters'},
-      ],
+    },
+    {
+      component: 'textarea',
+      name: 'description',
+      label: 'Description',
+      helperText: 'Brief description for internal reference',
+      validate: [{ type: 'max-length', threshold: 80, message: 'Must not exceed 80 characters' }],
     },
   ],
 }

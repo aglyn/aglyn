@@ -24,7 +24,7 @@ import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   RECAPTCHA_API_KEY,
-} from '@aglyn/core-data-fire'
+} from '@aglyn/foundation-data-fire'
 import { NextRouterEvent, SecureLoadingOverlayComponent } from '@aglyn/shared-ui-jsx'
 import { NoSsr } from '@mui/material'
 import { getAnalytics, logEvent, setUserId, setUserProperties } from 'firebase/analytics'

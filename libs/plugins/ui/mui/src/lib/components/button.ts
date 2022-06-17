@@ -19,7 +19,7 @@ import {
   type AglynComponentSchema,
   type ComponentId,
   FieldComponentType,
-} from '@aglyn/core-data-framework'
+} from '@aglyn/foundation-data-core'
 import { mdiGestureTapButton } from '@aglyn/shared-ui-mdi-jsx'
 import Button, { type ButtonProps } from '@mui/material/Button'
 import { BUNDLE_ID } from '../constants/bundle-common'

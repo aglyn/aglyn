@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { getApp, setCanvasElements } from '@aglyn/core-data-framework'
+import { getApp, setCanvasElements } from '@aglyn/foundation-data-core'
 import {
   AddControlsComponent,
   DevicePreviewControlsComponent,
@@ -24,11 +24,11 @@ import {
   useBesignerAppContext,
   withBesignerContext,
   WorkspaceEditorComponentProps,
-} from '@aglyn/core-feature-besigner'
-import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
-// import '@aglyn/core-feature-singleton'
+} from '@aglyn/foundation-feature-besigner'
+import { useAglynCanvasElementsNormalized } from '@aglyn/foundation-feature-renderer'
+// import '@aglyn/foundation-feature-singleton'
 import { HAS_BROWSER, ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
-import { useScreenVersion } from '@aglyn/core-data-fire'
+import { useScreenVersion } from '@aglyn/foundation-data-fire'
 import { AppLink, LOADING_OVERLAY_ELEMENT, useLoading } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
@@ -46,7 +46,7 @@ import '../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
-  () => import('@aglyn/core-feature-besigner').then((mod) => mod.WorkspaceEditorComponent),
+  () => import('@aglyn/foundation-feature-besigner').then((mod) => mod.WorkspaceEditorComponent),
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT }
 )
 

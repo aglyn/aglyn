@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AglynComponentField, FieldComponentType } from '@aglyn/core-data-framework'
+import { AglynComponentField, FieldComponentType } from '@aglyn/foundation-data-core'
 
 export const FIELD_COLOR: AglynComponentField = {
   name: 'color',

@@ -19,7 +19,7 @@ import {
   type AglynComponentSchema,
   type ComponentId,
   FieldComponentType,
-} from '@aglyn/core-data-framework'
+} from '@aglyn/foundation-data-core'
 import { mdiBorderInside } from '@aglyn/shared-ui-mdi-jsx'
 import Toolbar, { type ToolbarProps } from '@mui/material/Toolbar'
 import { BUNDLE_ID } from '../constants/bundle-common'

@@ -19,7 +19,7 @@ import {
   type AglynComponentSchema,
   type ComponentId,
   ComponentsLinealDirectiveFlag,
-} from '@aglyn/core-data-framework'
+} from '@aglyn/foundation-data-core'
 import { mdiFormatListBulletedSquare } from '@aglyn/shared-ui-mdi-jsx'
 import List, { type ListProps } from '@mui/material/List'
 import { BUNDLE_ID } from '../constants/bundle-common'

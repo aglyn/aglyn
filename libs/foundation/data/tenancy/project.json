@@ -1,0 +1,33 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/foundation/data/tenancy/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nrwl/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/foundation/data/tenancy",
+        "main": "libs/foundation/data/tenancy/src/index.ts",
+        "tsConfig": "libs/foundation/data/tenancy/tsconfig.lib.json",
+        "assets": ["libs/foundation/data/tenancy/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["libs/foundation/data/tenancy/**/*.ts"]
+      }
+    },
+    "test": {
+      "executor": "@nrwl/jest:jest",
+      "outputs": ["coverage/libs/foundation/data/tenancy"],
+      "options": {
+        "jestConfig": "libs/foundation/data/tenancy/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  },
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:tenancy"]
+}

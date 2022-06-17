@@ -19,7 +19,7 @@ import {
   type AglynComponentSchema,
   type ComponentId,
   FieldComponentType,
-} from '@aglyn/core-data-framework'
+} from '@aglyn/foundation-data-core'
 import {
   mdiAlphabetical,
   mdiFormatHeader1,

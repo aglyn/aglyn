@@ -1,0 +1,39 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/foundation/data/core/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nrwl/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/foundation/data/core",
+        "main": "libs/foundation/data/core/src/index.ts",
+        "tsConfig": "libs/foundation/data/core/tsconfig.lib.json",
+        "assets": ["libs/foundation/data/core/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "options": {
+        "lintFilePatterns": ["libs/foundation/data/core/**/*.ts"]
+      },
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nrwl/jest:jest",
+      "outputs": ["coverage/libs/foundation/data/core"],
+      "options": {
+        "jestConfig": "libs/foundation/data/core/jest.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "version": {
+      "executor": "@jscutlery/semver:version",
+      "options": {
+        "syncVersions": false
+      }
+    }
+  },
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:framework"]
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/foundation/data/fire/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nrwl/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/foundation/data/fire",
+        "main": "libs/foundation/data/fire/src/index.ts",
+        "tsConfig": "libs/foundation/data/fire/tsconfig.lib.json",
+        "assets": ["libs/foundation/data/fire/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["libs/foundation/data/fire/**/*.ts"]
+      }
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:feature"]
+}

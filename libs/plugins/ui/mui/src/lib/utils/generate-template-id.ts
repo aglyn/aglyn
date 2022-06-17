@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ComponentId } from '@aglyn/core-data-framework'
+import { ComponentId } from '@aglyn/foundation-data-core'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 export const generateTemplateId = (componentId: ComponentId): ComponentId => {

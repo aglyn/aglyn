@@ -1,0 +1,35 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/foundation/ui/renderer/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:ui", "aglyn:renderer"],
+  "targets": {
+    "build": {
+      "executor": "@nrwl/web:rollup",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/foundation/ui/renderer",
+        "tsConfig": "libs/foundation/ui/renderer/tsconfig.lib.json",
+        "project": "libs/foundation/ui/renderer/package.json",
+        "entryFile": "libs/foundation/ui/renderer/src/index.ts",
+        "external": ["react/jsx-runtime"],
+        "rollupConfig": "@nrwl/react/plugins/bundle-rollup",
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/foundation/ui/renderer/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["libs/foundation/ui/renderer/**/*.{ts,tsx,js,jsx}"]
+      }
+    }
+  }
+}
