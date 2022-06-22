@@ -21,14 +21,17 @@ import {
   WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-feature-app'
 import { getApp, setCanvasElements } from '@aglyn/core-data-app'
-import { useScreenVersion } from '@aglyn/tenant-feature-instance'
 import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
 import { HAS_BROWSER } from '@aglyn/shared-data-enums'
 import { LOADING_OVERLAY_ELEMENT, useLoading } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { decode, encode } from '@msgpack/msgpack'
+import {
+  compress,
+  decompress,
+  useScreenVersion,
+} from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { Bytes, Timestamp } from 'firebase/firestore'
 import dynamic from 'next/dynamic'
@@ -96,7 +99,7 @@ function Besigner(props) {
 
   useEffect(() => {
     if (elements && elements instanceof Bytes) {
-      const decoded: any = decode(elements.toUint8Array())
+      const decoded: any = decompress(elements)
       console.log('decoded update', decoded)
       setCanvasElements(app, { elements: decoded, type: 'normal' })
     }
@@ -104,11 +107,11 @@ function Besigner(props) {
 
   const handleSave = useCallback(async () => {
     const dequeueLoading = queueLoading()
-    const encodedNormal = Bytes.fromUint8Array(encode(normalized))
+    const compressed = compress(normalized)
     const timestamp = Timestamp.now()
     await updateScreen(
       {
-        elements: encodedNormal,
+        elements: compressed,
         updatedAt: timestamp,
       },
       { merge: true },

@@ -15,16 +15,10 @@
  * limitations under the License.
  */
 
-export * from './lib/constants/mock-data'
-export * from './lib/constants/site-paths'
+import { decode } from '@msgpack/msgpack'
+import { Bytes } from 'firebase/firestore'
 
-export * from './lib/hooks/use-screen'
-export * from './lib/hooks/use-screen-version'
-
-export * from './lib/utils/build-rewrite-site-host-path'
-export * from './lib/utils/compress'
-export * from './lib/utils/decompress'
-export * from './lib/utils/get-tenant-page-static-paths'
-export * from './lib/utils/get-tenant-page-static-props'
-
-export * from './lib/fb-client-app'
+export function decompress<T>(value: Bytes): T {
+  return decode(value.toUint8Array()) as T
+}
+export default decompress
