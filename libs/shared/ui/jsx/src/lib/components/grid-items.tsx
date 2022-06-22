@@ -15,36 +15,31 @@
  * limitations under the License.
  */
 
-import type {OverrideableComponentProps, ReplaceKey} from '@aglyn/shared-data-types'
-import {Grid as MuiGrid, type GridProps as MuiGridProps} from '@mui/material'
-import {forwardRef} from 'react'
+import type {
+  OverrideableComponentProps,
+  ReplaceKey,
+} from '@aglyn/shared-data-types'
+import { Grid as MuiGrid, type GridProps as MuiGridProps } from '@mui/material'
+import { forwardRef } from 'react'
 
 /* eslint-disable-next-line */
-export interface GridItemsProps extends MuiGridProps, ReplaceKey<OverrideableComponentProps, 'component', 'itemComponent'> {
+export interface GridItemsProps
+  extends MuiGridProps,
+    ReplaceKey<OverrideableComponentProps, 'component', 'itemComponent'> {
   items: MuiGridProps[]
 }
 
-export const GridItems = forwardRef<any, GridItemsProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      items,
-      itemComponent: ItemComponent,
-      ...rest
-    } = props
+export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
+  const { items, itemComponent: ItemComponent, ...rest } = props
 
-    return (
-      <MuiGrid ref={ref} container {...rest}>
-        {items.map((item, key) => (
-          <ItemComponent
-            item
-            key={item?.key ?? item?.id ?? key}
-            {...item}
-          />
-        ))}
-      </MuiGrid>
-    )
-  },
-)
+  return (
+    <MuiGrid ref={ref} container {...rest}>
+      {items.map((item, key) => (
+        <ItemComponent item key={item?.key ?? item?.id ?? key} {...item} />
+      ))}
+    </MuiGrid>
+  )
+})
 
 GridItems.displayName = 'GridItems'
 GridItems.aglyn = true

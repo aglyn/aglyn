@@ -21,10 +21,20 @@ import {
   useAglynAppContext,
   useAglynSiteTheme,
 } from '@aglyn/core-feature-renderer'
+import {
+  MuiShadowDom,
+  type ShadowRootProps,
+  useShadowDomContext,
+} from '@aglyn/shared-ui-jsx'
 import { styled, ThemeProvider } from '@aglyn/shared-ui-theme'
-import { Box, BoxProps } from '@mui/material'
+import { Box, type BoxProps, CssBaseline } from '@mui/material'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
-import { type ComponentProps, forwardRef, useCallback } from 'react'
+import {
+  type ComponentProps,
+  forwardRef,
+  HTMLAttributes,
+  useCallback,
+} from 'react'
 import ElementLeafComponent from './element-leaf.component'
 import ElementOverlayPopperComponent from './element-overlay-popper.component'
 
@@ -41,41 +51,62 @@ const ViewportFrame = styled('div', {
   display: 'flex',
   // position: 'relative',
 }))
+ViewportFrame.displayName = 'ViewportFrame'
+type SiteShadowDomProps = HTMLAttributes<HTMLDivElement> & ShadowRootProps
+const SiteShadowDom = styled(MuiShadowDom.div, {
+  name: 'AglynViewportShadowDom',
+})<SiteShadowDomProps>(({ theme }) => ({
+  minHeight: '100%',
+  width: '100%',
+  /**
+   * Positioning hack
+   * @see https://stackoverflow.com/a/70422489/16134372
+   */
+  transform: 'scale(1)',
+}))
+SiteShadowDom.displayName = 'SiteShadowDom'
 
-const SiteContainer = (props: Partial<BoxProps>) => {
-  const { ...rest } = props
+const Elements = () => {
   return (
     <Box
-      key="aglyn:site-container"
-      id="aglyn:site-container"
       sx={{
+        // bgcolor: 'background.paper',
         minHeight: 1,
-        width: 1,
-        bgcolor: 'background.paper',
+        minWidth: 1,
       }}
-      {...rest}
     >
-      <ThemedElementContainer />
+      <ElementLeafComponent
+        leafComponent={ElementLeafComponent}
+        $id={CANVAS_ROOT_ELEMENT_ID}
+        sx={{ minHeight: 1 }}
+      />
     </Box>
   )
 }
 
-const Elements = () => {
+const ThemedElementContainer = () => {
+  const shadowDom = useShadowDomContext()
+  const hostTheme = useAglynSiteTheme({ container: shadowDom })
   return (
-    <ElementLeafComponent
-      leafComponent={ElementLeafComponent}
-      $id={CANVAS_ROOT_ELEMENT_ID}
-      sx={{ minHeight: 1 }}
-    />
+    <ThemeProvider theme={hostTheme}>
+      <CssBaseline>
+        <Elements />
+      </CssBaseline>
+    </ThemeProvider>
   )
 }
 
-const ThemedElementContainer = () => {
-  const hostTheme = useAglynSiteTheme()
+const SiteContainer = (props: SiteShadowDomProps) => {
+  const { ...rest } = props
   return (
-    <ThemeProvider theme={hostTheme}>
-      <Elements />
-    </ThemeProvider>
+    <SiteShadowDom
+      key="aglyn:site-container"
+      id="aglyn:site-container"
+      mode="closed"
+      {...rest}
+    >
+      <ThemedElementContainer />
+    </SiteShadowDom>
   )
 }
 
@@ -109,7 +140,7 @@ export interface ViewportFrameComponentProps
   extends ComponentProps<typeof ViewportFrame> {}
 
 const ViewportFrameComponent = forwardRef<any, ViewportFrameComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { onMouseLeave, ...rest } = props
 
     const app = useAglynAppContext()

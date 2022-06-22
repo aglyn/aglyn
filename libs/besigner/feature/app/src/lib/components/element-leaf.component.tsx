@@ -36,7 +36,7 @@ import useLeafDrop from '../hooks/use-leaf-drop'
 export interface ElementLeafComponentProps extends LeafComponentProps {}
 
 const InnerLeafComponent = forwardRef<any, ElementLeafComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { $id, leafComponent, ...rest } = props
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
@@ -86,7 +86,7 @@ InnerLeafComponent.aglyn = true
 InnerLeafComponent.defaultProps = {}
 
 const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { $id, ...rest } = props
     const element = useRef<HTMLElement>()
     const [, dragHandle, dragPreview] = useLeafDrag(

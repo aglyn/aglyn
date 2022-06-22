@@ -15,11 +15,16 @@
  * limitations under the License.
  */
 
-import {AglynSvgIcon, AglynSvgLogo} from '@aglyn/shared-ui-jsx'
-import {Paper, Stack, type StackProps, Typography, type TypographyProps} from '@mui/material'
-import type {ReactNode} from 'react'
-import {forwardRef} from 'react'
-
+import { AglynSvgIcon, AglynSvgLogo } from '@aglyn/shared-ui-jsx'
+import {
+  Paper,
+  Stack,
+  type StackProps,
+  Typography,
+  type TypographyProps,
+} from '@mui/material'
+import type { ReactNode } from 'react'
+import { forwardRef } from 'react'
 
 export interface AuthFormProps extends StackProps {
   paperTop?: ReactNode
@@ -31,86 +36,79 @@ export interface AuthFormProps extends StackProps {
   paperAfter?: ReactNode
 }
 
-const AuthFormComponent = forwardRef<any, AuthFormProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      paperTop,
-      headingTop,
-      headingTopProps,
-      headingBottom,
-      headingBottomProps,
-      headingAfter,
-      paperAfter,
-      children,
-      ...rest
-    } = props
+const AuthFormComponent = forwardRef<any, AuthFormProps>((props, ref) => {
+  const {
+    paperTop,
+    headingTop,
+    headingTopProps,
+    headingBottom,
+    headingBottomProps,
+    headingAfter,
+    paperAfter,
+    children,
+    ...rest
+  } = props
 
-    return (
-      <Stack
-        ref={ref}
-        direction="column"
-        justifyContent="center"
-        alignItems="center"
-        textAlign="center"
-        spacing={2}
-        maxWidth={1}
-        width={420}
-        {...rest}
-      >
-        <Paper
-          variant="outlined"
-          sx={{p: 2, width: 420, maxWidth: 1}}
+  return (
+    <Stack
+      ref={ref}
+      direction="column"
+      justifyContent="center"
+      alignItems="center"
+      textAlign="center"
+      spacing={2}
+      maxWidth={1}
+      width={420}
+      {...rest}
+    >
+      <Paper variant="outlined" sx={{ p: 2, width: 420, maxWidth: 1 }}>
+        <Stack
+          direction="column"
+          justifyContent="center"
+          alignItems="center"
+          spacing={1}
+          marginBottom={4}
         >
+          {paperTop}
+
           <Stack
-            direction="column"
+            direction="row"
             justifyContent="center"
             alignItems="center"
             spacing={1}
-            marginBottom={4}
+            sx={{ pb: 3 }}
           >
-            {paperTop}
-
-            <Stack
-              direction="row"
-              justifyContent="center"
-              alignItems="center"
-              spacing={1}
-              sx={{pb: 3}}
-            >
-              <AglynSvgIcon rounded bordered sx={{fontSize: 24}} />
-              <AglynSvgLogo sx={{fontSize: 64, transform: `translateY(0.12rem)`}} />
-            </Stack>
-
-            {headingTop && (
-              <Typography
-                component="h1"
-                variant="h4"
-                {...headingTopProps}
-              >
-                {headingTop}
-              </Typography>
-            )}
-            {headingBottom && (
-              <Typography
-                component="div"
-                variant="h6"
-                align="center"
-                {...headingBottomProps}
-              >
-                {headingBottom}
-              </Typography>
-            )}
-            {headingAfter}
+            <AglynSvgIcon rounded bordered sx={{ fontSize: 24 }} />
+            <AglynSvgLogo
+              sx={{ fontSize: 64, transform: `translateY(0.12rem)` }}
+            />
           </Stack>
 
-          {children}
-        </Paper>
+          {headingTop && (
+            <Typography component="h1" variant="h4" {...headingTopProps}>
+              {headingTop}
+            </Typography>
+          )}
+          {headingBottom && (
+            <Typography
+              component="div"
+              variant="h6"
+              align="center"
+              {...headingBottomProps}
+            >
+              {headingBottom}
+            </Typography>
+          )}
+          {headingAfter}
+        </Stack>
 
-        {paperAfter}
-      </Stack>
-    )
-  }
-)
+        {children}
+      </Paper>
+
+      {paperAfter}
+    </Stack>
+  )
+})
 AuthFormComponent.displayName = 'AuthFormComponent'
 AuthFormComponent.aglyn = true
 

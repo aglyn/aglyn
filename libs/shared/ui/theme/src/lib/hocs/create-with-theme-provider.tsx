@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import type {JSXComponentType} from '@aglyn/shared-data-types'
-import {_isArr, _isNull} from '@aglyn/shared-util-guards'
-import {getDisplayName, noop} from '@aglyn/shared-util-tools'
-import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
-import {CssBaseline, useMediaQuery} from '@mui/material'
-import {get as getCookie, set as setCookie} from 'js-cookie'
+import type { JSXComponentType } from '@aglyn/shared-data-types'
+import { _isArr, _isNull } from '@aglyn/shared-util-guards'
+import { getDisplayName, noop } from '@aglyn/shared-util-tools'
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
+import { CssBaseline, useMediaQuery } from '@mui/material'
+import { get as getCookie, set as setCookie } from 'js-cookie'
 import {
   createContext,
   forwardRef,
@@ -30,9 +30,8 @@ import {
   useMemo,
   useState,
 } from 'react'
-import {useIsomorphicLayoutEffect} from 'react-use'
-import {createTheme, type Theme, ThemeProvider} from '../../vendor/mui'
-
+import { useIsomorphicLayoutEffect } from 'react-use'
+import { createTheme, type Theme, ThemeProvider } from '../../vendor/mui'
 
 export type ThemeMode = 'light' | 'dark' | 'system' | null
 export type ThemeModeType = 'user' | 'system'
@@ -40,7 +39,7 @@ export type ThemeModeResult = [ThemeModeType, ThemeMode]
 export type UseThemeMode = [
   mode: ThemeModeResult,
   toggleThemeMode: (event: SyntheticEvent<any>, to?: ThemeMode) => void,
-  cookieMode: ThemeMode
+  cookieMode: ThemeMode,
 ]
 
 export const THEME_DISPLAY_NAME: Record<ThemeMode, string> = {
@@ -80,12 +79,12 @@ export function useCookieThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
    */
   useIsomorphicLayoutEffect(() => {
     const cookieMode = getCookieThemeMode()
-    setMode((prev) => prev !== cookieMode ? cookieMode : prev)
+    setMode((prev) => (prev !== cookieMode ? cookieMode : prev))
   })
 
   const setCookieThemeMode = useCallback((newMode: ThemeMode) => {
-    setCookie(COOKIE_THEME_KEY, newMode, {expires: 365})
-    setMode((prev) => prev !== newMode ? newMode : prev)
+    setCookie(COOKIE_THEME_KEY, newMode, { expires: 365 })
+    setMode((prev) => (prev !== newMode ? newMode : prev))
   }, [])
 
   return useMemo(() => [mode, setCookieThemeMode], [mode, setCookieThemeMode])
@@ -96,7 +95,7 @@ export function useThemeModeState(): UseThemeMode {
   const [cookieMode, setCookieMode] = useCookieThemeMode()
 
   const systemMode = useMemo<ThemeMode>(() => {
-    return (prefersDark ? 'dark' : 'light')
+    return prefersDark ? 'dark' : 'light'
   }, [prefersDark])
 
   const [type, mode] = useMemo<ThemeModeResult>(() => {
@@ -106,35 +105,35 @@ export function useThemeModeState(): UseThemeMode {
     return ['system', systemMode]
   }, [cookieMode, systemMode])
 
-  const toggleThemeMode = useCallback((
-    event: SyntheticEvent<any>,
-    to?: ThemeMode,
-  ) => {
-    let newMode: ThemeMode
+  const toggleThemeMode = useCallback(
+    (event: SyntheticEvent<any>, to?: ThemeMode) => {
+      let newMode: ThemeMode
 
-    switch (true) {
-      case _isNull(to):
-      case to === 'system':
-        newMode = 'system'
-        break
-      case to === 'dark':
-      case to === 'light':
-        newMode = to
-        break
-      case _isNull(cookieMode):
-        newMode = 'light'
-        break
-      case cookieMode === 'light':
-        newMode = 'dark'
-        break
-      case cookieMode === 'dark':
-      default:
-        newMode = 'system'
-        break
-    }
+      switch (true) {
+        case _isNull(to):
+        case to === 'system':
+          newMode = 'system'
+          break
+        case to === 'dark':
+        case to === 'light':
+          newMode = to
+          break
+        case _isNull(cookieMode):
+          newMode = 'light'
+          break
+        case cookieMode === 'light':
+          newMode = 'dark'
+          break
+        case cookieMode === 'dark':
+        default:
+          newMode = 'system'
+          break
+      }
 
-    setCookieMode(newMode)
-  }, [cookieMode, setCookieMode])
+      setCookieMode(newMode)
+    },
+    [cookieMode, setCookieMode],
+  )
 
   return useMemo(
     () => [[type, mode], toggleThemeMode, cookieMode],
@@ -148,16 +147,19 @@ export type WithThemeProviderOptions = {
 }
 
 function createWithThemeProvider(options: WithThemeProviderOptions) {
-  const {theme, disableCssBaseline} = options
+  const { theme, disableCssBaseline } = options
   const [lightTheme, darkTheme] = !_isArr(theme)
-    ? [theme, createTheme({...theme, palette: {...theme?.palette, mode: 'dark'}})]
+    ? [
+        theme,
+        createTheme({ ...theme, palette: { ...theme?.palette, mode: 'dark' } }),
+      ]
     : theme
 
   return function withThemeProvider<P>(WrappedComponent: JSXComponentType<P>) {
     const displayName = getDisplayName(WrappedComponent)
 
-    const WithThemeProvider = forwardRef<any, P>(function RefRenderFn(props, ref) {
-      const {...rest} = props
+    const WithThemeProvider = forwardRef<any, P>((props, ref) => {
+      const { ...rest } = props
       const ThemeModeState = useThemeModeState()
       const activeTheme = useMemo<Theme>(() => {
         const [[, themeMode]] = ThemeModeState
@@ -183,5 +185,5 @@ function createWithThemeProvider(options: WithThemeProviderOptions) {
     return WithThemeProvider
   }
 }
-export {createWithThemeProvider}
+export { createWithThemeProvider }
 export default createWithThemeProvider

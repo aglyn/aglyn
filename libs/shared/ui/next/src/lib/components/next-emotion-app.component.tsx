@@ -16,15 +16,19 @@
  */
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import { CacheProvider, createEmotionCache, type EmotionCache } from '@aglyn/shared-ui-theme'
+import {
+  CacheProvider,
+  createEmotionCache,
+  CreateEmotionCacheOptions,
+  type EmotionCache,
+} from '@aglyn/shared-ui-theme'
 import type { ReactNode } from 'react'
-
-// Client-side cache, shared for the whole session of the user in the browser.
-const clientSideEmotionCache = createEmotionCache()
+import { useMemo } from 'react'
 
 export interface NextEmotionAppComponentProps {
-  emotionCache?: EmotionCache
   children?: ReactNode
+  emotionCache?: EmotionCache
+  cacheOptions?: CreateEmotionCacheOptions
 }
 
 /**
@@ -37,32 +41,46 @@ export interface NextEmotionAppComponentProps {
  * # Resolution order
  * __Server-side__
  *
- * 1. (if-exists) getInitialProps _app.tsx {@link NextEmotionAppComponent.getInitialProps}
- * 2. (if-exists) getInitialProps page {@link NextPageWithLayout.getInitialProps}
- * 3. getInitialProps _document.tsx {@link _EmotionDocumentComponent.getInitialProps}
+ * 1. (if-exists) getInitialProps _app.tsx
+ * {@link NextEmotionAppComponent.getInitialProps}
+ * 2. (if-exists) getInitialProps page {@link
+ * NextPageWithLayout.getInitialProps}
+ * 3. getInitialProps _document.tsx
+ * {@link _EmotionDocumentComponent.getInitialProps}
  * 4. render _app.tsx {@link NextEmotionAppComponent.render}
  * 5. render page {@link NextPageWithLayout.render}
  * 6. render _document.tsx {@link _EmotionDocumentComponent.render}
  *
  * __Server-side (w/ error)__
  *
- * 1. (if-exists) getInitialProps _document.tsx {@link _EmotionDocumentComponent.getInitialProps}
+ * 1. (if-exists) getInitialProps _document.tsx
+ * {@link _EmotionDocumentComponent.getInitialProps}
  * 2. render _app.tsx {@link NextEmotionAppComponent.render}
  * 3. render page {@link NextPageWithLayout.render}
  * 4. render _document.tsx {@link _EmotionDocumentComponent.render}
  *
  * __Client-side__
- * 1. (if-exists) getInitialProps _app.tsx {@link NextEmotionAppComponent.getInitialProps}
- * 2. (if-exists) getInitialProps page {@link NextPageWithLayout.getInitialProps}
+ * 1. (if-exists) getInitialProps _app.tsx
+ * {@link NextEmotionAppComponent.getInitialProps}
+ * 2. (if-exists) getInitialProps page {@link
+ * NextPageWithLayout.getInitialProps}
  * 3. render _app.tsx {@link NextEmotionAppComponent.render}
  * 4. render page {@link NextPageWithLayout.render}
  *
  * @see {@link _EmotionDocumentComponent}
  */
 function NextEmotionAppComponent(props: NextEmotionAppComponentProps) {
-  const { emotionCache = clientSideEmotionCache, children } = props
+  const { emotionCache, cacheOptions, children } = props
 
-  return <CacheProvider value={emotionCache}>{children}</CacheProvider>
+  const cache = useMemo(() => {
+    if (emotionCache) return emotionCache
+    return createEmotionCache({
+      key: 'next',
+      ...cacheOptions,
+    })
+  }, [emotionCache, cacheOptions])
+
+  return <CacheProvider value={cache}>{children}</CacheProvider>
 }
 NextEmotionAppComponent.displayName = 'NextEmotionAppComponent'
 NextEmotionAppComponent.aglyn = true

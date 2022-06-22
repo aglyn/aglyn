@@ -97,7 +97,7 @@ export interface ElementOverlayPopperComponentProps
 const ElementOverlayPopperComponent = forwardRef<
   any,
   ElementOverlayPopperComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { variant, id, ...rest } = props || {}
 
   const app = useBesignerAppContext()

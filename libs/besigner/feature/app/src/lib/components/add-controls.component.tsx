@@ -28,25 +28,23 @@ import useAddElementCallback from '../hooks/use-add-element-callback'
 
 export interface AddControlsProps extends StackProps {}
 
-const AddControlsComponent = forwardRef<any, AddControlsProps>(
-  function RefRenderFn(props, ref) {
-    const handleAddElementClick = useAddElementCallback()
+const AddControlsComponent = forwardRef<any, AddControlsProps>((props, ref) => {
+  const handleAddElementClick = useAddElementCallback()
 
-    return (
-      <MuiStack ref={ref} direction="row" spacing={1} {...props}>
-        <MuiTooltip title={'Add element'}>
-          <MuiIconButton
-            aria-haspopup="menu"
-            aria-label="add-element"
-            onClick={handleAddElementClick}
-          >
-            <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_ADD.path} />
-          </MuiIconButton>
-        </MuiTooltip>
-      </MuiStack>
-    )
-  },
-)
+  return (
+    <MuiStack ref={ref} direction="row" spacing={1} {...props}>
+      <MuiTooltip title={'Add element'}>
+        <MuiIconButton
+          aria-haspopup="menu"
+          aria-label="add-element"
+          onClick={handleAddElementClick}
+        >
+          <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_ADD.path} />
+        </MuiIconButton>
+      </MuiTooltip>
+    </MuiStack>
+  )
+})
 AddControlsComponent.displayName = 'AddControlsComponent'
 AddControlsComponent.aglyn = true
 

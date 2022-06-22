@@ -16,24 +16,25 @@
  */
 
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
-import { styled } from '@aglyn/shared-ui-theme'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
+import { _isFnT } from '@aglyn/shared-util-guards'
 import { Stack, type StackProps } from '@mui/material'
+import clsx from 'clsx'
 import dynamic from 'next/dynamic'
-import { forwardRef } from 'react'
+import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
+import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import type { AsidePanelComponentProps } from './aside-panel.component'
+import ViewportZoomControlsComponent from './viewport-zoom-controls.component'
 
+const classKeys = generateComponentClassKeys('AglynViewport', [
+  'panelLeftOpen',
+  'panelBottomOpen',
+  'panelRightOpen',
+])
 const PanelLeftComponent = dynamic<AsidePanelComponentProps>(
   () =>
     import('./aside-panel.component').then((mod) => mod.AsidePanelComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
-)
-
-const ViewportRootComponent = dynamic(
-  () =>
-    import('./viewport-root.component').then(
-      (mod) => mod.ViewportRootComponent,
-    ),
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 
@@ -48,13 +49,49 @@ const WorkspaceEditor = styled(Stack, {
   height: '100%',
   width: '100%',
   overflow: 'hidden',
+  [`&.${classKeys.panelLeftOpen}`]: {},
+  [`&.${classKeys.panelBottomOpen}`]: {},
+  [`&.${classKeys.panelRightOpen}`]: {},
 })
 
 export interface WorkspaceEditorComponentProps extends StackProps {}
 
 const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
-  function RefRenderFn(props, ref) {
-    const { children, ...rest } = props
+  (props, ref) => {
+    const { children, className, ...rest } = props
+
+    const [leftToggled] = useAglynBesignerPanelValue('panelLeft', 'toggled')
+    const [rightToggled] = useAglynBesignerPanelValue('panelRight', 'toggled')
+    const [bottomToggled] = useAglynBesignerPanelValue('panelBottom', 'toggled')
+
+    const elemClassName = clsx(
+      {
+        [classKeys.panelLeftOpen]: Boolean(leftToggled),
+        [classKeys.panelRightOpen]: Boolean(rightToggled),
+        [classKeys.panelBottomOpen]: Boolean(bottomToggled),
+      },
+      className,
+    )
+
+    const pannerRef = useRef<any>()
+
+    const handleZoomReset = useCallback((e: ChangeEvent<unknown>) => {
+      if (_isFnT(pannerRef.current?.reset)) {
+        pannerRef.current.reset()
+      }
+    }, [])
+
+    const handleZoomDecrease = useCallback((e: ChangeEvent<unknown>) => {
+      if (_isFnT(pannerRef.current?.zoomOut)) {
+        pannerRef.current.zoomOut()
+      }
+    }, [])
+
+    const handleZoomIncrease = useCallback((e: ChangeEvent<unknown>) => {
+      if (_isFnT(pannerRef.current?.zoomIn)) {
+        pannerRef.current.zoomIn()
+      }
+    }, [])
 
     return (
       <WorkspaceEditor
@@ -64,6 +101,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
         alignContent="stretch"
         alignItems="stretch"
         spacing={0}
+        className={elemClassName}
         {...rest}
       >
         <Stack
@@ -77,7 +115,6 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
           sx={{ overflow: 'hidden', zIndex: 0 }}
         >
           <PanelLeftComponent panel={'panelLeft'} />
-
           <Stack
             direction="column"
             alignItems="stretch"
@@ -88,14 +125,16 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
             spacing={0}
             sx={{ overflow: 'hidden', zIndex: 0 }}
           >
-            <ViewportRootComponent />
+            {children}
+            <ViewportZoomControlsComponent
+              onZoomReset={handleZoomReset}
+              onZoomDecrease={handleZoomDecrease}
+              onZoomIncrease={handleZoomIncrease}
+            />
             <AppBarBreadcrumbsComponent />
           </Stack>
-
           <PanelLeftComponent panel={'panelRight'} />
         </Stack>
-
-        {children}
       </WorkspaceEditor>
     )
   },

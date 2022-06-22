@@ -33,7 +33,7 @@ import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 export interface PanelControlsProps extends StackProps {}
 
 const PanelControlsComponent = forwardRef<any, PanelControlsProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const [panelLeft, setPanelLeft] = useAglynBesignerPanel('panelLeft')
     const [panelRight, setPanelRight] = useAglynBesignerPanel('panelRight')
     const openPanels = [panelLeft, panelRight]

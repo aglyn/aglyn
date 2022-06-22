@@ -18,9 +18,36 @@
 import { createTheme } from '@aglyn/shared-ui-theme'
 import { useMemo } from 'react'
 
-export function useAglynSiteTheme() {
+export type UseAglynSiteThemeOptions = {
+  container?: Element
+}
+
+export function useAglynSiteTheme(options: UseAglynSiteThemeOptions = {}) {
+  const { container } = options
+
   return useMemo(() => {
-    return createTheme({ palette: {} })
-  }, [])
+    return createTheme({
+      palette: {
+        mode: 'light',
+      },
+      components: {
+        MuiPopover: {
+          defaultProps: {
+            container: container,
+          },
+        },
+        MuiPopper: {
+          defaultProps: {
+            container: container,
+          },
+        },
+        MuiModal: {
+          defaultProps: {
+            container: container,
+          },
+        },
+      },
+    })
+  }, [container])
 }
 export default useAglynSiteTheme

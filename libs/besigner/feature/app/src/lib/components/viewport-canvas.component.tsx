@@ -86,7 +86,7 @@ export interface ViewportCanvasComponentProps
 }
 
 const ViewportCanvasComponent = forwardRef<any, ViewportCanvasComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { ...rest } = props
 
     const [devicePreview] = useAglynBesignerFlag('devicePreview')

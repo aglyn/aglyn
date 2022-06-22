@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { ErrorBoundaryComponent } from '@aglyn/shared-ui-jsx'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import {
   Card as MuiCard,
   CardActions as MuiCardActions,
@@ -97,7 +97,7 @@ export interface WidgetCardProps extends CardProps {
   ActionProps?: CardActionsProps
 }
 
-const WidgetCardComponent = forwardRef<any, WidgetCardProps>(function RefRenderFn(props, ref) {
+const WidgetCardComponent = forwardRef<any, WidgetCardProps>((props, ref) => {
   const {
     actions,
     classes,
@@ -120,19 +120,29 @@ const WidgetCardComponent = forwardRef<any, WidgetCardProps>(function RefRenderF
       [classKeys.contentGutterX]: Boolean(contentGutterX),
       [classKeys.contentGutterY]: Boolean(contentGutterY),
       [classKeys.contentBordered]: Boolean(contentBordered),
-      [classKeys.headerCentered]: Boolean(HeaderProps?.subheader || headerCentered),
+      [classKeys.headerCentered]: Boolean(
+        HeaderProps?.subheader || headerCentered,
+      ),
     },
-    className
+    className,
   )
 
   return (
     <Card ref={ref} className={cardClassName} {...rest}>
       <ErrorBoundaryComponent>
         {header || HeaderProps ? (
-          <MuiCardHeader title={header} titleTypographyProps={{ variant: 'h6' }} {...HeaderProps} />
+          <MuiCardHeader
+            title={header}
+            titleTypographyProps={{ variant: 'h6' }}
+            {...HeaderProps}
+          />
         ) : null}
-        {children || ContentProps ? <MuiCardContent children={children} {...ContentProps} /> : null}
-        {actions || ActionProps ? <MuiCardActions children={actions} {...ActionProps} /> : null}
+        {children || ContentProps ? (
+          <MuiCardContent children={children} {...ContentProps} />
+        ) : null}
+        {actions || ActionProps ? (
+          <MuiCardActions children={actions} {...ActionProps} />
+        ) : null}
         {lastChildren}
       </ErrorBoundaryComponent>
     </Card>

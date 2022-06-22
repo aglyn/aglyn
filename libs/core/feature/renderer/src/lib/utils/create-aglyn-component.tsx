@@ -49,7 +49,7 @@ export function createAglynComponent<P = any, C = any>(
       ? component
       : styled(component, styledOptions)({})
 
-  const AglynComponent = forwardRef<any, P>(function RefRenderFn(props, ref) {
+  const AglynComponent = forwardRef<any, P>((props, ref) => {
     return <Component ref={ref} {...props} />
   }) as IAglynComponent<P>
 

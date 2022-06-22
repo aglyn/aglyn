@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import { AppLink, type AppLinkProps } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import { mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
   Tab as MuiTab,
   type TabProps as MuiTabProps,
@@ -67,7 +67,7 @@ export interface AppLinkTabsProps extends Partial<MuiTabsProps> {
   activeTab?: string
 }
 
-const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(function RefRenderFn(props, ref) {
+const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>((props, ref) => {
   const { children, items, activeTab, sx, ...rest } = props
   const router = useRouter()
   const tabValue = useMemo(() => {
@@ -119,7 +119,7 @@ const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(function RefRende
             },
           },
         },
-        sx
+        sx,
       )}
       {...rest}
     >

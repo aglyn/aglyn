@@ -58,7 +58,7 @@ export interface ComponentsGridListProps extends Partial<GridListProps> {
 }
 
 const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { onItemSelect, items, sx, maxColumns, ...rest } = props
 
     const [columns, setColumns] = useState(maxColumns)

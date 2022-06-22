@@ -16,12 +16,17 @@
  */
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import {createChainedFunction} from '@aglyn/shared-util-tools'
-import {Collapse, emphasize, type SnackbarClassKey, styled} from '@mui/material'
+import { createChainedFunction } from '@aglyn/shared-util-tools'
+import {
+  Collapse,
+  emphasize,
+  type SnackbarClassKey,
+  styled,
+} from '@mui/material'
 import clsx from 'clsx'
-import {forwardRef, useEffect, useRef, useState} from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import SnackbarContent from '../SnackbarContent'
-import {type Snack} from '../SnackbarProvider'
+import { type Snack } from '../SnackbarProvider'
 import {
   type ClassNameMap,
   type RequiredBy,
@@ -29,11 +34,10 @@ import {
   type SnackbarProviderProps as ProviderProps,
   type TransitionHandlerProps,
 } from '../types'
-import {DEFAULTS, objectMerge, REASONS, transformer} from '../utils/constants'
+import { DEFAULTS, objectMerge, REASONS, transformer } from '../utils/constants'
 import defaultIconVariants from '../utils/defaultIconVariants'
 import Snackbar from './Snackbar'
-import {getTransitionDirection} from './SnackbarItem.util'
-
+import { getTransitionDirection } from './SnackbarItem.util'
 
 const componentName = 'SnackbarItem'
 
@@ -49,9 +53,12 @@ const classes = {
   wrappedRoot: `${componentName}-wrappedRoot`,
 }
 
-const StyledSnackbar = styled(Snackbar)(({theme}) => {
+const StyledSnackbar = styled(Snackbar)(({ theme }) => {
   const mode = theme.palette.mode
-  const backgroundColor = emphasize(theme.palette.background.default, mode === 'light' ? 0.8 : 0.98)
+  const backgroundColor = emphasize(
+    theme.palette.background.default,
+    mode === 'light' ? 0.8 : 0.98,
+  )
 
   return {
     [`&.${classes.wrappedRoot}`]: {
@@ -69,7 +76,8 @@ const StyledSnackbar = styled(Snackbar)(({theme}) => {
       alignItems: 'center',
       padding: '6px 16px',
       borderRadius: '4px',
-      boxShadow: '0px 3px 5px -1px rgba(0,0,0,0.2),0px 6px 10px 0px rgba(0,0,0,0.14),0px 1px 18px 0px rgba(0,0,0,0.12)',
+      boxShadow:
+        '0px 3px 5px -1px rgba(0,0,0,0.2),0px 6px 10px 0px rgba(0,0,0,0.14),0px 1px 18px 0px rgba(0,0,0,0.12)',
     },
     [`.${classes.lessPadding}`]: {
       paddingLeft: 8 * 2.5,
@@ -110,130 +118,141 @@ type RemovedProps =
   | 'anchorOrigin' // same as above
   | 'autoHideDuration' // same as above
   | 'preventDuplicate' // the one recevied from enqueueSnackbar is processed in provider, therefore
-                       // shouldn't be passed to SnackbarItem */
+// shouldn't be passed to SnackbarItem */
 
-export interface SnackbarItemProps extends RequiredBy<Omit<SharedProps, RemovedProps>, 'onEntered' | 'onExited' | 'onClose'> {
-  snack: Snack;
-  dense: ProviderProps['dense'];
-  iconVariant: ProviderProps['iconVariant'];
-  hideIconVariant: ProviderProps['hideIconVariant'];
-  classes: Partial<ClassNameMap<SnackbarClassKey>>;
+export interface SnackbarItemProps
+  extends RequiredBy<
+    Omit<SharedProps, RemovedProps>,
+    'onEntered' | 'onExited' | 'onClose'
+  > {
+  snack: Snack
+  dense: ProviderProps['dense']
+  iconVariant: ProviderProps['iconVariant']
+  hideIconVariant: ProviderProps['hideIconVariant']
+  classes: Partial<ClassNameMap<SnackbarClassKey>>
 }
 
-const SnackbarItem = forwardRef<any, SnackbarItemProps>(
-  function RefRenderFn(props, ref) {
+const SnackbarItem = forwardRef<any, SnackbarItemProps>((props, ref) => {
+  const { classes: propClasses, ...rest } = props
+  const timeout = useRef<ReturnType<typeof setTimeout>>()
+  const [collapsed, setCollapsed] = useState(true)
 
-    const {classes: propClasses, ...rest} = props
-    const timeout = useRef<ReturnType<typeof setTimeout>>()
-    const [collapsed, setCollapsed] = useState(true)
-
-    useEffect(() => (): void => {
+  useEffect(
+    () => (): void => {
       if (timeout.current) {
         clearTimeout(timeout.current)
       }
-    }, [])
+    },
+    [],
+  )
 
-    const handleClose = createChainedFunction(
-      [rest.snack.onClose, rest.onClose],
-      null,
-      rest.snack.snackbarId
-    )
+  const handleClose = createChainedFunction(
+    [rest.snack.onClose, rest.onClose],
+    null,
+    rest.snack.snackbarId,
+  )
 
-    const handleEntered: TransitionHandlerProps['onEntered'] = () => {
-      if (rest.snack.requestClose) {
-        handleClose(null, REASONS.INSTRCUTED)
-      }
+  const handleEntered: TransitionHandlerProps['onEntered'] = () => {
+    if (rest.snack.requestClose) {
+      handleClose(null, REASONS.INSTRCUTED)
     }
+  }
 
-    const handleExitedScreen = (): void => {
-      timeout.current = setTimeout(() => {
-        setCollapsed(!collapsed)
-      }, 125)
-    }
+  const handleExitedScreen = (): void => {
+    timeout.current = setTimeout(() => {
+      setCollapsed(!collapsed)
+    }, 125)
+  }
 
-    const {
-      style,
-      dense,
-      ariaAttributes: otherAriaAttributes,
-      className: otherClassName,
-      hideIconVariant,
-      iconVariant,
-      snack,
-      action: otherAction,
-      content: otherContent,
-      TransitionComponent: otherTranComponent,
-      TransitionProps: otherTranProps,
-      transitionDuration: otherTranDuration,
-      onEnter: ignoredOnEnter,
-      onEntered: ignoredOnEntered,
-      onEntering: ignoredOnEntering,
-      onExit: ignoredOnExit,
-      onExited: ignoredOnExited,
-      onExiting: ignoredOnExiting,
-      ...other
-    } = rest
+  const {
+    style,
+    dense,
+    ariaAttributes: otherAriaAttributes,
+    className: otherClassName,
+    hideIconVariant,
+    iconVariant,
+    snack,
+    action: otherAction,
+    content: otherContent,
+    TransitionComponent: otherTranComponent,
+    TransitionProps: otherTranProps,
+    transitionDuration: otherTranDuration,
+    onEnter: ignoredOnEnter,
+    onEntered: ignoredOnEntered,
+    onEntering: ignoredOnEntering,
+    onExit: ignoredOnExit,
+    onExited: ignoredOnExited,
+    onExiting: ignoredOnExiting,
+    ...other
+  } = rest
 
-    const {
-      persist,
-      snackbarId,
-      open,
-      entered,
-      requestClose,
-      className: singleClassName,
-      variant,
-      content: singleContent,
-      action: singleAction,
-      ariaAttributes: singleAriaAttributes,
-      anchorOrigin,
-      message: snackMessage,
-      TransitionComponent: singleTranComponent,
-      TransitionProps: singleTranProps,
-      transitionDuration: singleTranDuration,
-      onEnter,
-      onEntered,
-      onEntering,
-      onExit,
-      onExited,
-      onExiting,
-      ...singleSnackProps
-    } = snack
+  const {
+    persist,
+    snackbarId,
+    open,
+    entered,
+    requestClose,
+    className: singleClassName,
+    variant,
+    content: singleContent,
+    action: singleAction,
+    ariaAttributes: singleAriaAttributes,
+    anchorOrigin,
+    message: snackMessage,
+    TransitionComponent: singleTranComponent,
+    TransitionProps: singleTranProps,
+    transitionDuration: singleTranDuration,
+    onEnter,
+    onEntered,
+    onEntering,
+    onExit,
+    onExited,
+    onExiting,
+    ...singleSnackProps
+  } = snack
 
-    const icon = {
-      ...defaultIconVariants,
-      ...iconVariant,
-    }[variant]
+  const icon = {
+    ...defaultIconVariants,
+    ...iconVariant,
+  }[variant]
 
-    const ariaAttributes = {
-      'aria-describedby': 'notistack-snackbar',
-      ...objectMerge(singleAriaAttributes, otherAriaAttributes),
-    }
+  const ariaAttributes = {
+    'aria-describedby': 'notistack-snackbar',
+    ...objectMerge(singleAriaAttributes, otherAriaAttributes),
+  }
 
-    const TransitionComponent = singleTranComponent || otherTranComponent || DEFAULTS.TransitionComponent
-    const transitionDuration = objectMerge(singleTranDuration, otherTranDuration, DEFAULTS.transitionDuration)
-    const transitionProps = {
-      direction: getTransitionDirection(anchorOrigin),
-      ...objectMerge(singleTranProps, otherTranProps),
-    }
+  const TransitionComponent =
+    singleTranComponent || otherTranComponent || DEFAULTS.TransitionComponent
+  const transitionDuration = objectMerge(
+    singleTranDuration,
+    otherTranDuration,
+    DEFAULTS.transitionDuration,
+  )
+  const transitionProps = {
+    direction: getTransitionDirection(anchorOrigin),
+    ...objectMerge(singleTranProps, otherTranProps),
+  }
 
-    let action = singleAction || otherAction
-    if (typeof action === 'function') {
-      action = action(snackbarId)
-    }
+  let action = singleAction || otherAction
+  if (typeof action === 'function') {
+    action = action(snackbarId)
+  }
 
-    let content = singleContent || otherContent
-    if (typeof content === 'function') {
-      content = content(snackbarId, snack.message)
-    }
+  let content = singleContent || otherContent
+  if (typeof content === 'function') {
+    content = content(snackbarId, snack.message)
+  }
 
-    // eslint-disable-next-line operator-linebreak
-    const callbacks: { [key in keyof TransitionHandlerProps]?: any } = [
-      'onEnter',
-      'onEntering',
-      'onEntered',
-      'onExit',
-      'onExiting',
-      'onExited'
-    ].reduce((acc, callbackName) => ({
+  // eslint-disable-next-line operator-linebreak
+  const callbacks: { [key in keyof TransitionHandlerProps]?: any } = [
+    'onEnter',
+    'onEntering',
+    'onEntered',
+    'onExit',
+    'onExiting',
+    'onExited',
+  ].reduce(
+    (acc, callbackName) => ({
       ...acc,
       [callbackName]: createChainedFunction(
         [
@@ -241,73 +260,78 @@ const SnackbarItem = forwardRef<any, SnackbarItemProps>(
           rest[callbackName as keyof SnackbarItemProps],
         ],
         null,
-        rest.snack.snackbarId
+        rest.snack.snackbarId,
       ),
-    }), {})
+    }),
+    {},
+  )
 
-    return (
-      <Collapse
-        ref={ref}
-        unmountOnExit
-        timeout={175}
-        in={collapsed}
-        onExited={callbacks.onExited}
+  return (
+    <Collapse
+      ref={ref}
+      unmountOnExit
+      timeout={175}
+      in={collapsed}
+      onExited={callbacks.onExited}
+    >
+      <StyledSnackbar
+        {...other}
+        {...singleSnackProps}
+        open={open}
+        className={clsx(
+          propClasses.root,
+          classes.wrappedRoot,
+          propClasses[transformer.toAnchorOrigin(anchorOrigin)],
+        )}
+        onClose={handleClose}
       >
-        <StyledSnackbar
-          {...other}
-          {...singleSnackProps}
-          open={open}
-          className={clsx(
-            propClasses.root,
-            classes.wrappedRoot,
-            propClasses[transformer.toAnchorOrigin(anchorOrigin)],
-          )}
-          onClose={handleClose}
+        <TransitionComponent
+          appear
+          in={open}
+          timeout={transitionDuration}
+          {...transitionProps}
+          onExit={callbacks.onExit}
+          onExiting={callbacks.onExiting}
+          onExited={handleExitedScreen}
+          onEnter={callbacks.onEnter}
+          onEntering={callbacks.onEntering}
+          // order matters. first callbacks.onEntered to set entered: true,
+          // then handleEntered to check if there's a request for closing
+          onEntered={createChainedFunction([
+            callbacks.onEntered,
+            handleEntered,
+          ])}
         >
-          <TransitionComponent
-            appear
-            in={open}
-            timeout={transitionDuration}
-            {...transitionProps}
-            onExit={callbacks.onExit}
-            onExiting={callbacks.onExiting}
-            onExited={handleExitedScreen}
-            onEnter={callbacks.onEnter}
-            onEntering={callbacks.onEntering}
-            // order matters. first callbacks.onEntered to set entered: true,
-            // then handleEntered to check if there's a request for closing
-            onEntered={createChainedFunction([callbacks.onEntered, handleEntered])}
-          >
-            {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
-            {/* @ts-ignore */}
-            {content || (
-              <SnackbarContent
-                {...ariaAttributes}
-                role="alert"
-                style={style}
-                className={clsx(
-                  classes.contentRoot,
-                  {[classes.lessPadding]: !hideIconVariant && icon},
-                  classes[transformer.toVariant(variant)],
-                  propClasses[transformer.toVariant(variant)],
-                  otherClassName,
-                  singleClassName,
-                )}
+          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+          {/* @ts-ignore */}
+          {content || (
+            <SnackbarContent
+              {...ariaAttributes}
+              role="alert"
+              style={style}
+              className={clsx(
+                classes.contentRoot,
+                { [classes.lessPadding]: !hideIconVariant && icon },
+                classes[transformer.toVariant(variant)],
+                propClasses[transformer.toVariant(variant)],
+                otherClassName,
+                singleClassName,
+              )}
+            >
+              <div
+                id={ariaAttributes['aria-describedby']}
+                className={classes.message}
               >
-                <div id={ariaAttributes['aria-describedby']} className={classes.message}>
-                  {!hideIconVariant ? icon : null}
-                  {snackMessage}
-                </div>
-                {action && (
-                  <div className={classes.action}>{action}</div>
-                )}
-              </SnackbarContent>
-            )}
-          </TransitionComponent>
-        </StyledSnackbar>
-      </Collapse>
-    )
-  },
-)
+                {!hideIconVariant ? icon : null}
+                {snackMessage}
+              </div>
+              {action && <div className={classes.action}>{action}</div>}
+            </SnackbarContent>
+          )}
+        </TransitionComponent>
+      </StyledSnackbar>
+    </Collapse>
+  )
+})
 
 export default SnackbarItem

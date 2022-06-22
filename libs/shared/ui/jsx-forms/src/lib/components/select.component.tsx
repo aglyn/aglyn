@@ -28,7 +28,10 @@ import {
 } from '@mui/material'
 import { forwardRef, type ReactNode } from 'react'
 import { validationMessage } from '../utils/validation-message'
-import { useFieldApi, type UseFieldApiConfig } from '../vendor/data-driven-forms'
+import {
+  useFieldApi,
+  type UseFieldApiConfig,
+} from '../vendor/data-driven-forms'
 
 export type SelectBaseProps = MuiSelectProps & UseFieldApiConfig
 
@@ -43,7 +46,7 @@ export interface SelectProps extends SelectBaseProps {
   defaultOption?: MuiMenuItemProps
 }
 
-const SelectComponent = forwardRef<any, SelectProps>(function RefRenderFn(props, ref) {
+const SelectComponent = forwardRef<any, SelectProps>((props, ref) => {
   const {
     input,
     isReadOnly,
@@ -99,11 +102,17 @@ const SelectComponent = forwardRef<any, SelectProps>(function RefRenderFn(props,
             {defaultOption?.children ?? 'None'}
           </MuiMenuItem>
         )}
-        {options.map(({ children, label, value, ...item }: any, key: number) => (
-          <MuiMenuItem key={item.key ?? item.id ?? value ?? key} value={value} {...item}>
-            {children ?? label}
-          </MuiMenuItem>
-        ))}
+        {options.map(
+          ({ children, label, value, ...item }: any, key: number) => (
+            <MuiMenuItem
+              key={item.key ?? item.id ?? value ?? key}
+              value={value}
+              {...item}
+            >
+              {children ?? label}
+            </MuiMenuItem>
+          ),
+        )}
       </MuiSelect>
       {!helpText ? null : <MuiFormHelperText>{helpText}</MuiFormHelperText>}
     </MuiFormControl>

@@ -15,24 +15,9 @@
  * limitations under the License.
  */
 
-import {
-  alpha,
-  generateComponentClassKeys,
-  styled,
-} from '@aglyn/shared-ui-theme'
-import { _isFnT } from '@aglyn/shared-util-guards'
+import { alpha, styled } from '@aglyn/shared-ui-theme'
 import { Stack, type StackProps as MuiStackProps } from '@mui/material'
-import clsx from 'clsx'
-import { type ChangeEvent, forwardRef, useCallback, useRef } from 'react'
-import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
-import ViewportCanvasComponent from './viewport-canvas.component'
-import ViewportZoomControlsComponent from './viewport-zoom-controls.component'
-
-const classKeys = generateComponentClassKeys('AglynViewport', [
-  'panelLeftOpen',
-  'panelBottomOpen',
-  'panelRightOpen',
-])
+import { forwardRef } from 'react'
 
 const AglynViewport = styled(Stack, {
   name: 'AglynViewport',
@@ -81,9 +66,6 @@ const AglynViewport = styled(Stack, {
       '100px 100px',
     ].join(','),
     // position: 'relative',
-    [`&.${classKeys.panelLeftOpen}`]: {},
-    [`&.${classKeys.panelBottomOpen}`]: {},
-    [`&.${classKeys.panelRightOpen}`]: {},
   }
 })
 
@@ -93,48 +75,14 @@ export interface ViewportRootComponentProps extends MuiStackProps {
 }
 
 const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(
-  function RefRenderFn(props, ref) {
-    const { children, className, ...rest } = props
-
-    const pannerRef = useRef<any>()
-
-    const handleZoomReset = useCallback((e: ChangeEvent<unknown>) => {
-      if (_isFnT(pannerRef.current?.reset)) {
-        pannerRef.current.reset()
-      }
-    }, [])
-
-    const handleZoomDecrease = useCallback((e: ChangeEvent<unknown>) => {
-      if (_isFnT(pannerRef.current?.zoomOut)) {
-        pannerRef.current.zoomOut()
-      }
-    }, [])
-
-    const handleZoomIncrease = useCallback((e: ChangeEvent<unknown>) => {
-      if (_isFnT(pannerRef.current?.zoomIn)) {
-        pannerRef.current.zoomIn()
-      }
-    }, [])
-
-    const [leftToggled] = useAglynBesignerPanelValue('panelLeft', 'toggled')
-    const [rightToggled] = useAglynBesignerPanelValue('panelRight', 'toggled')
-    const [bottomToggled] = useAglynBesignerPanelValue('panelBottom', 'toggled')
-
-    const elemClassName = clsx(
-      {
-        [classKeys.panelLeftOpen]: Boolean(leftToggled),
-        [classKeys.panelRightOpen]: Boolean(rightToggled),
-        [classKeys.panelBottomOpen]: Boolean(bottomToggled),
-      },
-      className,
-    )
+  (props, ref) => {
+    const { children, ...rest } = props
 
     return (
       <AglynViewport
         ref={ref}
         id="aglyn:viewport-root"
         aria-label="besigner viewport root"
-        className={elemClassName}
         direction="column"
         alignItems="center"
         spacing={0}
@@ -142,14 +90,6 @@ const ViewportRootComponent = forwardRef<any, ViewportRootComponentProps>(
         // drawerWidth={left?.drawerWidth}
         {...rest}
       >
-        <ViewportCanvasComponent
-        // pannerRef={pannerRef}
-        />
-        <ViewportZoomControlsComponent
-          onZoomReset={handleZoomReset}
-          onZoomDecrease={handleZoomDecrease}
-          onZoomIncrease={handleZoomIncrease}
-        />
         {children}
       </AglynViewport>
     )

@@ -20,15 +20,12 @@ import {
   FIREBASE_DATABASE_EMULATOR_ENABLED,
   FIREBASE_FIRESTORE_EMULATOR_ENABLED,
 } from '@aglyn/shared-data-enums'
+import { NextRouterEvent, SplashScreen } from '@aglyn/shared-ui-jsx'
 import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   RECAPTCHA_API_KEY,
 } from '@aglyn/tenant-feature-instance'
-import {
-  NextRouterEvent,
-  SecureLoadingOverlayComponent,
-} from '@aglyn/shared-ui-jsx'
 import { NoSsr } from '@mui/material'
 import {
   getAnalytics,
@@ -177,7 +174,7 @@ function GetInnerLayout({ children }) {
   }
 
   if (status === 'loading') {
-    return <SecureLoadingOverlayComponent />
+    return <SplashScreen />
   }
 
   return (

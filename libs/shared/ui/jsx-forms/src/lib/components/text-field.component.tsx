@@ -15,61 +15,65 @@
  * limitations under the License.
  */
 
-import {TextField as MuiTextField, type TextFieldProps as MuiTextFieldProps} from '@mui/material'
-import {forwardRef, type ReactNode} from 'react'
-import {validationMessage} from '../utils/validation-message'
-import {useFieldApi, type UseFieldApiConfig} from '../vendor/data-driven-forms'
+import {
+  TextField as MuiTextField,
+  type TextFieldProps as MuiTextFieldProps,
+} from '@mui/material'
+import { forwardRef, type ReactNode } from 'react'
+import { validationMessage } from '../utils/validation-message'
+import {
+  useFieldApi,
+  type UseFieldApiConfig,
+} from '../vendor/data-driven-forms'
 
+export type TextFieldProps = MuiTextFieldProps &
+  UseFieldApiConfig & {
+    isReadOnly?: boolean
+    isDisabled?: boolean
+    isRequired?: boolean
+    description?: ReactNode
+    validateOnMount?: boolean
+  }
 
-export type TextFieldProps = MuiTextFieldProps & UseFieldApiConfig & {
-  isReadOnly?: boolean
-  isDisabled?: boolean
-  isRequired?: boolean
-  description?: ReactNode
-  validateOnMount?: boolean
-}
+const TextFieldComponent = forwardRef<any, TextFieldProps>((props, ref) => {
+  const {
+    input,
+    isReadOnly,
+    isDisabled,
+    placeholder,
+    isRequired,
+    label,
+    helperText,
+    description,
+    validateOnMount,
+    meta,
+    inputProps,
+    ...rest
+  } = useFieldApi(props)
+  const invalidMessage = validationMessage(meta, validateOnMount)
+  const helpText =
+    invalidMessage ||
+    ((meta.touched || validateOnMount) && meta.warning) ||
+    helperText ||
+    description
 
-const TextFieldComponent = forwardRef<any, TextFieldProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      input,
-      isReadOnly,
-      isDisabled,
-      placeholder,
-      isRequired,
-      label,
-      helperText,
-      description,
-      validateOnMount,
-      meta,
-      inputProps,
-      ...rest
-    } = useFieldApi(props)
-    const invalidMessage = validationMessage(meta, validateOnMount)
-    const helpText =
-      invalidMessage ||
-      ((meta.touched || validateOnMount) && meta.warning) ||
-      helperText ||
-      description
-
-    return (
-      <MuiTextField
-        {...input}
-        ref={ref}
-        disabled={isDisabled}
-        error={Boolean(invalidMessage)}
-        helperText={helpText}
-        inputProps={{readOnly: isReadOnly, ...inputProps}}
-        label={label}
-        placeholder={placeholder}
-        required={isRequired}
-        size="small"
-        fullWidth
-        {...rest}
-      />
-    )
-  },
-)
+  return (
+    <MuiTextField
+      {...input}
+      ref={ref}
+      disabled={isDisabled}
+      error={Boolean(invalidMessage)}
+      helperText={helpText}
+      inputProps={{ readOnly: isReadOnly, ...inputProps }}
+      label={label}
+      placeholder={placeholder}
+      required={isRequired}
+      size="small"
+      fullWidth
+      {...rest}
+    />
+  )
+})
 
 TextFieldComponent.displayName = 'TextFieldComponent'
 TextFieldComponent.aglyn = true

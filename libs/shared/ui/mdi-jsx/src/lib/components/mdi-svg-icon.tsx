@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,30 +15,25 @@
  * limitations under the License.
  */
 
-import type {IconId} from '@aglyn/shared-data-mdi'
-import {_isStrT} from '@aglyn/shared-util-guards'
-import {forwardRef} from 'react'
-import {useMdiIcon} from '../hooks/use-mdi-icon'
-import MdiIcon, {type MdiIconProps} from './mdi-icon'
-
+import type { IconId } from '@aglyn/shared-data-mdi'
+import { _isStrT } from '@aglyn/shared-util-guards'
+import { forwardRef } from 'react'
+import { useMdiIcon } from '../hooks/use-mdi-icon'
+import MdiIcon, { type MdiIconProps } from './mdi-icon'
 
 export interface MdiSvgIconProps extends MdiIconProps {
   iconId?: IconId
 }
 
-const MdiSvgIcon = forwardRef<any, MdiSvgIconProps>(
-  function RefRenderFn(props, ref) {
-    const {iconId, ...rest} = props
-    const icon = useMdiIcon(_isStrT(iconId) ? iconId : null)
+const MdiSvgIcon = forwardRef<any, MdiSvgIconProps>((props, ref) => {
+  const { iconId, ...rest } = props
+  const icon = useMdiIcon(_isStrT(iconId) ? iconId : null)
 
-    return (
-      <MdiIcon ref={ref} path={icon?.path} {...rest} />
-    )
-  },
-)
+  return <MdiIcon ref={ref} path={icon?.path} {...rest} />
+})
 
 MdiSvgIcon.displayName = 'MdiSvgIcon'
 MdiSvgIcon.aglyn = true
 
-export {MdiSvgIcon}
+export { MdiSvgIcon }
 export default MdiSvgIcon

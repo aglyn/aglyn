@@ -14,26 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {forwardRef} from 'react'
-import {SketchPicker, type SketchPickerProps} from 'react-color'
-
+import { forwardRef } from 'react'
+import { SketchPicker, type SketchPickerProps } from 'react-color'
 
 export interface ColorPickerProps extends SketchPickerProps {}
 
-const ColorPicker = forwardRef<any, ColorPickerProps>(
-  function RefRenderFn(props, ref) {
-    const {...rest} = props
+const ColorPicker = forwardRef<any, ColorPickerProps>((props, ref) => {
+  const { ...rest } = props
 
-    return (
-      <SketchPicker
-        ref={ref}
-        {...rest}
-      />
-    )
-  },
-)
+  return <SketchPicker ref={ref} {...rest} />
+})
 
 ColorPicker.displayName = 'ColorPicker'
 
-export {ColorPicker}
+export { ColorPicker }
 export default ColorPicker

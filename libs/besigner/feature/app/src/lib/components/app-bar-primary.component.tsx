@@ -47,7 +47,7 @@ export interface AppBarPrimaryComponentProps extends Partial<AppBarProps> {}
 export const AppBarPrimaryComponent = forwardRef<
   any,
   AppBarPrimaryComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { children, ...rest } = props
   const [, toggleThemeMode, themeMode] = useThemeMode()
   const themeModeDisplayName = getThemeModeDisplayName(themeMode)

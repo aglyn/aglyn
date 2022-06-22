@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {getDisplayName} from '@aglyn/shared-util-tools'
-import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
+import { getDisplayName } from '@aglyn/shared-util-tools'
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import {
   Component,
   type ComponentType,
@@ -27,7 +27,6 @@ import {
   type ReactNode,
   type RefAttributes,
 } from 'react'
-
 
 export interface ErrorBoundaryProps {
   children?: ReactNode
@@ -58,7 +57,7 @@ class ErrorBoundaryComponentClass extends Component<ErrorBoundaryProps, State> {
   public static getDerivedStateFromError(error) {
     // Update state so the next render will show the fallback UI.
     console.error(error, 'getDerivedStateFromError')
-    return {hasError: true, error}
+    return { hasError: true, error }
   }
 
   public componentDidCatch(error, errorInfo) {
@@ -72,25 +71,24 @@ class ErrorBoundaryComponentClass extends Component<ErrorBoundaryProps, State> {
   }
 
   public render() {
-    return this.state.hasError ? (
-      this.props.fallback ?? <h6>Something went wrong...</h6>
-    ) : (
-      this.props.children
-    )
+    return this.state.hasError
+      ? this.props.fallback ?? <h6>Something went wrong...</h6>
+      : this.props.children
   }
 }
 
-const ErrorBoundaryComponent = forwardRef<ErrorBoundaryComponentClass, ErrorBoundaryProps>(
-  function RefRenderFn(props, ref) {
-    const {children, ...rest} = props
+const ErrorBoundaryComponent = forwardRef<
+  ErrorBoundaryComponentClass,
+  ErrorBoundaryProps
+>((props, ref) => {
+  const { children, ...rest } = props
 
-    return (
-      <ErrorBoundaryComponentClass ref={ref} {...rest}>
-        {children}
-      </ErrorBoundaryComponentClass>
-    )
-  },
-)
+  return (
+    <ErrorBoundaryComponentClass ref={ref} {...rest}>
+      {children}
+    </ErrorBoundaryComponentClass>
+  )
+})
 ErrorBoundaryComponent.displayName = 'ErrorBoundaryComponent'
 ErrorBoundaryComponent.aglyn = true
 
@@ -98,22 +96,19 @@ export function withErrorBoundary<P, T>(
   WrappedComponent: ComponentType<P>,
   options?: ErrorBoundaryProps,
 ): ForwardRefExoticComponent<PropsWithoutRef<P> & RefAttributes<T>> {
-
   const displayName = getDisplayName(WrappedComponent)
-  const WithErrorBoundary = forwardRef<T, P>(
-    function RefRenderFn(props, ref) {
-      return (
-        <ErrorBoundaryComponentClass {...options}>
-          <WrappedComponent ref={ref} {...props} />
-        </ErrorBoundaryComponentClass>
-      )
-    },
-  )
+  const WithErrorBoundary = forwardRef<T, P>((props, ref) => {
+    return (
+      <ErrorBoundaryComponentClass {...options}>
+        <WrappedComponent ref={ref} {...props} />
+      </ErrorBoundaryComponentClass>
+    )
+  })
   WithErrorBoundary.displayName = `WithErrorBoundary(${displayName})`
   hoistNonReactStatics(WithErrorBoundary, WrappedComponent)
 
   return WithErrorBoundary
 }
 
-export {ErrorBoundaryComponent}
+export { ErrorBoundaryComponent }
 export default ErrorBoundaryComponent

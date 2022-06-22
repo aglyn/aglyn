@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,20 +17,24 @@
 
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import MuiPopper, { type PopperProps as MuiPopperProps } from '@mui/material/Popper'
+import MuiPopper, {
+  type PopperProps as MuiPopperProps,
+} from '@mui/material/Popper'
 import clsx from 'clsx'
 import { forwardRef, HTMLAttributes } from 'react'
 
 const classKeys = generateComponentClassKeys('AglynPopperStyled', ['arrow'])
 
 export const PopperStyledArrowComponent = styled(
-  forwardRef<any, HTMLAttributes<HTMLDivElement>>(function RefRenderFn(props, ref) {
+  forwardRef<any, HTMLAttributes<HTMLDivElement>>((props, ref) => {
     const { className, ...rest } = props
-    return <div ref={ref} className={clsx(classKeys.arrow, className)} {...rest} />
+    return (
+      <div ref={ref} className={clsx(classKeys.arrow, className)} {...rest} />
+    )
   }),
   {
     name: 'AglynPopperArrow',
-  }
+  },
 )({
   position: 'absolute',
   fontSize: 7,
@@ -53,7 +57,8 @@ export interface PopperStyledComponentProps extends MuiPopperProps {
 
 const PopperStyledComponent = styled(MuiPopper, {
   name: 'AglynPopperStyled',
-  shouldForwardProp: (prop) => !_isEqualitySameType(prop, 'disableArrow', 'arrowGap'),
+  shouldForwardProp: (prop) =>
+    !_isEqualitySameType(prop, 'disableArrow', 'arrowGap'),
 })<PopperStyledComponentProps>(({ theme, disableArrow, arrowGap }) => ({
   zIndex: 1,
   '& > div': {

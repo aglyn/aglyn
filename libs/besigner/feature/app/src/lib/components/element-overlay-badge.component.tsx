@@ -26,10 +26,7 @@ import {
   ICON_VARIANT_MODIFY_MOVE_UP,
   ICON_VARIANT_SELECT_PARENT,
 } from '@aglyn/shared-data-enums'
-import {
-  SrOnlyComponent,
-  type SrOnlyComponentProps,
-} from '@aglyn/shared-ui-jsx'
+import { SrOnly, type SrOnlyComponentProps } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
@@ -51,80 +48,76 @@ export interface BadgeButtonProps extends Omit<TooltipProps, 'children'> {
   SrOnlyProps?: SrOnlyComponentProps
 }
 
-export const BadgeButton = forwardRef<any, BadgeButtonProps>(
-  function RefRenderFn(props, ref) {
-    const { children, ButtonProps, icon, SrOnlyProps, ...rest } = props
+export const BadgeButton = forwardRef<any, BadgeButtonProps>((props, ref) => {
+  const { children, ButtonProps, icon, SrOnlyProps, ...rest } = props
 
-    return (
-      <MuiTooltip ref={ref} {...rest}>
-        <MuiButton
-          {...ButtonProps}
-          sx={mergeSxProps(
-            {
-              pt: 0.5,
-              pb: 0.5,
-              pl: 0.585,
-              pr: 0.585,
-              fontSize: 16,
-              '&.MuiButtonGroup-grouped': { minWidth: 30 },
-            },
-            ButtonProps?.sx,
-          )}
-        >
-          <MdiIcon fontSize="inherit" {...icon} />
-          <SrOnlyComponent component="span" {...SrOnlyProps}>
-            {children}
-          </SrOnlyComponent>
-        </MuiButton>
-      </MuiTooltip>
-    )
-  },
-)
+  return (
+    <MuiTooltip ref={ref} {...rest}>
+      <MuiButton
+        {...ButtonProps}
+        sx={mergeSxProps(
+          {
+            pt: 0.5,
+            pb: 0.5,
+            pl: 0.585,
+            pr: 0.585,
+            fontSize: 16,
+            '&.MuiButtonGroup-grouped': { minWidth: 30 },
+          },
+          ButtonProps?.sx,
+        )}
+      >
+        <MdiIcon fontSize="inherit" {...icon} />
+        <SrOnly component="span" {...SrOnlyProps}>
+          {children}
+        </SrOnly>
+      </MuiButton>
+    </MuiTooltip>
+  )
+})
 BadgeButton.displayName = 'AglynBadgeButton'
 
-export const MoveButtons = forwardRef<any, { $id: ElementId }>(
-  function RefRenderFn(props, ref) {
-    const { $id } = props
-    const app = useBesignerAppContext()
-    const [index, isFirstChild, isLastChild, parentId] =
-      useAglynElementParentPosition($id)
-    const handleMoveUp = useCallback(
-      (e: ChangeEvent<unknown>) => {
-        moveCanvasElement(app, { $id, parentId, index: index - 1 })
-      },
-      [app, $id, index, parentId],
-    )
-    const handleMoveDown = useCallback(
-      (e: ChangeEvent<unknown>) => {
-        moveCanvasElement(app, { $id, parentId, index: index + 1 })
-      },
-      [app, $id, index, parentId],
-    )
+export const MoveButtons = forwardRef<any, { $id: ElementId }>((props, ref) => {
+  const { $id } = props
+  const app = useBesignerAppContext()
+  const [index, isFirstChild, isLastChild, parentId] =
+    useAglynElementParentPosition($id)
+  const handleMoveUp = useCallback(
+    (e: ChangeEvent<unknown>) => {
+      moveCanvasElement(app, { $id, parentId, index: index - 1 })
+    },
+    [app, $id, index, parentId],
+  )
+  const handleMoveDown = useCallback(
+    (e: ChangeEvent<unknown>) => {
+      moveCanvasElement(app, { $id, parentId, index: index + 1 })
+    },
+    [app, $id, index, parentId],
+  )
 
-    return (
-      <>
-        {!isFirstChild && (
-          <BadgeButton
-            ref={ref}
-            title="Move up"
-            children={'move up'}
-            ButtonProps={{ onClick: handleMoveUp }}
-            icon={{ path: ICON_VARIANT_MODIFY_MOVE_UP.path }}
-          />
-        )}
-        {!isLastChild && (
-          <BadgeButton
-            ref={ref}
-            title="Move down"
-            children={'move down'}
-            ButtonProps={{ onClick: handleMoveDown }}
-            icon={{ path: ICON_VARIANT_MODIFY_MOVE_DOWN.path }}
-          />
-        )}
-      </>
-    )
-  },
-)
+  return (
+    <>
+      {!isFirstChild && (
+        <BadgeButton
+          ref={ref}
+          title="Move up"
+          children={'move up'}
+          ButtonProps={{ onClick: handleMoveUp }}
+          icon={{ path: ICON_VARIANT_MODIFY_MOVE_UP.path }}
+        />
+      )}
+      {!isLastChild && (
+        <BadgeButton
+          ref={ref}
+          title="Move down"
+          children={'move down'}
+          ButtonProps={{ onClick: handleMoveDown }}
+          icon={{ path: ICON_VARIANT_MODIFY_MOVE_DOWN.path }}
+        />
+      )}
+    </>
+  )
+})
 
 export interface ElementOverlayBadgeButtonsComponentProps
   extends ButtonGroupProps {
@@ -140,7 +133,7 @@ export interface ElementOverlayBadgeButtonsComponentProps
 const ElementOverlayBadgeComponent = forwardRef<
   any,
   ElementOverlayBadgeButtonsComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const {
     $id,
     dragHandleRef,

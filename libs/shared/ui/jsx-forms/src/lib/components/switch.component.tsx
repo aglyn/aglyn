@@ -29,10 +29,12 @@ import {
   Switch as MuiSwitch,
   type SwitchProps as MuiSwitchProps,
 } from '@mui/material'
-import {forwardRef, type ReactNode} from 'react'
-import {validationMessage} from '../utils/validation-message'
-import {useFieldApi, type UseFieldApiConfig} from '../vendor/data-driven-forms'
-
+import { forwardRef, type ReactNode } from 'react'
+import { validationMessage } from '../utils/validation-message'
+import {
+  useFieldApi,
+  type UseFieldApiConfig,
+} from '../vendor/data-driven-forms'
 
 export type SwitchBaseProps = MuiSwitchProps & UseFieldApiConfig
 
@@ -54,69 +56,73 @@ export interface SwitchProps extends SwitchBaseProps {
   FormHelperTextProps?: MuiFormHelperTextProps
 }
 
-const SwitchComponent = forwardRef<any, SwitchProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      input,
-      isReadOnly,
-      isDisabled,
-      isRequired,
-      label,
-      helperText,
-      description,
-      validateOnMount,
-      meta,
-      onText,
-      offText,
-      FormControlProps,
-      FormGroupProps,
-      FormControlLabelProps,
-      SwitchProps,
-      FormLabelProps,
-      FormHelperTextProps,
-      ...rest
-    } = useFieldApi({
-      ...props,
-      type: 'checkbox',
-    })
-    const invalid = validationMessage(meta, validateOnMount)
-    const helpText = invalid || ((meta.touched || validateOnMount) && meta.warning) || helperText || description
+const SwitchComponent = forwardRef<any, SwitchProps>((props, ref) => {
+  const {
+    input,
+    isReadOnly,
+    isDisabled,
+    isRequired,
+    label,
+    helperText,
+    description,
+    validateOnMount,
+    meta,
+    onText,
+    offText,
+    FormControlProps,
+    FormGroupProps,
+    FormControlLabelProps,
+    SwitchProps,
+    FormLabelProps,
+    FormHelperTextProps,
+    ...rest
+  } = useFieldApi({
+    ...props,
+    type: 'checkbox',
+  })
+  const invalid = validationMessage(meta, validateOnMount)
+  const helpText =
+    invalid ||
+    ((meta.touched || validateOnMount) && meta.warning) ||
+    helperText ||
+    description
 
-    return (
-      <MuiFormControl
-        ref={ref}
-        required={isRequired}
-        error={!!invalid}
-        component="fieldset" {...FormControlProps}>
-        <MuiFormGroup {...FormGroupProps}>
-          <MuiFormControlLabel
-            control={
-              <MuiSwitch
-                {...SwitchProps}
-                {...rest}
-                {...input}
-                readOnly={isReadOnly}
-                disabled={isDisabled || isReadOnly}
-                onChange={({target: {checked}}) => input.onChange(checked)}
-              />
-            }
-            label={
-              <MuiFormLabel {...FormLabelProps}>
-                {input.checked ? onText || label : offText || label}
-              </MuiFormLabel>
-            }
-            {...FormControlLabelProps}
-          />
-          {helpText && (
-            <MuiFormHelperText {...FormHelperTextProps}>
-              {helpText}
-            </MuiFormHelperText>
-          )}
-        </MuiFormGroup>
-      </MuiFormControl>
-    )
-  },
-)
+  return (
+    <MuiFormControl
+      ref={ref}
+      required={isRequired}
+      error={!!invalid}
+      component="fieldset"
+      {...FormControlProps}
+    >
+      <MuiFormGroup {...FormGroupProps}>
+        <MuiFormControlLabel
+          control={
+            <MuiSwitch
+              {...SwitchProps}
+              {...rest}
+              {...input}
+              readOnly={isReadOnly}
+              disabled={isDisabled || isReadOnly}
+              onChange={({ target: { checked } }) => input.onChange(checked)}
+            />
+          }
+          label={
+            <MuiFormLabel {...FormLabelProps}>
+              {input.checked ? onText || label : offText || label}
+            </MuiFormLabel>
+          }
+          {...FormControlLabelProps}
+        />
+        {helpText && (
+          <MuiFormHelperText {...FormHelperTextProps}>
+            {helpText}
+          </MuiFormHelperText>
+        )}
+      </MuiFormGroup>
+    </MuiFormControl>
+  )
+})
 
 SwitchComponent.displayName = 'SwitchComponent'
 SwitchComponent.aglyn = true

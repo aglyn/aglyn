@@ -34,7 +34,7 @@ import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 export interface InteractControlsProps extends StackProps {}
 
 const InteractControlsComponent = forwardRef<any, InteractControlsProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { ...rest } = props
     const [interactMode, setInteractMode] = useAglynBesignerFlag('interactMode')
     const handleInteractModeClick = useCallback(

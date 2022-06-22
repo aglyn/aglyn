@@ -15,13 +15,23 @@
  * limitations under the License.
  */
 
-import { IS_PRODUCTION, LINK_PREF, LINK_PRIORITY, META_PREF } from '@aglyn/shared-data-enums'
-import { createEmotionCache, createEmotionServer, type EmotionCache } from '@aglyn/shared-ui-theme'
+import {
+  IS_PRODUCTION,
+  LINK_PREF,
+  LINK_PRIORITY,
+  META_PREF,
+} from '@aglyn/shared-data-enums'
 import { makeLinkElements, makeMetaElements } from '@aglyn/shared-ui-jsx'
+import {
+  createEmotionCache,
+  createEmotionServer,
+  type EmotionCache,
+} from '@aglyn/shared-ui-theme'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import crypto from 'crypto'
 import type { AppType, Enhancer } from 'next/dist/shared/lib/utils'
+// eslint-disable-next-line @next/next/no-document-import-in-page
 import NextDocument, {
   type DocumentContext,
   type DocumentInitialProps,
@@ -52,28 +62,36 @@ export interface _EmotionDocumentProps extends LangParam {}
  * # Resolution order
  * __Server-side__
  *
- * 1. (if-exists) getInitialProps _app.tsx {@link NextEmotionAppComponent.getInitialProps}
- * 2. (if-exists) getInitialProps page {@link NextPageWithLayout.getInitialProps}
- * 3. getInitialProps _document.tsx {@link _EmotionDocumentComponent.getInitialProps}
+ * 1. (if-exists) getInitialProps _app.tsx
+ * {@link NextEmotionAppComponent.getInitialProps}
+ * 2. (if-exists) getInitialProps page {@link
+ * NextPageWithLayout.getInitialProps}
+ * 3. getInitialProps _document.tsx
+ * {@link _EmotionDocumentComponent.getInitialProps}
  * 4. render _app.tsx {@link NextEmotionAppComponent.render}
  * 5. render page {@link NextPageWithLayout.render}
  * 6. render _document.tsx {@link _EmotionDocumentComponent.render}
  *
  * __Server-side (w/ error)__
  *
- * 1. (if-exists) getInitialProps _document.tsx {@link _EmotionDocumentComponent.getInitialProps}
+ * 1. (if-exists) getInitialProps _document.tsx
+ * {@link _EmotionDocumentComponent.getInitialProps}
  * 2. render _app.tsx {@link NextEmotionAppComponent.render}
  * 3. render page {@link NextPageWithLayout.render}
  * 4. render _document.tsx {@link _EmotionDocumentComponent.render}
  *
  * __Client-side__
- * 1. (if-exists) getInitialProps _app.tsx {@link NextEmotionAppComponent.getInitialProps}
- * 2. (if-exists) getInitialProps page {@link NextPageWithLayout.getInitialProps}
+ * 1. (if-exists) getInitialProps _app.tsx
+ * {@link NextEmotionAppComponent.getInitialProps}
+ * 2. (if-exists) getInitialProps page {@link
+ * NextPageWithLayout.getInitialProps}
  * 3. render _app.tsx {@link NextEmotionAppComponent.render}
  * 4. render page {@link NextPageWithLayout.render}
  * @see {@link NextAppThemedComponent}
  */
-class _EmotionDocumentComponent<P extends _EmotionDocumentProps> extends NextDocument<P> {
+class _EmotionDocumentComponent<
+  P extends _EmotionDocumentProps,
+> extends NextDocument<P> {
   public static displayName = '_EmotionDocumentComponent'
   public static readonly aglyn = true
   public static defaultLanguage = 'en'
@@ -92,13 +110,17 @@ class _EmotionDocumentComponent<P extends _EmotionDocumentProps> extends NextDoc
   }
 
   public static getDocumentLanguage(query: DocumentContext['query']) {
-    const list = Array.isArray(query.lang) ? query.lang : [query.lang || this.defaultLanguage]
-    return list.find((item) => typeof item === 'string' && item.trim().length > 1)
+    const list = Array.isArray(query.lang)
+      ? query.lang
+      : [query.lang || this.defaultLanguage]
+    return list.find(
+      (item) => typeof item === 'string' && item.trim().length > 1,
+    )
   }
 
   public static useWithEmotionCache(cache?: EmotionCache): Enhancer<AppType> {
     return function withEmotionCache<P>(
-      Component: ComponentType<P & { emotionCache?: EmotionCache }>
+      Component: ComponentType<P & { emotionCache?: EmotionCache }>,
     ): ComponentType<P> {
       const displayName = getDisplayName(Component)
       function WithEmotionCache(props: P) {
@@ -119,7 +141,9 @@ class _EmotionDocumentComponent<P extends _EmotionDocumentProps> extends NextDoc
   static async getInitialProps(ctx: DocumentContext): InitPropsResponse {
     const { renderPage, query } = ctx
     const lang = this.getDocumentLanguage(query)
-    const emotionCache: EmotionCache = createEmotionCache()
+    const emotionCache: EmotionCache = createEmotionCache({
+      key: 'next',
+    })
     const { extractCriticalToChunks } = createEmotionServer(emotionCache)
     const withEmotionCache = this.useWithEmotionCache(emotionCache)
 
@@ -128,7 +152,8 @@ class _EmotionDocumentComponent<P extends _EmotionDocumentProps> extends NextDoc
         enhanceApp: withEmotionCache,
       })
 
-    const { styles: initialStyles, ...initialProps } = await NextDocument.getInitialProps(ctx)
+    const { styles: initialStyles, ...initialProps } =
+      await NextDocument.getInitialProps(ctx)
     const { styles: emotionStyles } = extractCriticalToChunks(initialProps.html)
 
     const styles = Children.toArray(initialStyles)
@@ -146,11 +171,11 @@ class _EmotionDocumentComponent<P extends _EmotionDocumentProps> extends NextDoc
     const { lang } = this.props
 
     let csp = `default-src 'self'; script-src 'self' ${cspHashOf(
-      NextScript.getInlineScriptSource(this.props)
+      NextScript.getInlineScriptSource(this.props),
     )}`
     if (IS_PRODUCTION) {
       csp = `default-src 'self' aglyn.com *.aglyn.com' ${cspHashOf(
-        NextScript.getInlineScriptSource(this.props)
+        NextScript.getInlineScriptSource(this.props),
       )}`
     }
 

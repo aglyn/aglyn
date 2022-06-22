@@ -80,7 +80,7 @@ export interface DevicePreviewControlsProps extends Partial<MenuProps> {}
 const DevicePreviewControlsComponent = forwardRef<
   any,
   DevicePreviewControlsProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { ...rest } = props
 
   const [devicePreview, setDevicePreview] =

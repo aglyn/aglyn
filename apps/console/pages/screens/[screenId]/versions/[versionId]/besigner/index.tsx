@@ -50,6 +50,20 @@ const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
     ),
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
+const ViewportRootComponent = dynamic<WorkspaceEditorComponentProps>(
+  () =>
+    import('@aglyn/besigner-feature-app').then(
+      (mod) => mod.ViewportRootComponent,
+    ),
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
+)
+const ViewportCanvasComponent = dynamic<WorkspaceEditorComponentProps>(
+  () =>
+    import('@aglyn/besigner-feature-app').then(
+      (mod) => mod.ViewportCanvasComponent,
+    ),
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
+)
 
 function Besigner(props) {
   const { query } = useRouter()
@@ -141,7 +155,11 @@ function Besigner(props) {
             onSave={handleSave}
             saveAvailable
           />
-          <WorkspaceEditorComponent />
+          <WorkspaceEditorComponent>
+            <ViewportRootComponent>
+              <ViewportCanvasComponent />
+            </ViewportRootComponent>
+          </WorkspaceEditorComponent>
         </>
       )}
     </>

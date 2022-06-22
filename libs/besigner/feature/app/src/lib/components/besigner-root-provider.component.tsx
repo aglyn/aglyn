@@ -56,7 +56,7 @@ export const withBesignerContext = <P,>(Component: ComponentType<P>) => {
 
 const BesignerRootProviderComponent = (props: BesignerComponentProps) => {
   /*forwardRef<any, BesignerComponentProps>(
- function RefRenderFn(props, ref) {*/
+ (props, ref) => {*/
   const { noSsr, appName, canvasElements, children } = props
   const Wrapper = noSsr ? NoSsr : Fragment
 

@@ -26,22 +26,20 @@ export interface BranchComponentProps extends OverrideableComponentProps {
   $id?: ElementId
 }
 
-const BranchComponent = forwardRef<any, BranchComponentProps>(
-  function RefRenderFn(props, ref) {
-    const { component: Component, leafComponent, $id, ...rest } = props
+const BranchComponent = forwardRef<any, BranchComponentProps>((props, ref) => {
+  const { component: Component, leafComponent, $id, ...rest } = props
 
-    const elements = useAglynElementData($id, 'elements')
-    const Leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
+  const elements = useAglynElementData($id, 'elements')
+  const Leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
 
-    return Array.isArray(elements) && elements.length ? (
-      <Component ref={ref} {...rest}>
-        {elements.map(($id) => (
-          <Leaf key={`element-leaf-${$id}`} $id={$id} leafComponent={Leaf} />
-        ))}
-      </Component>
-    ) : null
-  },
-)
+  return Array.isArray(elements) && elements.length ? (
+    <Component ref={ref} {...rest}>
+      {elements.map(($id) => (
+        <Leaf key={`element-leaf-${$id}`} $id={$id} leafComponent={Leaf} />
+      ))}
+    </Component>
+  ) : null
+})
 
 BranchComponent.displayName = 'BranchComponent'
 BranchComponent.aglyn = true

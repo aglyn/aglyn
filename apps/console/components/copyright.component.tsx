@@ -15,30 +15,23 @@
  * limitations under the License.
  */
 
-import {BRAND, CURRENT_YEAR} from '@aglyn/shared-data-enums'
-import {Typography, type TypographyProps} from '@mui/material'
-import {forwardRef} from 'react'
-
+import { BRAND, CURRENT_YEAR } from '@aglyn/shared-data-enums'
+import { Typography, type TypographyProps } from '@mui/material'
+import { forwardRef } from 'react'
 
 export interface CopyrightProps extends TypographyProps<any, any> {}
 
-const CopyrightComponent = forwardRef<any, CopyrightProps>(
-  function RefRenderFn(props, ref) {
-    const {children, ...rest} = props
-    return (
-      <Typography
-        ref={ref}
-        variant="subtitle2"
-        {...rest}
-      >
-        {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
-        {children}
-      </Typography>
-    )
-  },
-)
+const CopyrightComponent = forwardRef<any, CopyrightProps>((props, ref) => {
+  const { children, ...rest } = props
+  return (
+    <Typography ref={ref} variant="subtitle2" {...rest}>
+      {CURRENT_YEAR} &copy; {BRAND.ORG_NAME_LEGAL}
+      {children}
+    </Typography>
+  )
+})
 CopyrightComponent.displayName = 'CopyrightComponent'
 CopyrightComponent.aglyn = true
 
-export {CopyrightComponent}
+export { CopyrightComponent }
 export default CopyrightComponent

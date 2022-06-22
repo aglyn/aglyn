@@ -121,7 +121,7 @@ export interface WorkspacePanelComponentProps extends WorkspacePanelProps {
 }
 
 const WorkspacePanelComponent = forwardRef<any, WorkspacePanelComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const {
       children,
       className: classNameProp,

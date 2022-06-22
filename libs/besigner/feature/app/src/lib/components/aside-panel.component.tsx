@@ -294,7 +294,7 @@ const withTabPanelInner = (Component) => (props: any) => {
 }
 
 const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const handleAddElementClick = useAddElementCallback()
     return (
       <TabPanelInner sx={{ pl: 0.5 }}>
@@ -315,7 +315,7 @@ const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
 )
 
 const ComponentsList = forwardRef<any, ComponentsGridListProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { ...rest } = props
     return (
       <AglynComponentsContext.Consumer>
@@ -410,7 +410,7 @@ export interface AsidePanelComponentProps extends WorkspacePanelComponentProps {
 }
 
 const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { children, panel: panelKey, ...rest } = props
 
     const [panel, setPanel] = useAglynBesignerPanel(panelKey)

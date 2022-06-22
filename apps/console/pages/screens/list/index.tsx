@@ -27,7 +27,7 @@ import {
   AppLink,
   ContainerComponent,
   NavigationDrawerComponent,
-  SrOnlyComponent,
+  SrOnly,
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
@@ -256,7 +256,7 @@ function Screens(props) {
                   sx={{ mr: 2 }}
                 >
                   <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-                  <SrOnlyComponent>close drawer</SrOnlyComponent>
+                  <SrOnly>close drawer</SrOnly>
                 </IconButton>
                 <Typography variant="h6" component="div">
                   {'Create new screen'}

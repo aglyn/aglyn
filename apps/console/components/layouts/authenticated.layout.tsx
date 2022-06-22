@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-import {SecureLoadingOverlayComponent, useLoading} from '@aglyn/shared-ui-jsx'
-import {continueParam, useContinueUrl} from '@aglyn/shared-util-next'
-import {useRouter} from 'next/router'
-import {Fragment, type ReactNode, useEffect} from 'react'
-import {useSigninCheck} from 'reactfire'
-
+import { SplashScreen, useLoading } from '@aglyn/shared-ui-jsx'
+import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
+import { useRouter } from 'next/router'
+import { Fragment, type ReactNode, useEffect } from 'react'
+import { useSigninCheck } from 'reactfire'
 
 export interface AuthenticatedLayoutProps {
   children?: ReactNode
@@ -28,20 +27,22 @@ export interface AuthenticatedLayoutProps {
 }
 
 function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
-  const {children, requireEmailVerification} = props
-  const {queueLoading} = useLoading()
+  const { children, requireEmailVerification } = props
+  const { queueLoading } = useLoading()
   const router = useRouter()
   const [next] = useContinueUrl()
-  const {status, data: signInCheckResult} = useSigninCheck()
+  const { status, data: signInCheckResult } = useSigninCheck()
   const authLoading = status === 'loading'
   const signedIn = signInCheckResult?.signedIn === true
   const emailVerified = signInCheckResult?.user?.emailVerified
-  const invalidAuth = authLoading || !signedIn || (requireEmailVerification && !emailVerified)
+  const invalidAuth =
+    authLoading || !signedIn || (requireEmailVerification && !emailVerified)
 
   useEffect(() => {
     if (authLoading) return void 0
     if (!signedIn) return void pushToRequestAuth(`/signin`)
-    if (requireEmailVerification && !emailVerified) return void pushToRequestAuth(`/verify-email`)
+    if (requireEmailVerification && !emailVerified)
+      return void pushToRequestAuth(`/verify-email`)
 
     return void 0
 
@@ -58,15 +59,10 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
     signedIn,
   ])
 
-
-  return (
-    <Fragment>
-      {!invalidAuth ? children : <SecureLoadingOverlayComponent />}
-    </Fragment>
-  )
+  return <Fragment>{!invalidAuth ? children : <SplashScreen />}</Fragment>
 }
 AuthenticatedLayout.displayName = 'AuthenticatedLayout'
 AuthenticatedLayout.aglyn = true
 
-export {AuthenticatedLayout}
+export { AuthenticatedLayout }
 export default AuthenticatedLayout

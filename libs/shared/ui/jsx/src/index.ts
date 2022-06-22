@@ -37,11 +37,9 @@ export * from './lib/components/next-link'
 export * from './lib/components/popper-styled.component'
 export * from './lib/components/ruler-guides.component'
 export * from './lib/components/sandbox-frame'
-export * from './lib/components/secure-loading-overlay.component'
-export * from './lib/components/shadow-dom'
-export * from './lib/components/sr-only.component'
+export * from './lib/components/splash-screen'
+export * from './lib/components/sr-only'
 export * from './lib/components/zoomable-panning-component'
-
 
 export * from './lib/contexts/confirmation.context'
 export * from './lib/contexts/loading.context'

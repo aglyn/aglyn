@@ -98,7 +98,7 @@ interface ElementsTreeItemComponentProps extends Partial<TreeItemProps> {
 const ElementsTreeItemComponent = forwardRef<
   any,
   ElementsTreeItemComponentProps & { dragHandleRef?: any; dragPreviewRef?: any }
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { $id, dragHandleRef, dragPreviewRef, ...rest } = props,
     elements = useAglynElementData($id, 'elements') || [],
     label = useAglynElementLabel($id)
@@ -195,7 +195,7 @@ const ElementsTreeItemComponent = forwardRef<
 const DraggableTreeItemComponent = forwardRef<
   any,
   ElementsTreeItemComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { $id, ...rest } = props
   const elemRef = useRef<Element>(null)
   const [, dragHandle, dragPreview] = useLeafDrag(
@@ -225,7 +225,7 @@ export interface ElementsTreeViewComponentProps
 export const ElementsTreeViewComponent = forwardRef<
   any,
   ElementsTreeViewComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { children, ...rest } = props
   const [selected, setSelected] = useAglynCanvasSelected()
   const setHovered = useAglynCanvasSetHovered()

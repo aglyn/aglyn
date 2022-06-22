@@ -17,14 +17,14 @@
 
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import type { AnyProps } from '@aglyn/shared-data-types'
-import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   NavigationDrawerComponent,
   type NavigationDrawerProps,
-  SrOnlyComponent,
+  SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { Button, IconButton, Typography } from '@mui/material'
 import { forwardRef, type MouseEvent, useCallback, useState } from 'react'
 import type { ElementDrawerOptions } from '../contexts/element-drawer-context'
@@ -58,7 +58,7 @@ export interface ComponentsDrawerProps extends Partial<NavigationDrawerProps> {
 }
 
 const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { options, onItemSelect, onClose, onDelete, items, sx, ...rest } =
       props
 
@@ -104,7 +104,7 @@ const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerProps>(
           sx={{ mr: 2 }}
         >
           <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-          <SrOnlyComponent>close drawer</SrOnlyComponent>
+          <SrOnly>close drawer</SrOnly>
         </IconButton>
         <Typography
           color="inherit"

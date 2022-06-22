@@ -71,7 +71,7 @@ export interface BreadcrumbsProps extends MuiBreadcrumbsProps {
   centered?: boolean
 }
 
-const BreadcrumbsComponent = forwardRef<any, BreadcrumbsProps>(function RefRenderFn(props, ref) {
+const BreadcrumbsComponent = forwardRef<any, BreadcrumbsProps>((props, ref) => {
   const { centered, children, items, ...rest } = props
 
   return (

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,32 +15,33 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON} from '@aglyn/shared-data-mdi'
-import MuiSvgIcon, {type SvgIconProps as MuiSvgIconProps} from '@mui/material/SvgIcon'
-import {forwardRef, type SVGAttributes} from 'react'
-
+import { DEFAULT_ICON } from '@aglyn/shared-data-mdi'
+import MuiSvgIcon, {
+  type SvgIconProps as MuiSvgIconProps,
+} from '@mui/material/SvgIcon'
+import { forwardRef, type SVGAttributes } from 'react'
 
 export interface MdiIconProps extends MuiSvgIconProps {
   path?: string
   PathProps?: SVGAttributes<SVGPathElement>
 }
 
-const MdiIcon = forwardRef<any, MdiIconProps>(
-  function RefRenderFn(props, ref) {
-    const {path, children, PathProps, ...rest} = props
+const MdiIcon = forwardRef<any, MdiIconProps>((props, ref) => {
+  const { path, children, PathProps, ...rest } = props
 
-    return (
-      <MuiSvgIcon ref={ref} {...rest}>
-        {children ? children : (
-          <path d={path || DEFAULT_ICON.path} {...PathProps} />
-        )}
-      </MuiSvgIcon>
-    )
-  },
-)
+  return (
+    <MuiSvgIcon ref={ref} {...rest}>
+      {children ? (
+        children
+      ) : (
+        <path d={path || DEFAULT_ICON.path} {...PathProps} />
+      )}
+    </MuiSvgIcon>
+  )
+})
 
 MdiIcon.displayName = 'MdiIcon'
 MdiIcon.aglyn = true
 
-export {MdiIcon}
+export { MdiIcon }
 export default MdiIcon

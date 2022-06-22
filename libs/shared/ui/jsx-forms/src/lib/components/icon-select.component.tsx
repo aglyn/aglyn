@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { CardIconListItem, GridList } from '@aglyn/shared-ui-jsx'
 import {
   DEFAULT_ICON,
@@ -25,6 +24,7 @@ import {
   MdiIcon,
   useMdiIconsFuzzy,
 } from '@aglyn/shared-ui-mdi-jsx'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { useDebouncedCallback } from '@aglyn/shared-util-vendor'
 import {
   Button,
@@ -37,10 +37,19 @@ import {
   Typography,
 } from '@mui/material'
 
-import { forwardRef, type HTMLAttributes, useCallback, useMemo, useState } from 'react'
+import {
+  forwardRef,
+  type HTMLAttributes,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react'
 import { validationMessage } from '../utils/validation-message'
 
-import { useFieldApi, type UseFieldApiConfig } from '../vendor/data-driven-forms'
+import {
+  useFieldApi,
+  type UseFieldApiConfig,
+} from '../vendor/data-driven-forms'
 
 const iconUnset = { ...DEFAULT_ICON, id: null, name: '(none)' }
 const classKeys = generateComponentClassKeys('AglynIconSelect', [
@@ -91,7 +100,7 @@ export interface IconSelectProps extends HTMLAttributes<HTMLDivElement> {
   classes?: Partial<typeof classKeys>
 }
 
-const IconSelectComponent = forwardRef<any, IconSelectProps>(function RefRenderFn(props, ref) {
+const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
   const {
     input,
     isReadOnly,
@@ -151,13 +160,13 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>(function RefRenderF
         updateFilter()
       }
     },
-    [updateFilter]
+    [updateFilter],
   )
   const handleItemClick = useCallback(
     (e, item: Icon) => {
       setSelected(item.id)
     },
-    [setSelected]
+    [setSelected],
   )
 
   const renderItemContent = useCallback(
@@ -179,7 +188,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>(function RefRenderF
         </Tooltip>
       )
     },
-    [selected, handleItemClick]
+    [selected, handleItemClick],
   )
 
   return (
@@ -211,7 +220,10 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>(function RefRenderF
             }}
           >
             <span>
-              <MdiIcon fontSize="inherit" path={open ? mdiChevronUp.path : mdiChevronDown.path} />
+              <MdiIcon
+                fontSize="inherit"
+                path={open ? mdiChevronUp.path : mdiChevronDown.path}
+              />
             </span>
             <span>{currentIcon.name}</span>
           </MuiLink>
@@ -235,7 +247,11 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>(function RefRenderF
               </Typography>
             </Grid>
             <Grid item>
-              <Button color="secondary" onClick={handleChooseButtonClick} variant="contained">
+              <Button
+                color="secondary"
+                onClick={handleChooseButtonClick}
+                variant="contained"
+              >
                 Choose
               </Button>
             </Grid>

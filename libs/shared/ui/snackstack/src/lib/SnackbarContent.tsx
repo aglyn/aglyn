@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-import {styled} from '@mui/material'
-import {forwardRef} from 'react'
-import {type SnackbarContentProps} from './types'
-
+import { styled } from '@mui/material'
+import { forwardRef } from 'react'
+import { type SnackbarContentProps } from './types'
 
 const Root = styled('div', {
   name: 'AglynSnackbarContent',
-})(({theme}) => ({
+})(({ theme }) => ({
   display: 'flex',
   flexWrap: 'wrap',
   flexGrow: 1,
@@ -33,20 +32,14 @@ const Root = styled('div', {
 }))
 
 const SnackbarContent = forwardRef<HTMLDivElement, SnackbarContentProps>(
-  function RefRenderFn(props, ref) {
-    const {...rest} = props
+  (props, ref) => {
+    const { ...rest } = props
 
-    return (
-      <Root
-        ref={ref}
-        {...rest}
-      />
-    )
+    return <Root ref={ref} {...rest} />
   },
 )
 SnackbarContent.displayName = 'SnackbarContent'
 SnackbarContent.aglyn = true
 
-
-export {SnackbarContent}
+export { SnackbarContent }
 export default SnackbarContent

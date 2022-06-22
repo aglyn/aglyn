@@ -15,22 +15,23 @@
  * limitations under the License.
  */
 
-import {getDisplayName} from '@aglyn/shared-util-tools'
-import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
-import {useRouter} from 'next/router'
-import {type ComponentType, forwardRef, useEffect} from 'react'
-import {LoadingProviderComponent, useLoading} from '../contexts/loading.context'
-import {NextRouterEvent} from '../hooks/router-events'
+import { getDisplayName } from '@aglyn/shared-util-tools'
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
+import { useRouter } from 'next/router'
+import { type ComponentType, forwardRef, useEffect } from 'react'
+import {
+  LoadingProviderComponent,
+  useLoading,
+} from '../contexts/loading.context'
+import { NextRouterEvent } from '../hooks/router-events'
 import {
   LoadingOverlayComponent,
   type LoadingOverlayComponentProps,
 } from './loading-overlay.component'
 
-
-function RouterLoading({children}) {
-
+function RouterLoading({ children }) {
   const router = useRouter()
-  const {queueLoading} = useLoading()
+  const { queueLoading } = useLoading()
   useEffect(() => {
     const dequeue = []
     const handleStart = (url) => {
@@ -56,20 +57,17 @@ function RouterLoading({children}) {
 RouterLoading.displayName = 'RouterLoading'
 RouterLoading.aglyn = true
 
-export interface LoadingLayoutComponentProps extends Partial<LoadingOverlayComponentProps> {
-
-}
+export interface LoadingLayoutComponentProps
+  extends Partial<LoadingOverlayComponentProps> {}
 
 const LoadingLayoutComponent = forwardRef<any, LoadingLayoutComponentProps>(
-  function RefRenderFn(props, ref) {
-    const {children, ...rest} = props
+  (props, ref) => {
+    const { children, ...rest } = props
 
     return (
       <LoadingProviderComponent>
         <LoadingOverlayComponent ref={ref} {...rest}>
-          <RouterLoading>
-            {children}
-          </RouterLoading>
+          <RouterLoading>{children}</RouterLoading>
         </LoadingOverlayComponent>
       </LoadingProviderComponent>
     )
@@ -83,19 +81,17 @@ export function withLoadingLayoutComponent<P>(
   loadingLoadingProps: LoadingLayoutComponentProps,
 ) {
   const displayName = getDisplayName(WrappedComponent)
-  const WithLoadingLayoutComponent = forwardRef<any, P>(
-    function RefRenderFn(props, ref) {
-      return (
-        <LoadingLayoutComponent ref={ref} {...loadingLoadingProps}>
-          <WrappedComponent {...props} />
-        </LoadingLayoutComponent>
-      )
-    },
-  )
+  const WithLoadingLayoutComponent = forwardRef<any, P>((props, ref) => {
+    return (
+      <LoadingLayoutComponent ref={ref} {...loadingLoadingProps}>
+        <WrappedComponent {...props} />
+      </LoadingLayoutComponent>
+    )
+  })
   WithLoadingLayoutComponent.displayName = `WithLoadingLayoutComponent(${displayName})`
   hoistNonReactStatics(WithLoadingLayoutComponent, WrappedComponent)
   return WithLoadingLayoutComponent
 }
 
-export {LoadingLayoutComponent}
+export { LoadingLayoutComponent }
 export default LoadingLayoutComponent

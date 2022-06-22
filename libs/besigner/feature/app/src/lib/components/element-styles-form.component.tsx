@@ -160,7 +160,7 @@ export interface ElementStylesFormProps extends FormRendererProps {
 }
 
 const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { $id, ...rest } = props
     const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({ $id })

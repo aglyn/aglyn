@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
-import Button, {ButtonProps} from '@mui/material/Button'
-import Dialog, {DialogProps} from '@mui/material/Dialog'
+import Button, { ButtonProps } from '@mui/material/Button'
+import Dialog, { DialogProps } from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
-import DialogContentText, {DialogContentTextProps} from '@mui/material/DialogContentText'
-import DialogTitle, {DialogTitleProps} from '@mui/material/DialogTitle'
-import {forwardRef} from 'react'
-
+import DialogContentText, {
+  DialogContentTextProps,
+} from '@mui/material/DialogContentText'
+import DialogTitle, { DialogTitleProps } from '@mui/material/DialogTitle'
+import { forwardRef } from 'react'
 
 export interface DialogConfirmOptions {
   cancellationText?: ButtonProps['children']
@@ -40,36 +41,49 @@ export interface DialogConfirmProps extends DialogProps {
   onCancel?: ButtonProps['onClick']
 }
 
-export const DialogConfirm = forwardRef<any, DialogConfirmProps>(function RefRenderFn(props, ref) {
-  const {open, options, onCancel, onConfirm, onClose, ...rest} = props
-  const {
-    title,
-    description,
-    confirmationText,
-    cancellationText,
-    dialogProps,
-    confirmationButtonProps,
-    cancellationButtonProps,
-  } = options
-  return (
-    <Dialog ref={ref} fullWidth {...rest} {...dialogProps} open={open} onClose={onClose}>
-      {title && <DialogTitle>{title}</DialogTitle>}
-      {description && (
-        <DialogContent>
-          <DialogContentText>{description}</DialogContentText>
-        </DialogContent>
-      )}
-      <DialogActions>
-        <Button {...cancellationButtonProps} onClick={onCancel}>
-          {cancellationText}
-        </Button>
-        <Button color="primary" {...confirmationButtonProps} onClick={onConfirm}>
-          {confirmationText}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  )
-})
+export const DialogConfirm = forwardRef<any, DialogConfirmProps>(
+  (props, ref) => {
+    const { open, options, onCancel, onConfirm, onClose, ...rest } = props
+    const {
+      title,
+      description,
+      confirmationText,
+      cancellationText,
+      dialogProps,
+      confirmationButtonProps,
+      cancellationButtonProps,
+    } = options
+    return (
+      <Dialog
+        ref={ref}
+        fullWidth
+        {...rest}
+        {...dialogProps}
+        open={open}
+        onClose={onClose}
+      >
+        {title && <DialogTitle>{title}</DialogTitle>}
+        {description && (
+          <DialogContent>
+            <DialogContentText>{description}</DialogContentText>
+          </DialogContent>
+        )}
+        <DialogActions>
+          <Button {...cancellationButtonProps} onClick={onCancel}>
+            {cancellationText}
+          </Button>
+          <Button
+            color="primary"
+            {...confirmationButtonProps}
+            onClick={onConfirm}
+          >
+            {confirmationText}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    )
+  },
+)
 
 DialogConfirm.displayName = 'DialogConfirm'
 DialogConfirm.aglyn = true

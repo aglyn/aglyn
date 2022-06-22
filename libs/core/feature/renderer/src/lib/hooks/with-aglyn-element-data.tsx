@@ -61,7 +61,7 @@ export function withAglynElementData<U = any, T = any>(
 ): DecoratedComponent<U, T> {
   const displayName = getDisplayName(WrappedComponent)
   const WithAglynElementData = forwardRef<T, RequiredElementDataProps & U>(
-    function RefRenderFn(props, ref) {
+    (props, ref) => {
       const { $id, className: classNameProp, ...rest } = props
       const elementData = useAglynElementData($id)
       const component = useAglynComponent(

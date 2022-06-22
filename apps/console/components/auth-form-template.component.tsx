@@ -15,20 +15,24 @@
  * limitations under the License.
  */
 
-import {FormSpy, type FormTemplateRenderProps, useFormApi} from '@aglyn/shared-ui-jsx-forms'
-import {Box, Button, FormControl, Grid} from '@mui/material'
-import {forwardRef} from 'react'
-import {useSigninCheck} from 'reactfire'
+import {
+  FormSpy,
+  type FormTemplateRenderProps,
+  useFormApi,
+} from '@aglyn/shared-ui-jsx-forms'
+import { Box, Button, FormControl, Grid } from '@mui/material'
+import { forwardRef } from 'react'
+import { useSigninCheck } from 'reactfire'
 import AuthErrorAlertComponent from './auth-error-alert.component'
 
-
-export interface AuthFormTemplateComponentProps extends FormTemplateRenderProps {}
+export interface AuthFormTemplateComponentProps
+  extends FormTemplateRenderProps {}
 
 const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
-  function RefRenderFn(props, ref) {
-    const {formFields, schema, ...rest} = props
-    const {handleSubmit} = useFormApi()
-    const {status, error} = useSigninCheck()
+  (props, ref) => {
+    const { formFields, schema, ...rest } = props
+    const { handleSubmit } = useFormApi()
+    const { status, error } = useSigninCheck()
     const isLoading = status === 'loading'
     return (
       <form ref={ref} onSubmit={handleSubmit} noValidate {...rest}>
@@ -36,18 +40,15 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
         <Grid spacing={2} container>
           {formFields}
         </Grid>
-        <AuthErrorAlertComponent
-          error={error as any}
-          sx={{mt: 2, mb: 1}}
-        />
+        <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
         <FormSpy>
-          {({submitting, pristine, valid}) => (
+          {({ submitting, pristine, valid }) => (
             <Box mt={2}>
               <FormControl margin="normal" fullWidth>
                 <Button
                   color="secondary"
-                  disabled={submitting/* || !valid || pristine*/ || isLoading}
-                  style={{marginRight: 8}}
+                  disabled={submitting /* || !valid || pristine*/ || isLoading}
+                  style={{ marginRight: 8 }}
                   type="submit"
                   variant="contained"
                   fullWidth
@@ -65,5 +66,5 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
 AuthFormTemplateComponent.displayName = 'AuthFormTemplateComponent'
 AuthFormTemplateComponent.aglyn = true
 
-export {AuthFormTemplateComponent}
+export { AuthFormTemplateComponent }
 export default AuthFormTemplateComponent

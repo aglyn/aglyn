@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-import {mdiContentSave, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
+import { mdiContentSave, MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 
-import {Box, Button, FormControl, Grid} from '@mui/material'
-import {forwardRef} from 'react'
+import { Box, Button, FormControl, Grid } from '@mui/material'
+import { forwardRef } from 'react'
 
-import {FormSpy, type FormTemplateRenderProps, useFormApi} from '../vendor/data-driven-forms'
-
+import {
+  FormSpy,
+  type FormTemplateRenderProps,
+  useFormApi,
+} from '../vendor/data-driven-forms'
 
 export interface GridFormTemplateProps extends FormTemplateRenderProps {}
 
 export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
-  function RefRenderFn(props, ref) {
-    const {formFields, schema} = props
-    const {handleSubmit, onCancel} = useFormApi()
+  (props, ref) => {
+    const { formFields, schema } = props
+    const { handleSubmit, onCancel } = useFormApi()
     return (
       <form ref={ref} onSubmit={handleSubmit} noValidate>
         {schema.title}
@@ -36,7 +39,7 @@ export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
           {formFields as any}
         </Grid>
         <FormSpy>
-          {({submitting, validating, pristine, valid}) => (
+          {({ submitting, validating, pristine, valid }) => (
             <Box mt={2}>
               <FormControl margin="normal" fullWidth>
                 <Button
@@ -53,7 +56,7 @@ export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
                   color="secondary"
                   disabled={submitting || !valid || pristine}
                   startIcon={<MdiIcon path={mdiContentSave.path} />}
-                  style={{marginRight: 8}}
+                  style={{ marginRight: 8 }}
                   type="submit"
                   variant="contained"
                   fullWidth

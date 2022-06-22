@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-import React from 'react'
-import {render} from '@testing-library/react'
+import { styled, visuallyHidden } from '@aglyn/shared-ui-theme'
+import type { BoxProps } from '@mui/material'
 
-import ShadowDom from './shadow-dom'
+export interface SrOnlyComponentProps extends BoxProps {}
 
-
-describe('ShadowDom', () => {
-  it('should render successfully', () => {
-    const {baseElement} = render(<ShadowDom />)
-    expect(baseElement).toBeTruthy()
-  })
+export const SrOnly = styled('div', {
+  name: 'AglynSrOnly',
+})<SrOnlyComponentProps>({
+  ...visuallyHidden,
 })
+SrOnly.displayName = 'SrOnly'
+SrOnly.aglyn = true
+export default SrOnly

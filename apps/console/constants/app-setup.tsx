@@ -79,7 +79,7 @@ const c5 = createAglynComponent(
       },
     ],
   },
-  'span',
+  'div',
 )
 const components = [c1, c2, c3, c4, c5]
 

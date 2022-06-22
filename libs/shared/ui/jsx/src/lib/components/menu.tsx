@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
-import { Conditional, OverrideableComponentProps } from '@aglyn/shared-data-types'
-import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import {
+  Conditional,
+  OverrideableComponentProps,
+} from '@aglyn/shared-data-types'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   Box,
   type BoxProps as MuiBoxProps,
@@ -59,18 +62,19 @@ type ItemTypeProps = MuiMenuItemProps & {
 }
 type DividerTypeProps = DividerProps & { type: 'divider' }
 type SubheaderTypeProps = MuiListSubheaderProps & { type: 'subheader' }
-export type MenuItemProps<T extends ItemTypes = ItemTypes> = OverrideableComponentProps &
-  Conditional<
-    T,
-    'divider',
-    DividerTypeProps,
+export type MenuItemProps<T extends ItemTypes = ItemTypes> =
+  OverrideableComponentProps &
     Conditional<
       T,
-      'subheader',
-      SubheaderTypeProps,
-      Conditional<T, 'item' | undefined | never, ItemTypeProps, ItemTypeProps>
+      'divider',
+      DividerTypeProps,
+      Conditional<
+        T,
+        'subheader',
+        SubheaderTypeProps,
+        Conditional<T, 'item' | undefined | never, ItemTypeProps, ItemTypeProps>
+      >
     >
-  >
 
 /* eslint-disable-next-line */
 export interface MenuProps extends MuiBoxProps {
@@ -82,9 +86,18 @@ export interface MenuProps extends MuiBoxProps {
   horizontalOrigin?: MuiMenuProps['anchorOrigin']['horizontal']
 }
 
-export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) {
-  const { children, items, context, className, sx, dense, MenuProps, horizontalOrigin, ...rest } =
-    props
+export const Menu = forwardRef<any, MenuProps>((props, ref) => {
+  const {
+    children,
+    items,
+    context,
+    className,
+    sx,
+    dense,
+    MenuProps,
+    horizontalOrigin,
+    ...rest
+  } = props
 
   const [state, setState] = useState(defaultState)
   const child = Children.only(children)
@@ -104,7 +117,7 @@ export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) 
         mouseY: event.clientY - 4,
       })
     },
-    [context, onChildClick]
+    [context, onChildClick],
   )
   const open = Boolean(state.anchorEl || state.mouseY)
   const cloned = cloneElement(child, {
@@ -182,7 +195,7 @@ export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) 
                       ...arrowPlacement,
                     },
                   },
-                  paperSx
+                  paperSx,
                 ),
                 ...paperProps,
               }
@@ -192,50 +205,64 @@ export const Menu = forwardRef<any, MenuProps>(function RefRenderFn(props, ref) 
         onClose={handleClose}
         {...menuProps}
       >
-        {items.map(({ onClick, icon, children, type, endIcon, ...item }: any, i) => {
-          const key = item.key ?? item.id ?? i
+        {items.map(
+          ({ onClick, icon, children, type, endIcon, ...item }: any, i) => {
+            const key = item.key ?? item.id ?? i
 
-          switch (type) {
-            case 'subheader':
-              return (
-                <MuiListSubheader key={key} onClick={onClick} {...(item as any)}>
-                  {children}
-                </MuiListSubheader>
-              )
-            case 'divider':
-              return (
-                <Divider key={key} onClick={onClick} {...(item as any)}>
-                  {children}
-                </Divider>
-              )
-            case 'item':
-            default:
-              return (
-                <MuiMenuItem
-                  key={key}
-                  dense={dense}
-                  onClick={(e) => {
-                    handleClose()
-                    onClick && onClick(e)
-                  }}
-                  {...item}
-                >
-                  {!icon?.path || !icon ? null : (
-                    <ListItemIcon>
-                      {!icon?.path ? icon : <MdiIcon fontSize="small" {...icon} />}
-                    </ListItemIcon>
-                  )}
-                  <ListItemText>{children}</ListItemText>
+            switch (type) {
+              case 'subheader':
+                return (
+                  <MuiListSubheader
+                    key={key}
+                    onClick={onClick}
+                    {...(item as any)}
+                  >
+                    {children}
+                  </MuiListSubheader>
+                )
+              case 'divider':
+                return (
+                  <Divider key={key} onClick={onClick} {...(item as any)}>
+                    {children}
+                  </Divider>
+                )
+              case 'item':
+              default:
+                return (
+                  <MuiMenuItem
+                    key={key}
+                    dense={dense}
+                    onClick={(e) => {
+                      handleClose()
+                      onClick && onClick(e)
+                    }}
+                    {...item}
+                  >
+                    {!icon?.path || !icon ? null : (
+                      <ListItemIcon>
+                        {!icon?.path ? (
+                          icon
+                        ) : (
+                          <MdiIcon fontSize="small" {...icon} />
+                        )}
+                      </ListItemIcon>
+                    )}
+                    <ListItemText>{children}</ListItemText>
 
-                  {!endIcon?.path || !endIcon ? null : (
-                    <Typography variant="body2" color="text.secondary">
-                      {!endIcon?.path ? endIcon : <MdiIcon fontSize="small" {...endIcon} />}
-                    </Typography>
-                  )}
-                </MuiMenuItem>
-              )
-          }
-        })}
+                    {!endIcon?.path || !endIcon ? null : (
+                      <Typography variant="body2" color="text.secondary">
+                        {!endIcon?.path ? (
+                          endIcon
+                        ) : (
+                          <MdiIcon fontSize="small" {...endIcon} />
+                        )}
+                      </Typography>
+                    )}
+                  </MuiMenuItem>
+                )
+            }
+          },
+        )}
       </MuiMenu>
     </Box>
   )

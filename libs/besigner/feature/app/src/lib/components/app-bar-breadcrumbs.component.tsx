@@ -41,46 +41,44 @@ interface BreadcrumbItemProps extends LinkProps<'button'> {
   isLast?: boolean
 }
 
-const BreadcrumbItem = forwardRef<any, BreadcrumbItemProps>(
-  function RefRenderFn(props, ref) {
-    const { children, $id, isLast, ...rest } = props
-    const setSelected = useAglynCanvasSetSelected()
-    const setHovered = useAglynCanvasSetHovered()
-    const label = useAglynElementLabel($id)
+const BreadcrumbItem = forwardRef<any, BreadcrumbItemProps>((props, ref) => {
+  const { children, $id, isLast, ...rest } = props
+  const setSelected = useAglynCanvasSetSelected()
+  const setHovered = useAglynCanvasSetHovered()
+  const label = useAglynElementLabel($id)
 
-    const handleClick = useCallback(() => {
-      if (isLast) return
-      setSelected({ $id })
-    }, [$id, isLast, setSelected])
+  const handleClick = useCallback(() => {
+    if (isLast) return
+    setSelected({ $id })
+  }, [$id, isLast, setSelected])
 
-    const handleMouseEnter = useCallback(() => {
-      setHovered({ $id })
-    }, [$id, setHovered])
+  const handleMouseEnter = useCallback(() => {
+    setHovered({ $id })
+  }, [$id, setHovered])
 
-    return (
-      <Link
-        ref={ref}
-        color="textSecondary"
-        component="button"
-        underline={isLast ? 'none' : undefined}
-        onClick={handleClick}
-        fontSize="inherit"
-        onMouseEnter={handleMouseEnter}
-        sx={
-          !isLast
-            ? undefined
-            : {
-                cursor: 'initial',
-              }
-        }
-        {...rest}
-      >
-        {label}
-        {children}
-      </Link>
-    )
-  },
-)
+  return (
+    <Link
+      ref={ref}
+      color="textSecondary"
+      component="button"
+      underline={isLast ? 'none' : undefined}
+      onClick={handleClick}
+      fontSize="inherit"
+      onMouseEnter={handleMouseEnter}
+      sx={
+        !isLast
+          ? undefined
+          : {
+              cursor: 'initial',
+            }
+      }
+      {...rest}
+    >
+      {label}
+      {children}
+    </Link>
+  )
+})
 
 export interface AppBarBreadcrumbsComponentProps
   extends Partial<MuiAppBarProps> {}
@@ -88,7 +86,7 @@ export interface AppBarBreadcrumbsComponentProps
 const AppBarBreadcrumbsComponent = forwardRef<
   any,
   AppBarBreadcrumbsComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { children, sx, ...rest } = props
 
   const [selected] = useAglynCanvasSelected()

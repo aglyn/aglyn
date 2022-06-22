@@ -26,14 +26,13 @@ import { forwardRef } from 'react'
 import AddControlsComponent from './add-controls.component'
 import DevicePreviewControlsComponent from './device-preview-controls.component'
 import HistoryControlsComponent from './history-controls.component'
-import InteractControlsComponent from './interact-controls.component'
 import PanelControlsComponent from './panel-controls.component'
 
 export interface AppBarSecondaryComponentProps
   extends Partial<MuiAppBarProps> {}
 
 const AppBarSecondaryComponent = forwardRef<any, AppBarSecondaryComponentProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { children, sx, ...rest } = props
 
     return (

@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-ui-theme'
-import { SrOnlyComponent } from '@aglyn/shared-ui-jsx'
+import { SrOnly } from '@aglyn/shared-ui-jsx'
 import {
   mdiFitToPage,
   MdiIcon,
@@ -24,6 +23,7 @@ import {
   mdiMagnifyMinus,
   mdiMagnifyPlus,
 } from '@aglyn/shared-ui-mdi-jsx'
+import { styled } from '@aglyn/shared-ui-theme'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import { truthy } from '@aglyn/shared-util-tools'
 import Button from '@mui/material/Button'
@@ -71,7 +71,7 @@ export interface ViewportZoomControlsComponentProps
 export const ViewportZoomControlsComponent = forwardRef<
   any,
   ViewportZoomControlsComponentProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const {
     disableZoomResetButton,
     disableZoomDecreaseButton,
@@ -184,7 +184,7 @@ export const ViewportZoomControlsComponent = forwardRef<
             <Tooltip key={item.key ?? item.id ?? key} {...tooltipProps}>
               <Button {...buttonProps}>
                 <MdiIcon fontSize="small" {...svgPathIconProps} />
-                <SrOnlyComponent component="span" {...srOnlyProps} />
+                <SrOnly component="span" {...srOnlyProps} />
               </Button>
             </Tooltip>
           ),

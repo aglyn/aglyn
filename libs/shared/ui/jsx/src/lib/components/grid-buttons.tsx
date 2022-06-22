@@ -15,30 +15,27 @@
  * limitations under the License.
  */
 
-import type {GridProps as MuiGridProps} from '@mui/material'
-import {Button, ButtonProps as MuiButtonProps} from '@mui/material'
-import {type ElementType, forwardRef} from 'react'
+import type { GridProps as MuiGridProps } from '@mui/material'
+import { Button, ButtonProps as MuiButtonProps } from '@mui/material'
+import { type ElementType, forwardRef } from 'react'
 import GridItems from './grid-items'
-
 
 /* eslint-disable-next-line */
 export interface GridButtonsProps<P = MuiButtonProps> extends MuiGridProps {
-  items: (P & {GridItemProps?: MuiGridProps})[]
+  items: (P & { GridItemProps?: MuiGridProps })[]
   ItemComponent?: ElementType<P>
 }
 
 export const GridButtons = forwardRef<any, GridButtonsProps<any>>(
-  function RefRenderFn(props, ref) {
-    const {items, ItemComponent = Button, ...rest} = props
+  (props, ref) => {
+    const { items, ItemComponent = Button, ...rest } = props
     return (
       <GridItems
         ref={ref}
-        items={
-          items.map(({GridItemProps, ...item}) => ({
-            children: <ItemComponent {...item} />,
-            ...GridItemProps,
-          }))
-        }
+        items={items.map(({ GridItemProps, ...item }) => ({
+          children: <ItemComponent {...item} />,
+          ...GridItemProps,
+        }))}
         {...rest}
       />
     )

@@ -51,7 +51,7 @@ import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 export const ElementPropsFormTemplate = forwardRef<
   any,
   FormTemplateRenderProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { formFields, schema, ...rest } = props
   const { handleSubmit } = useFormApi()
   return (
@@ -106,7 +106,7 @@ export interface ElementPropsFormProps extends FormRendererProps {
 }
 
 const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
-  function RefRenderFn(props, ref) {
+  (props, ref) => {
     const { $id, ...rest } = props
     const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({ $id })

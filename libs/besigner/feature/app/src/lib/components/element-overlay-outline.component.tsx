@@ -95,7 +95,7 @@ export interface ElementOverlayOutlineProps extends BoxProps {
 const ElementOverlayOutlineComponent = forwardRef<
   any,
   ElementOverlayOutlineProps
->(function RefRenderFn(props, ref) {
+>((props, ref) => {
   const { className: classNameProp, $id, anchorEl, ...rest } = props
 
   const [isDragging, isDraggingOver] = useAglynDndElementStatus($id)
