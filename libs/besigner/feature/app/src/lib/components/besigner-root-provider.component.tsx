@@ -44,9 +44,9 @@ export const withBesignerContext = <P,>(Component: ComponentType<P>) => {
   const WithBesignerContext = (props: BesignerComponentProps & P) => {
     const { noSsr, appName, canvasElements, ...rest } = props
     return (
-      <BesignerComponent>
+      <BesignerRootProviderComponent>
         <Component {...(rest as P)} />
-      </BesignerComponent>
+      </BesignerRootProviderComponent>
     )
   }
   WithBesignerContext.displayName = `WithBesignerComponent(${displayName})`
@@ -54,7 +54,7 @@ export const withBesignerContext = <P,>(Component: ComponentType<P>) => {
   return WithBesignerContext
 }
 
-const BesignerComponent = (props: BesignerComponentProps) => {
+const BesignerRootProviderComponent = (props: BesignerComponentProps) => {
   /*forwardRef<any, BesignerComponentProps>(
  function RefRenderFn(props, ref) {*/
   const { noSsr, appName, canvasElements, children } = props
@@ -79,9 +79,9 @@ const BesignerComponent = (props: BesignerComponentProps) => {
   )
 }
 
-BesignerComponent.displayName = 'BesignerComponent'
-BesignerComponent.aglyn = true
-BesignerComponent.defaultProps = {}
+BesignerRootProviderComponent.displayName = 'BesignerRootProviderComponent'
+BesignerRootProviderComponent.aglyn = true
+BesignerRootProviderComponent.defaultProps = {}
 
-export { BesignerComponent }
-export default BesignerComponent
+export { BesignerRootProviderComponent }
+export default BesignerRootProviderComponent

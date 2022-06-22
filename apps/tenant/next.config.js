@@ -33,18 +33,4 @@ module.exports = withAglyn({
     AGLYN_TENANT_HOST_CNAME: process.env.AGLYN_TENANT_HOST_CNAME,
     AGLYN_TENANT_PUBLIC_KEY: process.env.AGLYN_TENANT_PUBLIC_KEY,
   },
-  async headers() {
-    return [
-      {
-        source: '/besigner',
-        headers: [
-          // Allow app to be framed inside aglyn subdomains for editing
-          {
-            key: 'Content-Security-Policy',
-            value: 'frame-ancestors https://*.aglyn.com https://aglyn.com',
-          },
-        ],
-      },
-    ]
-  },
 })

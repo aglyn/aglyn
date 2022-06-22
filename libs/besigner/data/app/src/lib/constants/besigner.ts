@@ -41,6 +41,13 @@ export enum DndDragSourceTypeFlag {
   TREE_ELEMENT = 'tree',
 }
 
+console.log(
+  'DndDragSourceTypeFlag',
+  DndDragSourceTypeFlag,
+  typeof DndDragSourceTypeFlag,
+  Object.values(DndDragSourceTypeFlag),
+)
+
 export enum DndDropLinealTypeFlag {
   ACTIVITY_ELEMENT_BEFORE = 0x1,
   ACTIVITY_ELEMENT_INSIDE = 0x2,

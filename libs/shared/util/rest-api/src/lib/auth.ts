@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-import {HttpResponseStatus, HttpStatusCode} from '@aglyn/shared-data-enums'
-import {getRequestHeader} from '@aglyn/shared-util-http'
-import type {NextApiHandler, NextApiRequest, NextApiResponse} from 'next'
-import {createNewJsonResponse} from './rest-api'
-
+// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
+import type {
+  HttpResponseStatus,
+  HttpStatusCode,
+} from '@aglyn/shared-data-enums'
+import { getRequestHeader } from '@aglyn/shared-util-http'
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
+import { createNewJsonResponse } from './rest-api'
 
 export const requireHeader = <T = any>(
   name: string,
   key: keyof NextApiRequest['headers'],
   handler: NextApiHandler<T>,
 ): NextApiHandler<T> => {
-  return async function(req: NextApiRequest, res: NextApiResponse<T>) {
+  return async function (req: NextApiRequest, res: NextApiResponse<T>) {
     const header = getRequestHeader(req, key)
 
     if (!header) {
@@ -40,9 +43,13 @@ export const requireHeader = <T = any>(
     await handler(req, res)
   } as unknown as NextApiHandler<T>
 }
-export const withIdTokenHeader = <T = any>(handler: NextApiHandler<T>): NextApiHandler<T> => {
+export const withIdTokenHeader = <T = any>(
+  handler: NextApiHandler<T>,
+): NextApiHandler<T> => {
   return requireHeader('idToken', 'id-token', handler)
 }
-export const withCsrfTokenHeader = <T = any>(handler: NextApiHandler<T>): NextApiHandler<T> => {
+export const withCsrfTokenHeader = <T = any>(
+  handler: NextApiHandler<T>,
+): NextApiHandler<T> => {
   return requireHeader('csrfToken', 'csrf-token', handler)
 }

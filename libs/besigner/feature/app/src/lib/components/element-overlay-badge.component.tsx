@@ -204,7 +204,7 @@ const ElementOverlayBadgeComponent = forwardRef<
             ref: dragHandleRef,
             sx: { '&, &:hover': { cursor: 'move' } },
           }}
-          icon={{ path: ICON_VARIANT_MODIFY_DRAG.path, color: 'secondary' }}
+          icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
         />
       )}
 

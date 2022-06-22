@@ -23,7 +23,7 @@ import {
   ICON_VARIANT_PRIMARY_KEY,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
-import { useScreen } from '@aglyn/db-data-tenants'
+import { useScreen } from '@aglyn/tenant-feature-instance'
 import {
   AppLink,
   ContainerComponent,

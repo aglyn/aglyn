@@ -16,7 +16,6 @@
     "core-feature-renderer": "libs/core/feature/renderer",
     "core-feature-singleton": "libs/core/feature/singleton",
     "core-ui-renderer": "libs/core/ui/renderer",
-    "db-data-tenants": "libs/db/data/tenants",
     "plugins-ui-mui": "libs/plugins/ui/mui",
     "shared-data-enums": "libs/shared/data/enums",
     "shared-data-forms": "libs/shared/data/forms",
@@ -47,6 +46,7 @@
     "silo": "apps/silo",
     "tenant": "apps/tenant",
     "tenant-e2e": "apps/tenant-e2e",
+    "tenant-feature-instance": "libs/tenant/feature/instance",
     "www": "apps/www",
     "www-e2e": "apps/www-e2e"
   },

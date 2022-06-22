@@ -1,5 +1,5 @@
 {
-  "name": "@aglyn/db-data-tenants",
+  "name": "@aglyn/tenant-feature-instance",
   "version": "0.0.1",
   "type": "commonjs",
   "dependencies": {

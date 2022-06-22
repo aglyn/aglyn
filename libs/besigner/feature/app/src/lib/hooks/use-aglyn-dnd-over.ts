@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { BesignerDndElementOver } from '@aglyn/besigner-data-app'
+import type { BesignerDroppableItem } from '@aglyn/besigner-data-app'
 import {
   type BesignerDndState,
   setBesignerDndItem,
@@ -26,18 +26,18 @@ import { useCallback } from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
 export function useAglynDndOver(): [
-  value: BesignerDndElementOver | undefined,
+  value: BesignerDroppableItem | undefined,
   setValue: (
     value:
-      | BesignerDndElementOver
+      | BesignerDroppableItem
       | ((
-          prev: BesignerDndElementOver,
+          prev: BesignerDroppableItem,
           dnd: BesignerDndState,
-        ) => BesignerDndElementOver),
+        ) => BesignerDroppableItem),
   ) => void,
 ] {
   const app = useBesignerAppContext()
-  const value = useSubscribable<BesignerDndElementOver>(
+  const value = useSubscribable<BesignerDroppableItem>(
     app.besigner?.dnd,
     undefined,
     (dnd) => dnd?.over,
@@ -52,21 +52,21 @@ export default useAglynDndOver
 
 export function useAglynDndSetOver(): (
   value:
-    | BesignerDndElementOver
+    | BesignerDroppableItem
     | ((
-        prev: BesignerDndElementOver,
+        prev: BesignerDroppableItem,
         dnd: BesignerDndState,
-      ) => BesignerDndElementOver),
+      ) => BesignerDroppableItem),
 ) => void {
   const app = useBesignerAppContext()
   return useCallback(
     (
       value:
-        | BesignerDndElementOver
+        | BesignerDroppableItem
         | ((
-            prev: BesignerDndElementOver,
+            prev: BesignerDroppableItem,
             dnd: BesignerDndState,
-          ) => BesignerDndElementOver),
+          ) => BesignerDroppableItem),
     ) => {
       setBesignerDndItem(app, {
         item: 'over',

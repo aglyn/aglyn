@@ -16,8 +16,8 @@
  */
 
 import type {
-  BesignerDndElementActive,
   BesignerDndState,
+  BesignerDraggableItem,
 } from '@aglyn/besigner-data-app'
 import { setBesignerDndItem } from '@aglyn/besigner-data-app'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
@@ -26,18 +26,18 @@ import { useCallback } from 'react'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
 export function useAglynDndActive(): [
-  value: BesignerDndElementActive | undefined,
+  value: BesignerDraggableItem | undefined,
   setValue: (
     value:
-      | BesignerDndElementActive
+      | BesignerDraggableItem
       | ((
-          prev: BesignerDndElementActive,
+          prev: BesignerDraggableItem,
           dnd: BesignerDndState,
-        ) => BesignerDndElementActive),
+        ) => BesignerDraggableItem),
   ) => void,
 ] {
   const app = useBesignerAppContext()
-  const value = useSubscribable<BesignerDndElementActive>(
+  const value = useSubscribable<BesignerDraggableItem>(
     app.besigner?.dnd,
     undefined,
     (dnd) => dnd?.active,
@@ -52,21 +52,21 @@ export default useAglynDndActive
 
 export function useAglynDndSetActive(): (
   value:
-    | BesignerDndElementActive
+    | BesignerDraggableItem
     | ((
-        prev: BesignerDndElementActive,
+        prev: BesignerDraggableItem,
         dnd: BesignerDndState,
-      ) => BesignerDndElementActive),
+      ) => BesignerDraggableItem),
 ) => void {
   const app = useBesignerAppContext()
   return useCallback(
     (
       value:
-        | BesignerDndElementActive
+        | BesignerDraggableItem
         | ((
-            prev: BesignerDndElementActive,
+            prev: BesignerDraggableItem,
             dnd: BesignerDndState,
-          ) => BesignerDndElementActive),
+          ) => BesignerDraggableItem),
     ) => {
       setBesignerDndItem(app, {
         item: 'active',

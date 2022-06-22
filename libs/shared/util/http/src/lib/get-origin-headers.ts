@@ -15,23 +15,23 @@
  * limitations under the License.
  */
 import isOriginAllowed from './is-origin-allowed'
-import {type StaticOrigin} from './types'
+import type { StaticOrigin } from './types'
 
-
-export function getOriginHeaders(reqOrigin: string | undefined, origin: StaticOrigin) {
+export function getOriginHeaders(
+  reqOrigin: string | undefined,
+  origin: StaticOrigin,
+) {
   const headers = new Headers()
 
   if (origin === '*') {
     // Allow any origin
     headers.set('Access-Control-Allow-Origin', '*')
-  }
-  else if (typeof origin === 'string') {
+  } else if (typeof origin === 'string') {
     // Fixed origin
     headers.set('Access-Control-Allow-Origin', origin)
     headers.append('Vary', 'Origin')
-  }
-  else {
-    const allowed = isOriginAllowed(reqOrigin as string ?? '', origin)
+  } else {
+    const allowed = isOriginAllowed((reqOrigin as string) ?? '', origin)
 
     if (allowed && reqOrigin) {
       headers.set('Access-Control-Allow-Origin', reqOrigin as string)

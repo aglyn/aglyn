@@ -21,7 +21,7 @@ import {
   WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-feature-app'
 import { getApp, setCanvasElements } from '@aglyn/core-data-app'
-import { useScreenVersion } from '@aglyn/db-data-tenants'
+import { useScreenVersion } from '@aglyn/tenant-feature-instance'
 import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
 import { HAS_BROWSER } from '@aglyn/shared-data-enums'

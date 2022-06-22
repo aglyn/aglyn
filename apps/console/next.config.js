@@ -29,18 +29,4 @@ module.exports = withAglyn({
   env: {
     AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
   },
-  async headers() {
-    return [
-      {
-        source: '/besigner',
-        headers: [
-          // Allow app to be framed inside aglyn subdomains for editing
-          {
-            key: 'Content-Security-Policy',
-            value: 'frame-ancestors  https://*.aglyn.com https://aglyn.com',
-          },
-        ],
-      },
-    ]
-  },
 })

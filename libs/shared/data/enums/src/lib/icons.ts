@@ -23,7 +23,7 @@ import {
   mdiArrowLeft,
   mdiArrowRight,
   mdiArrowUp,
-  mdiArrowUpRight,
+  mdiArrowULeftTop,
   mdiBookVariant,
   mdiBookVariantMultiple,
   mdiCalendar,
@@ -115,7 +115,7 @@ export const ICON_VARIANT_MODIFY_REDO = mdiRedo
 export const ICON_VARIANT_MODIFY_UNDO = mdiUndo
 export const ICON_VARIANT_MODIFY_SAVE = mdiContentSave
 export const ICON_VARIANT_NEW_TAB = mdiOpenInNew
-export const ICON_VARIANT_SELECT_PARENT = mdiArrowUpRight
+export const ICON_VARIANT_SELECT_PARENT = mdiArrowULeftTop
 export const ICON_VARIANT_SHOW_DETAIL = mdiPageNextOutline
 
 // Areas + Pages

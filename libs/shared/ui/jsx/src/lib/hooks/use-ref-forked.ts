@@ -15,26 +15,21 @@
  * limitations under the License.
  */
 
-import {_isFnT, _isObj} from '@aglyn/shared-util-guards'
+import { _isFnT, _isObj } from '@aglyn/shared-util-guards'
 import {
   type MutableRefObject,
   type Ref,
   type RefCallback,
   type RefObject,
-  useCallback,
-  useRef,
   useMemo,
+  useRef,
 } from 'react'
 
-
-export type CombinedRefsResult<T> = [
-  setRef: RefCallback<T>,
-  ref: RefObject<T>,
-]
 export type RefParam<T> = Ref<T> | null | undefined
 
-export const isRefCallback = <T, >(val: unknown): val is RefCallback<T> => _isFnT(val)
-export const isRefObject = <T, >(val: unknown): val is RefObject<T> => _isObj(val)
+export const isRefCallback = <T>(val: unknown): val is RefCallback<T> =>
+  _isFnT(val)
+export const isRefObject = <T>(val: unknown): val is RefObject<T> => _isObj(val)
 
 /**
  * Assign a React ref object, could be a RefCallback or RefObject
@@ -50,62 +45,97 @@ export function assignRef<T>(ref: Ref<T>, value: T): T {
  */
 export function useRefForked<InstanceA, InstanceB>(
   refB: RefParam<InstanceB>,
-): [RefObject<InstanceA>, Ref<InstanceA & InstanceB> | null]
+): [RefCallback<InstanceA & InstanceB>, RefObject<InstanceA>]
 export function useRefForked<InstanceA, InstanceB, InstanceC>(
   refB: RefParam<InstanceB>,
   refC: RefParam<InstanceC>,
-): [RefObject<InstanceA>, Ref<InstanceA & InstanceB & InstanceC> | null]
+): [RefCallback<InstanceA & InstanceB & InstanceC>, RefObject<InstanceA>]
 export function useRefForked<InstanceA, InstanceB, InstanceC, InstanceD>(
   refB: RefParam<InstanceB>,
   refC: RefParam<InstanceC>,
   refD: RefParam<InstanceD>,
-): [RefObject<InstanceA>, Ref<InstanceA & InstanceB & InstanceC & InstanceD> | null]
-export function useRefForked<InstanceA, InstanceB, InstanceC, InstanceD, InstanceE>(
+): [
+  RefCallback<InstanceA & InstanceB & InstanceC & InstanceD>,
+  RefObject<InstanceA>,
+]
+export function useRefForked<
+  InstanceA,
+  InstanceB,
+  InstanceC,
+  InstanceD,
+  InstanceE,
+>(
   refB: RefParam<InstanceB>,
   refC: RefParam<InstanceC>,
   refD: RefParam<InstanceD>,
   refE: RefParam<InstanceE>,
-): [RefObject<InstanceA>, Ref<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE> | null]
-export function useRefForked<InstanceA, InstanceB, InstanceC, InstanceD, InstanceE>(
+): [
+  RefCallback<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE>,
+  RefObject<InstanceA>,
+]
+export function useRefForked<
+  InstanceA,
+  InstanceB,
+  InstanceC,
+  InstanceD,
+  InstanceE,
+>(
   refB: RefParam<InstanceB>,
   refC?: RefParam<InstanceC>,
   refD?: RefParam<InstanceD>,
   refE?: RefParam<InstanceE>,
-): [RefObject<InstanceA>, Ref<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE> | null] {
-  const refA = useRef<InstanceA>()
-  const forkedRefs = useForkedRefs(refA, refB, refC, refD, refE)
-  return [refA, forkedRefs]
+): [
+  RefCallback<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE>,
+  RefObject<InstanceA>,
+] {
+  const refObject = useRef<InstanceA>()
+  const refCallback = useForkedRefs(refObject, refB, refC, refD, refE)
+  return [refCallback, refObject]
 }
 
 export function useForkedRefs<InstanceA, InstanceB>(
   refA: RefParam<InstanceA>,
   refB: RefParam<InstanceB>,
-): Ref<InstanceA & InstanceB> | null
+): RefCallback<InstanceA & InstanceB> | null
 export function useForkedRefs<InstanceA, InstanceB, InstanceC>(
   refA: RefParam<InstanceA>,
   refB: RefParam<InstanceB>,
   refC: RefParam<InstanceC>,
-): Ref<InstanceA & InstanceB & InstanceC> | null
+): RefCallback<InstanceA & InstanceB & InstanceC> | null
 export function useForkedRefs<InstanceA, InstanceB, InstanceC, InstanceD>(
   refA: RefParam<InstanceA>,
   refB: RefParam<InstanceB>,
   refC: RefParam<InstanceC>,
   refD: RefParam<InstanceD>,
-): Ref<InstanceA & InstanceB & InstanceC & InstanceD> | null
-export function useForkedRefs<InstanceA, InstanceB, InstanceC, InstanceD, InstanceE>(
+): RefCallback<InstanceA & InstanceB & InstanceC & InstanceD> | null
+export function useForkedRefs<
+  InstanceA,
+  InstanceB,
+  InstanceC,
+  InstanceD,
+  InstanceE,
+>(
   refA: RefParam<InstanceA>,
   refB: RefParam<InstanceB>,
   refC: RefParam<InstanceC>,
   refD: RefParam<InstanceD>,
   refE: RefParam<InstanceE>,
-): Ref<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE> | null
-export function useForkedRefs<InstanceA, InstanceB, InstanceC, InstanceD, InstanceE>(
+): RefCallback<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE> | null
+export function useForkedRefs<
+  InstanceA,
+  InstanceB,
+  InstanceC,
+  InstanceD,
+  InstanceE,
+>(
   refA: RefParam<InstanceA>,
   refB: RefParam<InstanceB>,
   refC?: RefParam<InstanceC>,
   refD?: RefParam<InstanceD>,
   refE?: RefParam<InstanceE>,
-): Ref<InstanceA & InstanceB & InstanceC & InstanceD & InstanceE> | null {
+): RefCallback<
+  InstanceA & InstanceB & InstanceC & InstanceD & InstanceE
+> | null {
   /**
    * This will create a new function if the ref props change and are defined.
    * This means react will call the old forkRef with `null` and the new forkRef
@@ -113,11 +143,11 @@ export function useForkedRefs<InstanceA, InstanceB, InstanceC, InstanceD, Instan
    */
   return useMemo(() => {
     if (
-      refA == null
-      && refB == null
-      && refC == null
-      && refD == null
-      && refE == null
+      refA == null &&
+      refB == null &&
+      refC == null &&
+      refD == null &&
+      refE == null
     ) {
       return null
     }
@@ -127,8 +157,8 @@ export function useForkedRefs<InstanceA, InstanceB, InstanceC, InstanceD, Instan
       assignRef(refC, refValue)
       assignRef(refD, refValue)
       assignRef(refE, refValue)
-    };
-  }, [refA, refB, refC, refD, refE]);
+    }
+  }, [refA, refB, refC, refD, refE])
 }
 
 export default useRefForked

@@ -1,23 +1,23 @@
 {
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "libs/db/data/tenants/src",
+  "sourceRoot": "libs/tenant/feature/instance/src",
   "projectType": "library",
   "targets": {
     "build": {
       "executor": "@nrwl/js:swc",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/libs/db/data/tenants",
-        "main": "libs/db/data/tenants/src/index.ts",
-        "tsConfig": "libs/db/data/tenants/tsconfig.lib.json",
-        "assets": ["libs/db/data/tenants/*.md"]
+        "outputPath": "dist/libs/tenant/feature/instance",
+        "main": "libs/tenant/feature/instance/src/index.ts",
+        "tsConfig": "libs/tenant/feature/instance/tsconfig.lib.json",
+        "assets": ["libs/tenant/feature/instance/*.md"]
       }
     },
     "lint": {
       "executor": "@nrwl/linter:eslint",
       "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": ["libs/db/data/tenants/**/*.ts"]
+        "lintFilePatterns": ["libs/tenant/feature/instance/**/*.ts"]
       }
     }
   },

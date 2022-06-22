@@ -48,7 +48,6 @@
         "libs/core/feature/singleton/src/index.ts"
       ],
       "@aglyn/core-ui-renderer": ["libs/core/ui/renderer/src/index.ts"],
-      "@aglyn/db-data-tenants": ["libs/db/data/tenants/src/index.ts"],
       "@aglyn/plugins-ui-mui": ["libs/plugins/ui/mui/src/index.ts"],
       "@aglyn/shared-data-brand": ["libs/shared/data/brand/src/index.ts"],
       "@aglyn/shared-data-enums": ["libs/shared/data/enums/src/index.ts"],
@@ -81,7 +80,10 @@
         "libs/shared/util/timestamp/src/index.ts"
       ],
       "@aglyn/shared-util-tools": ["libs/shared/util/tools/src/index.ts"],
-      "@aglyn/shared-util-vendor": ["libs/shared/util/vendor/src/index.ts"]
+      "@aglyn/shared-util-vendor": ["libs/shared/util/vendor/src/index.ts"],
+      "@aglyn/tenant-feature-instance": [
+        "libs/tenant/feature/instance/src/index.ts"
+      ]
     }
   },
   "exclude": ["node_modules", "tmp", "**/generated"]

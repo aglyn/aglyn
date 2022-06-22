@@ -18,7 +18,7 @@
 import {
   getTenantPageStaticPaths,
   getTenantPageStaticProps,
-} from '@aglyn/db-data-tenants'
+} from '@aglyn/tenant-feature-instance'
 
 export default function CatchAllPage(props) {
   return <>{JSON.stringify(props, null, 2)}</>

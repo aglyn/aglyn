@@ -101,8 +101,8 @@ export type BesignerDndItemKey = keyof BesignerDndState
 export type BesignerDndItemValue<
   K extends BesignerDndItemKey = BesignerDndItemKey,
 > = BesignerDndState[K]
-export type BesignerDndElementActive = BesignerContext['dnd']['active']
-export type BesignerDndElementOver = BesignerContext['dnd']['over']
+export type BesignerDraggableItem = BesignerContext['dnd']['active']
+export type BesignerDroppableItem = BesignerContext['dnd']['over']
 export type BesignerPanelItem = {
   id?: BesignerPanelViewFlag
   size?: number | string

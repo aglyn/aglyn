@@ -16,23 +16,22 @@
  */
 
 import {
+  DndDragSourceTypeFlag,
+  DndDropLinealTypeFlag,
+} from '@aglyn/besigner-data-app'
+import {
   LeafComponent,
   type LeafComponentProps,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import { useForkedRefs, useIsomorphicLayoutEffect } from '@aglyn/shared-ui-jsx'
-import {
-  type ChangeEvent,
-  forwardRef,
-  useCallback,
-  useMemo,
-  useRef,
-} from 'react'
+import { type ChangeEvent, forwardRef, useCallback, useRef } from 'react'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import { useAglynCanvasSetHovered } from '../hooks/use-aglyn-canvas-hovered'
 import useAglynCanvasElementIsSelected from '../hooks/use-aglyn-canvas-is-element-selected'
 import { useAglynCanvasSetSelected } from '../hooks/use-aglyn-canvas-selected'
-import useLeafDnd from '../hooks/use-leaf-dnd'
+import useLeafDrag from '../hooks/use-leaf-drag'
+import useLeafDrop from '../hooks/use-leaf-drop'
 
 export interface ElementLeafComponentProps extends LeafComponentProps {}
 
@@ -90,7 +89,14 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
   function RefRenderFn(props, ref) {
     const { $id, ...rest } = props
     const element = useRef<HTMLElement>()
-    const [dragHandle, dragPreview, dropRef] = useLeafDnd($id)
+    const [, dragHandle, dragPreview] = useLeafDrag(
+      $id,
+      DndDragSourceTypeFlag.CANVAS_ELEMENT,
+    )
+    const [, dropRef] = useLeafDrop(
+      $id,
+      DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
+    )
     const [setElementRef, deleteElementRef] = useRenderedCanvasElements()
     useIsomorphicLayoutEffect(() => {
       setElementRef($id, { $id, element, dragHandle })

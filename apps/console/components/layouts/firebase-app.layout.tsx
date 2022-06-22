@@ -24,7 +24,7 @@ import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
   RECAPTCHA_API_KEY,
-} from '@aglyn/db-data-tenants'
+} from '@aglyn/tenant-feature-instance'
 import {
   NextRouterEvent,
   SecureLoadingOverlayComponent,
