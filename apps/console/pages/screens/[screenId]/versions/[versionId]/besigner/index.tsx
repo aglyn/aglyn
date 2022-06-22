@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {getApp, setCanvasElements} from '@aglyn/foundation-data-core'
+import { getApp, setCanvasElements } from '@aglyn/foundation-data-core'
 import {
   AddControlsComponent,
   DevicePreviewControlsComponent,
@@ -25,49 +25,53 @@ import {
   withBesignerContext,
   WorkspaceEditorComponentProps,
 } from '@aglyn/foundation-feature-besigner'
-import {useAglynCanvasElementsNormalized} from '@aglyn/foundation-feature-renderer'
+import { useAglynCanvasElementsNormalized } from '@aglyn/foundation-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
-import {HAS_BROWSER, ICON_VARIANT_LEFT} from '@aglyn/shared-data-enums'
-import {useScreenVersion} from '@aglyn/foundation-data-fire'
+import { HAS_BROWSER, ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
+import { useScreenVersion } from '@aglyn/foundation-data-fire'
 import {
   AppLink,
   LOADING_OVERLAY_ELEMENT,
-  useIsomorphicLayoutEffect,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {NextPageTitle} from '@aglyn/shared-ui-next'
-import {useSnackbar} from '@aglyn/shared-ui-snackstack'
-import {decode, encode} from '@msgpack/msgpack'
-import {Button, Stack, Typography} from '@mui/material'
-import {Bytes, Timestamp} from 'firebase/firestore'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { NextPageTitle } from '@aglyn/shared-ui-next'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { decode, encode } from '@msgpack/msgpack'
+import { Button, Stack, Typography } from '@mui/material'
+import { Bytes, Timestamp } from 'firebase/firestore'
 import dynamic from 'next/dynamic'
-import {useRouter} from 'next/router'
-import {useCallback, useEffect} from 'react'
+import { useRouter } from 'next/router'
+import { useCallback, useEffect } from 'react'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
 import SecondaryAppBarComponent from '../../../../../../components/secondary-app-bar.component'
 import '../../../../../../constants/app-setup'
-import {buildRoute, Route} from '../../../../../../constants/route-links'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
-  () => import('@aglyn/foundation-feature-besigner').then((mod) => mod.WorkspaceEditorComponent),
-  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
+  () =>
+    import('@aglyn/foundation-feature-besigner').then(
+      (mod) => mod.WorkspaceEditorComponent,
+    ),
+  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
 
 function Besigner(props) {
-  const {query} = useRouter()
-  const {enqueueSnackbar} = useSnackbar()
-  const {queueLoading} = useLoading()
+  const { query } = useRouter()
+  const { enqueueSnackbar } = useSnackbar()
+  const { queueLoading } = useLoading()
   const app = useBesignerAppContext()
   const screenId = `${query.screenId}`
   const versionId = `${query.versionId}`
-  const detailUrl = buildRoute(Route.SCREEN_DETAILS, {screenId, versionId})
+  const detailUrl = buildRoute(Route.SCREEN_DETAILS, { screenId, versionId })
   const normalized = useAglynCanvasElementsNormalized()
-  const [{status, data: screen, error}, updateScreen] = useScreenVersion<any>({
-    screenId,
-    versionId,
-  })
+  const [{ status, data: screen, error }, updateScreen] = useScreenVersion<any>(
+    {
+      screenId,
+      versionId,
+    },
+  )
   const elements = screen?.elements
   const hasError = status === 'error'
   const notFound = status === 'success' && !screen
@@ -99,11 +103,11 @@ function Besigner(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
-  useIsomorphicLayoutEffect(() => {
+  useEffect(() => {
     if (elements && elements instanceof Bytes) {
       const decoded: any = decode(elements.toUint8Array())
       console.log('decoded update', decoded)
-      setCanvasElements(app, {elements: decoded, type: 'normal'})
+      setCanvasElements(app, { elements: decoded, type: 'normal' })
     }
   }, [app, elements])
 
@@ -116,7 +120,7 @@ function Besigner(props) {
         elements: encodedNormal,
         updatedAt: timestamp,
       },
-      {merge: true},
+      { merge: true },
     ).catch((e) => {
       enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
         variant: 'error',
@@ -142,11 +146,11 @@ function Besigner(props) {
             tabBarTitle={
               <Stack
                 direction="row"
-                spacing={{sm: 0.15, md: 0.5}}
+                spacing={{ sm: 0.15, md: 0.5 }}
                 alignItems="center"
                 typography={'subtitle2'}
                 lineHeight={'normal'}
-                sx={{color: 'tertiary.light'}}
+                sx={{ color: 'tertiary.light' }}
                 component={AppLink}
                 componentVariant={'text'}
                 underline="none"
@@ -165,7 +169,7 @@ function Besigner(props) {
               spacing={1}
             >
               <AddControlsComponent />
-              <HistoryControlsComponent sx={{flexGrow: 1}} />
+              <HistoryControlsComponent sx={{ flexGrow: 1 }} />
               <DevicePreviewControlsComponent />
               {/*<InteractControlsComponent />*/}
               <PanelControlsComponent />

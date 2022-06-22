@@ -17,7 +17,15 @@
 
 import type { AppUUN } from '../definitions/aglyn-app.types'
 import type { IAglynCanvasController } from '../definitions/aglyn-canvas.types'
+import type { AglynElement } from '../definitions/aglyn-elements.types'
 
 export const _INTERNAL_CANVAS_: Map<AppUUN, IAglynCanvasController> = new Map()
 export const CANVAS_ROOT_ELEMENT_ID = '_@_'
 export type CANVAS_ROOT_ELEMENT_ID = typeof CANVAS_ROOT_ELEMENT_ID
+
+export const DEFAULT_ROOT_ELEMENT: AglynElement = {
+  $id: CANVAS_ROOT_ELEMENT_ID,
+  elements: [],
+  parentId: null,
+  componentId: undefined,
+}

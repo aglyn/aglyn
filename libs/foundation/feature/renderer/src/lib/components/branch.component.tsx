@@ -15,36 +15,40 @@
  * limitations under the License.
  */
 
-import type { ComponentId } from '@aglyn/foundation-data-core'
+import type { ElementId } from '@aglyn/foundation-data-core'
 import type { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import { forwardRef, Fragment, useMemo } from 'react'
+import useAglynElementData from '../hooks/use-aglyn-element-data'
 import LeafComponent from './leaf.component'
 
 export interface BranchComponentProps extends OverrideableComponentProps {
   leafComponent?: LeafComponent
-  elements?: ComponentId[]
+  $id?: ElementId
 }
 
-const BranchComponent = forwardRef<any, BranchComponentProps>(function RefRenderFn(props, ref) {
-  const { component: Component, leafComponent, elements, ...rest } = props
+const BranchComponent = forwardRef<any, BranchComponentProps>(
+  function RefRenderFn(props, ref) {
+    const { component: Component, leafComponent, $id, ...rest } = props
 
-  const Leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
+    const elements = useAglynElementData($id, 'elements')
+    console.log('elements', $id, elements)
+    const Leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
 
-  return (
-    <Component ref={ref} {...rest}>
-      {elements.map(($id) => (
-        <Leaf key={$id} $id={$id} leafComponent={Leaf} />
-      ))}
-    </Component>
-  )
-})
+    return Array.isArray(elements) && elements.length ? (
+      <Component ref={ref} {...rest}>
+        {elements.map(($id) => (
+          <Leaf key={`element-leaf-${$id}`} $id={$id} leafComponent={Leaf} />
+        ))}
+      </Component>
+    ) : null
+  },
+)
 
 BranchComponent.displayName = 'BranchComponent'
 BranchComponent.aglyn = true
 BranchComponent.defaultProps = {
   component: Fragment,
   children: null,
-  elements: [],
 }
 
 export { BranchComponent }

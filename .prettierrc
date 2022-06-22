@@ -1,5 +1,4 @@
 {
-  "bracketSpacing": false,
   "importOrder": [
     "^react$",
     "^react-dom$",
@@ -13,10 +12,21 @@
     ".*"
   ],
   "importOrderSeparation": true,
-  "printWidth": 100,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "embeddedLanguageFormatting": "auto",
+  "htmlWhitespaceSensitivity": "ignore",
+  "insertPragma": false,
+  "jsxSingleQuote": false,
+  "printWidth": 80,
+  "proseWrap": "preserve",
+  "quoteProps": "as-needed",
+  "requirePragma": false,
   "semi": false,
   "singleQuote": true,
-  "tabWith": 2,
+  "tabWidth": 2,
   "trailingComma": "all",
-  "useTabs": false
+  "useTabs": false,
+  "vueIndentScriptAndStyle": false,
 }

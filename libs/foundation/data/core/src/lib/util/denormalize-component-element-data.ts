@@ -16,7 +16,10 @@
  */
 
 import { arraySafe, copy } from '@aglyn/shared-util-tools'
-import { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
+import {
+  CANVAS_ROOT_ELEMENT_ID,
+  DEFAULT_ROOT_ELEMENT,
+} from '../constants/canvas'
 import type {
   AglynElementDenormalized,
   AglynElementNormalized,
@@ -28,11 +31,13 @@ import type {
 const denormalizeData = (
   element: AglynElementNormalized,
   parentId: ElementId,
-  accumulator: AglynElementsDenormalized = {}
+  accumulator: AglynElementsDenormalized = {},
 ): AglynElementsDenormalized => {
   if (element?.$id && parentId && accumulator[parentId]) {
     const _element = element as unknown as AglynElementDenormalized
-    const childElements: AglynElementsNormalized = [...arraySafe(element.elements)]
+    const childElements: AglynElementsNormalized = [
+      ...arraySafe(element.elements),
+    ]
     _element.parentId = parentId
     _element.elements = []
     accumulator[_element.$id] = _element
@@ -48,25 +53,35 @@ const denormalizeData = (
 export function denormalizeComponentElementData(
   element: AglynElementNormalized,
   parentId: ElementId,
-  accumulator?: AglynElementsDenormalized
+  accumulator?: AglynElementsDenormalized,
 ): AglynElementsDenormalized
 export function denormalizeComponentElementData(
   elements: AglynElementsNormalized,
-  parentId?: ElementId
+  parentId?: ElementId,
 ): AglynElementsDenormalized
 export function denormalizeComponentElementData(
   data: AglynElementNormalized | AglynElementsNormalized,
   parentId: ElementId = CANVAS_ROOT_ELEMENT_ID,
-  accumulator?: AglynElementsDenormalized
+  accumulator?: AglynElementsDenormalized,
 ): AglynElementsDenormalized {
-  const denormalized: AglynElementsDenormalized = accumulator || {
-    [parentId]: {
-      $id: parentId,
-      elements: [],
-      parentId: null,
-      componentId: undefined,
-    },
+  let denormalized: AglynElementsDenormalized
+
+  if (accumulator) denormalized = accumulator
+  else if (parentId === CANVAS_ROOT_ELEMENT_ID) {
+    denormalized = {
+      [DEFAULT_ROOT_ELEMENT.$id]: { ...copy(DEFAULT_ROOT_ELEMENT) },
+    }
+  } else {
+    denormalized = {
+      [parentId]: {
+        $id: parentId,
+        elements: [],
+        parentId: null,
+        componentId: undefined,
+      },
+    }
   }
+
   if (!data) return denormalized
   const state = copy(data)
 

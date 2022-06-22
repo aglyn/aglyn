@@ -18,13 +18,11 @@
 import type { ComponentId } from '@aglyn/foundation-data-core'
 import { isValidElementType } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import { _isArrEmpty } from '@aglyn/shared-util-guards'
 import { Box, type BoxProps } from '@mui/material'
 import clsx from 'clsx'
 import { forwardRef, Fragment, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import useAglynElementComponent from '../hooks/use-aglyn-element-component'
-import useAglynElementData from '../hooks/use-aglyn-element-data'
 import useAglynElementResolvedProps from '../hooks/use-aglyn-element-resolved-props'
 import BranchComponent from './branch.component'
 
@@ -33,25 +31,24 @@ export interface LeafComponentProps extends BoxProps<any, any> {
   leafComponent?: LeafComponent
 }
 
-const LeafComponent = forwardRef<any, LeafComponentProps>(function RefRenderFn(props, ref) {
+const LeafComponent = forwardRef<any, LeafComponentProps>(function RefRenderFn(
+  props,
+  ref,
+) {
   const { $id, leafComponent, children, className, sx, ...rest } = props
-
-  const leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
+  const component = useAglynElementComponent<any, any>($id)
+  const Component = useMemo(() => {
+    return component && isValidElementType(component) ? component : Box
+  }, [component])
   const {
     className: resolvedClassName,
     sx: resolvedSx,
     ...resolved
   } = useAglynElementResolvedProps($id)
-  const elements = useAglynElementData($id, 'elements')
-  const component = useAglynElementComponent<any, any>($id)
-  const Component = useMemo(() => {
-    return component && isValidElementType(component) ? component : Box
-  }, [component])
 
   return (
     <Component
       ref={ref}
-      key={`element-leaf-${$id}`}
       id={`element-leaf-${$id}`}
       className={clsx(className, resolvedClassName)}
       sx={mergeSxProps(sx, resolvedSx)}
@@ -65,9 +62,11 @@ const LeafComponent = forwardRef<any, LeafComponentProps>(function RefRenderFn(p
           p: Fragment,
         }}
       />
-      {_isArrEmpty(elements) ? null : (
-        <BranchComponent key={`element-branch-${$id}`} leafComponent={leaf} elements={elements} />
-      )}
+      <BranchComponent
+        key={`element-branch-${$id}`}
+        $id={$id}
+        leafComponent={leafComponent}
+      />
     </Component>
   )
 })
