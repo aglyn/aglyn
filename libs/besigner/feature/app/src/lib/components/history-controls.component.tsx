@@ -34,7 +34,7 @@ export interface HistoryControlsProps extends StackProps {}
 const HistoryControlsComponent = forwardRef<any, HistoryControlsProps>(
   function RefRenderFn(props, ref) {
     const [undo, redo, canUndo, canRedo] = useAglynCanvasHistoryControls()
-
+    console.log('can undo ', canUndo, canRedo)
     return (
       <MuiStack ref={ref} direction="row" spacing={0.25} {...props}>
         <MuiTooltip title={'Undo (⌘Z)'}>

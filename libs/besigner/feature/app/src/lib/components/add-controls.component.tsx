@@ -37,8 +37,7 @@ const AddControlsComponent = forwardRef<any, AddControlsProps>(
         <MuiTooltip title={'Add element'}>
           <MuiIconButton
             aria-haspopup="menu"
-            aria-label="add"
-            edge="start"
+            aria-label="add-element"
             onClick={handleAddElementClick}
           >
             <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_ADD.path} />

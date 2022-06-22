@@ -113,7 +113,10 @@ export class AglynCanvasController
     })
 
     const present = new BehaviorSubject(
-      denormalizeComponentElementData(state.present || [], CANVAS_ROOT_ELEMENT_ID)
+      denormalizeComponentElementData(
+        state.present || [],
+        CANVAS_ROOT_ELEMENT_ID,
+      ),
     )
 
     this.__store__ = {
@@ -122,7 +125,9 @@ export class AglynCanvasController
       present: present,
       normalized: present.pipe(
         // throttleTime(20, undefined, {leading: false, trailing: true}),
-        map((present) => normalizeComponentElementData(present || {}, CANVAS_ROOT_ELEMENT_ID))
+        map((present) =>
+          normalizeComponentElementData(present || {}, CANVAS_ROOT_ELEMENT_ID),
+        ),
       ),
     }
 
@@ -137,7 +142,7 @@ export class AglynCanvasController
   }
 
   public getStore<K extends keyof CanvasContext>(
-    payload: CanvasGetStorePayload<K>
+    payload: CanvasGetStorePayload<K>,
   ): this['__store__'][K] {
     const { store } = payload
     return this.__store__?.[store]
@@ -157,46 +162,55 @@ export class AglynCanvasController
     return this
   }
   private handleStateModification<P>(
-    callback: (present: AglynElementsDenormalized, payload?: P) => AglynElementsDenormalized,
+    callback: (
+      present: AglynElementsDenormalized,
+      payload?: P,
+    ) => AglynElementsDenormalized,
     payload?: P,
-    clear = false
+    clear = false,
   ) {
     const state = this.getState()
     const prev = state.present
     const now = callback(copy(prev), payload)
     const updated = handleStateModificationHistoryChange(state, now)
     if (this.isDeepEqual(prev, now)) return this
-    if (clear) this.nextState({ past: [], present: updated.present, future: [] })
-    else this.nextState(updated)
+    if (clear) {
+      console.log('clear', updated)
+      this.nextState({ past: [], present: updated.present, future: [] })
+    } else this.nextState(updated)
     return this
   }
   private isDeepEqual<T>(prev: unknown, now: T): prev is T {
     return isEqual(prev, now)
   }
 
-  public getPastElements(payload?: CanvasGetElementsPastPayload): this['__store__']['past'] {
+  public getPastElements(
+    payload?: CanvasGetElementsPastPayload,
+  ): this['__store__']['past'] {
     return this.__store__?.['past']
   }
-  public getFutureElements(payload?: CanvasGetElementsFuturePayload): this['__store__']['future'] {
+  public getFutureElements(
+    payload?: CanvasGetElementsFuturePayload,
+  ): this['__store__']['future'] {
     return this.__store__?.['future']
   }
   public getPresentElements(
-    payload?: CanvasGetElementsPresentPayload
+    payload?: CanvasGetElementsPresentPayload,
   ): this['__store__']['present'] {
     return this.__store__?.['present']
   }
   public getDenormalizedElements(
-    payload?: CanvasGetElementsDenormalizedPayload
+    payload?: CanvasGetElementsDenormalizedPayload,
   ): this['__store__']['present'] {
     return this.__store__?.['present']
   }
   public getNormalizedElements(
-    payload?: CanvasGetElementsNormalizedPayload
+    payload?: CanvasGetElementsNormalizedPayload,
   ): this['__store__']['normalized'] {
     return this.__store__?.['normalized']
   }
   public getApi(
-    payload?: CanvasGetElementsNormalizedPayload
+    payload?: CanvasGetElementsNormalizedPayload,
   ): Pick<
     this,
     | 'undo'

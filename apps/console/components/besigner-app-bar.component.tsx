@@ -1,0 +1,114 @@
+/**
+ * @license
+ * Copyright 2022 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  AddControlsComponent,
+  DevicePreviewControlsComponent,
+  HistoryControlsComponent,
+  PanelControlsComponent,
+} from '@aglyn/besigner-feature-app'
+import {
+  ICON_VARIANT_LEFT,
+  ICON_VARIANT_MODIFY_SAVE,
+  ICON_VARIANT_SYMBOL_CONFIRMED,
+} from '@aglyn/shared-data-enums'
+import { AppLink } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { Button, type ButtonProps, Divider, Stack } from '@mui/material'
+import { forwardRef } from 'react'
+import SecondaryAppBarComponent, {
+  type SecondaryAppBarProps,
+} from './secondary-app-bar.component'
+
+export interface BesignerAppBarProps extends SecondaryAppBarProps {
+  detailsUrl: string
+  onSave: ButtonProps['onClick']
+  saveAvailable?: boolean
+}
+
+const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
+  (props, ref) => {
+    const { detailsUrl, onSave, saveAvailable } = props
+
+    return (
+      <SecondaryAppBarComponent
+        ref={ref}
+        tabBarTitle={
+          <Stack
+            direction="row"
+            spacing={{ sm: 0.15, md: 0.5 }}
+            alignItems="center"
+            typography={'subtitle2'}
+            lineHeight={'normal'}
+            sx={{ color: 'tertiary.light' }}
+            component={AppLink}
+            componentVariant={'text'}
+            underline="none"
+            href={detailsUrl}
+          >
+            <MdiIcon path={ICON_VARIANT_LEFT.path} fontSize={'small'} />
+            <span>{'Details'}</span>
+          </Stack>
+        }
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          width={1}
+          spacing={1}
+        >
+          <AddControlsComponent />
+          <HistoryControlsComponent sx={{ flexGrow: 1 }} />
+          <DevicePreviewControlsComponent />
+          {/*<InteractControlsComponent />*/}
+          <PanelControlsComponent />
+          <Divider
+            orientation="vertical"
+            sx={(theme) => ({
+              ml: `${theme.spacing(2)} !important`,
+            })}
+            flexItem
+            light
+          />
+          <Button
+            onClick={onSave}
+            size="small"
+            disabled={!saveAvailable}
+            endIcon={
+              <MdiIcon
+                path={
+                  saveAvailable
+                    ? ICON_VARIANT_MODIFY_SAVE.path
+                    : ICON_VARIANT_SYMBOL_CONFIRMED.path
+                }
+              />
+            }
+            sx={(theme) => ({ mr: `${theme.spacing(-1)} !important` })}
+          >
+            {saveAvailable ? 'Save' : 'Up to date'}
+          </Button>
+        </Stack>
+      </SecondaryAppBarComponent>
+    )
+  },
+)
+BesignerAppBarComponent.displayName = 'BesignerAppBarComponent'
+BesignerAppBarComponent.defaultProps = {}
+
+export { BesignerAppBarComponent }
+export default BesignerAppBarComponent

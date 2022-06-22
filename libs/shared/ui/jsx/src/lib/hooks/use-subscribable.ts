@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import {_isFnT} from '@aglyn/shared-util-guards'
+import { _isFnT } from '@aglyn/shared-util-guards'
 import isEqual from 'lodash-es/isEqual'
-import {type DependencyList, useCallback, useState} from 'react'
-import type {Observable as RxJsObservable, Unsubscribable as RxJsUnsubscribable} from 'rxjs'
-import {distinctUntilChanged} from 'rxjs/operators'
-import useIsomorphicLayoutEffect from './use-isomorphic-layout-effect'
-
+import { type DependencyList, useCallback, useEffect, useState } from 'react'
+import type {
+  Observable as RxJsObservable,
+  Unsubscribable as RxJsUnsubscribable,
+} from 'rxjs'
 
 export type SubscribableLike<T> = RxJsObservable<T> | Observable<T>
 export type MapObservable<V, R> = (newValue: V, prevValue: R) => R
@@ -33,21 +33,32 @@ export interface Observable<T> {
   pipe?(...args): any
 }
 
+export function useSubscribable<T>(
+  subscribable: SubscribableLike<T>,
+): T | undefined
 
-export function useSubscribable<T>(subscribable: SubscribableLike<T>): T | undefined
-
-export function useSubscribable<T,
+export function useSubscribable<
+  T,
   U = any,
-  M extends MapObservable<U, U | T | undefined> = MapObservable<U, U | T | undefined>>(
+  M extends MapObservable<U, U | T | undefined> = MapObservable<
+    U,
+    U | T | undefined
+  >,
+>(
   subscribable: SubscribableLike<U>,
   initialValue: U | T,
   mapValue?: M,
   dependencies?: DependencyList,
 ): U | T
 
-export function useSubscribable<T,
+export function useSubscribable<
+  T,
   U = any,
-  M extends MapObservable<U, U | T | undefined> = MapObservable<U, U | T | undefined>>(
+  M extends MapObservable<U, U | T | undefined> = MapObservable<
+    U,
+    U | T | undefined
+  >,
+>(
   subscribable: SubscribableLike<U>,
   initialValue?: U | T,
   mapValue?: M,
@@ -61,7 +72,7 @@ export function useSubscribable<T,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, dependencies)
 
-  useIsomorphicLayoutEffect(() => {
+  useEffect(() => {
     function handleChange(newValue) {
       update((prevValue) => {
         const value = mapUpdate(newValue, prevValue)
@@ -70,13 +81,14 @@ export function useSubscribable<T,
       })
     }
 
-    let $subscribable: SubscribableLike<U> = subscribable
+    const $subscribable: SubscribableLike<U> = subscribable
     if (!$subscribable) return
 
     if (typeof subscribable?.pipe === 'function') {
-      $subscribable = $subscribable?.pipe(distinctUntilChanged(isEqual))
+      // $subscribable = $subscribable?.pipe(distinctUntilChanged(isEqual))
     }
-    const subscriber: RxJsUnsubscribable = $subscribable?.subscribe(handleChange)
+    const subscriber: RxJsUnsubscribable =
+      $subscribable?.subscribe(handleChange)
     return () => subscriber?.unsubscribe?.()
   }, [subscribable, mapUpdate])
 

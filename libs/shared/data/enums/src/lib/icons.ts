@@ -38,6 +38,7 @@ import {
   mdiCodeString,
   mdiCog,
   mdiContentDuplicate,
+  mdiContentSave,
   mdiCubeOutline,
   mdiCursorDefault,
   mdiCursorMove,
@@ -77,7 +78,6 @@ import {
   mdiWhiteBalanceSunny,
 } from '@aglyn/shared-ui-mdi-jsx'
 
-
 // Data-Type
 export const ICON_VARIANT_ARRAY = mdiCodeArray
 export const ICON_VARIANT_COLLECTION = mdiBookVariantMultiple
@@ -113,6 +113,7 @@ export const ICON_VARIANT_MODIFY_MOVE_DOWN = mdiArrowDown
 export const ICON_VARIANT_MODIFY_MOVE_UP = mdiArrowUp
 export const ICON_VARIANT_MODIFY_REDO = mdiRedo
 export const ICON_VARIANT_MODIFY_UNDO = mdiUndo
+export const ICON_VARIANT_MODIFY_SAVE = mdiContentSave
 export const ICON_VARIANT_NEW_TAB = mdiOpenInNew
 export const ICON_VARIANT_SELECT_PARENT = mdiArrowUpRight
 export const ICON_VARIANT_SHOW_DETAIL = mdiPageNextOutline

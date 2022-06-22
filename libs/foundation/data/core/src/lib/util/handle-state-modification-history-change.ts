@@ -18,15 +18,15 @@
 import { copy } from '@aglyn/shared-util-tools'
 import type { ModificationHistoryState } from '../definitions/generic.types'
 
-const MAX_HISTORY = 25
+const MAX_HISTORY = 50
 
 export const handleStateModificationHistoryChange = <
   S,
-  T extends ModificationHistoryState<S> = ModificationHistoryState<S>
+  T extends ModificationHistoryState<S> = ModificationHistoryState<S>,
 >(
   state: T,
   newState: S,
-  maxHistory = MAX_HISTORY
+  maxHistory = MAX_HISTORY,
 ): ModificationHistoryState<S> => {
   const len = state.past.unshift(copy(state.present))
   if (len > maxHistory) state.past.splice(maxHistory - 1, len - maxHistory)

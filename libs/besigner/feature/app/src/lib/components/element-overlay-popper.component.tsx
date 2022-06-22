@@ -31,7 +31,7 @@ import { ICON_VARIANT_ENTITY_BLOCK } from '@aglyn/shared-data-enums'
 import { type KeyOf } from '@aglyn/shared-data-types'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
-import { Box } from '@mui/material'
+import { Box, Stack } from '@mui/material'
 import MuiPopper, {
   type PopperProps as MuiPopperProps,
 } from '@mui/material/Popper'
@@ -245,28 +245,24 @@ const ElementOverlayPopperComponent = forwardRef<
                         />
                       ),
                       hoveredOverlay: (
-                        <Box
+                        <Stack
                           data-aglyn-overlay-id={$id}
                           data-aglyn-overlay-variant={variant}
                           data-aglyn-overlay-type="badge-label"
+                          flexDirection="row"
+                          justifyContent="flex-start"
+                          alignItems="center"
                           sx={{
                             pointerEvents: 'none',
-                            // marginTop: '-20px',
                             marginLeft: '-2px',
                             bgcolor: 'secondary.main',
                             color: 'secondary.contrastText',
-                            whiteSpace: 'nowrap',
-                            textOverflow: 'ellipsis',
-                            overflow: 'hidden',
-                            px: 0.6,
+                            pl: 0.5,
+                            pr: 0.4,
                             py: 0.4,
                             lineHeight: 1,
                             maxWidth: 120,
                             fontSize: 12,
-                            display: 'flex',
-                            flexDirection: 'row',
-                            justifyContent: 'center',
-                            alignItems: 'center',
                           }}
                         >
                           <MdiIcon
@@ -275,14 +271,21 @@ const ElementOverlayPopperComponent = forwardRef<
                             sx={{
                               mr: 0.35,
                               pr: 0.25,
-                              ml: -0.35,
                               fontSize: `1.1em`,
                               borderRight: 1,
                               borderColor: 'divider',
                             }}
                           />
-                          {badgeLabel}
-                        </Box>
+                          <Box
+                            component={'span'}
+                            children={badgeLabel}
+                            sx={{
+                              whiteSpace: 'nowrap',
+                              textOverflow: 'ellipsis',
+                              overflow: 'hidden',
+                            }}
+                          />
+                        </Stack>
                       ),
                     }[variant]
                   }

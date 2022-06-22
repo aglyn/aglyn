@@ -32,13 +32,17 @@ export function useAglynCanvasHistoryControls(): UseAglynCanvasHistory {
   const undoCount = useSubscribable<number | 0>(
     app.canvas?.pastElements,
     0,
-    (past) => past?.length || 0,
+    (past) => {
+      return past?.length || 0
+    },
     [app],
   )
   const redoCount = useSubscribable<number | 0>(
     app.canvas?.futureElements,
     0,
-    (future) => future?.length || 0,
+    (future) => {
+      return future?.length || 0
+    },
     [app],
   )
   return useMemo(() => {

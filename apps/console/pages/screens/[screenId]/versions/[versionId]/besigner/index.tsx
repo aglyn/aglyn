@@ -15,37 +15,28 @@
  * limitations under the License.
  */
 
-import { getApp, setCanvasElements } from '@aglyn/foundation-data-core'
 import {
-  AddControlsComponent,
-  DevicePreviewControlsComponent,
-  HistoryControlsComponent,
-  PanelControlsComponent,
   useBesignerAppContext,
   withBesignerContext,
   WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-feature-app'
+import { getApp, setCanvasElements } from '@aglyn/foundation-data-core'
+import { useScreenVersion } from '@aglyn/foundation-data-tenants'
 import { useAglynCanvasElementsNormalized } from '@aglyn/foundation-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
-import { HAS_BROWSER, ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
-import { useScreenVersion } from '@aglyn/foundation-data-tenants'
-import {
-  AppLink,
-  LOADING_OVERLAY_ELEMENT,
-  useLoading,
-} from '@aglyn/shared-ui-jsx'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { HAS_BROWSER } from '@aglyn/shared-data-enums'
+import { LOADING_OVERLAY_ELEMENT, useLoading } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { decode, encode } from '@msgpack/msgpack'
-import { Button, Stack, Typography } from '@mui/material'
+import { Stack, Typography } from '@mui/material'
 import { Bytes, Timestamp } from 'firebase/firestore'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { useCallback, useEffect } from 'react'
+import BesignerAppBarComponent from '../../../../../../components/besigner-app-bar.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import ConsoleLayout from '../../../../../../components/layouts/console.layout'
-import SecondaryAppBarComponent from '../../../../../../components/secondary-app-bar.component'
 import '../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 
@@ -111,7 +102,7 @@ function Besigner(props) {
     }
   }, [app, elements])
 
-  const handleClick = useCallback(async () => {
+  const handleSave = useCallback(async () => {
     const dequeueLoading = queueLoading()
     const encodedNormal = Bytes.fromUint8Array(encode(normalized))
     const timestamp = Timestamp.now()
@@ -142,40 +133,11 @@ function Besigner(props) {
         LOADING_OVERLAY_ELEMENT
       ) : (
         <>
-          <SecondaryAppBarComponent
-            tabBarTitle={
-              <Stack
-                direction="row"
-                spacing={{ sm: 0.15, md: 0.5 }}
-                alignItems="center"
-                typography={'subtitle2'}
-                lineHeight={'normal'}
-                sx={{ color: 'tertiary.light' }}
-                component={AppLink}
-                componentVariant={'text'}
-                underline="none"
-                href={detailUrl}
-              >
-                <MdiIcon path={ICON_VARIANT_LEFT.path} fontSize={'small'} />
-                <span>{'Details'}</span>
-              </Stack>
-            }
-          >
-            <Stack
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-              width={1}
-              spacing={1}
-            >
-              <AddControlsComponent />
-              <HistoryControlsComponent sx={{ flexGrow: 1 }} />
-              <DevicePreviewControlsComponent />
-              {/*<InteractControlsComponent />*/}
-              <PanelControlsComponent />
-              <Button onClick={handleClick}>Save</Button>
-            </Stack>
-          </SecondaryAppBarComponent>
+          <BesignerAppBarComponent
+            detailsUrl={detailUrl}
+            onSave={handleSave}
+            saveAvailable
+          />
           <WorkspaceEditorComponent />
         </>
       )}

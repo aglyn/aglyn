@@ -20,11 +20,14 @@ import { copy } from '@aglyn/shared-util-tools'
 import type { ModificationHistoryState } from '../definitions/generic.types'
 
 export function handleStateModificationHistoryRedo<S>(
-  state: ModificationHistoryState<S>
+  state: ModificationHistoryState<S>,
 ): ModificationHistoryState<S> {
   if (!_isArrEmpty(state.future)) {
-    state.past.unshift(copy(state.present))
-    state.present = state.future.shift()
+    const _state = copy(state)
+    const present = copy(_state.present)
+    _state.past.unshift(present)
+    _state.present = _state.future.shift()
+    return _state
   }
   return state
 }
