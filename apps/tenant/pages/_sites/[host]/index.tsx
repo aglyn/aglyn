@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
-import { getTenantPageStaticPaths } from '@aglyn/foundation-data-tenants'
-import { getTenantPageStaticProps } from '@aglyn/foundation-data-tenants'
+import {
+  getTenantPageStaticPaths,
+  getTenantPageStaticProps,
+} from '@aglyn/foundation-data-tenants'
 import CatchAllPage from './[...path]'
 
 export const getStaticPaths = async (context) => {

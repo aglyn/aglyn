@@ -33,21 +33,17 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
+      "@aglyn/besigner-data-app": ["libs/besigner/data/app/src/index.ts"],
+      "@aglyn/besigner-feature-app": ["libs/besigner/feature/app/src/index.ts"],
+      "@aglyn/besigner-feature-canvas-designer": [
+        "libs/besigner/feature/canvas-designer/src/index.ts"
+      ],
       "@aglyn/foundation-data-admin": [
         "libs/foundation/data/admin/src/index.ts"
-      ],
-      "@aglyn/foundation-data-besigner": [
-        "libs/foundation/data/besigner/src/index.ts"
       ],
       "@aglyn/foundation-data-core": ["libs/foundation/data/core/src/index.ts"],
       "@aglyn/foundation-data-tenants": [
         "libs/foundation/data/tenants/src/index.ts"
-      ],
-      "@aglyn/foundation-feature-besigner": [
-        "libs/foundation/feature/besigner/src/index.ts"
-      ],
-      "@aglyn/foundation-feature-canvas-designer": [
-        "libs/foundation/feature/canvas-designer/src/index.ts"
       ],
       "@aglyn/foundation-feature-renderer": [
         "libs/foundation/feature/renderer/src/index.ts"

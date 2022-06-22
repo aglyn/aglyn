@@ -15,12 +15,15 @@
  * limitations under the License.
  */
 
-import {bundle as muiBundle} from '@aglyn/plugins-ui-mui'
-import {doesBesignerAppExist, initializeBesignerApp} from '@aglyn/foundation-data-besigner'
-import {registerBundle, registerComponent} from '@aglyn/foundation-data-core'
-import {samplePageData} from '@aglyn/foundation-feature-besigner'
-import {createAglynComponent} from '@aglyn/foundation-feature-renderer'
-import {IS_PRODUCTION} from '@aglyn/shared-data-enums'
+import { bundle as muiBundle } from '@aglyn/plugins-ui-mui'
+import {
+  doesBesignerAppExist,
+  initializeBesignerApp,
+} from '@aglyn/besigner-data-app'
+import { registerBundle, registerComponent } from '@aglyn/foundation-data-core'
+import { samplePageData } from '@aglyn/besigner-feature-app'
+import { createAglynComponent } from '@aglyn/foundation-feature-renderer'
+import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 
 const c1 = createAglynComponent(
   {

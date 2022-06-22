@@ -15,19 +15,21 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/foundation-data-tenants'
+import { BesignerCanvasHoveredElement } from '@aglyn/besigner-data-app'
+import type { ElementId } from '@aglyn/foundation-data-core'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
+import useBesignerAppContext from '../utils/use-besigner-app-context'
 
-export default function CatchAllPage(props) {
-  return <>{JSON.stringify(props, null, 2)}</>
+export function useAglynCanvasElementIsHovered($id: ElementId): boolean {
+  const app = useBesignerAppContext()
+  const value = useSubscribable<BesignerCanvasHoveredElement>(
+    app.besigner?.canvas,
+    false,
+    (canvas) => $id && canvas?.hovered?.$id === $id,
+    [$id, app],
+  )
+
+  return value
 }
 
-export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
-}
-
-export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
-}
+export default useAglynCanvasElementIsHovered

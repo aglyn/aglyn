@@ -15,19 +15,13 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/foundation-data-tenants'
+export const ELEMENT_ATTRIBUTE_PREFIX = 'data-aglyn-'
+export type ELEMENT_ATTRIBUTE_PREFIX = typeof ELEMENT_ATTRIBUTE_PREFIX
 
-export default function CatchAllPage(props) {
-  return <>{JSON.stringify(props, null, 2)}</>
+export const aglynAttributeKey = (
+  name: string,
+): `${ELEMENT_ATTRIBUTE_PREFIX}${typeof name}` => {
+  return `${ELEMENT_ATTRIBUTE_PREFIX}${name}`
 }
 
-export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
-}
-
-export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
-}
+export default aglynAttributeKey

@@ -15,19 +15,13 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/foundation-data-tenants'
+import type { IBesignerAppController } from '@aglyn/besigner-data-app'
+import { useAglynAppContext } from '@aglyn/foundation-feature-renderer'
 
-export default function CatchAllPage(props) {
-  return <>{JSON.stringify(props, null, 2)}</>
+export function useBesignerAppContext(
+  ...args: Parameters<typeof useAglynAppContext>
+): IBesignerAppController {
+  return useAglynAppContext<IBesignerAppController>(...args)
 }
 
-export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
-}
-
-export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
-}
+export default useBesignerAppContext

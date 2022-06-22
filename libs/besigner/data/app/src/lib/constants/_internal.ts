@@ -15,19 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/foundation-data-tenants'
+import type { AppUUN } from '@aglyn/foundation-data-core'
+import type { IAglynBesignerController } from '../controllers/aglyn-besigner.types'
 
-export default function CatchAllPage(props) {
-  return <>{JSON.stringify(props, null, 2)}</>
-}
-
-export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
-}
-
-export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
-}
+export const _INTERNAL_BESIGNERS_: Map<AppUUN, IAglynBesignerController> =
+  new Map()

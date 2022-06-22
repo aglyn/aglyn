@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/foundation-data-tenants'
+import type { ElementId } from '@aglyn/foundation-data-core'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
+import useBesignerAppContext from '../utils/use-besigner-app-context'
 
-export default function CatchAllPage(props) {
-  return <>{JSON.stringify(props, null, 2)}</>
+export function useAglynDndIsDraggingElement($id: ElementId): boolean {
+  const app = useBesignerAppContext()
+  const value = useSubscribable<boolean>(
+    app.besigner?.dnd,
+    false,
+    (dnd) => $id && dnd.active?.$id === $id,
+    [$id, app],
+  )
+
+  return value
 }
 
-export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
-}
-
-export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
-}
+export default useAglynDndIsDraggingElement

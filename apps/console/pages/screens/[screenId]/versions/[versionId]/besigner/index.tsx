@@ -24,7 +24,7 @@ import {
   useBesignerAppContext,
   withBesignerContext,
   WorkspaceEditorComponentProps,
-} from '@aglyn/foundation-feature-besigner'
+} from '@aglyn/besigner-feature-app'
 import { useAglynCanvasElementsNormalized } from '@aglyn/foundation-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
 import { HAS_BROWSER, ICON_VARIANT_LEFT } from '@aglyn/shared-data-enums'
@@ -51,7 +51,7 @@ import { buildRoute, Route } from '../../../../../../constants/route-links'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
-    import('@aglyn/foundation-feature-besigner').then(
+    import('@aglyn/besigner-feature-app').then(
       (mod) => mod.WorkspaceEditorComponent,
     ),
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },

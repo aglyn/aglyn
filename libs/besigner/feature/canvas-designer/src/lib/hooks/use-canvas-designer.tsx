@@ -15,19 +15,25 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/foundation-data-tenants'
+import Pikaso, { type Settings } from 'pikaso'
+import { type RefObject, useEffect, useRef, useState } from 'react'
 
-export default function CatchAllPage(props) {
-  return <>{JSON.stringify(props, null, 2)}</>
+export function useCanvasDesigner(
+  options: Partial<Settings> = {},
+): [RefObject<HTMLDivElement>, Pikaso | null] {
+  const [instance, setInstance] = useState<Pikaso | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const editor = new Pikaso({
+      container: ref.current as HTMLDivElement,
+      ...options,
+    })
+
+    setInstance(editor)
+  }, [options])
+
+  return [ref, instance]
 }
 
-export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
-}
-
-export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
-}
+export default useCanvasDesigner

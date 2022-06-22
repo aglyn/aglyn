@@ -1,0 +1,43 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/besigner/feature/app/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nrwl/web:rollup",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/besigner/feature/app",
+        "tsConfig": "libs/besigner/feature/app/tsconfig.lib.json",
+        "project": "libs/besigner/feature/app/package.json",
+        "entryFile": "libs/besigner/feature/app/src/index.ts",
+        "external": ["react/jsx-runtime"],
+        "rollupConfig": "@nrwl/react/plugins/bundle-rollup",
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/besigner/feature/app/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "options": {
+        "lintFilePatterns": ["libs/besigner/feature/app/**/*.{ts,tsx,js,jsx}"]
+      },
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nrwl/jest:jest",
+      "outputs": ["coverage/libs/besigner/feature/app"],
+      "options": {
+        "jestConfig": "libs/besigner/feature/app/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  },
+  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:besigner"]
+}

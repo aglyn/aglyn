@@ -31,7 +31,6 @@ const BranchComponent = forwardRef<any, BranchComponentProps>(
     const { component: Component, leafComponent, $id, ...rest } = props
 
     const elements = useAglynElementData($id, 'elements')
-    console.log('elements', $id, elements)
     const Leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
 
     return Array.isArray(elements) && elements.length ? (
