@@ -18,7 +18,7 @@
 import {
   type BesignerDraggableItem,
   type BesignerDroppableItem,
-  DndDragSourceTypeFlag,
+  DndDragType,
 } from '@aglyn/besigner-data-app'
 import { isRootElementId, moveCanvasElement } from '@aglyn/core-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
@@ -27,7 +27,7 @@ import {
   useAglynAppContext,
   useAglynElementComponentSchema,
 } from '@aglyn/core-feature-renderer'
-import { useDrag } from 'react-dnd'
+import { ConnectDragPreview, ConnectDragSource, useDrag } from 'react-dnd'
 import { useAglynCanvasSetSelected } from './use-aglyn-canvas-selected'
 import { useAglynDndSetActive } from './use-aglyn-dnd-active'
 import { useAglynDndSetOver } from './use-aglyn-dnd-over'
@@ -38,8 +38,11 @@ export type DragCollected = {
   over?: BesignerDroppableItem
 }
 
-export const useLeafDrag = ($id: ElementId, type?: DndDragSourceTypeFlag) => {
-  const dragType = type ?? DndDragSourceTypeFlag.CANVAS_ELEMENT
+export const useLeafDrag = (
+  $id: ElementId,
+  type?: DndDragType,
+): [DragCollected, ConnectDragSource, ConnectDragPreview] => {
+  const dragType = type ?? DndDragType.CANVAS_ELEMENT
   const app = useAglynAppContext()
   const setSelected = useAglynCanvasSetSelected()
   const setDndActive = useAglynDndSetActive()

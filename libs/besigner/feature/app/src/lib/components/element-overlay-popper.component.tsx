@@ -27,10 +27,8 @@ import {
   useAglynElementData,
   useAglynElementLabel,
 } from '@aglyn/core-feature-renderer'
-import { ICON_VARIANT_ENTITY_BLOCK } from '@aglyn/shared-data-enums'
 import { type KeyOf } from '@aglyn/shared-data-types'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import {
   Divider,
   Popper as MuiPopper,
@@ -43,6 +41,7 @@ import { RenderedCanvasElementsContext } from '../contexts/rendered-canvas-eleme
 import { useAglynCanvasSetHovered } from '../hooks/use-aglyn-canvas-hovered'
 import { useAglynCanvasSetSelected } from '../hooks/use-aglyn-canvas-selected'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
+import ElementIconComponent from './element-icon.component'
 import ElementOverlayBadgeComponent from './element-overlay-badge.component'
 import ElementOverlayOutlineComponent from './element-overlay-outline.component'
 
@@ -277,12 +276,10 @@ const ElementOverlayPopperComponent = forwardRef<
                             fontSize: 12,
                           }}
                         >
-                          <MdiIcon
+                          <ElementIconComponent
+                            $id={$id}
                             color="inherit"
-                            path={icon?.path || ICON_VARIANT_ENTITY_BLOCK.path}
-                            sx={{
-                              fontSize: `1.1em`,
-                            }}
+                            sx={{ fontSize: `1.1em` }}
                           />
                           <Typography
                             component="div"

@@ -15,17 +15,14 @@
  * limitations under the License.
  */
 
-import {
-  DndDragSourceTypeFlag,
-  DndDropLinealTypeFlag,
-} from '@aglyn/besigner-data-app'
+import { DndDragType, DndDropType } from '@aglyn/besigner-data-app'
 import {
   LeafComponent,
   type LeafComponentProps,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import { useForkedRefs, useIsomorphicLayoutEffect } from '@aglyn/shared-ui-jsx'
-import { type ChangeEvent, forwardRef, useCallback, useRef } from 'react'
+import { useRefForked } from '@aglyn/shared-ui-jsx'
+import { type ChangeEvent, forwardRef, useCallback, useEffect } from 'react'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import { useAglynCanvasSetHovered } from '../hooks/use-aglyn-canvas-hovered'
 import useAglynCanvasElementIsSelected from '../hooks/use-aglyn-canvas-is-element-selected'
@@ -35,14 +32,26 @@ import useLeafDrop from '../hooks/use-leaf-drop'
 
 export interface ElementLeafComponentProps extends LeafComponentProps {}
 
-const InnerLeafComponent = forwardRef<any, ElementLeafComponentProps>(
+const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
   (props, ref) => {
     const { $id, leafComponent, ...rest } = props
+    const [, dragHandle, dragPreview] = useLeafDrag(
+      $id,
+      DndDragType.CANVAS_ELEMENT,
+    )
+    const [, dropRef] = useLeafDrop($id, DndDropType.INSIDE)
+    const [_ref, element] = useRefForked<HTMLElement>(ref, dragPreview, dropRef)
+    const [setElementRef, deleteElementRef] = useRenderedCanvasElements()
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
     const isSelected = useAglynCanvasElementIsSelected($id)
     const setHovered = useAglynCanvasSetHovered()
     const setSelected = useAglynCanvasSetSelected()
+
+    useEffect(() => {
+      setElementRef($id, { $id, element, dragHandle })
+      return () => deleteElementRef($id)
+    })
 
     const handleOnMouseOver = useCallback(
       (e: ChangeEvent<any>) => {
@@ -67,7 +76,7 @@ const InnerLeafComponent = forwardRef<any, ElementLeafComponentProps>(
 
     return (
       <LeafComponent
-        ref={ref}
+        ref={_ref}
         $id={$id}
         leafComponent={leafComponent || ElementLeafComponent}
         onMouseOver={handleOnMouseOver}
@@ -76,36 +85,6 @@ const InnerLeafComponent = forwardRef<any, ElementLeafComponentProps>(
         data-aglyn-element-component={componentId}
         data-aglyn-element-bundle={bundleId}
         data-aglyn-element-selected={isSelected}
-        {...rest}
-      />
-    )
-  },
-)
-InnerLeafComponent.displayName = 'InnerLeafComponent'
-InnerLeafComponent.aglyn = true
-InnerLeafComponent.defaultProps = {}
-
-const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
-  (props, ref) => {
-    const { $id, ...rest } = props
-    const element = useRef<HTMLElement>()
-    const [, dragHandle, dragPreview] = useLeafDrag(
-      $id,
-      DndDragSourceTypeFlag.CANVAS_ELEMENT,
-    )
-    const [, dropRef] = useLeafDrop(
-      $id,
-      DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
-    )
-    const [setElementRef, deleteElementRef] = useRenderedCanvasElements()
-    useIsomorphicLayoutEffect(() => {
-      setElementRef($id, { $id, element, dragHandle })
-      return () => deleteElementRef($id)
-    }, [$id, element, dragHandle])
-    return (
-      <InnerLeafComponent
-        ref={useForkedRefs(ref, element, dragPreview, dropRef)}
-        $id={$id}
         {...rest}
       />
     )

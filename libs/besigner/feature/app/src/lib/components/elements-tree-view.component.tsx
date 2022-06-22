@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  DndDragSourceTypeFlag,
-  DndDropLinealTypeFlag,
-} from '@aglyn/besigner-data-app'
+import { DndDragType, DndDropType } from '@aglyn/besigner-data-app'
 import {
   CANVAS_ROOT_ELEMENT_ID,
   type ElementId,
@@ -198,14 +195,8 @@ const DraggableTreeItemComponent = forwardRef<
 >((props, ref) => {
   const { $id, ...rest } = props
   const elemRef = useRef<Element>(null)
-  const [, dragHandle, dragPreview] = useLeafDrag(
-    $id,
-    DndDragSourceTypeFlag.TREE_ELEMENT,
-  )
-  const [, dropRef] = useLeafDrop(
-    $id,
-    DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE,
-  )
+  const [, dragHandle, dragPreview] = useLeafDrag($id, DndDragType.TREE_ELEMENT)
+  const [, dropRef] = useLeafDrop($id, DndDropType.INSIDE)
 
   return (
     <ElementsTreeItemComponent

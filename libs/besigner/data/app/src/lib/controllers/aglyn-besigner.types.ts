@@ -32,8 +32,8 @@ import type {
   BesignerDeviceFlag,
   BesignerPanelTabFlag,
   BesignerPanelViewFlag,
-  DndDragSourceTypeFlag,
-  DndDropLinealTypeFlag,
+  DndDragType,
+  DndDropType,
   InteractionModeFlag,
 } from '../constants/besigner'
 import type {
@@ -77,8 +77,8 @@ export type BesignerContext = {
     panelBottom?: BesignerPanelItem
   }
   dnd: {
-    active?: BesignerDndElementBaseData<DndDragSourceTypeFlag>
-    over?: BesignerDndElementBaseData<DndDropLinealTypeFlag>
+    active?: BesignerDndElementBaseData<DndDragType>
+    over?: BesignerDndElementBaseData<DndDropType>
   }
 }
 export type BesignerFlagsState = BesignerContext['flags']
@@ -109,9 +109,7 @@ export type BesignerPanelItem = {
   toggled?: boolean
   tab?: BesignerPanelTabFlag
 }
-export type BesignerDndElementBaseData<
-  T extends DndDragSourceTypeFlag | DndDropLinealTypeFlag,
-> = {
+export type BesignerDndElementBaseData<T extends DndDragType | DndDropType> = {
   $id: ElementId
   type?: T
   componentId?: ComponentId

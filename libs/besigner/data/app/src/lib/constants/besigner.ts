@@ -35,23 +35,16 @@ export enum BesignerPanelTabFlag {
   ELEMENT_STYLES = 0x5,
 }
 
-export enum DndDragSourceTypeFlag {
+export enum DndDragType {
   CANVAS_ELEMENT = 'canvas',
   COMPONENT_TEMPLATE = 'template',
   TREE_ELEMENT = 'tree',
 }
 
-console.log(
-  'DndDragSourceTypeFlag',
-  DndDragSourceTypeFlag,
-  typeof DndDragSourceTypeFlag,
-  Object.values(DndDragSourceTypeFlag),
-)
-
-export enum DndDropLinealTypeFlag {
-  ACTIVITY_ELEMENT_BEFORE = 0x1,
-  ACTIVITY_ELEMENT_INSIDE = 0x2,
-  ACTIVITY_ELEMENT_AFTER = 0x3,
+export enum DndDropType {
+  BEFORE = 0x1,
+  INSIDE = 0x2,
+  AFTER = 0x3,
 }
 
 export enum BesignerDeviceFlag {

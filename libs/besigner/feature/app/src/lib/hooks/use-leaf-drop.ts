@@ -18,8 +18,8 @@
 import {
   BesignerDraggableItem,
   BesignerDroppableItem,
-  DndDragSourceTypeFlag,
-  DndDropLinealTypeFlag,
+  DndDragType,
+  DndDropType,
 } from '@aglyn/besigner-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
 import {
@@ -27,7 +27,11 @@ import {
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import { type DropTargetMonitor, useDrop } from 'react-dnd'
+import {
+  type ConnectDropTarget,
+  type DropTargetMonitor,
+  useDrop,
+} from 'react-dnd'
 import { useAglynCanvasSetHovered } from './use-aglyn-canvas-hovered'
 import { useAglynDndSetOver } from './use-aglyn-dnd-over'
 
@@ -40,8 +44,11 @@ export type DropCollected = {
   isDragging?: boolean
 }
 
-export const useLeafDrop = ($id: ElementId, type?: DndDropLinealTypeFlag) => {
-  const dropType = type ?? DndDropLinealTypeFlag.ACTIVITY_ELEMENT_INSIDE
+export const useLeafDrop = (
+  $id: ElementId,
+  type?: DndDropType,
+): [DropCollected, ConnectDropTarget] => {
+  const dropType = type ?? DndDropType.INSIDE
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
   const componentSchema = useAglynComponentSchema(componentId, bundleId)
@@ -60,7 +67,7 @@ export const useLeafDrop = ($id: ElementId, type?: DndDropLinealTypeFlag) => {
 
   return useDrop<BesignerDraggableItem, BesignerDroppableItem, DropCollected>(
     () => ({
-      accept: Object.values(DndDragSourceTypeFlag),
+      accept: Object.values(DndDragType),
       canDrop: (dragItem, monitor) => {
         const isOverDragItem = trail.indexOf(dragItem?.$id) >= 0
         const isOverSelf = monitor.isOver({ shallow: true })

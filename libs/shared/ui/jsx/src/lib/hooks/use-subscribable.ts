@@ -34,9 +34,8 @@ export interface Observable<T> {
 }
 
 export function useSubscribable<T>(
-  subscribable: SubscribableLike<T>,
+  $subscribable: SubscribableLike<T>,
 ): T | undefined
-
 export function useSubscribable<
   T,
   U = any,
@@ -45,12 +44,11 @@ export function useSubscribable<
     U | T | undefined
   >,
 >(
-  subscribable: SubscribableLike<U>,
+  $subscribable: SubscribableLike<U>,
   initialValue: U | T,
   mapValue?: M,
   dependencies?: DependencyList,
 ): U | T
-
 export function useSubscribable<
   T,
   U = any,
@@ -59,18 +57,19 @@ export function useSubscribable<
     U | T | undefined
   >,
 >(
-  subscribable: SubscribableLike<U>,
+  $subscribable: SubscribableLike<U>,
   initialValue?: U | T,
   mapValue?: M,
   dependencies: DependencyList = [],
 ): U | T | undefined {
   const [value, update] = useState<T | U | undefined>(() => initialValue)
+  const _dependencies = [...(dependencies || [])]
 
   const mapUpdate = useCallback((newValue, prevValue) => {
     if (_isFnT(mapValue)) return mapValue(newValue, prevValue as T) as T
     return newValue as U
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies)
+  }, _dependencies)
 
   useEffect(() => {
     function handleChange(newValue) {
@@ -81,16 +80,10 @@ export function useSubscribable<
       })
     }
 
-    const $subscribable: SubscribableLike<U> = subscribable
-    if (!$subscribable) return
-
-    if (typeof subscribable?.pipe === 'function') {
-      // $subscribable = $subscribable?.pipe(distinctUntilChanged(isEqual))
-    }
     const subscriber: RxJsUnsubscribable =
       $subscribable?.subscribe(handleChange)
     return () => subscriber?.unsubscribe?.()
-  }, [subscribable, mapUpdate])
+  }, [$subscribable, mapUpdate])
 
   return value
 }
