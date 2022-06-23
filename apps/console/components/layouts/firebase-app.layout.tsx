@@ -42,7 +42,6 @@ import {
   getFirestore,
 } from 'firebase/firestore'
 import { useRouter } from 'next/router'
-import type { ReactNode } from 'react'
 import { useEffect } from 'react'
 import {
   AnalyticsProvider,
@@ -191,7 +190,7 @@ function GetInnerLayout({ children }) {
 }
 
 export interface FirebaseAppLayoutProps {
-  children?: ReactNode
+  children?: JSX.Node
 }
 
 function FirebaseAppLayout(props: FirebaseAppLayoutProps) {

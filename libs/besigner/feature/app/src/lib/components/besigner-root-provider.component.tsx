@@ -27,7 +27,7 @@ import {
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { NoSsr } from '@mui/material'
-import { type ComponentType, Fragment, type ReactNode } from 'react'
+import { type ComponentType, Fragment } from 'react'
 import ComponentsDrawerContextProvider from '../contexts/components-drawer-context.provider'
 import RenderedCanvasElementsProvider from '../contexts/rendered-canvas-elements'
 import BesignerDndContext from './besigner-dnd-context.component'
@@ -36,7 +36,7 @@ export interface BesignerComponentProps {
   noSsr?: boolean
   appName?: AppUUN
   canvasElements?: CanvasSetElementsPayload
-  children?: ReactNode
+  children?: JSX.Node
 }
 
 export const withBesignerContext = <P,>(Component: ComponentType<P>) => {

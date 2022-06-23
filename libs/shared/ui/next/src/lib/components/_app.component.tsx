@@ -15,31 +15,77 @@
  * limitations under the License.
  */
 
-import {HAS_DOCUMENT} from '@aglyn/shared-data-enums'
-import type {JSXElementType} from '@aglyn/shared-data-types'
-import type {MakeLinkElementsConfig, MakeMetaElementsConfig} from '@aglyn/shared-ui-jsx'
-import {makeLinkElements, makeMetaElements} from '@aglyn/shared-ui-jsx'
-import {arraySafe} from '@aglyn/shared-util-tools'
+import { HAS_DOCUMENT } from '@aglyn/shared-data-enums'
+import type { JSXElementType } from '@aglyn/shared-data-types'
+import type {
+  MakeLinkElementsConfig,
+  MakeMetaElementsConfig,
+} from '@aglyn/shared-ui-jsx'
+import {
+  type EmotionCacheProps,
+  EmotionCacheProvider,
+  makeLinkElements,
+  makeMetaElements,
+} from '@aglyn/shared-ui-jsx'
+import { arraySafe } from '@aglyn/shared-util-tools'
 import Head from 'next/head'
-import {Fragment, type ReactNode, useEffect, useMemo} from 'react'
+import { Fragment, useEffect, useMemo } from 'react'
 import NextPageTitleProvider from '../contexts/next-page-title-provider'
-import NextEmotionAppComponent, {
-  type NextEmotionAppComponentProps,
-} from './next-emotion-app.component'
 import NextPageDecoratedLayoutComponent, {
   type NextPageDecoratedLayoutComponentProps,
 } from './next-page-decorated-layout.component'
 
+export type _AppProps<Props, InitialProps> =
+  NextPageDecoratedLayoutComponentProps<Props, InitialProps> &
+    EmotionCacheProps & {
+      children?: JSX.Node
+      headChildren?: JSX.Node
+      linkElements?: MakeLinkElementsConfig
+      MainComponent?: JSXElementType<{ children?: JSX.Node }>
+      metaElements?: MakeMetaElementsConfig
+    }
 
-export interface _AppProps<Props, InitialProps> extends NextPageDecoratedLayoutComponentProps<Props, InitialProps>, NextEmotionAppComponentProps {
-  children?: ReactNode
-  headChildren?: ReactNode
-  linkElements?: MakeLinkElementsConfig
-  MainComponent?: JSXElementType<{children?: ReactNode}>
-  metaElements?: MakeMetaElementsConfig
-}
-
-function _AppComponent<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
+/**
+ * Next.js custom _app.jsx with cached emotion styles
+ *
+ * App component manages mounting and hydration for the client app at the
+ * Next.JS app entry point, removes server styles additionally responsible for
+ * rendering every page Component
+ *
+ * # Resolution order
+ * __Server-side__
+ *
+ * 1. (if-exists) getInitialProps _app.tsx
+ * {@link _AppComponent.getInitialProps}
+ * 2. (if-exists) getInitialProps page {@link
+ * NextPageWithLayout.getInitialProps}
+ * 3. getInitialProps _document.tsx
+ * {@link _EmotionDocumentComponent.getInitialProps}
+ * 4. render _app.tsx {@link _AppComponent.render}
+ * 5. render page {@link NextPageWithLayout.render}
+ * 6. render _document.tsx {@link _EmotionDocumentComponent.render}
+ *
+ * __Server-side (w/ error)__
+ *
+ * 1. (if-exists) getInitialProps _document.tsx
+ * {@link _EmotionDocumentComponent.getInitialProps}
+ * 2. render _app.tsx {@link _AppComponent.render}
+ * 3. render page {@link NextPageWithLayout.render}
+ * 4. render _document.tsx {@link _EmotionDocumentComponent.render}
+ *
+ * __Client-side__
+ * 1. (if-exists) getInitialProps _app.tsx
+ * {@link _AppComponent.getInitialProps}
+ * 2. (if-exists) getInitialProps page {@link
+ * NextPageWithLayout.getInitialProps}
+ * 3. render _app.tsx {@link _AppComponent.render}
+ * 4. render page {@link NextPageWithLayout.render}
+ *
+ * @see {@link _EmotionDocumentComponent}
+ */
+function _AppComponent<Props, InitialProps>(
+  props: _AppProps<Props, InitialProps>,
+) {
   const {
     headChildren,
     metaElements,
@@ -68,7 +114,7 @@ function _AppComponent<Props, InitialProps>(props: _AppProps<Props, InitialProps
   }, [])
 
   return (
-    <NextEmotionAppComponent emotionCache={emotionCache}>
+    <EmotionCacheProvider emotionCache={emotionCache}>
       <NextPageTitleProvider>
         <Head>
           {makeMetaElements(metaElementsMemoed)}
@@ -79,7 +125,7 @@ function _AppComponent<Props, InitialProps>(props: _AppProps<Props, InitialProps
           <NextPageDecoratedLayoutComponent {...rest} />
         </MainComponent>
       </NextPageTitleProvider>
-    </NextEmotionAppComponent>
+    </EmotionCacheProvider>
   )
 }
 _AppComponent.displayName = '_AppComponent'
@@ -88,15 +134,11 @@ _AppComponent.defaultProps = {
   metaElements: [],
   linkElements: [],
   MainComponent: function MainComponent(props) {
-    const {children} = props
+    const { children } = props
 
-    return (
-      <Fragment>
-        {children}
-      </Fragment>
-    )
+    return <Fragment>{children}</Fragment>
   },
 }
 
-export {_AppComponent}
+export { _AppComponent }
 export default _AppComponent

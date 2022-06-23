@@ -16,13 +16,7 @@
  */
 
 import { AglynComponentsContext } from '@aglyn/core-feature-renderer'
-import {
-  type ElementType,
-  Fragment,
-  type ReactNode,
-  useCallback,
-  useState,
-} from 'react'
+import { type ElementType, Fragment, useCallback, useState } from 'react'
 import {
   ComponentsDrawerComponent,
   type ComponentsDrawerProps,
@@ -37,7 +31,7 @@ import {
 export interface ComponentsDrawerContextProviderProps
   extends Partial<ComponentsDrawerProps> {
   defaultOptions?: ElementDrawerOptions
-  children?: ReactNode
+  children?: JSX.Node
   component?: ElementType<ComponentsDrawerProps>
 }
 

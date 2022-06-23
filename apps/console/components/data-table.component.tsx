@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, mergeSxProps, styled } from '@aglyn/shared-ui-theme'
+import {
+  generateComponentClassKeys,
+  mergeSxProps,
+  styled,
+} from '@aglyn/shared-ui-theme'
 import {
   Box,
   type BoxProps,
@@ -28,7 +32,7 @@ import {
   GridOverlay,
   type GridOverlayProps,
 } from '@mui/x-data-grid'
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef } from 'react'
 
 const classKeys = generateComponentClassKeys('DataTableComponent', [
   'label',
@@ -69,7 +73,13 @@ const noRowsOverlay = (label: string) =>
   function NoRowsOverlay(props: GridOverlayProps) {
     return (
       <StyledGridOverlay>
-        <svg width="120" height="100" viewBox="0 0 184 152" aria-hidden focusable="false">
+        <svg
+          width="120"
+          height="100"
+          viewBox="0 0 184 152"
+          aria-hidden
+          focusable="false"
+        >
           <g fill="none" fillRule="evenodd">
             <g transform="translate(24 31.67)">
               <ellipse
@@ -96,7 +106,10 @@ const noRowsOverlay = (label: string) =>
               className={classKeys.antEmptyImg3}
               d="M149.121 33.292l-6.83 2.65a1 1 0 0 1-1.317-1.23l1.937-6.207c-2.589-2.944-4.109-6.534-4.109-10.408C138.802 8.102 148.92 0 161.402 0 173.881 0 184 8.102 184 18.097c0 9.995-10.118 18.097-22.599 18.097-4.528 0-8.744-1.066-12.28-2.902z"
             />
-            <g className={classKeys.antEmptyImg4} transform="translate(149.65 15.383)">
+            <g
+              className={classKeys.antEmptyImg4}
+              transform="translate(149.65 15.383)"
+            >
               <ellipse cx="20.654" cy="3.167" rx="2.849" ry="2.815" />
               <path d="M5.698 5.63H0L2.898.704zM9.259.704h4.985V5.63H9.259z" />
             </g>
@@ -128,63 +141,62 @@ export interface DataTableProps extends Partial<MuiDataGridProps> {
   RootBoxProps?: Partial<BoxProps>
   LoadingOverlayViewProps?: LoadingOverlayViewProps
   noRowsLabel?: string
-  children?: ReactNode
+  children?: JSX.Node
 }
 
-const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(function RefRenderFn(
-  props,
-  ref
-) {
-  const {
-    rows = [],
-    columns = [],
-    loading,
-    RootBoxProps,
-    noRowsLabel,
-    LoadingOverlayViewProps,
-    children,
-    sx,
-    components,
-    ...rest
-  } = props
-  return (
-    <Box
-      ref={ref}
-      sx={mergeSxProps(
-        {
-          height: 400,
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          '& .MuiDataGrid-root': {
-            border: 'none',
-            '& .MuiDataGrid-cell': {
-              '&:focus': {
-                outline: 'none',
+const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      rows = [],
+      columns = [],
+      loading,
+      RootBoxProps,
+      noRowsLabel,
+      LoadingOverlayViewProps,
+      children,
+      sx,
+      components,
+      ...rest
+    } = props
+    return (
+      <Box
+        ref={ref}
+        sx={mergeSxProps(
+          {
+            height: 400,
+            width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            '& .MuiDataGrid-root': {
+              border: 'none',
+              '& .MuiDataGrid-cell': {
+                '&:focus': {
+                  outline: 'none',
+                },
               },
             },
           },
-        },
-        sx
-      )}
-      {...RootBoxProps}
-    >
-      <DataGrid
-        sx={{ flexGrow: 1 }}
-        rows={rows}
-        columns={columns}
-        loading={loading}
-        components={{
-          NoRowsOverlay: noRowsOverlay(noRowsLabel),
-          LoadingOverlay: AppLoaderOverlayView(LoadingOverlayViewProps),
-          ...components,
-        }}
-        {...rest}
-      />
-      {children}
-    </Box>
-  )
-})
+          sx,
+        )}
+        {...RootBoxProps}
+      >
+        <DataGrid
+          sx={{ flexGrow: 1 }}
+          rows={rows}
+          columns={columns}
+          loading={loading}
+          components={{
+            NoRowsOverlay: noRowsOverlay(noRowsLabel),
+            LoadingOverlay: AppLoaderOverlayView(LoadingOverlayViewProps),
+            ...components,
+          }}
+          {...rest}
+        />
+        {children}
+      </Box>
+    )
+  },
+)
 
 DataTableComponent.displayName = 'DataTableComponent'
 DataTableComponent.aglyn = true

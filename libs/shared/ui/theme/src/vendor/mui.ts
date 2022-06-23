@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-import type {OverridableComponent} from '@mui/material/OverridableComponent'
-import type {Theme} from '@mui/material/styles'
+import type { OverridableComponent } from '@mui/material/OverridableComponent'
+import type { Theme as MuiTheme } from '@mui/material/styles'
 // eslint-disable-next-line no-restricted-imports
-import type {CSSProperties} from '@mui/material/styles/createMixins'
+import type { CSSProperties } from '@mui/material/styles/createMixins'
 // eslint-disable-next-line no-restricted-imports
-import type {Shadows} from '@mui/material/styles/shadows'
+import type { Shadows } from '@mui/material/styles/shadows'
 // import type { WithStyles } from '@mui/styles'
 // import type { ClassKeyInferable } from '@mui/styles/withStyles'
 import * as React from 'react'
-import type {ColorPropOverrides, IActionStates} from '../lib/theme.types'
+import type { ColorPropOverrides, IActionStates } from '../lib/theme.types'
 // import type {ContainerTypeMap} from '@mui/material/Container'
 
 //    _____     _______ ____  ____  ___ ____  _____ ____
@@ -47,7 +47,8 @@ declare module '@mui/material/Container' {
   }
 
   // eslint-disable-next-line @typescript-eslint/ban-types
-  interface ContainerTypeMap<P = {}, D extends React.ElementType = 'div'> extends VariantProps {
+  interface ContainerTypeMap<P = {}, D extends React.ElementType = 'div'>
+    extends VariantProps {
     props: P & ContainerTypeMap['props']
     defaultComponent: D
   }
@@ -173,6 +174,13 @@ declare module '@mui/material/styles' {
     shadowsInset: Shadows
   }
 
+  interface Theme {
+    vars: Omit<
+      Theme,
+      'typography' | 'mixins' | 'breakpoints' | 'direction' | 'transitions'
+    >
+  }
+
   interface DefaultTheme extends Theme {}
 
   // type ExtendPropsOfWithStyles<
@@ -183,7 +191,7 @@ declare module '@mui/material/styles' {
 }
 
 declare module '@mui/styles' {
-  interface DefaultTheme extends Theme {}
+  interface DefaultTheme extends MuiTheme {}
 }
 
 //   _______  ______   ___  ____ _____ ____
@@ -192,20 +200,19 @@ declare module '@mui/styles' {
 //  | |___ /  \|  __/| |_| |  _ < | |  ___) |
 //  |_____/_/\_\_|    \___/|_| \_\|_| |____/
 
-export {type Overwrite} from '@mui/types'
+export type { Overwrite } from '@mui/types'
 
 export {
   type ShapeOptions,
   type Spacing,
   type SpacingOptions,
-  type MuiStyledOptions as StyledOptions,
   type MuiStyledOptions,
   type SxProps,
   type BoxProps,
 } from '@mui/system'
 
-export {darkScrollbar} from '@mui/material'
-export {visuallyHidden} from '@mui/utils'
+export { darkScrollbar } from '@mui/material'
+export { visuallyHidden } from '@mui/utils'
 
 export {
   type Breakpoint,
@@ -262,6 +269,7 @@ export {
   useTheme,
   useThemeProps,
   experimental_sx as sx,
+  getInitColorSchemeScript,
 } from '@mui/material/styles'
 
 // eslint-disable-next-line no-restricted-imports
@@ -273,15 +281,15 @@ export {
 } from '@mui/material/styles/createPalette'
 
 // eslint-disable-next-line no-restricted-imports
-export {type TypographyOptions} from '@mui/material/styles/createTypography'
+export { type TypographyOptions } from '@mui/material/styles/createTypography'
 
 // eslint-disable-next-line no-restricted-imports
-export {type Shadows} from '@mui/material/styles/shadows'
+export { type Shadows } from '@mui/material/styles/shadows'
 
 // export { type ClassKeyInferable, type CreateCSSProperties } from '@mui/styles/withStyles'
 
 // eslint-disable-next-line no-restricted-imports
-export {type Shape} from '@mui/system/createTheme/shape'
+export { type Shape } from '@mui/system/createTheme/shape'
 
 export {
   type BaseCreateCSSProperties,

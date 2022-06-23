@@ -15,7 +15,52 @@
  * limitations under the License.
  */
 
-import { createTheme, responsiveFontSizes, type Theme, type ThemeOptions } from '../../vendor/mui'
+import {
+  createTheme,
+  darken,
+  getContrastRatio,
+  lighten,
+  responsiveFontSizes,
+  type Theme,
+  type ThemeOptions,
+} from '../../vendor/mui'
+
+enum ContrastText {
+  LIGHT = 'rgba(0, 0, 0, 0.87)',
+  DARK = '#FFFFFF',
+}
+
+function getContrastTextColor(background, contrastThreshold) {
+  return getContrastRatio(background, ContrastText.DARK) >= contrastThreshold ??
+    3
+    ? ContrastText.DARK
+    : ContrastText.LIGHT
+}
+function addShade(paletteColor, shade, variant, tonalOffset) {
+  const tonalOffsetLight = tonalOffset['light'] || (tonalOffset ?? 0.2)
+  const tonalOffsetDark = tonalOffset['dark'] || (tonalOffset ?? 0.2) * 1.5
+
+  if (!paletteColor[shade]) {
+    // eslint-disable-next-line no-prototype-builtins
+    if (paletteColor.hasOwnProperty(variant)) {
+      paletteColor[shade] = paletteColor[variant]
+    } else if (shade === 'light') {
+      paletteColor.light = lighten(paletteColor.main, tonalOffsetLight)
+    } else if (shade === 'dark') {
+      paletteColor.dark = darken(paletteColor.main, tonalOffsetDark)
+    } else if (shade === 'contrastText') {
+      paletteColor.contrastText = getContrastTextColor(
+        paletteColor.main,
+        tonalOffsetDark,
+      )
+    }
+  }
+}
+function addShadeVariants(paletteColor, tonalOffset?) {
+  addShade(paletteColor, 'dark', undefined, tonalOffset)
+  addShade(paletteColor, 'light', undefined, tonalOffset)
+  addShade(paletteColor, 'contrastText', undefined, tonalOffset)
+}
 
 export type CreateResponsiveThemeOptions = {
   themeOptions?: ThemeOptions
@@ -68,11 +113,15 @@ export type CreateResponsiveThemeOptions = {
  * @param {ThemeOptions} options
  * @returns {Theme}
  */
-export function createResponsiveTheme(options: CreateResponsiveThemeOptions): Theme {
+export function createResponsiveTheme(
+  options: CreateResponsiveThemeOptions,
+): Theme {
   const { themeOptions, responsiveFontSizesOptions } = options
   let theme = createTheme(themeOptions)
+  addShadeVariants(theme.palette.tertiary, theme.palette.tonalOffset)
+  addShadeVariants(theme.palette.quaternary, theme.palette.tonalOffset)
 
-  theme = responsiveFontSizes(theme, {
+  theme = responsiveFontSizes(createTheme(theme), {
     // Override to include `xs` and `xl` - default: ['sm', 'md', 'lg']
     breakpoints: ['xs', 'sm', 'md', 'lg', 'xl'],
     ...responsiveFontSizesOptions,

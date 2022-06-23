@@ -19,7 +19,6 @@ import type { ElementId } from '@aglyn/core-data-foundation'
 import {
   createContext,
   type MutableRefObject,
-  type ReactNode,
   useContext,
   useRef,
   useState,
@@ -53,7 +52,7 @@ export const useRenderedCanvasElements = () => {
 }
 
 export interface RenderedCanvasElementsProps {
-  children?: ReactNode
+  children?: JSX.Node
 }
 
 function RenderedCanvasElementsProvider(props: RenderedCanvasElementsProps) {

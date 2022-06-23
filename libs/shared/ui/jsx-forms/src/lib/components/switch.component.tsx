@@ -29,7 +29,7 @@ import {
   Switch as MuiSwitch,
   type SwitchProps as MuiSwitchProps,
 } from '@mui/material'
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef } from 'react'
 import { validationMessage } from '../utils/validation-message'
 import {
   useFieldApi,
@@ -42,12 +42,12 @@ export interface SwitchProps extends SwitchBaseProps {
   isReadOnly?: boolean
   isDisabled?: boolean
   isRequired?: boolean
-  label?: ReactNode
-  helperText?: ReactNode
-  description?: ReactNode
+  label?: JSX.Node
+  helperText?: JSX.Node
+  description?: JSX.Node
   validateOnMount?: boolean
-  onText?: ReactNode
-  offText?: ReactNode
+  onText?: JSX.Node
+  offText?: JSX.Node
   FormControlProps?: MuiFormControlProps
   FormGroupProps?: MuiFormGroupProps
   FormControlLabelProps?: MuiFormControlLabelProps

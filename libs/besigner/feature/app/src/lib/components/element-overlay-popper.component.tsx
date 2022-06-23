@@ -268,7 +268,7 @@ const ElementOverlayPopperComponent = forwardRef<
                             pointerEvents: 'none',
                             ml: '-2px',
                             mb: '1px',
-                            bgcolor: 'secondary.dark',
+                            bgcolor: 'secondary.main',
                             color: 'secondary.contrastText',
                             px: 0.5,
                             py: 0.35,
@@ -287,7 +287,7 @@ const ElementOverlayPopperComponent = forwardRef<
                             textOverflow={'ellipsis'}
                             overflow={'hidden'}
                             whiteSpace={'nowrap'}
-                            lineHeight={1}
+                            // lineHeight={1}
                             letterSpacing={-0.25}
                             fontSize={11}
                           />

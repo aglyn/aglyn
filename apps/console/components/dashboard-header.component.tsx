@@ -20,23 +20,24 @@ import {
   type BackgroundImageComponentProps,
   ContainerComponent,
 } from '@aglyn/shared-ui-jsx'
-import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {mergeSxProps} from '@aglyn/shared-ui-theme'
-import {Grid, Typography, type TypographyProps} from '@mui/material'
-import {type ReactNode, useMemo} from 'react'
-import {isElement} from 'react-is'
-import BreadcrumbsComponent, {type BreadcrumbsProps} from '../components/breadcrumbs.component'
-import {CONTENT_MAX_WIDTH} from '../constants/shared'
+import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import { Grid, Typography, type TypographyProps } from '@mui/material'
+import { isElement } from 'react-is'
+import BreadcrumbsComponent, {
+  type BreadcrumbsProps,
+} from '../components/breadcrumbs.component'
+import { CONTENT_MAX_WIDTH } from '../constants/shared'
 
-
-export interface DashboardHeaderProps extends Partial<BackgroundImageComponentProps> {
-  children?: ReactNode
+export interface DashboardHeaderProps
+  extends Partial<BackgroundImageComponentProps> {
+  children?: JSX.Node
   breadcrumbItems?: BreadcrumbsProps['items']
   disableBreadcrumbs?: true
   header?: TypographyProps<any, any> & {
-    icon?: MdiIconProps | ReactNode
+    icon?: MdiIconProps | JSX.Node
   }
-  headerRight?: ReactNode
+  headerRight?: JSX.Node
 }
 
 function DashboardHeaderComponent(props: DashboardHeaderProps) {
@@ -49,7 +50,12 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
     ...rest
   } = props
 
-  const {children: headerChildren, sx: headerSx, icon: headerIcon, ...header} = headerProp || {}
+  const {
+    children: headerChildren,
+    sx: headerSx,
+    icon: headerIcon,
+    ...header
+  } = headerProp || {}
 
   const breadcrumbs = useMemo(() => {
     return Array.isArray(breadcrumbItems) ? breadcrumbItems : []
@@ -110,7 +116,8 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
                         borderColor: 'tertiary.dark',
                         color: 'quaternary.contrastText',
                         bgcolor: 'quaternary.main',
-                        borderRadius: (theme) => `${theme.shape.appIconBorderRadius}`,
+                        borderRadius: (theme) =>
+                          `${theme.shape.appIconBorderRadius}`,
                       },
                       headerIcon['sx'],
                     )}
@@ -153,5 +160,5 @@ DashboardHeaderComponent.defaultProps = {
   disableDefaultBreadcrumb: false,
 }
 
-export {DashboardHeaderComponent}
+export { DashboardHeaderComponent }
 export default DashboardHeaderComponent

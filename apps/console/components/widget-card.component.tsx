@@ -28,7 +28,7 @@ import {
   type CardProps,
 } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef } from 'react'
 
 const classKeys = generateComponentClassKeys('AglynWidgetCard', [
   'contentGutterX',
@@ -89,9 +89,9 @@ export interface WidgetCardProps extends CardProps {
   contentGutterY?: boolean
   contentBordered?: boolean
   headerCentered?: boolean
-  header?: ReactNode
+  header?: JSX.Node
   actions?: CardActionsProps
-  lastChildren?: ReactNode
+  lastChildren?: JSX.Node
   HeaderProps?: CardHeaderProps
   ContentProps?: CardContentProps
   ActionProps?: CardActionsProps

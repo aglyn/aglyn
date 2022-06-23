@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {ReactNode, Ref, useEffect, useState, useCallback} from 'react'
-
+import { ReactNode, Ref, useCallback, useEffect, useState } from 'react'
 
 /**
  * Use a React Node property value from the passed property key
@@ -26,12 +25,13 @@ import {ReactNode, Ref, useEffect, useState, useCallback} from 'react'
  *
  * @param key {any} The property key
  * @param initialState {any} Initial property value
- * @return {[string, React.Ref<T>, React.ReactNode, ((newPropertyName: U) => void)]}
+ * @return {[string, React.Ref<T>, React.ReactNode, ((newPropertyName: U) =>
+ *   void)]}
  */
 export function useNodeProperty<U, T>(
   key: U,
   initialState = null,
-): [any, Ref<T>, ReactNode, (setNewKey: U) => void] {
+): [any, Ref<T>, JSX.Node, (setNewKey: U) => void] {
   const [keyName, setNewKey] = useState(key)
   const [value, setPropertyValue] = useState(initialState)
   const [node, setNode] = useState(null)

@@ -16,23 +16,29 @@
  */
 
 /**
- * Part of the following typing and documentation is from material-ui/src/Snackbar/Snackbar.d.ts
+ * Part of the following typing and documentation is from
+ * material-ui/src/Snackbar/Snackbar.d.ts
  */
-import type {ClickAwayListenerProps, SnackbarClassKey, StandardProps} from '@mui/material'
-import {TransitionProps} from '@mui/material/transitions'
+import type {
+  ClickAwayListenerProps,
+  SnackbarClassKey,
+  StandardProps,
+} from '@mui/material'
+import { TransitionProps } from '@mui/material/transitions'
 import type {
   AriaAttributes,
   ComponentType,
   HTMLAttributes,
-  ReactNode,
   Ref,
   SyntheticEvent,
 } from 'react'
 import type SnackbarProvider from './SnackbarProvider'
 
-
 export type RequiredBy<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
-export type ClassNameMap<ClassKey extends string = string> = Record<ClassKey, string>
+export type ClassNameMap<ClassKey extends string = string> = Record<
+  ClassKey,
+  string
+>
 type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>
 type Modify<T, R> = Pick<T, Exclude<keyof T, keyof R>> & R
 
@@ -40,13 +46,11 @@ export type SnackbarId = string | number
 export type VariantType = 'default' | 'error' | 'success' | 'warning' | 'info'
 export type CloseReason = 'timeout' | 'clickaway' | 'maxsnack' | 'instructed'
 
-export type SnackbarMessage = string | ReactNode
-export type SnackbarAction = ReactNode | ((snackbarId: SnackbarId) => ReactNode)
-export type SnackbarContentCallback = ReactNode | ((
-  snackbarId: SnackbarId,
-  message: SnackbarMessage,
-) => ReactNode)
-
+export type SnackbarMessage = string | JSX.Node
+export type SnackbarAction = JSX.Node | ((snackbarId: SnackbarId) => JSX.Node)
+export type SnackbarContentCallback =
+  | JSX.Node
+  | ((snackbarId: SnackbarId, message: SnackbarMessage) => JSX.Node)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TransitionCloseHandler = (
@@ -59,7 +63,10 @@ export type TransitionEnterHandler = (
   isAppearing: boolean,
   snackbarId: SnackbarId,
 ) => void
-export type TransitionHandler = (node: HTMLElement, snackbarId: SnackbarId) => void
+export type TransitionHandler = (
+  node: HTMLElement,
+  snackbarId: SnackbarId,
+) => void
 
 export type ContainerClassKey =
   | 'containerRoot'
@@ -70,8 +77,15 @@ export type ContainerClassKey =
   | 'containerAnchorOriginTopLeft'
   | 'containerAnchorOriginBottomLeft'
 
-export type VariantClassKey = 'variantSuccess' | 'variantError' | 'variantInfo' | 'variantWarning'
-export type CombinedClassKey = VariantClassKey | ContainerClassKey | SnackbarClassKey
+export type VariantClassKey =
+  | 'variantSuccess'
+  | 'variantError'
+  | 'variantInfo'
+  | 'variantWarning'
+export type CombinedClassKey =
+  | VariantClassKey
+  | ContainerClassKey
+  | SnackbarClassKey
 
 export interface SnackbarOrigin {
   vertical: 'top' | 'bottom'
@@ -82,23 +96,23 @@ export interface IconVariant {
   /**
    * Icon displayed when variant of a snackbar is set to `default`.
    */
-  default: ReactNode
+  default: JSX.Node
   /**
    * Icon displayed when variant of a snackbar is set to `error`.
    */
-  error: ReactNode
+  error: JSX.Node
   /**
    * Icon displayed when variant of a snackbar is set to `success`.
    */
-  success: ReactNode
+  success: JSX.Node
   /**
    * Icon displayed when variant of a snackbar is set to `warning`.
    */
-  warning: ReactNode
+  warning: JSX.Node
   /**
    * Icon displayed when variant of a snackbar is set to `info`.
    */
-  info: ReactNode
+  info: JSX.Node
 }
 
 /**
@@ -107,14 +121,17 @@ export interface IconVariant {
 export interface TransitionHandlerProps {
   /**
    * Callback fired before snackbar requests to get closed.
-   * The `reason` parameter can optionally be used to control the response to `onClose`.
+   * The `reason` parameter can optionally be used to control the response to
+   * `onClose`.
    *
    * @param {object} event The event source of the callback
-   * @param {string} reason Can be:`"timeout"` (`autoHideDuration` expired) or: `"clickaway"`
-   *  or: `"maxsnack"` (snackbar was closed because `maxSnack` has reached) or: `"instructed"`
+   * @param {string} reason Can be:`"timeout"` (`autoHideDuration` expired) or:
+   *   `"clickaway"` or: `"maxsnack"` (snackbar was closed because `maxSnack`
+   *   has reached) or: `"instructed"`
    * (snackbar was closed programmatically)
-   * @param {string|number|undefined} snackbarId ID of a Snackbar. snackbarId will be `undefined` if
-   *   closeSnackbar is called with no snackbarId (user requested all the snackbars to be closed)
+   * @param {string|number|undefined} snackbarId ID of a Snackbar. snackbarId
+   *   will be `undefined` if closeSnackbar is called with no snackbarId (user
+   *   requested all the snackbars to be closed)
    */
   onClose: TransitionCloseHandler
   /**
@@ -151,7 +168,8 @@ export type WithSnackbarProps = ProviderContext
 /**
  * @category Shared
  */
-export interface SnackbarProps extends StandardProps<HTMLAttributes<HTMLDivElement>, SnackbarClassKey> {
+export interface SnackbarProps
+  extends StandardProps<HTMLAttributes<HTMLDivElement>, SnackbarClassKey> {
   /**
    * The anchor of the `Snackbar`.
    * @default { horizontal: left, vertical: bottom }
@@ -159,9 +177,10 @@ export interface SnackbarProps extends StandardProps<HTMLAttributes<HTMLDivEleme
   anchorOrigin?: SnackbarOrigin
   /**
    * The number of milliseconds to wait before automatically calling the
-   * `onClose` function. By default snackbars get closed after 5000 milliseconds.
-   * Set autoHideDuration to 'null' if you don't want snackbars to automatically close.
-   * Alternatively pass `persist: true` in the options parameter of enqueueSnackbar.
+   * `onClose` function. By default snackbars get closed after 5000
+   * milliseconds. Set autoHideDuration to 'null' if you don't want snackbars
+   * to automatically close. Alternatively pass `persist: true` in the options
+   * parameter of enqueueSnackbar.
    * @default 5000
    */
   autoHideDuration?: number | null
@@ -175,15 +194,16 @@ export interface SnackbarProps extends StandardProps<HTMLAttributes<HTMLDivEleme
    */
   ariaAttributes?: AriaAttributes
   /**
-   * If `true`, the `autoHideDuration` timer will expire even if the window is not focused.
+   * If `true`, the `autoHideDuration` timer will expire even if the window is
+   * not focused.
    * @default false
    */
   disableWindowBlurListener?: boolean
   /**
-   * The number of milliseconds to wait before dismissing after user interaction.
-   * If `autoHideDuration` property isn't specified, it does nothing.
-   * If `autoHideDuration` property is specified but `resumeHideDuration` isn't,
-   * we use the default value.
+   * The number of milliseconds to wait before dismissing after user
+   * interaction. If `autoHideDuration` property isn't specified, it does
+   * nothing. If `autoHideDuration` property is specified but
+   * `resumeHideDuration` isn't, we use the default value.
    * @default autoHideDuration / 2 ms.
    */
   resumeHideDuration?: number
@@ -200,7 +220,7 @@ export interface SnackbarProps extends StandardProps<HTMLAttributes<HTMLDivEleme
    * ```
    * @default { enter: 225, exit: 195 }
    */
-  transitionDuration?: {appear?: number, enter?: number, exit?: number}
+  transitionDuration?: { appear?: number; enter?: number; exit?: number }
   /**
    * Properties applied to Transition component (e.g. Slide, Grow, Zoom, etc.)
    */
@@ -210,10 +230,13 @@ export interface SnackbarProps extends StandardProps<HTMLAttributes<HTMLDivEleme
 /**
  * @category Shared
  */
-export interface SharedProps extends Omit<SnackbarProps, 'classes'>, Partial<TransitionHandlerProps> {
+export interface SharedProps
+  extends Omit<SnackbarProps, 'classes'>,
+    Partial<TransitionHandlerProps> {
   /**
-   * Used to easily display different variant of snackbars. When passed to `SnackbarProvider`
-   * all snackbars inherit the `variant`, unless you override it in `enqueueSnackbar` options.
+   * Used to easily display different variant of snackbars. When passed to
+   * `SnackbarProvider` all snackbars inherit the `variant`, unless you
+   * override it in `enqueueSnackbar` options.
    * @default default
    */
   variant?: VariantType
@@ -223,12 +246,14 @@ export interface SharedProps extends Omit<SnackbarProps, 'classes'>, Partial<Tra
    */
   allowDuplicate?: boolean
   /**
-   * Replace the snackbar. Callback used for displaying entirely customized snackbar.
+   * Replace the snackbar. Callback used for displaying entirely customized
+   * snackbar.
    * @param {string|number} snackbarId ID of a snackbar
    */
   content?: SnackbarContentCallback
   /**
-   * Callback used for getting action(s). actions are mostly buttons displayed in Snackbar.
+   * Callback used for getting action(s). actions are mostly buttons displayed
+   * in Snackbar.
    * @param {string|number} snackbarId ID of a snackbar
    */
   action?: SnackbarAction
@@ -244,16 +269,16 @@ export interface OptionsObject extends SharedProps {
    */
   snackbarId?: SnackbarId
   /**
-   * Snackbar stays on the screen, unless it is dismissed (programmatically or through user
-   * interaction).
+   * Snackbar stays on the screen, unless it is dismissed (programmatically or
+   * through user interaction).
    * @default false
    */
   persist?: boolean
 }
 
 /**
- * All material-ui props, including class keys for notistack and material-ui with additional
- * notistack props
+ * All material-ui props, including class keys for notistack and material-ui
+ * with additional notistack props
  * @category Provider
  */
 export interface SnackbarProviderProps extends SharedProps {
@@ -261,7 +286,7 @@ export interface SnackbarProviderProps extends SharedProps {
    * Most of the time this is your App. every component from this point onward
    * will be able to show snackbars.
    */
-  children: ReactNode | ReactNode[]
+  children: JSX.Node | JSX.Node[]
   /**
    * Denser margins for snackbars. Recommended to be used on mobile devices.
    * @default false
@@ -282,7 +307,8 @@ export interface SnackbarProviderProps extends SharedProps {
    */
   domRoot?: HTMLElement
   /**
-   * Override or extend the styles applied to the container component or Snackbars.
+   * Override or extend the styles applied to the container component or
+   * Snackbars.
    */
   classes?: Partial<ClassNameMap<CombinedClassKey>>
   /**
@@ -297,6 +323,9 @@ export interface SnackbarProviderProps extends SharedProps {
 }
 
 export interface ProviderContext {
-  enqueueSnackbar: (message: SnackbarMessage, options?: OptionsObject) => SnackbarId
+  enqueueSnackbar: (
+    message: SnackbarMessage,
+    options?: OptionsObject,
+  ) => SnackbarId
   closeSnackbar: (snackbarId?: SnackbarId) => void
 }

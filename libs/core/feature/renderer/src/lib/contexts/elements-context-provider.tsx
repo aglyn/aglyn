@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-import type { ReactNode } from 'react'
 import { ElementsContext } from './elements-context'
 
 export interface ElementsContextProviderProps {
-  children?: ReactNode
+  children?: JSX.Node
   // addElement?: (payload: AddElementPayload) => void
 }
 

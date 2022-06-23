@@ -19,7 +19,6 @@ import {
   type ElementType,
   Fragment,
   type MouseEventHandler,
-  type ReactNode,
   useCallback,
   useMemo,
   useState,
@@ -32,10 +31,9 @@ import ConfirmationContext, {
 } from '../contexts/confirmation.context'
 import DialogConfirm from './dialog-confirm'
 
-
 export interface ConfirmationProviderComponentProps {
   defaultOptions?: ConfirmationContextConfig
-  children?: ReactNode
+  children?: JSX.Node
   component: ElementType<{
     open: boolean
     options: ConfirmationContextConfig
@@ -45,9 +43,14 @@ export interface ConfirmationProviderComponentProps {
   }>
 }
 
-export function ConfirmationProviderComponent(props: ConfirmationProviderComponentProps) {
-  const {children, defaultOptions = {}, component: Component} = props
-  const [options, setOptions] = useState({...DEFAULT_CONTEXT_CONFIG, ...defaultOptions})
+export function ConfirmationProviderComponent(
+  props: ConfirmationProviderComponentProps,
+) {
+  const { children, defaultOptions = {}, component: Component } = props
+  const [options, setOptions] = useState({
+    ...DEFAULT_CONTEXT_CONFIG,
+    ...defaultOptions,
+  })
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
 
@@ -77,7 +80,7 @@ export function ConfirmationProviderComponent(props: ConfirmationProviderCompone
 
   const child = useMemo(() => {
     return (
-      <ConfirmationContext.Provider value={{confirm}}>
+      <ConfirmationContext.Provider value={{ confirm }}>
         {children}
       </ConfirmationContext.Provider>
     )

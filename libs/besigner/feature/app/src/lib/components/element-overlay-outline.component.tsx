@@ -41,51 +41,53 @@ const classKeys = generateComponentClassKeys('AglynElementOverlayOutline', [
 
 const ElementOverlayOutline = styled(Box, {
   name: 'AglynElementOverlayOutline',
-})(({ theme }) => ({
-  pointerEvents: 'none',
-  position: 'absolute',
-  left: 0,
-  top: 0,
-  right: 0,
-  bottom: 0,
-  outlineColor: 'transparent',
-  outlineOffset: 1,
-  outlineWidth: 1,
-  outlineStyle: 'dashed',
-  // transition: theme.transitions.create([
-  //   'outline-width',
-  //   'outline-offset',
-  //   'outline-style',
-  //   'outline-color',
-  //   'background-color',
-  // ], {
-  //   duration: theme.transitions.duration.standard,
-  //   easing: theme.transitions.easing.easeInOut,
-  // }),
-
-  [`&.${classKeys.selectedSelf}`]: {
-    outlineWidth: 2,
-    outlineStyle: 'solid',
-    outlineColor: theme.palette.quaternary.main,
-  },
-  [`&.${classKeys.hoveringSelf}`]: {
-    outlineColor: theme.palette.secondary.main,
-    backgroundColor: alpha(theme.palette.secondary.main, 0.12),
-  },
-  [`&.${classKeys.draggingSelf}`]: {
+})(({ theme }) => {
+  return {
+    pointerEvents: 'none',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
     outlineColor: 'transparent',
-    backgroundColor: alpha(theme.palette.secondary.light, 0.76),
-  },
-  [`&.${classKeys.draggingOver}`]: {
-    outlineColor: theme.palette.quaternary.main,
-    backgroundColor: alpha(theme.palette.quaternary.dark, 0.76),
+    outlineOffset: 1,
+    outlineWidth: 1,
+    outlineStyle: 'dashed',
+    // transition: theme.transitions.create([
+    //   'outline-width',
+    //   'outline-offset',
+    //   'outline-style',
+    //   'outline-color',
+    //   'background-color',
+    // ], {
+    //   duration: theme.transitions.duration.standard,
+    //   easing: theme.transitions.easing.easeInOut,
+    // }),
+
+    [`&.${classKeys.selectedSelf}`]: {
+      outlineWidth: 2,
+      outlineStyle: 'solid',
+      outlineColor: theme.palette.quaternary.main,
+    },
+    [`&.${classKeys.hoveringSelf}`]: {
+      outlineColor: theme.palette.secondary.main,
+      backgroundColor: alpha(theme.palette.secondary.main, 0.12),
+    },
     [`&.${classKeys.draggingSelf}`]: {
       outlineColor: 'transparent',
       backgroundColor: alpha(theme.palette.secondary.light, 0.76),
-      cursor: 'no-drop',
     },
-  },
-}))
+    [`&.${classKeys.draggingOver}`]: {
+      outlineColor: theme.palette.quaternary.main,
+      backgroundColor: alpha(theme.palette.quaternary.dark, 0.76),
+      [`&.${classKeys.draggingSelf}`]: {
+        outlineColor: 'transparent',
+        backgroundColor: alpha(theme.palette.secondary.light, 0.76),
+        cursor: 'no-drop',
+      },
+    },
+  }
+})
 
 export interface ElementOverlayOutlineProps extends BoxProps {
   $id: ElementId

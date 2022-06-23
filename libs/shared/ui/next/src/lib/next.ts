@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-
 export * from './components/_app.component'
-export * from './components/image.component'
-export * from './components/next-emotion-app.component'
 export * from './components/_emotion-document.component'
+export * from './components/image.component'
 export * from './components/next-page-decorated-layout.component'
 
 export * from './contexts/next-page-title-provider'

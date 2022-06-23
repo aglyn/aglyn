@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-import {Ref, ReactNode} from 'react'
+import { Ref } from 'react'
 import useNodeProperty from './use-node-property'
 
-
-export function useTagName(initialState = null): [string, Ref<any>, ReactNode] {
+export function useTagName(initialState = null): [string, Ref<any>, JSX.Node] {
   const [tagName, ref, node] = useNodeProperty('tagName', initialState)
   return [tagName, ref, node]
 }

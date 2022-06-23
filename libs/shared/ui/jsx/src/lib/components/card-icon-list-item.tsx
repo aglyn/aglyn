@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, mergeSxProps } from '@aglyn/shared-ui-theme'
+import {
+  generateComponentClassKeys,
+  mergeSxProps,
+} from '@aglyn/shared-ui-theme'
 import {
   Box,
   Card,
@@ -24,7 +27,7 @@ import {
   Typography,
 } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, type MouseEvent, type ReactNode, useCallback } from 'react'
+import { forwardRef, type MouseEvent, useCallback } from 'react'
 import type { GridListItemData } from './grid-list'
 
 const cardClasses = generateComponentClassKeys('AglynCardIconListItem', [
@@ -36,104 +39,113 @@ const cardClasses = generateComponentClassKeys('AglynCardIconListItem', [
 
 export interface CardIconListItemProps extends Partial<MuiCardProps> {
   item: GridListItemData
-  preview?: ReactNode
-  label?: ReactNode
+  preview?: JSX.Node
+  label?: JSX.Node
   selected?: boolean
   onActionClick?: {
     bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void
   }['bivarianceHack']
 }
 
-export const CardIconListItem = forwardRef<any, CardIconListItemProps>(function RefRenderFn(
-  props,
-  ref
-) {
-  const { className, children, selected, item, label, onActionClick, preview, sx, ...rest } = props
-  const isSelected = Boolean(selected)
-  const handleClick = useCallback(
-    (e) => {
-      onActionClick && onActionClick(e, item)
-    },
-    [item, onActionClick]
-  )
-  return (
-    <Card
-      ref={ref}
-      className={clsx(
-        {
-          [cardClasses.selected]: isSelected,
-        },
-        className
-      )}
-      sx={mergeSxProps(
-        {
-          [`&.${cardClasses.selected}`]: {
-            [`& .${cardClasses.actionArea}`]: {
-              backgroundColor: 'secondary.main',
-              color: 'secondary.contrastText',
+export const CardIconListItem = forwardRef<any, CardIconListItemProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      className,
+      children,
+      selected,
+      item,
+      label,
+      onActionClick,
+      preview,
+      sx,
+      ...rest
+    } = props
+    const isSelected = Boolean(selected)
+    const handleClick = useCallback(
+      (e) => {
+        onActionClick && onActionClick(e, item)
+      },
+      [item, onActionClick],
+    )
+    return (
+      <Card
+        ref={ref}
+        className={clsx(
+          {
+            [cardClasses.selected]: isSelected,
+          },
+          className,
+        )}
+        sx={mergeSxProps(
+          {
+            [`&.${cardClasses.selected}`]: {
+              [`& .${cardClasses.actionArea}`]: {
+                backgroundColor: 'secondary.main',
+                color: 'secondary.contrastText',
+              },
             },
           },
-        },
-        sx
-      )}
-      {...rest}
-    >
-      <CardActionArea
-        disabled={isSelected}
-        onClick={handleClick}
-        className={cardClasses.actionArea}
-        sx={{
-          height: 0,
-          position: 'relative',
-          paddingTop: `${(3 / 4) * 100}%`, // 16:9
-        }}
+          sx,
+        )}
+        {...rest}
       >
-        <Box
-          className={cardClasses.wrapper}
+        <CardActionArea
+          disabled={isSelected}
+          onClick={handleClick}
+          className={cardClasses.actionArea}
           sx={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: '100%',
-            height: '100%',
+            height: 0,
+            position: 'relative',
+            paddingTop: `${(3 / 4) * 100}%`, // 16:9
           }}
         >
           <Box
-            className={cardClasses.content}
+            className={cardClasses.wrapper}
             sx={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
               width: '100%',
               height: '100%',
-              display: 'flex',
-              textAlign: 'center',
-              flexDirection: 'column',
-              justifyContent: 'space-evenly',
-              padding: 0.5,
             }}
           >
-            <span>
-              {children}
-              {preview}
-            </span>
-            {label && (
-              <Typography
-                component="span"
-                display="block"
-                variant="subtitle2"
-                sx={{
-                  lineHeight: 1.43,
-                  fontSize: (theme) => theme.typography.pxToRem(10),
-                  textTransform: 'uppercase',
-                }}
-              >
-                {label}
-              </Typography>
-            )}
+            <Box
+              className={cardClasses.content}
+              sx={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                textAlign: 'center',
+                flexDirection: 'column',
+                justifyContent: 'space-evenly',
+                padding: 0.5,
+              }}
+            >
+              <span>
+                {children}
+                {preview}
+              </span>
+              {label && (
+                <Typography
+                  component="span"
+                  display="block"
+                  variant="subtitle2"
+                  sx={{
+                    lineHeight: 1.43,
+                    fontSize: (theme) => theme.typography.pxToRem(10),
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {label}
+                </Typography>
+              )}
+            </Box>
           </Box>
-        </Box>
-      </CardActionArea>
-    </Card>
-  )
-})
+        </CardActionArea>
+      </Card>
+    )
+  },
+)
 
 CardIconListItem.displayName = 'CardIconListItem'
 CardIconListItem.aglyn = true

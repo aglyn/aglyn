@@ -30,7 +30,7 @@ import {
   type GridProps as MuiGridProps,
 } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, type ReactNode, useCallback, useMemo } from 'react'
+import { forwardRef, useCallback, useMemo } from 'react'
 import {
   VirtuosoGrid,
   type VirtuosoGridHandle,
@@ -103,7 +103,7 @@ export interface GridListProps extends Partial<VirtualizedGridProps> {
     item: GridListProps['items'][number],
     index: number,
     items: GridListProps['items'],
-  ) => ReactNode
+  ) => JSX.Node
   GridContainerProps?: MuiGridProps
   GridItemProps?: MuiGridProps
   ListWrapperProps?: ContainerProps

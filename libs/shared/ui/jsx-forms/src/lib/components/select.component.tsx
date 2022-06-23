@@ -26,7 +26,7 @@ import {
   Select as MuiSelect,
   type SelectProps as MuiSelectProps,
 } from '@mui/material'
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef } from 'react'
 import { validationMessage } from '../utils/validation-message'
 import {
   useFieldApi,
@@ -39,7 +39,7 @@ export interface SelectProps extends SelectBaseProps {
   isReadOnly?: boolean
   isDisabled?: boolean
   isRequired?: boolean
-  description?: ReactNode
+  description?: JSX.Node
   validateOnMount?: boolean
   FormControlProps?: Partial<MuiFormControlProps>
   disableDefaultOption?: boolean

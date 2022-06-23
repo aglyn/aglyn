@@ -20,27 +20,41 @@ import type {
   ValidationMap as PropTypesValidationMap,
   Validator as PropTypesValidator,
 } from 'prop-types'
-import type {Component} from 'react'
-import type {AnyObj, DistributiveOmit, EmptyObj} from './basic'
-
+import type { Component } from 'react'
+import type { AnyObj, DistributiveOmit, EmptyObj } from './basic'
 
 export type JSXKey = string | number
 
 export type JSXText = string | number
 export type JSXChild = JSXElement | JSXText
 export type JSXFragment = Iterable<JSXNode>
-export type JSXNode = JSXChild | JSXFragment | JSXPortal | boolean | null | undefined
+export type JSXNode =
+  | JSXChild
+  | JSXFragment
+  | JSXPortal
+  | boolean
+  | null
+  | undefined
 export type JSXNodeList = JSXNode[] | Iterable<JSXNode>
 
 export type JSXIntrinsicElements = JSX.IntrinsicElements
 export type JSXIntrinsicAttributes = JSX.IntrinsicAttributes
 export type JSXIntrinsicClassAttributes<T> = JSX.IntrinsicClassAttributes<T>
-export type JSXIntrinsicElementMap<P = any> = { [K in keyof JSXIntrinsicElements]: P extends JSXIntrinsicElements[K] ? K : never }
-export type JSXIntrinsicElement<P = any> = JSXIntrinsicElementMap<P>[keyof JSXIntrinsicElements]
+export type JSXIntrinsicElementMap<P = any> = {
+  [K in keyof JSXIntrinsicElements]: P extends JSXIntrinsicElements[K]
+    ? K
+    : never
+}
+export type JSXIntrinsicElement<P = any> =
+  JSXIntrinsicElementMap<P>[keyof JSXIntrinsicElements]
 
-export type JSXElementFunctionComponent<P = any> = {(props: P): JSX.Element | null}
+export type JSXElementFunctionComponent<P = any> = {
+  (props: P): JSX.Element | null
+}
 export type JSXElementClassComponent<P = any> = JSXComponentClass<P, any>
-export type JSXComponentType<P> = JSXElementFunctionComponent<P> | JSXElementClassComponent<P>
+export type JSXComponentType<P> =
+  | JSXElementFunctionComponent<P>
+  | JSXElementClassComponent<P>
 export type JSXElementType<P = any> =
   | JSXIntrinsicElement<P>
   | JSXComponentType<P>
@@ -49,91 +63,100 @@ export type JSXElementConstructor<P> =
   | ((props: P) => JSXElement | null)
   | (new (props: P) => JSXComponent<P, any>)
 
-export type JSXPropValidator<T> = PropTypesValidator<T>;
-export type JSXPropRequireable<T> = PropTypesRequireable<T>;
-export type JSXPropValidationMap<T> = PropTypesValidationMap<T>;
+export type JSXPropValidator<T> = PropTypesValidator<T>
+export type JSXPropRequireable<T> = PropTypesRequireable<T>
+export type JSXPropValidationMap<T> = PropTypesValidationMap<T>
 type JSXWeakValidationMap<T> = {
   [K in keyof T]?: null extends T[K]
     ? JSXPropValidator<T[K] | null | undefined>
     : undefined extends T[K]
-      ? JSXPropValidator<T[K] | null | undefined>
-      : JSXPropValidator<T[K]>
+    ? JSXPropValidator<T[K] | null | undefined>
+    : JSXPropValidator<T[K]>
 }
 
-export type JSXRefCallback<T> = {bivarianceHack(instance: T | null): void}['bivarianceHack'];
+export type JSXRefCallback<T> = {
+  bivarianceHack(instance: T | null): void
+}['bivarianceHack']
 export type JSXRef<T> = JSXRefCallback<T> | JSXRefObject<T> | null
 /** Ensures that the props do not include ref at all */
 export type JSXPropsWithoutRef<P> =
-// Pick would not be sufficient for this. We'd like to avoid unnecessary mapping and need a
-// distributive conditional to support unions. see:
-// https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types
-// https://github.com/Microsoft/TypeScript/issues/28339
+  // Pick would not be sufficient for this. We'd like to avoid unnecessary mapping and need a
+  // distributive conditional to support unions. see:
+  // https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types
+  // https://github.com/Microsoft/TypeScript/issues/28339
   P extends any
-    ? (
-      'ref' extends keyof P
-        ? Pick<P, Exclude<keyof P, 'ref'>>
-        : P
-      )
-    : P;
+    ? 'ref' extends keyof P
+      ? Pick<P, Exclude<keyof P, 'ref'>>
+      : P
+    : P
 
 /** Ensures that the props do not include string ref, which cannot be forwarded */
 export type JSXPropsWithRef<P> =
-// Just "P extends { ref?: infer R }" looks sufficient, but R will infer as {} if P is {}.
+  // Just "P extends { ref?: infer R }" looks sufficient, but R will infer as {} if P is {}.
   'ref' extends keyof P
-    ? P extends {ref?: infer R | undefined}
+    ? P extends { ref?: infer R | undefined }
       ? string extends R
-        ? JSXPropsWithoutRef<P> & {ref?: Exclude<R, string> | undefined}
+        ? JSXPropsWithoutRef<P> & { ref?: Exclude<R, string> | undefined }
         : P
       : P
-    : P;
+    : P
 
-export type JSXPropsWithChildren<P> = P & {children?: JSXNode | undefined}
+export type JSXPropsWithChildren<P> = P & { children?: JSXNode }
 
 /**
  * NOTE: prefer ComponentPropsWithRef, if the ref is forwarded,
  * or ComponentPropsWithoutRef when refs are not supported.
  */
-type JSXComponentProps<T extends keyof JSXIntrinsicElements | JSXElementConstructor<any>> =
-  T extends JSXElementConstructor<infer P>
-    ? P
-    : T extends keyof JSXIntrinsicElements
-      ? JSXIntrinsicElements[T]
-      : AnyObj
+type JSXComponentProps<
+  T extends keyof JSXIntrinsicElements | JSXElementConstructor<any>,
+> = T extends JSXElementConstructor<infer P>
+  ? P
+  : T extends keyof JSXIntrinsicElements
+  ? JSXIntrinsicElements[T]
+  : AnyObj
 
 export type ComponentPropsWithRef<T extends JSXElementType> =
   T extends JSXElementClassComponent<infer P>
     ? JSXPropsWithoutRef<P> & JSXRefAttributes<InstanceType<T>>
-    : JSXPropsWithRef<JSXComponentProps<T>>;
+    : JSXPropsWithRef<JSXComponentProps<T>>
 
-export type ComponentPropsWithoutRef<T extends JSXElementType> = JSXPropsWithoutRef<JSXComponentProps<T>>
+export type ComponentPropsWithoutRef<T extends JSXElementType> =
+  JSXPropsWithoutRef<JSXComponentProps<T>>
 
-export type JSXComponentRef<T extends JSXElementType> = T extends JSXNamedExoticComponent<ComponentPropsWithoutRef<T> & JSXRefAttributes<infer Method>>
-  ? Method
-  : ComponentPropsWithRef<T> extends JSXRefAttributes<infer Method>
+export type JSXComponentRef<T extends JSXElementType> =
+  T extends JSXNamedExoticComponent<
+    ComponentPropsWithoutRef<T> & JSXRefAttributes<infer Method>
+  >
+    ? Method
+    : ComponentPropsWithRef<T> extends JSXRefAttributes<infer Method>
     ? Method
     : never
 
 export interface JSXRefObject<T> {
-  readonly current: T | null;
+  readonly current: T | null
 }
 
 export interface JSXAttributes {
-  key?: JSXKey | null | undefined;
+  key?: JSXKey | null | undefined
 }
 
 export interface JSXRefAttributes<T> extends JSXAttributes {
-  ref?: JSXRef<T> | undefined;
+  ref?: JSXRef<T> | undefined
 }
 
 export interface JSXNodeArray extends Array<JSXNode> {}
 
-export interface JSXElement<P = any, T extends string | JSXComponentType<any> = string | JSXComponentType<any>> {
+export interface JSXElement<
+  P = any,
+  T extends string | JSXComponentType<any> = string | JSXComponentType<any>,
+> {
   type: T
   props: P
   key: JSXKey | null
 }
 
-export interface JSXComponent<P = EmptyObj, S = EmptyObj> extends Component<P, S> {
+export interface JSXComponent<P = EmptyObj, S = EmptyObj>
+  extends Component<P, S> {
   context: unknown
   setState<K extends keyof S>(
     state:
@@ -153,20 +176,24 @@ export interface JSXPortal extends JSXElement {
 }
 
 export interface JSXComponentClass<P = EmptyObj, S = any> {
-  new(props: P, context?: any): JSXComponent<P, S>
+  new (props: P, context?: any): JSXComponent<P, S>
 }
 
 export interface JSXFunctionComponent<P = EmptyObj, S = any> {
-  (props: JSXPropsWithChildren<P>, context?: any): JSXElement<any, any> | null;
-  propTypes?: JSXWeakValidationMap<P> | undefined;
-  contextTypes?: JSXPropValidationMap<any> | undefined;
-  defaultProps?: Partial<P> | undefined;
-  displayName?: string | undefined;
+  (props: JSXPropsWithChildren<P>, context?: any): JSXElement<any, any> | null
+  propTypes?: JSXWeakValidationMap<P> | undefined
+  contextTypes?: JSXPropValidationMap<any> | undefined
+  defaultProps?: Partial<P> | undefined
+  displayName?: string | undefined
 }
 
-export interface JSXElementAttributesProperty {props: EmptyObj}
+export interface JSXElementAttributesProperty {
+  props: EmptyObj
+}
 
-export interface JSXElementChildrenAttribute {children: EmptyObj}
+export interface JSXElementChildrenAttribute {
+  children: EmptyObj
+}
 
 // TODO: similar to how Fragment is actually a symbol, the values returned from createContext,
 // forwardRef and memo are actually objects that are treated specially by the renderer; see:
@@ -181,43 +208,48 @@ export interface JSXExoticComponent<P = AnyObj> {
   /**
    * **NOTE**: Exotic components are not callable.
    */
-  (props: P): (JSXElement | null);
-  readonly $$typeof: symbol;
+  (props: P): JSXElement | null
+  readonly $$typeof: symbol
 }
 
-export interface JSXNamedExoticComponent<P = AnyObj> extends JSXExoticComponent<P> {
-  displayName?: string | undefined;
+export interface JSXNamedExoticComponent<P = AnyObj>
+  extends JSXExoticComponent<P> {
+  displayName?: string | undefined
 }
 
 // will show `ForwardRef(${Component.displayName || Component.name})` in devtools by default,
 // but can be given its own specific name
-export interface JSXForwardRefExoticComponent<P> extends JSXNamedExoticComponent<P> {
-  defaultProps?: Partial<P> | undefined;
-  propTypes?: JSXWeakValidationMap<P> | undefined;
+export interface JSXForwardRefExoticComponent<P>
+  extends JSXNamedExoticComponent<P> {
+  defaultProps?: Partial<P> | undefined
+  propTypes?: JSXWeakValidationMap<P> | undefined
 }
 
 export interface ResolveProps<P = any> {
   <OUT = P>(inProps: P): OUT | Promise<OUT>
 }
 
-export type InnerRefProp<T = any> = {innerRef?: JSXRef<T>}
+export type InnerRefProp<T = any> = { innerRef?: JSXRef<T> }
 export type PropsWithInnerRef<P, T = any> = P & InnerRefProp<T>
 
-export type InferElementTypeProps<T> = T extends JSXElementType<infer P> ? P : never
+export type InferElementTypeProps<T> = T extends JSXElementType<infer P>
+  ? P
+  : never
 
-type OverrideComponentProp<P = any> = {component?: JSXElementType<P>}
-type OverrideComponentsProps<T extends OverrideComponentProp = any> =
-  [T] extends [{component: infer P}]
-    ? InferElementTypeProps<P>
-    : never
-type OverrideComponentPropPlusOverrideProps<T extends OverrideComponentProp = any> =
-  [T] extends [{component: JSXElementType}]
-    ? OverrideComponentsProps<T> & Pick<T, 'component'>
-    : {component?: undefined}
+type OverrideComponentProp<P = any> = { component?: JSXElementType<P> }
+type OverrideComponentsProps<T extends OverrideComponentProp = any> = [
+  T,
+] extends [{ component: infer P }]
+  ? InferElementTypeProps<P>
+  : never
+type OverrideComponentPropPlusOverrideProps<
+  T extends OverrideComponentProp = any,
+> = [T] extends [{ component: JSXElementType }]
+  ? OverrideComponentsProps<T> & Pick<T, 'component'>
+  : { component?: undefined }
 export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P &
   OverrideComponentPropPlusOverrideProps<T>
 
-
 //
 //
 //
@@ -229,10 +261,10 @@ export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P &
 //
 //
 //
-
 
 /**
- * `T extends ConsistentWith<T, U>` means that where `T` has overlapping properties with
+ * `T extends ConsistentWith<T, U>` means that where `T` has overlapping
+ * properties with
  * `U`, their value types do not conflict.
  *
  * @internal
@@ -251,10 +283,19 @@ export type ConsistentWith<DecorationTargetProps, InjectedProps> = {
  * additional {AdditionalProps}
  */
 export type PropInjectorComponent<InjectedProps, AdditionalProps = EmptyObj> = {
-  <C extends JSXComponentType<ConsistentWith<JSXComponentProps<C>, InjectedProps>>>(
+  <
+    C extends JSXComponentType<
+      ConsistentWith<JSXComponentProps<C>, InjectedProps>
+    >,
+  >(
     component: C,
-  ): JSXComponentType<DistributiveOmit<JSX.LibraryManagedAttributes<C, JSXComponentProps<C>>,
-    keyof InjectedProps> & AdditionalProps>
+  ): JSXComponentType<
+    DistributiveOmit<
+      JSX.LibraryManagedAttributes<C, JSXComponentProps<C>>,
+      keyof InjectedProps
+    > &
+      AdditionalProps
+  >
 }
 
 /**
@@ -266,22 +307,30 @@ export type PropInjectorComponent<InjectedProps, AdditionalProps = EmptyObj> = {
  *
  * @internal
  */
-export type OverridableStringUnion<T extends string | number, U = EmptyObj> = GenerateStringUnion<Overwrite<Record<T, true>, U>>
+export type OverridableStringUnion<
+  T extends string | number,
+  U = EmptyObj,
+> = GenerateStringUnion<Overwrite<Record<T, true>, U>>
 
 /**
- * Like `T & U`, but using the value types from `U` where their properties overlap.
+ * Like `T & U`, but using the value types from `U` where their properties
+ * overlap.
  *
  * @internal
  */
 export type Overwrite<T, U> = DistributiveOmit<T, keyof U> & U
 
-type GenerateStringUnion<T> = Extract<{
-  [Key in keyof T]: true extends T[Key] ? Key : never
-}[keyof T],
-  string>
+type GenerateStringUnion<T> = Extract<
+  {
+    [Key in keyof T]: true extends T[Key] ? Key : never
+  }[keyof T],
+  string
+>
 
 // https://stackoverflow.com/questions/53807517/how-to-test-if-two-types-are-exactly-the-same
-type IfEquals<T, U, Y = unknown, N = never> = (<G>() => G extends T ? 1 : 2) extends <G>() => G extends U ? 1 : 2
+type IfEquals<T, U, Y = unknown, N = never> = (<G>() => G extends T
+  ? 1
+  : 2) extends <G>() => G extends U ? 1 : 2
   ? Y
   : N
 

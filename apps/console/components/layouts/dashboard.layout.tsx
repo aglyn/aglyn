@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-import {ICON_VARIANT_HOME, ICON_VARIANT_SYMBOL_SECURE} from '@aglyn/shared-data-enums'
-import {MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {Box, Stack} from '@mui/material'
-import {type ReactNode, useMemo} from 'react'
-import DashboardHeaderComponent, {type DashboardHeaderProps} from '../dashboard-header.component'
+import {
+  ICON_VARIANT_HOME,
+  ICON_VARIANT_SYMBOL_SECURE,
+} from '@aglyn/shared-data-enums'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { Box, Stack } from '@mui/material'
+import { useMemo } from 'react'
+import DashboardHeaderComponent, {
+  type DashboardHeaderProps,
+} from '../dashboard-header.component'
 import FooterComponent from '../footer.component'
-import SecondaryAppBarComponent, {type SecondaryAppBarProps} from '../secondary-app-bar.component'
-
+import SecondaryAppBarComponent, {
+  type SecondaryAppBarProps,
+} from '../secondary-app-bar.component'
 
 const defaultNavTabItems: SecondaryAppBarProps['navTabItems'] = [
   {
@@ -40,17 +46,14 @@ const defaultNavTabItems: SecondaryAppBarProps['navTabItems'] = [
 const defaultTabBarTitle = (
   <Stack
     direction="row"
-    spacing={{sm: 0.15, md: 0.5}}
+    spacing={{ sm: 0.15, md: 0.5 }}
     alignItems="center"
     typography={'subtitle2'}
     lineHeight={'normal'}
-    sx={{color: 'tertiary.light'}}
+    sx={{ color: 'tertiary.light' }}
   >
     <span>{'Secure'}</span>
-    <MdiIcon
-      path={ICON_VARIANT_SYMBOL_SECURE.path}
-      fontSize={'small'}
-    />
+    <MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} fontSize={'small'} />
   </Stack>
 )
 
@@ -59,12 +62,12 @@ const defaultBreadcrumbs = [
     id: 'home',
     // children: 'Home',
     href: '/',
-    icon: {path: ICON_VARIANT_HOME.path},
+    icon: { path: ICON_VARIANT_HOME.path },
   },
 ]
 
 export interface DashboardLayoutProps {
-  children?: ReactNode
+  children?: JSX.Node
   breadcrumbItems?: DashboardHeaderProps['breadcrumbItems']
   disableBreadcrumbs?: DashboardHeaderProps['disableBreadcrumbs']
   disableDefaultBreadcrumb?: true
@@ -73,7 +76,7 @@ export interface DashboardLayoutProps {
   tabBarTitle?: SecondaryAppBarProps['tabBarTitle']
   navTabItems?: SecondaryAppBarProps['navTabItems']
   activeTab?: SecondaryAppBarProps['activeTab']
-  aside?: ReactNode
+  aside?: JSX.Node
 }
 
 function DashboardLayout(props: DashboardLayoutProps) {
@@ -93,7 +96,7 @@ function DashboardLayout(props: DashboardLayoutProps) {
   const breadcrumbs = useMemo(() => {
     return [
       ...(disableDefaultBreadcrumb ? [] : defaultBreadcrumbs),
-      ...Array.isArray(breadcrumbItems) ? breadcrumbItems : [],
+      ...(Array.isArray(breadcrumbItems) ? breadcrumbItems : []),
     ]
   }, [breadcrumbItems, disableDefaultBreadcrumb])
 
@@ -105,11 +108,7 @@ function DashboardLayout(props: DashboardLayoutProps) {
         activeTab={activeTab}
       />
 
-      <Stack
-        component="main"
-        direction="column"
-        sx={{flexGrow: 1}}
-      >
+      <Stack component="main" direction="column" sx={{ flexGrow: 1 }}>
         <DashboardHeaderComponent
           disableBreadcrumbs={disableBreadcrumbs}
           breadcrumbItems={breadcrumbs}
@@ -117,15 +116,11 @@ function DashboardLayout(props: DashboardLayoutProps) {
           header={header}
         />
 
-        <Box
-          component="main"
-          sx={{flexGrow: 1}}
-        >
+        <Box component="main" sx={{ flexGrow: 1 }}>
           {children}
         </Box>
 
         <FooterComponent />
-
       </Stack>
 
       {aside}
@@ -136,5 +131,5 @@ DashboardLayout.displayName = 'DashboardLayout'
 DashboardLayout.aglyn = true
 DashboardLayout.defaultProps = {}
 
-export {DashboardLayout}
+export { DashboardLayout }
 export default DashboardLayout

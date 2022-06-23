@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-import { CacheProvider, createEmotionCache } from '@aglyn/shared-ui-theme'
+import { createEmotionCache } from '@aglyn/shared-ui-theme'
 import { renderStylesToString } from '@emotion/server'
 import { Portal } from '@mui/material'
 import { paramCase } from 'change-case'
 import {
   createContext,
   forwardRef,
-  type ReactElement,
   useContext,
   useEffect,
   useState,
 } from 'react'
 import { renderToString } from 'react-dom/server'
 import { useRefForked } from '../hooks/use-ref-forked'
+import EmotionCacheProvider from './emotion-cache-provider'
 
 export type ShadowRendererProps = {
   container?: Node
   ssr?: boolean
-  children?: ReactElement
+  children?: JSX.Node
 }
-export type ShadowRenderer = (props: ShadowRendererProps) => ReactElement
+export type ShadowRenderer = (props: ShadowRendererProps) => JSX.Node
 export type CreateShadowRootOptions = {
   render: ShadowRenderer
 }
@@ -45,7 +45,7 @@ export interface ShadowRootProps {
   delegatesFocus?: boolean
   styleSheets?: globalThis.CSSStyleSheet[]
   ssr?: boolean
-  children?: ReactElement
+  children?: JSX.Node
 }
 
 const tags = new Map()
@@ -187,9 +187,9 @@ export const MuiShadowDomRenderer = (props: ShadowRendererProps) => {
   }
 
   return (
-    <CacheProvider value={cache}>
+    <EmotionCacheProvider emotionCache={cache}>
       <>{children}</>
-    </CacheProvider>
+    </EmotionCacheProvider>
   )
 }
 

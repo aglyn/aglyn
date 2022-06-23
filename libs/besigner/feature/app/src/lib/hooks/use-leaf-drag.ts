@@ -27,7 +27,11 @@ import {
   useAglynAppContext,
   useAglynElementComponentSchema,
 } from '@aglyn/core-feature-renderer'
-import { ConnectDragPreview, ConnectDragSource, useDrag } from 'react-dnd'
+import {
+  type ConnectDragPreview,
+  type ConnectDragSource,
+  useDrag,
+} from 'react-dnd'
 import { useAglynCanvasSetSelected } from './use-aglyn-canvas-selected'
 import { useAglynDndSetActive } from './use-aglyn-dnd-active'
 import { useAglynDndSetOver } from './use-aglyn-dnd-over'

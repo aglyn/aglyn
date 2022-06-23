@@ -23,17 +23,16 @@ import {
   Typography,
   type TypographyProps,
 } from '@mui/material'
-import type { ReactNode } from 'react'
 import { forwardRef } from 'react'
 
 export interface AuthFormProps extends StackProps {
-  paperTop?: ReactNode
-  headingTop?: ReactNode
+  paperTop?: JSX.Node
+  headingTop?: JSX.Node
   headingTopProps?: TypographyProps<any, any>
-  headingBottom?: ReactNode
+  headingBottom?: JSX.Node
   headingBottomProps?: TypographyProps<any, any>
-  headingAfter?: ReactNode
-  paperAfter?: ReactNode
+  headingAfter?: JSX.Node
+  paperAfter?: JSX.Node
 }
 
 const AuthFormComponent = forwardRef<any, AuthFormProps>((props, ref) => {

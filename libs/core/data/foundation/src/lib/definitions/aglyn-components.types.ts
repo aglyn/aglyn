@@ -34,7 +34,7 @@ import type {
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type { BoxProps, StyledOptions } from '@aglyn/shared-ui-theme'
+import type { BoxProps, MuiStyledOptions } from '@aglyn/shared-ui-theme'
 import type {
   ComponentsLinealDirectiveFlag,
   FieldComponentType,
@@ -174,7 +174,7 @@ export interface AglynComponentSchema<P = any> {
   /**
    * Options to be passed to styled(Component, \{...styledOptions\})
    */
-  styledOptions?: StyledOptions
+  styledOptions?: MuiStyledOptions
 
   /**
    * Lineal restrictions

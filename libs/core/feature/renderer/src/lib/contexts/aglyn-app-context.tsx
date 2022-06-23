@@ -22,13 +22,7 @@ import {
   DEFAULT_APP_UUN,
   type IAglynAppController,
 } from '@aglyn/core-data-foundation'
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useMemo,
-  useState,
-} from 'react'
+import { createContext, useContext, useMemo, useState } from 'react'
 
 export type IAglynAppContext = IAglynAppController | undefined
 
@@ -45,7 +39,7 @@ export function useAglynAppContext<
 
 export interface AglynAppContextComponentProps {
   appName?: AppUUN
-  children?: ReactNode
+  children?: JSX.Node
   canvasElements?: CanvasSetElementsPayload
 }
 

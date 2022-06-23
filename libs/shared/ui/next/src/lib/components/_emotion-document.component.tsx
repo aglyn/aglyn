@@ -26,6 +26,7 @@ import {
   createEmotionCache,
   createEmotionServer,
   type EmotionCache,
+  getInitColorSchemeScript,
 } from '@aglyn/shared-ui-theme'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
@@ -189,6 +190,7 @@ class _EmotionDocumentComponent<
           {makeLinkElements(LINK_PREF)}
         </Head>
         <body>
+          {getInitColorSchemeScript()}
           <Main />
           <NextScript />
         </body>

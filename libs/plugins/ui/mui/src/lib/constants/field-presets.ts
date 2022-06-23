@@ -42,9 +42,10 @@ export const FIELD_COLOR_ALT1: AglynComponentField = {
   options: [
     { value: '', label: 'Default' },
     { value: 'inherit', label: 'Inherit' },
+    { value: 'transparent', label: 'Transparent' },
     { value: 'primary', label: 'Primary' },
     { value: 'secondary', label: 'Secondary' },
-    { value: 'transparent', label: 'Transparent' },
+    { value: 'secondary', label: 'Secondary' },
   ],
 }
 export const FIELD_DISABLED: AglynComponentField = {

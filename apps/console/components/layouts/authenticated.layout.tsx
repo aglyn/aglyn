@@ -18,11 +18,11 @@
 import { SplashScreen, useLoading } from '@aglyn/shared-ui-jsx'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { useRouter } from 'next/router'
-import { Fragment, type ReactNode, useEffect } from 'react'
+import { Fragment, useEffect } from 'react'
 import { useSigninCheck } from 'reactfire'
 
 export interface AuthenticatedLayoutProps {
-  children?: ReactNode
+  children?: JSX.Node
   requireEmailVerification?: boolean
 }
 

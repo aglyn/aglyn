@@ -19,7 +19,7 @@ import {
   TextField as MuiTextField,
   type TextFieldProps as MuiTextFieldProps,
 } from '@mui/material'
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef } from 'react'
 import { validationMessage } from '../utils/validation-message'
 import {
   useFieldApi,
@@ -31,7 +31,7 @@ export type TextFieldProps = MuiTextFieldProps &
     isReadOnly?: boolean
     isDisabled?: boolean
     isRequired?: boolean
-    description?: ReactNode
+    description?: JSX.Node
     validateOnMount?: boolean
   }
 

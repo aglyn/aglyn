@@ -24,13 +24,12 @@ import {
   forwardRef,
   type ForwardRefExoticComponent,
   type PropsWithoutRef,
-  type ReactNode,
   type RefAttributes,
 } from 'react'
 
 export interface ErrorBoundaryProps {
-  children?: ReactNode
-  fallback?: ReactNode
+  children?: JSX.Node
+  fallback?: JSX.Node
   onCatch?: (error: Error, errorInfo: ErrorInfo) => void
 }
 

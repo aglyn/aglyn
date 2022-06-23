@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {APP_CONSOLE, ICON_VARIANT_MENU_DOWN} from '@aglyn/shared-data-enums'
+import { APP_CONSOLE, ICON_VARIANT_MENU_DOWN } from '@aglyn/shared-data-enums'
 import {
   AglynSvgIcon,
   AglynSvgLogo,
@@ -26,10 +26,10 @@ import {
   type MenuItemProps,
   type MenuProps,
 } from '@aglyn/shared-ui-jsx'
-import {MdiIcon, type MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {NextPageTitle} from '@aglyn/shared-ui-next'
-import {mergeSxProps} from '@aglyn/shared-ui-theme'
-import {_isArrEmpty} from '@aglyn/shared-util-guards'
+import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import { NextPageTitle } from '@aglyn/shared-ui-next'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import { _isArrEmpty } from '@aglyn/shared-util-guards'
 import {
   AppBar,
   Avatar,
@@ -42,12 +42,12 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material'
-import {Fragment, type ReactNode} from 'react'
-import {DRAWER_WIDTH, TOP_BAR_HEIGHT} from '../../constants/shared'
+import { Fragment } from 'react'
+import { DRAWER_WIDTH, TOP_BAR_HEIGHT } from '../../constants/shared'
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
-  const {avatar, icon, children, id, key, items, MenuProps, ...rest} = item
+  const { avatar, icon, children, id, key, items, MenuProps, ...rest } = item
   const isMenu = !_isArrEmpty(items)
   const itemKey = key || id || i
   const rendered =
@@ -57,22 +57,34 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
         id={id}
         color="inherit"
         startIcon={!icon?.path ? icon : <MdiIcon {...icon} />}
-        endIcon={!isMenu ? undefined : <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
-        {...(!rest.href ? {} : { component: AppLink, componentVariant: 'button' })}
+        endIcon={
+          !isMenu ? undefined : <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />
+        }
+        {...(!rest.href
+          ? {}
+          : { component: AppLink, componentVariant: 'button' })}
         {...rest}
         sx={mergeSxProps(
           {
             '& .MuiButton-endIcon': { marginLeft: 0 },
             '& .MuiButton-endIcon>*:nth-of-type(1)': { fontSize: `1.7em` },
           },
-          rest?.sx
+          rest?.sx,
         )}
       >
         {children}
       </Button>
     ) : (
       <IconButton key={itemKey} color="inherit" {...rest}>
-        {!avatar ? !icon?.path ? icon : <MdiIcon {...icon} /> : <Avatar {...avatar} />}
+        {!avatar ? (
+          !icon?.path ? (
+            icon
+          ) : (
+            <MdiIcon {...icon} />
+          )
+        ) : (
+          <Avatar {...avatar} />
+        )}
         {children}
       </IconButton>
     )
@@ -84,7 +96,7 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
       {...MenuProps}
       sx={mergeSxProps(
         {
-          p: {padding: 0.5, xs: 0.25},
+          p: { padding: 0.5, xs: 0.25 },
           '&:last-child': {
             paddingLeft: 0.75,
           },
@@ -99,11 +111,10 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
   )
 }
 
-
 export interface TopAppBarProps {
-  appBarSuffix?: ReactNode
+  appBarSuffix?: JSX.Node
   centerNavigationItems?: CenterNavMenuItem[]
-  customCenter?: ReactNode
+  customCenter?: JSX.Node
   disableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
 }
@@ -119,7 +130,7 @@ const TopAppBar = (props: TopAppBarProps) => {
 
   return (
     <ElevateOnScroll>
-      {({activeWithoutHysteresis}) => (
+      {({ activeWithoutHysteresis }) => (
         <AppBar
           component="header"
           color="inherit"
@@ -140,8 +151,10 @@ const TopAppBar = (props: TopAppBarProps) => {
             alignItems="center"
             justifyContent="flex-start"
             direction="row"
-            sx={{paddingLeft: {xs: 0, md: 0}}}
-            divider={<Divider orientation="vertical" variant="middle" flexItem light />}
+            sx={{ paddingLeft: { xs: 0, md: 0 } }}
+            divider={
+              <Divider orientation="vertical" variant="middle" flexItem light />
+            }
           >
             <Stack
               alignItems="center"
@@ -149,10 +162,15 @@ const TopAppBar = (props: TopAppBarProps) => {
               justifyContent="flex-start"
               color="inherit"
               width={DRAWER_WIDTH}
-              maxWidth={{xs: '100%'}}
-              sx={{paddingLeft: {xs: 2, md: 3}}}
+              maxWidth={{ xs: '100%' }}
+              sx={{ paddingLeft: { xs: 2, md: 3 } }}
             >
-              <AppLink href="/" componentVariant="button-base" color="inherit" disableRipple>
+              <AppLink
+                href="/"
+                componentVariant="button-base"
+                color="inherit"
+                disableRipple
+              >
                 <Stack
                   component="span"
                   alignItems="center"
@@ -207,7 +225,7 @@ const TopAppBar = (props: TopAppBarProps) => {
               justifyContent="flex-start"
               direction="row"
               flexGrow={1}
-              sx={{paddingLeft: 6}}
+              sx={{ paddingLeft: 6 }}
             >
               {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
                 <Stack
@@ -249,7 +267,8 @@ export interface QuickActionsMenuItem extends IconButtonProps {
   MenuProps?: Partial<MenuProps>
 }
 
-export interface CenterNavMenuItem extends Omit<AppLinkProps<'button'>, 'componentVariant'> {
+export interface CenterNavMenuItem
+  extends Omit<AppLinkProps<'button'>, 'componentVariant'> {
   icon?: MdiIconProps
   avatar?: any
   dense?: boolean
@@ -258,8 +277,10 @@ export interface CenterNavMenuItem extends Omit<AppLinkProps<'button'>, 'compone
   items?: MenuItemProps[]
 }
 
-export interface MainLayoutProps extends Omit<StackProps, 'title'>, TopAppBarProps {
-  children?: ReactNode | undefined
+export interface MainLayoutProps
+  extends Omit<StackProps, 'title'>,
+    TopAppBarProps {
+  children?: JSX.Node
   title?: string[] | string
 }
 

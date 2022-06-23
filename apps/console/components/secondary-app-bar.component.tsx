@@ -15,32 +15,33 @@
  * limitations under the License.
  */
 
-import {ElevateOnScroll} from '@aglyn/shared-ui-jsx'
-import {_isArrEmpty} from '@aglyn/shared-util-guards'
-import {AppBar, type AppBarProps, Divider, Toolbar, Typography} from '@mui/material'
-import {Fragment, type ReactNode} from 'react'
-import {TAB_HEIGHT, TOP_BAR_HEIGHT} from '../constants/shared'
-import AppLinkTabsComponent, {type AppLinkTabsProps} from './app-link-tabs.component'
-
+import { ElevateOnScroll } from '@aglyn/shared-ui-jsx'
+import { _isArrEmpty } from '@aglyn/shared-util-guards'
+import {
+  AppBar,
+  type AppBarProps,
+  Divider,
+  Toolbar,
+  Typography,
+} from '@mui/material'
+import { Fragment } from 'react'
+import { TAB_HEIGHT, TOP_BAR_HEIGHT } from '../constants/shared'
+import AppLinkTabsComponent, {
+  type AppLinkTabsProps,
+} from './app-link-tabs.component'
 
 export interface SecondaryAppBarProps extends Partial<AppBarProps> {
-  tabBarTitle?: ReactNode
+  tabBarTitle?: JSX.Node
   navTabItems?: AppLinkTabsProps['items']
   activeTab?: AppLinkTabsProps['activeTab']
 }
 
 function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
-  const {
-    children,
-    tabBarTitle,
-    navTabItems,
-    activeTab,
-    ...rest
-  } = props
+  const { children, tabBarTitle, navTabItems, activeTab, ...rest } = props
 
   return (
     <ElevateOnScroll threshold={TOP_BAR_HEIGHT}>
-      {({activeWithoutHysteresis}) => (
+      {({ activeWithoutHysteresis }) => (
         <AppBar
           component="aside"
           color="inherit"
@@ -80,7 +81,7 @@ function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
 
                 <Divider
                   orientation="vertical"
-                  sx={{ml: 1.25, mr: 1}}
+                  sx={{ ml: 1.25, mr: 1 }}
                   flexItem
                   light
                 />
@@ -90,10 +91,7 @@ function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
             {children}
 
             {!_isArrEmpty(navTabItems) && (
-              <AppLinkTabsComponent
-                items={navTabItems}
-                activeTab={activeTab}
-              />
+              <AppLinkTabsComponent items={navTabItems} activeTab={activeTab} />
             )}
           </Toolbar>
         </AppBar>
@@ -107,5 +105,5 @@ SecondaryAppBarComponent.defaultProps = {
   navTabItems: undefined,
 }
 
-export {SecondaryAppBarComponent}
+export { SecondaryAppBarComponent }
 export default SecondaryAppBarComponent

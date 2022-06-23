@@ -93,53 +93,53 @@ export const backgroundsDark: BackgroundRecord = {
 
 export const ordinalPrimaryLight: PrimaryRecord = {
   main: '#404C5C',
-  light: '#666F7C',
-  dark: '#2C3540',
-  contrastText: '#FFFFFF',
+  // light: '#666F7C',
+  // dark: '#2C3540',
+  // contrastText: '#FFFFFF',
 }
 export const ordinalPrimaryDark: PrimaryRecord = {
   main: '#2C3540',
-  light: '#3D4B5C',
-  dark: '#202830',
-  contrastText: '#FFFFFF',
+  // light: '#3D4B5C',
+  // dark: '#202830',
+  // contrastText: '#FFFFFF',
 }
 
 export const ordinalSecondaryLight: SecondaryRecord = {
   main: '#039BE5',
-  light: '#40C4FF',
-  dark: '#0277BD',
-  contrastText: '#FFFFFF',
+  // light: '#40C4FF',
+  // dark: '#0277BD',
+  // contrastText: '#FFFFFF',
 }
 export const ordinalSecondaryDark: SecondaryRecord = {
   main: '#03A9F4',
-  light: '#40C4FF',
-  dark: '#026CA0',
-  contrastText: '#FFFFFF',
+  // light: '#40C4FF',
+  // dark: '#026CA0',
+  // contrastText: '#FFFFFF',
 }
 
 export const ordinalTertiaryLight: TertiaryRecord = {
   main: '#9C27B0',
-  light: '#AF52BF',
-  dark: '#6D1B7B',
-  contrastText: '#FFFFFF',
+  // light: '#AF52BF',
+  // dark: '#6D1B7B',
+  // contrastText: '#FFFFFF',
 }
 export const ordinalTertiaryDark: TertiaryRecord = {
   main: '#AB47BC',
-  light: '#BA68C8',
-  dark: '#9C27B0',
-  contrastText: '#FFFFFF',
+  // light: '#BA68C8',
+  // dark: '#9C27B0',
+  // contrastText: '#FFFFFF',
 }
 
 export const ordinalQuaternaryLight: QuaternaryRecord = {
   main: '#E040FB',
-  light: '#E666FB',
-  dark: '#9C2CAF',
+  // light: '#E666FB',
+  // dark: '#9C2CAF',
   // contrastText: '#FFFFFF',
 }
 export const ordinalQuaternaryDark: QuaternaryRecord = {
   main: '#E040FB',
-  light: '#E666FB',
-  dark: '#9C2CAF',
+  // light: '#E666FB',
+  // dark: '#9C2CAF',
   // contrastText: '#FFFFFF',
 }
 

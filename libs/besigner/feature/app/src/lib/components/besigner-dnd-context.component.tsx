@@ -16,13 +16,12 @@
  */
 
 import type { BackendFactory } from 'dnd-core'
-import { type ReactNode } from 'react'
 import { DndProvider } from 'react-dnd'
 // import {TouchBackend} from 'react-dnd-touch-backend'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 
 export interface BesignerDndContextProps<BackendContext, BackendOptions> {
-  children?: ReactNode
+  children?: JSX.Node
   backend?: BackendFactory
   context?: BackendContext
   options?: BackendOptions
