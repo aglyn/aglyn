@@ -19,19 +19,14 @@ import type { AnyObj, Conditional } from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { BoxProps } from '@aglyn/shared-ui-theme'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type {
-  ComponentClass,
-  ComponentProps,
-  ElementType,
-  JSXElementConstructor,
-} from 'react'
+import type { ComponentClass, ComponentProps, ElementType } from 'react'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
 import type { BundleUId, ComponentId } from './aglyn-components.types'
 
 export type ElementId = string
 export type AglynElementType<
   P extends ComponentProps<C> | any = any,
-  C extends keyof JSX.IntrinsicElements | JSXElementConstructor<any> = any,
+  C extends keyof JSX.IntrinsicElements | JSX.ElementConstructor<any> = any,
 > =
   | ComponentClass<P>
   | JSX.ElementConstructor<P>

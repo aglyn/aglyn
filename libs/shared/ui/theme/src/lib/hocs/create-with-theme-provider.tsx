@@ -155,7 +155,7 @@ function createWithThemeProvider(options: WithThemeProviderOptions) {
       ]
     : theme
 
-  return function withThemeProvider<P>(WrappedComponent: JSXComponentType<P>) {
+  return function withThemeProvider<P>(WrappedComponent: JSX.ComponentType<P>) {
     const displayName = getDisplayName(WrappedComponent)
 
     const WithThemeProvider = forwardRef<any, P>((props, ref) => {

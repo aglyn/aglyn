@@ -15,20 +15,18 @@
  * limitations under the License.
  */
 
-/** Tuple with exactly two elements */
-export interface Tuple<T1, T2 = T1> extends Array<T1 | T2> {
-  0: T1
-  1: T2
-  length: 2 // using the numeric literal type '2'
-}
-
-/** Tuple with a guaranteed minimum of one (1) item */
-export interface TupleMin1<T> extends Array<T> {
-  0: T
-}
-
-/** Tuple with a guaranteed minimum of two (2) items */
-export interface TupleMin2<T1, T2 = T1> extends TupleMin1<T1 | T2> {
-  0: T1
-  1: T2
-}
+export * as DoD from './lib/dod'
+export * from './lib/basic'
+export * from './lib/crud'
+export * from './lib/fallback'
+export * from './lib/initializable'
+export * from './lib/iteratable'
+export * from './lib/jsx'
+export * from './lib/jsx-overrides'
+export * from './lib/lifecycle'
+export * from './lib/normalized'
+export * from './lib/react-overrides'
+export * from './lib/semantic'
+export * from './lib/serializable'
+export * from './lib/string'
+export * from './lib/tuples'

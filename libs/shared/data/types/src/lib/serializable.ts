@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
-import type {Dictionary} from './basic'
-
-
 export type iJSONMapKey = string
 export type iJSONListIndex = number
-export type iJSONPrimitive = string | number | boolean | undefined | null | symbol
-export type iJSONMap = {[key: iJSONMapKey]: iJSONValue}
+export type iJSONPrimitive =
+  | string
+  | number
+  | boolean
+  | undefined
+  | null
+  | symbol
+export type iJSONMap = { [key: iJSONMapKey]: iJSONValue }
 export type iJSONList = ArrayLike<iJSONValue>
 export type iJSONValue = iJSONPrimitive | iJSONMap | iJSONList
-export type iJSON = iJSONValue | Record<iJSONMapKey, iJSONValue> | ArrayLike<iJSONValue>
+export type iJSON =
+  | iJSONValue
+  | Record<iJSONMapKey, iJSONValue>
+  | ArrayLike<iJSONValue>
 
 /** Implements a toJSON method */
 export interface Serializable<T = iJSON> {

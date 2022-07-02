@@ -190,7 +190,7 @@ function GetInnerLayout({ children }) {
 }
 
 export interface FirebaseAppLayoutProps {
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 function FirebaseAppLayout(props: FirebaseAppLayoutProps) {

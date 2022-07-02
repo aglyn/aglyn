@@ -36,7 +36,7 @@ export interface BesignerComponentProps {
   noSsr?: boolean
   appName?: AppUUN
   canvasElements?: CanvasSetElementsPayload
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 export const withBesignerContext = <P,>(Component: ComponentType<P>) => {

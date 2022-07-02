@@ -286,7 +286,7 @@ export interface SnackbarProviderProps extends SharedProps {
    * Most of the time this is your App. every component from this point onward
    * will be able to show snackbars.
    */
-  children: JSX.Node | JSX.Node[]
+  children: JSX.Children
   /**
    * Denser margins for snackbars. Recommended to be used on mobile devices.
    * @default false

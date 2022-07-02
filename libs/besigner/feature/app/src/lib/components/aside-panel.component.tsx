@@ -63,7 +63,7 @@ import {
   useMemo,
   useState,
 } from 'react'
-import useAddElementCallback from '../hooks/use-add-element-callback'
+import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 import ComponentsGridListComponent, {
@@ -295,7 +295,7 @@ const withTabPanelInner = (Component) => (props: any) => {
 
 const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
   (props, ref) => {
-    const handleAddElementClick = useAddElementCallback()
+    const handleAddElementClick = useAddElementDrawerCallback()
     return (
       <TabPanelInner sx={{ pl: 0.5 }}>
         <ElementsTreeViewComponent ref={ref} {...props}>
@@ -303,7 +303,7 @@ const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
             <Button
               color="secondary"
               startIcon={<MdiIcon fontSize="inherit" path={mdiPlus.path} />}
-              onClick={handleAddElementClick}
+              onClick={async () => await handleAddElementClick()}
             >
               Add Element
             </Button>

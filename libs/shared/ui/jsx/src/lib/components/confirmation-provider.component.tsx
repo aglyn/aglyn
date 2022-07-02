@@ -33,7 +33,7 @@ import DialogConfirm from './dialog-confirm'
 
 export interface ConfirmationProviderComponentProps {
   defaultOptions?: ConfirmationContextConfig
-  children?: JSX.Node
+  children?: JSX.Children
   component: ElementType<{
     open: boolean
     options: ConfirmationContextConfig

@@ -39,7 +39,7 @@ export function useAglynAppContext<
 
 export interface AglynAppContextComponentProps {
   appName?: AppUUN
-  children?: JSX.Node
+  children?: JSX.Children
   canvasElements?: CanvasSetElementsPayload
 }
 

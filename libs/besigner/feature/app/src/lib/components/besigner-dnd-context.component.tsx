@@ -21,7 +21,7 @@ import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 
 export interface BesignerDndContextProps<BackendContext, BackendOptions> {
-  children?: JSX.Node
+  children?: JSX.Children
   backend?: BackendFactory
   context?: BackendContext
   options?: BackendOptions

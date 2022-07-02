@@ -22,7 +22,7 @@ import { Fragment, useEffect } from 'react'
 import { useSigninCheck } from 'reactfire'
 
 export interface AuthenticatedLayoutProps {
-  children?: JSX.Node
+  children?: JSX.Children
   requireEmailVerification?: boolean
 }
 

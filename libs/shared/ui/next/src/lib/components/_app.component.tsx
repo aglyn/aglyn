@@ -16,7 +16,6 @@
  */
 
 import { HAS_DOCUMENT } from '@aglyn/shared-data-enums'
-import type { JSXElementType } from '@aglyn/shared-data-types'
 import type {
   MakeLinkElementsConfig,
   MakeMetaElementsConfig,
@@ -38,10 +37,10 @@ import NextPageDecoratedLayoutComponent, {
 export type _AppProps<Props, InitialProps> =
   NextPageDecoratedLayoutComponentProps<Props, InitialProps> &
     EmotionCacheProps & {
-      children?: JSX.Node
-      headChildren?: JSX.Node
+      children?: JSX.Children
+      headchildren?: JSX.Children
       linkElements?: MakeLinkElementsConfig
-      MainComponent?: JSXElementType<{ children?: JSX.Node }>
+      MainComponent?: JSX.ElementType<{ children?: JSX.Children }>
       metaElements?: MakeMetaElementsConfig
     }
 

@@ -24,7 +24,7 @@ import {
 } from '@aglyn/shared-ui-theme'
 import { useMemo } from 'react'
 
-export type EmotionCacheProps = { children?: JSX.Node } & (
+export type EmotionCacheProps = { children?: JSX.Children } & (
   | { emotionCache?: EmotionCache; cacheOptions?: never }
   | { cacheOptions?: CreateEmotionCacheOptions; emotionCache?: never }
 )

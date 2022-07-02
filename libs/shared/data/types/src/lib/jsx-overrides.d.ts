@@ -32,6 +32,7 @@ declare global {
     export type Fragment = Iterable<Node>
     export type Node = Child | Fragment | Portal | boolean | null | undefined
     export type NodeList = Node[] | Iterable<Node>
+    export type Children = Node
 
     export type IntrinsicElements = JSX.IntrinsicElements
     export type IntrinsicAttributes = JSX.IntrinsicAttributes
@@ -165,7 +166,7 @@ declare global {
 
     export interface Portal extends Element {
       key: Key | null
-      children: Node
+      children: Children
     }
 
     export interface ComponentClass<P = EmptyObj, S = any> {

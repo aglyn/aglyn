@@ -32,13 +32,13 @@ import { CONTENT_MAX_WIDTH } from '../constants/shared'
 
 export interface DashboardHeaderProps
   extends Partial<BackgroundImageComponentProps> {
-  children?: JSX.Node
+  children?: JSX.Children
   breadcrumbItems?: BreadcrumbsProps['items']
   disableBreadcrumbs?: true
   header?: TypographyProps<any, any> & {
-    icon?: MdiIconProps | JSX.Node
+    icon?: MdiIconProps | JSX.Children
   }
-  headerRight?: JSX.Node
+  headerRight?: JSX.Children
 }
 
 function DashboardHeaderComponent(props: DashboardHeaderProps) {

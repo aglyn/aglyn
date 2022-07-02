@@ -61,7 +61,7 @@ export const useNextPageTitle = (values: PageTitleObject) => {
 }
 
 export interface NextPageTitleProps extends PageTitleObject {
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 export const NextPageTitle = (props: NextPageTitleProps) => {
@@ -73,7 +73,7 @@ export const NextPageTitle = (props: NextPageTitleProps) => {
 }
 
 export interface NextPageTitleContextProps {
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 const NextPageTitleProvider = (props: NextPageTitleContextProps) => {

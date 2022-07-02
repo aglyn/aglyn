@@ -33,7 +33,7 @@ import EmotionCacheProvider from './emotion-cache-provider'
 export type ShadowRendererProps = {
   container?: Node
   ssr?: boolean
-  children?: JSX.Node
+  children?: JSX.Children
 }
 export type ShadowRenderer = (props: ShadowRendererProps) => JSX.Node
 export type CreateShadowRootOptions = {
@@ -45,7 +45,7 @@ export interface ShadowRootProps {
   delegatesFocus?: boolean
   styleSheets?: globalThis.CSSStyleSheet[]
   ssr?: boolean
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 const tags = new Map()

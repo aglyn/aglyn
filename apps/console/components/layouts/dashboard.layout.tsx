@@ -67,7 +67,7 @@ const defaultBreadcrumbs = [
 ]
 
 export interface DashboardLayoutProps {
-  children?: JSX.Node
+  children?: JSX.Children
   breadcrumbItems?: DashboardHeaderProps['breadcrumbItems']
   disableBreadcrumbs?: DashboardHeaderProps['disableBreadcrumbs']
   disableDefaultBreadcrumb?: true

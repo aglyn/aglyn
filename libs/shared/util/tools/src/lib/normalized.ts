@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-import {NormalizedData, NormalizedModel} from '@aglyn/shared-data-types'
-import {_isNum, _isObj} from '@aglyn/shared-util-guards'
-import {arrayMoveAtIndex} from './array/array-move-at-index'
-import {arrayRemoveItem} from './array/array-remove-item'
-import {objectDeleteProperty} from './object/object-delete-property'
-
+// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
+import { NormalizedData, NormalizedModel } from '@aglyn/shared-data-types'
+import { _isNum, _isObj } from '@aglyn/shared-util-guards'
+import { arrayMoveAtIndex } from './array/array-move-at-index'
+import { arrayRemoveItem } from './array/array-remove-item'
+import { objectDeleteProperty } from './object/object-delete-property'
 
 type ID = string
-
 
 /**
  * Normalized data for 3NF
@@ -36,21 +35,24 @@ type ID = string
  * @template K
  * @see https://en.wikipedia.org/wiki/Third_normal_form
  */
-export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T, K> {
-
+export class Normalized<T = any, K extends ID = ID>
+  implements NormalizedModel<T, K>
+{
   static build<T, K extends ID>(): NormalizedData<T, K> {
-    return {allIds: [], byId: {}}
+    return { ids: [], byId: {} }
   }
 
-  public allIds: K[] = []
+  public ids: K[] = []
   public byId: { [P in K]?: T } = {}
 
-  public get length(): number { return (this.allIds ?? []).length }
+  public get length(): number {
+    return (this.ids ?? []).length
+  }
 
   constructor(public readonly props?: NormalizedData<T, K>) {
-    const {allIds, byId} = {...props}
-    this.allIds = allIds ?? []
-    this.byId = byId ?? {}
+    const { ids, byId } = { ...props }
+    this.ids = [...ids]
+    this.byId = { ...byId }
   }
 
   /**
@@ -64,11 +66,11 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @memberof Normalized
    */
   public static toArray<T extends NormalizedData<V>, V>(v: T): V[] {
-    return Array.from(v.allIds).map((id) => v.byId[id])
+    return Array.from(v.ids).map((id) => v.byId[id])
   }
 
   /**
-   * Resets the keys/allIds and values/byId back to empty
+   * Resets the keys/ids and values/byId back to empty
    *
    * @static
    * @param {NormalizedData} v
@@ -76,7 +78,7 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @memberof Normalized
    */
   public static clear<T extends NormalizedData<any>>(v: T): T {
-    v.allIds = []
+    v.ids = []
     v.byId = {}
     return v
   }
@@ -100,12 +102,17 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @returns {NormalizedModel<T>}
    * @memberof Normalized
    */
-  public static from<T extends {id: ID}, K extends ID>(...items: T[] | [id: K, value: any][]): NormalizedModel<T> {
-    const _items = [...items].map(i => _isObj(i) ? [i['id'], i] : [...i])
-    const parsed = _items.reduce<NormalizedData<T, K>>((acc, [id, v]) => ({
-      allIds: (acc?.allIds ?? []).concat(id),
-      byId: {...acc?.byId, [id]: v},
-    }), {allIds: [], byId: {}})
+  public static from<T extends { id: ID }, K extends ID>(
+    ...items: T[] | [id: K, value: any][]
+  ): NormalizedModel<T> {
+    const _items = [...items].map((i) => (_isObj(i) ? [i['id'], i] : [...i]))
+    const parsed = _items.reduce<NormalizedData<T, K>>(
+      (acc, [id, v]) => ({
+        ids: (acc?.ids ?? []).concat(id),
+        byId: { ...acc?.byId, [id]: v },
+      }),
+      { ids: [], byId: {} },
+    )
     return new this(parsed)
   }
 
@@ -119,11 +126,12 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @returns {NormalizedData<T>}
    * @memberof Normalized
    */
-  public static remove<T extends NormalizedData<TT, any>, K extends ID, TT = any>(
-    id: K,
-    model: T,
-  ): NormalizedData<TT, ID> {
-    model.allIds = arrayRemoveItem(model.allIds, id)
+  public static remove<
+    T extends NormalizedData<TT, any>,
+    K extends ID,
+    TT = any,
+  >(id: K, model: T): NormalizedData<TT, ID> {
+    model.ids = arrayRemoveItem(model.ids, id)
     model.byId = objectDeleteProperty(model.byId, id)
     return model
   }
@@ -147,16 +155,15 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
     index?: number,
   ): T {
     const [id, value] = item
-    const currentIndex = model.allIds.indexOf(id)
+    const currentIndex = model.ids.indexOf(id)
     const isUpdate = currentIndex !== -1
 
     model.byId[id] = value
 
     if (!isUpdate) {
-      model.allIds.push(id)
-    }
-    else if (_isNum(index) && currentIndex !== index) {
-      model.allIds = arrayMoveAtIndex(model.allIds, currentIndex, index)
+      model.ids.push(id)
+    } else if (_isNum(index) && currentIndex !== index) {
+      model.ids = arrayMoveAtIndex(model.ids, currentIndex, index)
     }
 
     return model
@@ -172,7 +179,10 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @returns {(undefined | T)}
    * @memberof Normalized
    */
-  public static get<T extends NormalizedData<V, K>, K extends ID, V>(id: K, model: T): V | null {
+  public static get<T extends NormalizedData<V, K>, K extends ID, V>(
+    id: K,
+    model: T,
+  ): V | null {
     return model.byId[id] ?? null
   }
 
@@ -182,12 +192,12 @@ export class Normalized<T = any, K extends ID = ID> implements NormalizedModel<T
    * @memberof Normalized
    */
   public toJSON(): NormalizedData<T, K> {
-    return {allIds: this.allIds, byId: this.byId}
+    return { ids: this.ids, byId: this.byId }
   }
 
   /**
    * Converts the current values into an array ordered by the
-   * appearance of the key in allIds array
+   * appearance of the key in ids array
    * @returns {Array<T>}
    * @memberof Normalized
    */

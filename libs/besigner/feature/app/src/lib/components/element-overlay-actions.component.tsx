@@ -15,9 +15,23 @@
  * limitations under the License.
  */
 
-import { isRootElementId, moveCanvasElement } from '@aglyn/core-data-app'
+import {
+  BesignerPanelTabFlag,
+  setBesignerPanels,
+} from '@aglyn/besigner-data-app'
+import { useRenderedCanvasElementRef } from '@aglyn/besigner-feature-app/contexts/rendered-canvas-elements'
+import { useAglynCanvasSetHovered } from '@aglyn/besigner-feature-app/hooks/use-aglyn-canvas-hovered'
+import { useAglynCanvasSetSelected } from '@aglyn/besigner-feature-app/hooks/use-aglyn-canvas-selected'
+import {
+  duplicateCanvasElement,
+  isRootElementId,
+  moveCanvasElement,
+} from '@aglyn/core-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
-import { useAglynElementIndexInParent } from '@aglyn/core-feature-renderer'
+import {
+  useAglynElementData,
+  useAglynElementIndexInParent,
+} from '@aglyn/core-feature-renderer'
 import {
   ICON_VARIANT_MODIFY_DRAG,
   ICON_VARIANT_MODIFY_DUPLICATE,
@@ -38,7 +52,6 @@ import {
   type TooltipProps,
 } from '@mui/material'
 import { type ChangeEvent, forwardRef, useCallback } from 'react'
-import type { DragElementWrapper } from 'react-dnd'
 import useBesignerAppContext from '../utils/use-besigner-app-context'
 
 export interface BadgeButtonProps extends Omit<TooltipProps, 'children'> {
@@ -118,74 +131,79 @@ export const MoveButtons = forwardRef<any, { $id: ElementId }>((props, ref) => {
   )
 })
 
-export interface ElementOverlayBadgeButtonsComponentProps
-  extends ButtonGroupProps {
+export interface ElementOverlayActionsProps extends ButtonGroupProps {
   $id: ElementId
-  dragHandle: DragElementWrapper<any>
-  onDuplicateClick?: (e: ChangeEvent<unknown>) => void
-  onModifyClick?: (e: ChangeEvent<unknown>) => void
-  onSelectParentClick?: (e: ChangeEvent<unknown>) => void
-  onHoverParent?: (e: ChangeEvent<unknown>) => void
-  onHoverParentLeave?: (e: ChangeEvent<unknown>) => void
 }
 
-const ElementOverlayBadgeComponent = forwardRef<
+const ElementOverlayActionsComponent = forwardRef<
   any,
-  ElementOverlayBadgeButtonsComponentProps
+  ElementOverlayActionsProps
 >((props, ref) => {
-  const {
-    $id,
-    dragHandle,
-    onDuplicateClick,
-    onModifyClick,
-    onSelectParentClick,
-    onHoverParent,
-    onHoverParentLeave,
-    ...rest
-  } = props
+  const { $id, ...rest } = props
+
+  const app = useBesignerAppContext()
+  const setHovered = useAglynCanvasSetHovered()
+  const setSelected = useAglynCanvasSetSelected()
+  const parentId = useAglynElementData($id, 'parentId')
+  const elementRef = useRenderedCanvasElementRef({ $id })
+
+  const handleParentOnMouseLeave = useCallback(
+    (e: ChangeEvent<unknown>) => {
+      setHovered(undefined)
+    },
+    [setHovered],
+  )
 
   const handleDuplicateClick = useCallback(
     (e: ChangeEvent<unknown>) => {
-      onDuplicateClick && onDuplicateClick(e)
+      duplicateCanvasElement(app, { $id })
     },
-    [onDuplicateClick],
+    [$id, app],
   )
 
   const handleModifyClick = useCallback(
     (e: ChangeEvent<unknown>) => {
-      onModifyClick && onModifyClick(e)
+      setBesignerPanels(app, {
+        panels: (panels) => ({
+          ...panels,
+          panelRight: {
+            ...panels.panelRight,
+            toggled: true,
+            tab: BesignerPanelTabFlag.ELEMENT_PROPS_FORM,
+          },
+        }),
+      })
     },
-    [onModifyClick],
+    [app],
   )
 
-  const handleSelectParentClick = useCallback(
+  const handleParentOnClick = useCallback(
     (e: ChangeEvent<unknown>) => {
-      onSelectParentClick && onSelectParentClick(e)
+      setSelected({ $id: parentId })
     },
-    [onSelectParentClick],
+    [parentId, setSelected],
   )
 
-  const handleParentHover = useCallback(
+  const handleParentOnMouseEnter = useCallback(
     (e: ChangeEvent<unknown>) => {
-      onHoverParent && onHoverParent(e)
+      setHovered({ $id: parentId })
     },
-    [onHoverParent],
-  )
-
-  const handleHoverParentLeave = useCallback(
-    (e: ChangeEvent<unknown>) => {
-      onHoverParentLeave && onHoverParentLeave(e)
-    },
-    [onHoverParentLeave],
+    [parentId, setHovered],
   )
 
   return (
     <MuiButtonGroup
       ref={ref}
-      id="aglyn:overlay-badge"
+      id="aglyn:element-overlay-badge"
+      data-aglyn-overlay-id={$id}
+      data-aglyn-overlay-variant="actions"
       variant="contained"
-      color="primary"
+      color="secondary"
       aria-label="element controls"
+      sx={{
+        boxShadow: 4,
+        pointerEvents: 'auto',
+      }}
       {...rest}
     >
       {!isRootElementId($id) && (
@@ -195,7 +213,7 @@ const ElementOverlayBadgeComponent = forwardRef<
           sx={{ '&, &:hover, &:focus': { cursor: 'move' } }}
           // ref={dragHandleRef}
           ButtonProps={{
-            ref: dragHandle,
+            ref: elementRef?.dragHandle,
             sx: { '&, &:hover, &:focus': { cursor: 'move' } },
           }}
           icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
@@ -223,9 +241,9 @@ const ElementOverlayBadgeComponent = forwardRef<
           title="Select parent"
           children={'select parent'}
           ButtonProps={{
-            onClick: handleSelectParentClick,
-            onMouseEnter: handleParentHover,
-            onMouseLeave: handleHoverParentLeave,
+            onClick: handleParentOnClick,
+            onMouseEnter: handleParentOnMouseEnter,
+            onMouseLeave: handleParentOnMouseLeave,
           }}
           icon={{ path: ICON_VARIANT_SELECT_PARENT.path }}
         />
@@ -235,8 +253,8 @@ const ElementOverlayBadgeComponent = forwardRef<
     </MuiButtonGroup>
   )
 })
-ElementOverlayBadgeComponent.displayName = 'ElementOverlayBadgeComponent'
-ElementOverlayBadgeComponent.aglyn = true
+ElementOverlayActionsComponent.displayName = 'ElementOverlayActionsComponent'
+ElementOverlayActionsComponent.aglyn = true
 
-export { ElementOverlayBadgeComponent }
-export default ElementOverlayBadgeComponent
+export { ElementOverlayActionsComponent }
+export default ElementOverlayActionsComponent

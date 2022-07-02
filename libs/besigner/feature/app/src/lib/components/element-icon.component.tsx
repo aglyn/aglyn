@@ -19,23 +19,31 @@ import type { ElementId } from '@aglyn/core-data-foundation'
 import { useAglynElementComponentSchema } from '@aglyn/core-feature-renderer'
 import { ICON_VARIANT_ENTITY_BLOCK } from '@aglyn/shared-data-enums'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { forwardRef } from 'react'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import { forwardRef, useMemo } from 'react'
 
 export interface ElementIconProps extends MdiIconProps {
   $id: ElementId
 }
 
 const ElementIconComponent = forwardRef<any, ElementIconProps>((props, ref) => {
-  const { $id, ...rest } = props
+  const { $id, sx, ...rest } = props
   const icon = useAglynElementComponentSchema($id)?.icon
+  const iconProps = useMemo(
+    () => ({
+      ...icon,
+      path: icon?.path || ICON_VARIANT_ENTITY_BLOCK.path,
+      sx: mergeSxProps(icon?.sx, sx),
+    }),
+    [icon, sx],
+  )
 
   return (
     <MdiIcon
       ref={ref}
-      color="quaternary"
       fontSize="inherit"
-      {...icon}
-      path={icon?.path || ICON_VARIANT_ENTITY_BLOCK.path}
+      color="inherit"
+      {...iconProps}
       {...rest}
     />
   )

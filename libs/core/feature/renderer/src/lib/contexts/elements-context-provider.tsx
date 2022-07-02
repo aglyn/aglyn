@@ -18,7 +18,7 @@
 import { ElementsContext } from './elements-context'
 
 export interface ElementsContextProviderProps {
-  children?: JSX.Node
+  children?: JSX.Children
   // addElement?: (payload: AddElementPayload) => void
 }
 

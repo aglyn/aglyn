@@ -79,7 +79,7 @@ export const useLoading = () => {
 }
 
 export interface LoadingProviderComponentProps {
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 export function LoadingProviderComponent(props: LoadingProviderComponentProps) {

@@ -17,9 +17,6 @@
 
 import type {
   Dictionary,
-  JSXForwardRefExoticComponent,
-  JSXPropsWithoutRef,
-  JSXRefAttributes,
   OrUndef,
   ResolveProps,
 } from '@aglyn/shared-data-types'
@@ -115,8 +112,8 @@ export type ComponentsRegistryContext = {
 }
 
 export interface IAglynComponent<P = any, T = any>
-  extends JSXForwardRefExoticComponent<
-    JSXPropsWithoutRef<P> & JSXRefAttributes<T>
+  extends JSX.ForwardRefExoticComponent<
+    JSX.PropsWithoutRef<P> & JSX.RefAttributes<T>
   > {
   [OF_TYPE]?: SYMBOL_TYPE
   [OF_KIND]?: SYMBOL_TYPE

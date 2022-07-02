@@ -24,7 +24,7 @@ import { forwardRef, type SVGAttributes, useMemo } from 'react'
 export interface MdiIconProps extends Omit<MuiSvgIconProps, 'children'> {
   path?: string
   PathProps?: SVGAttributes<SVGPathElement>
-  children?: (element: JSX.Node) => JSX.Node
+  children?: (element: JSX.Children) => JSX.Children
 }
 
 const MdiIcon = forwardRef<any, MdiIconProps>((props, ref) => {

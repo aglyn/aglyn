@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import {generateComponentClassKeys} from '@aglyn/shared-ui-theme'
-import {styled} from '@mui/material'
+import { generateComponentClassKeys } from '@aglyn/shared-ui-theme'
+import { styled } from '@mui/material'
 import clsx from 'clsx'
-import {type FC, memo} from 'react'
-import type {SnackbarProviderProps} from './types'
-import {SNACKBAR_INDENTS} from './utils/constants'
-
+import { type FC, memo } from 'react'
+import type { SnackbarProviderProps } from './types'
+import { SNACKBAR_INDENTS } from './utils/constants'
 
 const xsWidthMargin = 16
 const componentName = 'SnackbarContainer'
@@ -29,7 +28,8 @@ const collapse = {
   // Material-UI 4.12.x and above uses MuiCollapse-root; earlier versions use
   // Mui-Collapse-container.  https://github.com/mui-org/material-ui/pull/24084
   container: '& > .MuiCollapse-container, & > .MuiCollapse-root',
-  wrapper: '& > .MuiCollapse-container > .MuiCollapse-wrapper, & > .MuiCollapse-root > .MuiCollapse-wrapper',
+  wrapper:
+    '& > .MuiCollapse-container > .MuiCollapse-wrapper, & > .MuiCollapse-root > .MuiCollapse-wrapper',
 }
 
 const classes = generateComponentClassKeys('SnackbarContainer', [
@@ -42,7 +42,7 @@ const classes = generateComponentClassKeys('SnackbarContainer', [
   'center',
 ])
 
-const Root = styled('div')(({theme}) => ({
+const Root = styled('div')(({ theme }) => ({
   [`&.${classes.root}`]: {
     boxSizing: 'border-box',
     display: 'flex',
@@ -116,28 +116,26 @@ const Root = styled('div')(({theme}) => ({
 }))
 
 interface SnackbarContainerProps {
-  children: JSX.Element | JSX.Element[];
-  className?: string;
-  dense: SnackbarProviderProps['dense'];
-  anchorOrigin: NonNullable<SnackbarProviderProps['anchorOrigin']>;
+  children: JSX.Children
+  className?: string
+  dense: SnackbarProviderProps['dense']
+  anchorOrigin: NonNullable<SnackbarProviderProps['anchorOrigin']>
 }
 
 const SnackbarContainerRaw: FC<SnackbarContainerProps> = (props) => {
-  const {className, anchorOrigin, dense, ...other} = props
+  const { className, anchorOrigin, dense, ...other } = props
 
   const combinedClassname = clsx(
     classes[anchorOrigin.vertical],
     classes[anchorOrigin.horizontal],
-    {[classes.rootDense]: dense},
+    { [classes.rootDense]: dense },
     classes.root, // root should come after others to override maxWidth
     className,
   )
 
-  return (
-    <Root className={combinedClassname} {...other} />
-  )
+  return <Root className={combinedClassname} {...other} />
 }
 const SnackbarContainer = memo(SnackbarContainerRaw)
 
-export {SnackbarContainer}
+export { SnackbarContainer }
 export default SnackbarContainer

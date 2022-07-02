@@ -24,12 +24,12 @@ import {
   Tooltip as MuiTooltip,
 } from '@mui/material'
 import { forwardRef } from 'react'
-import useAddElementCallback from '../hooks/use-add-element-callback'
+import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 
 export interface AddControlsProps extends StackProps {}
 
 const AddControlsComponent = forwardRef<any, AddControlsProps>((props, ref) => {
-  const handleAddElementClick = useAddElementCallback()
+  const handleAddElementClick = useAddElementDrawerCallback()
 
   return (
     <MuiStack ref={ref} direction="row" spacing={1} {...props}>
@@ -37,7 +37,7 @@ const AddControlsComponent = forwardRef<any, AddControlsProps>((props, ref) => {
         <MuiIconButton
           aria-haspopup="menu"
           aria-label="add-element"
-          onClick={handleAddElementClick}
+          onClick={async () => await handleAddElementClick()}
         >
           <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_ADD.path} />
         </MuiIconButton>

@@ -21,8 +21,14 @@ import {
   type LeafComponentProps,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
-import { useRefForked } from '@aglyn/shared-ui-jsx'
-import { type ChangeEvent, forwardRef, useCallback, useEffect } from 'react'
+import { useForkedRefs } from '@aglyn/shared-ui-jsx'
+import {
+  type ChangeEvent,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
 import { useAglynCanvasSetHovered } from '../hooks/use-aglyn-canvas-hovered'
 import useAglynCanvasElementIsSelected from '../hooks/use-aglyn-canvas-is-element-selected'
@@ -33,25 +39,38 @@ import useLeafDrop from '../hooks/use-leaf-drop'
 export interface ElementLeafComponentProps extends LeafComponentProps {}
 
 const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
-  (props, ref) => {
+  (props, forwardRef) => {
     const { $id, leafComponent, ...rest } = props
     const [, dragHandle, dragPreview] = useLeafDrag($id, DndDragType.CANVAS)
     const [, dropRef] = useLeafDrop($id, DndDropType.INSIDE)
-    const [_ref, node] = useRefForked<HTMLElement>(ref, dragPreview, dropRef)
+    const [node, setNode] = useState<HTMLElement>()
     const { setElementRef, deleteElementRef } = useRenderedCanvasElements()
+    const ref = useForkedRefs<HTMLElement>(
+      forwardRef,
+      dragPreview,
+      dropRef,
+      setNode,
+    )
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
     const isSelected = useAglynCanvasElementIsSelected($id)
     const setHovered = useAglynCanvasSetHovered()
     const setSelected = useAglynCanvasSetSelected()
 
+    /**
+     * Update context element ref
+     */
     useEffect(() => {
-      setElementRef($id, { $id, node: node.current, dragHandle })
-      return () => deleteElementRef($id)
-    })
+      setElementRef($id, { $id, node, dragHandle })
+    }, [setElementRef, dragHandle, $id, node])
+    /**
+     * Remove only on unmount
+     */
+    useEffect(() => () => deleteElementRef($id), [deleteElementRef, $id])
 
     const handleOnMouseOver = useCallback(
       (e: ChangeEvent<any>) => {
+        e.preventDefault()
         e.stopPropagation()
         setHovered({ $id })
       },
@@ -73,7 +92,7 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
 
     return (
       <LeafComponent
-        ref={_ref}
+        ref={ref}
         $id={$id}
         leafComponent={leafComponent || ElementLeafComponent}
         onMouseOver={handleOnMouseOver}

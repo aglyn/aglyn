@@ -172,7 +172,7 @@ export interface JSXComponent<P = EmptyObj, S = EmptyObj>
 
 export interface JSXPortal extends JSXElement {
   key: JSXKey | null
-  children: JSXNode
+  children: JSX.Children
 }
 
 export interface JSXComponentClass<P = EmptyObj, S = any> {

@@ -16,9 +16,10 @@
  */
 
 import type { ElementId } from '@aglyn/core-data-foundation'
+import type { Dictionary } from '@aglyn/shared-data-types'
 import {
   createContext,
-  type MutableRefObject,
+  type RefObject,
   useContext,
   useMemo,
   useRef,
@@ -26,14 +27,14 @@ import {
 import type { DragElementWrapper, DragSourceOptions } from 'react-dnd'
 
 export type ElementDragHandle = DragElementWrapper<DragSourceOptions>
-export type ElementCanvasRefObject = {
+export type ElementCanvasRefObject = Dictionary & {
   $id: ElementId
   node: Element
   dragHandle: ElementDragHandle
 }
 
 export type RenderedCanvasElementsType = {
-  elements: MutableRefObject<Record<ElementId, ElementCanvasRefObject>>
+  elements: RefObject<Record<ElementId, ElementCanvasRefObject>>
   setElementRef($id: ElementId, ref: ElementCanvasRefObject): void
   deleteElementRef($id: ElementId): void
 }
@@ -51,8 +52,13 @@ export const useRenderedCanvasElements = () => {
   return useContext(RenderedCanvasElementsContext)
 }
 
+export const useRenderedCanvasElementRef = ({ $id }: { $id: ElementId }) => {
+  const { elements } = useRenderedCanvasElements()
+  return useMemo(() => elements.current[$id] || null, [elements, $id])
+}
+
 export interface RenderedCanvasElementsProps {
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 function RenderedCanvasElementsProvider(props: RenderedCanvasElementsProps) {
@@ -60,13 +66,11 @@ function RenderedCanvasElementsProvider(props: RenderedCanvasElementsProps) {
   const elements = useRef<Record<ElementId, ElementCanvasRefObject>>({})
   const context = useMemo<RenderedCanvasElementsType>(
     () => ({
-      get elements() {
-        return elements
-      },
-      setElementRef($id, ref): void {
+      elements,
+      setElementRef: ($id, ref): void => {
         elements.current[$id] = ref
       },
-      deleteElementRef($id): void {
+      deleteElementRef: ($id): void => {
         delete elements.current[$id]
       },
     }),

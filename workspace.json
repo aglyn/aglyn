@@ -20,6 +20,7 @@
     "shared-data-enums": "libs/shared/data/enums",
     "shared-data-forms": "libs/shared/data/forms",
     "shared-data-mdi": "libs/shared/data/mdi",
+    "shared-data-operators": "libs/shared/data/operators",
     "shared-data-regex": "libs/shared/data/regex",
     "shared-data-types": "libs/shared/data/types",
     "shared-feature-fbserver": "libs/shared/feature/fbserver",

@@ -141,7 +141,7 @@ export interface DataTableProps extends Partial<MuiDataGridProps> {
   RootBoxProps?: Partial<BoxProps>
   LoadingOverlayViewProps?: LoadingOverlayViewProps
   noRowsLabel?: string
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(

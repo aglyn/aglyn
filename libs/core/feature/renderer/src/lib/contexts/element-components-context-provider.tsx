@@ -19,7 +19,7 @@ import { useAglynComponentTemplateBlocks } from '../hooks/use-aglyn-component-te
 import { AglynComponentsContext } from './aglyn-components-context'
 
 export interface ElementComponentsContextProviderProps {
-  children?: JSX.Node
+  children?: JSX.Children
 }
 
 export function ElementComponentsContextProvider(

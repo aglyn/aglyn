@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
+import { useRenderedCanvasElementRef } from '@aglyn/besigner-feature-app/contexts/rendered-canvas-elements'
 import type { ElementId } from '@aglyn/core-data-foundation'
 import {
   alpha,
   generateComponentClassKeys,
   styled,
 } from '@aglyn/shared-ui-theme'
-import {
-  getElementClientRectBounding,
-  type VirtualElement,
-} from '@aglyn/shared-util-dom'
+import { getElementClientRectBounding } from '@aglyn/shared-util-dom'
 import { Box, type BoxProps } from '@mui/material'
 import clsx from 'clsx'
 import { forwardRef, useMemo } from 'react'
@@ -90,18 +88,17 @@ const ElementOverlayOutline = styled(Box, {
 
 export interface ElementOverlayOutlineProps extends BoxProps {
   $id: ElementId
-  anchorEl?: VirtualElement
 }
 
 const ElementOverlayOutlineComponent = forwardRef<
   any,
   ElementOverlayOutlineProps
 >((props, ref) => {
-  const { className: classNameProp, $id, anchorEl, ...rest } = props
-
+  const { className, $id, ...rest } = props
   const [isDragging, isDraggingOver] = useAglynDndElementStatus($id)
   const { isSelfSelected, isSelfHovered } = useAglynCanvasElementStatus($id)
-  const rect = anchorEl && getElementClientRectBounding(anchorEl)
+  const elementRef = useRenderedCanvasElementRef({ $id })
+  const rect = getElementClientRectBounding(elementRef?.node)
   const style = useMemo(
     () => ({
       width: rect?.width,
@@ -110,22 +107,22 @@ const ElementOverlayOutlineComponent = forwardRef<
     [rect],
   )
 
-  const className = clsx(
-    {
-      [classKeys.selectedSelf]: Boolean(isSelfSelected),
-      [classKeys.hoveringSelf]: Boolean(isSelfHovered),
-      [classKeys.draggingSelf]: Boolean(isDragging),
-      [classKeys.draggingOver]: Boolean(isDraggingOver),
-    },
-    classNameProp,
-  )
-
   return (
     <ElementOverlayOutline
       ref={ref}
-      id="aglyn:overlay-outline"
-      className={className}
+      id="aglyn:element-overlay-outline"
+      data-aglyn-overlay-id={$id}
+      data-aglyn-overlay-type="outline"
       style={style}
+      className={clsx(
+        {
+          [classKeys.selectedSelf]: Boolean(isSelfSelected),
+          [classKeys.hoveringSelf]: Boolean(isSelfHovered),
+          [classKeys.draggingSelf]: Boolean(isDragging),
+          [classKeys.draggingOver]: Boolean(isDraggingOver),
+        },
+        className,
+      )}
       {...rest}
     />
   )

@@ -15,4 +15,5 @@
  * limitations under the License.
  */
 
-export * from './types'
+export * from './lib/definitions'
+export * from './lib/inference'

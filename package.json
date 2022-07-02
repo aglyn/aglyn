@@ -34,7 +34,8 @@
     "cz": "cz",
     "prepare": "husky install",
     "vercel:build:app:www": "npx nx build www --prod --verbose --outputPath=./dist/apps/www",
-    "vercel:build:app:console": "npx nx build console --prod --verbose --outputPath=./dist/apps/console"
+    "vercel:build:app:console": "npx nx build console --prod --verbose --outputPath=./dist/apps/console",
+    "readme:table-of-contents": "markdown-toc -i ./README.md"
   },
   "dependencies": {
     "@data-driven-forms/mui-component-mapper": "^3.18.1",
@@ -183,6 +184,7 @@
     "gts": "^3.1.0",
     "husky": "^8.0.1",
     "jest": "28.1.0",
+    "markdown-toc": "^1.2.0",
     "next-compose-plugins": "^2.2.1",
     "nx": "14.3.5",
     "nx-electron": "13.1.2",

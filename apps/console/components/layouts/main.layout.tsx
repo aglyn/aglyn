@@ -280,7 +280,7 @@ export interface CenterNavMenuItem
 export interface MainLayoutProps
   extends Omit<StackProps, 'title'>,
     TopAppBarProps {
-  children?: JSX.Node
+  children?: JSX.Children
   title?: string[] | string
 }
 

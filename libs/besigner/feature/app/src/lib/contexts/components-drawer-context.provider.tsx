@@ -31,7 +31,7 @@ import {
 export interface ComponentsDrawerContextProviderProps
   extends Partial<ComponentsDrawerProps> {
   defaultOptions?: ElementDrawerOptions
-  children?: JSX.Node
+  children?: JSX.Children
   component?: ElementType<ComponentsDrawerProps>
 }
 

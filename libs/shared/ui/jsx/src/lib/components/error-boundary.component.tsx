@@ -28,7 +28,7 @@ import {
 } from 'react'
 
 export interface ErrorBoundaryProps {
-  children?: JSX.Node
+  children?: JSX.Children
   fallback?: JSX.Node
   onCatch?: (error: Error, errorInfo: ErrorInfo) => void
 }

@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-import type {IndexOf, JSXComponentType} from '@aglyn/shared-data-types'
-import type {ComponentMapper, FormRendererProps} from './vendor/data-driven-forms'
+import type { IndexOf } from '@aglyn/shared-data-types'
+import type {
+  ComponentMapper,
+  FormRendererProps,
+} from './vendor/data-driven-forms'
 
-
-export type FormTemplateComponent = JSXComponentType<FormRendererProps>
+export type FormTemplateComponent = JSX.ComponentType<FormRendererProps>
 export type FieldComponentMap = IndexOf<ComponentMapper>

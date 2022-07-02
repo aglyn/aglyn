@@ -89,6 +89,60 @@
 
 <hr/><!-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~SECTION~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
 
+## Table of Contents
+
+<!-- toc -->
+
+- [Monorepo sources](#monorepo-sources)
+  * [Library Types](#library-types)
+    + [Feature](#feature)
+    + [UI](#ui)
+    + [Data-access](#data-access)
+    + [Utility](#utility)
+  * [Directory and file structure](#directory-and-file-structure)
+  * [Apps Monorepo package type](#apps-monorepo-package-type)
+  * [Package scope predicate: lib(`core`)](#package-scope-predicate-libcore)
+    + [Data-access](#data-access-1)
+    + [UI](#ui-1)
+  * [Package scope predicate: lib(`shared`)](#package-scope-predicate-libshared)
+    + [Services and Providers (i.e., data-access)](#services-and-providers-ie-data-access)
+    + [Feature](#feature-1)
+    + [UI](#ui-2)
+    + [Utility](#utility-1)
+- [Terminology and meaning](#terminology-and-meaning)
+  * [Extension](#extension)
+  * [Plugin / Add-on](#plugin--add-on)
+- [Firebase](#firebase)
+  * [Emulation](#emulation)
+- [Monorepo source files](#monorepo-source-files)
+  * [Source files: apps](#source-files-apps)
+  * [Libraries](#libraries)
+- [Basic usage](#basic-usage)
+  * [Serving](#serving)
+  * [Building](#building)
+    + [Unit testing](#unit-testing)
+    + [End-to-end (e2e) testing](#end-to-end-e2e-testing)
+- [Scaffolding](#scaffolding)
+  * [Applications](#applications)
+  * [Libraries](#libraries-1)
+  * [App or library modules and components](#app-or-library-modules-and-components)
+- [Updating](#updating)
+  * [Move or rename application and libraries](#move-or-rename-application-and-libraries)
+  * [Nx build framework](#nx-build-framework)
+  * [Version and changelog](#version-and-changelog)
+- [Visualizing dependencies](#visualizing-dependencies)
+- [Environment files](#environment-files)
+  * [What other .env files can be used?](#what-other-env-files-can-be-used)
+    + [Files on the left have more priority than files on the right:](#files-on-the-left-have-more-priority-than-files-on-the-right)
+- [Git](#git)
+  * [Commit messages](#commit-messages)
+    + [Template](#template)
+    + [Overview](#overview)
+      - [Types](#types)
+      - [Footers](#footers)
+
+<!-- tocstop -->
+
 ## Monorepo sources
 
 There are many different types of libraries in a workspace. In order to maintain a certain sense of
