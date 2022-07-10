@@ -334,7 +334,7 @@ const ComponentsGroupItem = ({ id, isOpen, triggerToggle, item }) => {
       </ListItemIcon>
       <ListItemText
         primary={item?.labelPrimary}
-        secondary={item?.labelSecondary}
+        // secondary={item?.labelSecondary}
       />
       <MdiIcon
         path={

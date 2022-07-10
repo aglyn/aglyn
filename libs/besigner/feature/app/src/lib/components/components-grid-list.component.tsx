@@ -85,6 +85,7 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
         <ElementCardComponent
           onActionClick={handleItemClick}
           {...(props as any)}
+          item={props.item as any}
         />
       ),
       [handleItemClick],

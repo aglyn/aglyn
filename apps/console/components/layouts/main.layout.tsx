@@ -17,7 +17,6 @@
 
 import { APP_CONSOLE, ICON_VARIANT_MENU_DOWN } from '@aglyn/shared-data-enums'
 import {
-  AglynSvgIcon,
   AglynSvgLogo,
   AppLink,
   type AppLinkProps,
@@ -27,7 +26,7 @@ import {
   type MenuProps,
 } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { NextPageTitle } from '@aglyn/shared-ui-next'
+import { Image, NextPageTitle } from '@aglyn/shared-ui-next'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { _isArrEmpty } from '@aglyn/shared-util-guards'
 import {
@@ -44,6 +43,7 @@ import {
 } from '@mui/material'
 import { Fragment } from 'react'
 import { DRAWER_WIDTH, TOP_BAR_HEIGHT } from '../../constants/shared'
+import besignerIcon from '../../public/_static/images/icons/besiger-icon-v1-256.svg'
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
@@ -186,14 +186,15 @@ const TopAppBar = (props: TopAppBarProps) => {
                     }),
                   }}
                 >
-                  <AglynSvgIcon
+                  <Image
+                    src={besignerIcon}
                     sx={{
                       ml: -0.15,
                       height: '32px',
                       width: '32px',
                     }}
-                    bordered
-                    rounded
+                    height={32}
+                    width={32}
                   />
                   <AglynSvgLogo
                     color="secondary"

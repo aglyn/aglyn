@@ -17,8 +17,9 @@
 
 import { _isArr } from '@aglyn/shared-util-guards'
 import { useMemo } from 'react'
+import type { Theme as DefaultTheme } from '../../vendor/mui'
 
-export function useForkedSxProps<Theme extends object = JSX.EmptyObj>(
+export function useForkedSxProps<Theme extends DefaultTheme>(
   ...sxProps: JSX.SxProps<Theme>[]
 ): JSX.SxStyleArrayProp<Theme> {
   const deps = useMemo(() => [...sxProps], [sxProps])
@@ -29,7 +30,7 @@ export function useForkedSxProps<Theme extends object = JSX.EmptyObj>(
   )
 }
 
-export function mergeSxProps<Theme extends object = JSX.EmptyObj>(
+export function mergeSxProps<Theme extends DefaultTheme>(
   ...sxProps: JSX.SxProps<Theme>[]
 ): JSX.SxStyleArrayProp<Theme> {
   const merged = []

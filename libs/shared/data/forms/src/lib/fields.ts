@@ -23,8 +23,74 @@ import {
   REGEX_NUMBER,
   REGEX_SPECIAL_CHARACTER,
 } from '@aglyn/shared-data-regex'
-import {FieldComponentType, type FieldSchema, FieldValidatorType} from '@aglyn/shared-ui-jsx-forms'
+import {
+  FieldComponentType,
+  type FieldSchema,
+  FieldValidatorType,
+  type Validator,
+} from '@aglyn/shared-ui-jsx-forms'
 
+const VALIDATE_LENGTH_RANGE: (min: number, max: number) => Validator = (
+  min: number,
+  max: number,
+) => ({
+  type: FieldValidatorType.PATTERN,
+  pattern: RegExp(`/^.{${min},${max}}$/`),
+  message: `Length must between ${min}–${max} characters`,
+})
+
+const VALIDATE_PATTERN_RANGE_PASSWORD: Validator = VALIDATE_LENGTH_RANGE(6, 30)
+const VALIDATE_PATTERN_EMAIL: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: REGEX_EMAIL,
+  message: 'Enter a valid email (name@domain.com)',
+}
+const VALIDATE_PATTERN_LOWERCASE_MIN_1: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: REGEX_LETTER_LOWER,
+  message: 'Must contain at least 1 lowercase letter',
+}
+const VALIDATE_PATTERN_UPPERCASE_MIN_1: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: REGEX_LETTER_UPPER,
+  message: 'Must contain at least 1 uppercase letter',
+}
+const VALIDATE_PATTERN_NUMBER_MIN_1: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: REGEX_NUMBER,
+  message: 'Must contain at least 1 number',
+}
+const VALIDATE_PATTERN_SPACE_NEVER: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: REGEX_NO_SPACES,
+  message: 'Password can not have spaces',
+}
+const VALIDATE_PATTERN_SPECIAL_MIN_1: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: REGEX_SPECIAL_CHARACTER,
+  message: 'Must contain a special character [/!@$]',
+}
+
+export const VALIDATOR_LIST_EMAIL: Validator[] = [
+  {
+    type: FieldValidatorType.REQUIRED,
+    message: 'Email address is required',
+  },
+  VALIDATE_PATTERN_EMAIL,
+]
+
+export const VALIDATOR_LIST_PASSWORD: FieldSchema['validate'] = [
+  {
+    type: FieldValidatorType.REQUIRED,
+    message: 'Password is required',
+  },
+  VALIDATE_PATTERN_LOWERCASE_MIN_1,
+  VALIDATE_PATTERN_UPPERCASE_MIN_1,
+  VALIDATE_PATTERN_NUMBER_MIN_1,
+  VALIDATE_PATTERN_SPECIAL_MIN_1,
+  VALIDATE_PATTERN_SPACE_NEVER,
+  VALIDATE_PATTERN_RANGE_PASSWORD,
+]
 
 export const FIELD_SCHEMA_EMAIL: FieldSchema = {
   component: FieldComponentType.TEXT_FIELD,
@@ -33,17 +99,7 @@ export const FIELD_SCHEMA_EMAIL: FieldSchema = {
   placeholder: 'Work email',
   type: 'text',
   isRequired: true,
-  validate: [
-    {
-      type: FieldValidatorType.REQUIRED,
-      message: 'Email address is required',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: REGEX_EMAIL,
-      message: 'Enter a valid email (name@domain.com)',
-    },
-  ],
+  validate: [...VALIDATOR_LIST_EMAIL],
 }
 
 export const FIELD_SCHEMA_PASSWORD: FieldSchema = {
@@ -52,42 +108,7 @@ export const FIELD_SCHEMA_PASSWORD: FieldSchema = {
   label: 'Password',
   type: 'password',
   isRequired: true,
-  validate: [
-    {
-      type: FieldValidatorType.REQUIRED,
-      message: 'Password is required',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: /^.{6,30}$/,
-      message: 'Length must between 6–30 characters',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: REGEX_LETTER_UPPER,
-      message: 'Must contain at least 1 uppercase letter',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: REGEX_LETTER_LOWER,
-      message: 'Must contain at least 1 lowercase letter',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: REGEX_NUMBER,
-      message: 'Must contain at least 1 number',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: REGEX_SPECIAL_CHARACTER,
-      message: 'Must contain a special character [/!@$]',
-    },
-    {
-      type: FieldValidatorType.PATTERN,
-      pattern: REGEX_NO_SPACES,
-      message: 'Password can not have spaces',
-    },
-  ],
+  validate: [...VALIDATOR_LIST_PASSWORD],
 }
 
 export const FIELD_SCHEMA_PASSWORD_CONFIRM: FieldSchema = {
@@ -96,13 +117,24 @@ export const FIELD_SCHEMA_PASSWORD_CONFIRM: FieldSchema = {
   label: 'Confirm',
   type: 'password',
   required: true,
+  condition: {
+    or: [
+      {
+        when: [FIELD_SCHEMA_PASSWORD.name],
+        isEmpty: true,
+      },
+    ],
+    then: { visible: false },
+  },
   validate: [
     {
       type: FieldValidatorType.REQUIRED,
       message: 'Confirm your password.',
     },
     (value, values) => {
-      return values['Passwd'] !== value ? 'Those passwords didn\'t match. Try again.' : undefined
+      return values[FIELD_SCHEMA_PASSWORD.name] !== value
+        ? "Those passwords didn't match. Try again."
+        : undefined
     },
   ],
 }
@@ -118,7 +150,7 @@ export const FIELD_SCHEMA_FIRST_NAME: FieldSchema = {
   },
   isRequired: true,
   validate: [
-    {type: FieldValidatorType.REQUIRED, message: 'Please enter a first name'},
+    { type: FieldValidatorType.REQUIRED, message: 'Please enter a first name' },
     {
       type: FieldValidatorType.MIN_LENGTH,
       threshold: 2,
@@ -138,7 +170,7 @@ export const FIELD_SCHEMA_LAST_NAME: FieldSchema = {
   },
   isRequired: true,
   validate: [
-    {type: FieldValidatorType.REQUIRED, message: 'Provide your last name'},
+    { type: FieldValidatorType.REQUIRED, message: 'Provide your last name' },
     {
       type: FieldValidatorType.MIN_LENGTH,
       threshold: 1,

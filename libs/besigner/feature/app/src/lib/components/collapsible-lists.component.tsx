@@ -16,7 +16,7 @@
  */
 
 import type { AnyObj } from '@aglyn/shared-data-types'
-import { Collapse, type CollapseProps } from '@mui/material'
+import { Collapse, type CollapseProps, Divider } from '@mui/material'
 import { Fragment, useCallback, useState } from 'react'
 
 export type CollapsibleKey = string | number
@@ -48,7 +48,7 @@ export interface CollapsibleListsProps extends CollapseProps {
   unique?: boolean
 }
 
-const CollapsibleLists = (props: CollapsibleListsProps) => {
+const CollapsibleListsComponent = (props: CollapsibleListsProps) => {
   const {
     children,
     items,
@@ -77,7 +77,7 @@ const CollapsibleLists = (props: CollapsibleListsProps) => {
 
   return (
     <Fragment>
-      {items.map((item, index) => (
+      {items.map((item, index, arr) => (
         <Fragment key={item?.id}>
           <RenderItem
             id={item?.id}
@@ -95,17 +95,18 @@ const CollapsibleLists = (props: CollapsibleListsProps) => {
               triggerToggle={handleToggle(item?.id)}
             />
           </Collapse>
+          <Divider component="li" />
         </Fragment>
       ))}
     </Fragment>
   )
 }
-CollapsibleLists.displayName = 'CollapsibleListsComponent'
-CollapsibleLists.aglyn = true
-CollapsibleLists.defaultProps = {
+CollapsibleListsComponent.displayName = 'CollapsibleListsComponent'
+CollapsibleListsComponent.aglyn = true
+CollapsibleListsComponent.defaultProps = {
   initialOpen: [],
   unique: false,
 }
 
-const CollapsibleListsComponent = CollapsibleLists
+export { CollapsibleListsComponent }
 export default CollapsibleListsComponent
