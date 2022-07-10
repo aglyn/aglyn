@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/data/jsx/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nrwl/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/data/jsx",
+        "main": "libs/shared/data/jsx/src/index.ts",
+        "tsConfig": "libs/shared/data/jsx/tsconfig.lib.json",
+        "assets": ["libs/shared/data/jsx/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["libs/shared/data/jsx/**/*.ts"]
+      }
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:data"]
+}

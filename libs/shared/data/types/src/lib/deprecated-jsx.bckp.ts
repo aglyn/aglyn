@@ -78,7 +78,8 @@ export type JSXRefCallback<T> = {
   bivarianceHack(instance: T | null): void
 }['bivarianceHack']
 export type JSXRef<T> = JSXRefCallback<T> | JSXRefObject<T> | null
-/** Ensures that the props do not include ref at all */
+/** Ensures that the props do not include ref at all * @deprecated use {@link JSX} namespace instead
+ */
 export type JSXPropsWithoutRef<P> =
   // Pick would not be sufficient for this. We'd like to avoid unnecessary mapping and need a
   // distributive conditional to support unions. see:
@@ -90,7 +91,8 @@ export type JSXPropsWithoutRef<P> =
       : P
     : P
 
-/** Ensures that the props do not include string ref, which cannot be forwarded */
+/** Ensures that the props do not include string ref, which cannot be forwarded * @deprecated use {@link JSX} namespace instead
+ */
 export type JSXPropsWithRef<P> =
   // Just "P extends { ref?: infer R }" looks sufficient, but R will infer as {} if P is {}.
   'ref' extends keyof P
@@ -106,6 +108,7 @@ export type JSXPropsWithChildren<P> = P & { children?: JSXNode }
 /**
  * NOTE: prefer ComponentPropsWithRef, if the ref is forwarded,
  * or ComponentPropsWithoutRef when refs are not supported.
+ * @deprecated use {@link JSX} namespace instead
  */
 type JSXComponentProps<
   T extends keyof JSXIntrinsicElements | JSXElementConstructor<any>,
@@ -207,6 +210,7 @@ export interface JSXElementChildrenAttribute {
 export interface JSXExoticComponent<P = AnyObj> {
   /**
    * **NOTE**: Exotic components are not callable.
+   * @deprecated use {@link JSX} namespace instead
    */
   (props: P): JSXElement | null
   readonly $$typeof: symbol
@@ -268,6 +272,7 @@ export type OverrideableComponentProps<P = any, T = OverrideComponentProp> = P &
  * `U`, their value types do not conflict.
  *
  * @internal
+ * @deprecated use {@link JSX} namespace instead
  */
 export type ConsistentWith<DecorationTargetProps, InjectedProps> = {
   [P in keyof DecorationTargetProps]: P extends keyof InjectedProps
@@ -281,6 +286,7 @@ export type ConsistentWith<DecorationTargetProps, InjectedProps> = {
  * a function that takes {component} and returns a component that passes along
  * all the props to {component} except the {InjectedProps} and will accept
  * additional {AdditionalProps}
+ * @deprecated use {@link JSX} namespace instead
  */
 export type PropInjectorComponent<InjectedProps, AdditionalProps = EmptyObj> = {
   <
@@ -306,6 +312,7 @@ export type PropInjectorComponent<InjectedProps, AdditionalProps = EmptyObj> = {
  * string union.
  *
  * @internal
+ * @deprecated use {@link JSX} namespace instead
  */
 export type OverridableStringUnion<
   T extends string | number,
@@ -317,6 +324,7 @@ export type OverridableStringUnion<
  * overlap.
  *
  * @internal
+ * @deprecated use {@link JSX} namespace instead
  */
 export type Overwrite<T, U> = DistributiveOmit<T, keyof U> & U
 
@@ -338,6 +346,7 @@ type IfEquals<T, U, Y = unknown, N = never> = (<G>() => G extends T
  * A component whose root component can be controlled via a `component` prop.
  *
  * Adjusts valid props based on the type of `component`.
+ * @deprecated use {@link JSX} namespace instead
  */
 export interface OverridableComponent<M extends OverridableTypeMap> {
   <C extends JSXElementType>(
@@ -345,6 +354,7 @@ export interface OverridableComponent<M extends OverridableTypeMap> {
       /**
        * The component used for the root node.
        * Either a string to use a HTML element or a component.
+       * @deprecated use {@link JSX} namespace instead
        */
       component: C
     } & OverrideProps<M, C>,
@@ -355,6 +365,8 @@ export interface OverridableComponent<M extends OverridableTypeMap> {
 
 /**
  * Props of the component if `component={Component}` is used.
+ * @deprecated use {@link JSX} namespace instead
+ * @deprecated use {@link JSX} namespace instead
  */
 // prettier-ignore
 export type OverrideProps<M extends OverridableTypeMap,
@@ -365,6 +377,7 @@ export type OverrideProps<M extends OverridableTypeMap,
 
 /**
  * Props if `component={Component}` is NOT used.
+ * @deprecated use {@link JSX} namespace instead
  */
 // prettier-ignore
 export type DefaultComponentProps<M extends OverridableTypeMap> =
@@ -373,6 +386,7 @@ export type DefaultComponentProps<M extends OverridableTypeMap> =
 
 /**
  * Props defined on the component.
+ * @deprecated use {@link JSX} namespace instead
  */
 // prettier-ignore
 export type BaseProps<M extends OverridableTypeMap> = M['props'];

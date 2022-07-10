@@ -17,16 +17,10 @@
 
 import type { AglynComponentElementTemplate } from '@aglyn/core-data-foundation'
 import {
-  ICON_VARIANT_ENTITY_BLOCK,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import {
-  CardIconListItem,
-  GridList,
-  type GridListProps,
-  Menu,
-} from '@aglyn/shared-ui-jsx'
+import { GridList, type GridListProps, Menu } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { arrayFromLength } from '@aglyn/shared-util-tools'
@@ -38,6 +32,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import ElementCardComponent from './element-card.component'
 
 const endIcon = (value: number, active: number) =>
   value !== active
@@ -86,31 +81,11 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
     }, [handleColumnChange, columns, maxColumns])
 
     const renderItemContent = useCallback(
-      ({ icon, ...item }: AglynComponentElementTemplate) => (
-        <CardIconListItem
-          item={item}
-          label={item.label}
+      (props: AglynComponentElementTemplate) => (
+        <ElementCardComponent
           onActionClick={handleItemClick}
-        >
-          {!icon?.path && icon ? (
-            (icon as any)
-          ) : (
-            <MdiIcon
-              color="quaternary"
-              {...icon}
-              path={icon?.path || ICON_VARIANT_ENTITY_BLOCK.path}
-              sx={mergeSxProps(
-                {
-                  fontSize: { xs: `5ch`, sm: `4ch` },
-                  padding: `0.15ch`,
-                  color: 'quaternary.main',
-                  overflow: 'visible',
-                },
-                icon?.sx,
-              )}
-            />
-          )}
-        </CardIconListItem>
+          {...(props as any)}
+        />
       ),
       [handleItemClick],
     )

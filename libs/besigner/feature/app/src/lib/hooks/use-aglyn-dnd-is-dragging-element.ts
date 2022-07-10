@@ -17,7 +17,7 @@
 
 import type { ElementId } from '@aglyn/core-data-foundation'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
-import useBesignerAppContext from '../utils/use-besigner-app-context'
+import useBesignerAppContext from './use-besigner-app-context'
 
 export function useAglynDndIsDraggingElement($id: ElementId): boolean {
   const app = useBesignerAppContext()

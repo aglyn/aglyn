@@ -15,23 +15,27 @@
  * limitations under the License.
  */
 
-import type { OrUndef } from '@aglyn/shared-data-types'
 import { _isArr } from '@aglyn/shared-util-guards'
-import type { SxProps, Theme as DefaultTheme } from '../../vendor/mui'
+import { useMemo } from 'react'
 
-export type MergedSxProps<Theme extends object = DefaultTheme> = Extract<SxProps<Theme>, any[]>
+export function useForkedSxProps<Theme extends object = JSX.EmptyObj>(
+  ...sxProps: JSX.SxProps<Theme>[]
+): JSX.SxStyleArrayProp<Theme> {
+  const deps = useMemo(() => [...sxProps], [sxProps])
+  return useMemo(
+    () => mergeSxProps(...sxProps),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    deps,
+  )
+}
 
-export type MergeSxParameter<Theme extends object = DefaultTheme> = OrUndef<
-  OrUndef<SxProps<Theme>>[] | SxProps<Theme>
->
-
-export function mergeSxProps<Theme extends DefaultTheme>(
-  ...sxProps: MergeSxParameter<Theme>[]
-): MergedSxProps<Theme> {
-  const merged: MergedSxProps<Theme> = []
+export function mergeSxProps<Theme extends object = JSX.EmptyObj>(
+  ...sxProps: JSX.SxProps<Theme>[]
+): JSX.SxStyleArrayProp<Theme> {
+  const merged = []
 
   for (const sx of sxProps) {
-    if (_isArr(sx)) merged.push(...(sx as any))
+    if (_isArr(sx)) merged.push(...sx.map((i) => i || false))
     else merged.push(sx || false)
   }
 

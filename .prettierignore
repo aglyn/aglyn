@@ -4,7 +4,4 @@
 /coverage
 /nx.json
 /.eslintrc.json
-tsconfig.json
-tsconfig.*.json
-tsdoc.json
-tsdoc.*.json
+/workspace.json

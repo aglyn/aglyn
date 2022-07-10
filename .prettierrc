@@ -29,4 +29,12 @@
   "trailingComma": "all",
   "useTabs": false,
   "vueIndentScriptAndStyle": false,
+  "overrides": [
+    {
+      "files": ["tsconfig.*.json", "tsconfig.json", "tsdoc.*.json", "tsdoc.json"],
+      "options": {
+        "printWidth": 140
+      }
+    }
+  ]
 }

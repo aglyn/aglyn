@@ -17,7 +17,7 @@
 
 import {
   generateComponentClassKeys,
-  mergeSxProps,
+  useForkedSxProps,
 } from '@aglyn/shared-ui-theme'
 import {
   Box,
@@ -37,10 +37,13 @@ const cardClasses = generateComponentClassKeys('AglynCardIconListItem', [
   'wrapper',
 ])
 
-export interface CardIconListItemProps extends Partial<MuiCardProps> {
+export interface CardIconListItemProps
+  extends Omit<Partial<MuiCardProps>, 'children'> {
   item: GridListItemData
-  preview?: JSX.Node
-  label?: JSX.Node
+  children?:
+    | JSX.Children
+    | (({ item: GridListItemData, selected: boolean }) => JSX.Children)
+  label?: JSX.Children
   selected?: boolean
   onActionClick?: {
     bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void
@@ -56,39 +59,31 @@ export const CardIconListItem = forwardRef<any, CardIconListItemProps>(
       item,
       label,
       onActionClick,
-      preview,
       sx,
       ...rest
     } = props
     const isSelected = Boolean(selected)
+    const _className = clsx({ [cardClasses.selected]: isSelected }, className)
+    const _sx = useForkedSxProps(
+      {
+        [`&.${cardClasses.selected}`]: {
+          [`& .${cardClasses.actionArea}`]: {
+            backgroundColor: 'secondary.main',
+            color: 'secondary.contrastText',
+          },
+        },
+      },
+      sx,
+    )
     const handleClick = useCallback(
       (e) => {
         onActionClick && onActionClick(e, item)
       },
       [item, onActionClick],
     )
+
     return (
-      <Card
-        ref={ref}
-        className={clsx(
-          {
-            [cardClasses.selected]: isSelected,
-          },
-          className,
-        )}
-        sx={mergeSxProps(
-          {
-            [`&.${cardClasses.selected}`]: {
-              [`& .${cardClasses.actionArea}`]: {
-                backgroundColor: 'secondary.main',
-                color: 'secondary.contrastText',
-              },
-            },
-          },
-          sx,
-        )}
-        {...rest}
-      >
+      <Card ref={ref} className={_className} sx={_sx} {...rest}>
         <CardActionArea
           disabled={isSelected}
           onClick={handleClick}
@@ -116,15 +111,15 @@ export const CardIconListItem = forwardRef<any, CardIconListItemProps>(
                 height: '100%',
                 display: 'flex',
                 textAlign: 'center',
+                alignItems: 'center',
                 flexDirection: 'column',
                 justifyContent: 'space-evenly',
                 padding: 0.5,
               }}
             >
-              <span>
-                {children}
-                {preview}
-              </span>
+              {typeof children === 'function'
+                ? children({ item, selected: isSelected })
+                : children}
               {label && (
                 <Typography
                   component="span"

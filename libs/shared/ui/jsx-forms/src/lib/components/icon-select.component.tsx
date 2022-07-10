@@ -183,7 +183,11 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
             item={item}
             onActionClick={handleItemClick}
             selected={selected && selected === item.id}
-            preview={<MdiIcon fontSize="medium" path={item.path} />}
+            renderItem={
+              <div>
+                <MdiIcon fontSize="medium" path={item.path} />
+              </div>
+            }
           />
         </Tooltip>
       )

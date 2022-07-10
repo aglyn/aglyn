@@ -140,6 +140,7 @@ export interface AglynComponentField extends Dictionary<any> {
 export interface AglynComponentTemplateData<P = any> {
   readonly componentId: ComponentId
   readonly bundleId?: BundleUId
+  category?: string
   props?: BoxProps<any, P>
   elements?: AglynComponentTemplateData<any>[]
 }

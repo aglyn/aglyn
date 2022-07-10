@@ -16,13 +16,12 @@
  */
 
 export * as DoD from './lib/dod'
+export * from '@aglyn/shared-data-jsx'
 export * from './lib/basic'
 export * from './lib/crud'
 export * from './lib/fallback'
 export * from './lib/initializable'
 export * from './lib/iteratable'
-export * from './lib/jsx'
-export * from './lib/jsx-overrides'
 export * from './lib/lifecycle'
 export * from './lib/normalized'
 export * from './lib/react-overrides'

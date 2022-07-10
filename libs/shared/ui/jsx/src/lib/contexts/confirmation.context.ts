@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-import type { JSXNode } from '@aglyn/shared-data-types'
 import { noop } from '@aglyn/shared-util-tools'
 import type { ButtonProps, DialogProps } from '@mui/material'
 import { type Context, createContext, useContext } from 'react'
 
 export type ConfirmationContextConfig = {
-  cancellationText?: JSX.Node
-  confirmationText?: JSX.Node
+  cancellationText?: JSX.Children
+  confirmationText?: JSX.Children
   cancellationButtonProps?: Partial<ButtonProps>
   confirmationButtonProps?: Partial<ButtonProps>
   dialogProps?: Partial<DialogProps>
-  title?: JSX.Node
-  description?: JSX.Node
+  title?: JSX.Children
+  description?: JSX.Children
 }
 export type ConfirmFunctionOptions = ConfirmationContextConfig
 export type ConfirmFunction = <T>(

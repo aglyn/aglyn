@@ -26,8 +26,8 @@ import {
   useAglynElementLabel,
 } from '@aglyn/core-feature-renderer'
 import {
-  ICON_VARIANT_COLLAPSABLE_CLOSE,
-  ICON_VARIANT_COLLAPSABLE_OPEN,
+  ICON_VARIANT_COLLAPSIBLE_CLOSE,
+  ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_MODIFY_DRAG,
 } from '@aglyn/shared-data-enums'
 import { useForkedRefs } from '@aglyn/shared-ui-jsx'
@@ -117,8 +117,8 @@ const DraggableTreeItemComponent = forwardRef<
     <TreeItem
       ref={useForkedRefs(ref, dropRef)}
       nodeId={$id}
-      collapseIcon={<MdiIcon path={ICON_VARIANT_COLLAPSABLE_CLOSE.path} />}
-      expandIcon={<MdiIcon path={ICON_VARIANT_COLLAPSABLE_OPEN.path} />}
+      collapseIcon={<MdiIcon path={ICON_VARIANT_COLLAPSIBLE_CLOSE.path} />}
+      expandIcon={<MdiIcon path={ICON_VARIANT_COLLAPSIBLE_OPEN.path} />}
       onMouseOver={handleOnMouseOver}
       label={
         <Stack ref={dragPreview} direction="row" alignItems="center">

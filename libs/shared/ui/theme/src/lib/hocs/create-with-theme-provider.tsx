@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { JSXComponentType } from '@aglyn/shared-data-types'
 import { _isArr, _isNull } from '@aglyn/shared-util-guards'
 import { getDisplayName, noop } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'

@@ -214,6 +214,10 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
 GridList.displayName = 'GridList'
 GridList.aglyn = true
 GridList.defaultProps = {
+  items: [],
+  GridContainerProps: {},
+  GridItemProps: {},
+  ListWrapperProps: {},
   renderItemContent: (item) => item,
 }
 

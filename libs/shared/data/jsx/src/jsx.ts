@@ -15,21 +15,9 @@
  * limitations under the License.
  */
 
-import { BesignerCanvasHoveredElement } from '@aglyn/besigner-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
-import { useSubscribable } from '@aglyn/shared-ui-jsx'
-import useBesignerAppContext from './use-besigner-app-context'
+export * from './lib/definitions/main.d'
+export * from './lib/definitions/mui.d'
+export * from './lib/definitions/overridable.d'
+export * from './lib/definitions/sx.d'
 
-export function useAglynCanvasElementIsHovered($id: ElementId): boolean {
-  const app = useBesignerAppContext()
-  const value = useSubscribable<BesignerCanvasHoveredElement>(
-    app.besigner?.canvas,
-    false,
-    (canvas) => $id && canvas?.hovered?.$id === $id,
-    [$id, app],
-  )
-
-  return value
-}
-
-export default useAglynCanvasElementIsHovered
+export {}

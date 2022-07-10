@@ -18,7 +18,7 @@
 import { canvasRedo, canvasUndo } from '@aglyn/core-data-app'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useMemo } from 'react'
-import useBesignerAppContext from '../utils/use-besigner-app-context'
+import useBesignerAppContext from './use-besigner-app-context'
 
 export type UseAglynCanvasHistory = [
   undo: () => void,

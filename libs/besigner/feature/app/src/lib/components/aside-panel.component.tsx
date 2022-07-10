@@ -19,23 +19,29 @@ import {
   type BesignerPanelKey,
   BesignerPanelTabFlag,
 } from '@aglyn/besigner-data-app'
+import { getBundle } from '@aglyn/core-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
+import { AglynComponentElementTemplate } from '@aglyn/core-data-foundation'
 import {
-  AglynComponentsContext,
   useAglynComponentSchema,
+  useAglynComponentsContext,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import {
-  ICON_VARIANT_COLLAPSABLE_OPEN,
+  ICON_VARIANT_COLLAPSIBLE_CLOSE,
+  ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_ELEMENT_BROWSE,
   ICON_VARIANT_ELEMENT_DETAILS,
   ICON_VARIANT_ELEMENT_PROPERTIES,
   ICON_VARIANT_ELEMENT_STYLES,
   ICON_VARIANT_ELEMENT_TREE_VIEW,
+  ICON_VARIANT_ENTITY_BLOCK,
 } from '@aglyn/shared-data-enums'
+import { CardIconListItem } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, mdiPlus } from '@aglyn/shared-ui-mdi-jsx'
 import { alpha, mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
+  arraySortBy,
   numberFromHexadecimal,
   numberToHexadecimal,
 } from '@aglyn/shared-util-tools'
@@ -53,6 +59,12 @@ import {
   Box,
   Button,
   Divider,
+  Grid,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  type ListProps,
   Tab as MuiTab,
   Typography,
 } from '@mui/material'
@@ -66,9 +78,8 @@ import {
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
-import ComponentsGridListComponent, {
-  type ComponentsGridListProps,
-} from './components-grid-list.component'
+import useBesignerAppContext from '../hooks/use-besigner-app-context'
+import CollapsibleListsComponent from './collapsible-lists.component'
 import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 import ElementsTreeViewComponent, {
@@ -113,7 +124,7 @@ const AccordionSummary = styled((props: AccordionSummaryProps) => (
   <MuiAccordionSummary
     expandIcon={
       <MdiIcon
-        path={ICON_VARIANT_COLLAPSABLE_OPEN.path}
+        path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
         sx={{ fontSize: '0.9rem' }}
       />
     }
@@ -314,23 +325,144 @@ const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
   },
 )
 
-const ComponentsList = forwardRef<any, ComponentsGridListProps>(
-  (props, ref) => {
-    const { ...rest } = props
-    return (
-      <AglynComponentsContext.Consumer>
-        {({ templateBlocks }) => (
-          <ComponentsGridListComponent
-            items={templateBlocks}
-            ref={ref}
-            maxColumns={2}
-            {...rest}
+const ComponentsGroupItem = ({ id, isOpen, triggerToggle, item }) => {
+  console.log('isOpen', isOpen, id, item)
+  return (
+    <ListItemButton onClick={triggerToggle}>
+      <ListItemIcon>
+        <MdiIcon {...item.icon} />
+      </ListItemIcon>
+      <ListItemText
+        primary={item?.labelPrimary}
+        secondary={item?.labelSecondary}
+      />
+      <MdiIcon
+        path={
+          isOpen
+            ? ICON_VARIANT_COLLAPSIBLE_CLOSE.path
+            : ICON_VARIANT_COLLAPSIBLE_OPEN.path
+        }
+      />
+    </ListItemButton>
+  )
+}
+const ComponentGroupContents = ({ id, isOpen, triggerToggle, item }) => {
+  const ItemContent = useCallback(
+    ({ icon, ...item }: AglynComponentElementTemplate) => (
+      <CardIconListItem item={item} label={item.label}>
+        {!icon?.path && icon ? (
+          (icon as any)
+        ) : (
+          <MdiIcon
+            color="quaternary"
+            {...icon}
+            path={icon?.path || ICON_VARIANT_ENTITY_BLOCK.path}
+            sx={mergeSxProps(
+              {
+                fontSize: { xs: `5ch`, sm: `4ch` },
+                padding: `0.15ch`,
+                color: 'quaternary.main',
+                overflow: 'visible',
+              },
+              icon?.sx,
+            )}
           />
         )}
-      </AglynComponentsContext.Consumer>
-    )
-  },
-)
+      </CardIconListItem>
+    ),
+    [],
+  )
+
+  console.log('CollapsibleLists open', item)
+
+  // return <GridList items={item.items} renderItemContent={renderItemContent} />
+
+  return (
+    <Box>
+      <Grid container spacing={2}>
+        {item?.items?.map((i, index) => (
+          <Grid key={i?.id ?? index} xs={6} item>
+            <ItemContent {...i} />
+          </Grid>
+        ))}
+      </Grid>
+      {/*<ComponentsGridListComponent items={item.items} maxColumns={2} />*/}
+    </Box>
+  )
+}
+
+const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
+  const { ...rest } = props
+  const app = useBesignerAppContext()
+  const { templateBlocks } = useAglynComponentsContext()
+  const sortedItems = useMemo(
+    () => arraySortBy(templateBlocks, (i) => i.label),
+    [templateBlocks],
+  )
+  const allItem = useMemo(
+    () => ({
+      id: 'all',
+      order: 99,
+      labelPrimary: 'All',
+      labelSecondary: 'All items sorted A-Z',
+      icon: { path: ICON_VARIANT_ELEMENT_BROWSE.path },
+      items: [...sortedItems],
+    }),
+    [sortedItems],
+  )
+
+  const items = useMemo(() => {
+    const bundles = []
+    const cats = []
+
+    sortedItems.forEach((item) => {
+      const { bundleId, category } = item?.data || {}
+      const bundled = bundleId && bundles.find((i) => i.id === bundleId)
+      const categorized = category && cats.find((i) => i.id === category)
+
+      if (bundled) bundled?.items?.push(item)
+      if (categorized) categorized?.items?.push(item)
+      if (!bundled && bundleId) {
+        const bundle = getBundle(app, { bundleId })
+        bundles.push({
+          id: bundleId,
+          order: 49,
+          labelPrimary: bundle?.displayName ?? bundleId,
+          labelSecondary: bundle?.subtitle || 'Category',
+          icon: {
+            path: ICON_VARIANT_ELEMENT_BROWSE.path,
+            ...bundle?.icon,
+          },
+          items: [item],
+        })
+      }
+      if (!categorized && category) {
+        cats.push({
+          id: category,
+          order: 5,
+          labelPrimary: category,
+          labelSecondary: 'Bundle',
+          icon: { path: ICON_VARIANT_ELEMENT_BROWSE.path },
+          items: [item],
+        })
+      }
+    })
+
+    return arraySortBy([...cats, ...bundles, allItem], (i) => i.order ?? 0)
+  }, [sortedItems, allItem, app])
+
+  return (
+    <List ref={ref} dense {...rest}>
+      <>
+        <CollapsibleListsComponent
+          RenderItem={ComponentsGroupItem}
+          RenderContents={ComponentGroupContents}
+          items={items}
+        />
+      </>
+    </List>
+  )
+})
 
 const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
   panelLeft: {

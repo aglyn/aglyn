@@ -35,7 +35,7 @@ import {
 import { forwardRef, useMemo, useState } from 'react'
 import { useRenderedCanvasElementRef } from '../contexts/rendered-canvas-elements'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
-import useBesignerAppContext from '../utils/use-besigner-app-context'
+import useBesignerAppContext from '../hooks/use-besigner-app-context'
 import ElementOverlayActionsComponent from './element-overlay-actions.component'
 import ElementOverlayLabelComponent from './element-overlay-label.component'
 import ElementOverlayOutlineComponent from './element-overlay-outline.component'

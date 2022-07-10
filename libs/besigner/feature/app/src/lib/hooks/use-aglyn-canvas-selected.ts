@@ -23,7 +23,7 @@ import {
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import { useCallback } from 'react'
-import useBesignerAppContext from '../utils/use-besigner-app-context'
+import useBesignerAppContext from './use-besigner-app-context'
 
 export type BesignerCanvasSetSelected = (
   selected: BesignerCanvasSelected,
