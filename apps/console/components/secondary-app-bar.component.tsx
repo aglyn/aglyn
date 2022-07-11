@@ -44,7 +44,7 @@ function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
       {({ activeWithoutHysteresis }) => (
         <AppBar
           component="aside"
-          color="inherit"
+          color="bgSecondary"
           position="sticky"
           variant="elevation"
           elevation={activeWithoutHysteresis ? 4 : 0}

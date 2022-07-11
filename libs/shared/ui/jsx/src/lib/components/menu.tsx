@@ -180,7 +180,7 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                     maxHeight: ITEM_HEIGHT * 4.5,
                     width: '30ch',
                     filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
-                    backgroundColor: 'background.secondary',
+                    backgroundColor: 'bgSecondary.main',
                     marginTop: 0.5,
                     '&:before': {
                       content: '""',
@@ -189,7 +189,7 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                       top: 0,
                       width: 10,
                       height: 10,
-                      bgcolor: 'background.secondary',
+                      bgcolor: 'bgSecondary.main',
                       transform: 'translateY(-50%) rotate(45deg)',
                       zIndex: 0,
                       ...arrowPlacement,

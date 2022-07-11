@@ -133,7 +133,7 @@ const TopAppBar = (props: TopAppBarProps) => {
       {({ activeWithoutHysteresis }) => (
         <AppBar
           component="header"
-          color="inherit"
+          color="bgSecondary"
           variant="elevation"
           elevation={!disableAppBarElevation && activeWithoutHysteresis ? 4 : 0}
           position={disableAppBarElevation ? 'relative' : 'sticky'}

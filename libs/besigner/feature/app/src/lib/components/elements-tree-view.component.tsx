@@ -37,8 +37,9 @@ import {
   type SingleSelectTreeViewProps,
   TreeItem as MuiTreeItem,
   treeItemClasses,
-  type TreeItemProps,
+  type TreeItemProps as MuiTreeItemProps,
   TreeView as MuiTreeView,
+  type TreeViewProps as MuiTreeViewProps,
 } from '@mui/lab'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { ChangeEvent, forwardRef, useCallback, useMemo, useState } from 'react'
@@ -50,38 +51,42 @@ import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
 import ElementIconComponent from './element-icon.component'
 
-const TreeView = styled(MuiTreeView, { name: 'AglynTreeView' })({
-  overflow: 'auto',
-  flexGrow: 1,
+const TreeView = styled(MuiTreeView)<MuiTreeViewProps>({
+  // overflow: 'auto',
+  // flexGrow: 1,
 })
-const TreeItem = styled(MuiTreeItem, { name: 'AglynTreeItem' })(
-  ({ theme }) => ({
-    [`& .${treeItemClasses.content}`]: {
-      borderTopLeftRadius: `50px`,
-      borderBottomLeftRadius: `50px`,
-      '&.Mui-focused': {
-        backgroundColor: alpha(
-          theme.palette.secondary.dark,
-          theme.palette.action.focusOpacity,
-        ),
-      },
-      '&.Mui-selected': {
-        backgroundColor: alpha(
-          theme.palette.quaternary.main,
-          theme.palette.action.selectedOpacity,
-        ),
-      },
-      '&.Mui-selected.Mui-focused': {
-        backgroundColor: alpha(
-          theme.palette.quaternary.main,
-          theme.palette.action.activatedOpacity,
-        ),
-      },
+const TreeItem = styled(MuiTreeItem)<MuiTreeItemProps>(({ theme }) => ({
+  [`& > .${treeItemClasses.group}`]: {
+    minWidth: '100%',
+    width: 'unset',
+    borderLeft: `1px solid ${theme.palette.divider}`,
+    marginLeft: theme.spacing(1.75),
+  },
+  [`& .${treeItemClasses.content}`]: {
+    borderTopLeftRadius: `50px`,
+    borderBottomLeftRadius: `50px`,
+    [`&.${treeItemClasses.focused}`]: {
+      backgroundColor: alpha(
+        theme.palette.secondary.dark,
+        theme.palette.action.focusOpacity,
+      ),
     },
-  }),
-)
+    [`&.${treeItemClasses.selected}`]: {
+      backgroundColor: alpha(
+        theme.palette.quaternary.main,
+        theme.palette.action.selectedOpacity,
+      ),
+    },
+    [`&.${treeItemClasses.selected}.${treeItemClasses.focused}`]: {
+      backgroundColor: alpha(
+        theme.palette.quaternary.main,
+        theme.palette.action.activatedOpacity,
+      ),
+    },
+  },
+}))
 
-interface ElementsTreeItemComponentProps extends Partial<TreeItemProps> {
+interface ElementsTreeItemComponentProps extends Partial<MuiTreeItemProps> {
   $id: ElementId
 }
 
@@ -122,6 +127,30 @@ const DraggableTreeItemComponent = forwardRef<
       onMouseOver={handleOnMouseOver}
       label={
         <Stack ref={dragPreview} direction="row" alignItems="center">
+          <Button
+            component="div"
+            color="inherit"
+            ref={dragHandle}
+            // onMouseDown={handleOnMouseDown}
+            sx={{
+              fontSize: 16,
+              padding: 0.5,
+              marginLeft: -0.5,
+              marginRight: 0.5,
+              backgroundColor: 'transparent',
+              color: 'text.secondary',
+              display: 'flex',
+              alignItems: 'center',
+              flexDirection: 'column',
+              minWidth: 'unset',
+            }}
+          >
+            <MdiIcon
+              color="inherit"
+              fontSize="inherit"
+              path={ICON_VARIANT_MODIFY_DRAG.path}
+            />
+          </Button>
           <Box
             component="div"
             sx={{
@@ -143,33 +172,9 @@ const DraggableTreeItemComponent = forwardRef<
             <ElementIconComponent $id={$id} />
           </Box>
 
-          <Typography component="div" sx={{ flexGrow: 1 }}>
+          <Typography component="div" noWrap>
             {label}
           </Typography>
-
-          <Button
-            component="div"
-            color="inherit"
-            ref={dragHandle}
-            onMouseDown={handleOnMouseDown}
-            sx={{
-              fontSize: 16,
-              padding: 0.5,
-              marginLeft: 0.5,
-              backgroundColor: 'transparent',
-              color: 'tertiary.main',
-              display: 'flex',
-              alignItems: 'center',
-              flexDirection: 'column',
-              minWidth: 'unset',
-            }}
-          >
-            <MdiIcon
-              color="inherit"
-              fontSize="inherit"
-              path={ICON_VARIANT_MODIFY_DRAG.path}
-            />
-          </Button>
         </Stack>
       }
       {...rest}
@@ -193,10 +198,11 @@ export const ElementsTreeViewComponent = forwardRef<
   const [selected, setSelected] = useAglynCanvasSelected()
   const setHovered = useAglynCanvasSetHovered()
   const selectedHierarchy = useAglynCanvasElementHierarchy(selected?.$id)
-  const [expanded, setExpanded] = useState<ElementId[]>([])
+  const [manuallyExpanded, setManuallyExpanded] = useState<ElementId[]>([])
+
   const allExpanded = useMemo(
-    () => [...selectedHierarchy, ...expanded],
-    [selectedHierarchy, expanded],
+    () => [...selectedHierarchy, ...manuallyExpanded],
+    [selectedHierarchy, manuallyExpanded],
   )
 
   const handleTreeItemSelect = useCallback(
@@ -218,30 +224,36 @@ export const ElementsTreeViewComponent = forwardRef<
     [setHovered],
   )
 
-  const handleTreeItemToggle = useCallback((e, ids: ElementId[]) => {
-    e.stopPropagation()
-    e.preventDefault()
-    setExpanded(ids)
-  }, [])
+  const handleTreeItemToggle = useCallback(
+    (e, ids: ElementId[]) => {
+      e.stopPropagation()
+      e.preventDefault()
+      setManuallyExpanded(ids)
+    },
+    [setManuallyExpanded],
+  )
 
   return (
-    <TreeView
-      ref={ref}
-      id={'aglyn:tree-view'}
-      aria-label="canvas elements navigator"
-      onNodeSelect={handleTreeItemSelect}
-      onNodeFocus={handleTreeItemFocus}
-      onNodeToggle={handleTreeItemToggle}
-      selected={selected?.$id ?? ''}
-      expanded={allExpanded}
-      {...rest}
-    >
+    <>
       {children}
-      <DraggableTreeItemComponent
-        key={CANVAS_ROOT_ELEMENT_ID}
-        $id={CANVAS_ROOT_ELEMENT_ID}
-      />
-    </TreeView>
+
+      <TreeView
+        ref={ref}
+        id={'aglyn:tree-view'}
+        aria-label="canvas elements navigator"
+        onNodeSelect={handleTreeItemSelect}
+        onNodeFocus={handleTreeItemFocus}
+        onNodeToggle={handleTreeItemToggle}
+        selected={selected?.$id ?? ''}
+        expanded={allExpanded}
+        {...rest}
+      >
+        <DraggableTreeItemComponent
+          key={CANVAS_ROOT_ELEMENT_ID}
+          $id={CANVAS_ROOT_ELEMENT_ID}
+        />
+      </TreeView>
+    </>
   )
 })
 

@@ -162,6 +162,11 @@ export type ReplaceIndex<T, K extends keyof T, V> = Omit<T, K> & {
   [P in K]: V
 }
 
+/** From T, replace a property value whose key is in the union K (old key) with that of V (new value)  */
+export type PrefixKeys<T, Prefix extends keyof any, K extends keyof T = keyof T> = Omit<T, K> & {
+  [P in K as `${string & Prefix}${Capitalize<string & P>}`]: T[P]
+}
+
 /** With L (left), spread properties with R (right) (e.g. [...L, ...R], {...L, ...R}) */
 export type Spreaded<L, R = never> = /* With L (left), omit keys not in union with keys of R (right)*/
   Omit<L, keyof R> &

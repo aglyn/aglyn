@@ -58,7 +58,7 @@ export const AppBarPrimaryComponent = forwardRef<
       id="aglyn:besigner-appbar-primary"
       aria-label="primary app toolbar"
       position="static"
-      color="inherit"
+      color="bgSecondary"
       elevation={0}
       {...rest}
     >

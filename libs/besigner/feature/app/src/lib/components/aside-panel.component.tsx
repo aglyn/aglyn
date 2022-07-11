@@ -20,16 +20,16 @@ import {
   BesignerPanelTabFlag,
 } from '@aglyn/besigner-data-app'
 import { getBundle } from '@aglyn/core-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
-import { AglynComponentElementTemplate } from '@aglyn/core-data-foundation'
+import type {
+  AglynComponentElementTemplate,
+  ElementId,
+} from '@aglyn/core-data-foundation'
 import {
   useAglynComponentSchema,
   useAglynComponentsContext,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import {
-  ICON_VARIANT_COLLAPSIBLE_CLOSE,
-  ICON_VARIANT_COLLAPSIBLE_OPEN,
   ICON_VARIANT_ELEMENT_BROWSE,
   ICON_VARIANT_ELEMENT_DETAILS,
   ICON_VARIANT_ELEMENT_PROPERTIES,
@@ -38,7 +38,7 @@ import {
   ICON_VARIANT_ENTITY_BLOCK,
 } from '@aglyn/shared-data-enums'
 import { CardIconListItem } from '@aglyn/shared-ui-jsx'
-import { MdiIcon, mdiPlus } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon, type MdiIconProps, mdiPlus } from '@aglyn/shared-ui-mdi-jsx'
 import { alpha, mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
   arraySortBy,
@@ -49,28 +49,20 @@ import {
   TabContext as MuiTabContext,
   TabList as MuiTabList,
   TabPanel as MuiTabPanel,
+  type TabPanelProps as MuiTabPanelProps,
 } from '@mui/lab'
 import {
-  Accordion as MuiAccordion,
-  AccordionDetails as MuiAccordionDetails,
-  type AccordionProps,
-  AccordionSummary as MuiAccordionSummary,
-  type AccordionSummaryProps,
+  AppBar as MuiAppBar,
   Box,
   Button,
-  Divider,
   Grid,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
   type ListProps,
   Tab as MuiTab,
   Typography,
 } from '@mui/material'
 import {
   forwardRef,
-  SyntheticEvent,
+  type SyntheticEvent,
   useCallback,
   useMemo,
   useState,
@@ -89,61 +81,17 @@ import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
 } from './workspace-panel.component'
 
-const TabPanelInner = styled('div', {
-  name: 'AglynTabPanelInner',
-})(({ theme }) => ({
-  width: '100%',
-}))
 const TabPanel = styled(MuiTabPanel, {
   name: 'AglynTabPanel',
-})({
+})<MuiTabPanelProps>({
   padding: 0,
   overflow: 'auto',
   height: '100%',
 })
-const DividerSpacer = styled(Divider, {
-  name: 'AglynDividerSpacer',
+const TabPanelInner = styled('div', {
+  name: 'AglynTabPanelInner',
 })(({ theme }) => ({
-  marginTop: theme.spacing(2),
-  marginBottom: theme.spacing(2),
-}))
-const Accordion = styled((props: AccordionProps) => (
-  <MuiAccordion disableGutters elevation={0} square {...props} />
-))(({ theme }) => ({
-  border: `1px solid ${theme.palette.divider}`,
-  borderLeft: 0,
-  borderRight: 0,
-  '&:not(:last-child)': {
-    borderBottom: 0,
-  },
-  '&:before': {
-    display: 'none',
-  },
-}))
-const AccordionSummary = styled((props: AccordionSummaryProps) => (
-  <MuiAccordionSummary
-    expandIcon={
-      <MdiIcon
-        path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
-        sx={{ fontSize: '0.9rem' }}
-      />
-    }
-    {...props}
-  />
-))(({ theme }) => ({
-  backgroundColor: 'transparent',
-  flexDirection: 'row-reverse',
-  '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
-    transform: 'rotate(90deg)',
-  },
-  '& .MuiAccordionSummary-content': {
-    marginLeft: theme.spacing(1),
-  },
-}))
-
-const AccordionDetails = styled(MuiAccordionDetails)(({ theme }) => ({
-  padding: theme.spacing(2),
-  borderTop: '1px solid rgba(0, 0, 0, .125)',
+  width: '100%',
 }))
 
 const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
@@ -219,20 +167,14 @@ const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
 
   return (
     <TabPanelInner>
-      {details.map(({ label, items, ...item }) => (
-        <Accordion
-          key={item.key}
-          expanded={expanded === item.key}
-          onChange={handleChange(item.key)}
-        >
-          <AccordionSummary
-            aria-controls={`${item.key}-content`}
-            id={`${item.key}-header`}
-          >
-            <Typography>{label}</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            {items.map(
+      <CollapsibleListsComponent
+        items={details}
+        RenderSummaryComponent={({ item }) => (
+          <Typography>{item?.label}</Typography>
+        )}
+        RenderDetailsComponent={({ label, item }) => (
+          <>
+            {item?.items?.map(
               ({
                 label,
                 value,
@@ -273,9 +215,9 @@ const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
                 </Typography>
               ),
             )}
-          </AccordionDetails>
-        </Accordion>
-      ))}
+          </>
+        )}
+      />
     </TabPanelInner>
   )
 }
@@ -325,28 +267,7 @@ const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
   },
 )
 
-const ComponentsGroupItem = ({ id, isOpen, triggerToggle, item }) => {
-  console.log('isOpen', isOpen, id, item)
-  return (
-    <ListItemButton onClick={triggerToggle}>
-      <ListItemIcon>
-        <MdiIcon {...item.icon} />
-      </ListItemIcon>
-      <ListItemText
-        primary={item?.labelPrimary}
-        // secondary={item?.labelSecondary}
-      />
-      <MdiIcon
-        path={
-          isOpen
-            ? ICON_VARIANT_COLLAPSIBLE_CLOSE.path
-            : ICON_VARIANT_COLLAPSIBLE_OPEN.path
-        }
-      />
-    </ListItemButton>
-  )
-}
-const ComponentGroupContents = ({ id, isOpen, triggerToggle, item }) => {
+const ComponentGroupDetails = ({ id, isOpen, item }) => {
   const ItemContent = useCallback(
     ({ icon, ...item }: AglynComponentElementTemplate) => (
       <CardIconListItem item={item} label={item.label}>
@@ -411,7 +332,16 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
     [sortedItems],
   )
 
-  const items = useMemo(() => {
+  const items = useMemo<
+    {
+      id: string
+      order: number
+      labelPrimary: JSX.Node
+      labelSecondary: JSX.Node
+      icon: MdiIconProps
+      items: AglynComponentElementTemplate[]
+    }[]
+  >(() => {
     const bundles = []
     const cats = []
 
@@ -452,15 +382,16 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
   }, [sortedItems, allItem, app])
 
   return (
-    <List ref={ref} dense {...rest}>
-      <>
-        <CollapsibleListsComponent
-          RenderItem={ComponentsGroupItem}
-          RenderContents={ComponentGroupContents}
-          items={items}
-        />
-      </>
-    </List>
+    <>
+      <CollapsibleListsComponent
+        items={items}
+        RenderSummaryComponent={({ id, isOpen, item }) => {
+          console.log('isOpen', isOpen, id, item)
+          return <Typography>{item?.labelPrimary}</Typography>
+        }}
+        RenderDetailsComponent={ComponentGroupDetails}
+      />
+    </>
   )
 })
 
@@ -574,28 +505,36 @@ const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
       >
         <MuiTabContext value={numberToHexadecimal(value)}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <MuiTabList
-              onChange={handleTabChange}
-              variant="fullWidth"
-              indicatorColor="secondary"
-              textColor="secondary"
+            <MuiAppBar
+              color="bgSecondary"
+              position="relative"
+              elevation={0}
+              enableColorOnDark
             >
-              {tabs.map(({ value, tab: { icon, ...tab } }) => (
-                <MuiTab
-                  key={value}
-                  value={numberToHexadecimal(value)}
-                  iconPosition="top"
-                  icon={<MdiIcon {...icon} />}
-                  sx={{
-                    minHeight: 'unset',
-                    fontSize: (theme) => theme.typography.pxToRem(12),
-                    lineHeight: 0.8,
-                    pt: 1,
-                  }}
-                  {...tab}
-                />
-              ))}
-            </MuiTabList>
+              <MuiTabList
+                onChange={handleTabChange}
+                variant="fullWidth"
+                color="secondary"
+                indicatorColor="secondary"
+                textColor="secondary"
+              >
+                {tabs.map(({ value, tab: { icon, ...tab } }) => (
+                  <MuiTab
+                    key={value}
+                    value={numberToHexadecimal(value)}
+                    iconPosition="top"
+                    icon={<MdiIcon {...icon} />}
+                    sx={{
+                      minHeight: 'unset',
+                      fontSize: (theme) => theme.typography.pxToRem(12),
+                      lineHeight: 0.8,
+                      pt: 1,
+                    }}
+                    {...tab}
+                  />
+                ))}
+              </MuiTabList>
+            </MuiAppBar>
           </Box>
 
           {tabs.map(({ value, panel: { Component, ...panel } }) => (

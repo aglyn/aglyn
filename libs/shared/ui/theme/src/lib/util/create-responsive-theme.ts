@@ -120,6 +120,7 @@ export function createResponsiveTheme(
   let theme = createTheme(themeOptions)
   addShadeVariants(theme.palette.tertiary, theme.palette.tonalOffset)
   addShadeVariants(theme.palette.quaternary, theme.palette.tonalOffset)
+  addShadeVariants(theme.palette.bgSecondary, theme.palette.tonalOffset)
 
   theme = responsiveFontSizes(createTheme(theme), {
     // Override to include `xs` and `xl` - default: ['sm', 'md', 'lg']

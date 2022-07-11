@@ -136,7 +136,7 @@ const ComponentsDrawerComponent = forwardRef<any, ComponentsDrawerProps>(
         appBarLeft={appBarLeft}
         appBarRight={appBarRight}
         onClose={handleDrawerClose}
-        AppBarProps={{ color: 'inherit' }}
+        AppBarProps={{ color: 'bgSecondary' }}
         sx={mergeSxProps(
           {
             '& .AglynNavigationDrawer-content': {

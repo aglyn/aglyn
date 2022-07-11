@@ -19,6 +19,7 @@ import type { OverridableComponent } from '@mui/material/OverridableComponent'
 import type { Theme as MuiTheme } from '@mui/material/styles'
 // eslint-disable-next-line no-restricted-imports
 import type { CSSProperties } from '@mui/material/styles/createMixins'
+import type { ExtraColorOptions } from '@mui/material/styles/createPalette'
 // eslint-disable-next-line no-restricted-imports
 import type { Shadows } from '@mui/material/styles/shadows'
 // import type { WithStyles } from '@mui/styles'
@@ -65,7 +66,9 @@ declare module '@mui/material/SvgIcon' {
   interface SvgIconPropsColorOverrides extends ColorPropOverrides {}
 }
 declare module '@mui/material/AppBar' {
-  interface AppBarPropsColorOverrides extends ColorPropOverrides {}
+  interface AppBarPropsColorOverrides extends ColorPropOverrides {
+    bgSecondary: true
+  }
 }
 declare module '@mui/material/IconButton' {
   interface AppBarPropsColorOverrides extends ColorPropOverrides {}
@@ -76,18 +79,21 @@ declare module '@mui/system/createTheme/shape' {
   }
 }
 declare module '@mui/material/styles/createPalette' {
-  interface TypeBackground {
-    secondary: string
+  type ExtraColor = PaletteColor
+  type ExtraColorOptions = PaletteColorOptions
+
+  interface TypeBackground {}
+
+  interface PaletteOptions {
+    tertiary?: ExtraColorOptions
+    quaternary?: ExtraColorOptions
+    bgSecondary?: ExtraColorOptions
   }
 
   interface Palette {
-    tertiary: Palette['primary']
-    quaternary: Palette['primary']
-  }
-
-  interface PaletteOptions {
-    tertiary?: PaletteOptions['primary']
-    quaternary?: PaletteOptions['primary']
+    tertiary: ExtraColor
+    quaternary: ExtraColor
+    bgSecondary: ExtraColor
   }
 }
 declare module '@mui/material/styles/zIndex' {
@@ -101,6 +107,9 @@ declare module '@mui/material/styles/createMixins' {
   }
 }
 declare module '@mui/material/styles' {
+  type ExtraColor = Palette['primary']
+  type ExtraColorOptions = PaletteOptions['primary']
+
   /**
    * START EXAMPLE – MODULE AUGMENTATION ↓
    * ⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄⌄
@@ -147,8 +156,9 @@ declare module '@mui/material/styles' {
 
   interface PaletteOptions {
     background?: PaletteOptions['background']
-    tertiary?: PaletteOptions['primary']
-    quaternary?: PaletteOptions['primary']
+    tertiary?: ExtraColorOptions
+    quaternary?: ExtraColorOptions
+    bgSecondary?: ExtraColorOptions
     svgBackground?: IActionStates
     svgFilled?: IActionStates
     svgStroke?: IActionStates
@@ -157,8 +167,9 @@ declare module '@mui/material/styles' {
 
   interface Palette {
     background: Palette['background']
-    tertiary: Palette['primary']
-    quaternary: Palette['primary']
+    tertiary: ExtraColor
+    quaternary: ExtraColor
+    bgSecondary: ExtraColor
     svgBackground: IActionStates
     svgFilled: IActionStates
     svgStroke: IActionStates

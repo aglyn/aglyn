@@ -15,88 +15,138 @@
  * limitations under the License.
  */
 
+import { ICON_VARIANT_COLLAPSIBLE_OPEN } from '@aglyn/shared-data-enums'
 import type { AnyObj } from '@aglyn/shared-data-types'
-import { Collapse, type CollapseProps, Divider } from '@mui/material'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { styled } from '@aglyn/shared-ui-theme'
+import {
+  Accordion as MuiAccordion,
+  AccordionDetails as MuiAccordionDetails,
+  type AccordionDetailsProps as MuiAccordionDetailsProps,
+  type AccordionProps as MuiAccordionProps,
+  AccordionSummary as MuiAccordionSummary,
+  type AccordionSummaryProps as MuiAccordionSummaryProps,
+} from '@mui/material'
 import { Fragment, useCallback, useState } from 'react'
 
-export type CollapsibleKey = string | number
+const Accordion = styled((props: MuiAccordionProps) => (
+  <MuiAccordion disableGutters elevation={0} square {...props} />
+))<Partial<MuiAccordionProps>>(({ theme }) => ({
+  border: `1px solid ${theme.palette.divider}`,
+  borderLeft: 0,
+  borderRight: 0,
+  '&:not(:last-child)': {
+    borderBottom: 0,
+  },
+  '&:before': {
+    display: 'none',
+  },
+}))
+const AccordionSummary = styled((props: MuiAccordionSummaryProps) => (
+  <MuiAccordionSummary
+    expandIcon={
+      <MdiIcon
+        path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
+        sx={{ fontSize: '0.9rem' }}
+      />
+    }
+    {...props}
+  />
+))<Partial<MuiAccordionSummaryProps>>(({ theme }) => ({
+  backgroundColor: theme.palette.bgSecondary.main,
+  flexDirection: 'row-reverse',
+  '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
+    transform: 'rotate(90deg)',
+  },
+  '& .MuiAccordionSummary-content': {
+    marginLeft: theme.spacing(1),
+  },
+}))
+const AccordionDetails = styled(MuiAccordionDetails)<
+  Partial<MuiAccordionDetailsProps>
+>(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderTop: '1px solid rgba(0, 0, 0, .125)',
+}))
 
-export interface CollapsibleItem extends AnyObj {
-  id: CollapsibleKey
+interface CollapsibleItem extends AnyObj {
+  id?: JSX.Key
+  key?: JSX.Key
 }
-export type RenderCollapsibleItem = JSX.ElementType<{
-  id: CollapsibleKey
-  item: CollapsibleItem
+interface CollapsibleRenderProps<T extends CollapsibleItem> extends AnyObj {
+  id: JSX.Key
+  open: JSX.Key[]
   isOpen: boolean
-  open: CollapsibleKey[]
-  triggerToggle(event?: Event): void
-}>
-export type RenderCollapsibleContents = JSX.ElementType<{
-  id: CollapsibleKey
-  item: CollapsibleItem
-  isOpen: boolean
-  open: CollapsibleKey[]
-  triggerToggle(event?: Event): void
-}>
+  item: T
+}
 
-export interface CollapsibleListsProps extends CollapseProps {
-  children?: JSX.Children
-  items: CollapsibleItem[]
-  initialOpen?: CollapsibleKey[]
-  RenderItem: RenderCollapsibleItem
-  RenderContents: RenderCollapsibleContents
+export interface CollapsibleListsProps<T extends CollapsibleItem> {
+  items: T[]
   unique?: boolean
+  defaultExpanded?: JSX.Key[]
+  RenderSummaryComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
+  RenderDetailsComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
 }
 
-const CollapsibleListsComponent = (props: CollapsibleListsProps) => {
+const CollapsibleListsComponent = <T extends CollapsibleItem>(
+  props: CollapsibleListsProps<T>,
+) => {
   const {
-    children,
     items,
-    initialOpen,
-    RenderItem,
-    RenderContents,
+    defaultExpanded: initial,
+    RenderSummaryComponent,
+    RenderDetailsComponent,
     unique,
-    ...rest
   } = props
-  const [open, setOpen] = useState<CollapsibleKey[]>([])
+  const { id: firstId, key: firstKey } = items[0] || {}
+  const firstUnique = firstId ?? firstKey
+  const [open, setOpen] = useState<JSX.Key[]>([
+    ...(Array.isArray(initial) ? initial : firstUnique ? [firstUnique] : []),
+  ])
   const handleToggle = useCallback(
-    (id: CollapsibleKey) => (event: Event) => {
+    (id: JSX.Key) => (event: any, expand: boolean) => {
       setOpen((prev) => {
         const exists = prev.indexOf(id) >= 0
-        if (exists) return prev.filter((i) => i !== id)
-        else if (unique) return [id]
-        return [...prev, id]
+        if (expand && unique) return [id]
+        if (!expand && unique) return []
+        if (expand && exists) return prev
+        if (expand && !exists) return [...prev, id]
+        if (!expand && exists) return prev.filter((i) => i !== id)
+        return prev
       })
     },
     [unique],
   )
 
-  const isOpen = (id: CollapsibleKey) => {
+  const isOpen = (id: JSX.Key) => {
     return unique ? open[open.length - 1] === id : open.indexOf(id) >= 0
   }
 
   return (
     <Fragment>
-      {items.map((item, index, arr) => (
-        <Fragment key={item?.id}>
-          <RenderItem
-            id={item?.id}
-            item={item}
-            isOpen={isOpen(item?.id)}
-            open={open}
-            triggerToggle={handleToggle(item?.id)}
-          />
-          <Collapse orientation="vertical" in={isOpen(item?.id)} {...rest}>
-            <RenderContents
-              id={item?.id}
+      {items.map((item, index) => (
+        <Accordion
+          key={item?.key ?? item?.id ?? index}
+          expanded={isOpen(item?.key ?? item?.id ?? index)}
+          onChange={handleToggle(item?.key ?? item?.id ?? index)}
+        >
+          <AccordionSummary>
+            <RenderSummaryComponent
+              id={item?.key ?? item?.id ?? index}
+              isOpen={isOpen(item?.key ?? item?.id ?? index)}
               item={item}
-              isOpen={isOpen(item?.id)}
               open={open}
-              triggerToggle={handleToggle(item?.id)}
             />
-          </Collapse>
-          <Divider component="li" />
-        </Fragment>
+          </AccordionSummary>
+          <AccordionDetails>
+            <RenderDetailsComponent
+              id={item?.key ?? item?.id ?? index}
+              isOpen={isOpen(item?.key ?? item?.id ?? index)}
+              item={item}
+              open={open}
+            />
+          </AccordionDetails>
+        </Accordion>
       ))}
     </Fragment>
   )
@@ -104,8 +154,9 @@ const CollapsibleListsComponent = (props: CollapsibleListsProps) => {
 CollapsibleListsComponent.displayName = 'CollapsibleListsComponent'
 CollapsibleListsComponent.aglyn = true
 CollapsibleListsComponent.defaultProps = {
-  initialOpen: [],
   unique: false,
+  RenderSummaryComponent: (({ id }) => id) as any,
+  RenderDetailsComponent: (({ id }) => id) as any,
 }
 
 export { CollapsibleListsComponent }

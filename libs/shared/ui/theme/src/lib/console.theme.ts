@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { PrefixKeys } from '@aglyn/shared-data-types'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
 import type { IActionStates } from './theme.types'
@@ -22,7 +23,7 @@ import createResponsiveTheme from './util/create-responsive-theme'
 
 export type ColorVariant = 'light' | 'dark'
 export type BackgroundRecord = PaletteOptions['background']
-export type OrdinalIdentifier =
+export type OrdinalIdentifier<K extends string = ''> =
   | 'primary'
   | 'secondary'
   | 'tertiary'
@@ -82,13 +83,20 @@ export const shadesOfGrey = {
 
 export const backgroundsLight: BackgroundRecord = {
   default: '#F5F5F5',
-  secondary: `#F8F9FA`,
   paper: '#FFFFFF',
 }
 export const backgroundsDark: BackgroundRecord = {
-  default: '#1E242B',
-  secondary: `#404C5C`,
-  paper: '#2C3540',
+  default: '#161c21',
+  paper: '#2a3440',
+}
+
+export const ordinalBgSecondaryLight: QuaternaryRecord = {
+  main: `#F8F9FA`,
+  contrastText: '#000000',
+}
+export const ordinalBgSecondaryDark: QuaternaryRecord = {
+  main: `#202934`,
+  contrastText: '#FFFFFF',
 }
 
 export const ordinalPrimaryLight: PrimaryRecord = {
@@ -105,13 +113,13 @@ export const ordinalPrimaryDark: PrimaryRecord = {
 }
 
 export const ordinalSecondaryLight: SecondaryRecord = {
-  main: '#039BE5',
+  main: '#0091ea',
   // light: '#40C4FF',
   // dark: '#0277BD',
   // contrastText: '#FFFFFF',
 }
 export const ordinalSecondaryDark: SecondaryRecord = {
-  main: '#03A9F4',
+  main: '#00b0ff',
   // light: '#40C4FF',
   // dark: '#026CA0',
   // contrastText: '#FFFFFF',
@@ -154,6 +162,13 @@ export const ordinalDark: OrdinalRecord = {
   secondary: { ...ordinalSecondaryDark },
   tertiary: { ...ordinalTertiaryDark },
   quaternary: { ...ordinalQuaternaryDark },
+}
+
+export const ordinalBgLight: PrefixKeys<OrdinalRecord, 'bg'> = {
+  bgSecondary: { ...ordinalBgSecondaryLight },
+}
+export const ordinalBgDark: PrefixKeys<OrdinalRecord, 'bg'> = {
+  bgSecondary: { ...ordinalBgSecondaryDark },
 }
 
 export const actionSvgBgLight: IActionStates = {
@@ -449,6 +464,7 @@ export const consoleOptions: ThemeOptions = {
     background: { ...backgroundsLight },
     grey: { ...shadesOfGrey },
     ...ordinalLight,
+    ...ordinalBgLight,
     ...actionsLight,
     ...status,
   },
@@ -460,6 +476,7 @@ export const consoleOptionsDark: ThemeOptions = {
     background: { ...backgroundsDark },
     grey: { ...shadesOfGrey },
     ...ordinalDark,
+    ...ordinalBgDark,
     ...actionsDark,
     ...status,
   },
