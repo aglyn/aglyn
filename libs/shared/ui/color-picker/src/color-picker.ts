@@ -15,4 +15,4 @@
  * limitations under the License.
  */
 
-export * from './lib/color-picker'
+export * from '@aglyn/shared-ui-color-picker/color-picker.component'

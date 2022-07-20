@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import '@aglyn/shared-data-jsx'
 import { forwardRef } from 'react'
 import { LeafContext } from '../contexts/leaf-context'
 import type { LeafType } from '../definitions/leaf'

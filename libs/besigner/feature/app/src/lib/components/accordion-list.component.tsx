@@ -47,17 +47,24 @@ export interface AccordionSummaryProps
   extends Partial<MuiAccordionSummaryProps> {
   dense?: boolean
 }
-const AccordionSummary = styled((props: MuiAccordionSummaryProps) => (
-  <MuiAccordionSummary
-    expandIcon={
-      <MdiIcon
-        path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
-        sx={{ fontSize: '0.9rem' }}
-      />
-    }
-    {...props}
-  />
-))<AccordionSummaryProps>(({ theme, dense }) => ({
+const AccordionSummary = styled(
+  (props: MuiAccordionSummaryProps) => (
+    <MuiAccordionSummary
+      expandIcon={
+        <MdiIcon
+          path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
+          sx={{ fontSize: '0.9rem' }}
+        />
+      }
+      {...props}
+    />
+  ),
+  {
+    shouldForwardProp(propName: PropertyKey) {
+      return propName !== 'dense'
+    },
+  },
+)<AccordionSummaryProps>(({ theme, dense }) => ({
   textTransform: 'uppercase',
   backgroundColor: theme.palette.bgSecondary.main,
   flexDirection: 'row-reverse',
@@ -95,9 +102,9 @@ interface AccordionListItem extends AnyObj {
 }
 interface AccordionRenderProps<T extends AccordionListItem> extends AnyObj {
   id: JSX.Key
-  open: JSX.Key[]
-  isOpen: boolean
   item: T
+  isOpen: boolean
+  openItems: JSX.Key[]
 }
 
 export interface AccordionListProps<T extends AccordionListItem> {
@@ -122,7 +129,7 @@ const AccordionListComponent = <T extends AccordionListItem>(
     AccordionDetailsProps,
     unique,
   } = props
-  const [open, setOpen] = useState<JSX.Key[]>(() => {
+  const [openItems, setOpenItems] = useState<JSX.Key[]>(() => {
     if (!_isArrEmpty(initial)) return [...initial]
     const first = items[0]
     if (!_isUndOrNull(first?.id)) return [first?.id]
@@ -131,7 +138,7 @@ const AccordionListComponent = <T extends AccordionListItem>(
   })
   const handleToggle = useCallback(
     (id: JSX.Key) => (event: any, expand: boolean) => {
-      setOpen((prev) => {
+      setOpenItems((prev) => {
         const exists = prev.indexOf(id) >= 0
         if (expand && unique) return [id]
         if (!expand && unique) return []
@@ -144,36 +151,43 @@ const AccordionListComponent = <T extends AccordionListItem>(
     [unique],
   )
 
-  const isOpen = (id: JSX.Key) => {
-    return unique ? open[open.length - 1] === id : open.indexOf(id) >= 0
+  function getItemId(item: AccordionListItem, index: number) {
+    return item?.key ?? item?.id ?? index
+  }
+
+  function isOpen(id: JSX.Key) {
+    return unique
+      ? openItems[openItems.length - 1] === id
+      : openItems.indexOf(id) >= 0
   }
 
   return (
     <Fragment>
-      {items.map((item, index) => (
-        <Accordion
-          key={item?.key ?? item?.id ?? index}
-          expanded={isOpen(item?.key ?? item?.id ?? index)}
-          onChange={handleToggle(item?.key ?? item?.id ?? index)}
-        >
-          <AccordionSummary {...AccordionSummaryProps}>
-            <SummaryContentComponent
-              id={item?.key ?? item?.id ?? index}
-              isOpen={isOpen(item?.key ?? item?.id ?? index)}
-              item={item}
-              open={open}
-            />
-          </AccordionSummary>
-          <AccordionDetails {...AccordionDetailsProps}>
-            <DetailsContentComponent
-              id={item?.key ?? item?.id ?? index}
-              isOpen={isOpen(item?.key ?? item?.id ?? index)}
-              item={item}
-              open={open}
-            />
-          </AccordionDetails>
-        </Accordion>
-      ))}
+      {items.map((item, index) => {
+        const itemId = getItemId(item, index)
+        const itemOpen = isOpen(itemId)
+        const onToggle = handleToggle(itemId)
+        return (
+          <Accordion key={itemId} expanded={itemOpen} onChange={onToggle}>
+            <AccordionSummary {...AccordionSummaryProps}>
+              <SummaryContentComponent
+                id={itemId}
+                isOpen={itemOpen}
+                item={item}
+                openItems={openItems}
+              />
+            </AccordionSummary>
+            <AccordionDetails {...AccordionDetailsProps}>
+              <DetailsContentComponent
+                id={itemId}
+                isOpen={itemOpen}
+                item={item}
+                openItems={openItems}
+              />
+            </AccordionDetails>
+          </Accordion>
+        )
+      })}
     </Fragment>
   )
 }

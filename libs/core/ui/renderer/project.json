@@ -3,6 +3,7 @@
   "sourceRoot": "libs/core/ui/renderer/src",
   "projectType": "library",
   "tags": ["scope:lib", "scope:aglyn", "scope:ui", "aglyn:renderer"],
+  "implicitDependencies": ["shared-data-jsx"],
   "targets": {
     "build": {
       "executor": "@nrwl/web:rollup",

@@ -14,18 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { forwardRef } from 'react'
-import { SketchPicker, type SketchPickerProps } from 'react-color'
 
-export interface ColorPickerProps extends SketchPickerProps {}
+import { ComponentMeta, ComponentStory } from '@storybook/react'
+import { ColorPicker } from './color-picker.component'
 
-const ColorPicker = forwardRef<any, ColorPickerProps>((props, ref) => {
-  const { ...rest } = props
+export default {
+  component: ColorPicker,
+  title: 'ColorPicker',
+} as ComponentMeta<typeof ColorPicker>
 
-  return <SketchPicker ref={ref} {...rest} />
-})
+const Template: ComponentStory<typeof ColorPicker> = (args) => (
+  <ColorPicker {...args} />
+)
 
-ColorPicker.displayName = 'ColorPicker'
-
-export { ColorPicker }
-export default ColorPicker
+export const Primary = Template.bind({})
+Primary.args = {}

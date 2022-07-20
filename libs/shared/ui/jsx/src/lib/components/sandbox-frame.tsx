@@ -16,7 +16,6 @@
  */
 
 import type { InferElementTypeProps } from '@aglyn/shared-data-types'
-import { jssPreset, StylesProvider, useTheme } from '@aglyn/shared-ui-theme'
 
 import { create, type Jss, type JssOptions } from 'jss'
 import rtl from 'jss-rtl'

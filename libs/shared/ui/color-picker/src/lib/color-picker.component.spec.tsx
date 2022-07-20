@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-import {render} from '@testing-library/react'
+import { render } from '@testing-library/react'
 
-import ColorPicker from './color-picker'
-
+import ColorPicker from 'libs/shared/ui/color-picker/src/lib/color-picker.component'
 
 describe('ColorPicker', () => {
   it('should render successfully', () => {
-    const {baseElement} = render(<ColorPicker />)
+    const { baseElement } = render(<ColorPicker />)
     expect(baseElement).toBeTruthy()
   })
 })

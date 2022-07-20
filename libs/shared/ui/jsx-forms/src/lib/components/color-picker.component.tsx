@@ -237,7 +237,6 @@ const ColorPickerComponent = forwardRef<any, ColorPickerProps>((props, ref) => {
           >
             <AglynColorPicker
               {...ColorPickerProps}
-              width={null}
               color={value}
               onChange={handleColorChange}
               presetColors={presetColors}

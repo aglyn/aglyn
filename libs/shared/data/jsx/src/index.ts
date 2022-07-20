@@ -15,4 +15,7 @@
  * limitations under the License.
  */
 
-export * from './jsx'
+export * from './lib/main'
+export * from './lib/mui'
+export * from './lib/overridable'
+export * from './lib/sx'

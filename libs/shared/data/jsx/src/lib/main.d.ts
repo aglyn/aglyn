@@ -21,6 +21,7 @@ import type {
   Validator as PropTypesValidator,
 } from 'prop-types'
 import type { Component as ReactComponent } from 'react'
+import { ReactElement, ReactNode } from 'react'
 
 declare global {
   namespace JSX {
@@ -155,7 +156,68 @@ declare global {
     type RefCallback<T> = {
       bivarianceHack(instance: T | null): void
     }['bivarianceHack']
+    interface RefObject<T> {
+      readonly current: T | null
+    }
+    interface MutableRefObject<T> {
+      current: T
+    }
     type Ref<T> = RefCallback<T> | RefObject<T> | null
+    /**
+     * Gets the instance type for a React element. The instance will be
+     * different for various component types:
+     *
+     * - React class components will be the class instance. So if you had
+     * `class Foo extends React.Component<{}> {}` and used
+     * `React.ElementRef<typeof Foo>` then the type would be the instance of
+     * `Foo`.
+     * - React stateless functional components do not have a backing instance
+     * and so `React.ElementRef<typeof Bar>`
+     *   (when `Bar` is `function Bar() {}`) will give you the `undefined`
+     * type.
+     * - JSX intrinsics like `div` will give you their DOM instance. For
+     * `React.ElementRef<'div'>` that would be
+     *   `HTMLDivElement`. For `React.ElementRef<'input'>` that would be
+     * `HTMLInputElement`.
+     * - React stateless functional components that forward a `ref` will give
+     * you the `ElementRef` of the forwarded to component.
+     *
+     * `C` must be the type _of_ a React component so you need to use typeof as
+     * in React.ElementRef<typeof MyComponent>.
+     *
+     * @todo In Flow, this works a little different with forwarded refs and the
+     *   `AbstractComponent` that
+     *       `React.forwardRef()` returns.
+     */
+    type ElementRef<
+      C extends
+        | ForwardRefExoticComponent<any>
+        | { new (props: any): Component<any> }
+        | ((props: any, context?: any) => ReactElement | null)
+        | keyof JSX.IntrinsicElements,
+    > =
+      // need to check first if `ref` is a valid prop for ts@3.0
+      // otherwise it will infer `{}` instead of `never`
+      'ref' extends keyof ComponentPropsWithRef<C>
+        ? NonNullable<ComponentPropsWithRef<C>['ref']> extends Ref<
+            infer Instance
+          >
+          ? Instance
+          : never
+        : never
+
+    type ComponentRef<T extends ElementType> = T extends NamedExoticComponent<
+      ComponentPropsWithoutRef<T> & RefAttributes<infer Method>
+    >
+      ? Method
+      : ComponentPropsWithRef<T> extends RefAttributes<infer Method>
+      ? Method
+      : never
+
+    interface RefAttributes<T> extends Attributes {
+      ref?: Ref<T> | undefined
+    }
+
     /** Ensures that the props do not include ref at all */
     type PropsWithoutRef<P> =
       // Pick would not be sufficient for this. We'd like to avoid unnecessary mapping and need a
@@ -167,6 +229,12 @@ declare global {
           ? Pick<P, Exclude<keyof P, 'ref'>>
           : P
         : P
+    /** Ensures that the props do not include forwardedRef at all */
+    type PropsWithoutForwardedRef<P> = P extends any
+      ? 'forwardedRef' extends keyof P
+        ? Pick<P, Exclude<keyof P, 'forwardedRef'>>
+        : P
+      : P
 
     /** Ensures that the props do not include string ref, which cannot be forwarded */
     type PropsWithRef<P> =
@@ -178,8 +246,31 @@ declare global {
             : P
           : P
         : P
+    /** Ensures that the props do not include string forwardedRef, which cannot be forwarded */
+    type PropsWithForwardedRef<P> = 'forwardedRef' extends keyof P
+      ? P extends { forwardedRef?: infer R | undefined }
+        ? string extends R
+          ? PropsWithoutRef<P> & {
+              forwardedRef?: Exclude<R, string> | undefined
+            }
+          : P
+        : P
+      : P
 
-    type PropsWithChildren<P> = P & { children?: Children }
+    type ComponentPropsWithRef<T extends ElementType> =
+      T extends ElementClassComponent<infer P>
+        ? PropsWithoutRef<P> & RefAttributes<InstanceType<T>>
+        : PropsWithRef<ComponentProps<T>>
+    type ComponentPropsWithoutRef<T extends ElementType> = PropsWithoutRef<
+      ComponentProps<T>
+    >
+
+    type ComponentPropsWithForwardedRef<T extends ElementType> =
+      T extends ElementClassComponent<infer P>
+        ? PropsWithoutForwardedRef<P> & RefAttributes<InstanceType<T>>
+        : PropsWithForwardedRef<ComponentProps<T>>
+    type ComponentPropsWithoutForwardedRef<T extends ElementType> =
+      PropsWithoutForwardedRef<ComponentProps<T>>
 
     /**
      * NOTE: prefer ComponentPropsWithRef, if the ref is forwarded,
@@ -193,32 +284,12 @@ declare global {
       ? IntrinsicElements[T]
       : AnyObj
 
-    type ComponentPropsWithRef<T extends ElementType> =
-      T extends ElementClassComponent<infer P>
-        ? PropsWithoutRef<P> & RefAttributes<InstanceType<T>>
-        : PropsWithRef<ComponentProps<T>>
-
-    type ComponentPropsWithoutRef<T extends ElementType> = PropsWithoutRef<
-      ComponentProps<T>
-    >
-
-    type ComponentRef<T extends ElementType> = T extends NamedExoticComponent<
-      ComponentPropsWithoutRef<T> & RefAttributes<infer Method>
-    >
-      ? Method
-      : ComponentPropsWithRef<T> extends RefAttributes<infer Method>
-      ? Method
-      : never
-
-    interface RefObject<T> {
-      readonly current: T | null
+    type PropsWithChildren<P = unknown> = P & {
+      children?: ReactNode | undefined
     }
 
     interface Attributes {
       key?: KeyPropType
-    }
-    interface RefAttributes<T> extends Attributes {
-      ref?: Ref<T> | undefined
     }
     interface ElementAttributesProperty {
       props: EmptyObj
@@ -226,11 +297,12 @@ declare global {
     interface ElementChildrenAttribute {
       children: EmptyObj
     }
-    interface ResolveProps<P = any> {
-      <OUT = P>(inProps: P): OUT
+    interface ResolveProps<P = unknown, U extends P = P> {
+      <U extends P>(props: P): U
+      <U extends P>(props: P): PromiseLike<U>
+      (props: P): U
+      (props: P): PromiseLike<U>
     }
-    type InnerRefProp<T = any> = { innerRef?: Ref<T> }
-    type PropsWithInnerRef<P, T = any> = P & InnerRefProp<T>
 
     type PropValidator<T> = PropTypesValidator<T>
     type PropRequireable<T> = PropTypesRequireable<T>
