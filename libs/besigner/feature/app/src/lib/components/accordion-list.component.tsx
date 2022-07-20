@@ -71,6 +71,7 @@ const AccordionSummary = styled((props: MuiAccordionSummaryProps) => (
     ? {
         '&': {
           minHeight: 38,
+          fontSize: theme.typography.pxToRem(14),
         },
         '& .MuiAccordionSummary-content': {
           marginBottom: theme.spacing(1),

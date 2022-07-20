@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-import type {
-  OverrideableComponentProps,
-  ReplaceKey,
-} from '@aglyn/shared-data-types'
+import type { ReplaceKey } from '@aglyn/shared-data-types'
 import { styled } from '@aglyn/shared-ui-theme'
 import Link, { type LinkProps } from 'next/link'
 import { type AnchorHTMLAttributes, forwardRef } from 'react'
@@ -35,7 +32,7 @@ NextAnchor.aglyn = true
 
 export type NextLinkBaseProps = Omit<NextAnchorProps, 'href'> &
   Omit<LinkProps, 'as' | 'href'> &
-  ReplaceKey<OverrideableComponentProps, 'component', 'anchorComponent'>
+  ReplaceKey<JSX.OverrideableComponentProps, 'component', 'anchorComponent'>
 
 export interface NextLinkProps extends NextLinkBaseProps, NextLinkBaseProps {
   hrefTo?: LinkProps['href']

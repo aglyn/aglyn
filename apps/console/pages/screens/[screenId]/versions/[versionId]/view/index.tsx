@@ -23,7 +23,6 @@ import {
   ICON_VARIANT_PRIMARY_KEY,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
-import { useScreen } from '@aglyn/tenant-feature-instance'
 import {
   AppLink,
   ContainerComponent,
@@ -33,6 +32,7 @@ import {
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useScreen } from '@aglyn/tenant-feature-instance'
 import { List, ListItem, ListItemIcon, ListItemText } from '@mui/material'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
@@ -222,11 +222,16 @@ function ScreenDetails(props) {
   )
 }
 ScreenDetails.displayName = 'Page:ScreenDetails'
-ScreenDetails.layouts = [AuthenticatedLayout, ConsoleLayout]
-ScreenDetails.layoutProps = {
-  ConsoleLayout: {
-    title: 'Screen Details',
+ScreenDetails.layouts = [
+  {
+    Component: AuthenticatedLayout,
   },
-}
+  {
+    Component: ConsoleLayout,
+    props: {
+      title: 'Screen Details',
+    },
+  },
+]
 
 export default ScreenDetails

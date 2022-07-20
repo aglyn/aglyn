@@ -16,15 +16,23 @@
  */
 
 import {
+  useAddElementDrawerCallback,
   useBesignerAppContext,
   withBesignerContext,
-  WorkspaceEditorComponentProps,
+  type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-feature-app'
 import { getApp, setCanvasElements } from '@aglyn/core-data-app'
 import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
-import { HAS_BROWSER } from '@aglyn/shared-data-enums'
+import {
+  HAS_BROWSER,
+  ICON_VARIANT_LEFT,
+  ICON_VARIANT_MODIFY_ADD,
+  ICON_VARIANT_MODIFY_SAVE,
+  ICON_VARIANT_SYMBOL_CONFIRMED,
+} from '@aglyn/shared-data-enums'
 import { LOADING_OVERLAY_ELEMENT, useLoading } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -72,6 +80,8 @@ function Besigner(props) {
   const app = useBesignerAppContext()
   const screenId = `${query.screenId}`
   const versionId = `${query.versionId}`
+  const saveAvailable = true
+  const handleAddElementClick = useAddElementDrawerCallback()
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, { screenId, versionId })
   const normalized = useAglynCanvasElementsNormalized()
   const [{ status, data: screen, error }, updateScreen] = useScreenVersion<any>(
@@ -139,7 +149,54 @@ function Besigner(props) {
   }, [updateScreen, enqueueSnackbar, normalized, queueLoading])
 
   return (
-    <>
+    <ConsoleLayout
+      title={'Besigner'}
+      appBarSuffix={'Besigner'}
+      centerNavigationItems={[
+        // {
+        //   id: 'center-nav-site-picker',
+        //   children: ,
+        // },
+        {
+          id: 'center-nav-back',
+          startIcon: (
+            <MdiIcon path={ICON_VARIANT_LEFT.path} fontSize={'small'} />
+          ),
+          color: 'tertiary',
+          children: (
+            <>
+              <span>{'Back'}</span>
+            </>
+          ),
+          href: detailUrl,
+        },
+        {
+          id: 'center-nav-file',
+          children: 'File',
+          // href: '/besigner',
+          items: [
+            {
+              id: 'center-nav-file-new-element',
+              icon: {
+                path: ICON_VARIANT_MODIFY_ADD.path,
+              },
+              children: 'Add new element',
+              onClick: handleAddElementClick,
+            },
+            {
+              id: 'center-nav-file-screens',
+              icon: {
+                path: saveAvailable
+                  ? ICON_VARIANT_MODIFY_SAVE.path
+                  : ICON_VARIANT_SYMBOL_CONFIRMED.path,
+              },
+              children: saveAvailable ? 'Save screen' : 'Up to date',
+              onClick: handleSave,
+            },
+          ],
+        },
+      ]}
+    >
       <NextPageTitle screen={'Besigner'} />
 
       {error || notFound ? (
@@ -162,18 +219,12 @@ function Besigner(props) {
           </WorkspaceEditorComponent>
         </>
       )}
-    </>
+    </ConsoleLayout>
   )
 }
 
 Besigner.displayName = 'Page:Besigner'
-Besigner.layouts = [AuthenticatedLayout, ConsoleLayout]
-Besigner.layoutProps = {
-  ConsoleLayout: {
-    title: 'Besigner',
-    appBarSuffix: 'Besigner',
-  },
-}
+Besigner.layouts = [{ Component: AuthenticatedLayout }]
 
 export default withBesignerContext(Besigner)
 

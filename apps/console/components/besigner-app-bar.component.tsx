@@ -22,7 +22,6 @@ import {
   PanelControlsComponent,
 } from '@aglyn/besigner-feature-app'
 import {
-  ICON_VARIANT_LEFT,
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
@@ -58,10 +57,18 @@ const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             component={AppLink}
             componentVariant={'text'}
             underline="none"
-            href={detailsUrl}
+            onClick={onSave}
+            disabled={!saveAvailable}
           >
-            <MdiIcon path={ICON_VARIANT_LEFT.path} fontSize={'small'} />
-            <span>{'Details'}</span>
+            <MdiIcon
+              path={
+                saveAvailable
+                  ? ICON_VARIANT_MODIFY_SAVE.path
+                  : ICON_VARIANT_SYMBOL_CONFIRMED.path
+              }
+              fontSize={'small'}
+            />
+            <span>{saveAvailable ? 'Save' : 'Up to date'}</span>
           </Stack>
         }
       >

@@ -16,12 +16,11 @@
  */
 
 import type { ElementId } from '@aglyn/core-data-foundation'
-import type { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import { forwardRef, Fragment, useMemo } from 'react'
 import useAglynElementData from '../hooks/use-aglyn-element-data'
 import LeafComponent from './leaf.component'
 
-export interface BranchComponentProps extends OverrideableComponentProps {
+export interface BranchComponentProps extends JSX.OverrideableComponentProps {
   leafComponent?: LeafComponent
   $id?: ElementId
 }

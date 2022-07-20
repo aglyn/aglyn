@@ -345,11 +345,16 @@ const formSchema = {
   ],
 }
 Screens.displayName = 'Page:Screens'
-Screens.layouts = [AuthenticatedLayout, ConsoleLayout]
-Screens.layoutProps = {
-  ConsoleLayout: {
-    title: 'App Screens',
+Screens.layouts = [
+  {
+    Component: AuthenticatedLayout,
   },
-}
+  {
+    Component: ConsoleLayout,
+    props: {
+      title: 'App Screens',
+    },
+  },
+]
 
 export default Screens

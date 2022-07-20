@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import type { OverrideableComponentProps } from '@aglyn/shared-data-types'
 import { forwardRef } from 'react'
 import { LeafContext } from '../contexts/leaf-context'
 import type { LeafType } from '../definitions/leaf'
 
 export interface LeafProps<T extends LeafType = any>
-  extends OverrideableComponentProps {
+  extends JSX.OverrideableComponentProps {
   data: T
 }
 

@@ -35,7 +35,7 @@ declare global {
       ? OverrideComponentsProps<T> & Pick<T, 'component'>
       : { component?: undefined }
 
-    export type OverridableComponentProps<
+    export type OverrideableComponentProps<
       P = any,
       T = OverrideComponentProp,
     > = P & OverrideComponentPropPlusOverrideProps<T>

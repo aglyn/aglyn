@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  Conditional,
-  OverrideableComponentProps,
-} from '@aglyn/shared-data-types'
+import { Conditional } from '@aglyn/shared-data-types'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
@@ -63,7 +60,7 @@ type ItemTypeProps = MuiMenuItemProps & {
 type DividerTypeProps = DividerProps & { type: 'divider' }
 type SubheaderTypeProps = MuiListSubheaderProps & { type: 'subheader' }
 export type MenuItemProps<T extends ItemTypes = ItemTypes> =
-  OverrideableComponentProps &
+  JSX.OverrideableComponentProps &
     Conditional<
       T,
       'divider',

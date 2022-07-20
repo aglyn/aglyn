@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {APP_CONSOLE} from '@aglyn/shared-data-enums'
-import type {AuthResultError} from '@aglyn/shared-data-enums'
+import type { AuthResultError } from '@aglyn/shared-data-enums'
+import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import {
   FIELD_SCHEMA_EMAIL,
   FIELD_SCHEMA_FIRST_NAME,
@@ -24,13 +24,13 @@ import {
   FIELD_SCHEMA_PASSWORD,
   FIELD_SCHEMA_PASSWORD_CONFIRM,
 } from '@aglyn/shared-data-forms'
-import {AppLink, useLoading} from '@aglyn/shared-ui-jsx'
-import type {FormSchema} from '@aglyn/shared-ui-jsx-forms'
-import {FormRenderer, simpleComponentMapper} from '@aglyn/shared-ui-jsx-forms'
-import {mdiGoogle, MdiIcon} from '@aglyn/shared-ui-mdi-jsx'
-import {useNextPageTitle} from '@aglyn/shared-ui-next'
-import {Button, Divider, Stack, Typography} from '@mui/material'
-import {logEvent} from 'firebase/analytics'
+import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
+import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
+import { mdiGoogle, MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { useNextPageTitle } from '@aglyn/shared-ui-next'
+import { Button, Divider, Stack, Typography } from '@mui/material'
+import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
   createUserWithEmailAndPassword,
@@ -38,13 +38,12 @@ import {
   setPersistence,
   signInWithPopup,
 } from 'firebase/auth'
-import {useCallback, useState} from 'react'
-import {useAnalytics, useAuth} from 'reactfire'
+import { useCallback, useState } from 'react'
+import { useAnalytics, useAuth } from 'reactfire'
 import AuthErrorAlertComponent from '../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../components/auth-form-template.component'
 import AuthFormComponent from '../../components/auth-form.component'
 import UnauthenticatedLayout from '../../components/layouts/unauthenticated.layout'
-
 
 const googleOAuthProvider = new GoogleAuthProvider()
 
@@ -64,43 +63,52 @@ function SignUp() {
     suffix: APP_CONSOLE.AFFIX,
     separator: ` ${APP_CONSOLE.SEP} `,
   })
-  const {queueLoading, loading} = useLoading()
+  const { queueLoading, loading } = useLoading()
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
   const analytics = useAnalytics()
 
-  const handleSignUp = useCallback(async (values?: any) => {
-    if (loading) return
-    if (error) setError(null)
-    const dequeueLoading = queueLoading()
-    await setPersistence(firebaseAuth, browserLocalPersistence)
-      .then(() => {
-        if (values) {
-          return createUserWithEmailAndPassword(
-            firebaseAuth,
-            values[FIELD_SCHEMA_EMAIL.name],
-            values[FIELD_SCHEMA_PASSWORD.name],
-          )
-        }
-        return signInWithPopup(firebaseAuth, googleOAuthProvider)
-      })
-      .then((user) => {
-        logEvent(analytics, 'sign_up', {
-          method: user.providerId,
+  const handleSignUp = useCallback(
+    async (values?: any) => {
+      if (loading) return
+      if (error) setError(null)
+      const dequeueLoading = queueLoading()
+      await setPersistence(firebaseAuth, browserLocalPersistence)
+        .then(() => {
+          if (values) {
+            return createUserWithEmailAndPassword(
+              firebaseAuth,
+              values[FIELD_SCHEMA_EMAIL.name],
+              values[FIELD_SCHEMA_PASSWORD.name],
+            )
+          }
+          return signInWithPopup(firebaseAuth, googleOAuthProvider)
         })
-      })
-      .catch((error) => {
-        console.error(error)
-        setError({...error, credential: GoogleAuthProvider.credentialFromError(error)})
-      })
-      .finally(() => {
-        dequeueLoading()
-      })
-  }, [analytics, error, firebaseAuth, loading, queueLoading])
+        .then((user) => {
+          logEvent(analytics, 'sign_up', {
+            method: user.providerId,
+          })
+        })
+        .catch((error) => {
+          console.error(error)
+          setError({
+            ...error,
+            credential: GoogleAuthProvider.credentialFromError(error),
+          })
+        })
+        .finally(() => {
+          dequeueLoading()
+        })
+    },
+    [analytics, error, firebaseAuth, loading, queueLoading],
+  )
 
-  const handleFormSubmit = useCallback(async (values) => {
-    await handleSignUp(values)
-  }, [handleSignUp])
+  const handleFormSubmit = useCallback(
+    async (values) => {
+      await handleSignUp(values)
+    },
+    [handleSignUp],
+  )
   const handleGoogleButtonClick = useCallback(async () => {
     await handleSignUp()
   }, [handleSignUp])
@@ -108,27 +116,16 @@ function SignUp() {
   return (
     <AuthFormComponent
       paperTop={
-        <Typography
-          component="div"
-          variant="body2"
-          alignSelf="flex-end"
-        >
-          <AppLink href="/signin">
-            {'Sign in'}
-          </AppLink>
+        <Typography component="div" variant="body2" alignSelf="flex-end">
+          <AppLink href="/signin">{'Sign in'}</AppLink>
         </Typography>
       }
       headingTop={'Sign up'}
       headingBottom={'Create a new Aglyn Account'}
       paperAfter={
-        <Typography
-          component="div"
-          variant="body2"
-        >
+        <Typography component="div" variant="body2">
           {'Already have an account? '}
-          <AppLink href="/signin">
-            {'Sign in'}
-          </AppLink>
+          <AppLink href="/signin">{'Sign in'}</AppLink>
         </Typography>
       }
     >
@@ -137,19 +134,12 @@ function SignUp() {
         componentMapper={simpleComponentMapper}
         onSubmit={handleFormSubmit}
         schema={formSchema}
-        subscription={{values: true}}
+        subscription={{ values: true }}
         clearOnUnmount
       />
-      <AuthErrorAlertComponent
-        error={error as any}
-        sx={{mt: 2, mb: 1}}
-      />
+      <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
 
-      <Divider
-        flexItem
-        variant="middle"
-        sx={{my: 3}}
-      >
+      <Divider flexItem variant="middle" sx={{ my: 3 }}>
         {'Or sign up with'}
       </Divider>
 
@@ -172,6 +162,10 @@ function SignUp() {
   )
 }
 SignUp.displayName = 'Page:SignUp'
-SignUp.layouts = [UnauthenticatedLayout]
+SignUp.layouts = [
+  {
+    Component: UnauthenticatedLayout,
+  },
+]
 
 export default SignUp

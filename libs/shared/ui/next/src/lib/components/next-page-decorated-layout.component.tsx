@@ -15,24 +15,28 @@
  * limitations under the License.
  */
 
-import {getNextPageLayout, type NextAppWithLayoutProps} from '../utils/get-next-page-layout'
+import {
+  getNextPageLayout,
+  type NextAppWithLayoutProps,
+} from '../utils/get-next-page-layout'
 
-
-export interface NextPageDecoratedLayoutComponentProps<Props, InitialProps> extends NextAppWithLayoutProps<Props, InitialProps> {}
+export interface NextPageDecoratedLayoutComponentProps<Props, InitialProps>
+  extends NextAppWithLayoutProps<Props, InitialProps> {}
 
 /**
  * Decorate next page with defined layout
- * Uses the getLayout defined at the page level, if available
+ * Uses the layout defined at the page level, if available
  */
 function NextPageDecoratedLayoutComponent<Props, InitialProps>(
   props: NextPageDecoratedLayoutComponentProps<Props, InitialProps>,
 ) {
   const Component = props.Component
-  return getNextPageLayout(props)((<Component {...props.pageProps} />), props)
+  return getNextPageLayout(props)(<Component {...props.pageProps} />, props)
 }
 
-NextPageDecoratedLayoutComponent.displayName = 'NextPageDecoratedLayoutComponent'
+NextPageDecoratedLayoutComponent.displayName =
+  'NextPageDecoratedLayoutComponent'
 NextPageDecoratedLayoutComponent.aglyn = true
 
-export {NextPageDecoratedLayoutComponent}
+export { NextPageDecoratedLayoutComponent }
 export default NextPageDecoratedLayoutComponent

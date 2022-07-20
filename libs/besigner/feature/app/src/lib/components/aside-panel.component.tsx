@@ -171,9 +171,7 @@ const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
         unique
         items={details}
         AccordionSummaryProps={{ dense: true }}
-        SummaryContentComponent={({ item }) => (
-          <Typography>{item?.label}</Typography>
-        )}
+        SummaryContentComponent={({ item }) => <>{item?.label}</>}
         DetailsContentComponent={({ label, item }) => (
           <>
             {item?.items?.map(
@@ -390,7 +388,7 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
         items={items}
         AccordionSummaryProps={{ dense: true }}
         SummaryContentComponent={({ id, isOpen, item }) => (
-          <Typography>{item?.labelPrimary}</Typography>
+          <>{item?.labelPrimary}</>
         )}
         DetailsContentComponent={ComponentGroupDetails}
       />

@@ -70,13 +70,12 @@ export enum FontFamily {
   VERDANA = 'Verdana',
 }
 
-export const buildFontFamilyList = (fontFamily = FontFamily.SOURCE_SANS_PRO) =>
+export const buildFontFamilyList = (fontFamily = FontFamily.ROBOTO) =>
   [
     fontFamily,
     FontFamily.APPLE_SYSTEM,
     FontFamily.BLINK_MAC_SYSTEM_FONT,
     FontFamily.SEGOE_UI,
-    FontFamily.ROBOTO,
     FontFamily.HELVETICA_NEUE,
     FontFamily.ARIAL,
     FontFamily.SANS_SERIF,

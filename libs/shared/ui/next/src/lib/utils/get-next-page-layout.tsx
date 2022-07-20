@@ -15,87 +15,58 @@
  * limitations under the License.
  */
 
-import type {AnyProps} from '@aglyn/shared-data-types'
-import {copy, getDisplayName} from '@aglyn/shared-util-tools'
-import {objectDeepMerge} from '@aglyn/shared-util-vendor'
-import type {NextPage} from 'next'
-import type {AppProps as NextAppProps} from 'next/app'
-import type {ElementType, ReactElement} from 'react'
+import type { NextPage } from 'next'
+import type { AppProps as NextAppProps } from 'next/app'
 
+type AnyProps = Partial<Record<string, unknown>>
+type EmptyObj = Partial<Record<never, unknown>>
 
-export type NextPageGetLayoutFn = (
-  page: ReactElement,
-  props: NextAppWithLayoutProps,
-) => ReactElement
-
-export type NextPageMemberLayout = {
-  getLayout?: NextPageGetLayoutFn
-  layouts?: ElementType<any>[]
-  layoutProps?: { [P in NextPageWithLayout['displayName']]: AnyProps };
-  /** @deprecated use layouts */
-  layoutComponent?: NextPageWithLayout
+export interface NextPageGetLayoutFn {
+  (page: JSX.Element, props: NextAppWithLayoutProps): JSX.Element
 }
 
-export type   NextPageWithLayout<Props = AnyProps, InitialProps = Props> =
-  & NextPage<Props, InitialProps>
-  & NextPageMemberLayout
+export interface NextPageLayoutObject<P = EmptyObj> {
+  Component: JSX.ElementType<P>
+  props?: P
+}
 
-export type NextAppWithLayoutProps<Props = AnyProps, InitialProps = Props> = NextAppProps<Props> & {
+export interface NextPageMemberLayout {
+  layouts?: NextPageLayoutObject<any>[]
+  layout?: NextPageGetLayoutFn
+}
+
+export type NextPageWithLayout<
+  Props = AnyProps,
+  InitialProps = Props,
+> = NextPage<Props, InitialProps> & NextPageMemberLayout
+
+export interface NextAppWithLayoutProps<Props = AnyProps, InitialProps = Props>
+  extends NextAppProps<Props> {
   Component: NextPageWithLayout<Props, InitialProps>
-  mergedLayoutProps?: NextPageMemberLayout['layoutProps']
-  defaultGetLayout?: NextPageGetLayoutFn,
 }
 
-const GET_LAYOUT_NOOP = (page: ReactElement, props?: any) => page
+function GetLayout(page: JSX.Element, initialProps?: any) {
+  return page
+}
 
 export function getNextPageLayout<Props, InitialProps>(
   props: NextAppWithLayoutProps<Props, InitialProps>,
 ): NextPageGetLayoutFn {
-  const {Component, mergedLayoutProps, defaultGetLayout} = props
+  const { Component } = props
+  const { layout, layouts } = Component
 
-  if (Component.getLayout) {
-    return Component.getLayout
+  if (layout) return layout
+
+  if (Array.isArray(layouts)) {
+    return layouts.reduce((page, layout) => {
+      const { Component, props } = layout
+      return (innerPage, initialProps) => {
+        return page(<Component {...props} children={innerPage} />, initialProps)
+      }
+    }, GetLayout)
   }
 
-  if (Component.layouts) {
-    const layout = Component.layouts.reduce((page, OuterComponent) => {
-      const displayName = getDisplayName(OuterComponent)
-      const layoutProps = Component.layoutProps?.[displayName] || undefined
-
-      return (innerPage, props) => page((
-        <OuterComponent {...layoutProps}>
-          {innerPage}
-        </OuterComponent>
-      ), props)
-    }, defaultGetLayout || GET_LAYOUT_NOOP)
-
-    return layout
-  }
-
-  if (Component.layoutComponent) {
-    const ComponentLayout = Component.layoutComponent
-    const layoutProps = objectDeepMerge(
-      {},
-      {...ComponentLayout.layoutProps},
-      {...Component.layoutProps},
-      {...mergedLayoutProps},
-    )
-
-    return (page, props) => {
-      const OuterComponent = getNextPageLayout({
-        ...copy(props),
-        Component: ComponentLayout,
-        mergedLayoutProps: layoutProps,
-      })
-      return OuterComponent((
-        <ComponentLayout {...layoutProps[ComponentLayout.displayName] || {}}>
-          {page}
-        </ComponentLayout>
-      ), props)
-    }
-  }
-
-  return defaultGetLayout || GET_LAYOUT_NOOP
+  return GetLayout
 }
 
 export default getNextPageLayout

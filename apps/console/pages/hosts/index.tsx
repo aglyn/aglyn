@@ -17,16 +17,10 @@
 
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 
-
 function Hosts() {
-
-  return (
-    <>
-
-    </>
-  )
+  return <></>
 }
 Hosts.displayName = 'Page:Hosts'
-Hosts.layouts = [AuthenticatedLayout]
+Hosts.layouts = [{ Component: AuthenticatedLayout }]
 
 export default Hosts
