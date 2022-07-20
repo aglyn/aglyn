@@ -19,6 +19,7 @@ import type {
   AglynComponentSchema,
   ComponentId,
 } from '@aglyn/core-data-foundation'
+import { ComponentCategory } from '@aglyn/core-data-foundation'
 import { mdiFormatListChecks } from '@aglyn/shared-ui-mdi-jsx'
 import ListItemText, {
   type ListItemTextProps,
@@ -38,6 +39,7 @@ export const schema: AglynComponentSchema<ListItemTextProps> = {
       id: generateTemplateId(ID),
       label: 'List Item Text',
       icon: { path: mdiFormatListChecks.path },
+      category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,

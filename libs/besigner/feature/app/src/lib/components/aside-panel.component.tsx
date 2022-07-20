@@ -168,11 +168,13 @@ const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
   return (
     <TabPanelInner>
       <CollapsibleListsComponent
+        unique
         items={details}
-        RenderSummaryComponent={({ item }) => (
+        AccordionSummaryProps={{ dense: true }}
+        SummaryContentComponent={({ item }) => (
           <Typography>{item?.label}</Typography>
         )}
-        RenderDetailsComponent={({ label, item }) => (
+        DetailsContentComponent={({ label, item }) => (
           <>
             {item?.items?.map(
               ({
@@ -345,7 +347,8 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
     const cats = []
 
     sortedItems.forEach((item) => {
-      const { bundleId, category } = item?.data || {}
+      const { category, data } = item || {}
+      const { bundleId } = data || {}
       const bundled = bundleId && bundles.find((i) => i.id === bundleId)
       const categorized = category && cats.find((i) => i.id === category)
 
@@ -383,11 +386,13 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
   return (
     <>
       <CollapsibleListsComponent
+        unique
         items={items}
-        RenderSummaryComponent={({ id, isOpen, item }) => (
+        AccordionSummaryProps={{ dense: true }}
+        SummaryContentComponent={({ id, isOpen, item }) => (
           <Typography>{item?.labelPrimary}</Typography>
         )}
-        RenderDetailsComponent={ComponentGroupDetails}
+        DetailsContentComponent={ComponentGroupDetails}
       />
     </>
   )

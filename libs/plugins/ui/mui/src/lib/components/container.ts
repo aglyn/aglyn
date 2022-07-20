@@ -17,6 +17,7 @@
 
 import {
   type AglynComponentSchema,
+  ComponentCategory,
   type ComponentId,
   FieldComponentType,
 } from '@aglyn/core-data-foundation'
@@ -76,6 +77,7 @@ export const schema: AglynComponentSchema<ContainerProps> = {
         path: mdiViewArrayOutline.path,
         sx: { color: '#2196f3' },
       },
+      category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,

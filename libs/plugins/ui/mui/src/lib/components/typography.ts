@@ -17,6 +17,7 @@
 
 import {
   type AglynComponentSchema,
+  ComponentCategory,
   type ComponentId,
   FieldComponentType,
 } from '@aglyn/core-data-foundation'
@@ -152,6 +153,7 @@ export const schema: AglynComponentSchema<TypographyProps> = {
         sx: { color: '#057822' },
         ...item.icon,
       },
+      category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,

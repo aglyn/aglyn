@@ -19,6 +19,7 @@ import type {
   AglynComponentSchema,
   ComponentId,
 } from '@aglyn/core-data-foundation'
+import { ComponentCategory } from '@aglyn/core-data-foundation'
 import { mdiPageLayoutHeader } from '@aglyn/shared-ui-mdi-jsx'
 import AppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { BUNDLE_ID } from '../constants/bundle-common'
@@ -47,6 +48,7 @@ export const schema: AglynComponentSchema<AppBarProps> = {
         path: mdiPageLayoutHeader.path,
         sx: { color: '#2196f3' },
       },
+      category: ComponentCategory.SURFACE,
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,

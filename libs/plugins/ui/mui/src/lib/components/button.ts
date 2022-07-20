@@ -17,6 +17,7 @@
 
 import {
   type AglynComponentSchema,
+  ComponentCategory,
   type ComponentId,
   FieldComponentType,
 } from '@aglyn/core-data-foundation'
@@ -69,6 +70,7 @@ export const schema: AglynComponentSchema<ButtonProps> = {
         path: mdiGestureTapButton.path,
         sx: { color: '#2196f3' },
       },
+      category: ComponentCategory.INPUT,
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,

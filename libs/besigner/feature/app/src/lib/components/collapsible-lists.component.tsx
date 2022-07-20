@@ -43,6 +43,10 @@ const Accordion = styled((props: MuiAccordionProps) => (
     display: 'none',
   },
 }))
+export interface AccordionSummaryProps
+  extends Partial<MuiAccordionSummaryProps> {
+  dense?: boolean
+}
 const AccordionSummary = styled((props: MuiAccordionSummaryProps) => (
   <MuiAccordionSummary
     expandIcon={
@@ -53,7 +57,8 @@ const AccordionSummary = styled((props: MuiAccordionSummaryProps) => (
     }
     {...props}
   />
-))<Partial<MuiAccordionSummaryProps>>(({ theme }) => ({
+))<AccordionSummaryProps>(({ theme, dense }) => ({
+  textTransform: 'uppercase',
   backgroundColor: theme.palette.bgSecondary.main,
   flexDirection: 'row-reverse',
   '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
@@ -62,13 +67,26 @@ const AccordionSummary = styled((props: MuiAccordionSummaryProps) => (
   '& .MuiAccordionSummary-content': {
     marginLeft: theme.spacing(1),
   },
+  ...(dense
+    ? {
+        '&': {
+          minHeight: 38,
+        },
+        '& .MuiAccordionSummary-content': {
+          marginBottom: theme.spacing(1),
+          marginTop: theme.spacing(1),
+        },
+      }
+    : {}),
 }))
-const AccordionDetails = styled(MuiAccordionDetails)<
-  Partial<MuiAccordionDetailsProps>
->(({ theme }) => ({
-  padding: theme.spacing(2),
-  borderTop: '1px solid rgba(0, 0, 0, .125)',
-}))
+export interface AccordionDetailsProps
+  extends Partial<MuiAccordionDetailsProps> {}
+const AccordionDetails = styled(MuiAccordionDetails)<AccordionDetailsProps>(
+  ({ theme }) => ({
+    padding: theme.spacing(2),
+    borderTop: '1px solid rgba(0, 0, 0, .125)',
+  }),
+)
 
 interface CollapsibleItem extends AnyObj {
   id?: JSX.Key
@@ -85,8 +103,10 @@ export interface CollapsibleListsProps<T extends CollapsibleItem> {
   items: T[]
   unique?: boolean
   defaultExpanded?: JSX.Key[]
-  RenderSummaryComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
-  RenderDetailsComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
+  SummaryContentComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
+  DetailsContentComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
+  AccordionSummaryProps?: Partial<AccordionSummaryProps>
+  AccordionDetailsProps?: Partial<AccordionDetailsProps>
 }
 
 const CollapsibleListsComponent = <T extends CollapsibleItem>(
@@ -95,8 +115,10 @@ const CollapsibleListsComponent = <T extends CollapsibleItem>(
   const {
     items,
     defaultExpanded: initial,
-    RenderSummaryComponent,
-    RenderDetailsComponent,
+    SummaryContentComponent,
+    DetailsContentComponent,
+    AccordionSummaryProps,
+    AccordionDetailsProps,
     unique,
   } = props
   const [open, setOpen] = useState<JSX.Key[]>(() => {
@@ -133,16 +155,16 @@ const CollapsibleListsComponent = <T extends CollapsibleItem>(
           expanded={isOpen(item?.key ?? item?.id ?? index)}
           onChange={handleToggle(item?.key ?? item?.id ?? index)}
         >
-          <AccordionSummary>
-            <RenderSummaryComponent
+          <AccordionSummary {...AccordionSummaryProps}>
+            <SummaryContentComponent
               id={item?.key ?? item?.id ?? index}
               isOpen={isOpen(item?.key ?? item?.id ?? index)}
               item={item}
               open={open}
             />
           </AccordionSummary>
-          <AccordionDetails>
-            <RenderDetailsComponent
+          <AccordionDetails {...AccordionDetailsProps}>
+            <DetailsContentComponent
               id={item?.key ?? item?.id ?? index}
               isOpen={isOpen(item?.key ?? item?.id ?? index)}
               item={item}

@@ -17,6 +17,7 @@
 
 import {
   type AglynComponentSchema,
+  ComponentCategory,
   type ComponentId,
   ComponentsLinealDirectiveFlag,
 } from '@aglyn/core-data-foundation'
@@ -47,6 +48,7 @@ export const schema: AglynComponentSchema<ListItemProps> = {
       id: generateTemplateId(ID),
       label: 'List Item',
       icon: { path: mdiFormatListText.path },
+      category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
         bundleId: BUNDLE_ID,

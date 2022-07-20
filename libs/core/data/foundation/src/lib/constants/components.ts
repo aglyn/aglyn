@@ -30,6 +30,14 @@ export enum ComponentsLinealDirectiveFlag {
   DISALLOW = 0x02,
 }
 
+export enum ComponentCategory {
+  INPUT = 'Input',
+  SURFACE = 'Surface',
+  NAVIGATION = 'Navigation',
+  LAYOUT = 'Layout',
+  DATA_DISPLAY = 'Data Display',
+}
+
 export const _INTERNAL_COMPONENTS_: Map<AppUUN, IAglynComponentsController> =
   new Map()
 export const ELEMENT_ID_LENGTH = 10

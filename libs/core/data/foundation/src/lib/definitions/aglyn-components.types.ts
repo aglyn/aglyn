@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import type {
-  Dictionary,
-  OrUndef,
-  ResolveProps,
-} from '@aglyn/shared-data-types'
+import type { Dictionary, OrUndef } from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type {
   ConditionDefinition,
@@ -36,6 +32,7 @@ import type {
   ComponentsLinealDirectiveFlag,
   FieldComponentType,
 } from '../constants/components'
+import { ComponentCategory } from '../constants/components'
 import type {
   ComponentGetPayload,
   ComponentRegisterPayload,
@@ -89,6 +86,7 @@ export type AglynComponentElementTemplate = {
   label: string
   description?: string
   icon?: MdiIconProps
+  category?: string | ComponentCategory
   data: AglynComponentTemplateData<any>
 }
 
@@ -140,7 +138,6 @@ export interface AglynComponentField extends Dictionary<any> {
 export interface AglynComponentTemplateData<P = any> {
   readonly componentId: ComponentId
   readonly bundleId?: BundleUId
-  category?: string
   props?: BoxProps<any, P>
   elements?: AglynComponentTemplateData<any>[]
 }
@@ -191,7 +188,7 @@ export interface AglynComponentSchema<P = any> {
   /**
    * Filter props
    */
-  resolveProps?: ResolveProps<AglynElementDenormalized<P>>
+  resolveProps?: JSX.ResolveProps<AglynElementDenormalized<P>>
 
   /**
    * Feature flags
