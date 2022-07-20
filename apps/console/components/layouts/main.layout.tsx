@@ -97,9 +97,6 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
       sx={mergeSxProps(
         {
           p: { padding: 0.5, xs: 0.25 },
-          '&:last-child': {
-            paddingLeft: 0.75,
-          },
         },
         MenuProps?.sx,
       )}
@@ -226,7 +223,7 @@ const TopAppBar = (props: TopAppBarProps) => {
               justifyContent="flex-start"
               direction="row"
               flexGrow={1}
-              sx={{ paddingLeft: 6 }}
+              sx={{ paddingLeft: 1.5 }}
             >
               {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
                 <Stack

@@ -26,6 +26,7 @@ import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
 import {
   HAS_BROWSER,
+  ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_MODIFY_SAVE,
@@ -192,6 +193,20 @@ function Besigner(props) {
               },
               children: saveAvailable ? 'Save screen' : 'Up to date',
               onClick: handleSave,
+            },
+          ],
+        },
+        {
+          id: 'center-nav-edit',
+          children: 'Edit',
+          // href: '/besigner',
+          items: [
+            {
+              id: 'center-nav-edit-properties',
+              icon: {
+                path: ICON_VARIANT_APP_SETTINGS.path,
+              },
+              children: 'Screen properties',
             },
           ],
         },
