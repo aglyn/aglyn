@@ -21,7 +21,7 @@ import type { BoxProps } from '@aglyn/shared-ui-theme'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { ComponentClass, ComponentProps, ElementType } from 'react'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
-import type { BundleUId, ComponentId } from './aglyn-components.types'
+import type { BundleUId, ComponentId } from './components.types'
 
 export type ElementId = string
 export type AglynElementType<

@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
+import {
+  AglynBaseModelOptions,
+  AglynBaseModelT,
+  AglynDependency,
+  IAglynBaseModel,
+} from '@aglyn/core-data-foundation/definitions/shared'
 import type {
   AglynEventTriggerFlag,
   AglynEventTriggerPayload,
 } from '../constants/emitter'
 import { OF_KIND, OF_TYPE } from '../constants/symbol'
-import type { IAglynAppController } from './aglyn-app.types'
-import type {
-  AglynBaseModelOptions,
-  AglynBaseModelT,
-  IAglynBaseModel,
-} from './aglyn-base.types'
-import type { AglynDependency } from './aglyn-depends.types'
+import type { IAglynAppController } from './app.types'
 
 export type AglynModuleEffectListener<Effect extends AglynEventTriggerFlag> = [
   Effect,

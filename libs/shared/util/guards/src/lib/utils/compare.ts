@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import type {ComparisonOperator} from '@aglyn/shared-data-types'
-
+import { ComparisonOperator } from '@aglyn/shared-data-operators'
 
 /**
  * Perform comparison operation to check provided equality operator. If no

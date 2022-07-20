@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-import {
-  getCanvasDenormalizedElementsStore,
-  getComponentElementHierarchy,
-} from '@aglyn/core-data-app'
+import { getCanvasDenormalizedElementsStore } from '@aglyn/core-data-app'
 import type {
   AglynElementHierarchy,
   ElementId,
 } from '@aglyn/core-data-foundation'
+import { getComponentElementHierarchy } from '@aglyn/core-util-app'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 

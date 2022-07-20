@@ -71,7 +71,7 @@ import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callbac
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
 import useAglynCanvasSelected from '../hooks/use-aglyn-canvas-selected'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
-import CollapsibleListsComponent from './collapsible-lists.component'
+import AccordionListComponent from './accordion-list.component'
 import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 import ElementsTreeViewComponent, {
@@ -167,7 +167,7 @@ const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
 
   return (
     <TabPanelInner>
-      <CollapsibleListsComponent
+      <AccordionListComponent
         unique
         items={details}
         AccordionSummaryProps={{ dense: true }}
@@ -385,7 +385,7 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
 
   return (
     <>
-      <CollapsibleListsComponent
+      <AccordionListComponent
         unique
         items={items}
         AccordionSummaryProps={{ dense: true }}

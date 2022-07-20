@@ -30,36 +30,6 @@ export * from './lib/api/contexts.api'
 export * from './lib/api/extensions.api'
 export * from './lib/api/logger.api'
 
-//    __________  _   ________________    _   _____________
-//   / ____/ __ \/ | / / ___/_  __/   |  / | / /_  __/ ___/
-//  / /   / / / /  |/ /\__ \ / / / /| | /  |/ / / /  \__ \
-// / /___/ /_/ / /|  /___/ // / / ___ |/ /|  / / /  ___/ /
-// \____/\____/_/ |_//____//_/ /_/  |_/_/ |_/ /_/  /____/
-// 👇
-
-//    __  ______________   _____
-//   / / / /_  __/  _/ /  / ___/
-//  / / / / / /  / // /   \__ \
-// / /_/ / / / _/ // /______/ /
-// \____/ /_/ /___/_____/____/
-// 👇
-
-export * from './lib/util/aglyn-is'
-export * from './lib/util/build-component-props-form-schema'
-export * from './lib/util/confirm-valid-lineal-relationship'
-export * from './lib/util/create-component-element-data'
-export * from './lib/util/create-component-element-data-copy'
-export * from './lib/util/create-component-element-id'
-export * from './lib/util/create-components-bundle'
-export * from './lib/util/create-resource-uid'
-export * from './lib/util/denormalize-component-element-data'
-export * from './lib/util/get-component-element-hierarchy'
-export * from './lib/util/handle-state-modification-history-change'
-export * from './lib/util/handle-state-modification-history-redo'
-export * from './lib/util/handle-state-modification-history-undo'
-export * from './lib/util/is-root-element-id'
-export * from './lib/util/normalize-component-element-data'
-
 //     __  _______  ____  ________   _____
 //    /  |/  / __ \/ __ \/ ____/ /  / ___/
 //   / /|_/ / / / / / / / __/ / /   \__ \

@@ -19,28 +19,29 @@ import type { AglynEventTriggerFlag } from '../constants/emitter'
 import type { AglynPlatform } from '../constants/platform'
 import type { AglynVersion } from '../constants/version'
 import type {
-  AglynBaseModelOptions,
-  AglynBaseModelT,
-  IAglynBaseModel,
-} from './aglyn-base.types'
-import type {
   AglynCanvasControllerOptions,
   IAglynCanvasController,
-} from './aglyn-canvas.types'
-import type { IAglynCommandsController } from './aglyn-commands.types'
+} from './canvas.types'
+import type { IAglynCommandsController } from './commands.types'
 import type {
   AglynComponentsControllerOptions,
   IAglynComponentsController,
-} from './aglyn-components.types'
+} from './components.types'
 import type {
   AglynContextsControllerOptions,
   IAglynContextsController,
-} from './aglyn-contexts.types'
+} from './contexts.types'
 import type {
   AglynExtensionsControllerOptions,
   IAglynExtensionsController,
-} from './aglyn-extensions.types'
-import type { AglynUniqueId, Payload } from './generic.types'
+} from './extensions.types'
+import type {
+  AglynBaseModelOptions,
+  AglynBaseModelT,
+  AglynUniqueId,
+  IAglynBaseModel,
+  Payload,
+} from './shared'
 
 export type AppUUN = string
 export type AglynAppModule<T extends AglynUniqueId = any> = T

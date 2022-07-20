@@ -41,18 +41,8 @@ import type {
   IAglynCanvasController,
 } from '@aglyn/core-data-foundation'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
-import { copy } from '@aglyn/shared-util-tools'
-import defaultsDeep from 'lodash-es/defaultsDeep'
-import isEqual from 'lodash-es/isEqual'
-import { BehaviorSubject, Observable } from 'rxjs'
-import { map } from 'rxjs/operators'
-import { AglynModuleModel } from '../models/aglyn-module.model'
-import denormalizeComponentElementData from '../util/denormalize-component-element-data'
-import handleStateModificationHistoryChange from '../util/handle-state-modification-history-change'
-import handleStateModificationHistoryRedo from '../util/handle-state-modification-history-redo'
-import handleStateModificationHistoryUndo from '../util/handle-state-modification-history-undo'
-import normalizeComponentElementData from '../util/normalize-component-element-data'
 import {
+  denormalizeComponentElementData,
   handleCanvasAddElement,
   handleCanvasDeleteElement,
   handleCanvasDuplicateElement,
@@ -60,7 +50,17 @@ import {
   handleCanvasSetElement,
   handleCanvasSetElements,
   handleCanvasUpdateElement,
-} from '../util/utils.canvas'
+  handleStateModificationHistoryChange,
+  handleStateModificationHistoryRedo,
+  handleStateModificationHistoryUndo,
+  normalizeComponentElementData,
+} from '@aglyn/core-util-app'
+import { copy } from '@aglyn/shared-util-tools'
+import defaultsDeep from 'lodash-es/defaultsDeep'
+import isEqual from 'lodash-es/isEqual'
+import { BehaviorSubject, Observable } from 'rxjs'
+import { map } from 'rxjs/operators'
+import { AglynModuleModel } from '../models/aglyn-module.model'
 
 const TAG = 'AglynCanvas'
 const NS = 'com.aglyn.core.data.framework.controller.canvas'

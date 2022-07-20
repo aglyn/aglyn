@@ -16,6 +16,7 @@
     "core-feature-renderer": "libs/core/feature/renderer",
     "core-feature-singleton": "libs/core/feature/singleton",
     "core-ui-renderer": "libs/core/ui/renderer",
+    "core-util-app": "libs/core/util/app",
     "plugins-ui-mui": "libs/plugins/ui/mui",
     "shared-data-enums": "libs/shared/data/enums",
     "shared-data-forms": "libs/shared/data/forms",

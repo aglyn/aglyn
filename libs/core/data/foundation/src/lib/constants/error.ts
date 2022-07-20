@@ -20,9 +20,9 @@ import {
   type ErrorTagMessages,
   NsErrorFactory,
 } from '@aglyn/shared-util-errors'
-import type { AppUUN } from '../definitions/aglyn-app.types'
-import type { ExtensionUUN } from '../definitions/aglyn-extensions.types'
-import type { PayloadData, PayloadParams } from '../definitions/generic.types'
+import type { AppUUN } from '../definitions/app.types'
+import type { ExtensionUUN } from '../definitions/extensions.types'
+import type { PayloadData, PayloadParams } from '../definitions/shared'
 import { AglynLifecycleFlag } from './lifecycle'
 
 export enum AglynErrorEventFlag {

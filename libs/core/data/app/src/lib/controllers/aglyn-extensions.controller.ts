@@ -37,11 +37,11 @@ import {
   type ExtensionRegisterPayload,
   type ExtensionUnloadPayload,
 } from '@aglyn/core-data-foundation'
+import { isAglynExtension, isAglynModule } from '@aglyn/core-util-app'
 import type { MutableShallow } from '@aglyn/shared-data-types'
 import { _isCtor } from '@aglyn/shared-util-guards'
 import { AglynExtension } from '../models/aglyn-extension.model'
 import { AglynModuleModel } from '../models/aglyn-module.model'
-import { isAglynExtension, isAglynModule } from '../util/aglyn-is'
 
 const TAG = 'AglynExtensions'
 const NS = 'com.aglyn.core.data.framework.controller.extensions'

@@ -23,13 +23,13 @@ import type {
   ExtensionRegisterPayload,
   ExtensionUnloadPayload,
 } from '../constants/emitter'
-import type { IAglynAppController } from './aglyn-app.types'
-import type { AglynExtensionT, IAglynExtension } from './aglyn-extension.types'
+import type { IAglynAppController } from './app.types'
+import type { AglynExtensionT, IAglynExtension } from './extension.types'
 import type {
   AglynModuleModelOptions,
   AglynModuleModelT,
   IAglynModuleModel,
-} from './aglyn-module.types'
+} from './module.types'
 
 export type ExtensionUUN = string
 export type AglynExtensionLoader = () => Promise<AglynExtensionT>

@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { buildComponentPropsFormSchema } from '@aglyn/core-data-app'
 import type {
   AglynComponentPropsFormSchema,
   BundleUId,
   ComponentId,
 } from '@aglyn/core-data-foundation'
 import { useAglynComponentSchema } from '@aglyn/core-feature-renderer'
+import { buildComponentPropsFormSchema } from '@aglyn/core-util-app'
 
 import { useMemo } from 'react'
 

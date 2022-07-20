@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type { AppUUN } from '../definitions/aglyn-app.types'
-import type { IAglynExtensionsController } from '../definitions/aglyn-extensions.types'
+import type { AppUUN } from '../definitions/app.types'
+import type { IAglynExtensionsController } from '../definitions/extensions.types'
 
 export const _INTERNAL_EXTENSIONS_: Map<AppUUN, IAglynExtensionsController> =
   new Map()

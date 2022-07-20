@@ -22,39 +22,39 @@ import type {
   createEffect as createEffectorEffect,
   createEvent as createEffectorEvent,
 } from 'effector'
-import type { AppUUN } from '../definitions/aglyn-app.types'
-import type { CanvasContext } from '../definitions/aglyn-canvas.types'
+import type { AppUUN } from '../definitions/app.types'
+import type { CanvasContext } from '../definitions/canvas.types'
 import type {
   AglynCommandListener,
   AglynCommandResolver,
   CommandUId,
-} from '../definitions/aglyn-commands.types'
+} from '../definitions/commands.types'
 import type {
   AglynComponentsBundle,
   AglynComponentSchema,
   BundleUId,
   ComponentId,
   IAglynComponent,
-} from '../definitions/aglyn-components.types'
+} from '../definitions/components.types'
 import type {
   ContextStore,
   ContextStoreOptions,
   ContextStoreUid,
-} from '../definitions/aglyn-contexts.types'
+} from '../definitions/contexts.types'
 import type {
   AglynElementDenormalized,
   AglynElementNormalized,
   ElementId,
-} from '../definitions/aglyn-elements.types'
+} from '../definitions/elements.types'
 import type {
   AglynExtensionOptions,
   IAglynExtension,
-} from '../definitions/aglyn-extension.types'
+} from '../definitions/extension.types'
 import type {
   AglynExtensionLoader,
   ExtensionUUN,
-} from '../definitions/aglyn-extensions.types'
-import type { PayloadData } from '../definitions/generic.types'
+} from '../definitions/extensions.types'
+import type { PayloadData } from '../definitions/shared'
 
 export enum AglynEventStateFlag {
   APP_CREATING = 'event:app:creating', // 1

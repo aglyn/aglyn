@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { createComponentsBundle } from '@aglyn/core-data-app'
 import type { ComponentRegisterPayload } from '@aglyn/core-data-foundation'
 import { createAglynComponent } from '@aglyn/core-feature-renderer'
+import { createComponentsBundle } from '@aglyn/core-util-app'
 import { mdiViewArray } from '@aglyn/shared-ui-mdi-jsx'
 
 import appBar, { schema as appBarSchema } from './components/app-bar'

@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import type {ComparisonOperator} from '@aglyn/shared-data-types'
-import {_isNum} from './_is-num'
+import { ComparisonOperator } from '@aglyn/shared-data-operators'
+import { _isNum } from './_is-num'
 import compare from './utils/compare'
-
 
 /**
  * Checks if the parameter has length greater than 0 or second parameter
@@ -33,7 +32,9 @@ export function _isLength<T>(
 ): boolean {
   if (typeof leftOperand !== 'undefined') {
     const left = _isNum(leftOperand) ? leftOperand : leftOperand['length'] ?? 0
-    const right = _isNum(rightOperand) ? rightOperand : rightOperand['length'] ?? 0
+    const right = _isNum(rightOperand)
+      ? rightOperand
+      : rightOperand['length'] ?? 0
     return compare(left, right, operator)
   }
   return false

@@ -35,17 +35,17 @@ import type {
   CanvasUndoPayload,
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
-import type { IAglynAppController } from './aglyn-app.types'
-import type { ContextEvent } from './aglyn-contexts.types'
+import type { IAglynAppController } from './app.types'
+import type { ContextEvent } from './contexts.types'
 import type {
   AglynElementsDenormalized,
   AglynElementsNormalized,
-} from './aglyn-elements.types'
+} from './elements.types'
 import type {
   AglynModuleModelOptions,
   AglynModuleModelT,
   IAglynModuleModel,
-} from './aglyn-module.types'
+} from './module.types'
 
 export type CanvasContext = {
   future: AglynElementsDenormalized[]

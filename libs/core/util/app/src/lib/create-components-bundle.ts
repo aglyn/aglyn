@@ -30,3 +30,4 @@ export function createComponentsBundle(
     components,
   }
 }
+export default createComponentsBundle

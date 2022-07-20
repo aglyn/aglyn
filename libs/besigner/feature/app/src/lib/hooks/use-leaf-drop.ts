@@ -21,13 +21,13 @@ import {
   DndDragType,
   DndDropType,
 } from '@aglyn/besigner-data-app'
-import { confirmValidLinealRelationship } from '@aglyn/core-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
 import {
   useAglynCanvasElementHierarchy,
   useAglynComponentSchema,
   useAglynElementData,
 } from '@aglyn/core-feature-renderer'
+import { confirmValidLinealRelationship } from '@aglyn/core-util-app'
 import isEqual from 'lodash-es/isEqual'
 import { useMemo } from 'react'
 import { type ConnectDropTarget, useDrop } from 'react-dnd'

@@ -19,19 +19,13 @@ import {
   BesignerPanelTabFlag,
   setBesignerPanels,
 } from '@aglyn/besigner-data-app'
-import { useRenderedCanvasElementRef } from '@aglyn/besigner-feature-app/contexts/rendered-canvas-elements'
-import { useAglynCanvasSetHovered } from '@aglyn/besigner-feature-app/hooks/use-aglyn-canvas-hovered'
-import { useAglynCanvasSetSelected } from '@aglyn/besigner-feature-app/hooks/use-aglyn-canvas-selected'
-import {
-  duplicateCanvasElement,
-  isRootElementId,
-  moveCanvasElement,
-} from '@aglyn/core-data-app'
+import { duplicateCanvasElement, moveCanvasElement } from '@aglyn/core-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
 import {
   useAglynElementData,
   useAglynElementIndexInParent,
 } from '@aglyn/core-feature-renderer'
+import { isRootElementId } from '@aglyn/core-util-app'
 import {
   ICON_VARIANT_MODIFY_DRAG,
   ICON_VARIANT_MODIFY_DUPLICATE,
@@ -52,6 +46,9 @@ import {
   type TooltipProps,
 } from '@mui/material'
 import { type ChangeEvent, forwardRef, useCallback } from 'react'
+import { useRenderedCanvasElementRef } from '../contexts/rendered-canvas-elements'
+import { useAglynCanvasSetHovered } from '../hooks/use-aglyn-canvas-hovered'
+import { useAglynCanvasSetSelected } from '../hooks/use-aglyn-canvas-selected'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
 
 export interface BadgeButtonProps extends Omit<TooltipProps, 'children'> {

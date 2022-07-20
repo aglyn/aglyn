@@ -31,12 +31,12 @@ import {
   type ContextsGetStorePayload,
   type ContextsSetStorePayload,
 } from '../constants/emitter'
-import { type IAglynAppController } from './aglyn-app.types'
+import { type IAglynAppController } from './app.types'
 import {
   type AglynModuleModelOptions,
   type AglynModuleModelT,
   type IAglynModuleModel,
-} from './aglyn-module.types'
+} from './module.types'
 
 export type ContextStoreUid = string
 export type ContextDomain = EffectorDomain

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { createResourceUid } from '@aglyn/core-data-app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
+import { createResourceUid } from '@aglyn/core-util-app'
 import {
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,

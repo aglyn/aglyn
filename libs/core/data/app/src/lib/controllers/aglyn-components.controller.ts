@@ -45,12 +45,12 @@ import {
   type ComponentsBundleUnregisterPayload,
   type ComponentUnregisterPayload,
 } from '@aglyn/core-data-foundation'
+import { isAglynComponentElement } from '@aglyn/core-util-app'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { OrUndef } from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import { _isArr } from '@aglyn/shared-util-guards'
 import { AglynModuleModel } from '../models/aglyn-module.model'
-import { isAglynComponentElement } from '../util/aglyn-is'
 
 const TAG = 'AglynComponents'
 const NS = 'com.aglyn.core.data.framework.controller.components'

@@ -88,29 +88,29 @@ const AccordionDetails = styled(MuiAccordionDetails)<AccordionDetailsProps>(
   }),
 )
 
-interface CollapsibleItem extends AnyObj {
+interface AccordionListItem extends AnyObj {
   id?: JSX.Key
   key?: JSX.Key
 }
-interface CollapsibleRenderProps<T extends CollapsibleItem> extends AnyObj {
+interface AccordionRenderProps<T extends AccordionListItem> extends AnyObj {
   id: JSX.Key
   open: JSX.Key[]
   isOpen: boolean
   item: T
 }
 
-export interface CollapsibleListsProps<T extends CollapsibleItem> {
+export interface AccordionListProps<T extends AccordionListItem> {
   items: T[]
   unique?: boolean
   defaultExpanded?: JSX.Key[]
-  SummaryContentComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
-  DetailsContentComponent?: JSX.ElementType<CollapsibleRenderProps<T>>
+  SummaryContentComponent?: JSX.ElementType<AccordionRenderProps<T>>
+  DetailsContentComponent?: JSX.ElementType<AccordionRenderProps<T>>
   AccordionSummaryProps?: Partial<AccordionSummaryProps>
   AccordionDetailsProps?: Partial<AccordionDetailsProps>
 }
 
-const CollapsibleListsComponent = <T extends CollapsibleItem>(
-  props: CollapsibleListsProps<T>,
+const AccordionListComponent = <T extends AccordionListItem>(
+  props: AccordionListProps<T>,
 ) => {
   const {
     items,
@@ -176,13 +176,13 @@ const CollapsibleListsComponent = <T extends CollapsibleItem>(
     </Fragment>
   )
 }
-CollapsibleListsComponent.displayName = 'CollapsibleListsComponent'
-CollapsibleListsComponent.aglyn = true
-CollapsibleListsComponent.defaultProps = {
+AccordionListComponent.displayName = 'AccordionListComponent'
+AccordionListComponent.aglyn = true
+AccordionListComponent.defaultProps = {
   unique: false,
   RenderSummaryComponent: (({ id }) => id) as any,
   RenderDetailsComponent: (({ id }) => id) as any,
 }
 
-export { CollapsibleListsComponent }
-export default CollapsibleListsComponent
+export { AccordionListComponent }
+export default AccordionListComponent

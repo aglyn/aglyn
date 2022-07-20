@@ -29,7 +29,7 @@ import type {
   AglynElementsDenormalized,
   AglynElementsList,
   AglynElementsNormalized,
-} from './aglyn-elements.types'
+} from './elements.types'
 
 export type UserUid = string
 export type RoleUid = string

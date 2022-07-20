@@ -16,13 +16,13 @@
  */
 
 import type { AglynLifecycleFlag } from '../constants/lifecycle'
-import type { IAglynAppController } from './aglyn-app.types'
-import type { ExtensionUUN } from './aglyn-extensions.types'
+import type { IAglynAppController } from './app.types'
+import type { ExtensionUUN } from './extensions.types'
 import type {
   AglynModuleModelOptions,
   AglynModuleModelT,
   IAglynModuleModel,
-} from './aglyn-module.types'
+} from './module.types'
 
 export interface AglynExtensionOptions extends AglynModuleModelOptions {
   autoload?: boolean

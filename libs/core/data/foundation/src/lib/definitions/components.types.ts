@@ -44,13 +44,13 @@ import type {
 } from '../constants/emitter'
 import { FEATURE_FLAG } from '../constants/shared'
 import type { OF_KIND, OF_TYPE, SYMBOL_TYPE } from '../constants/symbol'
-import type { IAglynAppController } from './aglyn-app.types'
-import type { AglynElementDenormalized } from './aglyn-elements.types'
+import type { IAglynAppController } from './app.types'
+import type { AglynElementDenormalized } from './elements.types'
 import type {
   AglynModuleModelOptions,
   AglynModuleModelT,
   IAglynModuleModel,
-} from './aglyn-module.types'
+} from './module.types'
 
 export type BundleUId = string
 export type ComponentId = string

@@ -22,21 +22,19 @@
 // /_/    /_/_/   /_____//____/
 // 👇
 
-export * from './lib/definitions/aglyn-app.types'
-export * from './lib/definitions/aglyn-base.types'
-export * from './lib/definitions/aglyn-canvas.types'
-export * from './lib/definitions/aglyn-commands.types'
-export * from './lib/definitions/aglyn-components.types'
-export * from './lib/definitions/aglyn-contexts.types'
-export * from './lib/definitions/aglyn-depends.types'
-export * from './lib/definitions/aglyn-elements.types'
-export * from './lib/definitions/aglyn-extension.types'
-export * from './lib/definitions/aglyn-extensions.types'
-export * from './lib/definitions/aglyn-extensions.types'
-export * from './lib/definitions/aglyn-module.types'
-export * from './lib/definitions/aglyn-module.types'
-export * from './lib/definitions/aglyn-tenancy.types'
-export * from './lib/definitions/generic.types'
+export * from './lib/definitions/app.types'
+export * from './lib/definitions/canvas.types'
+export * from './lib/definitions/commands.types'
+export * from './lib/definitions/components.types'
+export * from './lib/definitions/contexts.types'
+export * from './lib/definitions/elements.types'
+export * from './lib/definitions/extension.types'
+export * from './lib/definitions/extensions.types'
+export * from './lib/definitions/extensions.types'
+export * from './lib/definitions/module.types'
+export * from './lib/definitions/module.types'
+export * from './lib/definitions/tenancy.types'
+export * from './lib/definitions/shared'
 
 //    __________  _   ________________    _   _____________
 //   / ____/ __ \/ | / / ___/_  __/   |  / | / /_  __/ ___/

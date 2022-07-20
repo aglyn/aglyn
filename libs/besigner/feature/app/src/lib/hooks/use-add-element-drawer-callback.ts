@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-import {
-  addCanvasElement,
-  createComponentElementData,
-} from '@aglyn/core-data-app'
+import { addCanvasElement } from '@aglyn/core-data-app'
 import {
   CANVAS_ROOT_ELEMENT_ID,
   type ElementId,
 } from '@aglyn/core-data-foundation'
 import { useAglynAppContext } from '@aglyn/core-feature-renderer'
+import { createComponentElementData } from '@aglyn/core-util-app'
 import { useCallback } from 'react'
 import {
   type ElementDrawerOptions,

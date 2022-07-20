@@ -20,13 +20,14 @@ import {
   type BesignerDroppableItem,
   DndDragType,
 } from '@aglyn/besigner-data-app'
-import { isRootElementId, moveCanvasElement } from '@aglyn/core-data-app'
+import { moveCanvasElement } from '@aglyn/core-data-app'
 import type { ElementId } from '@aglyn/core-data-foundation'
 import { FEATURE_FLAG } from '@aglyn/core-data-foundation'
 import {
   useAglynAppContext,
   useAglynElementComponentSchema,
 } from '@aglyn/core-feature-renderer'
+import { isRootElementId } from '@aglyn/core-util-app'
 import { useMemo } from 'react'
 import {
   type ConnectDragPreview,
