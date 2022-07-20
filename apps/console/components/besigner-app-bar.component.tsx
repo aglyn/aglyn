@@ -22,10 +22,10 @@ import {
   PanelControlsComponent,
 } from '@aglyn/besigner-feature-app'
 import {
+  ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import { AppLink } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { Button, type ButtonProps, Divider, Stack } from '@mui/material'
 import { forwardRef } from 'react'
@@ -47,36 +47,26 @@ const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       <SecondaryAppBarComponent
         ref={ref}
         tabBarTitle={
-          <Stack
-            direction="row"
-            spacing={{ sm: 0.15, md: 0.5 }}
-            alignItems="center"
-            typography={'subtitle2'}
-            lineHeight={'normal'}
-            sx={{ color: 'tertiary.light' }}
-            component={AppLink}
-            componentVariant={'text'}
-            underline="none"
-            onClick={onSave}
-            disabled={!saveAvailable}
+          <Button
+            size="small"
+            color="tertiary"
+            // onClick={onSave}
+            endIcon={
+              <MdiIcon
+                path={ICON_VARIANT_APP_SETTINGS.path}
+                fontSize={'small'}
+              />
+            }
           >
-            <MdiIcon
-              path={
-                saveAvailable
-                  ? ICON_VARIANT_MODIFY_SAVE.path
-                  : ICON_VARIANT_SYMBOL_CONFIRMED.path
-              }
-              fontSize={'small'}
-            />
-            <span>{saveAvailable ? 'Save' : 'Up to date'}</span>
-          </Stack>
+            {'Properties'}
+          </Button>
         }
       >
         <Stack
           direction="row"
           alignItems="center"
           justifyContent="space-between"
-          width={1}
+          flexGrow={1}
           spacing={1}
         >
           <AddControlsComponent />
