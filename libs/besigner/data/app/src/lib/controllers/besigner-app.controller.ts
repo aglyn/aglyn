@@ -16,14 +16,14 @@
  */
 
 import { AglynAppController } from '@aglyn/core-data-app'
-import { type IAglynModuleModel } from '@aglyn/core-data-foundation'
+import type { IAglynModuleModel } from '@aglyn/core-data-foundation'
 import { _INTERNAL_BESIGNERS_ } from '../constants/_internal'
-import { AglynBesignerController } from './aglyn-besigner.controller'
-import type { IAglynBesignerController } from './aglyn-besigner.types'
 import type {
   BesignerAppOptions,
   IBesignerAppController,
-} from './besigner-app.types'
+} from '../definitions/besigner-app.types'
+import type { IBesignerInterfaceController } from '../definitions/besigner-interface.types'
+import { BesignerInterfaceController } from './besigner-interface.controller'
 
 const TAG = 'BesignerApp'
 const NS = 'com.aglyn.besigner.data.controller.app'
@@ -32,23 +32,21 @@ export class BesignerAppController
   extends AglynAppController<BesignerAppOptions>
   implements IBesignerAppController
 {
+  #interfaceController: IBesignerInterfaceController = null
+
   public static get [Symbol.toStringTag](): string {
     return TAG
   }
   public static get namespace(): string {
     return NS
   }
-
-  #besignerController: IAglynBesignerController = null
-
-  public get besigner(): IAglynBesignerController {
-    return this.#besignerController
+  public get interface(): IBesignerInterfaceController {
+    return this.#interfaceController
   }
-
   protected get modules(): IAglynModuleModel[] {
     const modules = super.modules,
       extModule = modules.pop()
-    return [...modules, this.#besignerController, extModule]
+    return [...modules, this.#interfaceController, extModule]
   }
 
   constructor(options: BesignerAppOptions) {
@@ -59,15 +57,15 @@ export class BesignerAppController
     super.setupExtensions()
     _INTERNAL_BESIGNERS_.set(
       this.appName,
-      (this.#besignerController = new AglynBesignerController(this, {
-        ...this.options.modulesOptions?.besigner,
+      (this.#interfaceController = new BesignerInterfaceController(this, {
+        ...this.options.modulesOptions?.interface,
       })),
     )
     return this
   }
 
-  public getBesignerController(): IAglynBesignerController {
-    return this.#besignerController
+  public getBesignerController(): IBesignerInterfaceController {
+    return this.#interfaceController
   }
 }
 

@@ -47,29 +47,28 @@ import type {
   BesignerTogglePanelPayload,
 } from '../constants/emitter'
 import type {
-  AglynBesignerControllerOptions,
   BesignerContext,
-  IAglynBesignerController,
-} from './aglyn-besigner.types'
+  BesignerInterfaceControllerOptions,
+  IBesignerInterfaceController,
+} from '../definitions/besigner-interface.types'
 
-const TAG = 'AglynBesigner'
-const NS = 'com.aglyn.besigner.data.controller.besigner'
+const TAG = 'BesignerInterface'
+const NS = 'com.aglyn.besigner.data.controller.interface'
 
-export class AglynBesignerController
-  extends AglynModuleModel<AglynBesignerControllerOptions>
-  implements IAglynBesignerController
+export class BesignerInterfaceController
+  extends AglynModuleModel<BesignerInterfaceControllerOptions>
+  implements IBesignerInterfaceController
 {
+  public readonly __store__: {
+    [K in keyof BesignerContext]: BehaviorSubject<BesignerContext[K]>
+  }
+
   public static get [Symbol.toStringTag](): string {
     return TAG
   }
   public static get namespace(): string {
     return NS
   }
-
-  public readonly __store__: {
-    [K in keyof BesignerContext]: BehaviorSubject<BesignerContext[K]>
-  }
-
   public get canvas(): this['__store__']['canvas'] {
     return this.__store__?.canvas
   }
@@ -89,7 +88,7 @@ export class AglynBesignerController
 
   constructor(
     app: IAglynAppController,
-    options: AglynBesignerControllerOptions,
+    options: BesignerInterfaceControllerOptions,
   ) {
     super(app, options)
     const state = defaultsDeep(options.defaults, {
@@ -262,4 +261,4 @@ export class AglynBesignerController
   }
 }
 
-export default AglynBesignerController
+export default BesignerInterfaceController

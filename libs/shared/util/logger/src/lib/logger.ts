@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-
 /**
  * A container for all of the Logger instances
  */
@@ -48,7 +47,11 @@ export type LogLevelString = LogLevel | keyof Console
  * type of log, the current log level, and any other arguments passed (i.e. the
  * messages that the user wants to log) to this function.
  */
-export type LogHandler = (loggerInstance: Logger, level: LogLevelString, ...args: unknown[]) => void
+export type LogHandler = (
+  loggerInstance: Logger,
+  level: LogLevelString,
+  ...args: unknown[]
+) => void
 
 export interface LogOptions {
   level: LogLevel | keyof Console
@@ -96,7 +99,9 @@ export const defaultLogHandler: LogHandler = (
     return console[method](`[${now}]  ${instance.name}`, ...args)
   }
 
-  throw new Error(`Attempted to log a message with an invalid logType (value: ${level})`)
+  throw new Error(
+    `Attempted to log a message with an invalid logType (value: ${level})`,
+  )
 }
 
 export const FALLBACK_LOG_LEVEL = LogLevel.INFO
@@ -105,7 +110,6 @@ export const FALLBACK_LOG_LEVEL = LogLevel.INFO
  * TODO: INTEGRATE PACKAGE`debug`
  */
 export class Logger {
-
   /**
    * The default log level
    */
@@ -177,7 +181,8 @@ export class Logger {
    * Workaround for setter/getter having to be the same type
    */
   public setLogLevel(val?: LogLevelString): this {
-    if (val && LogLevel[LogLevel[val]] || console[val]) this.#logLevel = val as LogLevel
+    if ((val && LogLevel[LogLevel[val]]) || console[val])
+      this.#logLevel = val as LogLevel
     else this.#logLevel = FALLBACK_LOG_LEVEL
     return this
   }
@@ -192,35 +197,39 @@ export class Logger {
   /**
    * The optional, additional, user-defined log handler for the Logger instance.
    */
-  public setUserLogHandler(logCallback: LogCallback | null, options?: LogOptions): void {
+  public setUserLogHandler(
+    logCallback: LogCallback | null,
+    options?: LogOptions,
+  ): void {
     let customLogLevel: LogLevelString = null
-    if (options?.level && (LogLevel[LogLevel[options.level]] || console[options.level])) {
+    if (
+      options?.level &&
+      (LogLevel[LogLevel[options.level]] || console[options.level])
+    ) {
       customLogLevel = options.level
     }
     if (logCallback === null) {
       this.userLogHandler = null
-    }
-    else {
-      this.userLogHandler = (instance: Logger, level: LogLevel, ...args: unknown[]) => {
+    } else {
+      this.userLogHandler = (
+        instance: Logger,
+        level: LogLevel,
+        ...args: unknown[]
+      ) => {
         const message = args
           .map((arg) => {
             if (arg == null) {
               return null
-            }
-            else if (typeof arg === 'string') {
+            } else if (typeof arg === 'string') {
               return arg
-            }
-            else if (typeof arg === 'number' || typeof arg === 'boolean') {
+            } else if (typeof arg === 'number' || typeof arg === 'boolean') {
               return arg.toString()
-            }
-            else if (arg instanceof Error) {
+            } else if (arg instanceof Error) {
               return arg.message
-            }
-            else {
+            } else {
               try {
                 return JSON.stringify(arg)
-              }
-              catch (ignored) {
+              } catch (ignored) {
                 return null
               }
             }
@@ -232,9 +241,11 @@ export class Logger {
             args,
             message,
             type: instance.name,
-            level: options?.level && (
-              LogLevel[LogLevel[options.level]] || console[options.level]
-            ) || FALLBACK_LOG_LEVEL,
+            level:
+              (options?.level &&
+                (LogLevel[LogLevel[options.level]] ||
+                  console[options.level])) ||
+              FALLBACK_LOG_LEVEL,
           })
         }
       }
@@ -243,7 +254,10 @@ export class Logger {
   /**
    * The optional, additional, user-defined log handler for the Logger instance.
    */
-  public static setUserLogHandler(logCallback: LogCallback | null, options?: LogOptions): void {
+  public static setUserLogHandler(
+    logCallback: LogCallback | null,
+    options?: LogOptions,
+  ): void {
     for (const instance of instances) {
       instance.setUserLogHandler(logCallback, options)
     }
@@ -261,7 +275,8 @@ export class Logger {
   /** {@inheritDoc Console.log} */
   public log(...args: unknown[]): void {
     this.#logHandler(this, LogLevel.VERBOSE, ...args)
-    this.#userLogHandler && this.#userLogHandler(this, LogLevel.VERBOSE, ...args)
+    this.#userLogHandler &&
+      this.#userLogHandler(this, LogLevel.VERBOSE, ...args)
   }
   /** {@inheritDoc Console.info} */
   public info(...args: unknown[]): void {
@@ -278,5 +293,6 @@ export class Logger {
     this.#logHandler(this, LogLevel.ERROR, ...args)
     this.#userLogHandler && this.#userLogHandler(this, LogLevel.ERROR, ...args)
   }
-
 }
+
+export default Logger

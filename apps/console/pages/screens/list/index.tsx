@@ -35,6 +35,7 @@ import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, IconButton, Typography } from '@mui/material'
 import { GridActionsCellItem, type GridColumns } from '@mui/x-data-grid'
 import {
@@ -43,7 +44,6 @@ import {
   limit,
   query,
   setDoc,
-  Timestamp,
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'

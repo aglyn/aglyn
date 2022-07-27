@@ -23,7 +23,7 @@ import useBesignerAppContext from './use-besigner-app-context'
 export function useAglynCanvasElementIsHovered($id: NodeId): boolean {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerCanvasHoveredElement>(
-    app.besigner?.canvas,
+    app.interface?.canvas,
     false,
     (canvas) => $id && canvas?.hovered?.$id === $id,
     [$id, app],

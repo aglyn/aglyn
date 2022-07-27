@@ -38,7 +38,7 @@ export function useAglynDndActive(): [
 ] {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerDraggableItem>(
-    app.besigner?.dnd,
+    app.interface?.dnd,
     undefined,
     (dnd) => dnd?.active,
     [app],

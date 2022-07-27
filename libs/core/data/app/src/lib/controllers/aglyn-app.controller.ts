@@ -46,7 +46,7 @@ import {
 import { compress, decompress } from '@aglyn/core-util-app'
 import { getStaticField, truthy } from '@aglyn/shared-util-tools'
 import { Bytes } from 'firebase/firestore'
-import { AglynBaseModel } from '../models/aglyn-base.model'
+import AglynBaseModel from '../models/aglyn-base.model'
 import AglynDependencyManager from '../models/aglyn-depends.model'
 import AglynCanvasController from './aglyn-canvas.controller'
 import AglynCommandsController from './aglyn-commands.controller'
@@ -74,7 +74,6 @@ export class AglynAppController<
 {
   public static readonly platform: AglynPlatform = AGLYN_PLATFORM
   public static readonly version: AglynVersion = SDK_VERSION
-
   readonly #appName: AppUUN = null
   #deleted = false
   #extensionsController: IAglynExtensionsController = null

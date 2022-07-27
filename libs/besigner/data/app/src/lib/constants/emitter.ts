@@ -25,7 +25,7 @@ import type {
   BesignerFlagsState,
   BesignerPanelKey,
   BesignerPanelsState,
-} from '../controllers/aglyn-besigner.types'
+} from '../definitions/besigner-interface.types'
 import {
   BesignerCanvasItemKey,
   BesignerCanvasItemValue,
@@ -33,7 +33,7 @@ import {
   BesignerDndItemValue,
   BesignerFlagValue,
   BesignerPanelValue,
-} from '../controllers/aglyn-besigner.types'
+} from '../definitions/besigner-interface.types'
 
 export enum BesignerAppEffectFlag {
   BESIGNER_GET_STORE = 'effect:besigner:get-store',

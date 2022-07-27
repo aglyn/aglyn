@@ -16,7 +16,7 @@
  */
 
 import type { AppUUN } from '@aglyn/core-data-foundation'
-import type { IAglynBesignerController } from '../controllers/aglyn-besigner.types'
+import type { IBesignerInterfaceController } from '../definitions/besigner-interface.types'
 
-export const _INTERNAL_BESIGNERS_: Map<AppUUN, IAglynBesignerController> =
+export const _INTERNAL_BESIGNERS_: Map<AppUUN, IBesignerInterfaceController> =
   new Map()

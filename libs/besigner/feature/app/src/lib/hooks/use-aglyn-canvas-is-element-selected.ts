@@ -23,7 +23,7 @@ import useBesignerAppContext from './use-besigner-app-context'
 export function useAglynCanvasElementIsSelected($id: NodeId): boolean {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerCanvasSelectedElement>(
-    app.besigner?.canvas,
+    app.interface?.canvas,
     false,
     (canvas) => $id && canvas?.selected?.$id === $id,
     [$id, app],

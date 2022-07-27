@@ -38,7 +38,7 @@ export function useAglynDndOver(): [
 ] {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerDroppableItem>(
-    app.besigner?.dnd,
+    app.interface?.dnd,
     undefined,
     (dnd) => dnd?.over,
     [app],

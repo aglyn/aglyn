@@ -119,13 +119,13 @@ export type BesignerDndElementBaseData<T extends DndDragType | DndDropType> =
     hierarchy?: AglynComponentHierarchy
   }
 
-export interface AglynBesignerControllerOptions
+export interface BesignerInterfaceControllerOptions
   extends AglynModuleModelOptions {
   defaults?: Partial<BesignerContext>
 }
 
-export interface IAglynBesignerController
-  extends IAglynModuleModel<AglynBesignerControllerOptions> {
+export interface IBesignerInterfaceController
+  extends IAglynModuleModel<BesignerInterfaceControllerOptions> {
   readonly __store__: {
     [K in keyof BesignerContext]: BehaviorSubject<BesignerContext[K]>
   }
@@ -153,10 +153,10 @@ export interface IAglynBesignerController
   togglePanel(payload: BesignerTogglePanelPayload): this
 }
 
-export interface AglynBesignerControllerT
-  extends AglynModuleModelT<AglynBesignerControllerOptions> {
+export interface BesignerInterfaceControllerT
+  extends AglynModuleModelT<BesignerInterfaceControllerOptions> {
   new (
     app: IAglynAppController,
-    options: AglynBesignerControllerOptions,
-  ): IAglynBesignerController
+    options: BesignerInterfaceControllerOptions,
+  ): IBesignerInterfaceController
 }

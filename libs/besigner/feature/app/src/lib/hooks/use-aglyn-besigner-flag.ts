@@ -42,7 +42,7 @@ export function useAglynBesignerFlag<K extends BesignerFlagKey>(
   const app = useBesignerAppContext()
   const setFlag = useAglynBesignerSetFlag().bind(null, flag)
   const value = useSubscribable<BesignerFlagValue<K>>(
-    app.besigner?.flags,
+    app.interface?.flags,
     undefined,
     (flags) => flags?.[flag],
     [flag, app],

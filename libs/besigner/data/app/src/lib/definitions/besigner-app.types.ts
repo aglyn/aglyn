@@ -21,21 +21,21 @@ import type {
   IAglynAppController,
 } from '@aglyn/core-data-foundation'
 import type {
-  AglynBesignerControllerOptions,
-  IAglynBesignerController,
-} from './aglyn-besigner.types'
+  BesignerInterfaceControllerOptions,
+  IBesignerInterfaceController,
+} from './besigner-interface.types'
 
 export interface BesignerAppOptions extends AglynAppOptions {
   modulesOptions?: AglynAppOptions['modulesOptions'] & {
-    besigner?: AglynBesignerControllerOptions
+    interface?: BesignerInterfaceControllerOptions
   }
 }
 
 export interface IBesignerAppController
   extends IAglynAppController<BesignerAppOptions> {
-  readonly besigner?: IAglynBesignerController
+  readonly interface?: IBesignerInterfaceController
 
-  getBesignerController(): IAglynBesignerController
+  getBesignerController(): IBesignerInterfaceController
 }
 
 export interface BesignerAppControllerT

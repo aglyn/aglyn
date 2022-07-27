@@ -30,7 +30,7 @@ import BesignerAppController from '../controllers/besigner-app.controller'
 import type {
   BesignerAppOptions,
   IBesignerAppController,
-} from '../controllers/besigner-app.types'
+} from '../definitions/besigner-app.types'
 
 export function getAllBesignerApps(): IBesignerAppController[] {
   return [..._INTERNAL_APPS_.values()] as IBesignerAppController[]

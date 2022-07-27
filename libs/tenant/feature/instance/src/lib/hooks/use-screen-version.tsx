@@ -17,14 +17,9 @@
 
 import type { AglynScreenVersion } from '@aglyn/core-data-foundation'
 import { compress, decompress } from '@aglyn/core-util-app'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { copy } from '@aglyn/shared-util-tools'
-import {
-  Bytes,
-  doc,
-  setDoc,
-  type SetOptions,
-  Timestamp,
-} from 'firebase/firestore'
+import { Bytes, doc, setDoc, type SetOptions } from 'firebase/firestore'
 import { useCallback, useMemo } from 'react'
 import {
   type ObservableStatus,

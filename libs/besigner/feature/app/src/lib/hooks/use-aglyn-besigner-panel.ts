@@ -70,7 +70,7 @@ export function useAglynBesignerPanel(
 ] {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerPanelItem | undefined>(
-    app?.besigner?.panels,
+    app?.interface?.panels,
     undefined,
     (panels) => panels?.[name],
     [name, app],

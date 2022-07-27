@@ -34,16 +34,16 @@ import type {
   BesignerSetPanelsPayload,
   BesignerTogglePanelPayload,
 } from '../constants/emitter'
+import type { IBesignerAppController } from '../definitions/besigner-app.types'
 import type {
   BesignerContext,
-  IAglynBesignerController,
-} from '../controllers/aglyn-besigner.types'
-import type { IBesignerAppController } from '../controllers/besigner-app.types'
+  IBesignerInterfaceController,
+} from '../definitions/besigner-interface.types'
 import { _validateBesignerAppArg } from './app.api'
 
 export function _getBesignerController(
   app: IAglynAppController,
-): IAglynBesignerController {
+): IBesignerInterfaceController {
   _validateBesignerAppArg(app as IBesignerAppController)
   return _INTERNAL_BESIGNERS_.get(app.getName())
 }

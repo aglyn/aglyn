@@ -54,7 +54,7 @@ export function useAglynCanvasSelected(): [
 ] {
   const app = useBesignerAppContext()
   const value = useSubscribable<BesignerCanvasSelectedElement>(
-    app.besigner?.canvas,
+    app.interface?.canvas,
     undefined,
     (canvas) => canvas?.selected,
     [app],

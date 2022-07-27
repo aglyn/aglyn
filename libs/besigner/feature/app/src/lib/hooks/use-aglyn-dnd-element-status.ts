@@ -27,7 +27,7 @@ export type AglynDndElementStatus = [
 export function useAglynDndElementStatus($id: NodeId): AglynDndElementStatus {
   const app = useBesignerAppContext()
   const value = useSubscribable<AglynDndElementStatus>(
-    app.besigner?.dnd,
+    app.interface?.dnd,
     [false, false],
     (dnd) => [
       Boolean($id && dnd.active?.$id === $id),

@@ -53,7 +53,7 @@ export function useAglynCanvasHovered(): [
   const app = useBesignerAppContext()
   const setHovered = useAglynCanvasSetHovered()
   const value = useSubscribable<BesignerCanvasHoveredElement>(
-    app.besigner?.canvas,
+    app.interface?.canvas,
     undefined,
     (canvas) => canvas?.hovered,
     [app],

@@ -41,9 +41,17 @@ export * from './lib/constants/emitter'
 //  / /   / / / /  |/ / / / / /_/ / / / / /   / /   / __/ / /_/ \__ \
 // / /___/ /_/ / /|  / / / / _, _/ /_/ / /___/ /___/ /___/ _, ____/ /
 // \____/\____/_/ |_/ /_/ /_/ |_|\____/_____/_____/_____/_/ |_/____/
-// 👇 TYPES ONLY
+// 👇
 
-export * from './lib/controllers/aglyn-besigner.controller'
-export * from './lib/controllers/aglyn-besigner.types'
+export * from './lib/controllers/besigner-interface.controller'
 export * from './lib/controllers/besigner-app.controller'
-export * from './lib/controllers/besigner-app.types'
+
+//     ____  _________________   ____________________  _   _______
+//    / __ \/ ____/ ____/  _/ | / /  _/_  __/  _/ __ \/ | / / ___/
+//   / / / / __/ / /_   / //  |/ // /  / /  / // / / /  |/ /\__ \
+//  / /_/ / /___/ __/ _/ // /|  // /  / / _/ // /_/ / /|  /___/ /
+// /_____/_____/_/   /___/_/ |_/___/ /_/ /___/\____/_/ |_//____/
+// 👇
+
+export * from './lib/definitions/besigner-app.types'
+export * from './lib/definitions/besigner-interface.types'

@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import {NsErrorFactory} from './ns-error-factory'
-import type {ErrorPayload} from './types'
-
+import { NsErrorFactory } from './ns-error-factory'
+import type { ErrorPayload } from './types'
 
 export class NsError extends Error {
   readonly name = 'NsError'

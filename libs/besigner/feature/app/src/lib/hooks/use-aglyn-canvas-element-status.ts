@@ -46,7 +46,7 @@ export function useAglynCanvasElementStatus<T extends boolean = false>(
 ): AglynCanvasElementStatus<T> {
   const app = useBesignerAppContext()
   const value = useSubscribable<AglynCanvasElementStatus<T>>(
-    app.besigner?.canvas,
+    app.interface?.canvas,
     () => {
       const initialValue: ElementSelfChildStatus = {
         isSelfHovered: false,
