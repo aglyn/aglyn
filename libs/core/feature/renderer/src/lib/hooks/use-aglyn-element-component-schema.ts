@@ -15,15 +15,12 @@
  * limitations under the License.
  */
 
-import type {
-  AglynComponentSchema,
-  ElementId,
-} from '@aglyn/core-data-foundation'
+import type { AglynComponentSchema, NodeId } from '@aglyn/core-data-foundation'
 import useAglynComponentSchema from './use-aglyn-component-schema'
 import useAglynElementData from './use-aglyn-element-data'
 
 export function useAglynElementComponentSchema(
-  $id: ElementId,
+  $id: NodeId,
 ): AglynComponentSchema {
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')

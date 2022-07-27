@@ -16,7 +16,7 @@
  */
 
 import { updateCanvasElement } from '@aglyn/core-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import {
   useAglynAppContext,
   useAglynElementData,
@@ -97,7 +97,7 @@ ElementPropsFormTemplate.displayName = 'ElementPropsFormTemplate'
 ElementPropsFormTemplate.aglyn = true
 
 export interface ElementPropsFormProps extends FormRendererProps {
-  $id?: ElementId
+  $id?: NodeId
 }
 
 const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynComponentElementTemplate } from '@aglyn/core-data-foundation'
+import type { AglynNodeTemplateSchema } from '@aglyn/core-data-foundation'
 import {
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_SYMBOL_CONFIRMED,
@@ -42,11 +42,11 @@ const endIcon = (value: number, active: number) =>
       }
 
 export interface ComponentsGridListProps extends Partial<GridListProps> {
-  items?: AglynComponentElementTemplate[]
+  items?: AglynNodeTemplateSchema[]
   onItemSelect?: {
     bivarianceHack<T>(
       event: null | MouseEvent<T>,
-      data: { type: string; data: AglynComponentElementTemplate },
+      data: { type: string; data: AglynNodeTemplateSchema },
     ): void
   }['bivarianceHack']
   maxColumns?: number
@@ -81,7 +81,7 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
     }, [handleColumnChange, columns, maxColumns])
 
     const renderItemContent = useCallback(
-      (props: AglynComponentElementTemplate) => (
+      (props: AglynNodeTemplateSchema) => (
         <ElementCardComponent
           onActionClick={handleItemClick}
           {...(props as any)}

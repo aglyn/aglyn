@@ -21,7 +21,7 @@ import {
   DndDragType,
   DndDropType,
 } from '@aglyn/besigner-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import {
   useAglynCanvasElementHierarchy,
   useAglynComponentSchema,
@@ -45,7 +45,7 @@ export type DropCollected = {
 }
 
 export const useLeafDrop = (
-  $id: ElementId,
+  $id: NodeId,
   dropType?: DndDropType,
   acceptType?: DndDragType,
 ): [DropCollected, ConnectDropTarget] => {

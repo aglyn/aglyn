@@ -16,11 +16,11 @@
  */
 
 import {
-  AglynComponentField,
+  AglynFieldSchema,
   FieldComponentType,
 } from '@aglyn/core-data-foundation'
 
-export const FIELD_COLOR: AglynComponentField = {
+export const FIELD_COLOR: AglynFieldSchema = {
   name: 'color',
   description:
     'The color of the component. It supports those theme colors that make sense for this component.',
@@ -37,7 +37,7 @@ export const FIELD_COLOR: AglynComponentField = {
     { value: 'warning', label: 'Warning' },
   ],
 }
-export const FIELD_COLOR_ALT1: AglynComponentField = {
+export const FIELD_COLOR_ALT1: AglynFieldSchema = {
   ...FIELD_COLOR,
   options: [
     { value: '', label: 'Default' },
@@ -48,26 +48,26 @@ export const FIELD_COLOR_ALT1: AglynComponentField = {
     { value: 'secondary', label: 'Secondary' },
   ],
 }
-export const FIELD_DISABLED: AglynComponentField = {
+export const FIELD_DISABLED: AglynFieldSchema = {
   name: 'disabled',
   description: 'If true, the component is disabled.',
   component: FieldComponentType.SWITCH,
   label: 'Disabled?',
 }
-export const FIELD_FULL_WIDTH: AglynComponentField = {
+export const FIELD_FULL_WIDTH: AglynFieldSchema = {
   name: 'fullWidth',
   description:
     'If true, the button will take up the full width of its container.',
   component: FieldComponentType.SWITCH,
   label: 'Full width?',
 }
-export const FIELD_DISABLE_GUTTERS: AglynComponentField = {
+export const FIELD_DISABLE_GUTTERS: AglynFieldSchema = {
   name: 'disableGutters',
   description: 'If true, disables gutter padding.',
   component: FieldComponentType.SWITCH,
   label: 'Disable gutters?',
 }
-export const FIELD_SIZE: AglynComponentField = {
+export const FIELD_SIZE: AglynFieldSchema = {
   name: 'size',
   description:
     'The size of the component. small is equivalent to the dense button styling.',
@@ -81,7 +81,7 @@ export const FIELD_SIZE: AglynComponentField = {
     { value: 'large', label: 'Large' },
   ],
 }
-export const FIELD_POSITION: AglynComponentField = {
+export const FIELD_POSITION: AglynFieldSchema = {
   name: 'position',
   description:
     'The positioning type. The behavior of the different options is described in the MDN web docs. Note: sticky is not universally supported and will fall back to static when unavailable.',

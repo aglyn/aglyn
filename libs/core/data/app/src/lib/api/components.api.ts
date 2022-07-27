@@ -17,9 +17,9 @@
 
 import {
   _INTERNAL_COMPONENTS_,
-  type AglynComponentElementTemplate,
-  type AglynComponentsBundle,
+  type AglynComponentBundle,
   type AglynComponentSchema,
+  type AglynNodeTemplateSchema,
   type ComponentGetPayload,
   type ComponentRegisterPayload,
   type ComponentsBundleGetPayload,
@@ -64,7 +64,7 @@ export function getAllComponentsKeys(
 
 export function getAllComponentsTemplateValues(
   app: IAglynAppController,
-): AglynComponentElementTemplate[] {
+): AglynNodeTemplateSchema[] {
   return _getComponentsController(app)?.getAllComponentsTemplateValues()
 }
 
@@ -85,7 +85,7 @@ export function getComponentSchema(
 export function getBundle(
   app: IAglynAppController,
   payload: ComponentsBundleGetPayload,
-): OrUndef<AglynComponentsBundle> {
+): OrUndef<AglynComponentBundle> {
   return _getComponentsController(app)?.getBundle(payload)
 }
 

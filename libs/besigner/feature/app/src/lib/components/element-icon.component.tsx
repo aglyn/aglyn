@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { useAglynElementComponentSchema } from '@aglyn/core-feature-renderer'
 import { ICON_VARIANT_ENTITY_BLOCK } from '@aglyn/shared-data-enums'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
@@ -23,7 +23,7 @@ import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { forwardRef, useMemo } from 'react'
 
 export interface ElementIconProps extends MdiIconProps {
-  $id: ElementId
+  $id: NodeId
 }
 
 const ElementIconComponent = forwardRef<any, ElementIconProps>((props, ref) => {

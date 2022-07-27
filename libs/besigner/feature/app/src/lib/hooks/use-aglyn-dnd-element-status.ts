@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import useBesignerAppContext from './use-besigner-app-context'
 
@@ -24,9 +24,7 @@ export type AglynDndElementStatus = [
   isDraggingOver: boolean,
 ]
 
-export function useAglynDndElementStatus(
-  $id: ElementId,
-): AglynDndElementStatus {
+export function useAglynDndElementStatus($id: NodeId): AglynDndElementStatus {
   const app = useBesignerAppContext()
   const value = useSubscribable<AglynDndElementStatus>(
     app.besigner?.dnd,

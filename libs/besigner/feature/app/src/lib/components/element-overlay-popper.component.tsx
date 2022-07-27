@@ -20,7 +20,7 @@ import type {
   BesignerCanvasState,
 } from '@aglyn/besigner-data-app'
 import useAglynCanvasElementStatus from '@aglyn/besigner-feature-app/hooks/use-aglyn-canvas-element-status'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { ICON_VARIANT_MODIFY_ADD } from '@aglyn/shared-data-enums'
 import type { KeyOf } from '@aglyn/shared-data-types'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
@@ -44,7 +44,7 @@ type ActiveAddArea = 'top' | 'right' | 'bottom' | 'left' | null
 
 interface AddButtonProps extends FabProps {
   active?: boolean
-  $id?: ElementId
+  $id?: NodeId
 }
 
 const AddElementOverlay = styled(

@@ -21,7 +21,7 @@ import {
   DndDragType,
 } from '@aglyn/besigner-data-app'
 import { moveCanvasElement } from '@aglyn/core-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { FEATURE_FLAG } from '@aglyn/core-data-foundation'
 import {
   useAglynAppContext,
@@ -43,7 +43,7 @@ export type DragCollected = {
 }
 
 export const useLeafDrag = (
-  $id: ElementId,
+  $id: NodeId,
   dragType?: DndDragType,
 ): [DragCollected, ConnectDragSource, ConnectDragPreview] => {
   const type = dragType ?? DndDragType.CANVAS

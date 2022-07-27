@@ -21,8 +21,8 @@ import {
 } from '@aglyn/besigner-data-app'
 import { getBundle } from '@aglyn/core-data-app'
 import type {
-  AglynComponentElementTemplate,
-  ElementId,
+  AglynNodeTemplateSchema,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import {
   useAglynComponentSchema,
@@ -94,7 +94,7 @@ const TabPanelInner = styled('div', {
   width: '100%',
 }))
 
-const ElementInfo = function ElementInfo({ $id }: { $id: ElementId }) {
+const ElementInfo = function ElementInfo({ $id }: { $id: NodeId }) {
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')
   const parentId = useAglynElementData($id, 'parentId')
@@ -268,7 +268,7 @@ const ElementsTree = forwardRef<any, ElementsTreeViewComponentProps>(
 
 const ComponentGroupDetails = ({ id, isOpen, item }) => {
   const ItemContent = useCallback(
-    ({ icon, ...item }: AglynComponentElementTemplate) => (
+    ({ icon, ...item }: AglynNodeTemplateSchema) => (
       <CardIconListItem item={item} label={item.label}>
         {!icon?.path && icon ? (
           (icon as any)
@@ -338,7 +338,7 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
       labelPrimary: JSX.Node
       labelSecondary: JSX.Node
       icon: MdiIconProps
-      items: AglynComponentElementTemplate[]
+      items: AglynNodeTemplateSchema[]
     }[]
   >(() => {
     const bundles = []

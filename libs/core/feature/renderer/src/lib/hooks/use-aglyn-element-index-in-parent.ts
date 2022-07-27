@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { useMemo } from 'react'
 import { useAglynElementData } from './use-aglyn-element-data'
 
@@ -23,12 +23,12 @@ export type useAglynElementParentPosition = {
   index: number
   isFirst: boolean
   isLast: boolean
-  parentId: ElementId
-  elements: ElementId[]
+  parentId: NodeId
+  elements: NodeId[]
 }
 
 export function useAglynElementIndexInParent(
-  $id: ElementId,
+  $id: NodeId,
 ): useAglynElementParentPosition {
   const parentId = useAglynElementData($id, 'parentId')
   const _elements = useAglynElementData(parentId, 'elements')

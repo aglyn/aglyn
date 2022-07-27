@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ElementId } from '@aglyn/core-data-foundation'
+import { NodeId } from '@aglyn/core-data-foundation'
 import { useAglynElementLabel } from '@aglyn/core-feature-renderer'
 import { styled } from '@aglyn/shared-ui-theme'
 import { Divider, Stack, type StackProps, Typography } from '@mui/material'
@@ -47,7 +47,7 @@ const ElementLabelWrapper = styled(Stack, {
 }))
 
 export interface ElementOverlayLabelProps extends StackProps {
-  $id: ElementId
+  $id: NodeId
 }
 
 const ElementOverlayLabelComponent = forwardRef<

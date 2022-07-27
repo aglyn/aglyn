@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { forwardRef, Fragment, useMemo } from 'react'
 import useAglynElementData from '../hooks/use-aglyn-element-data'
 import LeafComponent from './leaf.component'
 
 export interface BranchComponentProps extends JSX.OverrideableComponentProps {
   leafComponent?: LeafComponent
-  $id?: ElementId
+  $id?: NodeId
 }
 
 const BranchComponent = forwardRef<any, BranchComponentProps>((props, ref) => {

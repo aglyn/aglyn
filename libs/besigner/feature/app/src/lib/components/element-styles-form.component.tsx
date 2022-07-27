@@ -16,7 +16,7 @@
  */
 
 import { updateCanvasElement } from '@aglyn/core-data-app'
-import { type ElementId, FieldComponentType } from '@aglyn/core-data-foundation'
+import { FieldComponentType, type NodeId } from '@aglyn/core-data-foundation'
 import {
   useAglynAppContext,
   useAglynElementData,
@@ -156,7 +156,7 @@ const stylesSchema = (presetColors) => ({
 })
 
 export interface ElementStylesFormProps extends FormRendererProps {
-  $id?: ElementId
+  $id?: NodeId
 }
 
 const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(

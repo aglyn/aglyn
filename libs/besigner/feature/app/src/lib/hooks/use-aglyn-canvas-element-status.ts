@@ -16,7 +16,7 @@
  */
 
 import { getCanvasDenormalizedElementsStore } from '@aglyn/core-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { getComponentElementHierarchy } from '@aglyn/core-util-app'
 import type { Conditional } from '@aglyn/shared-data-types'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
@@ -41,7 +41,7 @@ export type AglynCanvasElementStatus<T> = Conditional<
 >
 
 export function useAglynCanvasElementStatus<T extends boolean = false>(
-  $id: ElementId,
+  $id: NodeId,
   includeChildStatus: T = false as T,
 ): AglynCanvasElementStatus<T> {
   const app = useBesignerAppContext()
@@ -87,7 +87,7 @@ export function useAglynCanvasElementStatus<T extends boolean = false>(
 
   return value
 
-  function checkHierarchy(v: string[], $id: ElementId) {
+  function checkHierarchy(v: string[], $id: NodeId) {
     return (v || [])?.some((id, i, a) => id === $id && i !== a.length - 1)
   }
 }

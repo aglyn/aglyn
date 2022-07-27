@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import type { AglynComponentElementTemplate } from '@aglyn/core-data-foundation'
+import type { AglynNodeTemplateSchema } from '@aglyn/core-data-foundation'
 import { createContext, useContext } from 'react'
 
 export type UseElementComponentsContextType = () => AglynComponentsContextType
 
 export interface AglynComponentsContextType {
-  templateBlocks: AglynComponentElementTemplate[]
+  templateBlocks: AglynNodeTemplateSchema[]
 }
 
 export const DEFAULT_COMPONENTS_CONTEXT: AglynComponentsContextType = {

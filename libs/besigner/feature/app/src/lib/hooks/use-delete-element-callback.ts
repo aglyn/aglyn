@@ -20,13 +20,13 @@ import {
   setBesignerCanvasSelected,
 } from '@aglyn/besigner-data-app'
 import { deleteCanvasElement } from '@aglyn/core-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { useAglynAppContext } from '@aglyn/core-feature-renderer'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { type ChangeEvent, useCallback } from 'react'
 
 export interface UseDeleteElementCallbackOptions {
-  $id?: ElementId
+  $id?: NodeId
   onFulfilled?: (value: unknown) => void | PromiseLike<void>
   onRejected?: (reason: any) => void | PromiseLike<void>
   onCatch?: (error: unknown) => void | PromiseLike<void>

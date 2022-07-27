@@ -16,15 +16,12 @@
  */
 
 import { getCanvasDenormalizedElementsStore } from '@aglyn/core-data-app'
-import type {
-  AglynElementHierarchy,
-  ElementId,
-} from '@aglyn/core-data-foundation'
+import type { AglynElementHierarchy, NodeId } from '@aglyn/core-data-foundation'
 import { getComponentElementHierarchy } from '@aglyn/core-util-app'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-export function useAglynCanvasElementHierarchy<T extends ElementId>(
+export function useAglynCanvasElementHierarchy<T extends NodeId>(
   $id: T,
 ): AglynElementHierarchy<T> {
   const app = useAglynAppContext()

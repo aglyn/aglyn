@@ -30,22 +30,20 @@ import type {
   CommandUId,
 } from '../definitions/commands.types'
 import type {
-  AglynComponentsBundle,
+  AglynComponentBundle,
   AglynComponentSchema,
-  BundleUId,
+  AglynElementDenormalized,
+  AglynElementNormalized,
+  BundleId,
   ComponentId,
   IAglynComponent,
+  NodeId,
 } from '../definitions/components.types'
 import type {
   ContextStore,
   ContextStoreOptions,
   ContextStoreUid,
 } from '../definitions/contexts.types'
-import type {
-  AglynElementDenormalized,
-  AglynElementNormalized,
-  ElementId,
-} from '../definitions/elements.types'
 import type {
   AglynExtensionOptions,
   IAglynExtension,
@@ -182,30 +180,30 @@ export type ContextsDeleteStorePayload = PayloadData<{
 
 export type ComponentGetPayload = PayloadData<{
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }>
 export type ComponentsGetPayload = PayloadData<{
-  ids?: { componentId: ComponentId; bundleId?: BundleUId }[]
+  ids?: { componentId: ComponentId; bundleId?: BundleId }[]
 }>
 export type ComponentSchemaGetPayload = PayloadData<{
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }>
-export type ComponentsBundleGetPayload = PayloadData<{ bundleId: BundleUId }>
+export type ComponentsBundleGetPayload = PayloadData<{ bundleId: BundleId }>
 export type ComponentRegisterPayload<P extends AnyProps = any> = PayloadData<{
   schema: AglynComponentSchema<P>
   component: IAglynComponent<P>
 }>
 export type ComponentUnregisterPayload = PayloadData<{
   componentId: ComponentId
-  bundleId: BundleUId
+  bundleId: BundleId
 }>
 export type ComponentsBundleRegisterPayload = PayloadData<{
-  bundle: Omit<AglynComponentsBundle, 'componentIds'>
+  bundle: Omit<AglynComponentBundle, 'componentIds'>
   components: ComponentRegisterPayload[]
 }>
 export type ComponentsBundleUnregisterPayload = PayloadData<{
-  bundleId: BundleUId
+  bundleId: BundleId
 }>
 
 export type CommandsSetResolverPayload = PayloadData<{
@@ -248,25 +246,25 @@ export type CanvasGetElementsDenormalizedPayload = PayloadData<any>
 export type CanvasGetElementsNormalizedPayload = PayloadData<any>
 export type CanvasGetApiEventsPayload = PayloadData<any>
 export type CanvasAddElementPayload = PayloadData<{
-  parentId: ElementId
+  parentId: NodeId
   index: number
   element: AglynElementNormalized
 }>
-export type CanvasGetElementPayload = PayloadData<{ $id: ElementId }>
+export type CanvasGetElementPayload = PayloadData<{ $id: NodeId }>
 export type CanvasUpdateElementPayload = PayloadData<{
-  $id: ElementId
+  $id: NodeId
   update: (element: AglynElementDenormalized) => AglynElementDenormalized
 }>
 export type CanvasSetElementPayload = PayloadData<{
   element: AglynElementDenormalized
 }>
-export type CanvasDeleteElementPayload = PayloadData<{ $id: ElementId }>
+export type CanvasDeleteElementPayload = PayloadData<{ $id: NodeId }>
 export type CanvasMoveElementPayload = PayloadData<{
-  $id: ElementId
-  parentId: ElementId
+  $id: NodeId
+  parentId: NodeId
   index: number
 }>
-export type CanvasDuplicateElementPayload = PayloadData<{ $id: ElementId }>
+export type CanvasDuplicateElementPayload = PayloadData<{ $id: NodeId }>
 
 export type AppCreatingPayload = PayloadData<{ appName: AppUUN }>
 export type AppCreatedPayload = PayloadData<{ appName: AppUUN }>
@@ -334,31 +332,31 @@ export type CommandListenerUnregisteredPayload = PayloadData<{
 
 export type ComponentRegisteringPayload = PayloadData<{
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }>
 export type ComponentRegisteredPayload = PayloadData<{
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }>
 export type ComponentUnregisteringPayload = PayloadData<{
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }>
 export type ComponentUnregisteredPayload = PayloadData<{
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }>
 export type ComponentBundleRegisteringPayload = PayloadData<{
-  bundleId: BundleUId
+  bundleId: BundleId
 }>
 export type ComponentBundleRegisteredPayload = PayloadData<{
-  bundleId: BundleUId
+  bundleId: BundleId
 }>
 export type ComponentBundleUnregisteringPayload = PayloadData<{
-  bundleId: BundleUId
+  bundleId: BundleId
 }>
 export type ComponentBundleUnregisteredPayload = PayloadData<{
-  bundleId: BundleUId
+  bundleId: BundleId
 }>
 
 export interface AglynEventStatePayload

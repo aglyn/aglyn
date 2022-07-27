@@ -18,7 +18,7 @@
 import { getComponentSchema } from '@aglyn/core-data-app'
 import type {
   AglynComponentSchema,
-  BundleUId,
+  BundleId,
   ComponentId,
 } from '@aglyn/core-data-foundation'
 import { useMemo } from 'react'
@@ -26,7 +26,7 @@ import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynComponentSchema(
   componentId: ComponentId,
-  bundleId?: BundleUId,
+  bundleId?: BundleId,
 ): AglynComponentSchema {
   const app = useAglynAppContext()
   return useMemo(() => {

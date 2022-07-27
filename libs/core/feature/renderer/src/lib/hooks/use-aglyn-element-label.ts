@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import useAglynComponentSchema from './use-aglyn-component-schema'
 import useAglynElementData from './use-aglyn-element-data'
 
-export function useAglynElementLabel($id: ElementId) {
+export function useAglynElementLabel($id: NodeId) {
   const displayName = useAglynElementData($id, 'displayName')
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')

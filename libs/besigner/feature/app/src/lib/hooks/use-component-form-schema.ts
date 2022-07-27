@@ -17,7 +17,7 @@
 
 import type {
   AglynComponentPropsFormSchema,
-  BundleUId,
+  BundleId,
   ComponentId,
 } from '@aglyn/core-data-foundation'
 import { useAglynComponentSchema } from '@aglyn/core-feature-renderer'
@@ -29,7 +29,7 @@ export interface UseComponentFormSchema extends AglynComponentPropsFormSchema {}
 
 export interface UseComponentFormSchemaOptions {
   componentId: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
 }
 
 export const useComponentFormSchema = (

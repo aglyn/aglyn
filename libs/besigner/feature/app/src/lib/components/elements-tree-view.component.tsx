@@ -18,7 +18,7 @@
 import { DndDragType, DndDropType } from '@aglyn/besigner-data-app'
 import {
   CANVAS_ROOT_ELEMENT_ID,
-  type ElementId,
+  type NodeId,
 } from '@aglyn/core-data-foundation'
 import {
   useAglynCanvasElementHierarchy,
@@ -87,7 +87,7 @@ const TreeItem = styled(MuiTreeItem)<MuiTreeItemProps>(({ theme }) => ({
 }))
 
 interface ElementsTreeItemComponentProps extends Partial<MuiTreeItemProps> {
-  $id: ElementId
+  $id: NodeId
 }
 
 const DraggableTreeItemComponent = forwardRef<
@@ -198,7 +198,7 @@ export const ElementsTreeViewComponent = forwardRef<
   const [selected, setSelected] = useAglynCanvasSelected()
   const setHovered = useAglynCanvasSetHovered()
   const selectedHierarchy = useAglynCanvasElementHierarchy(selected?.$id)
-  const [manuallyExpanded, setManuallyExpanded] = useState<ElementId[]>([])
+  const [manuallyExpanded, setManuallyExpanded] = useState<NodeId[]>([])
 
   const allExpanded = useMemo(
     () => [...selectedHierarchy, ...manuallyExpanded],
@@ -225,7 +225,7 @@ export const ElementsTreeViewComponent = forwardRef<
   )
 
   const handleTreeItemToggle = useCallback(
-    (e, ids: ElementId[]) => {
+    (e, ids: NodeId[]) => {
       e.stopPropagation()
       e.preventDefault()
       setManuallyExpanded(ids)

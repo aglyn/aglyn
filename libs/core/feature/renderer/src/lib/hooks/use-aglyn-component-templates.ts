@@ -16,10 +16,10 @@
  */
 
 import { getAllComponentsTemplateValues } from '@aglyn/core-data-app'
-import type { AglynComponentElementTemplate } from '@aglyn/core-data-foundation'
+import type { AglynNodeTemplateSchema } from '@aglyn/core-data-foundation'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-export function useAglynComponentTemplateBlocks(): AglynComponentElementTemplate[] {
+export function useAglynComponentTemplateBlocks(): AglynNodeTemplateSchema[] {
   const app = useAglynAppContext()
   return getAllComponentsTemplateValues(app)
 }

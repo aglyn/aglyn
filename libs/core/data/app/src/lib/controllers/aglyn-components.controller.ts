@@ -16,12 +16,12 @@
  */
 
 import type {
-  AglynComponentElementTemplate,
-  AglynComponentsBundle,
+  AglynComponentBundle,
   AglynComponentSchema,
   AglynComponentsControllerOptions,
   AglynModuleEffectListener,
-  BundleUId,
+  AglynNodeTemplateSchema,
+  BundleId,
   ComponentId,
   ComponentsRegistryContext,
   ComponentsRegistryEntry,
@@ -127,7 +127,7 @@ export class AglynComponentsController
   protected _componentValues(): ComponentsRegistryValues {
     return [...this.components.values()]
   }
-  protected _templateValues(): AglynComponentElementTemplate[] {
+  protected _templateValues(): AglynNodeTemplateSchema[] {
     return [...this.templates.values()]
   }
 
@@ -140,7 +140,7 @@ export class AglynComponentsController
   public getAllComponentsValues(): ComponentsRegistryValues {
     return this._componentValues()
   }
-  public getAllComponentsTemplateValues(): AglynComponentElementTemplate[] {
+  public getAllComponentsTemplateValues(): AglynNodeTemplateSchema[] {
     return this._templateValues()
   }
 
@@ -170,13 +170,13 @@ export class AglynComponentsController
   }
   public getBundle(
     payload: ComponentsBundleGetPayload,
-  ): OrUndef<AglynComponentsBundle> {
+  ): OrUndef<AglynComponentBundle> {
     const { bundleId } = payload
     return this.bundles.get(bundleId)
   }
   public buildMapKey(data: {
     componentId: ComponentId
-    bundleId: BundleUId
+    bundleId: BundleId
   }): string {
     const { componentId, bundleId } = data
     return bundleId ? `${bundleId}:${componentId}` : componentId
@@ -224,8 +224,8 @@ export class AglynComponentsController
   }
   public registerBundle(payload: ComponentsBundleRegisterPayload): this {
     const { bundle, components } = payload
-    const _bundle: AglynComponentsBundle = { ...bundle, componentIds: [] }
-    const bundleId: BundleUId = _bundle.bundleId
+    const _bundle: AglynComponentBundle = { ...bundle, componentIds: [] }
+    const bundleId: BundleId = _bundle.bundleId
     this.handleEvent(
       [
         AglynEventStateFlag.COMPONENT_BUNDLE_REGISTERING,

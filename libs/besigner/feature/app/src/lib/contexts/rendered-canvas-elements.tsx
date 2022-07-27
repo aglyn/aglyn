@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import type { Dictionary } from '@aglyn/shared-data-types'
 import {
   createContext,
@@ -28,15 +28,15 @@ import type { DragElementWrapper, DragSourceOptions } from 'react-dnd'
 
 export type ElementDragHandle = DragElementWrapper<DragSourceOptions>
 export type ElementCanvasRefObject = Dictionary & {
-  $id: ElementId
+  $id: NodeId
   node: Element
   dragHandle: ElementDragHandle
 }
 
 export type RenderedCanvasElementsType = {
-  elements: RefObject<Record<ElementId, ElementCanvasRefObject>>
-  setElementRef($id: ElementId, ref: ElementCanvasRefObject): void
-  deleteElementRef($id: ElementId): void
+  elements: RefObject<Record<NodeId, ElementCanvasRefObject>>
+  setElementRef($id: NodeId, ref: ElementCanvasRefObject): void
+  deleteElementRef($id: NodeId): void
 }
 
 export const RenderedCanvasElementsContext =
@@ -52,7 +52,7 @@ export const useRenderedCanvasElements = () => {
   return useContext(RenderedCanvasElementsContext)
 }
 
-export const useRenderedCanvasElementRef = ({ $id }: { $id: ElementId }) => {
+export const useRenderedCanvasElementRef = ({ $id }: { $id: NodeId }) => {
   const { elements } = useRenderedCanvasElements()
   return useMemo(() => elements.current[$id] || null, [elements, $id])
 }
@@ -63,7 +63,7 @@ export interface RenderedCanvasElementsProps {
 
 function RenderedCanvasElementsProvider(props: RenderedCanvasElementsProps) {
   const { children } = props
-  const elements = useRef<Record<ElementId, ElementCanvasRefObject>>({})
+  const elements = useRef<Record<NodeId, ElementCanvasRefObject>>({})
   const context = useMemo<RenderedCanvasElementsType>(
     () => ({
       elements,

@@ -17,14 +17,14 @@
 
 import type {
   AglynElementDenormalized,
-  ElementId,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import { useMemo } from 'react'
 import useAglynComponentSchema from './use-aglyn-component-schema'
 import useAglynElementData from './use-aglyn-element-data'
 
-export function useAglynElementResolvedProps<P>($id: ElementId): P {
+export function useAglynElementResolvedProps<P>($id: NodeId): P {
   const elementData = useAglynElementData($id)
   const schema = useAglynComponentSchema(
     elementData?.componentId,

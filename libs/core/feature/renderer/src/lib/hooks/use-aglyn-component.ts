@@ -17,7 +17,7 @@
 
 import { getComponent } from '@aglyn/core-data-app'
 import type {
-  BundleUId,
+  BundleId,
   CommandUId,
   IAglynComponent,
 } from '@aglyn/core-data-foundation'
@@ -26,7 +26,7 @@ import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynComponent<P, T>(
   componentId: CommandUId,
-  bundleId?: BundleUId,
+  bundleId?: BundleId,
 ): OrUndef<IAglynComponent<P, T>> {
   const app = useAglynAppContext()
   return getComponent(app, { componentId, bundleId }) as IAglynComponent<P, T>

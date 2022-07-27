@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import type { ElementId, IAglynComponent } from '@aglyn/core-data-foundation'
+import type { IAglynComponent, NodeId } from '@aglyn/core-data-foundation'
 import type { OrUndef } from '@aglyn/shared-data-types'
 import useAglynComponent from './use-aglyn-component'
 import useAglynElementData from './use-aglyn-element-data'
 
 export function useAglynElementComponent<P, T>(
-  $id: ElementId,
+  $id: NodeId,
 ): OrUndef<IAglynComponent<P, T>> {
   const componentId = useAglynElementData($id, 'componentId')
   const bundleId = useAglynElementData($id, 'bundleId')

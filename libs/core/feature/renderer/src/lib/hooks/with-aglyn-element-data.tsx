@@ -17,8 +17,8 @@
 
 import {
   AglynElementDenormalized,
-  ElementId,
   IAglynComponent,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import { type InnerRefProp } from '@aglyn/shared-data-types'
 import { getDisplayName } from '@aglyn/shared-util-tools'
@@ -35,7 +35,7 @@ import { useAglynElementData } from './use-aglyn-element-data'
 import useAglynElementResolvedProps from './use-aglyn-element-resolved-props'
 
 export interface RequiredElementDataProps {
-  $id: ElementId
+  $id: NodeId
   className?: string
 }
 

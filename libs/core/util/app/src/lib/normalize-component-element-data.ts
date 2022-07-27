@@ -20,7 +20,7 @@ import type {
   AglynElementNormalized,
   AglynElementsDenormalized,
   AglynElementsNormalized,
-  ElementId,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
 import { arraySafe, copy } from '@aglyn/shared-util-tools'
@@ -32,7 +32,7 @@ const normalizeData = (
 ): AglynElementsNormalized => {
   if (element?.$id) {
     const _element = element as unknown as AglynElementNormalized
-    const childIds: ElementId[] = [...arraySafe(element.elements)]
+    const childIds: NodeId[] = [...arraySafe(element.elements)]
     _element.elements = []
     for (const $id of childIds) {
       if (!$id || !denormalized[$id]) continue
@@ -49,11 +49,11 @@ export function normalizeComponentElementData(
 ): AglynElementsNormalized
 export function normalizeComponentElementData(
   elements: AglynElementsDenormalized,
-  parentId?: ElementId,
+  parentId?: NodeId,
 ): AglynElementsNormalized
 export function normalizeComponentElementData(
   data: AglynElementDenormalized | AglynElementsDenormalized,
-  parentId: ElementId = CANVAS_ROOT_ELEMENT_ID,
+  parentId: NodeId = CANVAS_ROOT_ELEMENT_ID,
 ): AglynElementsNormalized {
   const normalized: AglynElementsNormalized = []
   if (!data) return normalized

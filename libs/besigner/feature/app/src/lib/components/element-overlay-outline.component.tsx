@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import '@aglyn/shared-data-jsx'
 import {
   alpha,
@@ -88,7 +88,7 @@ const ElementOutlineWrapper = styled('div', {
 
 export interface ElementOverlayOutlineProps
   extends JSX.InferElementTypeProps<typeof ElementOutlineWrapper> {
-  $id: ElementId
+  $id: NodeId
 }
 
 const ElementOverlayOutlineComponent = forwardRef<

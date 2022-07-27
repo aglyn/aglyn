@@ -17,7 +17,7 @@
 
 import {
   type AglynComponentHierarchyFlags,
-  type BundleUId,
+  type BundleId,
   type ComponentId,
   ComponentsLinealDirectiveFlag,
   type ComponentsLinealOrder,
@@ -56,7 +56,7 @@ export type ConfirmValidLinealRelationshipResponse =
 
 function validateLinealOrder(
   componentId: ComponentId,
-  bundleId: BundleUId,
+  bundleId: BundleId,
   linealOrder: ComponentsLinealOrder,
   governor:
     | typeof InvalidLinealRelationFlag.ITEM

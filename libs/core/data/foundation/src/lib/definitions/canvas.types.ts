@@ -36,11 +36,11 @@ import type {
   CanvasUpdateElementPayload,
 } from '../constants/emitter'
 import type { IAglynAppController } from './app.types'
-import type { ContextEvent } from './contexts.types'
-import type {
+import {
   AglynElementsDenormalized,
   AglynElementsNormalized,
-} from './elements.types'
+} from './components.types'
+import type { ContextEvent } from './contexts.types'
 import type {
   AglynModuleModelOptions,
   AglynModuleModelT,

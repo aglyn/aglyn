@@ -26,7 +26,7 @@ import type {
   CanvasSetElementPayload,
   CanvasSetElementsPayload,
   CanvasUpdateElementPayload,
-  ElementId,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import {
   CANVAS_ROOT_ELEMENT_ID,
@@ -83,7 +83,7 @@ export const handleCanvasAddElement = (
   payload: CanvasAddElementPayload,
 ): AglynElementsDenormalized => {
   const { index, element } = payload
-  let parentId: ElementId = null
+  let parentId: NodeId = null
   if (_hasOwnProperty(payload.parentId, state)) {
     parentId = payload.parentId
   } else {
@@ -139,7 +139,7 @@ export const handleCanvasMoveElement = (
     return state
   }
 
-  let parentId: ElementId = null
+  let parentId: NodeId = null
   if (_hasOwnProperty(payload.parentId, state)) parentId = payload.parentId
   else {
     console.error('Element must have a valid parent, falling back to root')

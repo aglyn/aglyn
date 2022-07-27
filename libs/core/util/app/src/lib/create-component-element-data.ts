@@ -16,9 +16,8 @@
  */
 
 import type {
-  AglynComponentElementTemplate,
-  AglynComponentTemplateData,
   AglynElementNormalized,
+  AglynNodeTemplateSchema,
 } from '@aglyn/core-data-foundation'
 import type { MutableKeys } from '@aglyn/shared-data-types'
 import { copy } from '@aglyn/shared-util-tools'
@@ -26,7 +25,7 @@ import defaultsDeep from 'lodash-es/defaultsDeep'
 import createComponentElementId from './create-component-element-id'
 
 function traverseComponentTemplate(
-  data: AglynComponentTemplateData,
+  data: AglynNodeTemplateSchema['data'],
 ): AglynElementNormalized {
   const response = { ...data } as AglynElementNormalized
 
@@ -42,7 +41,7 @@ function traverseComponentTemplate(
 }
 
 export type CreateComponentElementDataOptions =
-  | AglynComponentElementTemplate
+  | AglynNodeTemplateSchema
   | { data: AglynElementNormalized }
 
 export const ELEMENT_DEFAULTS: Partial<AglynElementNormalized> = {

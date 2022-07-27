@@ -19,17 +19,17 @@ import {
   type AglynElementHierarchy,
   type AglynElementsDenormalized,
   CANVAS_ROOT_ELEMENT_ID,
-  type ElementId,
+  type NodeId,
 } from '@aglyn/core-data-foundation'
 import isRootElementId from './is-root-element-id'
 
-export function getComponentElementHierarchy<T extends ElementId>(
+export function getComponentElementHierarchy<T extends NodeId>(
   $id: T,
   elements: AglynElementsDenormalized,
 ): AglynElementHierarchy<T> {
   const hierarchy = [CANVAS_ROOT_ELEMENT_ID]
 
-  let currentId: ElementId = $id
+  let currentId: NodeId = $id
   while (currentId && !isRootElementId(currentId)) {
     hierarchy.splice(1, 0, currentId)
     currentId = elements[currentId]?.parentId

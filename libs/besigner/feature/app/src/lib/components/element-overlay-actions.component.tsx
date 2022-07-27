@@ -20,7 +20,7 @@ import {
   setBesignerPanels,
 } from '@aglyn/besigner-data-app'
 import { duplicateCanvasElement, moveCanvasElement } from '@aglyn/core-data-app'
-import type { ElementId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import {
   useAglynElementData,
   useAglynElementIndexInParent,
@@ -87,7 +87,7 @@ export const BadgeButton = forwardRef<any, BadgeButtonProps>((props, ref) => {
 })
 BadgeButton.displayName = 'AglynBadgeButton'
 
-export const MoveButtons = forwardRef<any, { $id: ElementId }>((props, ref) => {
+export const MoveButtons = forwardRef<any, { $id: NodeId }>((props, ref) => {
   const { $id } = props
   const app = useBesignerAppContext()
   const { index, isFirst, isLast, parentId } = useAglynElementIndexInParent($id)
@@ -129,7 +129,7 @@ export const MoveButtons = forwardRef<any, { $id: ElementId }>((props, ref) => {
 })
 
 export interface ElementOverlayActionsProps extends ButtonGroupProps {
-  $id: ElementId
+  $id: NodeId
 }
 
 const ElementOverlayActionsComponent = forwardRef<

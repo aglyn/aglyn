@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import '@aglyn/shared-data-jsx'
 import { _isArr } from '@aglyn/shared-util-guards'
 import { useMemo } from 'react'
 import type { Theme as DefaultTheme } from '../../vendor/mui'

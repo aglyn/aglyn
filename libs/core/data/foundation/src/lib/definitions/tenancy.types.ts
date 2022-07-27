@@ -25,11 +25,11 @@ import type {
   HostScreenVisibility,
   HostViewFormat,
 } from '../constants/tenancy'
-import type {
+import {
   AglynElementsDenormalized,
   AglynElementsList,
   AglynElementsNormalized,
-} from './elements.types'
+} from './components.types'
 
 export type UserUid = string
 export type RoleUid = string

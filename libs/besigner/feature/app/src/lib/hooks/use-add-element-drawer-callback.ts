@@ -18,7 +18,7 @@
 import { addCanvasElement } from '@aglyn/core-data-app'
 import {
   CANVAS_ROOT_ELEMENT_ID,
-  type ElementId,
+  type NodeId,
 } from '@aglyn/core-data-foundation'
 import { useAglynAppContext } from '@aglyn/core-feature-renderer'
 import { createComponentElementData } from '@aglyn/core-util-app'
@@ -33,7 +33,7 @@ export interface UseAddElementCallbackOptions {
   onComplete?: (data: unknown) => void
   onError?: (error: unknown) => void
   drawerOptions?: ElementDrawerOptions
-  $id?: ElementId
+  $id?: NodeId
 }
 
 export type AddElementCallback = {

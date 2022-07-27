@@ -19,11 +19,11 @@ import type {
   AglynComponentHierarchy,
   AglynModuleModelOptions,
   AglynModuleModelT,
-  BundleUId,
+  BundleId,
   ComponentId,
-  ElementId,
   IAglynAppController,
   IAglynModuleModel,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { LogLevelString } from '@aglyn/shared-util-logger'
@@ -63,12 +63,12 @@ export type BesignerContext = {
   }
   canvas: {
     selected?: {
-      $id?: ElementId
-      hierarchy?: ElementId[]
+      $id?: NodeId
+      hierarchy?: NodeId[]
     }
     hovered?: {
-      $id?: ElementId
-      hierarchy?: ElementId[]
+      $id?: NodeId
+      hierarchy?: NodeId[]
     }
   }
   panels: {
@@ -110,10 +110,10 @@ export type BesignerPanelItem = {
   tab?: BesignerPanelTabFlag
 }
 export type BesignerDndElementBaseData<T extends DndDragType | DndDropType> = {
-  $id: ElementId
+  $id: NodeId
   type?: T
   componentId?: ComponentId
-  bundleId?: BundleUId
+  bundleId?: BundleId
   hierarchy?: AglynComponentHierarchy
 }
 

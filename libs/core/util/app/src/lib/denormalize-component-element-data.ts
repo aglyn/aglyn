@@ -20,7 +20,7 @@ import type {
   AglynElementNormalized,
   AglynElementsDenormalized,
   AglynElementsNormalized,
-  ElementId,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import {
   CANVAS_ROOT_ELEMENT_ID,
@@ -30,7 +30,7 @@ import { arraySafe, copy } from '@aglyn/shared-util-tools'
 
 const denormalizeData = (
   element: AglynElementNormalized,
-  parentId: ElementId,
+  parentId: NodeId,
   accumulator: AglynElementsDenormalized = {},
 ): AglynElementsDenormalized => {
   if (element?.$id && parentId && accumulator[parentId]) {
@@ -52,16 +52,16 @@ const denormalizeData = (
 
 export function denormalizeComponentElementData(
   element: AglynElementNormalized,
-  parentId: ElementId,
+  parentId: NodeId,
   accumulator?: AglynElementsDenormalized,
 ): AglynElementsDenormalized
 export function denormalizeComponentElementData(
   elements: AglynElementsNormalized,
-  parentId?: ElementId,
+  parentId?: NodeId,
 ): AglynElementsDenormalized
 export function denormalizeComponentElementData(
   data: AglynElementNormalized | AglynElementsNormalized,
-  parentId: ElementId = CANVAS_ROOT_ELEMENT_ID,
+  parentId: NodeId = CANVAS_ROOT_ELEMENT_ID,
   accumulator?: AglynElementsDenormalized,
 ): AglynElementsDenormalized {
   let denormalized: AglynElementsDenormalized

@@ -18,7 +18,7 @@
 import { getCanvasDenormalizedElementsStore } from '@aglyn/core-data-app'
 import type {
   AglynElementDenormalized,
-  ElementId,
+  NodeId,
 } from '@aglyn/core-data-foundation'
 import type { AnyProps, Conditional } from '@aglyn/shared-data-types'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
@@ -34,21 +34,15 @@ export type UseAglynElementData<
   AglynElementDenormalized<P>
 >
 
-export function useAglynElementData<P>(
-  $id: ElementId,
-): AglynElementDenormalized<P>
+export function useAglynElementData<P>($id: NodeId): AglynElementDenormalized<P>
 export function useAglynElementData<
   P,
   K extends keyof AglynElementDenormalized<P> = null,
->(
-  $id: ElementId,
-  property: K,
-  defaultValue?: any,
-): AglynElementDenormalized<P>[K]
+>($id: NodeId, property: K, defaultValue?: any): AglynElementDenormalized<P>[K]
 export function useAglynElementData<
   P,
   K extends keyof AglynElementDenormalized<P> = null,
->($id: ElementId, property?: K, defaultValue?: any): UseAglynElementData<P, K> {
+>($id: NodeId, property?: K, defaultValue?: any): UseAglynElementData<P, K> {
   const app = useAglynAppContext()
   return useSubscribable(
     getCanvasDenormalizedElementsStore(app),

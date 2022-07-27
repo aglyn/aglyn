@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { ElementId } from '@aglyn/core-data-foundation'
+import { NodeId } from '@aglyn/core-data-foundation'
 import {
   useAglynCanvasElementHierarchy,
   useAglynElementLabel,
@@ -37,7 +37,7 @@ import useAglynCanvasSelected, {
 } from '../hooks/use-aglyn-canvas-selected'
 
 interface BreadcrumbItemProps extends LinkProps<'button'> {
-  $id: ElementId
+  $id: NodeId
   isLast?: boolean
 }
 
