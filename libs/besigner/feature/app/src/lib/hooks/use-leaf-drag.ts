@@ -93,13 +93,13 @@ export function useLeafDrag<T extends BesignerDraggableItem>(
         if (!monitor.didDrop()) return
         if (!dropItem) return
         if (type === DndDragType.TEMPLATE) {
-          const newElement = createComponentElementData(dragItem as any)
-          addCanvasElement(app, {
+          const newElement = {
             index: NaN,
             parentId: dropItem?.$id || CANVAS_ROOT_ELEMENT_ID,
-            element: newElement,
-          })
-          setSelected({ $id: newElement.$id })
+            element: createComponentElementData(dragItem as any),
+          }
+          addCanvasElement(app, newElement)
+          setSelected({ $id: newElement.element.$id })
         } else {
           moveCanvasElement(app, {
             $id: dragItem.$id,

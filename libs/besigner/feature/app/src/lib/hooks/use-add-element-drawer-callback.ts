@@ -64,8 +64,9 @@ export function useAddElementDrawerCallback(
           const newElement = {
             index: NaN,
             parentId: callback?.$id || $id || CANVAS_ROOT_ELEMENT_ID,
-            element: createComponentElementData(data),
+            element: createComponentElementData({ data }),
           }
+          console.log('Add New Element ', data, newElement)
           addCanvasElement(app, newElement)
           setSelected({ $id: newElement.element.$id })
 
