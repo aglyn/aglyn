@@ -87,7 +87,7 @@ const ElementOutlineWrapper = styled('div', {
 })
 
 export interface ElementOverlayOutlineProps
-  extends JSX.InferElementTypeProps<typeof ElementOutlineWrapper> {
+  extends JSX.ComponentProps<typeof ElementOutlineWrapper> {
   $id: NodeId
 }
 

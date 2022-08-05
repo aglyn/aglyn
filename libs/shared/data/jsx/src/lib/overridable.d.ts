@@ -17,16 +17,12 @@
 
 declare global {
   namespace JSX {
-    export type InferElementTypeProps<T> = T extends ElementType<infer P>
-      ? P
-      : never
-
     type OverrideComponentProp<P = any> = { component?: ElementType<P> }
 
     type OverrideComponentsProps<T extends OverrideComponentProp = any> = [
       T,
-    ] extends [{ component: infer P }]
-      ? InferElementTypeProps<P>
+    ] extends [{ component: infer C }]
+      ? ComponentProps<C>
       : never
 
     type OverrideComponentPropPlusOverrideProps<

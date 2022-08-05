@@ -36,9 +36,7 @@ import ReactFrameComponent from 'react-frame-component'
 
 import { useForkedRefs } from '../hooks/use-ref-forked'
 
-export type FrameComponentProps = JSX.InferElementTypeProps<
-  typeof ReactFrameComponent
->
+export type FrameComponentProps = JSX.ComponentProps<typeof ReactFrameComponent>
 export type SandboxFrameDocument = HTMLIFrameElement['contentDocument']
 export type SandboxFrameWindow = HTMLIFrameElement['contentWindow']
 type State = {

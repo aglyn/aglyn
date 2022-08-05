@@ -15,19 +15,12 @@
  * limitations under the License.
  */
 
-import { ComponentMeta, ComponentStory } from '@storybook/react'
-import { ColorPicker } from './color-picker.component'
+import { render } from '@testing-library/react'
+import ColorPicker from './color-picker'
 
-export default {
-  component: ColorPicker,
-  title: 'ColorPicker',
-} as ComponentMeta<typeof ColorPicker>
-
-const Template: ComponentStory<typeof ColorPicker> = (args) => (
-  <ColorPicker {...args} />
-)
-
-export const Primary = Template.bind({})
-Primary.args = {
-  disableAlpha: false,
-}
+describe('ColorPicker', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<ColorPicker />)
+    expect(baseElement).toBeTruthy()
+  })
+})

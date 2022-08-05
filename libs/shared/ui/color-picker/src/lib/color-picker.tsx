@@ -35,6 +35,8 @@ const ColorPicker = forwardRef<any, ColorPickerProps>((props, ref) => {
     [onChange],
   )
 
+  // return <ColorGrid />
+
   return (
     <SketchPicker ref={ref} onChange={handleChange} color={color} {...rest} />
   )

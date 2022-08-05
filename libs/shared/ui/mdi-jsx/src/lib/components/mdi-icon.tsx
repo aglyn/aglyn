@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import '@aglyn/shared-data-jsx'
 import { DEFAULT_ICON } from '@aglyn/shared-data-mdi/constants/default-icon'
 import {
   SvgIcon as MuiSvgIcon,
@@ -26,7 +27,7 @@ import { forwardRef, useMemo } from 'react'
 export type MdiIconBaseProps = Omit<MuiSvgIconProps, 'children'>
 export type MdiIconFeatureProps = {
   path?: string
-  PathProps?: JSX.InferElementTypeProps<typeof motion.path>
+  PathProps?: JSX.ComponentProps<typeof motion.path>
 } & { children?: (d: string) => JSX.Children }
 
 const variants = {
