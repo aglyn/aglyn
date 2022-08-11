@@ -19,6 +19,14 @@
       "options": {
         "lintFilePatterns": ["libs/core/util/app/**/*.ts"]
       }
+    },
+    "test": {
+      "executor": "@nrwl/jest:jest",
+      "outputs": ["coverage/libs/core/util/app"],
+      "options": {
+        "jestConfig": "libs/core/util/app/jest.config.ts",
+        "passWithNoTests": true
+      }
     }
   },
   "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:framework"]

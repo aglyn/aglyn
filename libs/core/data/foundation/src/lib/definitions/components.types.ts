@@ -74,20 +74,20 @@ export type InstanceSchemas = Map<
 >
 export type InstanceTemplates = Map<TemplateId, AglynNodeTemplateSchema>
 
-export type ComponentsLinealOrder<
-  T extends ComponentsLinealDirectiveFlag = ComponentsLinealDirectiveFlag,
-> = [
-  directiveType: T,
+export type ComponentsLinealOrder = [
+  directiveType: ComponentsLinealDirectiveFlag,
   directiveDefinition:
-    | ComponentId[]
-    | { bundles?: BundleId[]; components: ComponentId[] }
-    | { bundles: BundleId[]; components?: ComponentId[] },
+    | Array<ComponentId>
+    | { bundles?: Array<BundleId>; components: Array<ComponentId> }
+    | { bundles: Array<BundleId>; components?: Array<ComponentId> },
 ]
 
 export type AglynComponentPropsFormSchema<P = any> =
   AglynComponentSchema<P>['attributes']
-export type AglynComponentHierarchy<P = any> =
-  AglynComponentSchema<P>['hierarchy']
+export type AglynComponentHierarchy<P = any> = Pick<
+  AglynComponentSchema<P>,
+  'restrictParent' | 'restrictChildren'
+>
 export type AglynComponentFlags<P = any> = AglynComponentSchema<P>['flags']
 export type AglynComponentsBundleMetadata = AglynComponentBundle
 export type AglynComponentsBundleSchema = Omit<
@@ -155,6 +155,7 @@ export interface AglynComponentsControllerT
 
 export interface AglynComponentSchema<P = any> {
   componentId: ComponentId
+  kind?: 'element' | 'text' | 'markdown'
   bundleId?: BundleId
 
   displayName: string
@@ -172,18 +173,13 @@ export interface AglynComponentSchema<P = any> {
   styledOptions?: MuiStyledOptions
 
   /**
-   * Lineal restrictions
+   * Define a limitation for elements allowed as direct descendents
    */
-  hierarchy?: {
-    /**
-     * Define a limitation for elements allowed as direct descendents
-     */
-    restrictChildren?: ComponentsLinealOrder
-    /**
-     * Define a limitation for elements allowed to be direct ancestors
-     */
-    restrictParent?: ComponentsLinealOrder
-  }
+  restrictChildren?: ComponentsLinealOrder
+  /**
+   * Define a limitation for elements allowed to be direct ancestors
+   */
+  restrictParent?: ComponentsLinealOrder
 
   /**
    * Filter props

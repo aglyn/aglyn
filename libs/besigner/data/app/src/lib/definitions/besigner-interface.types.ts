@@ -16,12 +16,12 @@
  */
 
 import type {
-  AglynComponentHierarchy,
   AglynModuleModelOptions,
   AglynModuleModelT,
   AglynNodeHierarchy,
   BundleId,
   ComponentId,
+  ComponentsLinealOrder,
   IAglynAppController,
   IAglynModuleModel,
   NodeId,
@@ -116,7 +116,8 @@ export type BesignerDndElementBaseData<T extends DndDragType | DndDropType> =
     componentId?: ComponentId
     bundleId?: BundleId
     trail?: AglynNodeHierarchy
-    hierarchy?: AglynComponentHierarchy
+    restrictParent?: ComponentsLinealOrder
+    restrictChildren?: ComponentsLinealOrder
   }
 
 export interface BesignerInterfaceControllerOptions

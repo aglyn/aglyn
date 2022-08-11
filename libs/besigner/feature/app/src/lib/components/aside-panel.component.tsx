@@ -308,13 +308,13 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
     const dndData = useMemo(() => {
       const { $id, data, componentId, bundleId } = item
       const componentSchema = getComponentSchema(app, { componentId, bundleId })
-      const hierarchy = componentSchema?.hierarchy
       return {
         $id,
         data,
         componentId,
         bundleId,
-        hierarchy,
+        restrictParent: componentSchema?.restrictParent,
+        restrictChildren: componentSchema?.restrictChildren,
       }
     }, [item])
     const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(

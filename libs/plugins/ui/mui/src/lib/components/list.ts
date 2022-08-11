@@ -34,14 +34,12 @@ export const schema: AglynComponentSchema<ListProps> = {
   bundleId: 'mui',
   displayName: 'List',
   icon: { path: mdiFormatListBulletedSquare.path },
-  hierarchy: {
-    restrictChildren: [
-      ComponentsLinealDirectiveFlag.LIMIT_TO,
-      {
-        components: [listItemSchema.componentId],
-      },
-    ],
-  },
+  restrictChildren: [
+    ComponentsLinealDirectiveFlag.LIMIT_TO,
+    {
+      components: [listItemSchema.componentId],
+    },
+  ],
   templates: [
     {
       id: generateTemplateId(ID),

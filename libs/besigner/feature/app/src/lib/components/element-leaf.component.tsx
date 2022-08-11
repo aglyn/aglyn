@@ -47,7 +47,6 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
     const componentId = useAglynElementData($id, 'componentId')
     const bundleId = useAglynElementData($id, 'bundleId')
     const componentSchema = useAglynComponentSchema(componentId, bundleId)
-    const hierarchy = componentSchema?.hierarchy
     const trail = useAglynCanvasElementHierarchy($id)
     const dndData = useMemo(
       () => ({
@@ -55,10 +54,11 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
         componentId,
         bundleId,
         componentSchema,
-        hierarchy,
+        restrictParent: componentSchema?.restrictParent,
+        restrictChildren: componentSchema?.restrictChildren,
         trail,
       }),
-      [$id, componentId, bundleId, componentSchema, hierarchy, trail],
+      [$id, componentId, bundleId, componentSchema, trail],
     )
     const [, dragHandle, dragPreview] = useLeafDrag(dndData, DndDragType.CANVAS)
     const [, dropRef] = useLeafDrop(dndData)

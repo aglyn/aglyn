@@ -15,14 +15,17 @@
  * limitations under the License.
  */
 
-import {
-  type AglynComponentHierarchy,
-  type BundleId,
-  type ComponentId,
-  ComponentsLinealDirectiveFlag,
-  type ComponentsLinealOrder,
+import type {
+  BundleId,
+  ComponentId,
+  ComponentsLinealOrder,
 } from '@aglyn/core-data-foundation'
 import { _isArr, _isArrEmpty } from '@aglyn/shared-util-guards'
+
+export enum ComponentsLinealDirectiveFlag {
+  LIMIT_TO = 0x01,
+  DISALLOW = 0x02,
+}
 
 export enum InvalidLinealRelationFlag {
   DISALLOW = 0x01,
@@ -63,9 +66,14 @@ function validateLinealOrder(
     | typeof InvalidLinealRelationFlag.PARENT,
 ) {
   const [directiveType, directiveDefinition] = linealOrder
-  const definition = _isArr(directiveDefinition)
-    ? { components: directiveDefinition }
-    : { ...directiveDefinition }
+  const definition = {
+    components: _isArr(directiveDefinition)
+      ? [...directiveDefinition]
+      : directiveDefinition?.components,
+    bundles: _isArr(directiveDefinition)
+      ? undefined
+      : directiveDefinition?.bundles,
+  }
 
   // Throw is disallowed
   if (directiveType === ComponentsLinealDirectiveFlag.DISALLOW) {
@@ -100,12 +108,14 @@ export interface ConfirmValidLinealRelationshipOptions {
   item: {
     componentId?: ComponentId
     bundleId?: ComponentId
-    hierarchy?: AglynComponentHierarchy
+    restrictParent?: ComponentsLinealOrder
+    restrictChildren?: ComponentsLinealOrder
   }
   parent: {
     componentId?: ComponentId
     bundleId?: ComponentId
-    hierarchy?: AglynComponentHierarchy
+    restrictParent?: ComponentsLinealOrder
+    restrictChildren?: ComponentsLinealOrder
   }
 }
 
@@ -113,27 +123,25 @@ export function confirmValidLinealRelationship(
   options: ConfirmValidLinealRelationshipOptions,
 ): ConfirmValidLinealRelationshipResponse {
   const { item, parent } = options
-  const itemRestrictParentLinealOrder = item.hierarchy?.restrictParent
-  const parentRestrictChildrenLinealOrder = parent.hierarchy?.restrictChildren
-
   try {
-    if (_isArr(itemRestrictParentLinealOrder)) {
+    if (item.restrictParent) {
       validateLinealOrder(
         parent.componentId,
         parent.bundleId,
-        itemRestrictParentLinealOrder,
+        item.restrictParent,
         InvalidLinealRelationFlag.ITEM,
       )
     }
-    if (_isArr(parentRestrictChildrenLinealOrder)) {
+    if (parent.restrictChildren) {
       validateLinealOrder(
         item.componentId,
         item.bundleId,
-        parentRestrictChildrenLinealOrder,
+        parent.restrictChildren,
         InvalidLinealRelationFlag.PARENT,
       )
     }
   } catch (e) {
+    console.error(e)
     if (e in InvalidLinealRelationFlag) {
       return [false, e]
     }

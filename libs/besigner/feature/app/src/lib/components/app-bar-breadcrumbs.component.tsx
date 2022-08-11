@@ -87,13 +87,13 @@ const BreadcrumbItem = forwardRef<any, BreadcrumbItemProps>(
     const trail = useAglynCanvasElementHierarchy($id)
     const dndData = useMemo(() => {
       const componentSchema = getComponentSchema(app, { componentId, bundleId })
-      const hierarchy = componentSchema?.hierarchy
       return {
         $id,
         componentId,
         bundleId,
-        hierarchy,
         trail,
+        restrictParent: componentSchema?.restrictParent,
+        restrictChildren: componentSchema?.restrictChildren,
       }
     }, [app, componentId, bundleId, $id, trail])
     const [, dropRef] = useLeafDrop(dndData)
