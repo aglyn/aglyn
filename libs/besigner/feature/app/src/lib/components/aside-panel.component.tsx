@@ -586,13 +586,24 @@ const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
               <MuiTabList
                 onChange={handleTabChange}
                 variant="fullWidth"
-                color="secondary"
-                indicatorColor="secondary"
-                textColor="secondary"
+                sx={{
+                  '& .MuiTab-root': {
+                    '&.Mui-selected': {
+                      color: ({ palette }) => palette.text.primary,
+                      backgroundColor: ({ palette }) =>
+                        palette.background.paper,
+                    },
+                  },
+                  '& .MuiTabs-indicator': {
+                    top: 0,
+                    backgroundColor: ({ palette }) => palette.tertiary.main,
+                  },
+                }}
               >
                 {tabs.map(({ value, tab: { icon, ...tab } }) => (
                   <MuiTab
                     key={value}
+                    // color={'tertiary'}
                     value={numberToHexadecimal(value)}
                     iconPosition="top"
                     icon={<MdiIcon {...icon} />}
