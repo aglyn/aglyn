@@ -90,7 +90,7 @@ export type AssignmentOperatorLogical =
   | AssignmentLogicalAND
   | AssignmentLogicalOR
   | AssignmentLogicalNullish
-export type AssignmentOperator =
+export type AssignmentOperatorAny =
   | Assignment
   | AssignmentOperatorArithmetic
   | AssignmentOperatorBitwise

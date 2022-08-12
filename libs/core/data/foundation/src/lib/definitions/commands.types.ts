@@ -24,7 +24,7 @@ import type {
   CommandsTriggerPayload,
   CommandsUnregisterListenerPayload,
 } from '../constants/emitter'
-import type { OF_KIND, OF_TYPE } from '../constants/symbol'
+import type { AGLYN_OF } from '../constants/symbol'
 import type { IAglynAppController } from './app.types'
 import type {
   AglynModuleModelOptions,
@@ -39,15 +39,13 @@ export type AglynCommander = EmitterFn<
 >
 
 export interface AglynCommandResolver {
-  readonly [OF_TYPE]?: number | symbol
-  readonly [OF_KIND]?: number | symbol
+  readonly [AGLYN_OF]?: number | symbol
   commandId: CommandUId
   (data: Dictionary): any
 }
 
 export interface AglynCommandListener {
-  readonly [OF_TYPE]?: number | symbol
-  readonly [OF_KIND]?: number | symbol
+  readonly [AGLYN_OF]?: number | symbol
   commandId: CommandUId
   (data: TriggerListenerPayload<any, any>): void
 }

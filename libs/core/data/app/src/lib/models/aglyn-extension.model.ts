@@ -16,6 +16,7 @@
  */
 
 import {
+  AGLYN_OF,
   AglynErrorEventFlag,
   type AglynExtensionOptions,
   AglynLifecycleFlag,
@@ -24,7 +25,6 @@ import {
   type IAglynAppController,
   type IAglynExtension,
   nextLifecycleIsValid,
-  OF_KIND,
 } from '@aglyn/core-data-foundation'
 import { getStaticField } from '@aglyn/shared-util-tools'
 import { AglynModuleModel } from './aglyn-module.model'
@@ -42,7 +42,7 @@ export abstract class AglynExtension<
   public static get [Symbol.toStringTag](): string {
     return TAG
   }
-  public static get [OF_KIND](): number | symbol {
+  public static get [AGLYN_OF](): number | symbol {
     return EXTENSION_TYPE
   }
   public static get namespace(): string {

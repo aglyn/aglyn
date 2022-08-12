@@ -19,6 +19,7 @@ import {
   _INTERNAL_COMPONENTS_,
   type AglynBundleSchema,
   type AglynComponentSchema,
+  type AglynExoticComponent,
   type AglynNodePresetSchema,
   type ComponentGetPayload,
   type ComponentRegisterPayload,
@@ -31,7 +32,6 @@ import {
   type ComponentsRegistryValues,
   type ComponentUnregisterPayload,
   type IAglynAppController,
-  type IAglynComponent,
   type IAglynComponentsController,
 } from '@aglyn/core-data-foundation'
 import { type OrUndef } from '@aglyn/shared-data-types'
@@ -71,7 +71,7 @@ export function getAllNodesPresetsValues(
 export function getComponent<P, T>(
   app: IAglynAppController,
   payload: ComponentGetPayload,
-): OrUndef<IAglynComponent<P, T>> {
+): OrUndef<AglynExoticComponent<P, T>> {
   return _getComponentsController(app)?.getComponent(payload)
 }
 

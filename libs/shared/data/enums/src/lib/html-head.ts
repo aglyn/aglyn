@@ -32,6 +32,7 @@ export const META_PREF: MakeMetaElementsConfig = [
     'IE=edge',
     { httpEquiv: 'X-UA-Compatible', id: 'http-equiv-x-ua-compatible' },
   ],
+  ['color-scheme', 'light dark'],
   [
     'theme-color',
     getConsoleMetaThemeColor('light'),

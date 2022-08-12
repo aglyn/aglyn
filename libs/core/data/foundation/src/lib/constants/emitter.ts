@@ -32,13 +32,13 @@ import type {
 import type {
   AglynBundleSchema,
   AglynComponentSchema,
+  AglynExoticComponent,
   AglynNodeItemDenormalized,
   AglynNodeItemNormalized,
   AglynNodesById,
   AglynNodesList,
   BundleId,
   ComponentId,
-  IAglynComponent,
   NodeId,
 } from '../definitions/components.types'
 import type {
@@ -198,7 +198,7 @@ export type ComponentSchemaGetPayload = PayloadData<{
 export type ComponentsBundleGetPayload = PayloadData<{ bundleId: BundleId }>
 export type ComponentRegisterPayload<P extends AnyProps = any> = PayloadData<{
   schema: AglynComponentSchema<P>
-  component: IAglynComponent<P>
+  component: AglynExoticComponent<P>
 }>
 export type ComponentUnregisterPayload = PayloadData<{
   componentId: ComponentId

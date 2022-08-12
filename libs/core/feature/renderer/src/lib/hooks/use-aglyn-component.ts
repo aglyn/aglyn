@@ -17,9 +17,9 @@
 
 import { getComponent } from '@aglyn/core-data-app'
 import type {
+  AglynExoticComponent,
   BundleId,
   CommandUId,
-  IAglynComponent,
 } from '@aglyn/core-data-foundation'
 import { type OrUndef } from '@aglyn/shared-data-types'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
@@ -27,8 +27,11 @@ import { useAglynAppContext } from '../contexts/aglyn-app-context'
 export function useAglynComponent<P, T>(
   componentId: CommandUId,
   bundleId?: BundleId,
-): OrUndef<IAglynComponent<P, T>> {
+): OrUndef<AglynExoticComponent<P, T>> {
   const app = useAglynAppContext()
-  return getComponent(app, { componentId, bundleId }) as IAglynComponent<P, T>
+  return getComponent(app, { componentId, bundleId }) as AglynExoticComponent<
+    P,
+    T
+  >
 }
 export default useAglynComponent

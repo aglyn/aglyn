@@ -15,23 +15,6 @@
  * limitations under the License.
  */
 
-type KeyOf<T> = keyof T
-type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
-
-export type Bool = boolean
-export type Bytes = Uint8Array | string
-export type TimestampSeconds = number
-export type Float = number
-export type Int32 = number
-export type Int64 = number
-export type Number = Float | Int32 | Int64
-export type Null = null
-export type Text = string
-export type Coordinates = Record<'longitude' | 'latitude', number>
-export type Mapped<T = any, K extends string | symbol = string> = Record<K, T>
-export type Sorted<T = any> = T extends any[] ? never : T[]
-export type Nestable<T = any> = Mapped<T> | Sorted<T>
-
 export type DataTypeFlag = {
   bool: 0x1
   [0x1]: 'bool'
@@ -70,6 +53,28 @@ export type DataTypeFlag = {
   [0xc]: 'timestamp'
 }
 
+/* private */
+type KeyOf<T> = keyof T
+type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
+
+/* Value data types, support same as Firestore */
+export type Bool = boolean
+export type Bytes = Uint8Array | string
+export type TimestampSeconds = number
+export type Float = number
+export type Int32 = number
+export type Int64 = number
+export type Number = Float | Int32 | Int64
+export type Null = null
+export type Text = string
+export type Coordinates = Record<'longitude' | 'latitude', number>
+export type Mapped<T = any, K extends string | symbol = string> = Record<K, T>
+export type Sorted<T = any> = T extends any[] ? never : T[]
+export type Nestable<T = any> = Mapped<T> | Sorted<T>
+
+/**
+ * Any value data type of those seen above
+ */
 export type InferValueTypeAny<T extends InferValueTypeAny = any> =
   | Bool
   | Bytes

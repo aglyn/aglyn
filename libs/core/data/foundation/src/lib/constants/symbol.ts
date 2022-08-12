@@ -17,7 +17,8 @@
 
 import { _isFnT } from '@aglyn/shared-util-guards'
 
-// The Symbol used to tag the AglynObject-like types. If there is no native Symbol
+// The Symbol used to tag the AglynObject-like types. If there is no native
+// Symbol
 // nor polyfill, then a plain number is used for performance.
 
 export type SYMBOL_TYPE = symbol | number
@@ -44,6 +45,8 @@ export enum HexTag {
 }
 
 export enum SymTag {
+  COMPONENT = 'component',
+
   MODULE = 'module',
   EXTENSION = 'extension',
 
@@ -67,10 +70,11 @@ const symFor = (hex: HexTag) => Symbol.for(`${SymPrefix}${HexSym[hex]}`)
 export const SymbolNamespace = 'aglyn'
 export const SymbolSeparator = '.'
 export const SymPrefix = `${SymbolNamespace}${SymbolSeparator}`
-export const FieldPrefix = '@'
+export const FieldPrefix = '$$'
 
 export const OF_TYPE = '$$of_type'
-export const OF_KIND = '$$of_kind'
+export const AGLYN_OF = 'aglynOf'
+export type AGLYN_OF = typeof AGLYN_OF
 
 export let MODULE_TYPE: SYMBOL_TYPE = HexTag.x60106
 export type MODULE_TYPE = SYMBOL_TYPE | typeof MODULE_TYPE

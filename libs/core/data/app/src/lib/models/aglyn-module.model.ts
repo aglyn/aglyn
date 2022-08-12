@@ -22,7 +22,7 @@ import type {
   IAglynAppController,
   IAglynModuleModel,
 } from '@aglyn/core-data-foundation'
-import { MODULE_TYPE, OF_KIND, OF_TYPE } from '@aglyn/core-data-foundation'
+import { AGLYN_OF, MODULE_TYPE } from '@aglyn/core-data-foundation'
 import { getStaticField } from '@aglyn/shared-util-tools'
 import { AglynBaseModel } from './aglyn-base.model'
 
@@ -38,21 +38,15 @@ export abstract class AglynModuleModel<
   public static get [Symbol.toStringTag](): string {
     return TAG
   }
-  public static get [OF_TYPE](): number | symbol {
+  public static get [AGLYN_OF](): number | symbol {
     return MODULE_TYPE
-  }
-  public static get [OF_KIND](): number | symbol {
-    return undefined
   }
   public static get namespace(): string {
     return NS
   }
 
-  public get [OF_TYPE](): number | symbol {
-    return getStaticField(OF_TYPE, this)
-  }
-  public get [OF_KIND](): number | symbol {
-    return getStaticField(OF_KIND, this)
+  public get [AGLYN_OF](): number | symbol {
+    return getStaticField(AGLYN_OF, this)
   }
 
   protected get listeners(): AglynModuleEffectListener<any>[] {

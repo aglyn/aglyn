@@ -26,8 +26,8 @@ import { FieldComponentType } from '@aglyn/shared-ui-jsx-forms'
 export { FieldComponentType }
 
 export enum ComponentsLinealDirectiveFlag {
-  LIMIT_TO = 0x01,
-  DISALLOW = 0x02,
+  LIMIT_TO = 'limitedTo',
+  DISALLOW = 'forbid',
 }
 
 export enum ComponentCategory {

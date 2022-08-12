@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Nx Test Lib: Core Util App" type="js.build_tools.nx" singleton="false">
+    <node-interpreter value="project" />
+    <nxfile value="$PROJECT_DIR$/nx.json" />
+    <tasks>
+      <task value="core-util-app:test" />
+    </tasks>
+    <envs />
+    <method v="2" />
+  </configuration>
+</component>

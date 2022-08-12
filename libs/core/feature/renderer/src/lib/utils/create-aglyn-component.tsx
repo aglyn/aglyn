@@ -16,14 +16,12 @@
  */
 
 import {
+  AGLYN_OF,
   type AglynComponentSchema,
+  type AglynExoticComponent,
   COMPONENT_ELEMENT_TYPE,
   type ComponentRegisterPayload,
   FEATURE_FLAG,
-  type IAglynComponent,
-  MODULE_TYPE,
-  OF_KIND,
-  OF_TYPE,
 } from '@aglyn/core-data-foundation'
 import {
   type ErrorBoundaryProps,
@@ -39,7 +37,8 @@ export function createAglynComponent<P = any, C = any>(
   component: C | any,
   options?: Partial<ErrorBoundaryProps>,
 ): ComponentRegisterPayload<P> {
-  const { componentId, bundleId, flags, styledOptions } = schema
+  const _schema = copy(schema)
+  const { componentId, bundleId, flags, styledOptions } = _schema
   const pascalId = `${bundleId ? pascalCase(bundleId) + '-' : ''}${pascalCase(
     componentId,
   )}`
@@ -51,18 +50,20 @@ export function createAglynComponent<P = any, C = any>(
 
   const AglynComponent = forwardRef<any, P>((props, ref) => {
     return <Component ref={ref} {...props} />
-  }) as IAglynComponent<P>
+  }) as AglynExoticComponent<P>
 
   AglynComponent.displayName = `AglynComponent(${pascalId})`
   AglynComponent.componentId = componentId
   AglynComponent.bundleId = bundleId
   AglynComponent.aglyn = true
-  AglynComponent[OF_TYPE] = MODULE_TYPE
-  AglynComponent[OF_KIND] = COMPONENT_ELEMENT_TYPE
+  AglynComponent[AGLYN_OF] = COMPONENT_ELEMENT_TYPE
   hoistNonReactStatics(AglynComponent, component)
 
   return {
-    component: withErrorBoundary(AglynComponent, options) as IAglynComponent<P>,
+    component: withErrorBoundary(
+      AglynComponent,
+      options,
+    ) as AglynExoticComponent<P>,
     schema: copy(schema),
   }
 }

@@ -34,7 +34,6 @@ import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
 import type {
   ComponentCategory,
   ComponentsLinealDirectiveFlag,
-  FieldComponentType,
 } from '../constants/components'
 import type {
   ComponentGetPayload,
@@ -46,7 +45,7 @@ import type {
   ComponentUnregisterPayload,
 } from '../constants/emitter'
 import type { FEATURE_FLAG } from '../constants/shared'
-import type { OF_KIND, OF_TYPE, SYMBOL_TYPE } from '../constants/symbol'
+import type { AGLYN_OF, SYMBOL_TYPE } from '../constants/symbol'
 import type { IAglynAppController } from './app.types'
 import type {
   AglynModuleModelOptions,
@@ -61,13 +60,16 @@ export type NodeId = string
 export type ComponentIdOrBundleTuple = ComponentId | [ComponentId, BundleId]
 
 export type ComponentsRegistryKeys = ComponentIdOrBundleTuple[]
-export type ComponentsRegistryValues = IAglynComponent[]
+export type ComponentsRegistryValues = AglynExoticComponent[]
 export type ComponentsRegistryEntry = [
   id: ComponentIdOrBundleTuple,
-  component: IAglynComponent,
+  component: AglynExoticComponent,
 ]
 export type InstanceBundles = Map<BundleId, AglynBundleSchema>
-export type InstanceComponents = Map<ComponentIdOrBundleTuple, IAglynComponent>
+export type InstanceComponents = Map<
+  ComponentIdOrBundleTuple,
+  AglynExoticComponent
+>
 export type InstanceSchemas = Map<
   ComponentIdOrBundleTuple,
   AglynComponentSchema
@@ -95,13 +97,22 @@ export type AglynComponentsBundleSchema = Omit<
   'componentIds'
 >
 
-export type AglynComponentType<
-  P extends ComponentProps<C> | any = any,
-  C extends keyof JSX.IntrinsicElements | JSX.ElementConstructor<any> = any,
-> =
-  | ComponentClass<P>
-  | JSX.ElementConstructor<P>
-  | keyof JSX.IntrinsicElements[keyof JSX.IntrinsicElements]
+export type AglynNodeItemNormalized<P = JSX.AnyProps> = AglynNodeSchema<P> & {
+  elements?: NodeId[]
+}
+export type AglynNodeItemDenormalized<P = JSX.AnyProps> = AglynNodeSchema<P> & {
+  elements?: AglynNodeItemDenormalized[]
+}
+
+export type AglynNodesById = {
+  [P in NodeId | CANVAS_ROOT_ELEMENT_ID]: AglynNodeItemNormalized & { $id: P }
+}
+export type AglynNodesList = Array<AglynNodeItemDenormalized>
+
+export type AglynNodeHierarchy<$ID extends NodeId = NodeId> = [
+  root: CANVAS_ROOT_ELEMENT_ID,
+  ...nodes: [...ancestors: NodeId[], element: $ID],
+]
 
 export interface AglynComponentsControllerOptions
   extends AglynModuleModelOptions {}
@@ -120,7 +131,7 @@ export interface IAglynComponentsController
 
   getComponent<P, T>(
     payload: ComponentGetPayload,
-  ): OrUndef<IAglynComponent<P, T>>
+  ): OrUndef<AglynExoticComponent<P, T>>
   getComponentSchema(
     payload: ComponentSchemaGetPayload,
   ): OrUndef<AglynComponentSchema>
@@ -142,21 +153,27 @@ export interface AglynComponentsControllerT
   ): IAglynComponentsController
 }
 
-export interface IAglynComponent<P = any, T = any>
+export type AglynComponentType<
+  P extends ComponentProps<C> | any = any,
+  C extends keyof JSX.IntrinsicElements | JSX.ElementConstructor<any> = any,
+> =
+  | ComponentClass<P>
+  | JSX.ElementConstructor<P>
+  | keyof JSX.IntrinsicElements[keyof JSX.IntrinsicElements]
+
+export interface AglynExoticComponent<PROPS = any, REF = any>
   extends JSX.ForwardRefExoticComponent<
-    JSX.PropsWithoutRef<P> & JSX.RefAttributes<T>
+    JSX.PropsWithoutRef<PROPS> & JSX.RefAttributes<REF>
   > {
-  [OF_TYPE]?: SYMBOL_TYPE
-  [OF_KIND]?: SYMBOL_TYPE
+  [AGLYN_OF]?: SYMBOL_TYPE
   aglyn?: boolean
-  componentId?: ComponentId
-  bundleId?: BundleId
+  schema?: AglynComponentSchema<PROPS>
 }
 
 export interface AglynComponentSchema<P = any> {
   componentId: ComponentId
-  kind?: 'element' | 'text' | 'markdown'
   bundleId?: BundleId
+  kind?: 'element' | 'text' | 'markdown'
 
   displayName: string
   title?: string
@@ -248,6 +265,50 @@ export type AglynNodePresetSchema = {
   data: NodePresetData
 }
 
+export enum FieldComponentType {
+  BUTTON = 'button',
+  CHECKBOX = 'checkbox',
+  COLOR_PICKER = 'color-picker',
+  DATE_PICKER = 'date-picker',
+  DUAL_LIST_SELECT = 'dual-list-select',
+  FIELD_ARRAY = 'field-array',
+  ICON_PICKER = 'icon-picker',
+  INPUT_ADDON_BUTTON_GROUP = 'input-addon-button-group',
+  INPUT_ADDON_GROUP = 'input-addon-group',
+  PLAIN_TEXT = 'plain-text',
+  RADIO = 'radio',
+  SELECT = 'select',
+  SLIDER = 'slider',
+  SUB_FORM = 'sub-form',
+  SWITCH = 'switch',
+  TAB_ITEM = 'tab-item',
+  TABS = 'tabs',
+  TEXT_FIELD = 'text-field',
+  TEXTAREA = 'textarea',
+  TIME_PICKER = 'time-picker',
+  TOGGLE_BUTTON = 'toggle-button',
+  WIZARD = 'wizard',
+}
+
+export enum FieldValidatorType {
+  EXACT_LENGTH = 'exact-length',
+  MAX_LENGTH = 'max-length',
+  MAX_NUMBER_VALUE = 'max-number-value',
+  MIN_ITEMS = 'min-items',
+  MIN_LENGTH = 'min-length',
+  MIN_NUMBER_VALUE = 'min-number-value',
+  PATTERN = 'pattern',
+  REQUIRED = 'required',
+  URL = 'url',
+}
+
+export type FieldDataType =
+  | 'boolean'
+  | 'float'
+  | 'integer'
+  | 'number'
+  | 'string'
+
 export interface AglynAttributeSchema extends Dictionary<any> {
   name: string
   dataType?: DataType
@@ -290,18 +351,3 @@ export interface AglynNodeSchema<P = JSX.AnyProps> {
   props?: P
   elements?: NodeId[] | AglynNodeSchema[]
 }
-
-export type AglynNodeItemNormalized<P = JSX.AnyProps> = AglynNodeSchema<P> & {
-  elements?: NodeId[]
-}
-export type AglynNodeItemDenormalized<P = JSX.AnyProps> = AglynNodeSchema<P> & {
-  elements?: AglynNodeItemDenormalized[]
-}
-
-export type AglynNodesById = Record<NodeId, AglynNodeItemNormalized>
-export type AglynNodesList = Array<AglynNodeItemDenormalized>
-
-export type AglynNodeHierarchy<$ID extends NodeId = NodeId> = [
-  root: CANVAS_ROOT_ELEMENT_ID,
-  ...nodes: [...ancestors: NodeId[], element: $ID],
-]

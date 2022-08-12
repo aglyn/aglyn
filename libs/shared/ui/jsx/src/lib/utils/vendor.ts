@@ -29,5 +29,4 @@ export {
   isStrictMode,
   isSuspense,
   isValidElementType,
-  typeOf as reactTypeOf,
 } from 'react-is'

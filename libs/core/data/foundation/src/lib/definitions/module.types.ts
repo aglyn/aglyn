@@ -19,7 +19,7 @@ import type {
   AglynEventTriggerFlag,
   AglynEventTriggerPayload,
 } from '../constants/emitter'
-import { OF_KIND, OF_TYPE } from '../constants/symbol'
+import { AGLYN_OF } from '../constants/symbol'
 import type { IAglynAppController } from './app.types'
 import type {
   AglynBaseModelOptions,
@@ -39,8 +39,7 @@ export interface IAglynModuleModel<
   O extends AglynModuleModelOptions = AglynModuleModelOptions,
 > extends IAglynBaseModel<O, IAglynAppController>,
     AglynDependency {
-  readonly [OF_TYPE]: number | symbol
-  readonly [OF_KIND]: number | symbol
+  readonly [AGLYN_OF]: number | symbol
   readonly namespace: string
 }
 
@@ -48,8 +47,7 @@ export interface AglynModuleModelT<
   O extends AglynModuleModelOptions = AglynModuleModelOptions,
 > extends AglynBaseModelT<O, IAglynAppController> {
   readonly [Symbol.toStringTag]: string
-  readonly [OF_TYPE]: number | symbol
-  readonly [OF_KIND]: number | symbol
+  readonly [AGLYN_OF]: number | symbol
   readonly namespace: string
   new (app: IAglynAppController, options: O): IAglynModuleModel<O>
 }

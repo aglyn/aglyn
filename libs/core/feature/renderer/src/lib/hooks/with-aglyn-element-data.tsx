@@ -16,8 +16,8 @@
  */
 
 import {
+  AglynExoticComponent,
   AglynNodeItemDenormalized,
-  IAglynComponent,
   NodeId,
 } from '@aglyn/core-data-foundation'
 import { getDisplayName } from '@aglyn/shared-util-tools'
@@ -41,7 +41,7 @@ export interface RequiredElementDataProps {
 export interface OptionalElementDataProps
   extends JSX.PropsWithForwardedRef<any> {
   elementData: AglynNodeItemDenormalized<any>
-  component: IAglynComponent<any>
+  component: AglynExoticComponent<any>
   elemProps: any
 }
 

@@ -19,16 +19,22 @@ import type {
   AglynBundleSchema,
   AglynComponentSchema,
   AglynComponentsControllerOptions,
+  AglynExoticComponent,
   AglynModuleEffectListener,
   AglynNodePresetSchema,
   BundleId,
+  ComponentGetPayload,
   ComponentId,
+  ComponentRegisterPayload,
+  ComponentsBundleGetPayload,
+  ComponentsBundleRegisterPayload,
+  ComponentsBundleUnregisterPayload,
   ComponentsRegistryContext,
   ComponentsRegistryEntry,
   ComponentsRegistryKeys,
   ComponentsRegistryValues,
+  ComponentUnregisterPayload,
   IAglynAppController,
-  IAglynComponent,
   IAglynComponentsController,
   InstanceBundles,
   InstanceComponents,
@@ -38,12 +44,6 @@ import type {
 import {
   AglynEventStateFlag,
   AglynEventTriggerFlag,
-  type ComponentGetPayload,
-  type ComponentRegisterPayload,
-  type ComponentsBundleGetPayload,
-  type ComponentsBundleRegisterPayload,
-  type ComponentsBundleUnregisterPayload,
-  type ComponentUnregisterPayload,
 } from '@aglyn/core-data-foundation'
 import { isAglynComponentElement } from '@aglyn/core-util-app'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
@@ -146,16 +146,16 @@ export class AglynComponentsController
 
   public getComponent<P, T>(
     payload: ComponentGetPayload,
-  ): OrUndef<IAglynComponent<P, T>> {
+  ): OrUndef<AglynExoticComponent<P, T>> {
     const { componentId, bundleId = undefined } = payload
     const key = this.buildMapKey({ bundleId, componentId })
     if (bundleId) {
       return this.components?.get(key) as unknown as OrUndef<
-        IAglynComponent<P, T>
+        AglynExoticComponent<P, T>
       >
     }
     return this.components?.get(key) as unknown as OrUndef<
-      IAglynComponent<P, T>
+      AglynExoticComponent<P, T>
     >
   }
   public getComponentSchema(

@@ -15,39 +15,24 @@
  * limitations under the License.
  */
 import {
+  AGLYN_OF,
   type AglynAppModule,
   type AglynCommandListener,
   type AglynCommandResolver,
+  type AglynExoticComponent,
   COMMAND_LISTENER_TYPE,
   COMMAND_RESOLVER_TYPE,
   COMPONENT_ELEMENT_TYPE,
   EXTENSION_TYPE,
-  type IAglynComponent,
   type IAglynExtension,
   MODULE_TYPE,
-  OF_KIND,
-  OF_TYPE,
 } from '@aglyn/core-data-foundation'
 import { _isFnT, _isObj } from '@aglyn/shared-util-guards'
-
-export function typeOf(object: unknown) {
-  if (_isFnT(object) || _isObj(object)) {
-    const _typeof = object[OF_TYPE]
-    switch (_typeof) {
-      case MODULE_TYPE:
-        return _typeof
-      default:
-        return typeof object
-    }
-  }
-
-  return undefined
-}
 
 export function kindOf(object: unknown) {
   if (_isFnT(object) || _isObj(object)) {
     // eslint-disable-next-line no-case-declarations
-    const kind = object[OF_KIND]
+    const kind = object[AGLYN_OF]
 
     switch (kind) {
       case MODULE_TYPE:
@@ -65,7 +50,7 @@ export function kindOf(object: unknown) {
 }
 
 export function isAglynModule<T>(object: unknown): object is AglynAppModule {
-  return typeOf(object) === MODULE_TYPE
+  return kindOf(object) === MODULE_TYPE
 }
 export function isAglynExtension<T>(
   object: unknown,
@@ -85,6 +70,6 @@ export function isAglynCommandListener<T>(
 }
 export function isAglynComponentElement<T>(
   object: unknown,
-): object is IAglynComponent {
+): object is AglynExoticComponent {
   return kindOf(object) === COMPONENT_ELEMENT_TYPE
 }
