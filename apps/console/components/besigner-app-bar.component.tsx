@@ -50,7 +50,7 @@ const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
         tabBarTitle={
           <Button
             size="small"
-            color="tertiary"
+            color="secondary"
             onClick={onPropertiesEdit}
             endIcon={
               <MdiIcon

@@ -42,7 +42,6 @@ const ElementLabelWrapper = styled(Stack, {
     justifyContent: 'center',
     display: 'flex',
     fontSize: theme.typography.pxToRem(12),
-    color: theme.palette.secondary.contrastText,
   },
 }))
 
@@ -78,7 +77,7 @@ const ElementOverlayLabelComponent = forwardRef<
       <div className={'icon-wrapper'}>
         <ElementIconComponent
           $id={$id}
-          sx={{ color: 'inherit' }}
+          // sx={{ color: 'inherit' }}
           fontSize="inherit"
         />
       </div>
@@ -88,6 +87,7 @@ const ElementOverlayLabelComponent = forwardRef<
         overflow="hidden"
         whiteSpace="nowrap"
         fontSize="inherit"
+        color="inherit"
         children={badgeLabel}
       />
     </ElementLabelWrapper>
