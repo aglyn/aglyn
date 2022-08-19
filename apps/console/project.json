@@ -13,7 +13,7 @@
       "configurations": {
         "production": {},
         "development": {
-          "outputPath": "tmp/apps/console"
+          "outputPath": "apps/console"
         }
       },
       "defaultConfiguration": "production"

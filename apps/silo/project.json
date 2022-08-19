@@ -14,7 +14,7 @@
       "configurations": {
         "production": {},
         "development": {
-          "outputPath": "tmp/apps/silo"
+          "outputPath": "apps/silo"
         }
       }
     },
