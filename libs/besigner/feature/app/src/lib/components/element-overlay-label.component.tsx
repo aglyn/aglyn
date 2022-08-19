@@ -77,7 +77,8 @@ const ElementOverlayLabelComponent = forwardRef<
       <div className={'icon-wrapper'}>
         <ElementIconComponent
           $id={$id}
-          // sx={{ color: 'inherit' }}
+          sx={{ color: 'inherit' }}
+          color="inherit"
           fontSize="inherit"
         />
       </div>
