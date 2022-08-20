@@ -15,13 +15,4 @@
  * limitations under the License.
  */
 
-import md5 from 'md5'
-
-export function gravatarUrlFromEmail(email: string) {
-  const emailHash = md5(
-    String(email ?? '')
-      .toLowerCase()
-      .trim(),
-  )
-  return `https://secure.gravatar.com/avatar/${emailHash}`
-}
+export { version, name } from '../../../package.json'

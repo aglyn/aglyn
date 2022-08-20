@@ -15,505 +15,290 @@
  * limitations under the License.
  */
 
-import type { AglynBaseModelOptions } from '@aglyn/core-data-foundation'
 import {
-  _INTERNAL_CANVAS_,
-  _INTERNAL_COMMANDS_,
-  _INTERNAL_COMPONENTS_,
-  _INTERNAL_CONTEXTS_,
-  _INTERNAL_EXTENSIONS_,
-  AGLYN_EMITTER,
   AGLYN_ERROR,
   AGLYN_LOGGER,
-  AGLYN_PLATFORM,
-  AglynAppOptions,
-  AglynEffectOptions,
-  type AglynEmitter,
-  type AglynErrorFactory,
-  type AglynEventPayloads,
-  AglynEventStateFlag,
-  AglynEventTriggerFlag,
-  type AglynLogger,
-  AglynPlatform,
-  AglynVersion,
-  AppUUN,
   IAglynCanvasController,
   IAglynCommandsController,
   IAglynComponentsController,
   IAglynContextsController,
   IAglynExtensionsController,
-  IAglynModuleModel,
-  SDK_VERSION,
 } from '@aglyn/core-data-foundation'
-import { compress, decompress } from '@aglyn/core-util-app'
-import { _isArr } from '@aglyn/shared-util-guards'
+import { decompress } from '@aglyn/core-util-app'
+import { LogLevelString } from '@aglyn/shared-util-logger'
 import { ITimestamp, Timestamp } from '@aglyn/shared-util-timestamp'
-import { getStaticField, truthy } from '@aglyn/shared-util-tools'
+import { encode } from '@msgpack/msgpack'
+import { EventEmitter2 } from 'eventemitter2'
 import { Bytes } from 'firebase/firestore'
-import AglynCanvasController from '../controllers/aglyn-canvas.controller'
-import AglynCommandsController from '../controllers/aglyn-commands.controller'
-import AglynComponentsController from '../controllers/aglyn-components.controller'
-import AglynContextsController from '../controllers/aglyn-contexts.controller'
-import AglynExtensionsController from '../controllers/aglyn-extensions.controller'
+import UAParser from 'ua-parser-js'
 import DependencyManager from './dependency-manager'
+import { name, version } from './package'
 
 const TAG = 'Aglyn'
-const NS = 'com.aglyn.core.data.model.base'
 
-export default class Aglyn extends DependencyManager {
-  public static readonly platform: AglynPlatform = AGLYN_PLATFORM
-  public static readonly version: AglynVersion = SDK_VERSION
-  readonly #appName: AppUUN = null
-  #errorFactory: AglynErrorFactory
-  #emitter: AglynEmitter
-  #logger: AglynLogger
-  #deleted = false
-  #extensions: IAglynExtensionsController = null
-  #contexts: IAglynContextsController = null
-  #commands: IAglynCommandsController = null
-  #components: IAglynComponentsController = null
-  #canvas: IAglynCanvasController = null
+export enum AglynEvent {
+  APP_CREATING = 'event:app:creating',
+  APP_CREATED = 'event:app:created',
+  APP_INITIALIZING = 'event:app:initializing',
+  APP_INITIALIZED = 'event:app:initialized',
+  APP_ACTIVATING = 'event:app:activating',
+  APP_ACTIVATED = 'event:app:activated',
+  APP_DEACTIVATING = 'event:app:deactivating',
+  APP_DEACTIVATED = 'event:app:deactivated',
+  APP_DESTROYING = 'event:app:destroying',
+  APP_DESTROYED = 'event:app:destroyed',
+  APP_DELETING = 'event:app:deleting',
+  APP_DELETED = 'event:app:deleted',
+
+  MODULE_INITIALIZING = 'event:module:initializing',
+  MODULE_INITIALIZED = 'event:module:initialized',
+  MODULE_ACTIVATING = 'event:module:activating',
+  MODULE_ACTIVATED = 'event:module:activated',
+  MODULE_DEACTIVATING = 'event:module:deactivating',
+  MODULE_DEACTIVATED = 'event:module:deactivated',
+  MODULE_DESTROYING = 'event:module:destroying',
+  MODULE_DESTROYED = 'event:module:destroyed',
+
+  EXTENSION_REGISTERING = 'event:extensions:registering-extension',
+  EXTENSION_REGISTERED = 'event:extensions:registered-extension',
+  EXTENSION_INITIALIZING = 'event:extensions:initializing-extension',
+  EXTENSION_INITIALIZED = 'event:extensions:initialized-extension',
+  EXTENSION_ACTIVATING = 'event:extensions:activating-extension',
+  EXTENSION_ACTIVATED = 'event:extensions:activated-extension',
+  EXTENSION_DEACTIVATING = 'event:extensions:deactivating-extension',
+  EXTENSION_DEACTIVATED = 'event:extensions:deactivated-extension',
+  EXTENSION_DESTROYING = 'event:extensions:destroying-extension',
+  EXTENSION_DESTROYED = 'event:extensions:destroyed-extension',
+
+  COMMAND_RESOLVER_SETTING = 'event:commands:setting-resolver',
+  COMMAND_RESOLVER_SET = 'event:commands:set-resolver',
+  COMMAND_LISTENER_REGISTERING = 'event:commands:registering-listener',
+  COMMAND_LISTENER_REGISTERED = 'event:commands:registered-listener',
+  COMMAND_RESOLVER_REMOVING = 'event:commands:unregistering-resolver',
+  COMMAND_RESOLVER_REMOVED = 'event:commands:unregistered-resolver',
+  COMMAND_LISTENER_UNREGISTERING = 'event:commands:unregistering-listener',
+  COMMAND_LISTENER_UNREGISTERED = 'event:commands:unregistered-listener',
+  COMMAND_RESOLVER_TRIGGERING = 'event:commands:triggering-resolver',
+  COMMAND_RESOLVER_TRIGGERED = 'event:commands:triggered-resolver',
+  COMMAND_LISTENERS_TRIGGERING = 'event:commands:triggering-listeners',
+  COMMAND_LISTENERS_TRIGGERED = 'event:commands:triggered-listeners',
+
+  COMPONENT_REGISTERING = 'event:components:registering-component',
+  COMPONENT_REGISTERED = 'event:components:registered-component',
+  COMPONENT_UNREGISTERING = 'event:components:unregistering-component',
+  COMPONENT_UNREGISTERED = 'event:components:unregistered-component',
+  COMPONENT_BUNDLE_REGISTERING = 'event:components:registering-bundle',
+  COMPONENT_BUNDLE_REGISTERED = 'event:components:registered-bundle',
+  COMPONENT_BUNDLE_UNREGISTERING = 'event:components:unregistering-bundle',
+  COMPONENT_BUNDLE_UNREGISTERED = 'event:components:unregistered-bundle',
+}
+
+export interface AglynConfig {
+  logLevel?: LogLevelString
+}
+
+export default class Aglyn {
+  public static readonly namespace = name
+  public static readonly version = version
+  public static readonly platform = new UAParser()
+  public static readonly errorFactory = AGLYN_ERROR
+  public static readonly logger = AGLYN_LOGGER
+  public static readonly emitter = new EventEmitter2()
+
+  //region Properties
   readonly #createdAt: ITimestamp
-  readonly #options: AglynAppOptions = null
-
-  //region Property Getters
-  protected get modules(): IAglynModuleModel[] {
-    return [
-      // Load internal modules before extensions
-      this.#contexts,
-      this.#commands,
-      this.#components,
-      this.#canvas,
-
-      // Last step
-      this.#extensions,
-    ]
-  }
-  public get [Symbol.toStringTag](): string {
-    return getStaticField(Symbol.toStringTag, this)
-  }
-  public get appName(): AppUUN {
-    return this.#appName
-  }
-  public get canvas(): IAglynCanvasController {
-    return this.#canvas
-  }
-  public get commands(): IAglynCommandsController {
-    return this.#commands
-  }
-  public get components(): IAglynComponentsController {
-    return this.#components
-  }
-  public get contexts(): IAglynContextsController {
-    return this.#contexts
-  }
   public get createdAt(): ITimestamp {
     return this.#createdAt
   }
-  public get deleted(): boolean {
-    return this.#deleted
+
+  readonly #options: AglynConfig = {}
+  public get options(): AglynConfig {
+    return this.#options
   }
-  public get emitter(): AglynEmitter {
-    return this.#emitter
+
+  #depends: DependencyManager = new DependencyManager()
+  public get depends(): DependencyManager {
+    return this.#depends
   }
-  public get errorFactory(): AglynErrorFactory {
-    return this.#errorFactory
+
+  #canvas: IAglynCanvasController = null
+  public get canvas(): IAglynCanvasController {
+    return this.#canvas
   }
+
+  #contexts: IAglynContextsController = null
+  public get contexts(): IAglynContextsController {
+    return this.#contexts
+  }
+
+  #commands: IAglynCommandsController = null
+  public get commands(): IAglynCommandsController {
+    return this.#commands
+  }
+
+  #components: IAglynComponentsController = null
+  public get components(): IAglynComponentsController {
+    return this.#components
+  }
+
+  #extensions: IAglynExtensionsController = null
   public get extensions(): IAglynExtensionsController {
     return this.#extensions
   }
-  public get logger(): AglynLogger {
-    return this.#logger
-  }
-  public get namespace(): string {
-    return getStaticField('namespace', this)
-  }
-  public get options(): AglynAppOptions {
-    return this.#options
-  }
-  public get platform(): AglynPlatform {
-    return getStaticField('platform', this)
-  }
-  public get version(): AglynVersion {
-    return getStaticField('version', this)
-  }
-  public static get [Symbol.toStringTag](): string {
-    return TAG
-  }
-  public static get namespace(): string {
-    return NS
-  }
   //endregion
 
-  constructor(options: AglynAppOptions) {
-    super()
-    this.#options = options
+  public static instance: Aglyn
+  public static getInstance(public readonly appName?: string) {}
+
+  public static setConfig(config: AglynConfig)
+
+  protected constructor(public readonly appName?: string) {
+    this.#options = { ...options }
     this.#createdAt = Timestamp.now()
-    this.setup()
+    this.setupLogger()
+    this.setupDepends()
   }
 
-  private setup() {
-    const namespace = this.namespace
-    const errorFactory = this.#options.errorFactory || AGLYN_ERROR
-    const logger = this.#options.logger || AGLYN_LOGGER
-    const logLevel = this.#options.logLevel
-
-    this.#errorFactory = !namespace
-      ? errorFactory
-      : errorFactory.childFactory(namespace)
-    this.#emitter = this.#options.emitter || AGLYN_EMITTER
-    this.#logger = !logLevel ? logger : logger.setLogLevel(logLevel)
+  //region Setup/Breakdown
+  private setupLogger() {
+    Aglyn.logger.setLogLevel(this.#options.logLevel)
   }
-
-  public toString(): string {
-    return `[object ${this[Symbol.toStringTag]}('${this.#appName}')]`
+  private setupDepends(): void {
+    this.#depends.addDependencies([])
   }
-
-  public toJSON() {
-    return {
-      namespace: this.namespace,
-      created: this.#createdAt.toJSON(),
-      name: this.#appName,
-      version: this.version,
-      platform: this.platform,
-    }
-  }
-
-  //region Property Get Methods
-  public getCanvasController(): IAglynCanvasController {
-    return this.#canvas
-  }
-  public getCommandsController(): IAglynCommandsController {
-    return this.#commands
-  }
-  public getComponentsController(): IAglynComponentsController {
-    return this.#components
-  }
-  public getContextsController(): IAglynContextsController {
-    return this.#contexts
-  }
-  public getCreatedAt(): ITimestamp {
-    return this.#createdAt
-  }
-  public getExtensionsController(): IAglynExtensionsController {
-    return this.#extensions
-  }
-  public getName(): AppUUN {
-    return this.#appName
-  }
-  public getOptions(): AglynBaseModelOptions {
-    return this.#options
-  }
-  //endregion
-
-  //region Deletion Methods
-  public isDeleted(): boolean {
-    return truthy(this.#deleted)
-  }
-  public setDeleted(value: boolean): this {
-    this.#deleted = Boolean(value)
-    return this
-  }
-  //endregion
-
-  //region Compression/Decompression Methods
-  public static compress<T>(value: T): Bytes {
-    return compress(value)
-  }
-  public static decompress<T>(value: Bytes): T {
-    return decompress(value)
-  }
-  public compress<T>(value: T): Bytes {
-    return Aglyn.compress(value)
-  }
-  public decompress<T>(value: Bytes): T {
-    return Aglyn.decompress(value)
-  }
-  //endregion
-
-  //region Modules/Extensions Methods
-  #initializeAppModules(): void {
-    for (const mod of this.modules) {
-      this.addDependency(mod)
-    }
-  }
-  #destroyAppModules(): void {
-    for (const mod of this.modules) {
-      this.removeDependency(mod.namespace)
-    }
-  }
-
-  public setupModules() {
-    this.handleEvent(
-      [AglynEventStateFlag.APP_CREATING, AglynEventStateFlag.APP_CREATED],
-      { appName: this.#appName },
-      () => {
-        this.#contexts = new AglynContextsController(this, {
-          ...this.options.modulesOptions?.contexts,
-        })
-        this.#commands = new AglynCommandsController(this, {
-          ...this.options.modulesOptions?.commands,
-        })
-        this.#components = new AglynComponentsController(this, {
-          ...this.options.modulesOptions?.components,
-        })
-        this.#canvas = new AglynCanvasController(this, {
-          ...this.options.modulesOptions?.canvas,
-        })
-        _INTERNAL_CONTEXTS_.set(this.#appName, this.#contexts)
-        _INTERNAL_COMMANDS_.set(this.#appName, this.#commands)
-        _INTERNAL_COMPONENTS_.set(this.#appName, this.#components)
-        _INTERNAL_CANVAS_.set(this.#appName, this.#canvas)
-      },
-    )
-    return this
-  }
-  public setupExtensions() {
-    this.#extensions = new AglynExtensionsController(this, {
-      ...this.options.modulesOptions?.extensions,
-    })
-    _INTERNAL_EXTENSIONS_.set(this.#appName, this.#extensions)
-    return this
-  }
-  //endregion
-
-  //region Internal Event Handling
-  #doEvent<F extends AglynEventStateFlag>(
-    flag: F,
-    payload?: AglynEventPayloads[F],
-  ): this {
-    const mergedPayload = {
-      ...payload,
-      __eventTimestamp__: Timestamp.now().toJSON(),
-      __eventController__: this.toJSON(),
-    }
-    this.logger.debug(flag, mergedPayload)
-    this.emitter.emit(flag, mergedPayload)
-    return this
-  }
-  #handleEvent<F1 extends AglynEventStateFlag, F2 extends AglynEventStateFlag>(
-    flags: [before: F1, after: F2],
-    payload:
-      | undefined
-      | AglynEventPayloads[F1 | F2]
-      | [before: AglynEventPayloads[F1], after: AglynEventPayloads[F2]],
-    handler: () => AglynEventPayloads[F2] | void,
-  ): this {
-    const [beforeFlag, afterFlag] = flags
-    const beforePayload = _isArr(payload) ? payload[0] : payload
-    this.#doEvent(beforeFlag, beforePayload)
-    const res = handler()
-    const afterPayload =
-      res || (_isArr(payload) ? payload[1] || payload[0] : payload)
-    this.#doEvent(afterFlag, afterPayload)
-    return this
-  }
-  protected handleEvent<
-    F1 extends AglynEventStateFlag,
-    F2 extends AglynEventStateFlag,
-  >(
-    flags: [before: F1, after: F2],
-    payload:
-      | undefined
-      | AglynEventPayloads[F1 | F2]
-      | [before: AglynEventPayloads[F1], after: AglynEventPayloads[F2]],
-    handler: () => AglynEventPayloads[F2] | void,
-  ): this {
-    this.#handleEvent(flags, payload, handler)
-    return this
+  private breakdownDepends() {
+    this.#depends.destroyDependencies()
   }
   //endregion
 
   //region Lifecycle Methods
-  //region Initialization Lifecycle Methods
-  public onInitialize(): this {
-    this.handleEvent(
-      [
-        AglynEventStateFlag.APP_INITIALIZING,
-        AglynEventStateFlag.APP_INITIALIZED,
-      ],
-      { appName: this.#appName },
-      () => {
-        this.#initializeAppModules()
-      },
-    )
-    return this
+  public static lifecycleEvent(
+    callbackFn: () => void,
+    options: {
+      startEvent: AglynEvent
+      startPayload: any[]
+      endEvent: AglynEvent
+      endPayload: any[]
+      onCatch?: (e: unknown) => void
+    },
+  ): void {
+    const { startEvent, startPayload, endEvent, endPayload, onCatch } = options
+    Aglyn.logger.debug(Timestamp.now().toJSON(), startEvent, startPayload)
+    Aglyn.emitter.emit(startEvent, Timestamp.now().toJSON(), ...startPayload)
+    try {
+      callbackFn()
+    } catch (e) {
+      Aglyn.logger.error(Timestamp.now().toJSON(), startEvent, startPayload, e)
+      onCatch && onCatch(e)
+    } finally {
+      Aglyn.logger.debug(Timestamp.now().toJSON(), startEvent, startPayload)
+      Aglyn.emitter.emit(endEvent, Timestamp.now().toJSON(), ...endPayload)
+    }
   }
+
   /** @ignore */
   public __initialize__(props?: never): this {
-    this.handleEvent(
-      [
-        AglynEventStateFlag.MODULE_INITIALIZING,
-        AglynEventStateFlag.MODULE_INITIALIZED,
-      ],
-      { namespace: this.namespace },
+    Aglyn.lifecycleEvent(
       () => {
         this.onInitialize()
       },
-    )
-    return this
-  }
-  //endregion
-
-  //region Activation Lifecycle Methods
-  public onActivate(): this {
-    this.handleEvent(
-      [AglynEventStateFlag.APP_ACTIVATING, AglynEventStateFlag.APP_ACTIVATED],
-      { appName: this.#appName },
-      () => {
-        console.log('app onActivate')
+      {
+        startEvent: AglynEvent.APP_INITIALIZING,
+        startPayload: [{ appName: this.#options.appName }],
+        endEvent: AglynEvent.APP_INITIALIZED,
+        endPayload: [{ appName: this.#options.appName }],
       },
     )
     return this
   }
   /** @ignore */
   public __activate__(props?: never): this {
-    this.handleEvent(
-      [
-        AglynEventStateFlag.MODULE_ACTIVATING,
-        AglynEventStateFlag.MODULE_ACTIVATED,
-      ],
-      { namespace: this.namespace },
+    Aglyn.lifecycleEvent(
       () => {
         this.onActivate()
       },
-    )
-    return this
-  }
-  //endregion
-
-  //region Deactivation Lifecycle Methods
-  public onDeactivate(): this {
-    this.handleEvent(
-      [
-        AglynEventStateFlag.APP_DEACTIVATING,
-        AglynEventStateFlag.APP_DEACTIVATED,
-      ],
-      { appName: this.#appName },
-      () => {
-        console.log('app onDeactivate')
+      {
+        startEvent: AglynEvent.APP_ACTIVATING,
+        startPayload: [{ appName: this.#options.appName }],
+        endEvent: AglynEvent.APP_ACTIVATED,
+        endPayload: [{ appName: this.#options.appName }],
       },
     )
     return this
   }
   /** @ignore */
   public __deactivate__(props?: never): this {
-    this.handleEvent(
-      [
-        AglynEventStateFlag.MODULE_DEACTIVATING,
-        AglynEventStateFlag.MODULE_DEACTIVATED,
-      ],
-      { namespace: this.namespace },
+    Aglyn.lifecycleEvent(
       () => {
         this.onDeactivate()
       },
-    )
-    return this
-  }
-  //endregion
-
-  //region Destruction Lifecycle Methods
-  public onDestroy(): this {
-    this.handleEvent(
-      [AglynEventStateFlag.APP_DESTROYING, AglynEventStateFlag.APP_DESTROYED],
-      { appName: this.#appName },
-      () => {
-        this.#destroyAppModules()
+      {
+        startEvent: AglynEvent.APP_DEACTIVATING,
+        startPayload: [{ appName: this.#options.appName }],
+        endEvent: AglynEvent.APP_DEACTIVATED,
+        endPayload: [{ appName: this.#options.appName }],
       },
     )
     return this
   }
   /** @ignore */
-  __destroy__(props?: never): this {
-    this.handleEvent(
-      [
-        AglynEventStateFlag.MODULE_DESTROYING,
-        AglynEventStateFlag.MODULE_DESTROYED,
-      ],
-      { namespace: this.namespace },
+  public __destroy__(props?: never): this {
+    Aglyn.lifecycleEvent(
       () => {
         this.onDestroy()
+      },
+      {
+        startEvent: AglynEvent.APP_DESTROYING,
+        startPayload: [{ appName: this.#options.appName }],
+        endEvent: AglynEvent.APP_DESTROYED,
+        endPayload: [{ appName: this.#options.appName }],
       },
     )
     return this
   }
-  //endregion
-  //endregion
 
-  //region Error Factory Methods
-  public getErrorFactory(): AglynErrorFactory {
-    return this.#errorFactory
-  }
-  public setErrorFactory(value: AglynErrorFactory): this {
-    this.#errorFactory = value
+  public onInitialize(): this {
     return this
   }
-  //endregion
-
-  //region Emitter Methods
-  public getEmitter(): AglynEmitter {
-    return this.#emitter
-  }
-  public setEmitter(value: AglynEmitter): this {
-    this.#emitter = value
+  public onActivate(): this {
     return this
   }
-  public get all() {
-    return this.#emitter.all
-  }
-  public on(type, handler) {
-    return this.#emitter.on(type, handler)
-  }
-  public effect<U>(data: AglynEffectOptions<AglynEventTriggerFlag, U>): this {
-    const { type, payload } = data
-    this.emitter.emit(type, payload as any)
+  public onDeactivate(): this {
     return this
   }
-  public off(type, handler?) {
-    return this.#emitter.off(type, handler)
-  }
-  public emit(type, handler?) {
-    return this.#emitter.emit(type, handler)
+  public onDestroy(): this {
+    return this
   }
   //endregion
 
-  //region Logger Methods
-  public getLogger(): AglynLogger {
-    return this.#logger
+  //region Compression/Decompression
+  public static compress<T>(value: T): Bytes {
+    return encode(value)
   }
-  public setLogger(value: AglynLogger): this {
-    this.#logger = value
-    return this
+  public static decompress<T>(value: Bytes): T {
+    return decompress(value)
   }
-  public setLogLevel(val) {
-    return this.#logger.setLogLevel(val) as any
+  //endregion
+
+  //region Built-in
+  public get [Symbol.toStringTag](): string {
+    return TAG
   }
-  public setUserLogHandler(logCallback, options) {
-    return this.#logger.setUserLogHandler(logCallback, options)
+  public toString() {
+    return `[object ${this[Symbol.toStringTag]}]`
   }
-  public debug(...args) {
-    return this.#logger.debug(...args)
-  }
-  public error(...args) {
-    return this.#logger.error(...args)
-  }
-  public info(...args) {
-    return this.#logger.info(...args)
-  }
-  public log(...args) {
-    return this.#logger.log(...args)
-  }
-  public warn(...args) {
-    return this.#logger.warn(...args)
-  }
-  public get logHandler() {
-    return this.#logger.logHandler
-  }
-  public get logLevel() {
-    return this.#logger.logLevel
-  }
-  public get userLogHandler() {
-    return this.#logger.userLogHandler
+  public toJSON() {
+    return {
+      namespace: Aglyn.namespace,
+      version: Aglyn.version,
+      platform: Aglyn.platform,
+      created: this.#createdAt.toJSON(),
+      options: this.#options,
+    }
   }
   //endregion
 }
+
+export interface Node {}
+
+export namespace Aglyn {}
