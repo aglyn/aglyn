@@ -15,4 +15,16 @@
  * limitations under the License.
  */
 
-export * from '@aglyn/shared-ui-color-picker/color-picker'
+/* eslint-disable */
+export default {
+  displayName: 'besigner-ui-color-picker',
+  preset: '../../../../jest.preset.js',
+  transform: {
+    '^.+\\.[tj]sx?$': [
+      '@swc/jest',
+      { jsc: { transform: { react: { runtime: 'automatic' } } } },
+    ],
+  },
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  coverageDirectory: '../../../../coverage/libs/besigner/ui/color-picker',
+}

@@ -86,13 +86,11 @@ declare module '@mui/material/styles/createPalette' {
 
   interface PaletteOptions {
     tertiary?: ExtraColorOptions
-    quaternary?: ExtraColorOptions
     surface?: ExtraColorOptions
   }
 
   interface Palette {
     tertiary: ExtraColor
-    quaternary: ExtraColor
     surface: ExtraColor
   }
 }
@@ -157,7 +155,6 @@ declare module '@mui/material/styles' {
   interface PaletteOptions {
     background?: PaletteOptions['background']
     tertiary?: ExtraColorOptions
-    quaternary?: ExtraColorOptions
     surface?: ExtraColorOptions
     svgBackground?: IActionStates
     svgFilled?: IActionStates
@@ -168,7 +165,6 @@ declare module '@mui/material/styles' {
   interface Palette {
     background: Palette['background']
     tertiary: ExtraColor
-    quaternary: ExtraColor
     surface: ExtraColor
     svgBackground: IActionStates
     svgFilled: IActionStates

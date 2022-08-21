@@ -15,14 +15,4 @@
  * limitations under the License.
  */
 
-export interface IActionStates {
-  main: string
-  hover: string
-  active: string
-  focus: string
-}
-
-export interface ColorPropOverrides {
-  tertiary: true
-  surface: true
-}
+export * from './lib/box-styler'

@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-import { deepPurple, lightBlue } from '@mui/material/colors'
+import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
-import type { IActionStates } from './theme.types'
 import createResponsiveTheme from './util/create-responsive-theme'
 
 export type ColorVariant = 'light' | 'dark'
@@ -27,82 +26,93 @@ export type OrdinalIdentifier<K extends string = ''> =
   | 'primary'
   | 'secondary'
   | 'tertiary'
-  | 'quaternary'
 export type OrdinalRecord<T extends OrdinalIdentifier = OrdinalIdentifier> =
   Pick<PaletteOptions, T>
 export type PrimaryRecord = OrdinalRecord<'primary'>['primary']
 export type SecondaryRecord = OrdinalRecord<'secondary'>['secondary']
 export type TertiaryRecord = OrdinalRecord<'tertiary'>['tertiary']
-export type QuaternaryRecord = OrdinalRecord<'quaternary'>['quaternary']
 export type ActionIdentifier = 'svgBackground' | 'svgFilled' | 'svgStroke'
 export type ActionRecord = Pick<PaletteOptions, ActionIdentifier>
-
-export const status = {
-  info: {
-    main: '#E53935',
-    light: '#EA605D',
-    dark: '#A02725',
-    contrastText: '#FFFFFF',
-  },
-  error: {
-    main: '#E53935',
-    light: '#EA605D',
-    dark: '#A02725',
-    contrastText: '#FFFFFF',
-  },
-  success: {
-    main: '#4CAF50',
-    light: '#81C784',
-    dark: '#388E3C',
-    contrastText: '#000000DE',
-  },
-  warning: {
-    main: '#FFAB40',
-    light: '#FFBB66',
-    dark: '#B2772C',
-    contrastText: '#000000DE',
-  },
-}
-
-export const shadesOfGrey = {
-  50: '#FAFAFA',
-  100: '#F5F5F5',
-  200: '#EEEEEE',
-  300: '#E0E0E0',
-  400: '#BDBDBD',
-  500: '#9E9E9E',
-  600: '#757575',
-  700: '#616161',
-  800: '#424242',
-  900: '#212121',
-  A100: '#D5D5D5',
-  A200: '#AAAAAA',
-  A400: '#303030',
-  A700: '#616161',
-}
-
-export const backgroundsLight: BackgroundRecord = {
-  default: '#F5F5F5',
-  paper: '#FFFFFF',
-}
-export const backgroundsDark: BackgroundRecord = {
-  default: '#161c21',
-  paper: '#2a3440',
-}
 
 const colorScheme = {
   light: {
     primary: {
-      main: `#404C5C`,
-      contrastText: '#000000',
+      main: '#404C5C',
+      contrastText: '#FFFFFF',
     },
     secondary: {
-      main: lightBlue['800'],
-      contrastText: '#000000',
+      main: '#00b0ff',
+      contrastText: '#FFFFFF',
     },
     tertiary: {
-      main: deepPurple['A400'],
+      main: '#e040fb',
       contrastText: '#FFFFFF',
+    },
+    surface: {
+      main: `#F8F9FA`,
+      contrastText: '#000000',
+    },
+    background: {
+      default: '#F5F5F5',
+      paper: '#FFFFFF',
+    },
+    info: {
+      main: '#E53935',
+      light: '#EA605D',
+      dark: '#A02725',
+      contrastText: '#FFFFFF',
+    },
+    error: {
+      main: '#E53935',
+      light: '#EA605D',
+      dark: '#A02725',
+      contrastText: '#FFFFFF',
+    },
+    success: {
+      main: '#4CAF50',
+      light: '#81C784',
+      dark: '#388E3C',
+      contrastText: '#000000DE',
+    },
+    warning: {
+      main: '#FFAB40',
+      light: '#FFBB66',
+      dark: '#B2772C',
+      contrastText: '#000000DE',
+    },
+    grey: {
+      50: '#FAFAFA',
+      100: '#F5F5F5',
+      200: '#EEEEEE',
+      300: '#E0E0E0',
+      400: '#BDBDBD',
+      500: '#9E9E9E',
+      600: '#757575',
+      700: '#616161',
+      800: '#424242',
+      900: '#212121',
+      A100: '#D5D5D5',
+      A200: '#AAAAAA',
+      A400: '#303030',
+      A700: '#616161',
+    },
+    svgBackground: {
+      main: '#FAFAFA',
+      hover: '#FAFAFA',
+      active: '#FAFAFA',
+      focus: '#FAFAFA',
+    },
+    svgFilled: {
+      main: '#9E9E9E',
+      hover: lightBlue['400'],
+      active: lightBlue['400'],
+      focus: lightBlue['400'],
+    },
+    svgStroke: {
+      main: '#FFFFFF',
+      hover: '#FFFFFF',
+      active: '#FFFFFF',
+      focus: '#FFFFFF',
     },
   },
   dark: {
@@ -111,145 +121,72 @@ const colorScheme = {
       contrastText: '#FFFFFF',
     },
     secondary: {
-      main: lightBlue['A400'],
-      contrastText: '#000000',
-    },
-    tertiary: {
-      main: '#AB47BC',
+      main: '#00b0ff',
       contrastText: '#FFFFFF',
     },
+    tertiary: {
+      main: '#e040fb',
+      contrastText: '#FFFFFF',
+    },
+    surface: {
+      main: `#202934`,
+      contrastText: '#FFFFFF',
+    },
+    background: {
+      default: '#161c21',
+      paper: '#2a3440',
+    },
+    info: {
+      main: '#1e88e5',
+      contrastText: '#FFFFFF',
+    },
+    error: {
+      main: '#E53935',
+      contrastText: '#FFFFFF',
+    },
+    success: {
+      main: '#4CAF50',
+      contrastText: '#000000DE',
+    },
+    warning: {
+      main: '#FFAB40',
+      contrastText: '#000000DE',
+    },
+    grey: {
+      50: '#FAFAFA',
+      100: '#F5F5F5',
+      200: '#EEEEEE',
+      300: '#E0E0E0',
+      400: '#BDBDBD',
+      500: '#9E9E9E',
+      600: '#757575',
+      700: '#616161',
+      800: '#424242',
+      900: '#212121',
+      A100: '#D5D5D5',
+      A200: '#AAAAAA',
+      A400: '#303030',
+      A700: '#616161',
+    },
+    svgBackground: {
+      main: '#FAFAFA',
+      hover: '#FAFAFA',
+      active: '#FAFAFA',
+      focus: '#FAFAFA',
+    },
+    svgFilled: {
+      main: '#9E9E9E',
+      hover: lightBlue['A100'],
+      active: lightBlue['A100'],
+      focus: lightBlue['A100'],
+    },
+    svgStroke: {
+      main: '#FFFFFF',
+      hover: '#FFFFFF',
+      active: '#FFFFFF',
+      focus: '#FFFFFF',
+    },
   },
-}
-
-export const ordinalBgSecondaryLight: QuaternaryRecord = {
-  main: `#F8F9FA`,
-  contrastText: '#000000',
-}
-export const ordinalBgSecondaryDark: QuaternaryRecord = {
-  main: `#202934`,
-  contrastText: '#FFFFFF',
-}
-
-export const ordinalPrimaryLight: PrimaryRecord = {
-  main: '#404C5C',
-  // light: '#666F7C',
-  // dark: '#2C3540',
-  // contrastText: '#FFFFFF',
-}
-export const ordinalPrimaryDark: PrimaryRecord = {
-  main: '#2C3540',
-  // light: '#3D4B5C',
-  // dark: '#202830',
-  // contrastText: '#FFFFFF',
-}
-
-export const ordinalSecondaryLight: SecondaryRecord = {
-  main: '#0091ea',
-  // contrastText: '#000000',
-  // light: '#40C4FF',
-  // dark: '#0277BD',
-  // contrastText: '#FFFFFF',
-}
-export const ordinalSecondaryDark: SecondaryRecord = {
-  main: '#00b0ff',
-  // contrastText: '#000000',
-  // light: '#40C4FF',
-  // dark: '#026CA0',
-}
-
-export const ordinalTertiaryLight: TertiaryRecord = {
-  main: '#E040FB',
-  // contrastText: '#FFFFFF',
-  // light: '#AF52BF',
-  // dark: '#6D1B7B',
-}
-export const ordinalTertiaryDark: TertiaryRecord = {
-  main: '#E040FB',
-  // contrastText: '#FFFFFF',
-  // light: '#BA68C8',
-  // dark: '#9C27B0',
-}
-
-export const ordinalQuaternaryLight: QuaternaryRecord = {
-  main: '#673ab7',
-  // light: '#E666FB',
-  // dark: '#9C2CAF',
-  // contrastText: '#FFFFFF',
-}
-export const ordinalQuaternaryDark: QuaternaryRecord = {
-  main: '#673ab7',
-  // light: '#E666FB',
-  // dark: '#9C2CAF',
-  // contrastText: '#FFFFFF',
-}
-
-export const ordinalLight: OrdinalRecord = {
-  primary: { ...ordinalPrimaryLight },
-  secondary: { ...ordinalSecondaryLight },
-  tertiary: { ...ordinalTertiaryLight },
-  quaternary: { ...ordinalQuaternaryLight },
-}
-export const ordinalDark: OrdinalRecord = {
-  primary: { ...ordinalPrimaryDark },
-  secondary: { ...ordinalSecondaryDark },
-  tertiary: { ...ordinalTertiaryDark },
-  quaternary: { ...ordinalQuaternaryDark },
-}
-
-export const otherColorsLight = {
-  surface: { ...ordinalBgSecondaryLight },
-}
-export const otherColorsDark = {
-  surface: { ...ordinalBgSecondaryDark },
-}
-
-export const actionSvgBgLight: IActionStates = {
-  main: shadesOfGrey[50],
-  hover: shadesOfGrey[50],
-  active: shadesOfGrey[50],
-  focus: shadesOfGrey[50],
-}
-export const actionSvgBgDark: IActionStates = {
-  main: shadesOfGrey[50],
-  hover: shadesOfGrey[50],
-  active: shadesOfGrey[50],
-  focus: shadesOfGrey[50],
-}
-export const actionSvgFilledLight: IActionStates = {
-  main: shadesOfGrey[500],
-  hover: ordinalSecondaryLight.light,
-  active: ordinalSecondaryLight.light,
-  focus: ordinalSecondaryLight.light,
-}
-export const actionSvgFilledDark: IActionStates = {
-  main: shadesOfGrey[500],
-  hover: ordinalSecondaryDark.light,
-  active: ordinalSecondaryDark.light,
-  focus: ordinalSecondaryDark.light,
-}
-
-export const actionSvgStrokeLight: IActionStates = {
-  main: '#FFFFFF',
-  hover: '#FFFFFF',
-  active: '#FFFFFF',
-  focus: '#FFFFFF',
-}
-export const actionSvgStrokeDark: IActionStates = {
-  main: '#FFFFFF',
-  hover: '#FFFFFF',
-  active: '#FFFFFF',
-  focus: '#FFFFFF',
-}
-
-export const actionsLight: ActionRecord = {
-  svgBackground: actionSvgBgLight,
-  svgFilled: actionSvgFilledLight,
-  svgStroke: actionSvgStrokeLight,
-}
-export const actionsDark: ActionRecord = {
-  svgBackground: actionSvgBgDark,
-  svgFilled: actionSvgFilledDark,
-  svgStroke: actionSvgStrokeDark,
 }
 
 const shadowKeyUmbraOpacity = 0.2
@@ -493,24 +430,14 @@ export const consoleOptions: ThemeOptions = {
   ...baseOptions,
   palette: {
     mode: 'light',
-    background: { ...backgroundsLight },
-    grey: { ...shadesOfGrey },
-    ...ordinalLight,
-    ...otherColorsLight,
-    ...actionsLight,
-    ...status,
+    ...colorScheme.light,
   },
 }
 export const consoleOptionsDark: ThemeOptions = {
   ...baseOptions,
   palette: {
     mode: 'dark',
-    background: { ...backgroundsDark },
-    grey: { ...shadesOfGrey },
-    ...ordinalDark,
-    ...otherColorsDark,
-    ...actionsDark,
-    ...status,
+    ...colorScheme.dark,
   },
 }
 

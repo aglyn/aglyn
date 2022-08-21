@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { BoxStyler } from '@aglyn/besigner-ui-box-styler'
 import { updateCanvasElement } from '@aglyn/core-data-app'
 import { FieldComponentType, type NodeId } from '@aglyn/core-data-foundation'
 import {
@@ -433,6 +434,8 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
 
     return (
       <>
+        <BoxStyler />
+
         <FormRenderer
           ref={ref}
           FormTemplate={ElementPropsFormTemplate}
