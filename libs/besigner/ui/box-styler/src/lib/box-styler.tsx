@@ -89,10 +89,19 @@ const Box = styled('div')(({ theme }) => {
     [`&.${classKeys.padding}`]: {
       height: 104,
       minWidth: 168,
+      padding: 2,
       borderStyle: 'dashed',
       borderWidth: 1,
       borderColor: theme.palette.success.dark,
       backgroundColor: alpha(darken(theme.palette.surface.main, 0.12), 0.96),
+      color: theme.palette.common.white,
+      background: [
+        'linear-gradient(',
+        '65deg, ',
+        `${alpha(theme.palette.tertiary.main, 0.12)}, `,
+        `${alpha(theme.palette.secondary.main, 0.12)}`,
+        ') content-box',
+      ].join(''),
     },
     [`&.${classKeys.node}`]: {
       minHeight: 24,
@@ -101,14 +110,8 @@ const Box = styled('div')(({ theme }) => {
       borderStyle: 'solid',
       borderWidth: 1,
       borderColor: theme.palette.info.dark,
-      backgroundColor: alpha(darken(theme.palette.surface.main, 0.24), 0.96),
-      // background: [
-      //   'linear-gradient(',
-      //   '65deg, ',
-      //   `${alpha(theme.palette.tertiary.main, 0.59)}, `,
-      //   `${alpha(theme.palette.secondary.main, 0.59)}`,
-      //   ') border-box',
-      // ].join(''),
+      color: theme.palette.surface.contrastText,
+      backgroundColor: alpha(darken(theme.palette.surface.main, 0.24), 0.12),
     },
   }
 })
@@ -186,8 +189,6 @@ const DimensionControl = (props: DimensionControlProps) => {
       {parsed.unit || 'default'}
     </IconButton>
   )
-
-  console.log('parsed', parsed)
 
   return (
     <div>

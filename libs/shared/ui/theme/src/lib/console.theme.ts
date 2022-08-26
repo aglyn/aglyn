@@ -57,27 +57,19 @@ const colorScheme = {
       paper: '#FFFFFF',
     },
     info: {
-      main: '#E53935',
-      light: '#EA605D',
-      dark: '#A02725',
+      main: '#1e88e5',
       contrastText: '#FFFFFF',
     },
     error: {
       main: '#E53935',
-      light: '#EA605D',
-      dark: '#A02725',
       contrastText: '#FFFFFF',
     },
     success: {
       main: '#4CAF50',
-      light: '#81C784',
-      dark: '#388E3C',
       contrastText: '#000000DE',
     },
     warning: {
       main: '#FFAB40',
-      light: '#FFBB66',
-      dark: '#B2772C',
       contrastText: '#000000DE',
     },
     grey: {
