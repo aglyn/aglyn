@@ -421,7 +421,7 @@ const TextAlignToggleButtonGroup = (props) => {
           exclusive
         >
           {field.options.map((option) => (
-            <ToggleButton value={option.value} size="small">
+            <ToggleButton key={option.value} value={option.value}>
               <Tooltip key={option.value} title={option.label}>
                 <MdiIcon path={option.icon} fontSize="inherit" />
               </Tooltip>
