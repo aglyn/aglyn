@@ -369,7 +369,7 @@ const ComponentGroupDetails = forwardRef<any, ComponentGroupDetailsProps>(
       <Box ref={ref} {...rest}>
         <Grid container spacing={2}>
           {item?.items?.map((i, index) => (
-            <Grid key={i?.id ?? index} xs={6} item>
+            <Grid key={i?.presetId ?? index} xs={6} item>
               <ComponentGridItem item={i} />
             </Grid>
           ))}
@@ -415,8 +415,8 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
     sortedItems.forEach((item) => {
       const { category, data } = item || {}
       const { bundleId } = data || {}
-      const bundled = bundleId && bundles.find((i) => i.id === bundleId)
-      const categorized = category && cats.find((i) => i.id === category)
+      const bundled = bundleId && bundles.find((i) => i.presetId === bundleId)
+      const categorized = category && cats.find((i) => i.presetId === category)
 
       if (bundled) bundled?.items?.push(item)
       if (categorized) categorized?.items?.push(item)

@@ -215,7 +215,7 @@ export class AglynComponentsController
         }
         if (_isArr(schema.presets)) {
           schema.presets.forEach((i) => {
-            this.presets.set(i.id, i)
+            this.presets.set(i.presetId, i)
           })
         }
       },
@@ -260,7 +260,7 @@ export class AglynComponentsController
             // TODO: throw errorFactory error
           }
           this.schemas.get(key)?.presets?.forEach((i) => {
-            this.presets.delete(i.id)
+            this.presets.delete(i.presetId)
           })
           this.components.delete(key)
           this.schemas.delete(key)
@@ -270,7 +270,7 @@ export class AglynComponentsController
           this.bundles.set(bundleId, bundle)
         } else {
           this.schemas.get(componentId)?.presets?.forEach((i) => {
-            this.presets.delete(i.id)
+            this.presets.delete(i.presetId)
           })
           this.schemas.delete(componentId)
           this.components.delete(componentId)

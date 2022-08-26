@@ -69,7 +69,7 @@ export const schema: AglynComponentSchema<ContainerProps> = {
   ],
   presets: [
     {
-      id: generatePresetId(ID),
+      presetId: generatePresetId(ID),
       label: 'Container',
       icon: {
         path: mdiViewArrayOutline.path,

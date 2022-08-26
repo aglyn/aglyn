@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import { PartialKeys } from '@aglyn/shared-data-types'
+import { _isArr } from '@aglyn/shared-util-guards'
+import { copy } from '@aglyn/shared-util-tools'
 import { nanoid } from 'nanoid'
 import Node, { type NodeId, type NodeSchema } from './node'
 
@@ -22,9 +25,10 @@ const NODE_ID_LENGTH = 10
 
 export default class CanvasManager {
   public static Node = Node
+  public static Component = Node
   public nodes = new Map<NodeId, Node<any>>()
 
-  constructor(nodes: Record<NodeId, NodeSchema>) {
+  constructor(nodes: Record<NodeId, NodeSchema> = {}) {
     Object.entries(nodes).forEach(([, schema]) => {
       this.setNode(new CanvasManager.Node(schema))
     })
@@ -38,9 +42,13 @@ export default class CanvasManager {
     return nanoid(NODE_ID_LENGTH)
   }
 
-  public static createNode<P>(schema: Omit<NodeSchema<P>, '$id'>): Node<P> {
-    const $id = CanvasManager.createNodeId()
-    return new CanvasManager.Node({ ...schema, $id })
+  public static createNode<P>(
+    schema: PartialKeys<NodeSchema<P>, '$id'>,
+  ): Node<P> {
+    return new CanvasManager.Node({
+      $id: CanvasManager.createNodeId(),
+      ...schema,
+    })
   }
 
   public setNode<P>(node: Node<P>): this {
@@ -48,7 +56,20 @@ export default class CanvasManager {
     return this
   }
 
+  public deleteChildren<P>(node: Node<P>): this {
+    const children = Array.isArray(node.nodes) ? node.nodes : []
+    for (const childId of children) {
+      const child = this.getNode(childId)
+      if (child) {
+        this.deleteChildren(child)
+        this.deleteNode(child)
+      }
+    }
+    return this
+  }
+
   public deleteNode<P>(node: Node<P>): this {
+    this.deleteChildren(node)
     this.nodes.delete(node.$id)
     return this
   }
@@ -57,8 +78,24 @@ export default class CanvasManager {
     return this.nodes.get($id)
   }
 
-  public duplicateNode<P>(node: Node<P>): Node<P> {
-    return CanvasManager.createNode({ ...node.toJSON() })
+  public duplicateNode<P>(node: Node<P>, parentId?: NodeId): Node<P> {
+    const copied = CanvasManager.createNode({
+      ...copy(node.toJSON()),
+      $id: CanvasManager.createNodeId(),
+    })
+    copied.$id = CanvasManager.createNodeId()
+    copied.parentId = parentId
+    copied.nodes = []
+
+    for (const childId of _isArr(node.nodes) ? node.nodes : []) {
+      const oldChild = this.getNode(childId)
+      if (oldChild) {
+        const newChild = this.duplicateNode(oldChild, copied.$id)
+        copied.nodes.push(newChild.$id)
+      }
+    }
+    this.setNode(copied)
+    return copied
   }
 
   public reparentNode(
@@ -67,10 +104,10 @@ export default class CanvasManager {
     newParent: Node<any>,
     index: number,
   ): this {
-    oldParent.elements = oldParent.elements.filter((id) => id !== node.$id)
+    oldParent.nodes = oldParent.nodes.filter((id) => id !== node.$id)
     node.parentId = newParent.$id
-    if (isNaN(index)) newParent.elements.push(node.$id)
-    else newParent.elements.splice(index, 0, node.$id)
+    if (isNaN(index)) newParent.nodes.push(node.$id)
+    else newParent.nodes.splice(index, 0, node.$id)
 
     this.nodes.set(oldParent.$id, oldParent)
     this.nodes.set(newParent.$id, newParent)

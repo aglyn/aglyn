@@ -42,7 +42,7 @@ export const schema: AglynComponentSchema<ListProps> = {
   ],
   presets: [
     {
-      id: generatePresetId(ID),
+      presetId: generatePresetId(ID),
       label: 'List',
       icon: { path: mdiFormatListBulletedSquare.path },
       category: ComponentCategory.DATA_DISPLAY,

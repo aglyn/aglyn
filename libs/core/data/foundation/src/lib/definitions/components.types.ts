@@ -255,7 +255,7 @@ export type NodePresetData = Omit<AglynNodeSchema, '$id' | 'elements'> & {
 }
 
 export type AglynNodePresetSchema = {
-  id: PresetId
+  presetId: PresetId
   label: string
   componentId?: ComponentId
   bundleId?: BundleId
@@ -326,10 +326,10 @@ export interface AglynAttributeSchema extends Dictionary<any> {
 }
 
 export interface AglynBundleSchema {
-  readonly bundleId: BundleId
-  componentIds: ComponentId[]
+  bundleId: BundleId
+  componentIds?: ComponentId[]
   // Metadata
-  displayName: string
+  displayName?: string
   title?: string
   subtitle?: string
   description?: string

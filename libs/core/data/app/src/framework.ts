@@ -53,3 +53,5 @@ export * from './lib/controllers/aglyn-canvas.controller'
 export * from './lib/controllers/aglyn-commands.controller'
 export * from './lib/controllers/aglyn-components.controller'
 export * from './lib/controllers/aglyn-contexts.controller'
+
+export * from './lib/future/aglyn'

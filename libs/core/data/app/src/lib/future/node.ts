@@ -26,7 +26,7 @@ export interface NodeSchema<P = JSX.AnyProps> {
   parentId?: NodeId
   sx?: JSX.SxProps
   props?: P
-  elements?: NodeId[]
+  nodes?: NodeId[]
 }
 
 export default class Node<P = JSX.AnyProps> {
@@ -74,11 +74,11 @@ export default class Node<P = JSX.AnyProps> {
     this.schema.props = value
   }
 
-  public get elements(): NodeId[] {
-    return this.schema.elements
+  public get nodes(): NodeId[] {
+    return this.schema.nodes
   }
-  public set elements(value: NodeId[]) {
-    this.schema.elements = value
+  public set nodes(value: NodeId[]) {
+    this.schema.nodes = value
   }
 
   constructor(schema: NodeSchema<P>) {
@@ -89,7 +89,7 @@ export default class Node<P = JSX.AnyProps> {
       parentId: schema.parentId,
       sx: Array.isArray(schema.sx) ? [...schema.sx] : [],
       props: { ...schema.props },
-      elements: Array.isArray(schema.elements) ? [...schema.elements] : [],
+      nodes: Array.isArray(schema.nodes) ? [...schema.nodes] : [],
     }
   }
 
@@ -101,7 +101,7 @@ export default class Node<P = JSX.AnyProps> {
       parentId: this.parentId,
       sx: this.sx,
       props: this.props,
-      elements: this.elements,
+      nodes: this.nodes,
     }
   }
 }

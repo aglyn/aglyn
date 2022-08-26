@@ -26,16 +26,15 @@ import {
 } from '@aglyn/core-data-foundation'
 import { LogLevelString } from '@aglyn/shared-util-logger'
 import { ITimestamp, Timestamp } from '@aglyn/shared-util-timestamp'
-import {
-  decode,
-  type DecodeOptions,
-  encode,
-  type EncodeOptions,
-} from '@msgpack/msgpack'
+import { type DecodeOptions, type EncodeOptions } from '@msgpack/msgpack'
 import type { SplitUndefined } from '@msgpack/msgpack/src/context'
 import { EventEmitter2 } from 'eventemitter2'
 import UAParser from 'ua-parser-js'
-import DependencyManager from './dependency-manager'
+import ComponentManager from './components-manager'
+import DependencyManager, {
+  type Dependency,
+  type DependencyId,
+} from './dependency-manager'
 import { name, version } from './package'
 
 const TAG = 'Aglyn'
@@ -95,19 +94,24 @@ export enum AglynEvent {
   COMPONENT_BUNDLE_REGISTERED = 'event:components:registered-bundle',
   COMPONENT_BUNDLE_UNREGISTERING = 'event:components:unregistering-bundle',
   COMPONENT_BUNDLE_UNREGISTERED = 'event:components:unregistered-bundle',
+  COMPONENT_PRESET_REGISTERING = 'event:components:registering-preset',
+  COMPONENT_PRESET_REGISTERED = 'event:components:registered-preset',
+  COMPONENT_PRESET_UNREGISTERING = 'event:components:unregistering-preset',
+  COMPONENT_PRESET_UNREGISTERED = 'event:components:unregistered-preset',
 }
 
 export interface AglynConfig {
   logLevel?: LogLevelString
 }
 
-export default class Aglyn {
+export class Aglyn {
   public static readonly namespace = name
   public static readonly version = version
   public static readonly platform = new UAParser()
   public static readonly errorFactory = AGLYN_ERROR
   public static readonly logger = AGLYN_LOGGER
   public static readonly emitter = new EventEmitter2()
+  public static readonly components = ComponentManager
 
   //region Properties
   readonly #createdAt: ITimestamp
@@ -118,11 +122,6 @@ export default class Aglyn {
   readonly #config: AglynConfig = {}
   public get config(): AglynConfig {
     return this.#config
-  }
-
-  #depends: DependencyManager = new DependencyManager()
-  public get depends(): DependencyManager {
-    return this.#depends
   }
 
   #canvas: IAglynCanvasController = null
@@ -151,9 +150,10 @@ export default class Aglyn {
   }
   //endregion
 
-  public static instance: Aglyn
-  public static getInstance(appName?: string, config?: AglynConfig) {
-    return (this.instance ||= new Aglyn(appName, config))
+  protected static singleton: Aglyn
+  public static getSingleton(appName?: string, config?: AglynConfig) {
+    if (!this.singleton) this.singleton = new this(appName, config)
+    return this.singleton
   }
 
   protected constructor(
@@ -163,18 +163,11 @@ export default class Aglyn {
     this.#config = { ...config }
     this.#createdAt = Timestamp.now()
     this.setupLogger()
-    this.setupDepends()
   }
 
   //region Setup/Breakdown
   private setupLogger() {
     Aglyn.logger.setLogLevel(this.#config.logLevel)
-  }
-  private setupDepends(): void {
-    this.#depends.addDependencies([])
-  }
-  private breakdownDepends() {
-    this.#depends.destroyDependencies()
   }
   //endregion
 
@@ -274,23 +267,7 @@ export default class Aglyn {
     return this
   }
   public onDestroy(): this {
-    this.breakdownDepends()
     return this
-  }
-  //endregion
-
-  //region Compression/Decompression
-  public static encode<ContextType = undefined>(
-    value: unknown,
-    options?: EncodeOptions<SplitUndefined<ContextType>>,
-  ): Uint8Array {
-    return encode(value, options)
-  }
-  public static decode<ContextType = undefined>(
-    buffer: ArrayLike<number> | BufferSource,
-    options?: DecodeOptions<SplitUndefined<ContextType>>,
-  ): unknown {
-    return decode(buffer, options)
   }
   //endregion
 
@@ -314,6 +291,40 @@ export default class Aglyn {
   //endregion
 }
 
-export interface Node {}
+//region Dependency Management
+export namespace Aglyn {
+  export const depends: DependencyManager = new DependencyManager()
+  export function addDependency(dependency: Dependency) {
+    depends.addDependency(dependency)
+    return this
+  }
+  export function removeDependency(dependencyId: DependencyId) {
+    depends.removeDependency(dependencyId)
+    return this
+  }
+  export function getDependency(dependencyId: DependencyId) {
+    return depends.getDependency(dependencyId)
+  }
+}
+//endregion
 
-export namespace Aglyn {}
+//region Compression/Decompression
+export namespace Aglyn {
+  export function encode<ContextType = undefined>(
+    value: unknown,
+    options?: EncodeOptions<SplitUndefined<ContextType>>,
+  ): Uint8Array {
+    return encode(value, options)
+  }
+  export function decode<ContextType = undefined>(
+    buffer: ArrayLike<number> | BufferSource,
+    options?: DecodeOptions<SplitUndefined<ContextType>>,
+  ): unknown {
+    return decode(buffer, options)
+  }
+}
+//endregion
+
+export default Aglyn
+
+console.log('aglyn', Aglyn, Aglyn.getSingleton(), Aglyn.depends)
