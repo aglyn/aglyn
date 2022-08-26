@@ -117,7 +117,7 @@ const DimensionControl = ({ dimension }: { dimension: BoxDimension }) => {
   const [menuOpen, setMenuOpen] = useState(false)
   const [iconRef, setIconRef] = useState<any>()
   const toggleMenu = () => setMenuOpen((prev) => !prev)
-  const handleChange = (type: 'value' | 'unit') => (value) => {
+  const handleChange = (type: 'value' | 'unit') => (value: any) => {
     setDimension((prev) => ({ ...prev, [type]: value }))
     setMenuOpen(false)
   }

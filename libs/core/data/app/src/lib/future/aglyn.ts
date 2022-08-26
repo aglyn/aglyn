@@ -24,12 +24,16 @@ import {
   IAglynContextsController,
   IAglynExtensionsController,
 } from '@aglyn/core-data-foundation'
-import { decompress } from '@aglyn/core-util-app'
 import { LogLevelString } from '@aglyn/shared-util-logger'
 import { ITimestamp, Timestamp } from '@aglyn/shared-util-timestamp'
-import { encode } from '@msgpack/msgpack'
+import {
+  decode,
+  type DecodeOptions,
+  encode,
+  type EncodeOptions,
+} from '@msgpack/msgpack'
+import type { SplitUndefined } from '@msgpack/msgpack/src/context'
 import { EventEmitter2 } from 'eventemitter2'
-import { Bytes } from 'firebase/firestore'
 import UAParser from 'ua-parser-js'
 import DependencyManager from './dependency-manager'
 import { name, version } from './package'
@@ -111,9 +115,9 @@ export default class Aglyn {
     return this.#createdAt
   }
 
-  readonly #options: AglynConfig = {}
-  public get options(): AglynConfig {
-    return this.#options
+  readonly #config: AglynConfig = {}
+  public get config(): AglynConfig {
+    return this.#config
   }
 
   #depends: DependencyManager = new DependencyManager()
@@ -148,12 +152,15 @@ export default class Aglyn {
   //endregion
 
   public static instance: Aglyn
-  public static getInstance(public readonly appName?: string) {}
+  public static getInstance(appName?: string, config?: AglynConfig) {
+    return (this.instance ||= new Aglyn(appName, config))
+  }
 
-  public static setConfig(config: AglynConfig)
-
-  protected constructor(public readonly appName?: string) {
-    this.#options = { ...options }
+  protected constructor(
+    public readonly appName?: string,
+    config?: AglynConfig,
+  ) {
+    this.#config = { ...config }
     this.#createdAt = Timestamp.now()
     this.setupLogger()
     this.setupDepends()
@@ -161,7 +168,7 @@ export default class Aglyn {
 
   //region Setup/Breakdown
   private setupLogger() {
-    Aglyn.logger.setLogLevel(this.#options.logLevel)
+    Aglyn.logger.setLogLevel(this.#config.logLevel)
   }
   private setupDepends(): void {
     this.#depends.addDependencies([])
@@ -204,9 +211,9 @@ export default class Aglyn {
       },
       {
         startEvent: AglynEvent.APP_INITIALIZING,
-        startPayload: [{ appName: this.#options.appName }],
+        startPayload: [{ appName: Aglyn.namespace }],
         endEvent: AglynEvent.APP_INITIALIZED,
-        endPayload: [{ appName: this.#options.appName }],
+        endPayload: [{ appName: this.appName }],
       },
     )
     return this
@@ -219,9 +226,9 @@ export default class Aglyn {
       },
       {
         startEvent: AglynEvent.APP_ACTIVATING,
-        startPayload: [{ appName: this.#options.appName }],
+        startPayload: [{ appName: this.appName }],
         endEvent: AglynEvent.APP_ACTIVATED,
-        endPayload: [{ appName: this.#options.appName }],
+        endPayload: [{ appName: this.appName }],
       },
     )
     return this
@@ -234,9 +241,9 @@ export default class Aglyn {
       },
       {
         startEvent: AglynEvent.APP_DEACTIVATING,
-        startPayload: [{ appName: this.#options.appName }],
+        startPayload: [{ appName: this.appName }],
         endEvent: AglynEvent.APP_DEACTIVATED,
-        endPayload: [{ appName: this.#options.appName }],
+        endPayload: [{ appName: this.appName }],
       },
     )
     return this
@@ -249,9 +256,9 @@ export default class Aglyn {
       },
       {
         startEvent: AglynEvent.APP_DESTROYING,
-        startPayload: [{ appName: this.#options.appName }],
+        startPayload: [{ appName: this.appName }],
         endEvent: AglynEvent.APP_DESTROYED,
-        endPayload: [{ appName: this.#options.appName }],
+        endPayload: [{ appName: this.appName }],
       },
     )
     return this
@@ -267,16 +274,23 @@ export default class Aglyn {
     return this
   }
   public onDestroy(): this {
+    this.breakdownDepends()
     return this
   }
   //endregion
 
   //region Compression/Decompression
-  public static compress<T>(value: T): Bytes {
-    return encode(value)
+  public static encode<ContextType = undefined>(
+    value: unknown,
+    options?: EncodeOptions<SplitUndefined<ContextType>>,
+  ): Uint8Array {
+    return encode(value, options)
   }
-  public static decompress<T>(value: Bytes): T {
-    return decompress(value)
+  public static decode<ContextType = undefined>(
+    buffer: ArrayLike<number> | BufferSource,
+    options?: DecodeOptions<SplitUndefined<ContextType>>,
+  ): unknown {
+    return decode(buffer, options)
   }
   //endregion
 
@@ -293,7 +307,8 @@ export default class Aglyn {
       version: Aglyn.version,
       platform: Aglyn.platform,
       created: this.#createdAt.toJSON(),
-      options: this.#options,
+      appName: this.appName,
+      options: this.#config,
     }
   }
   //endregion
