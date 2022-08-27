@@ -54,5 +54,6 @@ export * from './lib/controllers/aglyn-commands.controller'
 export * from './lib/controllers/aglyn-components.controller'
 export * from './lib/controllers/aglyn-contexts.controller'
 
-export * from './lib/future/aglyn'
-export { AglynEvent } from '@aglyn/core-data-app/future/constants'
+import * as Aglyn from './lib/future/aglyn'
+
+console.log('aglyn', Aglyn)

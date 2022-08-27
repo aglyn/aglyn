@@ -15,7 +15,5 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
-
-export const version = pkg.version
-export const namespace = pkg.name
+export * from './node'
+export * as canvas from './nodes-manager'

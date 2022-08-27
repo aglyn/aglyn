@@ -15,7 +15,18 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
+import { DecodeOptions, EncodeOptions } from '@msgpack/msgpack'
+import { SplitUndefined } from '@msgpack/msgpack/src/context'
 
-export const version = pkg.version
-export const namespace = pkg.name
+export function encode<ContextType = undefined>(
+  value: unknown,
+  options?: EncodeOptions<SplitUndefined<ContextType>>,
+): Uint8Array {
+  return encode(value, options)
+}
+export function decode<ContextType = undefined>(
+  buffer: ArrayLike<number> | BufferSource,
+  options?: DecodeOptions<SplitUndefined<ContextType>>,
+): unknown {
+  return decode(buffer, options)
+}

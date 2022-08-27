@@ -15,7 +15,16 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
+import { NsErrorFactory } from '@aglyn/shared-util-errors'
+import { namespace } from '../constants'
 
-export const version = pkg.version
-export const namespace = pkg.name
+const AglynErrorMessage = {}
+
+export class ErrorManager extends NsErrorFactory {}
+
+const singleton = new NsErrorFactory(
+  namespace.split('/')[0],
+  namespace.split('/')[1],
+  AglynErrorMessage,
+)
+export default singleton

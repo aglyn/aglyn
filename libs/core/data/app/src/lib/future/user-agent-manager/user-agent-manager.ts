@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
+import UAParser from 'ua-parser-js'
 
-export const version = pkg.version
-export const namespace = pkg.name
+export class UserAgentManager extends UAParser {}
+
+const singleton = new UserAgentManager()
+export default singleton

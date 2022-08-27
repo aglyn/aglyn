@@ -15,6 +15,5 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
-
-export const { version, name } = pkg
+export * from './log-manager'
+export { default as logger } from './log-manager'

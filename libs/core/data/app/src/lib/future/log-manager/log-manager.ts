@@ -15,7 +15,14 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
+import { Logger, LogLevelString } from '@aglyn/shared-util-logger'
+import { namespace } from '../constants'
 
-export const version = pkg.version
-export const namespace = pkg.name
+export function setLogLevel(logLevel: LogLevelString) {
+  singleton.setLogLevel(logLevel)
+}
+
+export class LogManager extends Logger {}
+
+const singleton = new Logger(namespace)
+export default singleton

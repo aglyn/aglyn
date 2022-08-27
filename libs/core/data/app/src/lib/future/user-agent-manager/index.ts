@@ -15,7 +15,5 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
-
-export const version = pkg.version
-export const namespace = pkg.name
+export * from './user-agent-manager'
+export { default as platform } from './user-agent-manager'
