@@ -17,14 +17,14 @@
 
 import { makeAutoObservable } from 'mobx'
 import { nanoid } from 'nanoid'
-import type { BundleId } from '../bundle-manager'
+import type { PluginId } from '../plugin-manager'
 
 export type NodeId = string
 
 export interface NodeSchema<P = JSX.AnyProps> {
   $id: NodeId
   componentId: string
-  bundleId?: BundleId
+  bundleId?: PluginId
   parentId?: NodeId
   sx?: JSX.SxProps
   props?: P

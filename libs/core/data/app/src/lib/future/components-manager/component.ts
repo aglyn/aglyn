@@ -29,7 +29,7 @@ import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 import type { ComponentClass, ComponentProps } from 'react'
-import type { BundleId } from '../bundle-manager'
+import type { PluginId } from '../plugin-manager'
 import type { NodeId, NodeSchema } from '../screen-manager'
 
 export type ComponentId = string
@@ -91,8 +91,8 @@ export type ComponentsLinealOrder = [
   directiveType: ComponentsLinealDirectiveFlag,
   directiveDefinition:
     | Array<ComponentId>
-    | { bundles?: Array<BundleId>; components: Array<ComponentId> }
-    | { bundles: Array<BundleId>; components?: Array<ComponentId> },
+    | { bundles?: Array<PluginId>; components: Array<ComponentId> }
+    | { bundles: Array<PluginId>; components?: Array<ComponentId> },
 ]
 
 export interface AttributeSchema extends Dictionary<any> {
@@ -111,7 +111,7 @@ export interface AttributeSchema extends Dictionary<any> {
 }
 export interface ComponentSchema<P = any> {
   componentId: ComponentId
-  bundleId?: BundleId
+  bundleId?: PluginId
   kind?: 'element' | 'plaintext' | 'markdown'
 
   displayName: string

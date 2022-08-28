@@ -17,10 +17,10 @@
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { BundleId } from '../bundle-manager'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { ComponentId } from '../components-manager'
 import { ComponentCategory, NodePresetData } from '../components-manager'
+import { PluginId } from '../plugin-manager'
 
 export type PresetId = string
 
@@ -28,7 +28,7 @@ export type PresetSchema = {
   presetId: PresetId
   label: string
   componentId?: ComponentId
-  bundleId?: BundleId
+  bundleId?: PluginId
   description?: string
   icon?: MdiIconProps
   category?: string | ComponentCategory

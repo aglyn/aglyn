@@ -15,5 +15,5 @@
  * limitations under the License.
  */
 
-export * from './bundle'
-export * as bundles from './bundle-manager'
+export * from './plugin'
+export * as bundles from './plugin-manager'

@@ -16,8 +16,8 @@
  */
 
 import { _hasOwnProperty } from '@aglyn/shared-util-guards'
-import { bundles } from '../bundle-manager'
 import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
+import { bundles } from '../plugin-manager'
 import { ComponentId, ComponentSchema, ComponentType } from './component'
 
 export const factories: Record<ComponentId, ComponentType> = {}
