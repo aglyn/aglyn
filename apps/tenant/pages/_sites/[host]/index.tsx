@@ -15,18 +15,33 @@
  * limitations under the License.
  */
 
-import {
-  getTenantPageStaticPaths,
-  getTenantPageStaticProps,
-} from '@aglyn/tenant-feature-instance'
-import CatchAllPage from './[...slug]'
+// import {
+//   getTenantPageStaticPaths,
+//   getTenantPageStaticProps,
+// } from '@aglyn/tenant-feature-instance'
+
+export default function CatchAllPage(props) {
+  console.log('!!!!!CatchAllPage')
+  return <>{JSON.stringify(props, null, 2)}</>
+}
 
 export const getStaticPaths = async (context) => {
-  return getTenantPageStaticPaths(context)
+  console.log('!!!!!getStaticPaths props', context)
+  return {
+    paths: [
+      { params: { host: 'aa', slug: ['bb', 'cc'] } },
+      { params: { host: 'hh', slug: ['bb', 'cc'] } },
+    ],
+    fallback: false, // can also be true or 'blocking'
+  }
+  // return getTenantPageStaticPaths(context)
 }
 
 export const getStaticProps = async (context) => {
-  return getTenantPageStaticProps(context)
+  console.log('!!!!!getStaticProps')
+  return {
+    props: { context },
+    revalidate: 30, // never=false, always=1, since=SECONDS
+  }
+  // return getTenantPageStaticProps(context)
 }
-
-export default CatchAllPage

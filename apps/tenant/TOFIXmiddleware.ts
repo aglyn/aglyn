@@ -17,7 +17,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 
-export function middleware(req: NextRequest) {
+export function TOFIXmiddleware(req: NextRequest) {
   const reqHost = req.headers.get('host') || 'console.aglyn.io'
   const PORT = process.env.PORT
   const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
@@ -45,7 +45,7 @@ export function middleware(req: NextRequest) {
     default:
       const redirect = 'https://console.aglyn.io'
       console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '', redirect)
-      return NextResponse.redirect(new URL(redirect, req.url))
+      return NextResponse.redirect(redirect)
   }
 
   if (
@@ -55,20 +55,20 @@ export function middleware(req: NextRequest) {
   ) {
     const redirect = '/'
     console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '', redirect)
-    return NextResponse.redirect(new URL(redirect, req.url))
+    return NextResponse.redirect(redirect)
   }
   // url.hostname = 'my.localhost'
   // rewrite root application to `/home` folder
   if (reqHost === 'localhost:4500' || reqHost === 'platformize.vercel.app') {
     const rewrite = `/home${req.nextUrl.pathname}`
+    console.log('REWRITING!!!!!', req.nextUrl.pathname, '', rewrite)
     return NextResponse.rewrite(new URL(rewrite, req.url))
-    return NextResponse.rewrite(req.nextUrl)
   }
 
   // rewrite to the current hostname under the pages/_sites folder
   // the main logic component will happen in pages/_sites/[host]/[...path].tsx
   const rewrite = `/_sites/${tenant}${req.nextUrl.pathname}`
-  console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '', rewrite)
+  console.log('REWRITING!!!!!', req.nextUrl.pathname, '', rewrite)
   return NextResponse.rewrite(new URL(rewrite, req.url))
 }
 
@@ -77,8 +77,9 @@ export function middleware(req: NextRequest) {
  * E.g. if you decide to put all your posts under `/posts/[postSlug]`,
  * you'll need to add an extra matcher item "/posts/:path*".
  *
- * The reason we do this is to prevent the middleware from matching absolute
- * paths like "demo.vercel.pub/_sites/steven" and have the content from
+ * The reason we do this is to prevent the TOFIXmiddleware from matching
+ * absolute paths like "demo.vercel.pub/_sites/steven" and have the content
+ * from
  * `steven` be served.
  *
  * Here's a breakdown of each matcher item:
@@ -98,10 +99,10 @@ export function middleware(req: NextRequest) {
 export const config = {
   // prettier-ignore
   matcher: [
-    '/',
-    '/([^/.]*)',
+    // '/',
+    '/([^/.a-zA-Z]*)',
     // '/(\\?\\!favicon.ico|robots.txt)',
     // '/(\\?\\!_next|_static|api)/:path*',
-    '/_sites/:path*',
+    // '/_sites/:path*',
   ],
 }
