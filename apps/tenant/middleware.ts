@@ -17,61 +17,6 @@
 
 import { type NextRequest, NextResponse } from 'next/server'
 
-export function TOFIXmiddleware(req: NextRequest) {
-  const reqHost = req.headers.get('host') || 'console.aglyn.io'
-  const PORT = process.env.PORT
-  const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
-  const VERCEL_ENV = process.env.VERCEL === '1'
-  const PRODUCTION = process.env.NODE_ENV === 'production'
-  const isProdVercel = PRODUCTION && VERCEL_ENV
-
-  // If localhost, assign the host value manually
-  // If prod, get the custom domain/subdomain value by removing the root URL
-  // (in the case of "test.vercel.app", "vercel.app" is the root URL)
-  let tenant: string
-
-  switch (true) {
-    case isProdVercel && reqHost === AGLYN_TENANT_HOST_CNAME:
-    case isProdVercel && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
-      tenant = AGLYN_TENANT_HOST_CNAME
-      break
-    case isProdVercel && reqHost.endsWith(`.aglyn.app`):
-      tenant = reqHost.replace(`.aglyn.app`, '')
-      break
-    case reqHost.endsWith(`.localhost:4500`):
-      // Development and testing (localhost:4500)
-      tenant = reqHost.replace(`.localhost:4500`, '')
-      break
-    default:
-      const redirect = 'https://console.aglyn.io'
-      console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '', redirect)
-      return NextResponse.redirect(redirect)
-  }
-
-  if (
-    req.nextUrl.pathname === '/login' &&
-    (req.cookies.get('next-auth.session-token') ||
-      req.cookies.get('__Secure-next-auth.session-token'))
-  ) {
-    const redirect = '/'
-    console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '', redirect)
-    return NextResponse.redirect(redirect)
-  }
-  // url.hostname = 'my.localhost'
-  // rewrite root application to `/home` folder
-  if (reqHost === 'localhost:4500' || reqHost === 'platformize.vercel.app') {
-    const rewrite = `/home${req.nextUrl.pathname}`
-    console.log('REWRITING!!!!!', req.nextUrl.pathname, '', rewrite)
-    return NextResponse.rewrite(new URL(rewrite, req.url))
-  }
-
-  // rewrite to the current hostname under the pages/_sites folder
-  // the main logic component will happen in pages/_sites/[host]/[...path].tsx
-  const rewrite = `/_sites/${tenant}${req.nextUrl.pathname}`
-  console.log('REWRITING!!!!!', req.nextUrl.pathname, '', rewrite)
-  return NextResponse.rewrite(new URL(rewrite, req.url))
-}
-
 /**
  * The way you configure your matcher items depend on your route structure.
  * E.g. if you decide to put all your posts under `/posts/[postSlug]`,
@@ -99,10 +44,57 @@ export function TOFIXmiddleware(req: NextRequest) {
 export const config = {
   // prettier-ignore
   matcher: [
-    // '/',
-    '/([^/.a-zA-Z]*)',
+    '/',
+    '/([^/.]*)',
     // '/(\\?\\!favicon.ico|robots.txt)',
     // '/(\\?\\!_next|_static|api)/:path*',
-    // '/_sites/:path*',
+    '/_sites/:path*',
   ],
+}
+
+export function middleware(req: NextRequest) {
+  const reqHost = req.headers.get('host') || 'console.aglyn.io'
+  const PORT = process.env.PORT
+  const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
+  const VERCEL_ENV = process.env.VERCEL === '1'
+  const PRODUCTION = process.env.NODE_ENV === 'production'
+  const isProdVercel = PRODUCTION && VERCEL_ENV
+
+  // If localhost, assign the host value manually
+  // If prod, get the custom domain/subdomain value by removing the root URL
+  // (in the case of "test.vercel.app", "vercel.app" is the root URL)
+  let tenant: string
+
+  switch (true) {
+    case isProdVercel && reqHost === AGLYN_TENANT_HOST_CNAME:
+    case isProdVercel && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
+      tenant = AGLYN_TENANT_HOST_CNAME
+      break
+    case isProdVercel && reqHost.endsWith(`.aglyn.app`):
+      tenant = reqHost.replace(`.aglyn.app`, '')
+      break
+    case reqHost.endsWith(`.localhost:4500`):
+      // Development and testing (localhost:4500)
+      tenant = reqHost.replace(`.localhost:4500`, '')
+      break
+    case reqHost === 'localhost:4500':
+    default:
+      console.log('REDIR!!', req.nextUrl.pathname, 'https://console.aglyn.io')
+      return NextResponse.redirect('https://console.aglyn.io')
+  }
+
+  if (
+    req.nextUrl.pathname === '/login' &&
+    (req.cookies.get('next-auth.session-token') ||
+      req.cookies.get('__Secure-next-auth.session-token'))
+  ) {
+    console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '/')
+    return NextResponse.redirect('/')
+  }
+
+  // rewrite to the current hostname under the pages/_sites folder
+  // the main logic component will happen in pages/_sites/[host]/[...path].tsx
+  const rewrite = `/_sites/${tenant}${req.nextUrl.pathname}`
+  console.log('REWR!!', req.nextUrl.pathname, '', rewrite)
+  return NextResponse.rewrite(new URL(rewrite, req.url))
 }

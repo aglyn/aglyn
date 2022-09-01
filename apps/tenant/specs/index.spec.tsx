@@ -16,7 +16,7 @@
  */
 
 import { render } from '@testing-library/react'
-import Page from '../pages/_sites/[host]/[...slug]'
+import Page from '../pages/_sites/[host]/[[...slug]]'
 
 describe('Index', () => {
   it('should render successfully', () => {

@@ -17,13 +17,13 @@
 
 // MARK – IMPORTS
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const withAglyn = require('../../tools/nextjs-base.config')
+const withAglyn = require('../../build/nextjs-base.config')
 
 // MARK – GLOBALS
 const isProduction = process.env.NODE_ENV === 'production'
 const securityPolicy = isProduction
-  ? 'default-src \'self\' aglyn.com *.aglyn.com'
-  : 'default-src \'self\''
+  ? "default-src 'self' aglyn.com *.aglyn.com"
+  : "default-src 'self'"
 
 /**
  * @type {import('/tools/nextjs-base.config').WithAglynOptions}
