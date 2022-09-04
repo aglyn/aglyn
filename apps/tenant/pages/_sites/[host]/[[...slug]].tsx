@@ -15,29 +15,98 @@
  * limitations under the License.
  */
 
-import getTenantPageStaticPaths from '../../../utils/get-tenant-page-static-paths'
-import getTenantPageStaticProps from '../../../utils/get-tenant-page-static-props'
+import type {
+  AglynHost,
+  AglynScreen,
+  AglynScreenVersion,
+} from '@aglyn/core-data-foundation'
+import type { GetStaticPaths, GetStaticProps, PreviewData } from 'next/types'
+import type { ParsedUrlQuery } from 'querystring'
+import getHost from '../../../utils/get-host'
+import getScreen from '../../../utils/get-screen'
+import getScreenVersion from '../../../utils/get-screen-version'
 
-export const getStaticProps = async (context) => {
+export type StaticPreviewData = PreviewData
+
+export const getStaticProps: GetStaticProps<
+  Props,
+  StaticPathsCtx,
+  StaticPreviewData
+> = async (context) => {
   console.log('!!!!!getStaticProps', context)
 
-  // return {
-  //   props: { params: context.params },
-  //   revalidate: 30, // never=false, always=1, since=SECONDS
-  // }
-  return getTenantPageStaticProps(context)
+  const { params } = context
+
+  try {
+    const hostRes = await getHost(params.host as string)
+    console.log('hostRes', hostRes)
+
+    if (hostRes.error || !hostRes.host) {
+      return {
+        notFound: true,
+        revalidate: false, // never=false, always=1, since=SECONDS
+      }
+    }
+
+    const screenEntry = Object.entries(hostRes.host.screens || {}).find(
+      ([screenId, slug]) => {
+        return slug === (params.slug as string[]).join('/')
+      },
+    )
+    console.log('screenEntry', screenEntry)
+
+    if (!Array.isArray(screenEntry)) {
+      return {
+        notFound: true,
+        revalidate: false, // never=false, always=1, since=SECONDS
+      }
+    }
+
+    const screenId = screenEntry[0]
+    const screenRes = await getScreen(screenId)
+    console.log('screenRes', screenRes)
+
+    if (screenRes.error || !screenRes.screen) {
+      return {
+        notFound: true,
+        revalidate: false, // never=false, always=1, since=SECONDS
+      }
+    }
+
+    const versionRes = await getScreenVersion(
+      screenId,
+      screenRes.screen.versionId,
+    )
+    console.log('versionRes', versionRes)
+
+    return {
+      props: JSON.parse(JSON.stringify({ hostRes, screenRes, versionRes })),
+      revalidate: false, // never=false, always=1, since=SECONDS
+    }
+  } catch (e) {
+    console.error(e)
+  }
 }
 
-export const getStaticPaths = async (context) => {
-  console.log('!!!!!getStaticPaths props', context)
-  // return {
-  //   paths: [],
-  //   fallback: 'blocking', // can also be true or 'blocking'
-  // }
-  return getTenantPageStaticPaths(context)
+export interface StaticPathsCtx extends ParsedUrlQuery {}
+
+export const getStaticPaths: GetStaticPaths<StaticPathsCtx> = async (ctx) => {
+  console.log('!!!!!getStaticPaths ctx', ctx)
+  return {
+    paths: [],
+    fallback: 'blocking', // ISR server-render if static cache is not available
+  }
 }
 
-export default function CatchAllPage(props) {
+interface Props {
+  host?: AglynHost
+  screen?: {
+    data?: AglynScreen
+    version?: AglynScreenVersion
+  }
+}
+
+export default function CatchAllPage(props: Props) {
   console.log('!!!!!CatchAllPage')
-  return <>{JSON.stringify(props, null, 2)}</>
+  return <pre>{JSON.stringify(props, null, 2)}</pre>
 }

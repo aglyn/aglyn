@@ -12,6 +12,11 @@
       "type": "image/png"
     },
     {
+      "src": "icons/icon-24x24.png",
+      "sizes": "24x24",
+      "type": "image/png"
+    },
+    {
       "src": "icons/icon-32x32.ico",
       "sizes": "32x32",
       "type": "image/x-icon"
@@ -19,6 +24,21 @@
     {
       "src": "icons/icon-32x32.png",
       "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-64x64.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-100x100.png",
+      "sizes": "100x100",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-128x128.png",
+      "sizes": "128x128",
       "type": "image/png"
     },
     {
@@ -34,6 +54,21 @@
     {
       "src": "icons/icon-180x180.png",
       "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-256x256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-1024x1024.png",
+      "sizes": "1024x1024",
       "type": "image/png"
     },
     {

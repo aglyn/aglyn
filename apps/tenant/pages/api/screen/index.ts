@@ -27,15 +27,16 @@ import getAllScreens from '../../../utils/get-all-screens'
 
 async function handler(request: NextApiRequest, response: NextApiResponse) {
   const {
-    query: { nextPageToken },
+    query: { nextPageToken, host },
   } = request
-  const token = Array.isArray(nextPageToken) ? nextPageToken[0] : nextPageToken
+
+  if (!host) return nextHandleJsonError(response, new Error('Bad request'))
+
   let data = null
   let error = null
-
   // Start listing users from the beginning, 1000 at a time.
   try {
-    data = await getAllScreens(token)
+    data = await getAllScreens(host as string, nextPageToken as string)
     if (data?.error) error = data?.error
   } catch (err) {
     // eslint-disable-next-line no-console

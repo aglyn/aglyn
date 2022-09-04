@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
-import { doc, setDoc, type SetOptions } from 'firebase/firestore'
+import type { AglynScreen } from '@aglyn/core-data-foundation'
+import type { OrUndef } from '@aglyn/shared-data-types'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
+import {
+  doc,
+  type FirestoreDataConverter,
+  setDoc,
+  type SetOptions,
+} from 'firebase/firestore'
 import { useCallback } from 'react'
 import {
   type ObservableStatus,
@@ -24,31 +32,52 @@ import {
   useFirestoreDocDataOnce,
 } from 'reactfire'
 
+const converter: FirestoreDataConverter<AglynScreen> = {
+  toFirestore(data) {
+    if (data.$id) delete data.$id
+    data.updatedAt = Timestamp.now()
+    return data
+  },
+  fromFirestore(snapshot, options) {
+    if (!snapshot.exists()) return undefined
+    const data = snapshot.data(options)
+    data.$id = snapshot.id
+    return data as AglynScreen
+  },
+}
+
 export type UseScreenOptions = {
   screenId: string
   useFirestoreDocDataOptions?: ReactFireOptions
 }
 
-export function useScreen<T>(
-  options: UseScreenOptions,
-): [ObservableStatus<T>, (value: T, options: SetOptions) => Promise<void>] {
+type Response = [
+  $screen: ObservableStatus<OrUndef<AglynScreen>>,
+  setScreen: (
+    value: Partial<AglynScreen>,
+    options: SetOptions,
+  ) => Promise<void>,
+]
+
+export function useScreen(options: UseScreenOptions): Response {
   const { screenId, useFirestoreDocDataOptions } = options
   const firestore = useFirestore()
-  const reference = doc(firestore, 'screens', screenId)
+  const reference = doc(firestore, 'screens', screenId).withConverter(converter)
 
-  const value = useFirestoreDocDataOnce(reference, {
+  const $screen = useFirestoreDocDataOnce(reference, {
     idField: '$id',
     ...useFirestoreDocDataOptions,
-  }) as ObservableStatus<T>
+  }) as ObservableStatus<OrUndef<AglynScreen>>
 
-  const update = useCallback(
-    async (value, options: SetOptions) => {
-      return await setDoc(reference, value, options)
+  const setScreen = useCallback(
+    async function setScreen(value: Partial<AglynScreen>, options: SetOptions) {
+      const { $id, ...fields } = value
+      return await setDoc(reference, fields, options)
     },
     [reference],
   )
 
-  return [value, update]
+  return [$screen, setScreen]
 }
 
 export default useScreen

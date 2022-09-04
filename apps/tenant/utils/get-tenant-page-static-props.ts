@@ -16,10 +16,7 @@
  */
 
 import type { Dictionary } from '@aglyn/shared-data-types'
-import {
-  mockDB,
-  type TenantSite,
-} from '@aglyn/tenant-feature-instance/constants/mock-data'
+import { mockDB, type TenantSite } from '@aglyn/tenant-feature-instance'
 import type {
   GetStaticPropsContext,
   GetStaticPropsResult,
@@ -33,7 +30,6 @@ export interface StaticProps extends Dictionary {
 
 /**
  * @see {@link https://vercel.com/docs/concepts/next.js/incremental-static-regeneration#fetching-data|Fetching data for ISR}
- * @param context
  */
 export async function getTenantPageStaticProps(
   context: GetStaticPropsContext<StaticPaths, PreviewData>,

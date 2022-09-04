@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { type NextRequest, NextResponse } from 'next/server'
+import type { NextMiddleware } from 'next/server'
+import { NextResponse } from 'next/server'
+
 
 /**
  * The way you configure your matcher items depend on your route structure.
@@ -28,8 +30,6 @@ import { type NextRequest, NextResponse } from 'next/server'
  * `steven` be served.
  *
  * Here's a breakdown of each matcher item:
- * @example
- * "/" - Matches the root path of the site.
  * @example
  * "/" - Matches the root path of the site.
  * @example
@@ -52,9 +52,8 @@ export const config = {
   ],
 }
 
-export function middleware(req: NextRequest) {
+export const middleware: NextMiddleware = (req, event) => {
   const reqHost = req.headers.get('host') || 'console.aglyn.io'
-  const PORT = process.env.PORT
   const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
   const VERCEL_ENV = process.env.VERCEL === '1'
   const PRODUCTION = process.env.NODE_ENV === 'production'
