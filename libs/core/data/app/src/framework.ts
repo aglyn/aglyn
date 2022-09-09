@@ -53,8 +53,3 @@ export * from './lib/controllers/aglyn-canvas.controller'
 export * from './lib/controllers/aglyn-commands.controller'
 export * from './lib/controllers/aglyn-components.controller'
 export * from './lib/controllers/aglyn-contexts.controller'
-
-import * as Aglyn from './lib/future/aglyn'
-
-globalThis.Aglynn = Aglyn
-console.log('aglyn', Aglyn)

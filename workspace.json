@@ -3,6 +3,7 @@
   "projects": {
     "admin": "apps/admin",
     "admin-e2e": "apps/admin-e2e",
+    "aglyn": "libs/aglyn",
     "api": "apps/api",
     "api-e2e": "apps/api-e2e",
     "besigner-data-app": "libs/besigner/data/app",

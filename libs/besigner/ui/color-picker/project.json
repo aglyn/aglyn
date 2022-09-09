@@ -28,7 +28,9 @@
       "executor": "@nrwl/linter:eslint",
       "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": ["libs/besigner/ui/color-picker/**/*.{ts,tsx,js,jsx}"]
+        "lintFilePatterns": [
+          "libs/besigner/ui/color-picker/**/*.{ts,tsx,js,jsx}"
+        ]
       }
     },
     "test": {

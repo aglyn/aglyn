@@ -14,13 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export * from './utils'
-export * from './constants'
 
-export * from './emit-manager'
-export * from './user-agent-manager'
-export * from './plugin-manager'
-export * from './preset-manager'
-export * from './components-manager'
-export * from './screen-manager'
-export * from './dependency-manager'
+const pkg = require('../../package.json')
+
+export const version = pkg.version
+export const namespace = pkg.name
+export const CANVAS_ROOT_ELEMENT_ID = '_@_'

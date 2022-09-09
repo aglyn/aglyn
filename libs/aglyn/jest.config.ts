@@ -15,19 +15,18 @@
  * limitations under the License.
  */
 
-// MARK – IMPORTS
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const withAglyn = require('../../build/nextjs-base.config')
-
-// MARK – GLOBALS
-const isProduction = process.env.NODE_ENV === 'production'
-
-/**
- * @type {import('/tools/nextjs-base.config').WithAglynOptions}
- **/
-module.exports = withAglyn({
-  swcMinify: true,
-  env: {
-    AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
+/* eslint-disable */
+export default {
+  displayName: 'aglyn',
+  preset: '../../jest.preset.js',
+  testEnvironment: 'node',
+  transform: {
+    '^.+\\.[tj]sx?$': [
+      '@swc/jest',
+      { jsc: { transform: { react: { runtime: 'automatic' } } } },
+    ],
   },
-})
+  transformIgnorePatterns: ['<rootDor>/node_modules/'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
+  coverageDirectory: '../../coverage/libs/aglyn',
+}

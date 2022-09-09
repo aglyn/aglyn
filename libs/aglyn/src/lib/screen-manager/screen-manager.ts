@@ -20,7 +20,13 @@ import { _isArr } from '@aglyn/shared-util-guards'
 import { copy } from '@aglyn/shared-util-tools'
 import { observable, toJS } from 'mobx'
 import { AglynEvent, emitter } from '../emit-manager'
-import { createNodeId, nodeFactory, type NodeId, type NodeSchema } from './node'
+import {
+  createNodeId,
+  nodeFactory,
+  type NodeId,
+  type NodeSchema,
+  NodeSchemaDenormalized,
+} from './node'
 
 export * from './node'
 
@@ -139,4 +145,37 @@ function duplicateNodeAndChildren<P>(
   }
   setNodeItem(newNode)
   return newNode as NodeSchema<P>
+}
+
+export function denormalizeNodes(
+  nodes: Record<NodeId, NodeSchema<any>>,
+  rootNode: NodeSchema<any>,
+) {
+  const parent = copy(rootNode) as unknown as NodeSchemaDenormalized<any>
+
+  parent.nodes = (parent.nodes ||= []).map((id) => {
+    const child = nodes[id as unknown as string]
+    child.parentId = parent.$id
+    return denormalizeNodes(nodes, child)
+  })
+
+  return parent
+}
+
+export function normalizeNodes(
+  nodes: NodeSchemaDenormalized<any>[],
+  accumulator: Record<NodeId, NodeSchema<any>> = {},
+) {
+  for (const rootNode of nodes) {
+    const parent = copy(rootNode) as unknown as NodeSchema<any>
+    parent.nodes = (parent as unknown as NodeSchemaDenormalized<any>).nodes.map(
+      (child) => child.$id,
+    )
+    accumulator = {
+      ...accumulator,
+      ...normalizeNodes(rootNode.nodes, accumulator),
+    }
+    accumulator[parent.$id] = parent
+  }
+  return accumulator
 }

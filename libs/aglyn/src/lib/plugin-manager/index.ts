@@ -15,4 +15,5 @@
  * limitations under the License.
  */
 
+export * from './plugin-manager'
 export * as plugins from './plugin-manager'

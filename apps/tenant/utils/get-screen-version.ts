@@ -24,7 +24,7 @@ import type {
 
 export async function getScreenVersion(screen: ScreenUid, version: VersionUid) {
   const data = {
-    screen: undefined as AglynScreen,
+    version: undefined as AglynScreen,
     nextPageToken: '',
     error: null,
   }
@@ -40,7 +40,7 @@ export async function getScreenVersion(screen: ScreenUid, version: VersionUid) {
     .get()
     .then((res) => {
       if (!res.exists) return
-      data.screen = res.data() as AglynScreen
+      data.version = res.data() as AglynScreen
     })
     .catch((error) => {
       console.error(error)

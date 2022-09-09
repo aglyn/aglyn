@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import pkg from '../../../package.json'
-
-export const version = pkg.version
-export const namespace = pkg.name
+export * from './utils'
+export * from './constants'
+export * from './emit-manager'
+export * from './user-agent-manager'
+export * from './plugin-manager'
+export * from './preset-manager'
+export * from './components-manager'
+export * from './screen-manager'
+export * from './dependency-manager'

@@ -19,13 +19,12 @@ import type { AglynScreen } from '@aglyn/core-data-foundation'
 import { AglynScreenVersion } from '@aglyn/core-data-foundation'
 import { decode, encode } from '@msgpack/msgpack'
 import * as firebaseAdmin from 'firebase-admin'
-import { Bytes } from 'firebase/firestore'
 
 function compress(value) {
-  return Bytes.fromUint8Array(encode(value))
+  return Buffer.from(encode(value))
 }
 function decompress(value) {
-  return decode(value.toUint8Array())
+  return decode(value)
 }
 
 export const screenConverter: firebaseAdmin.firestore.FirestoreDataConverter<AglynScreen> =
