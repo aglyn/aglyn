@@ -213,7 +213,6 @@
     "markdown-toc": "^1.2.0",
     "next-compose-plugins": "^2.2.1",
     "nx": "14.7.5",
-    "nx-electron": "13.1.2",
     "prettier": "2.6.2",
     "react-test-renderer": "18.2.0",
     "storybook-addon-swc": "^1.1.7",

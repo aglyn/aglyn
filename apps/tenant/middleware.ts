@@ -18,7 +18,6 @@
 import type { NextMiddleware } from 'next/server'
 import { NextResponse } from 'next/server'
 
-
 /**
  * The way you configure your matcher items depend on your route structure.
  * E.g. if you decide to put all your posts under `/posts/[postSlug]`,
@@ -53,7 +52,7 @@ export const config = {
 }
 
 export const middleware: NextMiddleware = (req, event) => {
-  const reqHost = req.headers.get('host') || 'console.aglyn.io'
+  const reqHost = req?.headers?.get('host') || 'console.aglyn.io'
   const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
   const VERCEL_ENV = process.env.VERCEL === '1'
   const PRODUCTION = process.env.NODE_ENV === 'production'
