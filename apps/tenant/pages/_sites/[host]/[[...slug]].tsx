@@ -73,7 +73,8 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     const hostId = hostRes.host.$id
     const screenEntry = Object.entries(hostRes.host.screens || {}).find(
       ([screenId, slug]) => {
-        return slug === (params.slug as string[]).join('/')
+        const currentPath = (params.slug as string[]).join('/')
+        return slug === currentPath || slug === `/${currentPath || ''}`
       },
     )
     console.debug('screenEntry', screenEntry)
