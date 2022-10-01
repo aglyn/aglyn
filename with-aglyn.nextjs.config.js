@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-const nextComposePlugins = require('next-compose-plugins')
 const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer')
 const pkg = require('./package.json')
 const withNx = require('@nrwl/next/plugins/with-nx')
@@ -346,7 +345,7 @@ function withAglyn(nextConfig = {}) {
    * @param userConfig {import('./with-aglyn.nextjs.config').WithAglynOptions}
    * @returns WithAglynOptions
    **/
-  const useAglyn = (userConfig = {}) => {
+  const handleUserConfig = (userConfig = {}) => {
     const merged = deepFillIn(AGLYN_CONFIG, userConfig),
       aglynConfig = merged.aglyn
 
@@ -405,7 +404,7 @@ function withAglyn(nextConfig = {}) {
     }
   }
 
-  return nextComposePlugins([useAglyn, withNx], nextConfig)
+  return withNx(handleUserConfig(nextConfig))
 }
 
 module.exports = withAglyn
