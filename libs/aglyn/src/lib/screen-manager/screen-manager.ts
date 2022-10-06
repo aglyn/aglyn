@@ -16,9 +16,12 @@
  */
 
 import type { PartialKeys } from '@aglyn/shared-data-types'
-import { _isArr } from '@aglyn/shared-util-guards'
+import _isArr from '@aglyn/shared-util-guards/_is-arr'
+import _isObj from '@aglyn/shared-util-guards/_is-obj'
 import cloneDeep from 'lodash-es/cloneDeep'
 import { observable, toJS } from 'mobx'
+import * as Aglyn from '../../index'
+import { NODE_ROOT_ID } from '../../index'
 import { AglynEvent, emitter } from '../emit-manager'
 import {
   createNodeId,
@@ -199,4 +202,38 @@ export function denormalizeNodes(
     accumulator[node.$id] = node
   }
   return accumulator
+}
+
+type ProcessableNodes =
+  | NodeSchemaNested<any>[]
+  | NodeSchemaNested<any>
+  | Record<NodeId, NodeSchema>
+export function processNodesToDenormalized(
+  value: ProcessableNodes,
+): Record<NodeId, NodeSchema<any>> {
+  let response: Record<NodeId, NodeSchema<any>> = null
+
+  if (Array.isArray(value)) {
+    response = denormalizeNodes(
+      [
+        {
+          $id: NODE_ROOT_ID,
+          componentId: 'div',
+          nodes: [...value],
+        },
+      ],
+      null,
+    )
+  } else if (
+    _isObj(value) &&
+    Array.isArray(value?.nodes) &&
+    typeof value.nodes[0] !== 'string'
+  ) {
+    const _value = { ...(value as NodeSchemaNested<any>) }
+    response = denormalizeNodes([_value], _value.parentId || NODE_ROOT_ID)
+  } else {
+    response = value as unknown as Record<Aglyn.NodeId, Aglyn.NodeSchema>
+  }
+
+  return response
 }

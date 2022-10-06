@@ -34,6 +34,7 @@ import {
   ICON_VARIANT_MODIFY_ADD,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
+import { iJSON } from '@aglyn/shared-data-types'
 import {
   AppLink,
   LOADING_OVERLAY_ELEMENT,
@@ -42,7 +43,22 @@ import {
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useScreenVersion } from '@aglyn/tenant-feature-instance'
-import { Stack, Typography } from '@mui/material'
+import { json as codeMirrorJson } from '@codemirror/lang-json'
+import {
+  Alert,
+  AlertTitle,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  type DialogProps,
+  DialogTitle,
+  Stack,
+  Typography,
+} from '@mui/material'
+import { githubDark } from '@uiw/codemirror-theme-github'
+import CodeEditor from '@uiw/react-codemirror'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { useCallback, useEffect, useState } from 'react'
@@ -73,6 +89,63 @@ const ViewportCanvasComponent = dynamic<WorkspaceEditorComponentProps>(
     ),
   { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
 )
+
+interface JsonEditorDialogProps extends Omit<DialogProps, 'defaultValue'> {
+  onSave?: {
+    bivarianceHack(event: object, value: iJSON): void
+  }['bivarianceHack']
+  defaultValue?: iJSON
+}
+
+function JsonEditorModal(props: JsonEditorDialogProps) {
+  const { onClose, onSave, defaultValue, ...rest } = props
+
+  const [data, setData] = useState(defaultValue)
+  const handleChange = useCallback((value) => {
+    const json = JSON.parse(value)
+    setData(json)
+  }, [])
+  const handleSave = useCallback(
+    (event) => {
+      console.log('handleSave', data)
+      onSave && onSave(event, data)
+    },
+    [onSave, data],
+  )
+
+  return (
+    <>
+      <Dialog maxWidth="lg" fullWidth onClose={onClose} {...rest}>
+        <DialogTitle>Screen Raw JSON</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            <Alert severity="warning">
+              <AlertTitle>Warning: Advanced Feature Ahead!</AlertTitle>
+              Using the raw json editor is highly discouraged and should only be
+              used by individuals who understand the consequences. Changes may
+              potentially result in undesired outcomes which are{' '}
+              <strong>destructive and irreversible</strong>.
+            </Alert>
+          </DialogContentText>
+          <br />
+          <CodeEditor
+            value={JSON.stringify(data, null, 2)}
+            onChange={handleChange}
+            theme={githubDark}
+            extensions={[codeMirrorJson()]}
+            maxHeight="100%"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button variant="contained" onClick={onClose as any}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave}>Save JSON</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  )
+}
 
 function Besigner(props) {
   const { query } = useRouter()
@@ -131,13 +204,23 @@ function Besigner(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
+  const updateCanvasElements = useCallback(
+    (e, value: any) => {
+      const nodes = Aglyn.screen.processNodesToDenormalized(value)
+      Aglyn.screen.setNodes(nodes)
+
+      // @TODO ⚠️ remove after full migration to Aglyn.*
+      setCanvasElements(app, { elements: nodes, type: 'normal' })
+    },
+    [app],
+  )
+
   useEffect(() => {
     if (nodes) {
       console.log('decoded update', nodes)
-      Aglyn.screen.setNodes(nodes)
-      setCanvasElements(app, { elements: nodes, type: 'normal' })
+      updateCanvasElements(null, nodes)
     }
-  }, [app, nodes])
+  }, [updateCanvasElements, nodes])
 
   const handleSave = useCallback(async () => {
     const dequeueLoading = queueLoading()
@@ -186,6 +269,11 @@ function Besigner(props) {
         dequeueLoading()
       })
   }, [updateScreen, enqueueSnackbar, normalized, queueLoading])
+
+  const [jsonOpen, setJsonOpen] = useState(false)
+  const openJsonEditor = useCallback(() => setJsonOpen(true), [])
+  const closeJsonEditor = useCallback(() => setJsonOpen(false), [])
+  const handleJsonSave = useCallback(updateCanvasElements, [])
 
   return (
     <>
@@ -279,6 +367,15 @@ function Besigner(props) {
                 disabled: !canRedo,
                 ListItemTextProps: { inset: true },
               },
+              {
+                type: 'divider',
+              },
+              {
+                id: 'center-nav-edit-rawjson',
+                children: 'Raw JSON',
+                onClick: () => openJsonEditor(),
+                ListItemTextProps: { inset: true },
+              },
             ],
           },
           {
@@ -332,6 +429,19 @@ function Besigner(props) {
           setScreenDialog(false)
         }}
       />
+      {Aglyn.screen.nodes && Aglyn.screen.nodes[Aglyn.NODE_ROOT_ID] && (
+        <JsonEditorModal
+          open={jsonOpen}
+          onClose={closeJsonEditor}
+          onSave={handleJsonSave}
+          defaultValue={
+            Aglyn.screen.nestNodes(
+              Aglyn.screen.nodes,
+              Aglyn.screen.nodes[Aglyn.NODE_ROOT_ID],
+            ) as iJSON
+          }
+        />
+      )}
     </>
   )
 }

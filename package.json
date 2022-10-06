@@ -51,6 +51,7 @@
     "vercel:env-pull": "vercel env pull"
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.0",
     "@data-driven-forms/mui-component-mapper": "^3.18.11",
     "@data-driven-forms/react-form-renderer": "^3.18.11",
     "@emotion/cache": "^11.9.3",
@@ -70,6 +71,8 @@
     "@mui/x-data-grid": "^5.15.3",
     "@swc/helpers": "~0.3.17",
     "@tippyjs/react": "^4.2.6",
+    "@uiw/codemirror-theme-github": "^4.12.3",
+    "@uiw/react-codemirror": "^4.12.3",
     "change-case": "^4.1.2",
     "clsx": "^1.1.1",
     "cookie-signature": "^1.2.0",
@@ -233,4 +236,3 @@
     }
   }
 }
-

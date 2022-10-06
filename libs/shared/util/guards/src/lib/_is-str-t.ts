@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,9 @@
  * @param includeEmpty
  * @returns {val is string}
  */
+export function _isStrT(val: unknown): val is string
 export function _isStrT(val: unknown, includeEmpty = true): val is string {
   return typeof val === 'string' && (includeEmpty ? true : Boolean(val.length))
 }
+
+export default _isStrT

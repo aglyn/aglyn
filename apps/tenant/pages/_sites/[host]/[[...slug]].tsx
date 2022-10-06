@@ -139,19 +139,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
      *=========================================*/
 
     const nodes = versionRes.version.nodes
-    const isNested = Array.isArray(nodes)
-    const denormalized = !isNested
-      ? (nodes as unknown as Record<Aglyn.NodeId, Aglyn.NodeSchema>)
-      : Aglyn.screen.denormalizeNodes(
-          [
-            {
-              $id: Aglyn.NODE_ROOT_ID,
-              componentId: 'div',
-              nodes: [...nodes],
-            },
-          ],
-          null,
-        )
+    const denormalized = Aglyn.screen.processNodesToDenormalized(nodes)
     Aglyn.screen.setNodes(denormalized)
 
     const props = {
