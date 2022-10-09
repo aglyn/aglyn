@@ -33,7 +33,7 @@ const Stem = forwardRef<any, StemProps>((props, ref) => {
   }
 
   const nodeSchema = Aglyn.screen.getNode(nodeId)
-  let cmpFactory: Aglyn.ComponentType = null
+  let cmpFactory: Aglyn.ComponentFactory = null
   let cmpSchema: Aglyn.ComponentSchema = null
 
   if (Aglyn.components.hasComponent(nodeSchema.componentId)) {

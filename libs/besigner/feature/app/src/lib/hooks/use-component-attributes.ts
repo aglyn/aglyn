@@ -30,7 +30,7 @@ export interface UseComponentFormSchema extends AglynComponentPropsFormSchema {}
 
 export interface UseComponentFormSchemaOptions {
   componentId: ComponentId
-  bundleId?: BundleId
+  pluginId?: BundleId
 }
 
 export const useComponentAttributes = (
@@ -39,8 +39,8 @@ export const useComponentAttributes = (
   const app = useAglynAppContext()
 
   return useMemo(() => {
-    const { componentId, bundleId } = opts
-    const componentSchema = getComponentSchema(app, { componentId, bundleId })
+    const { componentId, pluginId } = opts
+    const componentSchema = getComponentSchema(app, { componentId, pluginId })
     return buildComponentPropsFormSchema(componentSchema?.attributes)
   }, [app, opts])
 }

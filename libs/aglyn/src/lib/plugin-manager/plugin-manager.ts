@@ -55,12 +55,12 @@ emitter.on(AglynEvent.PLUGIN_UNREGISTER, ({ pluginId }) => {
 })
 // export const bundles: Record<PluginId, Plugin> = {}
 //
-// export function getBundle(bundleId: PluginId) {
-//   return bundles[bundleId]
+// export function getBundle(pluginId: PluginId) {
+//   return bundles[pluginId]
 // }
 //
-// export function hasBundle(bundleId: PluginId) {
-//   return bundleId && _hasOwnProperty(bundleId, bundles)
+// export function hasBundle(pluginId: PluginId) {
+//   return pluginId && _hasOwnProperty(pluginId, bundles)
 // }
 //
 // export function registerBundle(schema: Plugin) {
@@ -82,22 +82,22 @@ emitter.on(AglynEvent.PLUGIN_UNREGISTER, ({ pluginId }) => {
 //   )
 // }
 //
-// export function unregisterBundle(bundleId: PluginId) {
-//   const bundle = bundles[bundleId]
+// export function unregisterBundle(pluginId: PluginId) {
+//   const bundle = bundles[pluginId]
 //   lifecycleEvent(
 //     () => {
-//       if (!bundle) throw new Error(`No bundle exists with ID ${bundleId}`)
+//       if (!bundle) throw new Error(`No bundle exists with ID ${pluginId}`)
 //
 //       // for (const componentId of bundle.componentIds || []) {
-//       //   emitter.emit(AglynEvent.COMPONENT_UNREGISTER, { componentId, bundleId })
+//       //   emitter.emit(AglynEvent.COMPONENT_UNREGISTER, { componentId, pluginId })
 //       // }
-//       delete bundles[bundleId]
+//       delete bundles[pluginId]
 //     },
 //     {
 //       beforeEvent: AglynEvent.PLUGIN_UNREGISTERING,
-//       beforePayload: [{ bundleId }],
+//       beforePayload: [{ pluginId }],
 //       afterEvent: AglynEvent.PLUGIN_UNREGISTERED,
-//       afterPayload: [{ bundleId }],
+//       afterPayload: [{ pluginId }],
 //     },
 //   )
 // }

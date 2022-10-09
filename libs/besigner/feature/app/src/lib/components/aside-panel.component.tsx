@@ -103,9 +103,9 @@ const TabPanelInner = styled('div', {
 
 const ElementInfo = function ElementInfo({ $id }: { $id: NodeId }) {
   const componentId = useAglynElementData($id, 'componentId')
-  const bundleId = useAglynElementData($id, 'bundleId')
+  const pluginId = useAglynElementData($id, 'pluginId')
   const parentId = useAglynElementData($id, 'parentId')
-  const schema = useAglynComponentSchema(componentId, bundleId)
+  const schema = useAglynComponentSchema(componentId, pluginId)
   const failoverText = 'n/a'
   const details = useMemo(
     () => [
@@ -158,13 +158,13 @@ const ElementInfo = function ElementInfo({ $id }: { $id: NodeId }) {
           {
             key: 'bundle-id',
             label: 'Bundle ID',
-            value: bundleId,
+            value: pluginId,
             ValueTypographyProps: {},
           },
         ],
       },
     ],
-    [schema, $id, parentId, componentId, bundleId],
+    [schema, $id, parentId, componentId, pluginId],
   )
   const [expanded, setExpanded] = useState<string | false>(details[0].key)
   const handleChange =
@@ -303,13 +303,13 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
     const icon = item?.icon
     const app = useAglynAppContext()
     const dndData = useMemo(() => {
-      const { $id, data, componentId, bundleId } = item
-      const componentSchema = getComponentSchema(app, { componentId, bundleId })
+      const { $id, data, componentId, pluginId } = item
+      const componentSchema = getComponentSchema(app, { componentId, pluginId })
       return {
         $id,
         data,
         componentId,
-        bundleId,
+        pluginId,
         restrictParent: componentSchema?.restrictParent,
         restrictChildren: componentSchema?.restrictChildren,
       }
@@ -414,18 +414,18 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
 
     sortedItems.forEach((item) => {
       const { category, data } = item || {}
-      const { bundleId } = data || {}
-      const bundled = bundleId && bundles.find((i) => i.presetId === bundleId)
+      const { pluginId } = data || {}
+      const bundled = pluginId && bundles.find((i) => i.presetId === pluginId)
       const categorized = category && cats.find((i) => i.presetId === category)
 
       if (bundled) bundled?.items?.push(item)
       if (categorized) categorized?.items?.push(item)
-      if (!bundled && bundleId) {
-        const bundle = getBundle(app, { bundleId })
+      if (!bundled && pluginId) {
+        const bundle = getBundle(app, { pluginId })
         bundles.push({
-          id: bundleId,
+          id: pluginId,
           order: 49,
-          labelPrimary: bundle?.displayName ?? bundleId,
+          labelPrimary: bundle?.displayName ?? pluginId,
           labelSecondary: bundle?.subtitle || 'Category',
           icon: {
             path: ICON_VARIANT_ELEMENT_BROWSE.path,

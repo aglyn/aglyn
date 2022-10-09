@@ -117,19 +117,19 @@ const DraggableTreeItemComponent = forwardRef<
   const { $id, ...rest } = props
   const app = useAglynAppContext()
   const componentId = useAglynElementData($id, 'componentId')
-  const bundleId = useAglynElementData($id, 'bundleId')
+  const pluginId = useAglynElementData($id, 'pluginId')
   const trail = useAglynCanvasElementHierarchy($id)
   const dndData = useMemo(() => {
-    const componentSchema = getComponentSchema(app, { componentId, bundleId })
+    const componentSchema = getComponentSchema(app, { componentId, pluginId })
     return {
       $id,
       componentId,
-      bundleId,
+      pluginId,
       trail,
       restrictParent: componentSchema?.restrictParent,
       restrictChildren: componentSchema?.restrictChildren,
     }
-  }, [app, componentId, bundleId, $id, trail])
+  }, [app, componentId, pluginId, $id, trail])
   const [, dragHandle, dragPreview] = useLeafDrag(dndData, DndDragType.TREE)
   const [, dropRef] = useLeafDrop(dndData)
   const nodes = useAglynElementData($id, 'nodes')

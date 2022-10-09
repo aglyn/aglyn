@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { DndDragType } from '@aglyn/besigner-data-app'
 import {
   LeafComponent,
   type LeafComponentProps,
   useAglynCanvasElementHierarchy,
-  useAglynComponentSchema,
-  useAglynElementData,
 } from '@aglyn/core-feature-renderer'
 import { useForkedRefs } from '@aglyn/shared-ui-jsx'
 import {
@@ -44,31 +43,32 @@ export interface ElementLeafComponentProps extends LeafComponentProps {}
 const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
   (props, forwardRef) => {
     const { $id, leafComponent, ...rest } = props
-    const componentId = useAglynElementData($id, 'componentId')
-    const bundleId = useAglynElementData($id, 'bundleId')
-    const componentSchema = useAglynComponentSchema(componentId, bundleId)
+    const node = Aglyn.screen.getNode($id)
+    const schema = Aglyn.components.getSchema(node?.componentId)
+    const componentId = schema?.componentId
+    const pluginId = schema?.pluginId
     const trail = useAglynCanvasElementHierarchy($id)
     const dndData = useMemo(
       () => ({
         $id,
         componentId,
-        bundleId,
-        componentSchema,
-        restrictParent: componentSchema?.restrictParent,
-        restrictChildren: componentSchema?.restrictChildren,
+        pluginId,
+        componentSchema: schema,
+        restrictParent: schema?.restrictParent,
+        restrictChildren: schema?.restrictChildren,
         trail,
       }),
-      [$id, componentId, bundleId, componentSchema, trail],
+      [$id, componentId, pluginId, schema, trail],
     )
     const [, dragHandle, dragPreview] = useLeafDrag(dndData, DndDragType.CANVAS)
     const [, dropRef] = useLeafDrop(dndData)
-    const [node, setNode] = useState<HTMLElement>()
+    const [nodeRef, setNodeRef] = useState<HTMLElement>()
     const { setElementRef, deleteElementRef } = useRenderedCanvasElements()
     const ref = useForkedRefs<HTMLElement>(
       forwardRef,
       dragPreview,
       dropRef,
-      setNode,
+      setNodeRef,
     )
     const isSelected = useAglynCanvasElementIsSelected($id)
     const setHovered = useAglynCanvasSetHovered()
@@ -78,8 +78,8 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
      * Update context element ref
      */
     useEffect(() => {
-      setElementRef($id, { $id, node, dragHandle })
-    }, [setElementRef, dragHandle, $id, node])
+      setElementRef($id, { $id, node: nodeRef, dragHandle })
+    }, [setElementRef, dragHandle, $id, nodeRef])
     /**
      * Remove only on unmount
      */
@@ -116,7 +116,7 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
         onMouseDown={handleOnMouseDown}
         data-aglyn-node={$id}
         data-aglyn-component={componentId}
-        data-aglyn-bundle={bundleId}
+        data-aglyn-bundle={pluginId}
         data-aglyn-status={isSelected ? 'selected' : 'none'}
         {...rest}
       />

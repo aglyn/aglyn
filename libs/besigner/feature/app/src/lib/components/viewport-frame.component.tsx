@@ -66,23 +66,18 @@ const SiteShadowDom = styled(MuiShadowDom.div, {
 }))
 SiteShadowDom.displayName = 'SiteShadowDom'
 
-const Elements = () => {
+function RenderedNodes() {
   return (
-    <Box
-      sx={{
-        bgcolor: 'background.paper',
-        minHeight: 1,
-        minWidth: 1,
-      }}
-    >
+    <>
       <ElementLeafComponent
         leafComponent={ElementLeafComponent}
         $id={CANVAS_ROOT_ELEMENT_ID}
         sx={{ minHeight: 1 }}
       />
-    </Box>
+    </>
   )
 }
+
 const ViewportGlobalStyles = (
   <GlobalStyles
     styles={{
@@ -98,7 +93,15 @@ const ThemedElementContainer = () => {
   return (
     <ThemeProvider theme={hostTheme}>
       <CssBaseline />
-      <Elements />
+      <Box
+        sx={{
+          bgcolor: 'background.paper',
+          minHeight: 1,
+          minWidth: 1,
+        }}
+      >
+        <RenderedNodes />
+      </Box>
     </ThemeProvider>
   )
 }

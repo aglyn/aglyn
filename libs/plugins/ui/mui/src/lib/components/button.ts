@@ -36,7 +36,7 @@ const ID: ComponentId = 'button'
 
 export const schema: AglynComponentSchema<ButtonProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Button',
   icon: {
     path: mdiGestureTapButton.path,
@@ -71,7 +71,7 @@ export const schema: AglynComponentSchema<ButtonProps> = {
       category: ComponentCategory.INPUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {
           variant: 'outlined',
           children: 'Click Me',

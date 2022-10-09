@@ -29,7 +29,7 @@ const ID: ComponentId = 'stack'
 
 export const schema: AglynComponentSchema<StackProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Stack',
   icon: {
     path: mdiViewColumn.path,
@@ -47,7 +47,7 @@ export const schema: AglynComponentSchema<StackProps> = {
       category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {},
         sx: { flexDirection: 'row' },
       },
@@ -62,7 +62,7 @@ export const schema: AglynComponentSchema<StackProps> = {
       category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {},
         sx: { flexDirection: 'column' },
       },

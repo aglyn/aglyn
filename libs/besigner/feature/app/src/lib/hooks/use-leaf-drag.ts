@@ -78,9 +78,9 @@ export function useLeafDrag<T extends BesignerDraggableItem>(
       },
       canDrag: (monitor) => {
         const dragItem = monitor.getItem()
-        const { $id, componentId, bundleId } = dragItem || {}
+        const { $id, componentId, pluginId } = dragItem || {}
         if (isRootElementId($id)) return false
-        const schema = getComponentSchema(app, { componentId, bundleId })
+        const schema = getComponentSchema(app, { componentId, pluginId })
         const flags = schema?.flags
         if (flags?.dragging === FEATURE_FLAG.DISABLED) return false
         return true

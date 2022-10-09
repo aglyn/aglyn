@@ -136,7 +136,7 @@ export interface IAglynComponentsController
     payload: ComponentSchemaGetPayload,
   ): OrUndef<AglynComponentSchema>
   getBundle(payload: ComponentsBundleGetPayload): OrUndef<AglynBundleSchema>
-  buildMapKey(data: { componentId: ComponentId; bundleId: BundleId }): string
+  buildMapKey(data: { componentId: ComponentId; pluginId: BundleId }): string
 
   registerComponent(payload: ComponentRegisterPayload): this
   registerBundle(payload: ComponentsBundleRegisterPayload): this
@@ -172,7 +172,7 @@ export interface AglynExoticComponent<PROPS = any, REF = any>
 
 export interface AglynComponentSchema<P = any> {
   componentId: ComponentId
-  bundleId?: BundleId
+  pluginId?: BundleId
   kind?: 'element' | 'plaintext' | 'markdown'
 
   displayName: string
@@ -258,7 +258,7 @@ export type AglynNodePresetSchema = {
   presetId: PresetId
   label: string
   componentId?: ComponentId
-  bundleId?: BundleId
+  pluginId?: BundleId
   description?: string
   icon?: MdiIconProps
   category?: string | ComponentCategory
@@ -326,7 +326,7 @@ export interface AglynAttributeSchema extends Dictionary<any> {
 }
 
 export interface AglynBundleSchema {
-  bundleId: BundleId
+  pluginId: BundleId
   componentIds?: ComponentId[]
   // Metadata
   displayName?: string
@@ -346,7 +346,7 @@ export interface ComponentsRegistryContext {
 export interface AglynNodeSchema<P = JSX.AnyProps> {
   $id: NodeId
   componentId: ComponentId
-  bundleId?: BundleId
+  pluginId?: BundleId
   parentId?: NodeId
   sx?: JSX.SxProps
   props?: P

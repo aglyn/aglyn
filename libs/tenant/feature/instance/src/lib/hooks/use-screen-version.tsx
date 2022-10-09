@@ -39,6 +39,10 @@ const converter: FirestoreDataConverter<AglynScreenVersion> = {
       data.nodes = data.elements
       delete data.elements
     }
+    if (data['bundleId']) {
+      data.pluginId = data['bundleId']
+      delete data['bundleId']
+    }
     if (data.nodes) data.nodes = compress(data.nodes) as any
     if (data.$id) delete data.$id
     data.updatedAt = Timestamp.now()
@@ -50,6 +54,10 @@ const converter: FirestoreDataConverter<AglynScreenVersion> = {
     if (data?.elements instanceof Bytes) {
       data.nodes = data.elements
       delete data.elements
+    }
+    if (data?.['bundleId']) {
+      data.pluginId = data['bundleId']
+      delete data['bundleId']
     }
     if (data?.nodes instanceof Bytes) {
       data.nodes = decompress(data.nodes)

@@ -31,7 +31,7 @@ const ID: ComponentId = 'app-bar'
 
 export const schema: AglynComponentSchema<AppBarProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'App Toolbar',
   icon: {
     path: mdiPageLayoutHeader.path,
@@ -49,7 +49,7 @@ export const schema: AglynComponentSchema<AppBarProps> = {
       category: ComponentCategory.SURFACE,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {
           position: 'sticky',
         },

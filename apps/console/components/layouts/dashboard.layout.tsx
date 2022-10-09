@@ -32,19 +32,6 @@ import SecondaryAppBarComponent, {
   type SecondaryAppBarProps,
 } from '../secondary-app-bar.component'
 
-const defaultNavTabItems: SecondaryAppBarProps['navTabItems'] = [
-  {
-    id: 'nav-tab-dashboard',
-    label: 'Dashboard',
-    href: '/',
-  },
-  {
-    id: 'nav-tab-screens',
-    label: 'Screens',
-    href: '/screens/list',
-  },
-]
-
 const defaultTabBarTitle = (
   <Stack
     direction="row"

@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { updateCanvasElement } from '@aglyn/core-data-app'
 import type { NodeId } from '@aglyn/core-data-foundation'
-import {
-  useAglynAppContext,
-  useAglynElementData,
-} from '@aglyn/core-feature-renderer'
+import { useAglynAppContext } from '@aglyn/core-feature-renderer'
 import {
   FormRenderer,
   type FormRendererProps,
@@ -35,7 +33,6 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import Grid from '@mui/material/Grid'
-import useComponentAttributes from 'libs/besigner/feature/app/src/lib/hooks/use-component-attributes'
 import { type ChangeEvent, forwardRef, useCallback } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
@@ -103,12 +100,12 @@ export interface ElementPropsFormProps extends FormRendererProps {
 const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
   (props, ref) => {
     const { $id, ...rest } = props
+    const node = Aglyn.screen.getNode($id)
     const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({ $id })
-    const componentId = useAglynElementData($id, 'componentId')
-    const bundleId = useAglynElementData($id, 'bundleId')
-    const elemProps = useAglynElementData($id, 'props')
-    const attributes = useComponentAttributes({ componentId, bundleId })
+    const elemProps = node?.props
+    const schema = Aglyn.components.getSchema(node?.componentId)
+    const attributes = schema?.attributes || []
 
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback(

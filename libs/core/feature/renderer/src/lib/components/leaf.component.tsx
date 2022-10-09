@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-import type { ComponentId } from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import { isValidElementType } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
+import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
 import { Box, type BoxProps } from '@mui/material'
 import clsx from 'clsx'
 import { forwardRef, Fragment, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
-import useAglynElementComponent from '../hooks/use-aglyn-element-component'
 import useAglynElementResolvedProps from '../hooks/use-aglyn-element-resolved-props'
 import BranchComponent from './branch.component'
 
 export interface LeafComponentProps extends BoxProps<any, any> {
-  $id: ComponentId
+  $id: Aglyn.NodeId
   leafComponent?: LeafComponent
 }
 
@@ -36,28 +36,30 @@ const LeafComponent = forwardRef<any, LeafComponentProps>(function RefRenderFn(
   ref,
 ) {
   const { $id, leafComponent, children, className, sx, ...rest } = props
-  const component = useAglynElementComponent<any, any>($id)
+  const node = Aglyn.screen.getNode($id)
+  const factory = Aglyn.components.getFactory(node?.componentId)
   const Component = useMemo(() => {
-    return component && isValidElementType(component) ? component : Box
-  }, [component])
-  const {
-    className: resolvedClassName,
-    sx: resolvedSx,
-    ...resolved
-  } = useAglynElementResolvedProps($id)
+    return isValidElementType(factory) ? factory : Box
+  }, [factory])
+  const resolved = useAglynElementResolvedProps($id)
+  const _className = clsx(
+    className,
+    ...arraySafe(resolved?.className, [resolved?.className]),
+    ...arraySafe(resolved?.props?.className, [resolved?.props?.className]),
+  )
 
   return (
     <Component
       ref={ref}
       id={`element-leaf-${$id}`}
-      className={clsx(className, resolvedClassName)}
-      sx={mergeSxProps(sx, resolvedSx)}
+      className={_className}
+      sx={mergeSxProps(sx, resolved?.sx, resolved?.props?.sx)}
+      {...resolved?.props}
       {...rest}
-      {...resolved}
     >
       {children}
       <ReactMarkdown
-        children={resolved.children}
+        children={resolved?.props?.children}
         components={{
           p: Fragment,
         }}

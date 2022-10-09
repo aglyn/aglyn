@@ -15,29 +15,24 @@
  * limitations under the License.
  */
 
-import type {
-  AglynNodeItemDenormalized,
-  NodeId,
-} from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
+import type { NodeId } from '@aglyn/core-data-foundation'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import { useMemo } from 'react'
-import useAglynComponentSchema from './use-aglyn-component-schema'
-import useAglynElementData from './use-aglyn-element-data'
 
-export function useAglynElementResolvedProps<P>($id: NodeId): P {
-  const elementData = useAglynElementData($id)
-  const schema = useAglynComponentSchema(
-    elementData?.componentId,
-    elementData?.bundleId,
-  )
+function defaultPropsResolver(node: Aglyn.NodeSchema) {
+  return node
+}
+
+export function useAglynElementResolvedProps($id: NodeId) {
+  const node = Aglyn.screen.getNode($id)
+  const schema = Aglyn.components.getSchema(node?.componentId)
   const resolveProps = schema?.resolveProps
 
   return useMemo(() => {
-    const data = ((_isFnT(resolveProps)
-      ? resolveProps.call(undefined, elementData)
-      : elementData) || {}) as AglynNodeItemDenormalized<P>
-
-    return { ...data?.props, sx: data?.sx } as P
-  }, [elementData, resolveProps])
+    return _isFnT(resolveProps)
+      ? resolveProps(node)
+      : defaultPropsResolver(node)
+  }, [node, resolveProps])
 }
 export default useAglynElementResolvedProps

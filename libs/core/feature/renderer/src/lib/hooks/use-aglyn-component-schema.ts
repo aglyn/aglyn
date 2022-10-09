@@ -26,11 +26,11 @@ import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynComponentSchema(
   componentId: ComponentId,
-  bundleId?: BundleId,
+  pluginId?: BundleId,
 ): AglynComponentSchema {
   const app = useAglynAppContext()
   return useMemo(() => {
-    return getComponentSchema(app, { componentId, bundleId })
-  }, [app, componentId, bundleId])
+    return getComponentSchema(app, { componentId, pluginId })
+  }, [app, componentId, pluginId])
 }
 export default useAglynComponentSchema

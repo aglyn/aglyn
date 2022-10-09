@@ -71,7 +71,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (hostRes.error || !hostRes.host) {
       return {
         notFound: true,
-        revalidate: 360, // never=false, always=1, since=SECONDS
+        revalidate: 3600, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -91,7 +91,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (!Array.isArray(screenEntry)) {
       return {
         notFound: true,
-        revalidate: 360, // never=false, always=1, since=SECONDS
+        revalidate: 3600, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -108,7 +108,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (screenRes.error || !screenRes.screen) {
       return {
         notFound: true,
-        revalidate: 360, // never=false, always=1, since=SECONDS
+        revalidate: 3600, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -128,7 +128,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (versionRes.error || !versionRes.version) {
       return {
         notFound: true,
-        revalidate: 360, // never=false, always=1, since=SECONDS
+        revalidate: 3600, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -164,7 +164,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     return {
       // props: {},
       notFound: true,
-      revalidate: 360,
+      revalidate: 3600,
     }
   }
 }
@@ -247,19 +247,19 @@ export default function CatchAllPage(props: Props) {
 //       nodes: [
 //         {
 //           componentId: 'app-bar',
-//           bundleId: 'mui',
+//           pluginId: 'mui',
 //           props: {
 //             position: 'fixed',
 //           },
 //           elements: [
 //             {
 //               componentId: 'toolbar',
-//               bundleId: 'mui',
+//               pluginId: 'mui',
 //               $id: 'SQN-Pslbub',
 //               elements: [
 //                 {
 //                   componentId: 'container',
-//                   bundleId: 'mui',
+//                   pluginId: 'mui',
 //                   props: {
 //                     disableGutters: false,
 //                     fixed: false,
@@ -269,7 +269,7 @@ export default function CatchAllPage(props: Props) {
 //                   elements: [
 //                     {
 //                       componentId: 'typography',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'h5',
 //                         children: 'DuploCloud',
@@ -297,7 +297,7 @@ export default function CatchAllPage(props: Props) {
 //         },
 //         {
 //           componentId: 'container',
-//           bundleId: 'mui',
+//           pluginId: 'mui',
 //           props: {
 //             maxWidth: 'md',
 //           },
@@ -305,7 +305,7 @@ export default function CatchAllPage(props: Props) {
 //           elements: [
 //             {
 //               componentId: 'stack',
-//               bundleId: 'mui',
+//               pluginId: 'mui',
 //               props: {},
 //               sx: {
 //                 flexDirection: 'row',
@@ -604,7 +604,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -617,7 +617,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -630,7 +630,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -643,7 +643,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -656,7 +656,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -669,7 +669,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -682,7 +682,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -695,7 +695,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -708,7 +708,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -721,7 +721,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -734,7 +734,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -747,7 +747,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -760,7 +760,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -773,7 +773,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -786,7 +786,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -799,7 +799,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -812,7 +812,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -825,7 +825,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -838,7 +838,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -851,7 +851,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -864,7 +864,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1046,7 +1046,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1059,7 +1059,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1072,7 +1072,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1085,7 +1085,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1098,7 +1098,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1111,7 +1111,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1124,7 +1124,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1137,7 +1137,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1150,7 +1150,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1163,7 +1163,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1176,7 +1176,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1189,7 +1189,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1202,7 +1202,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1215,7 +1215,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1228,7 +1228,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1241,7 +1241,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1254,7 +1254,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1267,7 +1267,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1280,7 +1280,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1293,7 +1293,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',
@@ -1306,7 +1306,7 @@ export default function CatchAllPage(props: Props) {
 //                     },
 //                     {
 //                       componentId: 'button',
-//                       bundleId: 'mui',
+//                       pluginId: 'mui',
 //                       props: {
 //                         variant: 'outlined',
 //                         children: 'Click Me',

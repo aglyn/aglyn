@@ -30,7 +30,7 @@ const ID: ComponentId = 'container'
 
 export const schema: AglynComponentSchema<ContainerProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Container',
   icon: {
     path: mdiViewArrayOutline.path,
@@ -78,7 +78,7 @@ export const schema: AglynComponentSchema<ContainerProps> = {
       category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {},
       },
     },

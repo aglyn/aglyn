@@ -31,7 +31,7 @@ const ID: ComponentId = 'list-item-text'
 
 export const schema: AglynComponentSchema<ListItemTextProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'List Item Text',
   icon: { path: mdiFormatListChecks.path },
   presets: [
@@ -42,7 +42,7 @@ export const schema: AglynComponentSchema<ListItemTextProps> = {
       category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {
           primary: 'Item Primary',
           secondary: 'This is the secondary',

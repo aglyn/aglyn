@@ -59,7 +59,7 @@ export type ConfirmValidLinealRelationshipResponse =
 
 function validateLinealOrder(
   componentId: ComponentId,
-  bundleId: BundleId,
+  pluginId: BundleId,
   linealOrder: ComponentsLinealOrder,
   governor:
     | typeof InvalidLinealRelationFlag.ITEM
@@ -80,7 +80,7 @@ function validateLinealOrder(
     if (definition?.components?.some((cid) => cid === componentId)) {
       throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
     }
-    if (definition?.bundles?.some((bid) => bid === bundleId)) {
+    if (definition?.bundles?.some((bid) => bid === pluginId)) {
       throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
     }
   }
@@ -97,7 +97,7 @@ function validateLinealOrder(
     if (
       _isArr(definition?.bundles) &&
       (_isArrEmpty(definition?.bundles) ||
-        !definition?.bundles?.some((bid) => bid === bundleId))
+        !definition?.bundles?.some((bid) => bid === pluginId))
     ) {
       throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
     }
@@ -107,13 +107,13 @@ function validateLinealOrder(
 export interface ConfirmValidLinealRelationshipOptions {
   item: {
     componentId?: ComponentId
-    bundleId?: ComponentId
+    pluginId?: ComponentId
     restrictParent?: ComponentsLinealOrder
     restrictChildren?: ComponentsLinealOrder
   }
   parent: {
     componentId?: ComponentId
-    bundleId?: ComponentId
+    pluginId?: ComponentId
     restrictParent?: ComponentsLinealOrder
     restrictChildren?: ComponentsLinealOrder
   }
@@ -127,7 +127,7 @@ export function confirmValidLinealRelationship(
     if (item.restrictParent) {
       validateLinealOrder(
         parent.componentId,
-        parent.bundleId,
+        parent.pluginId,
         item.restrictParent,
         InvalidLinealRelationFlag.ITEM,
       )
@@ -135,7 +135,7 @@ export function confirmValidLinealRelationship(
     if (parent.restrictChildren) {
       validateLinealOrder(
         item.componentId,
-        item.bundleId,
+        item.pluginId,
         parent.restrictChildren,
         InvalidLinealRelationFlag.PARENT,
       )

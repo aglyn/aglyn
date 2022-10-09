@@ -23,7 +23,7 @@ export function useAglynElementComponentSchema(
   $id: NodeId,
 ): AglynComponentSchema {
   const componentId = useAglynElementData($id, 'componentId')
-  const bundleId = useAglynElementData($id, 'bundleId')
-  return useAglynComponentSchema(componentId, bundleId)
+  const pluginId = useAglynElementData($id, 'pluginId')
+  return useAglynComponentSchema(componentId, pluginId)
 }
 export default useAglynElementComponentSchema

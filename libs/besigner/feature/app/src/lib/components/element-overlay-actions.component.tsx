@@ -19,6 +19,7 @@ import {
   BesignerPanelTabFlag,
   setBesignerPanels,
 } from '@aglyn/besigner-data-app'
+import useDeleteElementCallback from '@aglyn/besigner-feature-app/hooks/use-delete-element-callback'
 import { duplicateCanvasElement, moveCanvasElement } from '@aglyn/core-data-app'
 import type { NodeId } from '@aglyn/core-data-foundation'
 import {
@@ -27,6 +28,7 @@ import {
 } from '@aglyn/core-feature-renderer'
 import { isRootElementId } from '@aglyn/core-util-app'
 import {
+  ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_DRAG,
   ICON_VARIANT_MODIFY_DUPLICATE,
   ICON_VARIANT_MODIFY_EDIT,
@@ -188,6 +190,11 @@ const ElementOverlayActionsComponent = forwardRef<
     [parentId, setHovered],
   )
 
+  const deleteElementCallback = useDeleteElementCallback({ $id })
+  const handleDeleteClick = useCallback((e: ChangeEvent<unknown>) => {
+    deleteElementCallback(e)
+  }, [])
+
   return (
     <MuiButtonGroup
       ref={ref}
@@ -223,6 +230,15 @@ const ElementOverlayActionsComponent = forwardRef<
           children="duplicate"
           ButtonProps={{ onClick: handleDuplicateClick }}
           icon={{ path: ICON_VARIANT_MODIFY_DUPLICATE.path }}
+        />
+      )}
+
+      {!isRootElementId($id) && (
+        <BadgeButton
+          title="Delete"
+          children="delete"
+          ButtonProps={{ onClick: handleDeleteClick }}
+          icon={{ path: ICON_VARIANT_MODIFY_DELETE.path }}
         />
       )}
 

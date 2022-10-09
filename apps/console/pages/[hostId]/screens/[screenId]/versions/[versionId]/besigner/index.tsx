@@ -102,8 +102,12 @@ function JsonEditorModal(props: JsonEditorDialogProps) {
 
   const [data, setData] = useState(defaultValue)
   const handleChange = useCallback((value) => {
-    const json = JSON.parse(value)
-    setData(json)
+    try {
+      const json = JSON.parse(value)
+      setData(json)
+    } catch (e) {
+      console.warn(e)
+    }
   }, [])
   const handleSave = useCallback(
     (event) => {
@@ -129,11 +133,15 @@ function JsonEditorModal(props: JsonEditorDialogProps) {
           </DialogContentText>
           <br />
           <CodeEditor
-            value={JSON.stringify(data, null, 2)}
+            // initialState={{ json: JSON.stringify(data, null, 2) }}
+            value={JSON.stringify(defaultValue, null, 2)}
             onChange={handleChange}
             theme={githubDark}
-            extensions={[codeMirrorJson()]}
-            maxHeight="100%"
+            extensions={[codeMirrorJson() /*linter,*/ /*lintGutter()*/]}
+            height="50vh"
+            basicSetup={{
+              lintKeymap: true,
+            }}
           />
         </DialogContent>
         <DialogActions>

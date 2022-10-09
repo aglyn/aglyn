@@ -32,7 +32,7 @@ const ID: ComponentId = 'list-item'
 
 export const schema: AglynComponentSchema<ListItemProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'List Item',
   icon: { path: mdiFormatListText.path },
   restrictChildren: [
@@ -49,7 +49,7 @@ export const schema: AglynComponentSchema<ListItemProps> = {
       category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         nodes: [
           {
             ...listItemTextSchema.presets![0]!.data,

@@ -38,8 +38,8 @@ export function createAglynComponent<P = any, C = any>(
   options?: Partial<ErrorBoundaryProps>,
 ): ComponentRegisterPayload<P> {
   const _schema = copy(schema)
-  const { componentId, bundleId, flags, styledOptions } = _schema
-  const pascalId = `${bundleId ? pascalCase(bundleId) + '-' : ''}${pascalCase(
+  const { componentId, pluginId, flags, styledOptions } = _schema
+  const pascalId = `${pluginId ? pascalCase(pluginId) + '-' : ''}${pascalCase(
     componentId,
   )}`
 
@@ -54,7 +54,7 @@ export function createAglynComponent<P = any, C = any>(
 
   AglynComponent.displayName = `AglynComponent(${pascalId})`
   AglynComponent.componentId = componentId
-  AglynComponent.bundleId = bundleId
+  AglynComponent.pluginId = pluginId
   AglynComponent.aglyn = true
   AglynComponent[AGLYN_OF] = COMPONENT_ELEMENT_TYPE
   hoistNonReactStatics(AglynComponent, component)

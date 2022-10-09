@@ -96,8 +96,44 @@ export function setNodeItem<P = JSX.AnyProps>(node: NodeSchema<P>) {
 }
 
 export function deleteNode<P = JSX.AnyProps>(node: NodeSchema<P>) {
+  if (!node || node.$id === NODE_ROOT_ID) return
   deleteChildNodes(node)
+  removeNodeFromParent(node, getNode(node.parentId))
   delete nodes[node.$id]
+}
+
+export function removeNodeFromParent(
+  node: NodeSchema<any>,
+  parent: NodeSchema<any>,
+) {
+  if (!node || !parent || !parent.nodes.some((id) => id !== node.$id)) return
+  parent.nodes = parent.nodes.filter((id) => id !== node.$id)
+  nodes[parent.$id] = parent
+}
+
+export function addNodeToParent(
+  node: NodeSchema<any>,
+  parent: NodeSchema<any>,
+  index: number,
+) {
+  if (!node || !parent || parent.nodes.some((id) => id !== node.$id)) return
+  node.parentId = parent.$id
+  if (isNaN(index)) parent.nodes.push(node.$id)
+  else parent.nodes.splice(index, 0, node.$id)
+
+  nodes[parent.$id] = parent
+  nodes[node.$id] = node
+}
+
+function deleteChildNodes<P = JSX.AnyProps>(node: NodeSchema<P>) {
+  const children = Array.isArray(node.nodes) ? node.nodes : []
+  for (const childId of children) {
+    const child = getNode(childId)
+    if (child) {
+      deleteChildNodes(child)
+      deleteNode(child)
+    }
+  }
 }
 
 export function duplicateNode<P = JSX.AnyProps>(
@@ -117,25 +153,8 @@ export function reparentNode(
   newParent: NodeSchema<any>,
   index: number,
 ) {
-  oldParent.nodes = oldParent.nodes.filter((id) => id !== node.$id)
-  node.parentId = newParent.$id
-  if (isNaN(index)) newParent.nodes.push(node.$id)
-  else newParent.nodes.splice(index, 0, node.$id)
-
-  nodes[oldParent.$id] = oldParent
-  nodes[newParent.$id] = newParent
-  nodes[node.$id] = node
-}
-
-function deleteChildNodes<P = JSX.AnyProps>(node: NodeSchema<P>) {
-  const children = Array.isArray(node.nodes) ? node.nodes : []
-  for (const childId of children) {
-    const child = getNode(childId)
-    if (child) {
-      deleteChildNodes(child)
-      deleteNode(child)
-    }
-  }
+  removeNodeFromParent(node, oldParent)
+  addNodeToParent(node, newParent, index)
 }
 
 function duplicateNodeAndChildren<P = JSX.AnyProps>(
@@ -171,6 +190,10 @@ export function nestNodes(
     parent.nodes = parent['elements']
     delete parent['elements']
   }
+  if (parent['bundleId']) {
+    parent.pluginId = parent['bundleId']
+    delete parent['bundleId']
+  }
 
   parent.nodes = (parent.nodes ||= []).map((id) => {
     const child = nodes[id as unknown as string]
@@ -190,6 +213,10 @@ export function denormalizeNodes(
     if (nestedNode['elements']) {
       nestedNode.nodes = nestedNode['elements']
       delete nestedNode['elements']
+    }
+    if (nestedNode['bundleId']) {
+      nestedNode.pluginId = nestedNode['bundleId']
+      delete nestedNode['bundleId']
     }
 
     const node = cloneDeep(nestedNode) as unknown as NodeSchema<any>

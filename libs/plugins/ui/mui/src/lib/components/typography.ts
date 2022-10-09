@@ -67,7 +67,7 @@ const typographyVariants = [
 
 export const schema: AglynComponentSchema<TypographyProps> = {
   componentId: ID,
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Typography',
   icon: {
     path: mdiAlphabetical.path,
@@ -137,7 +137,7 @@ export const schema: AglynComponentSchema<TypographyProps> = {
       },
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {
           variant: 'outlined',
           children: 'Typographical text element',
@@ -154,7 +154,7 @@ export const schema: AglynComponentSchema<TypographyProps> = {
       category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {
           variant: item.value,
           children: item.label,

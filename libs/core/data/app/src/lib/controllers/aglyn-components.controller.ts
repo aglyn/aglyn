@@ -147,9 +147,9 @@ export class AglynComponentsController
   public getComponent<P, T>(
     payload: ComponentGetPayload,
   ): OrUndef<AglynExoticComponent<P, T>> {
-    const { componentId, bundleId = undefined } = payload
-    const key = this.buildMapKey({ bundleId, componentId })
-    if (bundleId) {
+    const { componentId, pluginId = undefined } = payload
+    const key = this.buildMapKey({ pluginId, componentId })
+    if (pluginId) {
       return this.components?.get(key) as unknown as OrUndef<
         AglynExoticComponent<P, T>
       >
@@ -161,9 +161,9 @@ export class AglynComponentsController
   public getComponentSchema(
     payload: ComponentGetPayload,
   ): OrUndef<AglynComponentSchema> {
-    const { componentId, bundleId } = payload
-    const key = this.buildMapKey({ bundleId, componentId })
-    if (bundleId) {
+    const { componentId, pluginId } = payload
+    const key = this.buildMapKey({ pluginId, componentId })
+    if (pluginId) {
       return this.schemas?.get(key)
     }
     return this.schemas?.get(key)
@@ -171,22 +171,22 @@ export class AglynComponentsController
   public getBundle(
     payload: ComponentsBundleGetPayload,
   ): OrUndef<AglynBundleSchema> {
-    const { bundleId } = payload
-    return this.bundles.get(bundleId)
+    const { pluginId } = payload
+    return this.bundles.get(pluginId)
   }
   public buildMapKey(data: {
     componentId: ComponentId
-    bundleId: BundleId
+    pluginId: BundleId
   }): string {
-    const { componentId, bundleId } = data
-    return bundleId ? `${bundleId}:${componentId}` : componentId
+    const { componentId, pluginId } = data
+    return pluginId ? `${pluginId}:${componentId}` : componentId
   }
 
   public registerComponent(payload: ComponentRegisterPayload): this {
     const { component, schema } = payload
     const componentId = schema.componentId
-    const bundleId = schema.bundleId || undefined
-    const key = this.buildMapKey({ bundleId, componentId })
+    const pluginId = schema.pluginId || undefined
+    const key = this.buildMapKey({ pluginId, componentId })
 
     if (!isAglynComponentElement(component)) {
       // TODO: throw errorFactory error
@@ -197,17 +197,17 @@ export class AglynComponentsController
         AglynEventStateFlag.COMPONENT_REGISTERING,
         AglynEventStateFlag.COMPONENT_REGISTERED,
       ],
-      { componentId, bundleId },
+      { componentId, pluginId },
       () => {
-        if (bundleId) {
-          const bundle = this.bundles.get(bundleId)
+        if (pluginId) {
+          const bundle = this.bundles.get(pluginId)
           if (bundle) {
             this.components.set(key, component)
             this.schemas.set(key, schema)
             bundle.componentIds.push(componentId)
           } else {
             // TODO: throw errorFactory error
-            throw new Error(`Bundle does not exists: (${bundleId})`)
+            throw new Error(`Bundle does not exists: (${pluginId})`)
           }
         } else {
           this.components.set(componentId, component)
@@ -225,17 +225,17 @@ export class AglynComponentsController
   public registerBundle(payload: ComponentsBundleRegisterPayload): this {
     const { bundle, components } = payload
     const _bundle: AglynBundleSchema = { ...bundle, componentIds: [] }
-    const bundleId: BundleId = _bundle.bundleId
+    const pluginId: BundleId = _bundle.pluginId
     this.handleEvent(
       [
         AglynEventStateFlag.COMPONENT_BUNDLE_REGISTERING,
         AglynEventStateFlag.COMPONENT_BUNDLE_REGISTERED,
       ],
-      { bundleId },
+      { pluginId },
       () => {
-        this.bundles.set(bundleId, _bundle)
+        this.bundles.set(pluginId, _bundle)
         ;[...components].forEach(({ schema, component }) => {
-          schema.bundleId = bundleId
+          schema.pluginId = pluginId
           this.registerComponent({ schema, component })
         })
       },
@@ -244,19 +244,19 @@ export class AglynComponentsController
   }
 
   public unregisterComponent(payload: ComponentUnregisterPayload): this {
-    const { componentId, bundleId = undefined } = payload
-    const key = this.buildMapKey({ bundleId, componentId })
+    const { componentId, pluginId = undefined } = payload
+    const key = this.buildMapKey({ pluginId, componentId })
     this.handleEvent(
       [
         AglynEventStateFlag.COMPONENT_UNREGISTERING,
         AglynEventStateFlag.COMPONENT_UNREGISTERED,
       ],
-      { bundleId, componentId },
+      { pluginId, componentId },
       () => {
-        if (bundleId) {
-          const bundle = this.bundles.get(bundleId)
+        if (pluginId) {
+          const bundle = this.bundles.get(pluginId)
           if (!bundle) {
-            throw new Error(`No bundle exists with ID ${bundleId}.`)
+            throw new Error(`No bundle exists with ID ${pluginId}.`)
             // TODO: throw errorFactory error
           }
           this.schemas.get(key)?.presets?.forEach((i) => {
@@ -267,7 +267,7 @@ export class AglynComponentsController
           bundle.componentIds = bundle.componentIds.filter(
             (i) => i !== componentId,
           )
-          this.bundles.set(bundleId, bundle)
+          this.bundles.set(pluginId, bundle)
         } else {
           this.schemas.get(componentId)?.presets?.forEach((i) => {
             this.presets.delete(i.presetId)
@@ -280,10 +280,10 @@ export class AglynComponentsController
     return this
   }
   public unregisterBundle(payload: ComponentsBundleUnregisterPayload): this {
-    const { bundleId } = payload
-    const bundle = this.bundles.get(bundleId)
+    const { pluginId } = payload
+    const bundle = this.bundles.get(pluginId)
     if (!bundle) {
-      throw new Error(`No bundle exists with ID ${bundleId}.`)
+      throw new Error(`No bundle exists with ID ${pluginId}.`)
       // TODO: throw errorFactory error
     }
     this.handleEvent(
@@ -291,12 +291,12 @@ export class AglynComponentsController
         AglynEventStateFlag.COMPONENT_BUNDLE_UNREGISTERING,
         AglynEventStateFlag.COMPONENT_BUNDLE_UNREGISTERED,
       ],
-      { bundleId },
+      { pluginId },
       () => {
         bundle.componentIds.forEach((componentId) => {
-          this.unregisterComponent({ componentId, bundleId })
+          this.unregisterComponent({ componentId, pluginId })
         })
-        this.bundles.delete(bundleId)
+        this.bundles.delete(pluginId)
       },
     )
     return this

@@ -79,7 +79,7 @@ export enum ComponentsLinealDirectiveFlag {
   DISALLOW = 'forbid',
 }
 
-export type ComponentType<
+export type ComponentFactory<
   P extends ComponentProps<C> | any = any,
   C extends keyof JSX.IntrinsicElements | JSX.ElementConstructor<any> = any,
 > = ComponentClass<P> | JSX.ElementConstructor<P> | keyof JSX.IntrinsicElements

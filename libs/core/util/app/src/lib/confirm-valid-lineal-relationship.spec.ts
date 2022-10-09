@@ -24,13 +24,13 @@ describe('confirm-valid-lineal-relationship', () => {
   it('is valid if no restrictions exist', () => {
     const item = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictParent: undefined,
       restrictChildren: undefined,
     }
     const parent = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictChildren: undefined,
     }
     expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(true)
@@ -38,13 +38,13 @@ describe('confirm-valid-lineal-relationship', () => {
   it('is invalid if component="cba" and parent requires "abc"', () => {
     const item = {
       componentId: 'cba',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictParent: undefined,
       restrictChildren: undefined,
     }
     const parent = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictChildren: [
         ComponentsLinealDirectiveFlag.LIMIT_TO,
         ['abc'],
@@ -55,13 +55,13 @@ describe('confirm-valid-lineal-relationship', () => {
   it('is valid if component="abc" and parent requires "abc"', () => {
     const item = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictParent: undefined,
       restrictChildren: undefined,
     }
     const parent = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictChildren: [
         ComponentsLinealDirectiveFlag.LIMIT_TO,
         ['abc'],
@@ -72,13 +72,13 @@ describe('confirm-valid-lineal-relationship', () => {
   it('is invalid if component="abc"/bundle="zyx" and parent requires "abc"/"xyz"', () => {
     const item = {
       componentId: 'abc',
-      bundleId: 'zyx',
+      pluginId: 'zyx',
       restrictParent: undefined,
       restrictChildren: undefined,
     }
     const parent = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictChildren: [
         ComponentsLinealDirectiveFlag.LIMIT_TO,
         { bundles: ['xyz'], components: ['abc'] },
@@ -89,13 +89,13 @@ describe('confirm-valid-lineal-relationship', () => {
   it('is valid if component="abc"/bundle="xyz" and parent requires "abc"/"xyz"', () => {
     const item = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictParent: undefined,
       restrictChildren: undefined,
     }
     const parent = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictChildren: [
         ComponentsLinealDirectiveFlag.LIMIT_TO,
         { bundles: ['xyz'], components: ['abc'] },
@@ -106,13 +106,13 @@ describe('confirm-valid-lineal-relationship', () => {
   it('is invalid if component="cba"/bundle="xyz" and parent requires "abc"/"xyz"', () => {
     const item = {
       componentId: 'cba',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictParent: undefined,
       restrictChildren: undefined,
     }
     const parent = {
       componentId: 'abc',
-      bundleId: 'xyz',
+      pluginId: 'xyz',
       restrictChildren: [
         ComponentsLinealDirectiveFlag.LIMIT_TO,
         { bundles: ['xyz'], components: ['abc'] },

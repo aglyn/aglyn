@@ -67,6 +67,10 @@ export const screenVersionConverter: firebaseAdmin.firestore.FirestoreDataConver
         data.nodes = data.elements
         delete data.elements
       }
+      if (data['bundleId']) {
+        data.pluginId = data['bundleId']
+        delete data['bundleId']
+      }
       if (data.nodes) data.nodes = compress(data.nodes) as any
       if (data.$id) delete data.$id
       data.updatedAt = firebaseAdmin.firestore.Timestamp.now()
@@ -78,6 +82,10 @@ export const screenVersionConverter: firebaseAdmin.firestore.FirestoreDataConver
       if (data?.elements) {
         data.nodes = data.elements
         delete data.elements
+      }
+      if (data?.['bundleId']) {
+        data.pluginId = data['bundleId']
+        delete data['bundleId']
       }
       if (data?.nodes) {
         data.nodes = decompress(data.nodes)

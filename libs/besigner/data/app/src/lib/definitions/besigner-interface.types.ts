@@ -114,7 +114,7 @@ export type BesignerDndElementBaseData<T extends DndDragType | DndDropType> =
   JSX.AnyProps & {
     $id: NodeId
     componentId?: ComponentId
-    bundleId?: BundleId
+    pluginId?: BundleId
     trail?: AglynNodeHierarchy
     restrictParent?: ComponentsLinealOrder
     restrictChildren?: ComponentsLinealOrder

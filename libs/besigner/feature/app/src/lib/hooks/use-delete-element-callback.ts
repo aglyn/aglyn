@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   setBesignerCanvasHovered,
   setBesignerCanvasSelected,
@@ -59,9 +60,14 @@ export const useDeleteElementCallback = (
       })
         .then(
           (res) => {
+            const node = Aglyn.screen.getNode(opts?.$id || $id)
             setBesignerCanvasSelected(app, { selected: () => ({}) })
             setBesignerCanvasHovered(app, { hovered: () => ({}) })
-            deleteCanvasElement(app, { $id: opts?.$id || $id })
+            console.log('delete node', node, opts, $id, options)
+            if (node) {
+              Aglyn.screen.deleteNode(node)
+              deleteCanvasElement(app, { $id: opts?.$id || $id })
+            }
             opts?.onFulfilled && opts?.onFulfilled(res)
             onFulfilled && onFulfilled(res)
           },
@@ -77,7 +83,7 @@ export const useDeleteElementCallback = (
           onCatch && onCatch(e)
         })
     },
-    [app, confirm, $id, onFulfilled, onRejected, onCatch],
+    [confirm, $id, app, options, onFulfilled, onRejected, onCatch],
   )
 }
 

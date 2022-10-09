@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { JSONSchema7 } from 'json-schema'
 import { makeAutoObservable } from 'mobx'
 import { nanoid } from 'nanoid'
 import type { PluginId } from '../plugin-manager'
@@ -24,17 +25,74 @@ export type NodeId = string
 export interface NodeSchema<P = JSX.AnyProps> {
   $id: NodeId
   componentId: string
-  bundleId?: PluginId
+  pluginId?: PluginId
   parentId?: NodeId
-  sx?: JSX.SxProps
-  props?: P
   nodes?: NodeId[]
+  className?: string
+  props?: P
+  sx?: JSX.SxProps
+}
+
+export const NodeSchemaJsonSchema: JSONSchema7 = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://aglyn.io/schema/node.schema.json',
+  title: 'Aglyn Node Item',
+  description: 'Aglyn screen node for hydrating view component',
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    $id: {
+      description: 'The unique identifier for a node',
+      type: 'string',
+    },
+    componentId: {
+      description: 'The unique identifier of the node component',
+      type: 'string',
+    },
+    pluginId: {
+      description: 'The unique identifier of the node component bundle',
+      type: 'string',
+    },
+    parentId: {
+      description: 'The unique identifier of the node parent',
+      type: 'string',
+    },
+    sx: {
+      description: 'The node style properties for emotion',
+      type: 'object',
+    },
+    props: {
+      description: 'The node props/attributes passed to the component',
+      type: 'object',
+    },
+    nodes: {
+      description: 'List of the children unique identifiers for the node',
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+    },
+  },
+  required: ['$id', 'componentId'],
 }
 
 export type NodeSchemaNested<P = JSX.AnyProps> = Omit<
   NodeSchema<P>,
   'nodes'
 > & { nodes?: NodeSchemaNested<any>[] }
+
+export const NodeSchemaNestedJsonSchema: JSONSchema7 = {
+  ...NodeSchemaJsonSchema,
+  properties: {
+    ...NodeSchemaJsonSchema.properties,
+    nodes: {
+      ...(NodeSchemaJsonSchema.properties['nodes'] as JSONSchema7),
+      items: {
+        $ref: '#',
+      },
+    },
+  },
+}
 
 export const NODE_ID_LENGTH = 10
 
@@ -46,7 +104,7 @@ export function nodeFactory<P = JSX.AnyProps>(schema: NodeSchema<P>) {
   const node: NodeSchema<P> = {
     $id: schema.$id,
     componentId: schema.componentId,
-    bundleId: schema.bundleId,
+    pluginId: schema.pluginId,
     parentId: schema.parentId,
     sx: Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx },
     props: { ...schema.props },
@@ -56,7 +114,7 @@ export function nodeFactory<P = JSX.AnyProps>(schema: NodeSchema<P>) {
   return makeAutoObservable({
     $id: node.$id,
     componentId: node.componentId,
-    bundleId: node.bundleId,
+    pluginId: node.pluginId,
     parentId: node.parentId,
     sx: node.sx,
     props: node.props,

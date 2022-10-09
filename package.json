@@ -182,6 +182,7 @@
     "@types/flat": "^5.0.2",
     "@types/gravatar": "^1.8.3",
     "@types/jest": "28.1.8",
+    "@types/json-schema": "^7.0.11",
     "@types/lodash-es": "^4.17.6",
     "@types/lru-cache": "^7.10.10",
     "@types/node": "18.7.18",

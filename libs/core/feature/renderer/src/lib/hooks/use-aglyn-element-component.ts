@@ -24,7 +24,7 @@ export function useAglynElementComponent<P, T>(
   $id: NodeId,
 ): OrUndef<AglynExoticComponent<P, T>> {
   const componentId = useAglynElementData($id, 'componentId')
-  const bundleId = useAglynElementData($id, 'bundleId')
-  return useAglynComponent(componentId, bundleId)
+  const pluginId = useAglynElementData($id, 'pluginId')
+  return useAglynComponent(componentId, pluginId)
 }
 export default useAglynElementComponent

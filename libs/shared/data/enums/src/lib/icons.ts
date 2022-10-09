@@ -45,7 +45,6 @@ import {
   mdiCubeOutline,
   mdiCursorDefault,
   mdiCursorMove,
-  mdiDeleteOutline,
   mdiDockBottom,
   mdiDockLeft,
   mdiDockRight,
@@ -88,6 +87,7 @@ import {
   mdiWeatherNight,
   mdiWeb,
   mdiWhiteBalanceSunny,
+  mdiWindowClose,
 } from '@aglyn/shared-ui-mdi-jsx'
 
 // Data-Type
@@ -132,7 +132,7 @@ export const ICON_VARIANT_DOCK_LEFT_TOGGLE = mdiDockLeft
 export const ICON_VARIANT_DOCK_RIGHT_TOGGLE = mdiDockRight
 export const ICON_VARIANT_MENU_DOWN = mdiMenuDown
 export const ICON_VARIANT_MODIFY_ADD = mdiPlus
-export const ICON_VARIANT_MODIFY_DELETE = mdiDeleteOutline
+export const ICON_VARIANT_MODIFY_DELETE = mdiWindowClose
 export const ICON_VARIANT_MODIFY_DRAG = mdiDrag
 export const ICON_VARIANT_MODIFY_DUPLICATE = mdiContentDuplicate
 export const ICON_VARIANT_MODIFY_EDIT = mdiPencil

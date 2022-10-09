@@ -30,7 +30,29 @@ export const schema: Aglyn.ComponentSchema = {
     path: mdiViewColumn.path,
     sx: { color: '#2196f3' },
   },
-  attributes: [],
+  attributes: [
+    {
+      name: 'direction',
+      label: 'Direction',
+      description:
+        'Defines the directional flow using the `flex-direction` style property. It is applied for all screen sizes.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: '', label: 'Default' },
+        { value: 'column', label: 'Column' },
+        { value: 'column-reverse', label: 'Column Reversed' },
+        { value: 'row', label: 'Row' },
+        { value: 'row-reverse', label: 'Row Reversed' },
+      ],
+    },
+    {
+      name: 'spacing',
+      label: 'Spacing',
+      description: 'Defines the space/gap between its immediate children.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+    },
+  ],
 }
 
 export default Stack

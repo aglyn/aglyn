@@ -15,5 +15,8 @@
  * limitations under the License.
  */
 
-export * from './user-agent-manager'
-export { default as platform } from './user-agent-manager'
+import UAParserJS from 'ua-parser-js'
+
+export class UAParser extends UAParserJS {}
+
+export const session = new UAParser()

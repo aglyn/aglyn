@@ -28,7 +28,7 @@ export type PresetSchema = {
   presetId: PresetId
   label: string
   componentId?: ComponentId
-  bundleId?: PluginId
+  pluginId?: PluginId
   description?: string
   icon?: MdiIconProps
   category?: string | ComponentCategory

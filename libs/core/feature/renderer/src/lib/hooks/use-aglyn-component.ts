@@ -26,10 +26,10 @@ import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynComponent<P, T>(
   componentId: CommandUId,
-  bundleId?: BundleId,
+  pluginId?: BundleId,
 ): OrUndef<AglynExoticComponent<P, T>> {
   const app = useAglynAppContext()
-  return getComponent(app, { componentId, bundleId }) as AglynExoticComponent<
+  return getComponent(app, { componentId, pluginId }) as AglynExoticComponent<
     P,
     T
   >

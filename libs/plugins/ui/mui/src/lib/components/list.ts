@@ -31,7 +31,7 @@ const ID: ComponentId = 'list'
 
 export const schema: AglynComponentSchema<ListProps> = {
   componentId: ID,
-  bundleId: 'mui',
+  pluginId: 'mui',
   displayName: 'List',
   icon: { path: mdiFormatListBulletedSquare.path },
   restrictChildren: [
@@ -48,7 +48,7 @@ export const schema: AglynComponentSchema<ListProps> = {
       category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         nodes: [
           {
             ...listItemSchema.presets![0]!.data,

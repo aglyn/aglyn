@@ -37,16 +37,16 @@ export function hasPreset(presetId: PresetId) {
 }
 
 export function registerPreset(preset: PresetSchema) {
-  const { presetId, bundleId, componentId } = preset
+  const { presetId, pluginId, componentId } = preset
   lifecycleEvent(
     () => {
       presets[presetId] = preset
     },
     {
       beforeEvent: AglynEvent.PRESET_REGISTERING,
-      beforePayload: [{ bundleId, componentId, presetId }],
+      beforePayload: [{ pluginId, componentId, presetId }],
       afterEvent: AglynEvent.PRESET_REGISTERED,
-      afterPayload: [{ bundleId, componentId, presetId }],
+      afterPayload: [{ pluginId, componentId, presetId }],
     },
   )
 }

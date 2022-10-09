@@ -15,9 +15,6 @@
  * limitations under the License.
  */
 
-import UAParser from 'ua-parser-js'
+import { observable } from 'mobx'
 
-export class UserAgentManager extends UAParser {}
-
-const singleton = new UserAgentManager()
-export default singleton
+export const activeTenant = observable({})

@@ -15,14 +15,19 @@
  * limitations under the License.
  */
 
+import { observable } from 'mobx'
 import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
 import { hasDependency } from '../plugin-manager'
-import type { ComponentId, ComponentSchema, ComponentType } from './component'
+import type {
+  ComponentFactory,
+  ComponentId,
+  ComponentSchema,
+} from './component'
 
 export * from './component'
 
-export const factories: Record<ComponentId, ComponentType> = {}
-export const schemas: Record<ComponentId, ComponentSchema> = {}
+export const factories: Record<ComponentId, ComponentFactory> = observable({})
+export const schemas: Record<ComponentId, ComponentSchema> = observable({})
 
 emitter.on(AglynEvent.COMPONENT_REGISTER, ({ component, schema }) => {
   registerComponent(component, schema)
@@ -44,7 +49,7 @@ export function hasComponent(componentId: ComponentId) {
 }
 
 export function registerComponent(
-  component: ComponentType,
+  component: ComponentFactory,
   schema: ComponentSchema,
 ) {
   const { componentId, pluginId } = schema

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type {FieldComponentMap} from '../types'
+import type { FieldComponentMap } from '../types'
 import optionIsEqualToValue from '../utils/option-is-equal-to-value'
 import {
   FieldCheckbox,
@@ -37,7 +37,6 @@ import {
   FieldWizard,
 } from './dynamic-fields'
 
-
 export const fieldSharedOptions = {
   size: 'small',
   color: 'secondary',
@@ -55,12 +54,12 @@ export const FIELD_MAP_SELECT: FieldComponentMap = {
 }
 export const FIELD_MAP_SWITCH: FieldComponentMap = {
   color: fieldSharedOptions.color,
-  size: 'medium',
+  // size: 'medium',
   component: FieldSwitch,
 }
 export const FIELD_MAP_TEXT_FIELD: FieldComponentMap = {
   ...fieldSharedOptions,
-  size: 'medium',
+  // size: 'small',
   component: FieldTextField,
 }
 export const FIELD_MAP_TEXTAREA: FieldComponentMap = {
