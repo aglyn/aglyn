@@ -20,8 +20,7 @@ import _isArr from '@aglyn/shared-util-guards/_is-arr'
 import _isObj from '@aglyn/shared-util-guards/_is-obj'
 import cloneDeep from 'lodash-es/cloneDeep'
 import { observable, toJS } from 'mobx'
-import * as Aglyn from '../../index'
-import { NODE_ROOT_ID } from '../../index'
+import { NODE_ROOT_ID, NodeNavigationHierarchy } from '../../index'
 import { AglynEvent, emitter } from '../emit-manager'
 import {
   createNodeId,
@@ -259,8 +258,26 @@ export function processNodesToDenormalized(
     const _value = { ...(value as NodeSchemaNested<any>) }
     response = denormalizeNodes([_value], _value.parentId || NODE_ROOT_ID)
   } else {
-    response = value as unknown as Record<Aglyn.NodeId, Aglyn.NodeSchema>
+    response = value as unknown as Record<NodeId, NodeSchema>
   }
 
   return response
+}
+
+export function isNodeRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
+  return id === NODE_ROOT_ID
+}
+
+export function getNodeNavigationHierarchy(
+  id: NodeId,
+): NodeNavigationHierarchy {
+  const hierarchy = [NODE_ROOT_ID]
+
+  let currentId: NodeId = id
+  while (currentId && !isNodeRootNodeId(currentId)) {
+    hierarchy.splice(1, 0, currentId)
+    currentId = getNode(currentId)?.parentId
+  }
+
+  return hierarchy as NodeNavigationHierarchy
 }

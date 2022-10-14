@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { BoxStyler, Measurements } from '@aglyn/besigner-ui-box-styler'
 import { updateCanvasElement } from '@aglyn/core-data-app'
 import { FieldComponentType, type NodeId } from '@aglyn/core-data-foundation'
 import {
   useAglynAppContext,
-  useAglynElementData,
   useAglynSiteTheme,
 } from '@aglyn/core-feature-renderer'
 import {
@@ -443,7 +443,8 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
     const { $id, ...rest } = props
     const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({ $id })
-    const elemStyles = useAglynElementData($id, 'sx')
+    const node = Aglyn.screen.getNode($id)
+    const nodeSx = node?.sx
     const siteTheme = useAglynSiteTheme()
 
     const schema = useMemo(() => {
@@ -457,6 +458,9 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback(
       (values) => {
+        if (node) {
+          node.sx = { ...values }
+        }
         updateCanvasElement(app, {
           $id,
           update: (element) => {
@@ -464,7 +468,7 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
           },
         })
       },
-      [$id, app],
+      [$id, app, node],
     )
     const handleDeleteElement = useCallback(
       (e: ChangeEvent<unknown>) => {
@@ -476,35 +480,35 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
     const handleBoxStylerChange = useCallback(
       (dimensions: Measurements) => {
         handleElementSave({
-          ...elemStyles,
+          ...nodeSx,
           ...dimensions,
         })
       },
-      [elemStyles, handleElementSave],
+      [nodeSx, handleElementSave],
     )
 
     const handleTextAlignChange = useCallback(
       (e, value: string) => {
         handleElementSave({
-          ...elemStyles,
+          ...nodeSx,
           textAlign: value || 'undefined',
         })
       },
-      [elemStyles, handleElementSave],
+      [nodeSx, handleElementSave],
     )
 
     const boxMeasurements = useMemo(
       () => ({
-        marginTop: elemStyles?.['marginTop'],
-        marginLeft: elemStyles?.['marginLeft'],
-        marginRight: elemStyles?.['marginRight'],
-        marginBottom: elemStyles?.['marginBottom'],
-        paddingTop: elemStyles?.['paddingTop'],
-        paddingLeft: elemStyles?.['paddingLeft'],
-        paddingRight: elemStyles?.['paddingRight'],
-        paddingBottom: elemStyles?.['paddingBottom'],
+        marginTop: nodeSx?.['marginTop'],
+        marginLeft: nodeSx?.['marginLeft'],
+        marginRight: nodeSx?.['marginRight'],
+        marginBottom: nodeSx?.['marginBottom'],
+        paddingTop: nodeSx?.['paddingTop'],
+        paddingLeft: nodeSx?.['paddingLeft'],
+        paddingRight: nodeSx?.['paddingRight'],
+        paddingBottom: nodeSx?.['paddingBottom'],
       }),
-      [elemStyles],
+      [nodeSx],
     )
 
     return (
@@ -516,7 +520,7 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
 
         <TextAlignToggleButtonGroup
           onChange={handleTextAlignChange}
-          value={elemStyles?.['textAlign']}
+          value={nodeSx?.['textAlign']}
           field={{
             component: FieldComponentType.TOGGLE_BUTTON,
             name: 'textAlign',
@@ -560,7 +564,7 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
           componentMapper={componentMapper}
           onCancel={handleFormCancel}
           onSubmit={handleElementSave}
-          initialValues={elemStyles}
+          initialValues={nodeSx}
           schema={schema}
           {...rest}
         />

@@ -18,6 +18,7 @@
 import type { JSONSchema7 } from 'json-schema'
 import { makeAutoObservable } from 'mobx'
 import { nanoid } from 'nanoid'
+import { NODE_ROOT_ID } from '../constants'
 import type { PluginId } from '../plugin-manager'
 
 export type NodeId = string
@@ -31,6 +32,7 @@ export interface NodeSchema<P = JSX.AnyProps> {
   className?: string
   props?: P
   sx?: JSX.SxProps
+  displayName?: string
 }
 
 export const NodeSchemaJsonSchema: JSONSchema7 = {
@@ -80,6 +82,11 @@ export type NodeSchemaNested<P = JSX.AnyProps> = Omit<
   NodeSchema<P>,
   'nodes'
 > & { nodes?: NodeSchemaNested<any>[] }
+
+export type NodeNavigationHierarchy = [
+  root: typeof NODE_ROOT_ID,
+  ...nodes: [...ancestors: NodeId[], node: NodeId],
+]
 
 export const NodeSchemaNestedJsonSchema: JSONSchema7 = {
   ...NodeSchemaJsonSchema,

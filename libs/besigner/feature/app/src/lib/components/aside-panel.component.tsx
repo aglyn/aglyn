@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   type BesignerPanelKey,
   BesignerPanelTabFlag,
   DndDragType,
 } from '@aglyn/besigner-data-app'
-import { getBundle, getComponentSchema } from '@aglyn/core-data-app'
+import { getBundle } from '@aglyn/core-data-app'
 import type { AglynNodePresetSchema, NodeId } from '@aglyn/core-data-foundation'
-import {
-  useAglynAppContext,
-  useAglynComponentSchema,
-  useAglynComponentsContext,
-  useAglynElementData,
-} from '@aglyn/core-feature-renderer'
+import { useAglynComponentsContext } from '@aglyn/core-feature-renderer'
 import {
   ICON_VARIANT_ELEMENT,
   ICON_VARIANT_ELEMENT_BROWSE,
@@ -102,10 +98,8 @@ const TabPanelInner = styled('div', {
 }))
 
 const ElementInfo = function ElementInfo({ $id }: { $id: NodeId }) {
-  const componentId = useAglynElementData($id, 'componentId')
-  const pluginId = useAglynElementData($id, 'pluginId')
-  const parentId = useAglynElementData($id, 'parentId')
-  const schema = useAglynComponentSchema(componentId, pluginId)
+  const node = Aglyn.screen.getNode($id)
+  const schema = Aglyn.components.getSchema(node?.componentId)
   const failoverText = 'n/a'
   const details = useMemo(
     () => [
@@ -148,23 +142,23 @@ const ElementInfo = function ElementInfo({ $id }: { $id: NodeId }) {
           {
             key: 'parent-id',
             label: 'Parent Element ID',
-            value: parentId,
+            value: node?.parentId,
           },
           {
             key: 'component-id',
             label: 'Component ID',
-            value: componentId,
+            value: schema?.componentId,
           },
           {
-            key: 'bundle-id',
-            label: 'Bundle ID',
-            value: pluginId,
+            key: 'plugin-id',
+            label: 'Plugin ID',
+            value: schema?.pluginId,
             ValueTypographyProps: {},
           },
         ],
       },
     ],
-    [schema, $id, parentId, componentId, pluginId],
+    [schema, $id, node],
   )
   const [expanded, setExpanded] = useState<string | false>(details[0].key)
   const handleChange =
@@ -301,19 +295,18 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
   (props, forwardRef) => {
     const { item, ...rest } = props
     const icon = item?.icon
-    const app = useAglynAppContext()
+    const schema = Aglyn.components.getSchema(item?.componentId)
     const dndData = useMemo(() => {
       const { $id, data, componentId, pluginId } = item
-      const componentSchema = getComponentSchema(app, { componentId, pluginId })
       return {
         $id,
         data,
         componentId,
-        pluginId,
-        restrictParent: componentSchema?.restrictParent,
-        restrictChildren: componentSchema?.restrictChildren,
+        pluginId: schema?.pluginId,
+        restrictParent: schema?.restrictParent,
+        restrictChildren: schema?.restrictChildren,
       }
-    }, [item])
+    }, [item, schema])
     const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(
       dndData,
       DndDragType.TEMPLATE,

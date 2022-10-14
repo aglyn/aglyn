@@ -101,15 +101,18 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
   (props, ref) => {
     const { $id, ...rest } = props
     const node = Aglyn.screen.getNode($id)
+    const schema = Aglyn.components.getSchema(node?.componentId)
+    const nodeProps = node?.props
     const app = useAglynAppContext()
     const deleteElementCallback = useDeleteElementCallback({ $id })
-    const elemProps = node?.props
-    const schema = Aglyn.components.getSchema(node?.componentId)
     const attributes = schema?.attributes || []
 
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback(
       (values) => {
+        if (node) {
+          node.props = { ...values }
+        }
         updateCanvasElement(app, {
           $id,
           update: (element) => {
@@ -136,7 +139,7 @@ const ElementPropsForm = forwardRef<any, ElementPropsFormProps>(
             componentMapper={simpleComponentMapper}
             onCancel={handleFormCancel}
             onSubmit={handleElementSave}
-            initialValues={elemProps}
+            initialValues={nodeProps}
             schema={{ fields: attributes }}
             {...rest}
           >

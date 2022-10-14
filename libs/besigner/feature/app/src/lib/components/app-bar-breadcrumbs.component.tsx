@@ -15,11 +15,9 @@
  * limitations under the License.
  */
 
-import { getComponentSchema } from '@aglyn/core-data-app'
+import * as Aglyn from '@aglyn/aglyn'
 import { NodeId } from '@aglyn/core-data-foundation'
 import {
-  useAglynAppContext,
-  useAglynCanvasElementHierarchy,
   useAglynElementData,
   useAglynElementLabel,
 } from '@aglyn/core-feature-renderer'
@@ -78,24 +76,22 @@ const BreadcrumbItem = forwardRef<any, BreadcrumbItemProps>(
   (props, forwardRef) => {
     const { children, item, lastItem, ...rest } = props
     const { $id } = item
-    const app = useAglynAppContext()
     const setSelected = useAglynCanvasSetSelected()
     const setHovered = useAglynCanvasSetHovered()
     const label = useAglynElementLabel($id)
     const componentId = useAglynElementData($id, 'componentId')
-    const pluginId = useAglynElementData($id, 'pluginId')
-    const trail = useAglynCanvasElementHierarchy($id)
+    const hierarchy = Aglyn.screen.getNodeNavigationHierarchy($id)
     const dndData = useMemo(() => {
-      const componentSchema = getComponentSchema(app, { componentId, pluginId })
+      const schema = Aglyn.components.getSchema(componentId)
       return {
         $id,
         componentId,
-        pluginId,
-        trail,
-        restrictParent: componentSchema?.restrictParent,
-        restrictChildren: componentSchema?.restrictChildren,
+        pluginId: schema?.pluginId,
+        trail: hierarchy,
+        restrictParent: schema?.restrictParent,
+        restrictChildren: schema?.restrictChildren,
       }
-    }, [app, componentId, pluginId, $id, trail])
+    }, [componentId, $id, hierarchy])
     const [, dropRef] = useLeafDrop(dndData)
     const ref = useForkedRefs<any>(forwardRef, dropRef)
 
@@ -142,7 +138,7 @@ interface BreadcrumbsProps extends Partial<MuiBreadcrumbsProps> {}
 const Breadcrumbs = forwardRef<any, BreadcrumbsProps>((props, ref) => {
   const { children, sx, ...rest } = props
   const [selected] = useAglynCanvasSelected()
-  const ids = useAglynCanvasElementHierarchy(selected?.$id)
+  const hierarchy = Aglyn.screen.getNodeNavigationHierarchy(selected?.$id)
 
   return (
     <MuiBreadcrumbs
@@ -152,7 +148,7 @@ const Breadcrumbs = forwardRef<any, BreadcrumbsProps>((props, ref) => {
       sx={mergeSxProps({ lineHeight: 1, fontSize: 11 }, sx)}
       {...rest}
     >
-      {ids.map(($id, index, arr) => (
+      {hierarchy.map(($id, index, arr) => (
         <BreadcrumbItem
           key={$id ?? index}
           item={{ $id }}
