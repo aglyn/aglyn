@@ -101,6 +101,7 @@
     "md5": "^2.3.0",
     "mitt": "^3.0.0",
     "mobx": "^6.6.1",
+    "mobx-react-lite": "^3.4.0",
     "mout": "^1.2.3",
     "nanoid": "^3.3.4",
     "nanoid-dictionary": "^4.3.0",

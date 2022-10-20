@@ -21,15 +21,13 @@ import {
   type BesignerDroppableItem,
   DndDragType,
 } from '@aglyn/besigner-data-app'
-import { addCanvasElement, moveCanvasElement } from '@aglyn/core-data-app'
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
 import { useAglynAppContext } from '@aglyn/core-feature-renderer'
-import { createComponentElementData } from '@aglyn/core-util-app'
 import {
   type ConnectDragPreview,
   type ConnectDragSource,
   useDrag,
 } from 'react-dnd'
+import { useAglynCanvasSetHovered } from './use-aglyn-canvas-hovered'
 import { useAglynCanvasSetSelected } from './use-aglyn-canvas-selected'
 import { useAglynDndSetActive } from './use-aglyn-dnd-active'
 import { useAglynDndSetOver } from './use-aglyn-dnd-over'
@@ -44,88 +42,45 @@ export function useLeafDrag<T extends BesignerDraggableItem>(
 ): [DragCollected, ConnectDragSource, ConnectDragPreview] {
   const app = useAglynAppContext()
   const setSelected = useAglynCanvasSetSelected()
+  const setHovered = useAglynCanvasSetHovered()
   const setDndActive = useAglynDndSetActive()
   const setDndOver = useAglynDndSetOver()
+  const isRootNode = Aglyn.screen.isRootNodeId(dragObject?.$id)
+  const schema = Aglyn.components.getSchema(dragObject?.componentId)
+  const canDrag = !isRootNode && Aglyn.isFeatureEnabled(schema?.flags?.dragging)
+
+  const deps = [
+    dragObject,
+    canDrag,
+    app,
+    type,
+    setDndActive,
+    setDndOver,
+    setSelected,
+    setHovered,
+  ]
 
   // console.log('dragItem item canDrag', dragItem, $id, type, canDrag, flags)
 
   return useDrag<T, BesignerDroppableItem, DragCollected>(
-    () => ({
+    /*() => */ {
+      type: type,
+      item: dragObject,
+      canDrag: canDrag,
       options: {
         dropEffect: 'move',
       },
       previewOptions: {
         offsetY: -50,
       },
-      type,
       isDragging: (monitor) => {
         return dragObject?.$id && dragObject?.$id === monitor.getItem()?.$id
-      },
-      item: () => {
-        console.log('draggable item', dragObject)
-        if (type !== DndDragType.TEMPLATE) {
-          setSelected({ $id: dragObject.$id })
-          setDndActive(dragObject)
-        }
-        return dragObject
-      },
-      canDrag: (monitor) => {
-        const item = monitor.getItem()
-        if (Aglyn.screen.isRootNodeId(item?.$id)) return false
-        const schema = Aglyn.components.getSchema(item?.componentId)
-        return Aglyn.isFeatureEnabled(schema?.flags?.dragging)
-      },
-      end: (dragItem, monitor) => {
-        setDndActive(undefined)
-        setDndOver(undefined)
-        const dropItem = monitor.getDropResult()
-        console.log('end drag ', dragItem, dropItem)
-        if (!monitor.didDrop()) return
-        if (!dropItem) return
-        if (type === DndDragType.TEMPLATE) {
-          const parent =
-            Aglyn.screen.getNode(dropItem?.$id) ||
-            Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
-          const templateData = {
-            ...(dragItem?.data as any),
-            $id: Aglyn.createNodeId(),
-            parentId: parent?.$id,
-          }
-          Aglyn.screen.setNodes(
-            Aglyn.screen.denormalizeNodes([templateData as any], parent?.$id),
-          )
-          Aglyn.screen.addNodeToParent(
-            Aglyn.screen.getNode(templateData.$id),
-            parent,
-            NaN,
-          )
-          const newElement = {
-            index: NaN,
-            parentId: dropItem?.$id || CANVAS_ROOT_ELEMENT_ID,
-            element: createComponentElementData(dragItem as any),
-          }
-          addCanvasElement(app, newElement)
-          setSelected({ $id: newElement.element.$id })
-        } else {
-          const node = Aglyn.screen.getNode(dragItem?.$id)
-          Aglyn.screen.reparentNode(
-            node,
-            Aglyn.screen.getNode(node?.parentId),
-            Aglyn.screen.getNode(dropItem?.$id),
-            NaN,
-          )
-          moveCanvasElement(app, {
-            $id: dragItem.$id,
-            parentId: dropItem?.$id,
-            index: NaN,
-          })
-        }
       },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
-    }),
-    [dragObject, app, type, setSelected, setDndActive],
+    },
+    deps,
   )
 }
 export default useLeafDrag

@@ -266,27 +266,25 @@ const withTabPanelInner = (Component) => (props: any) => {
   )
 }
 
-const ElementsTree = forwardRef<any, NodeTreeViewProps>(
-  (props, ref) => {
-    const handleAddElementClick = useAddElementDrawerCallback()
-    return (
-      <TabPanelInner sx={{ pl: 0.5 }}>
-        <Box sx={{ px: 0.5, pb: 1, pt: 1 }}>
-          <Button
-            color="secondary"
-            startIcon={
-              <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_ADD.path} />
-            }
-            onClick={handleAddElementClick}
-          >
-            {'Add Element'}
-          </Button>
-        </Box>
-        <NodeTreeViewComponent ref={ref} {...props} />
-      </TabPanelInner>
-    )
-  },
-)
+const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
+  const handleAddElementClick = useAddElementDrawerCallback()
+  return (
+    <TabPanelInner sx={{ pl: 0.5 }}>
+      <Box sx={{ px: 0.05, pb: 1, pt: 1 }}>
+        <Button
+          color="secondary"
+          startIcon={
+            <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_ADD.path} />
+          }
+          onClick={handleAddElementClick}
+        >
+          {'Add Element'}
+        </Button>
+      </Box>
+      <NodeTreeViewComponent ref={ref} {...props} />
+    </TabPanelInner>
+  )
+})
 
 type ComponentGridItemProps = CardIconListItemProps & {
   item: AglynNodePresetSchema

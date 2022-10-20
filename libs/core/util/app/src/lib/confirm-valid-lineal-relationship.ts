@@ -76,7 +76,10 @@ function validateLinealOrder(
   }
 
   // Throw is disallowed
-  if (directiveType === ComponentsLinealDirectiveFlag.DISALLOW) {
+  if (
+    ComponentsLinealDirectiveFlag[directiveType] ===
+    ComponentsLinealDirectiveFlag.DISALLOW
+  ) {
     if (definition?.components?.some((cid) => cid === componentId)) {
       throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
     }
@@ -86,7 +89,10 @@ function validateLinealOrder(
   }
 
   // Throw if limited to range and missing
-  if (directiveType === ComponentsLinealDirectiveFlag.LIMIT_TO) {
+  if (
+    ComponentsLinealDirectiveFlag[directiveType] ===
+    ComponentsLinealDirectiveFlag.LIMIT_TO
+  ) {
     if (
       _isArr(definition?.components) &&
       (_isArrEmpty(definition?.components) ||

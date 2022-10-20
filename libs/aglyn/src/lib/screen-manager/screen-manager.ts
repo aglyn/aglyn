@@ -106,9 +106,10 @@ export function removeNodeFromParent(
   node: NodeSchema<any>,
   parent: NodeSchema<any>,
 ) {
-  if (!node || !parent || !parent.nodes.some((id) => id !== node.$id)) return
-  parent.nodes = parent.nodes.filter((id) => id !== node.$id)
+  if (!node || !parent || !parent.nodes.some((id) => id === node.$id)) return
+  parent.nodes = [...parent.nodes].filter((id) => id !== node.$id)
   nodes[parent.$id] = parent
+  node.parentId = null
 }
 
 export function addNodeToParent(
@@ -116,11 +117,14 @@ export function addNodeToParent(
   parent: NodeSchema<any>,
   index = NaN,
 ) {
-  if (!node || !parent || parent.nodes.some((id) => id !== node.$id)) return
-  node.parentId = parent.$id
-  if (isNaN(index)) parent.nodes.push(node.$id)
-  else parent.nodes.splice(index, 0, node.$id)
+  if (!node || !parent || parent.nodes.some((id) => id === node.$id)) return
+  if (isNaN(index)) {
+    parent.nodes = [...parent.nodes, node.$id]
+  } else {
+    parent.nodes.splice(index, 0, node.$id)
+  }
 
+  node.parentId = parent.$id
   nodes[parent.$id] = parent
   nodes[node.$id] = node
 }

@@ -163,9 +163,17 @@ function Screens(props) {
         nodes: { [CANVAS_ROOT_ELEMENT_ID]: { nodes: [] } },
       }
       await Promise.all([
-        setDoc(doc(firestore, 'screens', newId), newValues),
+        setDoc(doc(firestore, 'hosts', hostId, 'screens', newId), newValues),
         setDoc(
-          doc(firestore, 'screens', newId, 'versions', newVersionId),
+          doc(
+            firestore,
+            'hosts',
+            hostId,
+            'screens',
+            newId,
+            'versions',
+            newVersionId,
+          ),
           newVersionValue,
         ),
       ])
@@ -182,7 +190,15 @@ function Screens(props) {
           dequeueLoading()
         })
     },
-    [loading, error, queueLoading, firestore, handleFormClose, enqueueSnackbar],
+    [
+      loading,
+      error,
+      queueLoading,
+      firestore,
+      hostId,
+      handleFormClose,
+      enqueueSnackbar,
+    ],
   )
 
   const handleDeleteScreen = useCallback(

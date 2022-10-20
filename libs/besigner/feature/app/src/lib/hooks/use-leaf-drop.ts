@@ -15,15 +15,24 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   type BesignerDraggableItem,
   type BesignerDroppableItem,
   DndDragType,
 } from '@aglyn/besigner-data-app'
-import { confirmValidLinealRelationship } from '@aglyn/core-util-app'
+import { addCanvasElement } from '@aglyn/core-data-app'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
+import { useAglynAppContext } from '@aglyn/core-feature-renderer'
+import {
+  confirmValidLinealRelationship,
+  createComponentElementData,
+} from '@aglyn/core-util-app'
 import isEqual from 'lodash-es/isEqual'
 import { type ConnectDropTarget, useDrop } from 'react-dnd'
 import { useAglynCanvasSetHovered } from './use-aglyn-canvas-hovered'
+import { useAglynCanvasSetSelected } from './use-aglyn-canvas-selected'
+import { useAglynDndSetActive } from './use-aglyn-dnd-active'
 import { useAglynDndSetOver } from './use-aglyn-dnd-over'
 
 export type DropCollected = {
@@ -37,45 +46,96 @@ export type DropCollected = {
 }
 
 export function useLeafDrop<T extends BesignerDroppableItem>(
-  data: T,
+  dropObject: T,
   accept: DndDragType[] = Object.values(DndDragType),
 ): [DropCollected, ConnectDropTarget] {
+  const app = useAglynAppContext()
+  const setSelected = useAglynCanvasSetSelected()
   const setHovered = useAglynCanvasSetHovered()
+  const setDndActive = useAglynDndSetActive()
   const setDndOver = useAglynDndSetOver()
-  const dropItem: T = data
+  const deps = [dropObject, app, ...(Array.isArray(accept) ? accept : [accept])]
 
   return useDrop<BesignerDraggableItem, T, DropCollected>(
-    () => ({
+    {
+      accept: accept,
       options: {
         arePropsEqual: (props, otherProps) => {
           console.log('arePropsEqual', props, otherProps)
           return isEqual(props, otherProps)
         },
       },
-      accept: accept,
-      canDrop: (dragItem, monitor) => {
-        const trail = Array.isArray(dropItem?.trail) ? dropItem?.trail : []
-        const isOverDragItem = trail.indexOf(dragItem?.$id) >= 0
+      drop: (dragObject, monitor) => {
+        if (monitor.didDrop()) return
+        if (!dropObject) return
+        const dragType = monitor.getItemType()
+        const trail = Array.isArray(dropObject?.trail) ? dropObject?.trail : []
+        const isOverDragItem = trail.indexOf(dragObject?.$id) >= 0
         const isOverSelf = monitor.isOver({ shallow: true })
+
+        setDndActive(undefined)
+        setDndOver(undefined)
+        setSelected({})
+        setHovered({})
+        console.log('end drag ', dragObject, dragObject, dropObject)
+
+        if (!isOverSelf || isOverDragItem) return
+
+        const dropSchema = Aglyn.components.getSchema(dropObject?.componentId)
+        const dropAllowed = Aglyn.isFeatureEnabled(dropSchema?.flags?.dropping)
         const [validRelationship] = confirmValidLinealRelationship({
-          item: dragItem,
-          parent: dropItem,
+          item: dragObject,
+          parent: dropObject,
         })
-        return Boolean(isOverSelf && !isOverDragItem && validRelationship)
-      },
-      drop: (dragItem, monitor) => {
-        console.log('on drop ', dragItem, monitor.didDrop())
+
+        if (!dropAllowed || !validRelationship) return
+
+        if (dragType === DndDragType.TEMPLATE) {
+          const parent =
+            Aglyn.screen.getNode(dropObject?.$id) ||
+            Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
+          const templateData = {
+            ...(dragObject?.data as any),
+            $id: Aglyn.createNodeId(),
+            parentId: parent?.$id,
+          }
+          Aglyn.screen.setNodes(
+            Aglyn.screen.denormalizeNodes([templateData as any], parent?.$id),
+          )
+          Aglyn.screen.addNodeToParent(
+            Aglyn.screen.getNode(templateData.$id),
+            parent,
+            NaN,
+          )
+          const newElement = {
+            index: NaN,
+            parentId: dropObject?.$id || CANVAS_ROOT_ELEMENT_ID,
+            element: createComponentElementData(dragObject as any),
+          }
+          addCanvasElement(app, newElement)
+          setSelected({ $id: newElement.element.$id })
+        } else {
+          const node = Aglyn.screen.getNode(dragObject?.$id)
+          Aglyn.screen.reparentNode(
+            node,
+            Aglyn.screen.getNode(node?.parentId),
+            Aglyn.screen.getNode(dropObject?.$id),
+            NaN,
+          )
+          setSelected({ $id: node?.$id })
+        }
+
         /**
          * If already handled return
          */
-        if (monitor.didDrop()) return undefined
-        return dropItem
+        // if (monitor.didDrop()) return undefined
+        return undefined
       },
       hover: (dragItem, monitor) => {
         // Make sure not to bubble up for parents
         if (!monitor.isOver({ shallow: true })) return
-        setHovered({ $id: dropItem?.$id })
-        setDndOver(dropItem)
+        setHovered({ $id: dropObject?.$id })
+        setDndOver(dropObject)
       },
       collect: (monitor) => {
         const canDrop = monitor.canDrop()
@@ -94,8 +154,8 @@ export function useLeafDrop<T extends BesignerDroppableItem>(
           isOverDragItem,
         }
       },
-    }),
-    [dropItem, accept, setDndOver],
+    },
+    deps,
   )
 }
 export default useLeafDrop
