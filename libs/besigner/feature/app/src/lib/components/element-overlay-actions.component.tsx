@@ -277,7 +277,7 @@ const ElementOverlayActionsComponent = forwardRef<
       </MuiButtonGroup>
       <Popper
         sx={{ zIndex: 1 }}
-        open={moreButton && moreOpen}
+        open={Boolean(moreButton) && moreOpen}
         anchorEl={moreButton}
         role={undefined}
         transition
