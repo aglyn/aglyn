@@ -72,17 +72,13 @@ export const dndStatus: {
   get hasDropTarget(): boolean {
     return Boolean(this.drop)
   },
-  get dragBreadcrumbs(): Aglyn.NodeNavigationHierarchy | false {
+  get dragBreadcrumbs(): Aglyn.NodeBreadcrumbPath | false {
     if (!this.isDragging) return false
-    return Aglyn.screen.getNodeNavigationHierarchy(
-      this.drag as Aglyn.NodeSchema,
-    )
+    return Aglyn.screen.getNodeBreadcrumbPath(this.drag as Aglyn.NodeSchema)
   },
-  get dropBreadcrumbs(): Aglyn.NodeNavigationHierarchy | false {
+  get dropBreadcrumbs(): Aglyn.NodeBreadcrumbPath | false {
     if (!this.hasDropTarget) return false
-    return Aglyn.screen.getNodeNavigationHierarchy(
-      this.drop as Aglyn.NodeSchema,
-    )
+    return Aglyn.screen.getNodeBreadcrumbPath(this.drop as Aglyn.NodeSchema)
   },
 })
 

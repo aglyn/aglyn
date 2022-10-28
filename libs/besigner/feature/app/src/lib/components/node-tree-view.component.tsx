@@ -43,6 +43,7 @@ import {
   type ListProps as MuiListProps,
   Stack,
 } from '@mui/material'
+import { observer } from 'mobx-react-lite'
 import {
   type ChangeEvent,
   createContext,
@@ -175,7 +176,7 @@ interface NodeTreeItemProps
   nodeId: Aglyn.NodeId
 }
 
-function NodeTreeItem(props: NodeTreeItemProps) {
+const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   const { nodeId, ...rest } = props
   const {
     expanded,
@@ -188,14 +189,12 @@ function NodeTreeItem(props: NodeTreeItemProps) {
     onItemFocus,
   } = useContext(TreeViewContext)
   const node = Aglyn.screen.getNode(nodeId)
-  const schema = Aglyn.components.getSchema(node?.componentId)
-  const nodeLabel = Aglyn.screen.getNodeLabelShort(node)
-  const hierarchy = Aglyn.screen.getNodeNavigationHierarchy(node)
-  const depth = hierarchy.length - 1
+  const schema = node?.componentSchema
+  const nodeLabel = node?.labelShort
+  const breadcrumbPath = node?.breadcrumbPath
+  const depth = breadcrumbPath.length - 1
   const isRootNode = Aglyn.screen.isRootNode(node)
   const dragAllowed = Aglyn.isFeatureEnabled(schema?.flags?.dragging)
-  const nodes = node?.nodes
-  const hasNodes = Array.isArray(nodes) && nodes.length > 0
   const collapseIn = expanded?.some((i) => i === nodeId)
   const isSelected = selected === nodeId
   const dragDisabled = Boolean(isRootNode || !dragAllowed)
@@ -204,8 +203,8 @@ function NodeTreeItem(props: NodeTreeItemProps) {
     componentId: node?.componentId,
     pluginId: schema?.pluginId,
     parentId: node?.parentId,
-    nodes,
-    trail: hierarchy,
+    nodes: node?.nodes,
+    trail: breadcrumbPath,
     restrictParent: schema?.restrictParent,
     restrictChildren: schema?.restrictChildren,
   }
@@ -280,9 +279,9 @@ function NodeTreeItem(props: NodeTreeItemProps) {
                 color="default"
                 sx={{
                   padding: '2px',
-                  visibility: !hasNodes ? 'hidden' : 'visible',
+                  visibility: !node?.hasNodes ? 'hidden' : 'visible',
                 }}
-                disabled={!hasNodes}
+                disabled={!node?.hasNodes}
                 onClick={(e) => onItemToggle(e, nodeId)}
               >
                 {collapseIn ? closeIcon : expandIcon}
@@ -319,7 +318,7 @@ function NodeTreeItem(props: NodeTreeItemProps) {
           </TreeItemButton>
         </Stack>
 
-        {hasNodes && (
+        {node?.hasNodes && (
           <Box className="node-tree-sub-list" sx={{ position: 'relative' }}>
             <Divider
               orientation="vertical"
@@ -336,7 +335,7 @@ function NodeTreeItem(props: NodeTreeItemProps) {
             />
             <Collapse unmountOnExit in={collapseIn}>
               <TreeView disablePadding>
-                {nodes.map((nodeId) => (
+                {node?.nodes?.map((nodeId) => (
                   <NodeTreeItem key={nodeId} nodeId={nodeId} />
                 ))}
               </TreeView>
@@ -346,7 +345,7 @@ function NodeTreeItem(props: NodeTreeItemProps) {
       </TreeItem>
     </>
   )
-}
+})
 
 const TreeViewContext = createContext<{
   expanded: Aglyn.NodeId[]
@@ -376,7 +375,7 @@ export const NodeTreeViewComponent = forwardRef<any, NodeTreeViewProps>(
     const { ...rest } = props
     const [selected, setSelected] = useAglynCanvasSelected()
     const setHovered = useAglynCanvasSetHovered()
-    const hierarchy = Aglyn.screen.getNodeNavigationHierarchy(selected?.$id)
+    const hierarchy = Aglyn.screen.getNodeBreadcrumbPath(selected?.$id)
     const [manuallyExpanded, setManuallyExpanded] = useState<NodeId[]>([])
 
     const allExpanded = useMemo(

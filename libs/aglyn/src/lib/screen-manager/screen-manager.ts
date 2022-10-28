@@ -20,22 +20,27 @@ import _isArr from '@aglyn/shared-util-guards/_is-arr'
 import _isObj from '@aglyn/shared-util-guards/_is-obj'
 import _isStrT from '@aglyn/shared-util-guards/_is-str-t'
 import cloneDeep from 'lodash-es/cloneDeep'
-import { observable, toJS } from 'mobx'
-import { getComponentLabel } from '../components-manager/components-manager'
-import { AglynEvent, emitter } from '../emit-manager'
+import { observable, runInAction, toJS } from 'mobx'
 import {
-  createNodeId,
-  NODE_ROOT_ID,
-  nodeFactory,
-  type NodeId,
-  type NodeNavigationHierarchy,
-  type NodeSchema,
-  type NodeSchemaNested,
-} from './node'
-
-export * from './node'
+  type ComponentSchema,
+  getComponentLabel,
+  getSchema,
+} from '../components-manager/components-manager'
+import { createIdUrlSafe } from '../constants'
+import { AglynEvent, emitter } from '../emit-manager'
+import type { PluginId } from '../plugin-manager'
 
 export const nodes: Record<NodeId, NodeSchema<any>> = observable({})
+export const NODE_ROOT_ID = '_@_'
+export const NODE_ID_LENGTH = 10
+export const NODE_ROOT_LABEL = 'Document'
+
+export enum NType {
+  NODE = 'node',
+  TEXT = 'text',
+  SCREEN = 'screen',
+  REF = 'ref',
+}
 
 emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
   clearNodes()
@@ -59,10 +64,156 @@ emitter.on(
   },
 )
 
+export type NodeId = string
+
+export interface NodeModel<TYPE extends NType = null> {
+  /**
+   * The unique identifier for a node
+   */
+  $id: NodeId
+  /**
+   * Display name of node to override inherited label. Only used in editor
+   */
+  name?: string
+  /**
+   * The node type to describe the IST
+   */
+  type?: TYPE
+}
+
+export interface NodeSchema<P = JSX.AnyProps> extends NodeModel<NType.NODE> {
+  /**
+   * The unique identifier of the node component
+   */
+  componentId: string
+  /**
+   * The unique identifier of the node component plugin bundle
+   */
+  pluginId?: PluginId
+  /**
+   * The unique identifier of the node parent
+   */
+  parentId?: NodeId
+  /**
+   * List of the children unique identifiers for the node
+   */
+  nodes?: NodeId[]
+  /**
+   * Class name to pass the DOM node, can also be defined in props
+   */
+  className?: string
+  /**
+   * The node props/attributes passed to the component
+   */
+  props?: P
+  /**
+   * The node style properties for emotion
+   */
+  sx?: JSX.SxProps
+  /**
+   * The computed node parent (only for type completion)
+   */
+  parent?: NodeSchema<any> | null
+  /**
+   * The computed index in parent nodes (only for type completion)
+   */
+  index?: number | null
+  /**
+   * The computed label (only for type completion)
+   */
+  labelShort?: string | undefined
+  /**
+   * The computed breadcrumb path (only for type completion)
+   */
+  breadcrumbPath?: NodeBreadcrumbPath
+  /**
+   * The computed component schema (only for type completion)
+   */
+  componentSchema?: ComponentSchema | undefined
+  /**
+   * The computed guard for of child nodes (only for type completion)
+   */
+  hasNodes?: boolean
+}
+
+export type NodeSchemaNested<P = JSX.AnyProps> = Omit<
+  NodeSchema<P>,
+  'nodes'
+> & { nodes?: NodeSchemaNested<any>[] }
+
+export type NodeSchemaJSON<P = JSX.AnyProps> = Omit<
+  NodeSchema<P>,
+  | 'parent'
+  | 'index'
+  | 'labelShort'
+  | 'breadcrumbPath'
+  | 'componentSchema'
+  | 'hasNodes'
+>
+
+export type NodeBreadcrumbPath = [
+  root: string & typeof NODE_ROOT_ID,
+  ...nodes: [...ancestors: NodeId[], node: NodeId],
+]
+
+export function createNodeId(): NodeId {
+  return createIdUrlSafe(NODE_ID_LENGTH)
+}
+
+export function isRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
+  return id === NODE_ROOT_ID
+}
+
+export function nodeFactory<P = JSX.AnyProps>(
+  schema: NodeSchema<P>,
+): NodeSchema<P> {
+  return observable({
+    $id: schema.$id,
+    componentId: schema.componentId,
+    pluginId: schema.pluginId,
+    parentId: schema.parentId,
+    props: { ...schema.props },
+    sx: Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx },
+    nodes: Array.isArray(schema.nodes) ? [...schema.nodes] : [],
+
+    get parent(): NodeSchema<any> | null {
+      return getNode(this.parentId)
+    },
+    get index(): number | null {
+      return getNodeIndex(this)
+    },
+    get labelShort(): string {
+      return getNodeLabelShort(this)
+    },
+    get breadcrumbPath(): NodeBreadcrumbPath {
+      return getNodeBreadcrumbPath(this)
+    },
+    get componentSchema(): ComponentSchema | undefined {
+      return getNodeComponentSchema(this)
+    },
+    get hasNodes(): boolean {
+      return Array.isArray(this.nodes) && this.nodes.length > 0
+    },
+    toJSON(): NodeSchemaJSON<P> {
+      return nodeToJSON(this)
+    },
+  })
+}
+
+export function isRootNode(node: NodeSchema): boolean {
+  return node?.$id === NODE_ROOT_ID
+}
+
 export function toJSON() {
   return {
     nodes: toJS(nodes),
   }
+}
+
+export function nodeToJSON<P = JSX.AnyProps>(
+  node: NodeSchema<P>,
+): NodeSchemaJSON<P> {
+  return toJS(node)
 }
 
 export function createNode<P = JSX.AnyProps>(
@@ -72,17 +223,20 @@ export function createNode<P = JSX.AnyProps>(
 }
 
 export function clearNodes() {
-  for (const key in nodes) delete nodes[key]
+  runInAction(() => {
+    for (const key in nodes) delete nodes[key]
+  })
 }
 
 export function setNodes<P = JSX.AnyProps>(
   values: Record<NodeId, NodeSchema<P>>,
 ) {
-  Object.entries(values).forEach(([id, node]) => {
-    nodes[id] = createNode(node)
+  runInAction(() => {
+    Object.entries(values).forEach(([id, node]) => {
+      nodes[id] = createNode(node)
+    })
   })
 }
-
 export function hasNode($id: NodeId): boolean {
   return Object.hasOwn(nodes, $id)
 }
@@ -93,15 +247,37 @@ export function getNode<P = JSX.AnyProps>(
   return nodes[$id]
 }
 
+export function getNodeIndex(node: NodeSchema<any>) {
+  const parent = getNode(node?.parentId)
+  return parent?.nodes?.indexOf(node.$id)
+}
+
+export function isNodeFirstIndex(node: NodeSchema<any>) {
+  return getNodeIndex(node) === 0
+}
+
+export function isNodeLastIndex(node: NodeSchema<any>) {
+  const parent = getNode(node?.parentId)
+  return getNodeIndex(node) + 1 === parent?.nodes?.length
+}
+
+export function getNodeComponentSchema(node: NodeSchema<any>): ComponentSchema {
+  return getSchema(node?.componentId)
+}
+
 export function setNodeItem<P = JSX.AnyProps>(node: NodeSchema<P>) {
-  nodes[node.$id] = createNode(node)
+  runInAction(() => {
+    nodes[node.$id] = createNode(node)
+  })
 }
 
 export function deleteNode<P = JSX.AnyProps>(node: NodeSchema<P>) {
   if (!node || node.$id === NODE_ROOT_ID) return
-  deleteChildNodes(node)
-  removeNodeFromParent(node, getNode(node.parentId))
-  delete nodes[node.$id]
+  runInAction(() => {
+    deleteChildNodes(node)
+    removeNodeFromParent(node, getNode(node.parentId))
+    delete nodes[node.$id]
+  })
 }
 
 export function removeNodeFromParent(
@@ -109,9 +285,12 @@ export function removeNodeFromParent(
   parent: NodeSchema<any>,
 ) {
   if (!node || !parent || !parent.nodes.some((id) => id === node.$id)) return
-  parent.nodes = [...parent.nodes].filter((id) => id !== node.$id)
-  nodes[parent.$id] = parent
-  node.parentId = null
+
+  runInAction(() => {
+    parent.nodes = [...parent.nodes].filter((id) => id !== node.$id)
+    nodes[parent.$id] = parent
+    node.parentId = null
+  })
 }
 
 export function addNodeToParent(
@@ -120,15 +299,17 @@ export function addNodeToParent(
   index = NaN,
 ) {
   if (!node || !parent || parent.nodes.some((id) => id === node.$id)) return
-  if (isNaN(index)) {
-    parent.nodes = [...parent.nodes, node.$id]
-  } else {
-    parent.nodes.splice(index, 0, node.$id)
-  }
+  runInAction(() => {
+    if (isNaN(index)) {
+      parent.nodes = [...parent.nodes, node.$id]
+    } else {
+      parent.nodes.splice(index, 0, node.$id)
+    }
 
-  node.parentId = parent.$id
-  nodes[parent.$id] = parent
-  nodes[node.$id] = node
+    node.parentId = parent.$id
+    nodes[parent.$id] = parent
+    nodes[node.$id] = node
+  })
 }
 
 function deleteChildNodes<P = JSX.AnyProps>(node: NodeSchema<P>) {
@@ -167,7 +348,7 @@ function duplicateNodeAndChildren<P = JSX.AnyProps>(
   node: NodeSchema<P>,
   parentId: NodeId,
 ): NodeSchema<P> {
-  const copied = cloneDeep(node)
+  const copied = nodeToJSON(node)
   const newNode = createNode({
     ...copied,
     $id: createNodeId(),
@@ -313,23 +494,11 @@ export function processNodesToDenormalized(
   return response
 }
 
-export function isRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
-  return id === NODE_ROOT_ID
-}
-
-export function isRootNode(node: NodeSchema): boolean {
-  return node?.$id === NODE_ROOT_ID
-}
-
-export function getNodeNavigationHierarchy(
-  nodeId: NodeId,
-): NodeNavigationHierarchy
-export function getNodeNavigationHierarchy(
-  node: NodeSchema,
-): NodeNavigationHierarchy
-export function getNodeNavigationHierarchy(
+export function getNodeBreadcrumbPath(nodeId: NodeId): NodeBreadcrumbPath
+export function getNodeBreadcrumbPath(node: NodeSchema): NodeBreadcrumbPath
+export function getNodeBreadcrumbPath(
   nodeOrId: NodeId | NodeSchema,
-): NodeNavigationHierarchy {
+): NodeBreadcrumbPath {
   const hierarchy = [NODE_ROOT_ID]
 
   let currentId = typeof nodeOrId !== 'string' ? nodeOrId?.$id : nodeOrId
@@ -338,11 +507,66 @@ export function getNodeNavigationHierarchy(
     currentId = getNode(currentId)?.parentId
   }
 
-  return hierarchy as NodeNavigationHierarchy
+  return hierarchy as NodeBreadcrumbPath
 }
 
 export function getNodeLabelShort(node: NodeSchema) {
-  if (isRootNode(node)) return 'Document'
+  if (isRootNode(node)) return NODE_ROOT_LABEL
   const componentLabel = getComponentLabel(node?.componentId)
   return node?.name || componentLabel || node?.$id
 }
+
+// export const NodeSchemaJsonSchema: JSONSchema7 = {
+//   $schema: 'https://json-schema.org/draft/2020-12/schema',
+//   $id: 'https://aglyn.io/schema/node.schema.json',
+//   title: 'Aglyn Node Item',
+//   description: 'Aglyn screen node for hydrating view component',
+//   type: 'object',
+//   additionalProperties: false,
+//   properties: {
+//     $id: {
+//       description: 'The unique identifier for a node',
+//       type: 'string',
+//     },
+//     componentId: {
+//       description: 'The unique identifier of the node component',
+//       type: 'string',
+//     },
+//     pluginId: {
+//       description: 'The unique identifier of the node component bundle',
+//       type: 'string',
+//     },
+//     parentId: {
+//       description: 'The unique identifier of the node parent',
+//       type: 'string',
+//     },
+//     sx: {
+//       description: 'The node style properties for emotion',
+//       type: 'object',
+//     },
+//     props: {
+//       description: 'The node props/attributes passed to the component',
+//       type: 'object',
+//     },
+//     nodes: {
+//       description: 'List of the children unique identifiers for the node',
+//       type: 'array',
+//       items: {
+//         type: 'string',
+//       },
+//     },
+//   },
+//   required: ['$id', 'componentId'],
+// }
+// export const NodeSchemaNestedJsonSchema: JSONSchema7 = {
+//   ...NodeSchemaJsonSchema,
+//   properties: {
+//     ...NodeSchemaJsonSchema.properties,
+//     nodes: {
+//       ...(NodeSchemaJsonSchema.properties['nodes'] as JSONSchema7),
+//       items: {
+//         $ref: '#',
+//       },
+//     },
+//   },
+// }

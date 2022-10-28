@@ -15,5 +15,5 @@
  * limitations under the License.
  */
 
-export * from './node'
+export * from './screen-manager'
 export * as screen from './screen-manager'

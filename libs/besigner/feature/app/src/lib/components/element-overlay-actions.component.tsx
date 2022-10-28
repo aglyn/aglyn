@@ -22,11 +22,6 @@ import {
 } from '@aglyn/besigner-data-app'
 import useDeleteElementCallback from '@aglyn/besigner-feature-app/hooks/use-delete-element-callback'
 import { duplicateCanvasElement, moveCanvasElement } from '@aglyn/core-data-app'
-import type { NodeId } from '@aglyn/core-data-foundation'
-import {
-  useAglynElementData,
-  useAglynElementIndexInParent,
-} from '@aglyn/core-feature-renderer'
 import { isRootElementId } from '@aglyn/core-util-app'
 import {
   ICON_VARIANT_MODIFY_DELETE,
@@ -57,6 +52,7 @@ import {
   Tooltip as MuiTooltip,
   type TooltipProps,
 } from '@mui/material'
+import { observer } from 'mobx-react-lite'
 import { type ChangeEvent, forwardRef, useCallback, useState } from 'react'
 import { useRenderedCanvasElementRef } from '../contexts/rendered-canvas-elements'
 import { useAglynCanvasSetHovered } from '../hooks/use-aglyn-canvas-hovered'
@@ -99,57 +95,69 @@ export const BadgeButton = forwardRef<any, BadgeButtonProps>((props, ref) => {
 })
 BadgeButton.displayName = 'AglynBadgeButton'
 
-export const MoveButtons = forwardRef<any, { $id: NodeId }>((props, ref) => {
-  const { $id } = props
+const MoveUpButton = observer(({ $id }: { $id: Aglyn.NodeId }) => {
   const app = useBesignerAppContext()
-  const { index, isFirst, isLast, parentId } = useAglynElementIndexInParent($id)
+  const node = Aglyn.screen.getNode($id)
+
   const handleMoveUp = useCallback(
     (e: ChangeEvent<unknown>) => {
-      const node = Aglyn.screen.getNode($id)
-      const parent = Aglyn.screen.getNode(node?.parentId)
-      const oldIndex = parent?.nodes?.indexOf(node.$id) || 0
-      Aglyn.screen.reparentNode(node, parent, parent, oldIndex - 1)
-      moveCanvasElement(app, { $id, parentId, index: index - 1 })
+      Aglyn.screen.reparentNode(
+        node,
+        node?.parent,
+        node?.parent,
+        node?.index - 1,
+      )
+      moveCanvasElement(app, {
+        $id: node?.$id,
+        parentId: node?.parentId,
+        index: node?.index - 1,
+      })
     },
-    [app, $id, index, parentId],
-  )
-  const handleMoveDown = useCallback(
-    (e: ChangeEvent<unknown>) => {
-      const node = Aglyn.screen.getNode($id)
-      const parent = Aglyn.screen.getNode(node?.parentId)
-      const oldIndex = parent?.nodes?.indexOf(node.$id) || 0
-      Aglyn.screen.reparentNode(node, parent, parent, oldIndex + 1)
-      moveCanvasElement(app, { $id, parentId, index: index + 1 })
-    },
-    [app, $id, index, parentId],
+    [app, node],
   )
 
-  return (
-    <>
-      {!isFirst && (
-        <BadgeButton
-          ref={ref}
-          title="Move up"
-          children={'move up'}
-          ButtonProps={{ onClick: handleMoveUp }}
-          icon={{ path: ICON_VARIANT_MODIFY_MOVE_UP.path }}
-        />
-      )}
-      {!isLast && (
-        <BadgeButton
-          ref={ref}
-          title="Move down"
-          children={'move down'}
-          ButtonProps={{ onClick: handleMoveDown }}
-          icon={{ path: ICON_VARIANT_MODIFY_MOVE_DOWN.path }}
-        />
-      )}
-    </>
+  return node?.index > 0 ? (
+    <BadgeButton
+      title="Move up"
+      children={'move up'}
+      ButtonProps={{ onClick: handleMoveUp }}
+      icon={{ path: ICON_VARIANT_MODIFY_MOVE_UP.path }}
+    />
+  ) : null
+})
+const MoveDownButton = observer(({ $id }: { $id: Aglyn.NodeId }) => {
+  const app = useBesignerAppContext()
+  const node = Aglyn.screen.getNode($id)
+
+  const handleMoveDown = useCallback(
+    (e: ChangeEvent<unknown>) => {
+      Aglyn.screen.reparentNode(
+        node,
+        node?.parent,
+        node?.parent,
+        node?.index + 1,
+      )
+      moveCanvasElement(app, {
+        $id: node?.$id,
+        parentId: node?.parentId,
+        index: node?.index + 1,
+      })
+    },
+    [app, node],
   )
+
+  return node?.index < node?.parent?.nodes?.length - 1 ? (
+    <BadgeButton
+      title="Move down"
+      children={'move down'}
+      ButtonProps={{ onClick: handleMoveDown }}
+      icon={{ path: ICON_VARIANT_MODIFY_MOVE_DOWN.path }}
+    />
+  ) : null
 })
 
 export interface ElementOverlayActionsProps extends ButtonGroupProps {
-  $id: NodeId
+  $id: Aglyn.NodeId
 }
 
 const ElementOverlayActionsComponent = forwardRef<
@@ -161,7 +169,8 @@ const ElementOverlayActionsComponent = forwardRef<
   const app = useBesignerAppContext()
   const setHovered = useAglynCanvasSetHovered()
   const setSelected = useAglynCanvasSetSelected()
-  const parentId = useAglynElementData($id, 'parentId')
+  const node = Aglyn.screen.getNode($id)
+  const parentId = node?.parentId
   const elementRef = useRenderedCanvasElementRef({ $id })
   const [moreOpen, setMoreOpen] = useState(false)
   const [moreButton, moreButtonRef] = useState(null)
@@ -270,7 +279,8 @@ const ElementOverlayActionsComponent = forwardRef<
           />
         )}
 
-        {!isRootElementId($id) && <MoveButtons $id={$id} />}
+        {!isRootElementId($id) && <MoveUpButton $id={$id} />}
+        {!isRootElementId($id) && <MoveDownButton $id={$id} />}
 
         <BadgeButton
           ref={moreButtonRef}

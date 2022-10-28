@@ -107,7 +107,7 @@ const BreadcrumbItem = forwardRef<any, BreadcrumbItemProps>(
     const { children, nodeId, lastItem, ...rest } = props
     const node = Aglyn.screen.getNode(nodeId)
     const nodeLabel = Aglyn.screen.getNodeLabelShort(node)
-    const hierarchy = Aglyn.screen.getNodeNavigationHierarchy(node)
+    const hierarchy = Aglyn.screen.getNodeBreadcrumbPath(node)
     const schema = Aglyn.components.getSchema(node?.componentId)
     const setSelected = useAglynCanvasSetSelected()
     const setHovered = useAglynCanvasSetHovered()
@@ -167,7 +167,7 @@ interface BreadcrumbsProps extends Partial<MuiBreadcrumbsProps> {}
 const Breadcrumbs = forwardRef<any, BreadcrumbsProps>((props, ref) => {
   const { children, sx, ...rest } = props
   const [selected] = useAglynCanvasSelected()
-  const hierarchy = Aglyn.screen.getNodeNavigationHierarchy(selected?.$id)
+  const hierarchy = Aglyn.screen.getNodeBreadcrumbPath(selected?.$id)
 
   return (
     <StyledBreadcrumbs
