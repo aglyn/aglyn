@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { addCanvasElement } from '@aglyn/core-data-app'
 import {
   CANVAS_ROOT_ELEMENT_ID,
@@ -61,6 +62,23 @@ export function useAddElementDrawerCallback(
           return data
         })
         .then((data: any) => {
+          const parent =
+            Aglyn.screen.getNode(callback?.$id || $id) ||
+            Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
+          const templateData = {
+            ...(data as any),
+            $id: Aglyn.createNodeId(),
+            parentId: parent?.$id,
+          }
+          Aglyn.screen.setNodes(
+            Aglyn.screen.denormalizeNodes([templateData as any], parent?.$id),
+          )
+          Aglyn.screen.addNodeToParent(
+            Aglyn.screen.getNode(templateData.$id),
+            parent,
+            NaN,
+          )
+
           const newElement = {
             index: NaN,
             parentId: callback?.$id || $id || CANVAS_ROOT_ELEMENT_ID,

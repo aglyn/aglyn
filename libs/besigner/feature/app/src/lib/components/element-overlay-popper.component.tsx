@@ -73,11 +73,11 @@ const AddElementOverlay = styled(
   },
 )<AddButtonProps>(({ active }) => ({
   visibility: active ? undefined : 'hidden',
-  borderRadius: '50%',
+  borderRadius: 4,
   minWidth: 'unset',
   minHeight: 'unset',
   height: 24,
-  width: 24,
+  width: 48,
   paddingLeft: 4,
   paddingRight: 4,
   paddingTop: 2,
