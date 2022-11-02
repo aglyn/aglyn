@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,15 @@
  * @param {string} [separator='.']
  * @returns {*}
  */
-export function objectGetDeepProperty<T>(obj: T, path: string, separator = '.'): any {
+export function objectGetDeepProperty<U, T = any>(
+  obj: T,
+  path: string,
+  separator = '.',
+): U {
   const keys = path.split(separator)
   const lastKey = keys.pop()
   const lastObj = keys.reduce((v, k) => (v[k] = v[k] ?? {}), obj)
   return lastObj[lastKey]
 }
+
+export default objectGetDeepProperty

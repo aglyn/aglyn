@@ -17,7 +17,6 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
-import { type NodeId } from '@aglyn/core-data-foundation'
 import {
   ICON_VARIANT_COLLAPSIBLE_CLOSE,
   ICON_VARIANT_COLLAPSIBLE_OPEN,
@@ -54,7 +53,6 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useState,
 } from 'react'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
@@ -209,9 +207,9 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   const schema = node?.componentSchema
   const nodeLabel = node?.labelShort
   const breadcrumbPath = node?.breadcrumbPath
-  const depth = breadcrumbPath.length - 1
+  const depth = breadcrumbPath?.length - 1
   const isRootNode = Aglyn.screen.isRootNode(node)
-  const dragAllowed = Aglyn.isFeatureEnabled(schema?.flags?.dragging)
+  const dragAllowed = Aglyn.components.isFeatureEnabled(schema?.flags?.dragging)
   const collapseIn = expanded?.some((i) => i === nodeId)
   const isSelected = Besigner.focus.isNodeSelected(node)
   const dragDisabled = Boolean(isRootNode || !dragAllowed)
@@ -389,16 +387,19 @@ const TreeViewContext = createContext<{
 })
 
 const TreeViewContent = observer(() => {
-  const selected = Besigner.focus.focusStatus.selected
-  const lastSelected = Besigner.focus.focusStatus.lastSelected
-  const [manuallyExpanded, setManuallyExpanded] = useState<NodeId[]>([])
+  const selected = Besigner.focus.state.selected
+  const lastSelected = Besigner.focus.state.lastSelected
+  const expanded = Besigner.focus.state.expanded
 
   const allExpanded = useMemo(() => {
-    return selected?.reduce(
-      (accumulator, current) => [...accumulator, ...current.breadcrumbPath],
-      [...manuallyExpanded],
+    return [...expanded, ...selected]?.reduce(
+      (accumulator, current) => [
+        ...accumulator,
+        ...(current?.breadcrumbPath || []),
+      ],
+      [],
     )
-  }, [selected, manuallyExpanded])
+  }, [selected, expanded])
 
   const handleTreeItemSelect = useCallback((e, $id) => {
     e.stopPropagation()
@@ -415,15 +416,10 @@ const TreeViewContent = observer(() => {
     Besigner.focus.setHoveredNode(Aglyn.screen.getNode($id))
   }, [])
 
-  const handleTreeItemToggle = useCallback((e, id: NodeId) => {
+  const handleTreeItemToggle = useCallback((e, id: Aglyn.NodeId) => {
     e.stopPropagation()
     e.preventDefault()
-    setManuallyExpanded((prev) => {
-      if (prev.some((i) => i === id)) {
-        return [...prev].filter((i) => i !== id)
-      }
-      return [...prev, id]
-    })
+    Besigner.focus.toggleNodeExpansion(Aglyn.screen.getNode(id))
   }, [])
 
   return (

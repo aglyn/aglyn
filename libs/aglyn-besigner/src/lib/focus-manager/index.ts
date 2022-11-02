@@ -16,3 +16,9 @@
  */
 
 export * as focus from './focus-manager'
+export {
+  type HoveredNode,
+  type SelectedNodes,
+  type ExpandedNodes,
+  type LastSelectedNode,
+} from './focus-manager'

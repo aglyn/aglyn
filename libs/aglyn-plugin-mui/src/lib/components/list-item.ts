@@ -29,7 +29,7 @@ export const schema: Aglyn.ComponentSchema = {
   displayName: 'List Item',
   icon: { path: mdiFormatListText.path },
   restrictChildren: [
-    Aglyn.ComponentsLinealDirectiveFlag.LIMIT_TO,
+    Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
       components: [listItemTextSchema.componentId],
     },

@@ -16,3 +16,4 @@
  */
 
 export * as dnd from './dnd-manager'
+export { type DndState, DragType, DndDropType } from './dnd-manager'

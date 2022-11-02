@@ -15,9 +15,26 @@
  * limitations under the License.
  */
 
+import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import { _hasOwnProperty } from '@aglyn/shared-util-guards'
+import { runInAction } from 'mobx'
+import type { ComponentId } from '../components-manager'
+import { ComponentCategory, type NodePresetData } from '../components-manager'
 import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
-import type { PresetId, PresetSchema } from './preset'
+import type { PluginId } from '../plugin-manager'
+
+export type PresetId = string
+
+export type PresetSchema = {
+  presetId: PresetId
+  label: string
+  componentId?: ComponentId
+  pluginId?: PluginId
+  description?: string
+  icon?: MdiIconProps
+  category?: string | ComponentCategory
+  data: NodePresetData
+}
 
 export const presets: Record<PresetId, PresetSchema> = {}
 
@@ -40,7 +57,9 @@ export function registerPreset(preset: PresetSchema) {
   const { presetId, pluginId, componentId } = preset
   lifecycleEvent(
     () => {
-      presets[presetId] = preset
+      runInAction(() => {
+        presets[presetId] = preset
+      })
     },
     {
       beforeEvent: AglynEvent.PRESET_REGISTERING,
@@ -54,7 +73,9 @@ export function registerPreset(preset: PresetSchema) {
 export function unregisterPreset(presetId: PresetId) {
   lifecycleEvent(
     () => {
-      delete presets[presetId]
+      runInAction(() => {
+        delete presets[presetId]
+      })
     },
     {
       beforeEvent: AglynEvent.PRESET_UNREGISTERING,

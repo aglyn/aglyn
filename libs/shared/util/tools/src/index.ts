@@ -69,8 +69,8 @@ export * from './lib/number/number-from-hexadecimal'
 
 // OBJECT
 
-export * from './lib/object/object-copy'
-export * from './lib/object/object-copy-deep'
+export * from '@aglyn/shared-util-tools/object/object-clone'
+export * from '@aglyn/shared-util-tools/object/object-clone-deep'
 export * from './lib/object/object-delete-property'
 export * from './lib/object/object-get-deep-property'
 export * from './lib/object/object-get-keys-and-symbol-properties'

@@ -16,44 +16,61 @@
  */
 
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
-import type {Conditional, NUN, OmitIndexOfType, PKey} from '@aglyn/shared-data-types'
-import {_isUndT} from '@aglyn/shared-util-guards'
-import {copy} from '../copy'
-
+import type {
+  Conditional,
+  NUN,
+  OmitIndexOfType,
+  PKey,
+} from '@aglyn/shared-data-types'
+import { _isUndT } from '@aglyn/shared-util-guards'
+import cloneDeep from '../copy'
 
 export type RemapOptions = {
   /** When true will remove 'undefined' values */
   remove?: boolean
   copy?: 'deep' | 'shallow' | boolean
 }
+
 export type RemapTarget<K extends PKey, V = unknown> = Record<K, V>
-export type RemapCallback<K extends PKey, V, U = V> = {
-  (value: V, key: K, target: RemapTarget<K, V>): U
-}
-export type RemapOutputDefault<T extends RemapTarget<K, V>, K extends PKey, V, U = V> = RemapTarget<K,
-  U>
-export type RemapOutputFiltered<T extends RemapTarget<K, V>,
-  K extends PKey,
-  V,
-  U = V> = OmitIndexOfType<RemapOutputDefault<T, K, V, U>, NUN>
-export type RemapOutput<T extends RemapTarget<K, V>,
+
+export type RemapCallback<K extends PKey, V, U = V> = (
+  value: V,
+  key: K,
+  target: RemapTarget<K, V>,
+) => U
+
+export type RemapOutputDefault<
+  T extends RemapTarget<K, V>,
   K extends PKey,
   V,
   U = V,
-  O extends RemapOptions = any> = O extends {remove: true}
-  ? RemapOutputFiltered<T, K, V, U>
-  : RemapOutputDefault<T, K, V, U>
+> = RemapTarget<K, U>
 
+// prettier-ignore
+export type RemapOutputFiltered<
+  T extends RemapTarget<K, V>,
+  K extends PKey,
+  V,
+  U = V,
+> = OmitIndexOfType<
+  RemapOutputDefault<T, K, V, U>,
+  NUN
+>
 
-const hasOwnProperty = Object.prototype.hasOwnProperty
+// prettier-ignore
+export type RemapOutput<
+  T extends RemapTarget<K, V>,
+  K extends PKey,
+  V,
+  U = V,
+  O extends RemapOptions = any
+> =
+  O extends {remove: true}
+    ? RemapOutputFiltered<T, K, V, U>
+    : RemapOutputDefault<T, K, V, U>
 
 /**
  * Map an object keys and values
- * @param {RemapTarget<K, V>} target
- * @param {RemapCallback<K, V, U>} callbackFn
- * @param {RemapOptions} options
- * @param {ThisType<T>} thisArg
- * @returns {RemapOutput<typeof target, K, V, U, typeof options>}
  */
 export function objectRemap<K extends PKey, V, U = V, T = RemapTarget<K, V>>(
   target: RemapTarget<K, V>,
@@ -63,20 +80,28 @@ export function objectRemap<K extends PKey, V, U = V, T = RemapTarget<K, V>>(
 ): RemapOutput<typeof target, K, V, U, typeof options> {
   type ThisArg = Conditional<typeof thisArg, NUN, typeof target, typeof thisArg>
   type Output = RemapOutput<typeof target, K, V, U, typeof options>
+
+  // prettier-ignore
   const remapped = (
-    options?.copy === 'deep' ? copy(target)
-      : options?.copy === 'shallow' || options?.copy === true ? {...target}
-        : target
+    options?.copy === 'deep'
+      ? cloneDeep(target)
+      : (
+        options?.copy === 'shallow' || options?.copy === true
+          ? {...target}
+          : target
+      )
   ) as unknown as Output
+
   const _thisArg = (thisArg ?? remapped) as ThisArg
 
   for (const key in target) {
-    if (hasOwnProperty.call(target, key)) {
+    if (Object.hasOwn(target, key)) {
       const value = callbackFn.call(_thisArg, target[key], key, target)
       if (options?.remove && _isUndT(value)) delete remapped[key]
       else remapped[key] = value
     }
   }
+
   return remapped
 }
 

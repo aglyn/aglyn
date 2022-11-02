@@ -15,5 +15,5 @@
  * limitations under the License.
  */
 
-export * from './preset'
 export * as presets from './preset-manager'
+export { type PresetId, type PresetSchema } from './preset-manager'

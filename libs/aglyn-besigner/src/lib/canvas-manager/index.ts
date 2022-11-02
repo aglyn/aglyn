@@ -14,14 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import cloneDeep from '../copy'
 
-
-/**
- * Deeply copy everything in iterable or array
- * @param target - Iterable list to deep copy
- */
-export function arrayCopyDeep<T>(target: T[]): T[] {
-  return cloneDeep(target)
-}
-export default arrayCopyDeep
+export * as canvas from './canvas-manager'
+export { EditorMode } from './canvas-manager'

@@ -17,14 +17,14 @@
 
 import type { ModificationHistoryState } from '@aglyn/core-data-foundation'
 import { _isArrEmpty } from '@aglyn/shared-util-guards'
-import { copy } from '@aglyn/shared-util-tools'
+import { cloneDeep } from '@aglyn/shared-util-tools'
 
 export function handleStateModificationHistoryRedo<S>(
   state: ModificationHistoryState<S>,
 ): ModificationHistoryState<S> {
   if (!_isArrEmpty(state.future)) {
-    const _state = copy(state)
-    const present = copy(_state.present)
+    const _state = cloneDeep(state)
+    const present = cloneDeep(_state.present)
     _state.past.unshift(present)
     _state.present = _state.future.shift()
     return _state

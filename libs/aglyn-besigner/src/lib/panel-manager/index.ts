@@ -15,14 +15,5 @@
  * limitations under the License.
  */
 
-import copy from '../copy'
-
-
-/**
- * Copy deep
- * @param target - Object map to create a deep copy of
- */
-export function objectCopyDeep<K extends keyof any, T>(target: Record<K, T>): typeof target {
-  return copy(target)
-}
-export default objectCopyDeep
+export * as panels from './panel-manager'
+export { DockRegion, PanelTab, type PanelSchema } from './panel-manager'

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,23 +16,22 @@
  */
 
 /**
+ * Removes a named property in an object.Modifies the existing object unless
+ * provided `{copy: true}` for options
  *
- *
- * @export
- * @template T
- * @template K
- * @param {Readonly<T>} obj
- * @param {K} key
- * @param {{ copy: boolean }} [options]
- * @returns {T}
+ * @example
+ * const alpha = `{ping: 'foo', pong: 'bar'}`
+ * const bravo = `objectDeleteProperty(alpha, 'ping') // {pong: 'bar'}`
  */
 export function objectDeleteProperty<T, K extends keyof T>(
   obj: T,
   key: K,
-  options?: {copy: boolean},
+  options?: { copy: boolean },
 ): Omit<T, K> {
-  const {copy = false} = options ?? {}
-  const _obj = copy ? {...obj} : obj
-  delete _obj[key]
-  return _obj
+  const { copy } = { ...options }
+  const res = copy ? { ...obj } : obj
+  delete res[key]
+  return res
 }
+
+export default objectDeleteProperty

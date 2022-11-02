@@ -20,7 +20,7 @@ import type {
   AglynModuleEffectListener,
   IAglynAppController,
 } from '@aglyn/core-data-foundation'
-import { copy } from '@aglyn/shared-util-tools'
+import { cloneDeep } from '@aglyn/shared-util-tools'
 import defaultsDeep from 'lodash-es/defaultsDeep'
 import isEqual from 'lodash-es/isEqual'
 import { BehaviorSubject } from 'rxjs'
@@ -170,7 +170,7 @@ export class BesignerInterfaceController
   }
   public setPanel(payload: BesignerSetPanelPayload): this {
     const { panel, value } = payload || {}
-    const prev = copy(this.__store__?.panels?.getValue())
+    const prev = cloneDeep(this.__store__?.panels?.getValue())
     const prevPanel = prev?.[panel]
     const nowPanel = value(prevPanel, prev)
     const now = { ...prev, [panel]: nowPanel }

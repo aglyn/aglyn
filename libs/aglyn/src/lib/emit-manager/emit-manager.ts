@@ -25,7 +25,7 @@ export function setLogLevel(logLevel: LogLevelString) {
   logger.setLogLevel(logLevel)
 }
 
-export const logger = new Logger(namespace)
+export const logger = new LogManager(namespace)
 
 export enum AglynEvent {
   APP_INITIALIZING = 'lifecycle.app.initializing',

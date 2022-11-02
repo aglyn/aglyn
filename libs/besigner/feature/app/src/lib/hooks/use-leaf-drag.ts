@@ -21,7 +21,6 @@ import {
   type BesignerDraggableItem,
   type BesignerDroppableItem,
 } from '@aglyn/besigner-data-app'
-import { useAglynAppContext } from '@aglyn/core-feature-renderer'
 import {
   type ConnectDragPreview,
   type ConnectDragSource,
@@ -36,12 +35,12 @@ export function useLeafDrag<T extends BesignerDraggableItem>(
   dragObject?: T,
   type: Besigner.dnd.DragType = Besigner.dnd.DragType.CANVAS,
 ): [DragCollected, ConnectDragSource, ConnectDragPreview] {
-  const app = useAglynAppContext()
   const isRootNode = Aglyn.screen.isRootNodeId(dragObject?.$id)
   const schema = Aglyn.components.getSchema(dragObject?.componentId)
-  const canDrag = !isRootNode && Aglyn.isFeatureEnabled(schema?.flags?.dragging)
+  const dragEnabled = Aglyn.components.isFeatureEnabled(schema?.flags?.dragging)
+  const canDrag = !isRootNode && dragEnabled
 
-  const deps = [dragObject, canDrag, app, type]
+  const deps = [dragObject, canDrag, type]
 
   // console.log('dragItem item canDrag', dragItem, $id, type, canDrag, flags)
 

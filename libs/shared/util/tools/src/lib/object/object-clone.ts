@@ -14,14 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import cloneDeep from '../copy'
-
 
 /**
- * Deeply copy everything in iterable or array
- * @param target - Iterable list to deep copy
+ * Shallow copy iterable properties in iterable or array
  */
-export function arrayCopyDeep<T>(target: T[]): T[] {
-  return cloneDeep(target)
+export function objectClone<T>(
+  target: Record<keyof any, T>,
+): Record<keyof any, T> {
+  return { ...target }
 }
-export default arrayCopyDeep
+
+export default objectClone

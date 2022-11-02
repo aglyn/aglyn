@@ -130,7 +130,7 @@ const innerModifiers = [
 
 const variantToStoreName: Record<
   PopperVariant,
-  KeyOf<Pick<typeof Besigner.focus.focusStatus, 'lastSelected' | 'hovered'>>
+  KeyOf<Pick<typeof Besigner.focus.state, 'lastSelected' | 'hovered'>>
 > = {
   selectedOverlay: 'lastSelected',
   hoveredOverlay: 'hovered',
@@ -149,7 +149,7 @@ const ElementOverlayPopper = (
 ) => {
   const { variant, ...rest } = props || {}
 
-  const state = Besigner.focus.focusStatus[variantToStoreName[variant]]
+  const state = Besigner.focus.state[variantToStoreName[variant]]
   const $id = state?.$id
   const node = Aglyn.screen.getNode($id)
 

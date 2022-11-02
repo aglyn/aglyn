@@ -21,13 +21,7 @@ import {
   type BesignerDraggableItem,
   type BesignerDroppableItem,
 } from '@aglyn/besigner-data-app'
-import { addCanvasElement } from '@aglyn/core-data-app'
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
-import { useAglynAppContext } from '@aglyn/core-feature-renderer'
-import {
-  confirmValidLinealRelationship,
-  createComponentElementData,
-} from '@aglyn/core-util-app'
+import { confirmValidLinealRelationship } from '@aglyn/core-util-app'
 import isEqual from 'lodash-es/isEqual'
 import { type ConnectDropTarget, useDrop } from 'react-dnd'
 
@@ -45,8 +39,7 @@ export function useLeafDrop<T extends BesignerDroppableItem>(
   dropObject: T,
   accept: Besigner.dnd.DragType[] = Object.values(Besigner.dnd.DragType),
 ): [DropCollected, ConnectDropTarget] {
-  const app = useAglynAppContext()
-  const deps = [dropObject, app, ...(Array.isArray(accept) ? accept : [accept])]
+  const deps = [dropObject, ...(Array.isArray(accept) ? accept : [accept])]
 
   return useDrop<BesignerDraggableItem, T, DropCollected>(
     {
@@ -72,7 +65,9 @@ export function useLeafDrop<T extends BesignerDroppableItem>(
         if (!isOverSelf || isOverDragItem) return
 
         const dropSchema = Aglyn.components.getSchema(dropObject?.componentId)
-        const dropAllowed = Aglyn.isFeatureEnabled(dropSchema?.flags?.dropping)
+        const dropAllowed = Aglyn.components.isFeatureEnabled(
+          dropSchema?.flags?.dropping,
+        )
         const [validRelationship] = confirmValidLinealRelationship({
           item: dragObject,
           parent: dropObject,
@@ -95,13 +90,6 @@ export function useLeafDrop<T extends BesignerDroppableItem>(
 
           const node = Aglyn.screen.getNode(templateData.$id)
           Aglyn.screen.addNodeToParent(node, parent, NaN)
-
-          const newElement = {
-            index: NaN,
-            parentId: dropObject?.$id || CANVAS_ROOT_ELEMENT_ID,
-            element: createComponentElementData(dragObject as any),
-          }
-          addCanvasElement(app, newElement)
           Besigner.focus.setSelectedNode(node)
         } else {
           const node = Aglyn.screen.getNode(dragObject?.$id)

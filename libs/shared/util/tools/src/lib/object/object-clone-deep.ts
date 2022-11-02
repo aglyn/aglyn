@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import {PKey} from '@aglyn/shared-data-types'
-
+import cloneDeep from '../copy'
 
 /**
- * Shallow copy iterable properties in iterable or array
- * @param {Record<PKey, T>} target
- * @returns {Record<PKey, T>}
+ * Copy deep
  */
-export function objectCopy<T>(target: Record<PKey, T>): typeof target {
-  return {...target}
+export function objectCloneDeep<K extends keyof any, T>(
+  target: Record<K, T>,
+): Record<K, T> {
+  return cloneDeep(target)
 }
+export default objectCloneDeep

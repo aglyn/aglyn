@@ -17,27 +17,37 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observable, runInAction } from 'mobx'
+import { computedFn } from 'mobx-utils'
 
-export interface FocusStatus {
+export type HoveredNode = Aglyn.NodeSchema<any> | null
+export type SelectedNodes = Aglyn.NodeSchema<any>[]
+export type ExpandedNodes = Aglyn.NodeSchema<any>[]
+export type LastSelectedNode = Aglyn.NodeSchema<any> | undefined
+
+interface FocusState {
   /**
    * The current hovered node
    */
-  hovered?: Aglyn.NodeSchema<any> | null
+  hovered?: HoveredNode
   /**
    * The current selected node
    */
-  selected: Aglyn.NodeSchema<any>[]
+  selected: SelectedNodes
   /**
    * The current expanded node in tree views
    */
-  expanded: Aglyn.NodeSchema<any>[]
+  expanded: ExpandedNodes
   /**
    * The computed last selected node
    */
-  readonly lastSelected?: Aglyn.NodeSchema<any> | undefined
+  readonly lastSelected: LastSelectedNode
+
+  readonly isNodeSelected: (node: Aglyn.NodeSchema) => boolean
+  readonly isNodeHovered: (node: Aglyn.NodeSchema) => boolean
+  readonly isNodeExpanded: (node: Aglyn.NodeSchema) => boolean
 }
 
-export const focusStatus = observable<FocusStatus>({
+export const state = observable<FocusState>({
   hovered: null,
   selected: [],
   expanded: [],
@@ -45,40 +55,72 @@ export const focusStatus = observable<FocusStatus>({
   get lastSelected(): Aglyn.NodeSchema<any> | undefined {
     return this.selected[this.selected.length - 1]
   },
+
+  isNodeSelected: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+    if (!node) return false
+    console.log('this undefined isNodeSelected', state)
+    return state.selected.some((i) => i?.$id === node?.$id)
+  }),
+  isNodeHovered: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+    if (!node) return false
+    return state.hovered?.$id === node?.$id
+  }),
+  isNodeExpanded: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+    if (!node) return false
+    return state.expanded.some((i) => i?.$id === node?.$id)
+  }),
 })
 
 export function isNodeSelected(node: Aglyn.NodeSchema<any>) {
-  if (!node) return false
-  return focusStatus.selected.some((i) => i?.$id === node?.$id)
+  return state.isNodeSelected(node)
 }
 
 export function isNodeHovered(node: Aglyn.NodeSchema<any>) {
-  if (!node) return false
-  return focusStatus.hovered?.$id === node?.$id
+  return state.isNodeHovered(node)
 }
 
 export function isNodeExpanded(node: Aglyn.NodeSchema<any>) {
-  if (!node) return false
-  return focusStatus.expanded.some((i) => i?.$id === node?.$id)
+  return state.isNodeExpanded(node)
 }
 
 export function clearFocusStatus() {
   runInAction(() => {
-    focusStatus.selected = []
-    focusStatus.hovered = null
+    state.selected = []
+    state.hovered = null
   })
 }
 
 export function clearSelection() {
   runInAction(() => {
-    focusStatus.selected = []
+    state.selected = []
   })
 }
 
 export function clearHover() {
   runInAction(() => {
-    focusStatus.hovered = null
+    state.hovered = null
   })
+}
+
+export function expandNode(node: Aglyn.NodeSchema<any>) {
+  if (!node || isNodeExpanded(node)) return
+  runInAction(() => {
+    state.expanded.push(node)
+  })
+}
+
+export function collapseNode(node: Aglyn.NodeSchema<any>) {
+  if (!node || !isNodeExpanded(node)) return
+  runInAction(() => {
+    const index = state.expanded.findIndex((i) => i?.$id === node?.$id)
+    state.expanded.splice(index, 1)
+  })
+}
+
+export function toggleNodeExpansion(node: Aglyn.NodeSchema<any>) {
+  if (!node) return
+  if (isNodeExpanded(node)) return collapseNode(node)
+  expandNode(node)
 }
 
 export function handleNodeSelection(
@@ -99,10 +141,10 @@ export function deselectNode(
   if (!isNodeSelected(node)) return
   runInAction(() => {
     if (multiSelection) {
-      const selectIndex = focusStatus.selected.indexOf(node)
-      focusStatus.selected.splice(selectIndex, 1)
+      const selectIndex = state.selected.indexOf(node)
+      state.selected.splice(selectIndex, 1)
     } else {
-      focusStatus.selected = []
+      state.selected = []
     }
   })
 }
@@ -113,21 +155,21 @@ export function setSelectedNode(
 ) {
   if (isNodeSelected(node)) return
   runInAction(() => {
-    if (multiSelection) focusStatus.selected.push(node)
-    else focusStatus.selected = [node]
+    if (multiSelection) state.selected.push(node)
+    else state.selected = [node]
   })
 }
 
 export function setHoveredNode(node: Aglyn.NodeSchema<any>) {
   if (isNodeHovered(node)) return
   runInAction(() => {
-    focusStatus.hovered = node
+    state.hovered = node
   })
 }
 
 export function dehoverNode(node: Aglyn.NodeSchema<any>) {
   if (!isNodeHovered(node)) return
   runInAction(() => {
-    focusStatus.hovered = null
+    state.hovered = null
   })
 }

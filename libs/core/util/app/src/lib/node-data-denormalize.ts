@@ -23,7 +23,7 @@ import type {
   NodeId,
 } from '@aglyn/core-data-foundation'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
-import { arraySafe, copy } from '@aglyn/shared-util-tools'
+import { arraySafe, cloneDeep } from '@aglyn/shared-util-tools'
 
 const denormalizeData = (
   element: AglynNodeItemNormalized,
@@ -57,7 +57,7 @@ export function nodeDataDenormalize(
 ): AglynNodesList {
   const denormalized: AglynNodesList = []
   if (!data) return denormalized
-  const state = copy(data)
+  const state = cloneDeep(data)
 
   try {
     let normalized: AglynNodesById

@@ -15,5 +15,18 @@
  * limitations under the License.
  */
 
-export * from './screen-manager'
 export * as screen from './screen-manager'
+export {
+  NODE_ID_LENGTH,
+  NODE_ROOT_ID,
+  NODE_ROOT_LABEL,
+  NType,
+  createNodeId,
+  createNode,
+  type NodeId,
+  type NodeModel,
+  type NodeSchema,
+  type NodeSchemaJSON,
+  type NodeSchemaNested,
+  type NodeBreadcrumbPath,
+} from './screen-manager'

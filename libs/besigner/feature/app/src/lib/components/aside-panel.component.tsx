@@ -243,7 +243,7 @@ const defaultTabContent = (
 )
 
 const withSelectedElement = (Component) => () => {
-  const lastSelected = Besigner.focus.focusStatus.lastSelected
+  const lastSelected = Besigner.focus.state.lastSelected
   return !lastSelected ? (
     <Stack
       direction="column"

@@ -55,7 +55,7 @@ export function useAddElementDrawerCallback(
         .then((data: any) => {
           const $id =
             callback?.$id ||
-            Besigner.focus.focusStatus.lastSelected?.$id ||
+            Besigner.focus.state.lastSelected?.$id ||
             Aglyn.NODE_ROOT_ID
           const parent =
             Aglyn.screen.getNode($id) ||

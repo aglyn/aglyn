@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {_isObj} from '@aglyn/shared-util-guards'
-
+import { _isObj } from '@aglyn/shared-util-guards'
 
 /**
  * Safe object/{} will always return an object
@@ -27,6 +26,11 @@ import {_isObj} from '@aglyn/shared-util-guards'
  * @param {Record<string, unknown>} [or]
  * @returns {Record<string, unknown>}
  */
-export function objectSafe<T>(val: T, or?: Record<string, unknown>): Record<string, unknown> {
+export function objectSafe<T>(
+  val: T,
+  or?: Record<string, unknown>,
+): Record<string, unknown> {
   return _isObj(val) ? val : _isObj(or) ? or : {}
 }
+
+export default objectSafe

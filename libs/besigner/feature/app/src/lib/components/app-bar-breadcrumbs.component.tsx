@@ -154,7 +154,7 @@ interface BreadcrumbsProps extends Partial<MuiBreadcrumbsProps> {}
 
 const Breadcrumbs = observer((props: BreadcrumbsProps) => {
   const { children, sx, ...rest } = props
-  const lastSelected = Besigner.focus.focusStatus.lastSelected
+  const lastSelected = Besigner.focus.state.lastSelected
 
   return (
     <StyledBreadcrumbs separator="›" aria-label="breadcrumb" sx={sx} {...rest}>
