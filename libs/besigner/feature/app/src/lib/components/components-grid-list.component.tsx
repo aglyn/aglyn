@@ -43,7 +43,7 @@ const endIcon = (value: number, active: number) =>
 
 export interface ComponentsGridListProps extends Partial<GridListProps> {
   items?: AglynNodePresetSchema[]
-  onItemSelect?: {
+  onActionClick?: {
     bivarianceHack<T>(
       event: null | MouseEvent<T>,
       data: { type: string; data: AglynNodePresetSchema },
@@ -54,7 +54,7 @@ export interface ComponentsGridListProps extends Partial<GridListProps> {
 
 const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
   (props, ref) => {
-    const { onItemSelect, items, sx, maxColumns, ...rest } = props
+    const { onActionClick, items, sx, maxColumns, ...rest } = props
 
     const [columns, setColumns] = useState(maxColumns)
     const handleColumnChange = useCallback(
@@ -63,11 +63,11 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
       },
       [],
     )
-    const handleItemClick = useCallback(
+    const handleOnActionClick = useCallback(
       (e, item) => {
-        onItemSelect?.call(null, e, { type: 'selection', data: item })
+        onActionClick?.call(null, e, { type: 'selection', data: item?.data })
       },
-      [onItemSelect],
+      [onActionClick],
     )
 
     const columnOptions = useMemo(() => {
@@ -81,14 +81,17 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
     }, [handleColumnChange, columns, maxColumns])
 
     const renderItemContent = useCallback(
-      ({ data, ...props }: AglynNodePresetSchema) => (
-        <ElementCardComponent
-          onActionClick={handleItemClick}
-          {...(props as any)}
-          item={data as any}
-        />
-      ),
-      [handleItemClick],
+      (item: AglynNodePresetSchema) => {
+        return (
+          <ElementCardComponent
+            onActionClick={handleOnActionClick}
+            label={item?.label}
+            icon={item?.icon}
+            item={{ id: item?.presetId, ...item } as any}
+          />
+        )
+      },
+      [handleOnActionClick],
     )
 
     return (

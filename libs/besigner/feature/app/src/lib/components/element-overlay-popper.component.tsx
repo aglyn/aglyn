@@ -243,7 +243,10 @@ ElementOverlayPopper.aglyn = true
 ElementOverlayPopper.defaultProps = {
   variant: 'hoveredOverlay',
 }
-const ElementOverlayPopperComponent = observer(ElementOverlayPopper, {
+const ElementOverlayPopperComponent = observer<
+  ElementOverlayPopperComponentProps,
+  any
+>(ElementOverlayPopper, {
   forwardRef: true,
 })
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
+import { render } from '@testing-library/react'
 import React from 'react'
-import {render} from '@testing-library/react'
-import CardIconListItem from './card-icon-list-item'
+import CardListItem from './card-list-item'
 
-
-describe('CardIconListItem', () => {
+describe('CardListItem', () => {
   it('should render successfully', () => {
-    const {baseElement} = render(<CardIconListItem />)
+    const { baseElement } = render(<CardListItem item={{}} />)
     expect(baseElement).toBeTruthy()
   })
 })

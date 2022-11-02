@@ -58,7 +58,7 @@ import {
 } from 'react'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
-import ElementIconComponent from './element-icon.component'
+import ComponentIconComponent from './component-icon.component'
 
 const classKey = generateComponentClassKeys('TreeView', [
   'root',
@@ -325,7 +325,7 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
               flexDirection: 'column',
             }}
           >
-            <ElementIconComponent component={schema} />
+            <ComponentIconComponent component={schema} />
           </MuiListItemIcon>
           <MuiListItemText
             primary={nodeLabel}

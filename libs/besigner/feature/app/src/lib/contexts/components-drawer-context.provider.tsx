@@ -56,7 +56,7 @@ function ComponentsDrawerContextProvider(
     },
     [reject],
   )
-  const handleConfirm = useCallback(
+  const handleOnActionClick = useCallback(
     (e, item) => {
       resolve && resolve({ option: item })
       setResolveReject([])
@@ -90,7 +90,7 @@ function ComponentsDrawerContextProvider(
             {...rest}
           >
             <ComponentsGridListComponent
-              onItemSelect={handleConfirm}
+              onActionClick={handleOnActionClick}
               items={nodePresets}
             />
           </Component>

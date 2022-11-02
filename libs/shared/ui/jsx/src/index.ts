@@ -17,7 +17,8 @@
 
 export * from './lib/components/app-link'
 export * from './lib/components/background-image.component'
-export * from './lib/components/card-icon-list-item'
+export * from '@aglyn/shared-ui-jsx/components/card-list-item'
+export * from './lib/components/children-function-prop'
 export * from './lib/components/confirmation-provider.component'
 export * from './lib/components/container'
 export * from './lib/components/dialog-confirm'

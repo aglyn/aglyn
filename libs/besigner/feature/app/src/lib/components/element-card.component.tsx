@@ -16,47 +16,38 @@
  */
 
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
-import {
-  CardIconListItem,
-  type CardIconListItemProps,
-} from '@aglyn/shared-ui-jsx'
+import { CardListItem, type CardListItemProps } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { useForkedSxProps } from '@aglyn/shared-ui-theme'
+import { styled } from '@aglyn/shared-ui-theme'
 import { forwardRef } from 'react'
 
-export interface ElementCardProps extends CardIconListItemProps {
-  label: string
+const Icon = styled(MdiIcon)(({ theme }) => ({
+  fontSize: theme.typography.pxToRem(48),
+  padding: '0.15ch',
+  color: 'inherit',
+  overflow: 'visible',
+  opacity: 0.7,
+}))
+
+export interface ElementCardProps extends CardListItemProps {
   icon?: MdiIconProps
 }
 
 const ElementCardComponent = forwardRef<any, ElementCardProps>((props, ref) => {
-  const { item, label, icon, ...rest } = props
-  const _iconSx = useForkedSxProps(
-    {
-      fontSize: { xs: `5ch`, sm: `4ch` },
-      padding: `0.15ch`,
-      color: 'tertiary.main',
-      overflow: 'visible',
-    },
-    icon?.sx,
-  )
+  const { icon, ...rest } = props
 
   return (
-    <CardIconListItem ref={ref} item={item} label={label} {...rest}>
+    <CardListItem ref={ref} {...rest}>
       {({ item }) => (
         <div>
           {!icon?.path && icon ? (
             (icon as any)
           ) : (
-            <MdiIcon
-              {...icon}
-              path={icon?.path || ICON_VARIANT_ELEMENT.path}
-              sx={_iconSx}
-            />
+            <Icon {...icon} path={icon?.path || ICON_VARIANT_ELEMENT.path} />
           )}
         </div>
       )}
-    </CardIconListItem>
+    </CardListItem>
   )
 })
 ElementCardComponent.displayName = 'ElementCardComponent'

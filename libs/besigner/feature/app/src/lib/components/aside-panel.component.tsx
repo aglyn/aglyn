@@ -34,8 +34,8 @@ import {
   ICON_VARIANT_MODIFY_ADD,
 } from '@aglyn/shared-data-enums'
 import {
-  CardIconListItem,
-  type CardIconListItemProps,
+  CardListItem,
+  type CardListItemProps,
   useForkedRefs,
 } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
@@ -287,7 +287,7 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
   )
 })
 
-type ComponentGridItemProps = CardIconListItemProps & {
+type ComponentGridItemProps = CardListItemProps & {
   item: AglynNodePresetSchema
 }
 const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
@@ -314,7 +314,7 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
 
     return (
       <>
-        <CardIconListItem
+        <CardListItem
           ref={ref}
           ContentBoxProps={{
             ref: dragPreview,
@@ -341,7 +341,7 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
               )}
             />
           )}
-        </CardIconListItem>
+        </CardListItem>
       </>
     )
   },

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { CardIconListItem, GridList } from '@aglyn/shared-ui-jsx'
+import { CardListItem, GridList } from '@aglyn/shared-ui-jsx'
 import {
   DEFAULT_ICON,
   type Icon,
@@ -179,7 +179,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
           enterDelay={375}
           enterNextDelay={745}
         >
-          <CardIconListItem
+          <CardListItem
             item={item}
             onActionClick={handleItemClick}
             selected={selected && selected === item.id}

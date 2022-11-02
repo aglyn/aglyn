@@ -20,38 +20,33 @@ import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
-import { useMemo } from 'react'
+import { isElement, isValidElementType } from 'react-is'
 
-export interface ElementIconProps extends MdiIconProps {
-  component: Aglyn.ComponentSchema
+export interface ComponentIconProps extends MdiIconProps {
+  component?: Aglyn.ComponentSchema
 }
 
-const ElementIcon = (props: ElementIconProps, ref: any) => {
+const ComponentIcon = (props: ComponentIconProps) => {
   const { component, sx, ...rest } = props
-  const icon = component?.icon
-  const iconProps = useMemo(
-    () => ({
-      ...icon,
-      path: icon?.path || ICON_VARIANT_ELEMENT.path,
-      sx: mergeSxProps(icon?.sx, sx),
-    }),
-    [icon, sx],
-  )
+  const Icon = component?.icon
+
+  if (isElement(Icon)) return Icon
 
   return (
     <MdiIcon
-      ref={ref}
       fontSize="inherit"
       color="inherit"
-      {...iconProps}
+      path={Icon?.path || ICON_VARIANT_ELEMENT.path}
+      sx={mergeSxProps(sx, Icon?.sx)}
+      {...(isValidElementType(Icon) ? { component: Icon } : { ...Icon })}
       {...rest}
     />
   )
 }
-ElementIcon.displayName = 'ElementIconComponent'
-ElementIcon.defaultProps = {}
+ComponentIcon.displayName = 'ComponentIconComponent'
+ComponentIcon.defaultProps = {}
 
-const ElementIconComponent = observer(ElementIcon, { forwardRef: true })
+const ComponentIconComponent = observer<ComponentIconProps>(ComponentIcon)
 
-export { ElementIconComponent }
-export default ElementIconComponent
+export { ComponentIconComponent }
+export default ComponentIconComponent

@@ -21,7 +21,7 @@ import { ICON_VARIANT_MODIFY_ADD } from '@aglyn/shared-data-enums'
 import { styled } from '@aglyn/shared-ui-theme'
 import { Divider, Stack, type StackProps, Typography } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import ElementIconComponent from './element-icon.component'
+import ComponentIconComponent from './component-icon.component'
 import { BadgeButton } from './element-overlay-actions.component'
 
 const ElementLabelWrapper = styled(Stack, {
@@ -90,7 +90,7 @@ const ElementOverlayLabel = (props: ElementOverlayLabelProps) => {
         justifyContent="center"
         sx={{ fontSize: 12 }}
       >
-        <ElementIconComponent
+        <ComponentIconComponent
           component={node?.componentSchema}
           color="inherit"
           fontSize="inherit"
