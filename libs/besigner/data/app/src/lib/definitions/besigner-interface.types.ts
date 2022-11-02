@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import type {
   AglynModuleModelOptions,
   AglynModuleModelT,
   AglynNodeHierarchy,
   BundleId,
   ComponentId,
-  ComponentsLinealOrder,
   IAglynAppController,
   IAglynModuleModel,
   NodeId,
@@ -116,8 +116,8 @@ export type BesignerDndElementBaseData<T extends DndDragType | DndDropType> =
     componentId?: ComponentId
     pluginId?: BundleId
     trail?: AglynNodeHierarchy
-    restrictParent?: ComponentsLinealOrder
-    restrictChildren?: ComponentsLinealOrder
+    restrictParent?: Aglyn.ComponentsLinealOrder
+    restrictChildren?: Aglyn.ComponentsLinealOrder
   }
 
 export interface BesignerInterfaceControllerOptions

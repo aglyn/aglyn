@@ -213,21 +213,16 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   const collapseIn = expanded?.some((i) => i === nodeId)
   const isSelected = Besigner.focus.isNodeSelected(node)
   const dragDisabled = Boolean(isRootNode || !dragAllowed)
-  const dndData = {
-    $id: node?.$id,
-    componentId: node?.componentId,
-    pluginId: schema?.pluginId,
-    parentId: node?.parentId,
-    nodes: node?.nodes,
-    trail: breadcrumbPath,
-    restrictParent: schema?.restrictParent,
-    restrictChildren: schema?.restrictChildren,
-  }
+
   const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(
-    dndData,
+    { $id: node?.$id, node },
     Besigner.dnd.DragType.TREE,
   )
-  const [{ isOver }, dropRef] = useLeafDrop(dndData)
+  const [{ isOver }, dropRef] = useLeafDrop({
+    $id: node?.$id,
+    node,
+    type: Besigner.dnd.DropAreaType.INSIDE,
+  })
 
   return (
     <TreeItem
@@ -397,10 +392,6 @@ const TreeViewContent = observer(() => {
       [],
     )
   }, [allExpanded])
-
-  console.log('selected tree', selected)
-  console.log('expanded tree', expanded)
-  console.log('expanded allExpanded', allExpanded)
 
   const handleTreeItemToggle = useCallback((e, $id: Aglyn.NodeId) => {
     e.stopPropagation()

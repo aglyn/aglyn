@@ -53,7 +53,7 @@ export const schema: AglynComponentSchema<ToolbarProps> = {
   ],
   presets: [
     {
-      presetId: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'Toolbar Content',
       icon: {
         path: mdiBorderInside.path,

@@ -27,7 +27,6 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from 'react'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
@@ -41,23 +40,16 @@ const ElementLeafComponent = forwardRef<any, ElementLeafComponentProps>(
     const { $id, leafComponent, ...rest } = props
     const node = Aglyn.screen.getNode($id)
     const isSelected = Besigner.focus.isNodeSelected(node)
-    const dndData = useMemo(
-      () => ({
-        $id,
-        componentId: node?.componentId,
-        pluginId: node?.componentSchema?.pluginId,
-        componentSchema: node?.componentSchema,
-        restrictParent: node?.componentSchema?.restrictParent,
-        restrictChildren: node?.componentSchema?.restrictChildren,
-        trail: node?.breadcrumbPath,
-      }),
-      [$id, node],
-    )
+
     const [, dragHandle, dragPreview] = useLeafDrag(
-      dndData,
+      { $id: node?.$id, node },
       Besigner.dnd.DragType.CANVAS,
     )
-    const [, dropRef] = useLeafDrop(dndData)
+    const [, dropRef] = useLeafDrop({
+      $id: node?.$id,
+      node,
+      type: Besigner.dnd.DropAreaType.INSIDE,
+    })
     const [nodeRef, setNodeRef] = useState<HTMLElement>()
     const { setElementRef, deleteElementRef } = useRenderedCanvasElements()
     const ref = useForkedRefs<HTMLElement>(

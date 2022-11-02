@@ -30,6 +30,7 @@ import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 import { observable, runInAction } from 'mobx'
 import type { ComponentClass, ComponentProps } from 'react'
+import * as Aglyn from '../../index'
 import {
   FEATURE_FLAG,
   FieldComponentType,
@@ -39,6 +40,14 @@ import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 import { hasDependency } from '../plugin-manager'
 import type { NodeId, NodeSchema } from '../screen-manager'
+
+export enum ComponentCategory {
+  INPUT = 'Input',
+  SURFACE = 'Surface',
+  NAVIGATION = 'Navigation',
+  LAYOUT = 'Layout',
+  DATA_DISPLAY = 'Data Display',
+}
 
 export type ComponentId = string
 
@@ -93,11 +102,11 @@ export interface ComponentSchema<P = any> {
   /**
    * Define a limitation for nodes allowed as direct descendents
    */
-  restrictChildren?: ComponentsLinealOrder
+  restrictChildren?: Aglyn.ComponentsLinealOrder
   /**
    * Define a limitation for nodes allowed to be direct ancestors
    */
-  restrictParent?: ComponentsLinealOrder
+  restrictParent?: Aglyn.ComponentsLinealOrder
 
   /**
    * Filter props
@@ -159,14 +168,6 @@ emitter.on(AglynEvent.COMPONENT_REGISTER, ({ component, schema }) => {
 emitter.on(AglynEvent.COMPONENT_UNREGISTER, ({ componentId }) => {
   unregisterComponent(componentId)
 })
-
-export enum ComponentCategory {
-  INPUT = 'Input',
-  SURFACE = 'Surface',
-  NAVIGATION = 'Navigation',
-  LAYOUT = 'Layout',
-  DATA_DISPLAY = 'Data Display',
-}
 
 export function _isFeatureExplicitlyDisabled(val: FEATURE_FLAG) {
   return Boolean(val === FEATURE_FLAG.DISABLED)

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import type { Dictionary, OrUndef } from '@aglyn/shared-data-types'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type {
@@ -31,10 +32,7 @@ import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { ComponentClass, ComponentProps } from 'react'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
-import type {
-  ComponentCategory,
-  ComponentsLinealDirectiveFlag,
-} from '../constants/components'
+import type { ComponentCategory } from '../constants/components'
 import type {
   ComponentGetPayload,
   ComponentRegisterPayload,
@@ -77,7 +75,7 @@ export type InstanceSchemas = Map<
 export type InstanceNodePresets = Map<PresetId, AglynNodePresetSchema>
 
 export type ComponentsLinealOrder = [
-  directiveType: ComponentsLinealDirectiveFlag,
+  directiveType: Aglyn.LinealDirectiveFlag,
   directiveDefinition:
     | Array<ComponentId>
     | { bundles?: Array<BundleId>; components: Array<ComponentId> }
@@ -192,11 +190,11 @@ export interface AglynComponentSchema<P = any> {
   /**
    * Define a limitation for nodes allowed as direct descendents
    */
-  restrictChildren?: ComponentsLinealOrder
+  restrictChildren?: Aglyn.ComponentsLinealOrder
   /**
    * Define a limitation for nodes allowed to be direct ancestors
    */
-  restrictParent?: ComponentsLinealOrder
+  restrictParent?: Aglyn.ComponentsLinealOrder
 
   /**
    * Filter props
@@ -255,7 +253,7 @@ export type NodePresetData = Omit<AglynNodeSchema, '$id' | 'nodes'> & {
 }
 
 export type AglynNodePresetSchema = {
-  presetId: PresetId
+  $id: PresetId
   label: string
   componentId?: ComponentId
   pluginId?: BundleId

@@ -15,17 +15,8 @@
  * limitations under the License.
  */
 
-import type {
-  BundleId,
-  ComponentId,
-  ComponentsLinealOrder,
-} from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import { _isArr, _isArrEmpty } from '@aglyn/shared-util-guards'
-
-export enum ComponentsLinealDirectiveFlag {
-  LIMIT_TO = 0x01,
-  DISALLOW = 0x02,
-}
 
 export enum InvalidLinealRelationFlag {
   DISALLOW = 0x01,
@@ -58,9 +49,9 @@ export type ConfirmValidLinealRelationshipResponse =
   | [isValid: false, reason: InvalidLinealRelationFlag]
 
 function validateLinealOrder(
-  componentId: ComponentId,
-  pluginId: BundleId,
-  linealOrder: ComponentsLinealOrder,
+  componentId: Aglyn.ComponentId,
+  pluginId: Aglyn.PluginId,
+  linealOrder: Aglyn.ComponentsLinealOrder,
   governor:
     | typeof InvalidLinealRelationFlag.ITEM
     | typeof InvalidLinealRelationFlag.PARENT,
@@ -70,28 +61,28 @@ function validateLinealOrder(
     components: _isArr(directiveDefinition)
       ? [...directiveDefinition]
       : directiveDefinition?.components,
-    bundles: _isArr(directiveDefinition)
+    plugins: _isArr(directiveDefinition)
       ? undefined
       : directiveDefinition?.bundles,
   }
 
   // Throw is disallowed
   if (
-    ComponentsLinealDirectiveFlag[directiveType] ===
-    ComponentsLinealDirectiveFlag.DISALLOW
+    Aglyn.LinealDirectiveFlag[directiveType] ===
+    Aglyn.LinealDirectiveFlag.DISALLOW
   ) {
     if (definition?.components?.some((cid) => cid === componentId)) {
       throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
     }
-    if (definition?.bundles?.some((bid) => bid === pluginId)) {
+    if (definition?.plugins?.some((pid) => pid === pluginId)) {
       throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
     }
   }
 
   // Throw if limited to range and missing
   if (
-    ComponentsLinealDirectiveFlag[directiveType] ===
-    ComponentsLinealDirectiveFlag.LIMIT_TO
+    Aglyn.LinealDirectiveFlag[directiveType] ===
+    Aglyn.LinealDirectiveFlag.LIMIT_TO
   ) {
     if (
       _isArr(definition?.components) &&
@@ -101,34 +92,26 @@ function validateLinealOrder(
       throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
     }
     if (
-      _isArr(definition?.bundles) &&
-      (_isArrEmpty(definition?.bundles) ||
-        !definition?.bundles?.some((bid) => bid === pluginId))
+      _isArr(definition?.plugins) &&
+      (_isArrEmpty(definition?.plugins) ||
+        !definition?.plugins?.some((pid) => pid === pluginId))
     ) {
       throw InvalidLinealRelationFlag.DISALLOW_BUNDLE | governor
     }
   }
 }
 
-export interface ConfirmValidLinealRelationshipOptions {
-  item: {
-    componentId?: ComponentId
-    pluginId?: ComponentId
-    restrictParent?: ComponentsLinealOrder
-    restrictChildren?: ComponentsLinealOrder
-  }
-  parent: {
-    componentId?: ComponentId
-    pluginId?: ComponentId
-    restrictParent?: ComponentsLinealOrder
-    restrictChildren?: ComponentsLinealOrder
-  }
+type LinealItem = {
+  componentId?: Aglyn.ComponentId
+  pluginId?: Aglyn.PluginId
+  restrictParent?: Aglyn.ComponentsLinealOrder
+  restrictChildren?: Aglyn.ComponentsLinealOrder
 }
 
 export function confirmValidLinealRelationship(
-  options: ConfirmValidLinealRelationshipOptions,
+  item: LinealItem,
+  parent: LinealItem,
 ): ConfirmValidLinealRelationshipResponse {
-  const { item, parent } = options
   try {
     if (item.restrictParent) {
       validateLinealOrder(

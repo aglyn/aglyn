@@ -30,43 +30,17 @@ import { createIdUrlSafe } from '../constants'
 import { AglynEvent, emitter } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 
-export const nodes = observable<Record<NodeId, NodeSchema<any>>>({})
-export const NODE_ROOT_ID = '_@_'
-export const NODE_ID_LENGTH = 10
-export const NODE_ROOT_LABEL = 'Document'
-
-export enum NType {
+export enum NodeType {
   NODE = 'node',
   TEXT = 'text',
   SCREEN = 'screen',
   REF = 'ref',
+  PRESET = 'preset',
 }
-
-emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
-  clearNodes()
-})
-emitter.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
-  setNodes(nodes)
-})
-emitter.on(AglynEvent.NODE_SET, ({ node, create }) => {
-  setNode(node, create)
-})
-emitter.on(AglynEvent.NODE_DELETE, ({ node }) => {
-  deleteNode(node)
-})
-emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
-  duplicateNode(node)
-})
-emitter.on(
-  AglynEvent.NODE_REPARENT,
-  ({ node, oldParent, newParent, index }) => {
-    reparentNode(node, oldParent, newParent, index)
-  },
-)
 
 export type NodeId = string
 
-export interface NodeModel<TYPE extends NType = null> {
+export interface AbstractNodeSchema<TYPE extends NodeType = null> {
   /**
    * The unique identifier for a node
    */
@@ -81,11 +55,12 @@ export interface NodeModel<TYPE extends NType = null> {
   type?: TYPE
 }
 
-export interface NodeSchema<P = JSX.AnyProps> extends NodeModel<NType.NODE> {
+export interface NodeSchema<P = JSX.AnyProps>
+  extends AbstractNodeSchema<NodeType.NODE> {
   /**
    * The unique identifier of the node component
    */
-  componentId: string
+  componentId?: string
   /**
    * The unique identifier of the node component plugin bundle
    */
@@ -155,6 +130,34 @@ export type NodeBreadcrumbPath = [
   root: string & typeof NODE_ROOT_ID,
   ...nodes: [...ancestors: NodeId[], node: NodeId],
 ]
+
+export const NODE_ROOT_ID = '_@_'
+export const NODE_ID_LENGTH = 10
+export const NODE_ROOT_LABEL = 'Document'
+
+export const nodes = observable<Record<NodeId, NodeSchema<any>>>({})
+
+emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
+  clearNodes()
+})
+emitter.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
+  setNodes(nodes)
+})
+emitter.on(AglynEvent.NODE_SET, ({ node, create }) => {
+  setNode(node, create)
+})
+emitter.on(AglynEvent.NODE_DELETE, ({ node }) => {
+  deleteNode(node)
+})
+emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
+  duplicateNode(node)
+})
+emitter.on(
+  AglynEvent.NODE_REPARENT,
+  ({ node, oldParent, newParent, index }) => {
+    reparentNode(node, oldParent, newParent, index)
+  },
+)
 
 export function createNodeId(): NodeId {
   return createIdUrlSafe(NODE_ID_LENGTH)

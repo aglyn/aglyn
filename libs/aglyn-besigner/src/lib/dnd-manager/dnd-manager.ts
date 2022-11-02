@@ -16,22 +16,37 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { confirmValidLinealRelationship } from '@aglyn/core-util-app'
 import { observable, runInAction } from 'mobx'
 import { computedFn } from 'mobx-utils'
+
+export enum DragType {
+  CANVAS = 'canvas',
+  TEMPLATE = 'template',
+  TREE = 'tree',
+}
+
+export enum DropAreaType {
+  BEFORE = 0x1,
+  INSIDE = 0x2,
+  AFTER = 0x3,
+}
+
+export type DraggableNode = Aglyn.NodeSchema<any> | Aglyn.PresetSchema<any>
 
 export interface DndState {
   /**
    * The current drag object
    */
-  drag?: Aglyn.NodeSchema | null
+  drag: DraggableNode | null
   /**
    * The current drop object
    */
-  drop?: Aglyn.NodeSchema | null
+  drop: DraggableNode | null
   /**
    * Computed guard to check if dragging
    */
-  readonly isDragging: boolean
+  readonly hasDragTarget: boolean
   /**
    * Computed guard to check if drop target available
    */
@@ -45,62 +60,92 @@ export interface DndState {
    */
   readonly dropBreadcrumbs: Aglyn.NodeBreadcrumbPath | false
   /**
+   * Computed check for valid lineal relationship
+   */
+  readonly isValidLinealRelationship: boolean
+  /**
    * Computed guard fn if node is dragging
    */
-  readonly isDraggingNode: (node: Aglyn.NodeSchema<any>) => boolean
+  readonly isDraggingNode: (node: DraggableNode) => boolean
   /**
    * Computed guard fn if node is dragging the drop target
    */
-  readonly isDraggingDropNode: (node: Aglyn.NodeSchema<any>) => boolean
+  readonly isDraggingDropNode: (node: DraggableNode) => boolean
   /**
    * Computed guard fn if node is dragging the drop target
    */
-  readonly isDraggingOverDropNode: (node: Aglyn.NodeSchema<any>) => boolean
+  readonly isDraggingOverDropNode: (node: DraggableNode) => boolean
 }
 
 export const state = observable<DndState>({
   drag: null,
   drop: null,
-  get isDragging(): boolean {
+
+  get hasDragTarget(): boolean {
     return Boolean(this.drag)
   },
   get hasDropTarget(): boolean {
     return Boolean(this.drop)
   },
   get dragBreadcrumbs(): Aglyn.NodeBreadcrumbPath | false {
-    if (!this.isDragging) return false
+    if (!this.hasDragTarget) return false
     return this.drag?.breadcrumbPath
   },
   get dropBreadcrumbs(): Aglyn.NodeBreadcrumbPath | false {
     if (!this.hasDropTarget) return false
     return this.drop?.breadcrumbPath
   },
-  isDraggingNode: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+  get isValidLinealRelationship(): boolean {
+    if (!this.hasDragTarget) return false
+    if (!this.hasDropTarget) return false
+    if (this.drag?.type === Aglyn.NodeType.PRESET) {
+      const itemNode = this.drag?.data
+      const itemSchema = Aglyn.components.getSchema(itemNode?.componentId)
+      return confirmValidLinealRelationship(
+        {
+          pluginId: this.drag?.data?.pluginId,
+          componentId: itemNode?.componentId,
+          restrictChildren: itemSchema?.restrictChildren,
+          restrictParent: itemSchema?.restrictParent,
+        },
+        {
+          pluginId: this.drop?.pluginId,
+          componentId: this.drop?.componentId,
+          restrictChildren: this.drop?.componentSchema?.restrictChildren,
+          restrictParent: this.drop?.componentSchema?.restrictParent,
+        },
+      )[0]
+    }
+    return confirmValidLinealRelationship(
+      {
+        pluginId: this.drag?.pluginId,
+        componentId: this.drag?.componentId,
+        restrictChildren: this.drag?.componentSchema?.restrictChildren,
+        restrictParent: this.drag?.componentSchema?.restrictParent,
+      },
+      {
+        pluginId: this.drop?.pluginId,
+        componentId: this.drop?.componentId,
+        restrictChildren: this.drop?.componentSchema?.restrictChildren,
+        restrictParent: this.drop?.componentSchema?.restrictParent,
+      },
+    )[0]
+  },
+
+  isDraggingNode: computedFn((node: DraggableNode): boolean => {
     if (!node) return false
     return node?.$id === state.drag?.$id
   }),
-  isDraggingDropNode: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+  isDraggingDropNode: computedFn((node: DraggableNode): boolean => {
     if (!node) return false
     return node?.$id === state.drop?.$id
   }),
-  isDraggingOverDropNode: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+  isDraggingOverDropNode: computedFn((node: DraggableNode): boolean => {
     if (!node) return false
     const breadcrumbs = state.dropBreadcrumbs
     return Array.isArray(breadcrumbs) && breadcrumbs.indexOf(node?.$id) >= 0
   }),
 })
-
-export enum DragType {
-  CANVAS = 'canvas',
-  TEMPLATE = 'template',
-  TREE = 'tree',
-}
-
-export enum DndDropType {
-  BEFORE = 0x1,
-  INSIDE = 0x2,
-  AFTER = 0x3,
-}
 
 export function clearDndStatus() {
   runInAction(() => {
@@ -109,26 +154,26 @@ export function clearDndStatus() {
   })
 }
 
-export function setDragNode(dragNode: Aglyn.NodeSchema<any> | null) {
+export function setDragNode(dragNode: DraggableNode | null) {
   runInAction(() => {
-    state.drag = dragNode
+    state.drag = dragNode || null
   })
 }
 
-export function setDropNode(dropNode: Aglyn.NodeSchema<any> | null) {
+export function setDropNode(dropNode: DraggableNode | null) {
   runInAction(() => {
-    state.drop = dropNode
+    state.drop = dropNode || null
   })
 }
 
-export function isDraggingNode(node: Aglyn.NodeSchema<any>): boolean {
+export function isDraggingNode(node: DraggableNode): boolean {
   return state.isDraggingNode(node)
 }
 
-export function isDraggingDropNode(node: Aglyn.NodeSchema<any>): boolean {
+export function isDraggingDropNode(node: DraggableNode): boolean {
   return state.isDraggingDropNode(node)
 }
 
-export function isDraggingOverDropNode(node: Aglyn.NodeSchema<any>): boolean {
+export function isDraggingOverDropNode(node: DraggableNode): boolean {
   return state.isDraggingOverDropNode(node)
 }

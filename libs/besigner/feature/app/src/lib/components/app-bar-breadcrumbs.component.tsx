@@ -36,7 +36,7 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useCallback, useMemo } from 'react'
+import { forwardRef, useCallback } from 'react'
 import useLeafDrop from '../hooks/use-leaf-drop'
 
 const breadcrumbItemClassKey = generateComponentClassKeys('BreadcrumbItem', [
@@ -102,18 +102,22 @@ export interface BreadcrumbItemProps extends Partial<LinkProps<'button'>> {
 const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
   const { children, nodeId, lastItem, ...rest } = props
   const node = Aglyn.screen.getNode(nodeId)
-  const schema = node?.componentSchema
-  const dndData = useMemo(() => {
-    return {
-      $id: nodeId,
-      componentId: node?.componentId,
-      pluginId: schema?.pluginId,
-      trail: node?.breadcrumbPath,
-      restrictParent: schema?.restrictParent,
-      restrictChildren: schema?.restrictChildren,
-    }
-  }, [nodeId, node, schema])
-  const [, dropRef] = useLeafDrop(dndData)
+  // const schema = node?.componentSchema
+  // const dndData = useMemo(() => {
+  //   return {
+  //     $id: nodeId,
+  //     componentId: node?.componentId,
+  //     pluginId: schema?.pluginId,
+  //     trail: node?.breadcrumbPath,
+  //     restrictParent: schema?.restrictParent,
+  //     restrictChildren: schema?.restrictChildren,
+  //   }
+  // }, [nodeId, node, schema])
+  const [, dropRef] = useLeafDrop({
+    $id: node?.$id,
+    node,
+    type: Besigner.dnd.DropAreaType.INSIDE,
+  })
 
   const handleClick = useCallback(
     (e) => {

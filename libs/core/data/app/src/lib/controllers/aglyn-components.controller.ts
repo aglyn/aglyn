@@ -113,7 +113,7 @@ export class AglynComponentsController
     return {
       ...super.toJSON(),
       componentIds: this.components?.keys() as any,
-      bundles: this.bundles as any,
+      plugins: this.bundles as any,
       schemas: this.schemas as any,
     }
   }
@@ -215,7 +215,7 @@ export class AglynComponentsController
         }
         if (_isArr(schema.presets)) {
           schema.presets.forEach((i) => {
-            this.presets.set(i.presetId, i)
+            this.presets.set(i.$id, i)
           })
         }
       },
@@ -260,7 +260,7 @@ export class AglynComponentsController
             // TODO: throw errorFactory error
           }
           this.schemas.get(key)?.presets?.forEach((i) => {
-            this.presets.delete(i.presetId)
+            this.presets.delete(i.$id)
           })
           this.components.delete(key)
           this.schemas.delete(key)
@@ -270,7 +270,7 @@ export class AglynComponentsController
           this.bundles.set(pluginId, bundle)
         } else {
           this.schemas.get(componentId)?.presets?.forEach((i) => {
-            this.presets.delete(i.presetId)
+            this.presets.delete(i.$id)
           })
           this.schemas.delete(componentId)
           this.components.delete(componentId)

@@ -87,7 +87,7 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
             onActionClick={handleOnActionClick}
             label={item?.label}
             icon={item?.icon}
-            item={{ id: item?.presetId, ...item } as any}
+            item={{ id: item?.$id, ...item } as any}
           />
         )
       },

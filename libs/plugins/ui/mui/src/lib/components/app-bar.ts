@@ -40,7 +40,7 @@ export const schema: AglynComponentSchema<AppBarProps> = {
   attributes: [FIELD_COLOR_ALT1, FIELD_POSITION],
   presets: [
     {
-      presetId: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'App Toolbar',
       icon: {
         path: mdiPageLayoutHeader.path,

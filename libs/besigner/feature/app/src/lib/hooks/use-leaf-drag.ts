@@ -18,49 +18,63 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
-  type BesignerDraggableItem,
-  type BesignerDroppableItem,
-} from '@aglyn/besigner-data-app'
-import {
   type ConnectDragPreview,
   type ConnectDragSource,
   useDrag,
 } from 'react-dnd'
+import { type NodeDropArea } from './use-leaf-drop'
 
 export type DragCollected = {
   isDragging: boolean
 }
 
-export function useLeafDrag<T extends BesignerDraggableItem>(
-  dragObject?: T,
-  type: Besigner.dnd.DragType = Besigner.dnd.DragType.CANVAS,
-): [DragCollected, ConnectDragSource, ConnectDragPreview] {
-  const isRootNode = Aglyn.screen.isRootNodeId(dragObject?.$id)
-  const schema = Aglyn.components.getSchema(dragObject?.componentId)
-  const dragEnabled = Aglyn.components.isFeatureEnabled(schema?.flags?.dragging)
-  const canDrag = !isRootNode && dragEnabled
+export type NodeDragItem<
+  T extends Besigner.DragType = Besigner.DragType.CANVAS,
+> = {
+  $id: Aglyn.NodeId
+  node?: T extends Besigner.DragType.TEMPLATE
+    ? Aglyn.PresetSchema<any>
+    : Aglyn.NodeSchema<any>
+}
 
-  const deps = [dragObject, canDrag, type]
+export function useLeafDrag(
+  dragObject?: NodeDragItem<typeof type>,
+  type: Besigner.DragType = Besigner.DragType.CANVAS,
+): [DragCollected, ConnectDragSource, ConnectDragPreview] {
+  const deps = [dragObject, type]
 
   // console.log('dragItem item canDrag', dragItem, $id, type, canDrag, flags)
 
-  return useDrag<T, BesignerDroppableItem, DragCollected>(
+  return useDrag<NodeDragItem<typeof type>, NodeDropArea, DragCollected>(
     /*() => */ {
       type: type,
       item: () => {
         // Besigner.focus.setHoveredNode(Aglyn.screen.getNode(dropObject?.$id))
-        Besigner.dnd.setDragNode(Aglyn.screen.getNode(dragObject?.$id))
+        Besigner.dnd.setDragNode(dragObject?.node)
         return dragObject
       },
-      canDrag: canDrag,
+      canDrag: () => {
+        if (type !== Besigner.DragType.TEMPLATE) {
+          const node = dragObject?.node as Aglyn.NodeSchema<any>
+          const isRootNode = Aglyn.screen.isRootNodeId(dragObject?.$id)
+          const dragEnabled = Aglyn.components.isFeatureEnabled(
+            node?.componentSchema?.flags?.dragging,
+          )
+
+          return !isRootNode && dragEnabled
+        }
+        return true
+      },
       options: {
         dropEffect: 'move',
       },
       previewOptions: {
-        offsetY: -50,
+        offsetY: -1,
       },
       isDragging: (monitor) => {
-        return dragObject?.$id && dragObject?.$id === monitor.getItem()?.$id
+        return Boolean(
+          dragObject?.$id && dragObject?.$id === monitor.getItem()?.$id,
+        )
       },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),

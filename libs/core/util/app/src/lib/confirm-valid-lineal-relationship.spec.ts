@@ -15,10 +15,8 @@
  * limitations under the License.
  */
 
-import { ComponentsLinealOrder } from '@aglyn/core-data-foundation'
-import confirmValidLinealRelationship, {
-  ComponentsLinealDirectiveFlag,
-} from './confirm-valid-lineal-relationship'
+import * as Aglyn from '@aglyn/aglyn'
+import confirmValidLinealRelationship from './confirm-valid-lineal-relationship'
 
 describe('confirm-valid-lineal-relationship', () => {
   it('is valid if no restrictions exist', () => {
@@ -33,7 +31,7 @@ describe('confirm-valid-lineal-relationship', () => {
       pluginId: 'xyz',
       restrictChildren: undefined,
     }
-    expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(true)
+    expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(true)
   })
   it('is invalid if component="cba" and parent requires "abc"', () => {
     const item = {
@@ -46,11 +44,11 @@ describe('confirm-valid-lineal-relationship', () => {
       componentId: 'abc',
       pluginId: 'xyz',
       restrictChildren: [
-        ComponentsLinealDirectiveFlag.LIMIT_TO,
+        Aglyn.LinealDirectiveFlag.LIMIT_TO,
         ['abc'],
-      ] as ComponentsLinealOrder,
+      ] as Aglyn.ComponentsLinealOrder,
     }
-    expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(false)
+    expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(false)
   })
   it('is valid if component="abc" and parent requires "abc"', () => {
     const item = {
@@ -63,11 +61,11 @@ describe('confirm-valid-lineal-relationship', () => {
       componentId: 'abc',
       pluginId: 'xyz',
       restrictChildren: [
-        ComponentsLinealDirectiveFlag.LIMIT_TO,
+        Aglyn.LinealDirectiveFlag.LIMIT_TO,
         ['abc'],
-      ] as ComponentsLinealOrder,
+      ] as Aglyn.ComponentsLinealOrder,
     }
-    expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(true)
+    expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(true)
   })
   it('is invalid if component="abc"/bundle="zyx" and parent requires "abc"/"xyz"', () => {
     const item = {
@@ -80,11 +78,11 @@ describe('confirm-valid-lineal-relationship', () => {
       componentId: 'abc',
       pluginId: 'xyz',
       restrictChildren: [
-        ComponentsLinealDirectiveFlag.LIMIT_TO,
+        Aglyn.LinealDirectiveFlag.LIMIT_TO,
         { bundles: ['xyz'], components: ['abc'] },
-      ] as ComponentsLinealOrder,
+      ] as Aglyn.ComponentsLinealOrder,
     }
-    expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(false)
+    expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(false)
   })
   it('is valid if component="abc"/bundle="xyz" and parent requires "abc"/"xyz"', () => {
     const item = {
@@ -97,11 +95,11 @@ describe('confirm-valid-lineal-relationship', () => {
       componentId: 'abc',
       pluginId: 'xyz',
       restrictChildren: [
-        ComponentsLinealDirectiveFlag.LIMIT_TO,
+        Aglyn.LinealDirectiveFlag.LIMIT_TO,
         { bundles: ['xyz'], components: ['abc'] },
-      ] as ComponentsLinealOrder,
+      ] as Aglyn.ComponentsLinealOrder,
     }
-    expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(true)
+    expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(true)
   })
   it('is invalid if component="cba"/bundle="xyz" and parent requires "abc"/"xyz"', () => {
     const item = {
@@ -114,10 +112,10 @@ describe('confirm-valid-lineal-relationship', () => {
       componentId: 'abc',
       pluginId: 'xyz',
       restrictChildren: [
-        ComponentsLinealDirectiveFlag.LIMIT_TO,
+        Aglyn.LinealDirectiveFlag.LIMIT_TO,
         { bundles: ['xyz'], components: ['abc'] },
-      ] as ComponentsLinealOrder,
+      ] as Aglyn.ComponentsLinealOrder,
     }
-    expect(confirmValidLinealRelationship({ item, parent })[0]).toEqual(false)
+    expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(false)
   })
 })

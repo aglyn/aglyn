@@ -22,7 +22,6 @@ import {
   BesignerPanelTabFlag,
 } from '@aglyn/besigner-data-app'
 import { getBundle } from '@aglyn/core-data-app'
-import type { AglynNodePresetSchema } from '@aglyn/core-data-foundation'
 import { useAglynComponentsContext } from '@aglyn/core-feature-renderer'
 import {
   ICON_VARIANT_ELEMENT,
@@ -288,28 +287,29 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
 })
 
 type ComponentGridItemProps = CardListItemProps & {
-  item: AglynNodePresetSchema
+  item: Aglyn.PresetSchema<any>
 }
 const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
   (props, forwardRef) => {
     const { item, ...rest } = props
     const icon = item?.icon
-    const schema = Aglyn.components.getSchema(item?.componentId)
-    const dndData = useMemo(() => {
-      const { $id, data, componentId, pluginId } = item
-      return {
-        $id,
-        data,
-        componentId,
-        pluginId: schema?.pluginId,
-        restrictParent: schema?.restrictParent,
-        restrictChildren: schema?.restrictChildren,
-      }
-    }, [item, schema])
+    // const schema = Aglyn.components.getSchema(item?.componentId)
+    // const dndData = useMemo(() => {
+    //   const { $id, data, componentId, pluginId } = item
+    //   return {
+    //     $id,
+    //     data,
+    //     componentId,
+    //     pluginId: schema?.pluginId,
+    //     restrictParent: schema?.restrictParent,
+    //     restrictChildren: schema?.restrictChildren,
+    //   }
+    // }, [item, schema])
     const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(
-      dndData,
+      { $id: item?.$id, node: item },
       Besigner.dnd.DragType.TEMPLATE,
     )
+
     const ref = useForkedRefs(forwardRef, dragHandle)
 
     return (
@@ -349,7 +349,7 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
 type ComponentGroupDetailsProps = BoxProps &
   JSX.AnyProps & {
     item?: {
-      items?: AglynNodePresetSchema[]
+      items?: Aglyn.PresetSchema<any>[]
     }
     id?: string
     isOpen?: boolean
@@ -361,7 +361,7 @@ const ComponentGroupDetails = forwardRef<any, ComponentGroupDetailsProps>(
       <Box ref={ref} {...rest}>
         <Grid container spacing={2}>
           {item?.items?.map((i, index) => (
-            <Grid key={i?.presetId ?? index} xs={6} item>
+            <Grid key={i?.$id ?? index} xs={6} item>
               <ComponentGridItem item={i} />
             </Grid>
           ))}
@@ -398,7 +398,7 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
       labelPrimary: JSX.Node
       labelSecondary: JSX.Node
       icon: MdiIconProps
-      items: AglynNodePresetSchema[]
+      items: Aglyn.PresetSchema<any>[]
     }[]
   >(() => {
     const bundles = []
@@ -407,8 +407,8 @@ const ComponentsList = forwardRef<any, ListProps>((props, ref) => {
     sortedItems.forEach((item) => {
       const { category, data } = item || {}
       const { pluginId } = data || {}
-      const bundled = pluginId && bundles.find((i) => i.presetId === pluginId)
-      const categorized = category && cats.find((i) => i.presetId === category)
+      const bundled = pluginId && bundles.find((i) => i.$id === pluginId)
+      const categorized = category && cats.find((i) => i.$id === category)
 
       if (bundled) bundled?.items?.push(item)
       if (categorized) categorized?.items?.push(item)
