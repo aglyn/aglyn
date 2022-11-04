@@ -45,6 +45,7 @@ import {
   Stack,
 } from '@mui/material'
 import clsx from 'clsx'
+import uniq from 'lodash-es/uniq'
 import { observer } from 'mobx-react-lite'
 import {
   type ChangeEvent,
@@ -387,9 +388,11 @@ const TreeViewContent = observer(() => {
   const allExpanded = Besigner.focus.state.allExpanded
 
   const expanded = useMemo(() => {
-    return allExpanded.reduce(
-      (acc, item) => [...acc, ...(item?.breadcrumbPath || [])],
-      [],
+    return uniq(
+      allExpanded.reduce(
+        (acc, item) => [...acc, ...(item?.breadcrumbPath || [])],
+        [],
+      ),
     )
   }, [allExpanded])
 

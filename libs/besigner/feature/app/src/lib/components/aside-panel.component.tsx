@@ -305,7 +305,7 @@ const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
     //     restrictChildren: schema?.restrictChildren,
     //   }
     // }, [item, schema])
-    const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(
+    const [, dragHandle, dragPreview] = useLeafDrag(
       { $id: item?.$id, node: item },
       Besigner.dnd.DragType.TEMPLATE,
     )
