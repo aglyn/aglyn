@@ -32,7 +32,7 @@ import clsx from 'clsx'
 import dynamic, { type DynamicOptionsLoadingProps } from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { forwardRef, useMemo } from 'react'
-import { NextLink, type NextLinkProps } from './next-link'
+import NextLink, { type NextLinkProps } from './next-link'
 
 const Placeholder = (props: DynamicOptionsLoadingProps) => {
   const { error } = props

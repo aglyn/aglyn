@@ -57,6 +57,7 @@ const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
 
   return (
     <Link
+      ref={ref}
       as={hrefAs}
       href={hrefTo}
       locale={locale}
@@ -65,9 +66,8 @@ const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
       replace={replace}
       scroll={scroll}
       shallow={shallow}
-    >
-      <Anchor ref={ref} {...rest} />
-    </Link>
+      {...rest}
+    />
   )
 })
 
