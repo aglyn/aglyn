@@ -21,13 +21,13 @@ import ListItem from '@mui/material/ListItem'
 import { PLUGIN_ID } from '../constants/common'
 import { schema as listItemTextSchema } from './list-item-text'
 
-const ID: Aglyn.ComponentId = 'list-item'
+export const ID: Aglyn.ComponentId = 'muiListItem'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,
   pluginId: PLUGIN_ID,
   displayName: 'List Item',
-  category: Aglyn.ComponentCategory.LAYOUT,
+  category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListText.path },
   restrictChildren: [
     Aglyn.LinealDirectiveFlag.LIMIT_TO,

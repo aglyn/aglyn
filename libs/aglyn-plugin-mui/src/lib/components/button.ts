@@ -26,13 +26,13 @@ import {
   FIELD_SIZE,
 } from '../constants/field-presets'
 
-const ID: Aglyn.ComponentId = 'button'
+export const ID: Aglyn.ComponentId = 'muiButton'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Button',
-  category: Aglyn.ComponentCategory.NAVIGATION,
+  category: Aglyn.ComponentCategory.INPUT,
   icon: {
     path: mdiGestureTapButton.path,
     sx: { color: '#2196f3' },

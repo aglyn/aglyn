@@ -17,11 +17,12 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiBorderInside } from '@aglyn/shared-ui-mdi-jsx'
-import Toolbar from '@mui/material/Toolbar'
+import ToolbarInner from '@mui/material/Toolbar'
 import { PLUGIN_ID } from '../constants/common'
 import { FIELD_DISABLE_GUTTERS } from '../constants/field-presets'
+import { ID as toolbarId } from './app-bar'
 
-const ID: Aglyn.ComponentId = 'toolbar'
+export const ID: Aglyn.ComponentId = 'muiToolbar'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,
@@ -32,6 +33,10 @@ export const schema: Aglyn.ComponentSchema = {
     path: mdiBorderInside.path,
     sx: { color: '#2196f3' },
   },
+  restrictParent: [
+    Aglyn.LinealDirectiveFlag.LIMIT_TO,
+    { components: [toolbarId], plugins: [PLUGIN_ID] },
+  ],
   attributes: [
     FIELD_DISABLE_GUTTERS,
     {
@@ -48,4 +53,4 @@ export const schema: Aglyn.ComponentSchema = {
   ],
 }
 
-export default Toolbar
+export default ToolbarInner

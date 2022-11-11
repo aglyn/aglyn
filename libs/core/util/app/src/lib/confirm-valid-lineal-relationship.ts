@@ -63,7 +63,7 @@ function validateLinealOrder(
       : directiveDefinition?.components,
     plugins: _isArr(directiveDefinition)
       ? undefined
-      : directiveDefinition?.bundles,
+      : directiveDefinition?.plugins,
   }
 
   // Throw is disallowed

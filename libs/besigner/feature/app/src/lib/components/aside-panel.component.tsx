@@ -21,6 +21,7 @@ import {
   type BesignerPanelKey,
   BesignerPanelTabFlag,
 } from '@aglyn/besigner-data-app'
+import { ComponentAccordionList } from '@aglyn/besigner-feature-app/components/component-accordion-list'
 import {
   ICON_VARIANT_ELEMENT,
   ICON_VARIANT_ELEMENT_BROWSE,
@@ -30,12 +31,7 @@ import {
   ICON_VARIANT_ELEMENT_TREE_VIEW,
   ICON_VARIANT_MODIFY_ADD,
 } from '@aglyn/shared-data-enums'
-import {
-  CardListItem,
-  type CardListItemProps,
-  useForkedRefs,
-} from '@aglyn/shared-ui-jsx'
-import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { alpha, mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
   getDisplayName,
@@ -52,14 +48,11 @@ import {
 import {
   AppBar as MuiAppBar,
   Box,
-  BoxProps,
   Button,
-  Grid,
   Stack,
   Tab as MuiTab,
   Typography,
 } from '@mui/material'
-import groupBy from 'lodash-es/groupBy'
 import { observer } from 'mobx-react-lite'
 import {
   forwardRef,
@@ -70,11 +63,7 @@ import {
 } from 'react'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import useAglynBesignerPanel from '../hooks/use-aglyn-besigner-panel'
-import useLeafDrag from '../hooks/use-leaf-drag'
-import AccordionListComponent, {
-  AccordionListItem,
-  type AccordionListProps,
-} from './accordion-list.component'
+import AccordionListComponent from './accordion-list.component'
 import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 import NodeTreeViewComponent, {
@@ -302,175 +291,6 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
   )
 })
 
-type ComponentGridItemData = Aglyn.PresetSchema<any> | Aglyn.NodeSchema<any>
-type ComponentGridGroupItemData = {
-  id: string
-  order: number
-  labelPrimary: JSX.Node
-  labelSecondary: JSX.Node
-  icon: MdiIconProps
-  items: ComponentGridItemData[]
-}
-type ComponentGridItemProps = Partial<CardListItemProps> & {
-  item: ComponentGridGroupItemData
-}
-const ComponentGridItem = forwardRef<any, ComponentGridItemProps>(
-  (props, forwardRef) => {
-    const { item, ...rest } = props
-    const isPreset = item?.type === Aglyn.NodeType.PRESET
-    const icon = isPreset ? item?.schema?.icon : item?.icon
-
-    const label =
-      item?.label ||
-      item?.displayName ||
-      item?.title ||
-      (isPreset
-        ? item?.schema?.label
-        : Aglyn.components.getComponentLabel(item?.componentId))
-    // const schema = Aglyn.components.getSchema(item?.componentId)
-    // const dndData = useMemo(() => {
-    //   const { $id, data, componentId, pluginId } = item
-    //   return {
-    //     $id,
-    //     data,
-    //     componentId,
-    //     pluginId: schema?.pluginId,
-    //     restrictParent: schema?.restrictParent,
-    //     restrictChildren: schema?.restrictChildren,
-    //   }
-    // }, [item, schema])
-    const [, dragHandle, dragPreview] = useLeafDrag(
-      { $id: item?.$id, node: item },
-      Besigner.dnd.DragType.TEMPLATE,
-    )
-
-    !label && console.log('ComponentGridItem', label, item?.$id, item)
-
-    const ref = useForkedRefs(forwardRef, dragHandle)
-
-    return (
-      <CardListItem
-        ref={ref}
-        ContentBoxProps={{
-          ref: dragPreview,
-        }}
-        item={{ ...item, id: item?.$id }}
-        label={label}
-        {...rest}
-      >
-        {!icon?.path && icon ? (
-          (icon as any)
-        ) : (
-          <MdiIcon
-            color="tertiary"
-            {...icon}
-            path={icon?.path || ICON_VARIANT_ELEMENT.path}
-            sx={mergeSxProps(
-              {
-                fontSize: { xs: `5ch`, sm: `4ch` },
-                padding: `0.15ch`,
-                color: 'tertiary.main',
-                overflow: 'visible',
-              },
-              icon?.sx,
-            )}
-          />
-        )}
-      </CardListItem>
-    )
-  },
-)
-type ComponentGroupDetailsProps = BoxProps &
-  JSX.AnyProps & {
-    item?: ComponentGridGroupItemData
-    id?: string
-    isOpen?: boolean
-  }
-const ComponentGroupDetails = forwardRef<any, ComponentGroupDetailsProps>(
-  (props, ref) => {
-    const { id, isOpen, item, ...rest } = props
-    return (
-      <Box ref={ref} {...rest}>
-        <Grid container spacing={2}>
-          {item?.items?.map((i, index) => (
-            <Grid key={i?.$id ?? index} xs={6} item>
-              <ComponentGridItem item={i} />
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-    )
-  },
-)
-
-const ComponentsList = observer(
-  <T extends AccordionListItem = AccordionListItem>(
-    props: AccordionListProps<T>,
-  ) => {
-    const { ...rest } = props
-    const presets = Aglyn.presets.state
-    const schemas = Aglyn.components.schemas
-
-    const items = useMemo<ComponentGridGroupItemData[]>(() => {
-      const allItems = [
-        ...Object.values(presets || {}),
-        ...Object.values(schemas || {}),
-      ]
-
-      const grouped = groupBy(allItems, (i) => {
-        return i?.category || i?.meta?.category || 'Uncategorized'
-      })
-
-      const mapped = Object.entries({ ...grouped, All: allItems })
-        .sort(([aId], [bId]) => {
-          switch (true) {
-            case aId === 'All' && bId === 'Uncategorized':
-              return 1
-            case aId === 'Uncategorized' && bId === 'All':
-              return -1
-            case aId === 'All':
-            case aId === 'Uncategorized':
-              return 1
-            case bId === 'All':
-            case bId === 'Uncategorized':
-              return -1
-            default:
-              return aId.localeCompare(bId)
-          }
-        })
-        .map(([groupId, group]) => {
-          return {
-            id: groupId,
-            labelPrimary: groupId,
-            labelSecondary: 'Category',
-            icon: {
-              path: ICON_VARIANT_ELEMENT.path,
-            },
-            items: group,
-            order: 0,
-          }
-        })
-
-      console.log('aside panel group components', mapped)
-
-      return mapped
-    }, [presets, schemas])
-
-    return (
-      <AccordionListComponent
-        unique
-        items={items}
-        AccordionSummaryProps={{ dense: true }}
-        SummaryContentComponent={({ id, isOpen, item }) => (
-          <>{item?.labelPrimary}</>
-        )}
-        DetailsContentComponent={ComponentGroupDetails}
-        {...rest}
-      />
-    )
-  },
-)
-
 const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
   panelLeft: {
     defaultTab: BesignerPanelTabFlag.ELEMENTS_TREE,
@@ -497,7 +317,7 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           label: 'Elements',
         },
         panel: {
-          Component: ComponentsList,
+          Component: ComponentAccordionList,
         },
       },
     ],

@@ -20,7 +20,7 @@ import { mdiViewArrayOutline } from '@aglyn/shared-ui-mdi-jsx'
 import Container from '@mui/material/Container'
 import { PLUGIN_ID } from '../constants/common'
 
-const ID: Aglyn.ComponentId = 'container'
+export const ID: Aglyn.ComponentId = 'muiContainer'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,

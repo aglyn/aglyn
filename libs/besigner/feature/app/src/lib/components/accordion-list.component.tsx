@@ -30,9 +30,14 @@ import {
 } from '@mui/material'
 import { Fragment, useCallback, useState } from 'react'
 
-const Accordion = styled((props: MuiAccordionProps) => (
-  <MuiAccordion disableGutters elevation={0} square {...props} />
-))<Partial<MuiAccordionProps>>(({ theme }) => ({
+const Accordion = styled((props: MuiAccordionProps) => {
+  const { children, ...rest } = props
+  return (
+    <MuiAccordion disableGutters elevation={0} square {...rest}>
+      {children}
+    </MuiAccordion>
+  )
+})<Partial<MuiAccordionProps>>(({ theme }) => ({
   border: `1px solid ${theme.palette.divider}`,
   borderLeft: 0,
   borderRight: 0,

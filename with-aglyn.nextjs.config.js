@@ -319,7 +319,7 @@ const AGLYN_CONFIG = {
     //   /** @see https://github.com/vercel/next.js/issues/7755#issuecomment-812805708 */
     //   config.resolve.fallback.fs = false
     // }
-    config.plugins.push(
+    config.bundles.push(
       new webpack.DefinePlugin({
         'process.env.BUILD_ID': JSON.stringify(buildId),
       }),
@@ -388,7 +388,7 @@ function withAglyn(nextConfig = {}) {
           } = aglynConfig.analyzerOptions
           const fileExt = analyzerMode === 'json' ? 'json' : 'html'
 
-          config.plugins.push(
+          config.bundles.push(
             new BundleAnalyzerPlugin({
               analyzerMode: analyzerMode || 'static',
               reportFilename: options.isServer

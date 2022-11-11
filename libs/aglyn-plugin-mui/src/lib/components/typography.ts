@@ -30,13 +30,13 @@ import {
 import Typography from '@mui/material/Typography'
 import { PLUGIN_ID } from '../constants/common'
 
-const ID: Aglyn.ComponentId = 'typography'
+export const ID: Aglyn.ComponentId = 'muiTypography'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Typography',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.TEXT,
   icon: {
     path: mdiAlphabetical.path,
     sx: { color: '#057822' },

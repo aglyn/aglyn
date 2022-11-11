@@ -47,6 +47,7 @@ export enum ComponentCategory {
   NAVIGATION = 'Navigation',
   LAYOUT = 'Layout',
   DATA_DISPLAY = 'Data Display',
+  TEXT = 'Text',
 }
 
 export type ComponentId = string
@@ -61,8 +62,8 @@ export type ComponentsLinealOrder = [
   directiveType: LinealDirectiveFlag,
   directiveDefinition:
     | Array<ComponentId>
-    | { bundles?: Array<PluginId>; components: Array<ComponentId> }
-    | { bundles: Array<PluginId>; components?: Array<ComponentId> },
+    | { plugins?: Array<PluginId>; components: Array<ComponentId> }
+    | { plugins: Array<PluginId>; components?: Array<ComponentId> },
 ]
 
 export interface AttributeSchema extends Dictionary<any> {
@@ -219,7 +220,7 @@ export function registerComponent(
       if (pluginId && !hasDependency(pluginId)) {
         throw new Error(`No plugin exists with ID ${pluginId}.`)
       } /* else if (pluginId) {
-        const ids = (bundles[pluginId].componentIds ??= [])
+        const ids = (plugins[pluginId].componentIds ??= [])
         ids.push(componentId)
       }*/
       runInAction(() => {
@@ -247,7 +248,7 @@ export function unregisterComponent(componentId: ComponentId) {
       if (pluginId && !hasDependency(pluginId)) {
         throw new Error(`No plugin exists with ID ${pluginId}.`)
       } /*else if (pluginId) {
-        bundles[pluginId].componentIds = bundles[pluginId].componentIds.filter(
+        plugins[pluginId].componentIds = plugins[pluginId].componentIds.filter(
           (i) => i !== componentId,
         )
       }*/

@@ -25,9 +25,10 @@ import * as ListItemText from './components/list-item-text'
 import * as Stack from './components/stack'
 import * as Toolbar from './components/toolbar'
 import * as Typography from './components/typography'
+import { PLUGIN_ID } from './constants/common'
 
 Aglyn.plugins.addDependency({
-  id: 'mui',
+  id: PLUGIN_ID,
   info: {
     displayName: 'Material UI',
     description: 'Material UI elements',
@@ -51,6 +52,15 @@ Aglyn.plugins.addDependency({
   },
   destroy(...args): void {
     console.log('mui destroy', ...args)
+    Aglyn.components.unregisterComponent(AppBar.ID)
+    Aglyn.components.unregisterComponent(Toolbar.ID)
+    Aglyn.components.unregisterComponent(Button.ID)
+    Aglyn.components.unregisterComponent(Container.ID)
+    Aglyn.components.unregisterComponent(List.ID)
+    Aglyn.components.unregisterComponent(ListItem.ID)
+    Aglyn.components.unregisterComponent(ListItemText.ID)
+    Aglyn.components.unregisterComponent(Stack.ID)
+    Aglyn.components.unregisterComponent(Typography.ID)
   },
 })
 

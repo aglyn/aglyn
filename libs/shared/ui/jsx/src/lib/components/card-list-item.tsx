@@ -32,6 +32,7 @@ import type { GridListItemData } from './grid-list'
 const cardClasses = generateComponentClassKeys('CardListItem', [
   'actionArea',
   'selected',
+  'aspectContainer',
   'wrapper',
   'content',
   'label',
@@ -45,6 +46,11 @@ const Card = styled(MuiCard)(({ theme }) => ({
       backgroundColor: theme.palette.secondary.main,
       color: theme.palette.secondary.contrastText,
     },
+  },
+  [`.${cardClasses.aspectContainer}`]: {
+    height: 0,
+    position: 'relative',
+    paddingTop: `${(3 / 4) * 100}%`, // 16:9
   },
   [`.${cardClasses.wrapper}`]: {
     position: 'absolute',
@@ -69,12 +75,6 @@ const Card = styled(MuiCard)(({ theme }) => ({
     textTransform: 'uppercase',
   },
 }))
-
-const CardActionArea = styled(MuiCardActionArea)({
-  height: 0,
-  position: 'relative',
-  paddingTop: `${(3 / 4) * 100}%`, // 16:9
-})
 
 export interface CardListItemProps
   extends Omit<Partial<MuiCardProps>, 'children'> {
@@ -117,51 +117,55 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
       [item, onActionClick],
     )
 
+    const innerContent = (
+      <CardBox
+        {...WrapperBoxProps}
+        className={clsx(cardClasses.wrapper, WrapperBoxProps?.className)}
+      >
+        <CardBox
+          {...ContentBoxProps}
+          className={clsx(cardClasses.content, ContentBoxProps?.className)}
+        >
+          <ChildrenFunctionProp
+            childrenProp={children}
+            args={{ item, selected: isSelected }}
+          />
+
+          {label && (
+            <Typography
+              component="span"
+              display="block"
+              variant="subtitle2"
+              {...LabelTypographyProps}
+              className={clsx(
+                cardClasses.label,
+                LabelTypographyProps?.className,
+              )}
+            >
+              {label}
+            </Typography>
+          )}
+        </CardBox>
+      </CardBox>
+    )
+
     return (
       <Card
         ref={ref}
         className={clsx({ [cardClasses.selected]: isSelected }, className)}
         {...rest}
       >
-        <CardActionArea
+        <MuiCardActionArea
           disabled={isSelected}
           onClick={handleClick}
           {...CardActionAreaProps}
           className={clsx(
-            cardClasses.actionArea,
+            cardClasses.aspectContainer,
             CardActionAreaProps?.className,
           )}
         >
-          <CardBox
-            {...WrapperBoxProps}
-            className={clsx(cardClasses.wrapper, WrapperBoxProps?.className)}
-          >
-            <CardBox
-              {...ContentBoxProps}
-              className={clsx(cardClasses.content, ContentBoxProps?.className)}
-            >
-              <ChildrenFunctionProp
-                childrenProp={children}
-                args={{ item, selected: isSelected }}
-              />
-
-              {label && (
-                <Typography
-                  component="span"
-                  display="block"
-                  variant="subtitle2"
-                  {...LabelTypographyProps}
-                  className={clsx(
-                    cardClasses.label,
-                    LabelTypographyProps?.className,
-                  )}
-                >
-                  {label}
-                </Typography>
-              )}
-            </CardBox>
-          </CardBox>
-        </CardActionArea>
+          {innerContent}
+        </MuiCardActionArea>
       </Card>
     )
   },

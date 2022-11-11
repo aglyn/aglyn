@@ -20,7 +20,7 @@ import { mdiViewColumn } from '@aglyn/shared-ui-mdi-jsx'
 import Stack from '@mui/material/Stack'
 import { PLUGIN_ID } from '../constants/common'
 
-const ID: Aglyn.ComponentId = 'stack'
+export const ID: Aglyn.ComponentId = 'muiStack'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,

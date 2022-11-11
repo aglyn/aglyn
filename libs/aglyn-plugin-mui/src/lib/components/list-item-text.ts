@@ -20,13 +20,13 @@ import { mdiFormatListChecks } from '@aglyn/shared-ui-mdi-jsx'
 import ListItemText from '@mui/material/ListItemText'
 import { PLUGIN_ID } from '../constants/common'
 
-const ID: Aglyn.ComponentId = 'list-item-text'
+export const ID: Aglyn.ComponentId = 'muiListItemText'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,
   pluginId: PLUGIN_ID,
   displayName: 'List Item Text',
-  category: Aglyn.ComponentCategory.LAYOUT,
+  category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListChecks.path },
 }
 

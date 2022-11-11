@@ -17,16 +17,16 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiPageLayoutHeader } from '@aglyn/shared-ui-mdi-jsx'
-import AppBar from '@mui/material/AppBar'
+import Toolbar from '@mui/material/AppBar'
 import { PLUGIN_ID } from '../constants/common'
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'
 
-const ID: Aglyn.ComponentId = 'app-bar'
+export const ID: Aglyn.ComponentId = 'muiAppBar'
 
 export const schema: Aglyn.ComponentSchema = {
   componentId: ID,
   pluginId: PLUGIN_ID,
-  displayName: 'App Toolbar',
+  displayName: 'Toolbar',
   category: Aglyn.ComponentCategory.SURFACE,
   icon: {
     path: mdiPageLayoutHeader.path,
@@ -35,4 +35,4 @@ export const schema: Aglyn.ComponentSchema = {
   attributes: [FIELD_COLOR_ALT1, FIELD_POSITION],
 }
 
-export default AppBar
+export default Toolbar
