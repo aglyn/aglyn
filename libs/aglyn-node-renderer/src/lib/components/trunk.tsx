@@ -35,7 +35,6 @@ const Trunk = forwardRef<any, TrunkProps>((props, ref) => {
   )
 })
 Trunk.displayName = 'Trunk'
-Trunk.defaultProps = {}
 Trunk.aglyn = true
 
 export { Trunk }

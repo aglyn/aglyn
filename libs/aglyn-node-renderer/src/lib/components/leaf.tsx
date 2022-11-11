@@ -17,19 +17,21 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { styled } from '@aglyn/shared-ui-theme'
+import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
 import { observer } from 'mobx-react-lite'
-import { type ForwardedRef, useMemo } from 'react'
+import { type ForwardedRef, HTMLAttributes, useMemo } from 'react'
 import { isValidElementType } from 'react-is'
 
 const DefaultComponent = styled('div')({})
 
-export interface LeafProps {
+export interface LeafProps extends HTMLAttributes<any> {
   children?: any
   node: Aglyn.NodeSchema
+  sx?: JSX.SxProps
 }
 
 function RawLeaf(props: LeafProps, ref: ForwardedRef<any>) {
-  const { children, node } = props
+  const { children, node, sx, ...rest } = props
   const componentSchema = node?.componentSchema
   const resolveProps = componentSchema?.resolveProps
   const Factory = Aglyn.components.getFactory(componentSchema?.componentId)
@@ -44,17 +46,19 @@ function RawLeaf(props: LeafProps, ref: ForwardedRef<any>) {
   }, [resolveProps, node])
 
   const merged = useMemo(() => {
-    return { ...resolved, sx: node?.sx }
-  }, [node, resolved])
+    return { ...resolved, sx: mergeSxProps(sx, node?.sx) }
+  }, [resolved, sx, node])
 
   return (
     <Component
       ref={ref}
       key={node?.$id}
       data-aglyn={`leaf:${node?.$id}`}
+      {...rest}
       {...merged}
     >
-      {children || node?.props?.children}
+      {children}
+      {merged?.['children']}
     </Component>
   )
 }

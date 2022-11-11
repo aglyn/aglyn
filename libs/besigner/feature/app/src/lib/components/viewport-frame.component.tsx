@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { setBesignerCanvasHovered } from '@aglyn/besigner-data-app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
 import {
@@ -35,8 +36,8 @@ import {
   HTMLAttributes,
   useCallback,
 } from 'react'
-import ElementLeafComponent from './element-leaf.component'
 import ElementOverlayPopperComponent from './element-overlay-popper.component'
+import LeafComponent from './leaf.component'
 
 const ViewportFrame = styled('div', {
   name: 'AglynViewportFrame',
@@ -66,18 +67,6 @@ const SiteShadowDom = styled(MuiShadowDom.div, {
 }))
 SiteShadowDom.displayName = 'SiteShadowDom'
 
-function RenderedNodes() {
-  return (
-    <>
-      <ElementLeafComponent
-        leafComponent={ElementLeafComponent}
-        $id={CANVAS_ROOT_ELEMENT_ID}
-        sx={{ minHeight: 1 }}
-      />
-    </>
-  )
-}
-
 const ViewportGlobalStyles = (
   <GlobalStyles
     styles={{
@@ -87,21 +76,13 @@ const ViewportGlobalStyles = (
     }}
   />
 )
-const ThemedElementContainer = () => {
+const ThemedElementContainer = ({ children }) => {
   const shadowDom = useShadowDomContext()
   const hostTheme = useAglynSiteTheme({ container: shadowDom })
   return (
     <ThemeProvider theme={hostTheme}>
       <CssBaseline />
-      <Box
-        sx={{
-          bgcolor: 'background.paper',
-          minHeight: 1,
-          minWidth: 1,
-        }}
-      >
-        <RenderedNodes />
-      </Box>
+      {children}
     </ThemeProvider>
   )
 }
@@ -117,7 +98,20 @@ const SiteContainer = (props: SiteShadowDomProps) => {
     >
       <>
         {ViewportGlobalStyles}
-        <ThemedElementContainer />
+        <ThemedElementContainer>
+          <Box
+            sx={{
+              bgcolor: 'background.paper',
+              minHeight: 1,
+              minWidth: 1,
+            }}
+          >
+            <AglynNodeRenderer
+              nodeId={CANVAS_ROOT_ELEMENT_ID}
+              LeafComponent={LeafComponent}
+            />
+          </Box>
+        </ThemedElementContainer>
       </>
     </SiteShadowDom>
   )

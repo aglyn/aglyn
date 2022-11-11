@@ -267,7 +267,6 @@ export function unregisterComponent(componentId: ComponentId) {
 
 export function getComponentLabel(componentId?: ComponentId) {
   const schema = getSchema(componentId)
-  console.log('getComponentLabel', componentId, schema)
   return (
     schema?.displayName || schema?.title || schema?.componentId || componentId
   )

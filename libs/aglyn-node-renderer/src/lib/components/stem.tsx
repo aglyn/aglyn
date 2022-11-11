@@ -37,13 +37,7 @@ function RawStem(props, ref) {
     <RendererComponents.Consumer>
       {({ LeafComponent, BranchComponent }) => (
         <LeafComponent ref={ref} key={node?.$id} node={node}>
-          {!node?.nodes?.length ? null : (
-            <BranchComponent
-              key={node?.$id}
-              parentId={node?.$id}
-              nodeIds={node?.nodes || []}
-            />
-          )}
+          <BranchComponent node={node} />
         </LeafComponent>
       )}
     </RendererComponents.Consumer>

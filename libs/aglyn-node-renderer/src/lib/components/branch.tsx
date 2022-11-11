@@ -16,27 +16,28 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { observer } from 'mobx-react-lite'
 import { Fragment } from 'react'
 import Stem from './stem'
 
 export interface BranchProps {
-  nodeIds: Aglyn.NodeId[]
-  parentId: Aglyn.NodeId
+  node: Aglyn.NodeSchema<any>
 }
 
-function Branch(props: BranchProps) {
-  const { nodeIds, parentId } = props
+function RawBranch(props: BranchProps) {
+  const { node } = props
   return (
-    <Fragment key={parentId}>
-      {nodeIds.map((nodeId) => (
+    <Fragment key={node?.$id}>
+      {node?.nodes?.map((nodeId) => (
         <Stem key={nodeId} nodeId={nodeId} />
       ))}
     </Fragment>
   )
 }
-Branch.displayName = 'Branch'
-Branch.defaultProps = {}
-Branch.aglyn = true
+RawBranch.displayName = 'Branch'
+RawBranch.aglyn = true
+
+const Branch = observer<BranchProps, any>(RawBranch, { forwardRef: true })
 
 export { Branch }
 export default Branch
