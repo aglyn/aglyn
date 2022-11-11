@@ -29,5 +29,7 @@ export { default as Trunk } from './components/trunk'
 
 export * from './components/tree-root'
 export { default as TreeRoot } from './components/tree-root'
-
 export { default as AglynNodeRenderer } from './components/tree-root'
+
+export * from './contexts/renderer-components'
+export { default as RendererComponents } from './contexts/renderer-components'

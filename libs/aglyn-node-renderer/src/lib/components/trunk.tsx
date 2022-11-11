@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { forwardRef } from 'react'
-import Stem from './stem'
+import RendererComponents from '../contexts/renderer-components'
 
 export interface TrunkProps {
   nodeId: Aglyn.NodeId
@@ -26,7 +26,13 @@ export interface TrunkProps {
 const Trunk = forwardRef<any, TrunkProps>((props, ref) => {
   const { nodeId } = props
 
-  return <Stem ref={ref} key={nodeId} nodeId={nodeId} />
+  return (
+    <RendererComponents.Consumer>
+      {({ StemComponent }) => (
+        <StemComponent ref={ref} key={nodeId} nodeId={nodeId} />
+      )}
+    </RendererComponents.Consumer>
+  )
 })
 Trunk.displayName = 'Trunk'
 Trunk.defaultProps = {}

@@ -16,17 +16,43 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { forwardRef } from 'react'
+import { forwardRef, useMemo } from 'react'
+import RendererComponents, {
+  type RenderComponentsContext,
+} from '../contexts/renderer-components'
+import Branch from './branch'
+import Leaf from './leaf'
+import Stem from './stem'
 import Trunk from './trunk'
 
-export interface TreeRootProps {
+export interface TreeRootProps extends Partial<RenderComponentsContext> {
   nodeId: Aglyn.NodeId
 }
 
 const TreeRoot = forwardRef<any, TreeRootProps>((props, ref) => {
-  const { nodeId } = props
+  const {
+    nodeId,
+    TrunkComponent,
+    StemComponent,
+    BranchComponent,
+    LeafComponent,
+  } = props
 
-  return <Trunk ref={ref} nodeId={nodeId} />
+  const Components = useMemo(
+    () => ({
+      TrunkComponent: TrunkComponent || Trunk,
+      StemComponent: StemComponent || Stem,
+      BranchComponent: BranchComponent || Branch,
+      LeafComponent: LeafComponent || Leaf,
+    }),
+    [TrunkComponent, StemComponent, BranchComponent, LeafComponent],
+  ) as RenderComponentsContext
+
+  return (
+    <RendererComponents.Provider value={Components}>
+      <Components.TrunkComponent ref={ref} nodeId={nodeId} />
+    </RendererComponents.Provider>
+  )
 })
 TreeRoot.displayName = 'TreeRoot'
 TreeRoot.defaultProps = {}

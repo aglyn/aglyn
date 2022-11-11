@@ -16,15 +16,14 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { forwardRef } from 'react'
-import Branch from './branch'
-import Leaf from './leaf'
+import { observer } from 'mobx-react-lite'
+import RendererComponents from '../contexts/renderer-components'
 
 export interface StemProps {
   nodeId: Aglyn.NodeId
 }
 
-const Stem = forwardRef<any, StemProps>((props, ref) => {
+function RawStem(props, ref) {
   const { nodeId } = props
 
   if (!Aglyn.screen.hasNode(nodeId)) {
@@ -32,36 +31,28 @@ const Stem = forwardRef<any, StemProps>((props, ref) => {
     return <div></div>
   }
 
-  const nodeSchema = Aglyn.screen.getNode(nodeId)
-  let cmpFactory: Aglyn.ComponentFactory = null
-  let cmpSchema: Aglyn.ComponentSchema = null
-
-  if (Aglyn.components.hasComponent(nodeSchema.componentId)) {
-    cmpFactory = Aglyn.components.getFactory(nodeSchema.componentId)
-    cmpSchema = Aglyn.components.getSchema(nodeSchema.componentId)
-  }
+  const node = Aglyn.screen.getNode(nodeId)
 
   return (
-    <Leaf
-      ref={ref}
-      key={nodeSchema.$id}
-      component={cmpFactory}
-      nodeSchema={nodeSchema}
-      cmpSchema={cmpSchema}
-    >
-      {!nodeSchema.nodes?.length ? null : (
-        <Branch
-          key={nodeSchema.$id}
-          parentId={nodeSchema.$id}
-          nodeIds={nodeSchema.nodes}
-        />
+    <RendererComponents.Consumer>
+      {({ LeafComponent, BranchComponent }) => (
+        <LeafComponent ref={ref} key={node?.$id} node={node}>
+          {!node?.nodes?.length ? null : (
+            <BranchComponent
+              key={node?.$id}
+              parentId={node?.$id}
+              nodeIds={node?.nodes || []}
+            />
+          )}
+        </LeafComponent>
       )}
-    </Leaf>
+    </RendererComponents.Consumer>
   )
-})
-Stem.displayName = 'Stem'
-Stem.defaultProps = {}
-Stem.aglyn = true
+}
+RawStem.displayName = 'Stem'
+RawStem.aglyn = true
+
+const Stem = observer<StemProps, any>(RawStem, { forwardRef: true })
 
 export { Stem }
 export default Stem

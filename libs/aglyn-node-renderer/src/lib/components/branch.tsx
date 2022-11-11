@@ -24,7 +24,7 @@ export interface BranchProps {
   parentId: Aglyn.NodeId
 }
 
-const Branch = (props: BranchProps) => {
+function Branch(props: BranchProps) {
   const { nodeIds, parentId } = props
   return (
     <Fragment key={parentId}>

@@ -17,49 +17,51 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { styled } from '@aglyn/shared-ui-theme'
-import { forwardRef, useMemo } from 'react'
+import { observer } from 'mobx-react-lite'
+import { type ForwardedRef, useMemo } from 'react'
 import { isValidElementType } from 'react-is'
 
 const DefaultComponent = styled('div')({})
 
 export interface LeafProps {
-  component: any
   children?: any
-  nodeSchema: Aglyn.NodeSchema
-  cmpSchema?: Aglyn.ComponentSchema
+  node: Aglyn.NodeSchema
 }
 
-const Leaf = forwardRef<any, LeafProps>((props, ref) => {
-  const { component, children, nodeSchema, cmpSchema } = props
+function RawLeaf(props: LeafProps, ref: ForwardedRef<any>) {
+  const { children, node } = props
+  const componentSchema = node?.componentSchema
+  const resolveProps = componentSchema?.resolveProps
+  const Factory = Aglyn.components.getFactory(componentSchema?.componentId)
 
   const Component = useMemo(() => {
-    return isValidElementType(component) ? component : DefaultComponent
-  }, [component])
+    return isValidElementType(Factory) ? Factory : DefaultComponent
+  }, [Factory])
 
   const resolved = useMemo(() => {
-    const data = cmpSchema?.resolveProps && cmpSchema?.resolveProps(nodeSchema)
-    return data || nodeSchema.props
-  }, [cmpSchema, nodeSchema])
+    const resolved = resolveProps && resolveProps(node)
+    return resolved || node.props
+  }, [resolveProps, node])
 
   const merged = useMemo(() => {
-    const { sx } = { ...nodeSchema }
-    return { ...resolved, sx: sx }
-  }, [nodeSchema, resolved])
+    return { ...resolved, sx: node?.sx }
+  }, [node, resolved])
 
   return (
     <Component
       ref={ref}
-      key={nodeSchema.$id}
-      data-aglyn={`leaf:${nodeSchema.$id}`}
+      key={node?.$id}
+      data-aglyn={`leaf:${node?.$id}`}
       {...merged}
     >
-      {children || nodeSchema.props?.children}
+      {children || node?.props?.children}
     </Component>
   )
-})
-Leaf.displayName = 'Leaf'
-Leaf.defaultProps = {}
-Leaf.aglyn = true
+}
+RawLeaf.displayName = 'Leaf'
+RawLeaf.aglyn = true
+
+const Leaf = observer<LeafProps, any>(RawLeaf, { forwardRef: true })
 
 export { Leaf }
 export default Leaf
