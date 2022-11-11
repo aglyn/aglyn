@@ -103,7 +103,7 @@
     "mobx": "^6.6.1",
     "mobx-react-lite": "^3.4.0",
     "mobx-utils": "^6.0.5",
-    "mout": "^1.2.3",
+    "mout": "^1.2.4",
     "nanoid": "^3.3.4",
     "nanoid-dictionary": "^4.3.0",
     "next": "13.0.0",
