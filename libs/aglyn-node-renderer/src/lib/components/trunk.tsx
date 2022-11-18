@@ -16,26 +16,26 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { forwardRef } from 'react'
+import { observer } from 'mobx-react-lite'
+import { type MutableRefObject } from 'react'
 import RendererComponents from '../contexts/renderer-components'
+import type { StemProps } from './stem'
 
 export interface TrunkProps {
-  nodeId: Aglyn.NodeId
+  node: Aglyn.NodeSchema<any>
 }
 
-const Trunk = forwardRef<any, TrunkProps>((props, ref) => {
-  const { nodeId } = props
+function TrunkRaw(props: TrunkProps, ref: MutableRefObject<any>) {
+  const { node } = props
 
   return (
     <RendererComponents.Consumer>
-      {({ StemComponent }) => (
-        <StemComponent ref={ref} key={nodeId} nodeId={nodeId} />
-      )}
+      {({ StemComponent }) => <StemComponent ref={ref} node={node} />}
     </RendererComponents.Consumer>
   )
-})
-Trunk.displayName = 'Trunk'
-Trunk.aglyn = true
+}
+TrunkRaw.displayName = 'Trunk'
+TrunkRaw.aglyn = true
 
-export { Trunk }
+export const Trunk = observer<StemProps, any>(TrunkRaw, { forwardRef: true })
 export default Trunk

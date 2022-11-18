@@ -65,8 +65,8 @@ const ComponentGridItem = observer<ComponentGridItemProps, any>(
         : Aglyn.components.getComponentLabel(item?.componentId))
 
     const [, dragHandle, dragPreview] = useLeafDrag(
-      { node: item },
-      Besigner.dnd.DragType.TEMPLATE,
+      item,
+      Besigner.DragType.CANVAS,
     )
 
     !label && console.log('ComponentGridItem', label, item?.$id, item)

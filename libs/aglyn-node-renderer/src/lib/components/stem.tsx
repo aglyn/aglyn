@@ -20,31 +20,29 @@ import { observer } from 'mobx-react-lite'
 import RendererComponents from '../contexts/renderer-components'
 
 export interface StemProps {
-  nodeId: Aglyn.NodeId
+  node: Aglyn.NodeSchema<any>
 }
 
-function RawStem(props, ref) {
-  const { nodeId } = props
-
-  const node = Aglyn.screen.getNode(nodeId)
+function StemRaw(props, ref) {
+  const { node } = props
 
   if (!node) {
-    console.error(`Error rendering ${nodeId}`)
+    console.error(`Error rendering`, node)
     return <div></div>
   }
 
   return (
-    <RendererComponents.Consumer>
+    <RendererComponents.Consumer key={node?.$id}>
       {({ LeafComponent, BranchComponent }) => (
-        <LeafComponent ref={ref} key={node?.$id} node={node}>
+        <LeafComponent ref={ref} node={node}>
           <BranchComponent node={node} />
         </LeafComponent>
       )}
     </RendererComponents.Consumer>
   )
 }
-RawStem.displayName = 'Stem'
-RawStem.aglyn = true
+StemRaw.displayName = 'Stem'
+StemRaw.aglyn = true
 
-export const Stem = observer<StemProps, any>(RawStem, { forwardRef: true })
+export const Stem = observer<StemProps, any>(StemRaw, { forwardRef: true })
 export default Stem

@@ -22,7 +22,6 @@ import _isStrT from '@aglyn/shared-util-guards/_is-str-t'
 import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
 import cloneDeep from 'lodash-es/cloneDeep'
 import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
-import * as Aglyn from '../../index'
 import {
   type ComponentId,
   type ComponentSchema,
@@ -43,7 +42,7 @@ export enum NodeType {
 
 export type NodeId = string
 
-export interface AbstractNodeSchema<TYPE extends NodeType = null> {
+export interface AbstractNodeSchema<TYPE extends NodeType = any> {
   /**
    * The unique identifier for a node
    */
@@ -92,6 +91,10 @@ export interface NodeSchema<P = JSX.AnyProps>
    * The computed node parent (only for type completion)
    */
   readonly parent?: NodeSchema<any> | null
+  /**
+   * The computed node parent (only for type completion)
+   */
+  readonly children?: NodeSchema<any>[]
   /**
    * The computed index in parent nodes (only for type completion)
    */
@@ -188,6 +191,14 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   get index(): number | null {
     return getNodeIndex(this)
   }
+  get children(): NodeSchema<any>[] {
+    const res: NodeSchema[] = []
+    for (const $id of this.nodes) {
+      const node = getNode($id)
+      res.push(node)
+    }
+    return res
+  }
   get labelShort(): string {
     return getNodeLabelShort(this)
   }
@@ -221,62 +232,8 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
 }
 
-export function nodeFactory<P = JSX.AnyProps>(
-  schema: NodeSchema<P>,
-): NodeSchema<P> {
-  return makeAutoObservable({
-    $id: schema.$id,
-    componentId: schema.componentId,
-    pluginId: schema.pluginId,
-    parentId: schema.parentId,
-    props: { ...schema.props },
-    sx: Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx },
-    nodes: Array.isArray(schema.nodes) ? [...schema.nodes] : [],
-
-    get parent(): NodeSchema<any> | null {
-      return getNode(this.parentId)
-    },
-    get index(): number | null {
-      return getNodeIndex(this)
-    },
-    get labelShort(): string {
-      return getNodeLabelShort(this)
-    },
-    get breadcrumbPath(): NodeBreadcrumbPath {
-      return getNodeBreadcrumbPath(this)
-    },
-    get componentSchema(): ComponentSchema | undefined {
-      return getNodeComponentSchema(this)
-    },
-    get hasNodes(): boolean {
-      return Array.isArray(this.nodes) && this.nodes.length > 0
-    },
-    toJSON(): NodeSchemaJSON<P> {
-      return nodeToJSON(this)
-    },
-  })
-}
-
 export function isRootNode(node: NodeSchema<any>): boolean {
   return node?.$id === NODE_ROOT_ID
-}
-
-export function canDragNode(node: AbstractNodeSchema): boolean {
-  if (!node) throw new Error('Invalid node')
-  switch (true) {
-    case !node:
-      throw new Error('Invalid node')
-    case isRootNode(node):
-      return false
-    case node?.type === NodeType.PRESET:
-      return true
-    case node?.type === NodeType.NODE:
-      return Aglyn.components.isFeatureEnabled(
-        (node as NodeSchema<any>)?.componentSchema?.flags?.dragging,
-      )
-    default:
-      return false
-  }
 }
 
 export function toJSON() {
@@ -305,27 +262,20 @@ export function createNode<P = JSX.AnyProps>(
 
 export function setNode(node: NodeSchema<any>, create = false) {
   if (!node || (!create && !node.$id)) throw new Error('Invalid node')
-  return runInAction(
-    () => (nodes[node?.$id] = create ? createNode(node) : node),
-  )
-}
-
-export function createAndSetNode(node: NodeSchema<any>) {
-  if (!node) throw new Error('Invalid node')
-  runInAction(() => {
-    nodes[node.$id] = createNode(node)
+  return runInAction(() => {
+    return (nodes[node?.$id] = create ? createNode(node) : node)
   })
 }
 
 export function setNodes(values: Record<NodeId, NodeSchema<any>>) {
   if (!values) return
-  runInAction(() => {
-    for (const nodeId in values) {
-      const node = values[nodeId]
-      if (!node) continue
-      setNode(createNode(node))
-    }
-  })
+  for (const nodeId in values) {
+    const schema = values[nodeId]
+    if (!schema) continue
+    const node = createNode(schema)
+
+    runInAction(() => setNode(node))
+  }
 }
 
 export function hasNode($id: NodeId): boolean {
@@ -434,8 +384,8 @@ export function addNodeToParent(
     }
 
     node.parentId = parent.$id
-    setNode(node)
   })
+  setNode(node)
 }
 
 export function duplicateNode<P = JSX.AnyProps>(

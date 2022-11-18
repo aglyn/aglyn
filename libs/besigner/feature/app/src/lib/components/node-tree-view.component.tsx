@@ -235,11 +235,11 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   const isSelected = Besigner.focus.isNodeSelected(node)
   const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
-  const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(
-    { node },
-    Besigner.dnd.DragType.TREE,
+  const [dragCollect, dragRef, previewRef] = useLeafDrag(
+    node,
+    Besigner.DragType.CANVAS,
   )
-  const [{ isOver }, dropRef] = useLeafDrop({ node })
+  const [dropCollect, dropRef] = useLeafDrop(node)
 
   return (
     <TreeItem
@@ -255,23 +255,21 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
       className={clsx(className, classKey.treeItem, {
         [classKey.itemSelected]: Besigner.focus.isNodeSelected(node),
         [classKey.itemHovered]: Besigner.focus.isNodeHovered(node),
-        [classKey.itemIsDragging]: isDragging,
-        [classKey.itemIsDragOver]: isOver,
+        [classKey.itemIsDragging]: dragCollect.isDragging,
+        [classKey.itemIsDragOver]: dropCollect.isOver,
       })}
       disablePadding
-      sx={{ opacity: isDragging ? 0.5 : undefined }}
+      style={{ opacity: dragCollect.isDragging ? 0.5 : undefined }}
       {...rest}
     >
       <Stack
-        ref={(e) => {
-          dragPreview(dropRef(e as any))
-        }}
+        ref={(e: any) => dropRef(previewRef(e))}
         className={classKey.treeListItem}
         direction="row"
       >
         {!isRootNode && (
           <MuiListItemIcon
-            ref={dragHandle}
+            ref={dragRef}
             className={classKey.dragHandle}
             draggable
             sx={{

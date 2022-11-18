@@ -181,7 +181,7 @@ export default function CatchAllPage(props: Props) {
 
   return (
     <>
-      <AglynNodeRenderer nodeId={Aglyn.NODE_ROOT_ID} />
+      <AglynNodeRenderer node={Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)} />
     </>
   )
 }

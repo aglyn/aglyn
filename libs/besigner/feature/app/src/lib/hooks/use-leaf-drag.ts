@@ -33,19 +33,18 @@ export type NodeDragItem = {
 }
 
 export function useLeafDrag(
-  dragObject: NodeDragItem,
+  node: NodeDragItem['node'],
+  type: Besigner.DragType,
 ): [DragCollected, ConnectDragSource, ConnectDragPreview] {
-  console.log('canDrag item', type)
-  // console.log('dragItem item canDrag', dragItem, $id, type, canDrag, flags)
-
   return useDrag<NodeDragItem, NodeDropArea, DragCollected>(
     /*() => */ {
-      type: dragObject?.node?.type,
-      item: () => ({
-        node: Besigner.dnd.setDragNode(dragObject?.node),
-      }),
+      type: type,
+      item: () => {
+        Besigner.dnd.setDragNode(node)
+        return { node: node }
+      },
       canDrag: () => {
-        return Aglyn.screen.canDragNode(dragObject?.node)
+        return Besigner.dnd.canDragNode(node)
       },
       options: {
         dropEffect: 'move',
@@ -54,14 +53,14 @@ export function useLeafDrag(
         offsetY: -1,
       },
       isDragging: (monitor) => {
-        const dragNode = dragObject?.node
-        const monitorNode = monitor.getItem().node
-        return Boolean(dragNode?.$id && dragNode?.$id === monitorNode?.$id)
+        const dragNode = monitor.getItem().node
+        return Boolean(node?.$id && node?.$id === dragNode?.$id)
       },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
     },
+    [type],
   )
 }
 export default useLeafDrag

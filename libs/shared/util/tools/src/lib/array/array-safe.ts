@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-import {_isArr} from '@aglyn/shared-util-guards'
-
+import { _isArr } from '@aglyn/shared-util-guards'
 
 /**
  * Safe array, will always return an array
  */
-export const arraySafe = <T = any>(
-  val: unknown,
-  or?: unknown,
-): T[] => {
+export function arraySafe<T = any>(
+  val: T[] | unknown,
+  or?: T[] | unknown,
+): T[] {
   if (_isArr(val)) return val
   if (_isArr(or)) return or
   return []

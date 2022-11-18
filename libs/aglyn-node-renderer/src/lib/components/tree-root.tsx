@@ -16,7 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { forwardRef, useMemo } from 'react'
+import { observer } from 'mobx-react-lite'
+import { type MutableRefObject, useMemo } from 'react'
 import RendererComponents, {
   type RenderComponentsContext,
 } from '../contexts/renderer-components'
@@ -26,12 +27,12 @@ import Stem from './stem'
 import Trunk from './trunk'
 
 export interface TreeRootProps extends Partial<RenderComponentsContext> {
-  nodeId: Aglyn.NodeId
+  node: Aglyn.NodeSchema
 }
 
-const TreeRoot = forwardRef<any, TreeRootProps>((props, ref) => {
+function TreeRootRaw(props: TreeRootProps, ref: MutableRefObject<any>) {
   const {
-    nodeId,
+    node,
     TrunkComponent,
     StemComponent,
     BranchComponent,
@@ -48,15 +49,18 @@ const TreeRoot = forwardRef<any, TreeRootProps>((props, ref) => {
     [TrunkComponent, StemComponent, BranchComponent, LeafComponent],
   ) as RenderComponentsContext
 
+  console.log('node', node)
+
   return (
     <RendererComponents.Provider value={Components}>
-      <Components.TrunkComponent ref={ref} nodeId={nodeId} />
+      <Components.TrunkComponent ref={ref} node={node} />
     </RendererComponents.Provider>
   )
-})
-TreeRoot.displayName = 'TreeRoot'
-TreeRoot.defaultProps = {}
-TreeRoot.aglyn = true
+}
+TreeRootRaw.displayName = 'TreeRoot'
+TreeRootRaw.aglyn = true
 
-export { TreeRoot }
+export const TreeRoot = observer<TreeRootProps, any>(TreeRootRaw, {
+  forwardRef: true,
+})
 export default TreeRoot

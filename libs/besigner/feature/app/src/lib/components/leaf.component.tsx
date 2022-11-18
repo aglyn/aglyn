@@ -17,13 +17,13 @@
 
 import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { useForkedRefs } from '@aglyn/shared-ui-jsx'
+import { useForkedRefs, useIsomorphicLayoutEffect } from '@aglyn/shared-ui-jsx'
 import { observer } from 'mobx-react-lite'
 import {
-  type ChangeEvent,
   type MutableRefObject,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
@@ -39,10 +39,11 @@ function RawLeafComponent(
   const { node, ...rest } = props
 
   const [, dragHandle, dragPreview] = useLeafDrag(
-    { node },
-    Besigner.dnd.DragType.CANVAS,
+    node,
+    Besigner.DragType.CANVAS,
   )
-  const [, dropRef] = useLeafDrop({ node })
+  const [, dropRef] = useLeafDrop(node)
+  const localRef = useRef<HTMLElement>(null)
   const [nodeRef, setNodeRef] = useState<HTMLElement>()
   const { setElementRef, deleteElementRef } = useRenderedCanvasElements()
   const ref = useForkedRefs<HTMLElement>(
@@ -50,6 +51,7 @@ function RawLeafComponent(
     dragPreview,
     dropRef,
     setNodeRef,
+    localRef,
   )
 
   /**
@@ -63,7 +65,7 @@ function RawLeafComponent(
   })
 
   const handleOnMouseOver = useCallback(
-    (e: ChangeEvent<any>) => {
+    (e: Event) => {
       e.preventDefault()
       e.stopPropagation()
       Besigner.focus.setHoveredNode(node)
@@ -71,7 +73,7 @@ function RawLeafComponent(
     [node],
   )
   const handleOnMouseDown = useCallback(
-    (e: ChangeEvent<any>) => {
+    (e: Event) => {
       e.preventDefault()
       e.stopPropagation()
       Besigner.focus.handleNodeSelection(node)
@@ -80,6 +82,19 @@ function RawLeafComponent(
   )
   const isSelected = Besigner.focus.isNodeSelected(node)
 
+  useIsomorphicLayoutEffect(() => {
+    const el = localRef.current
+    if (el) {
+      el.addEventListener('mouseover', handleOnMouseOver)
+      el.addEventListener('mousedown', handleOnMouseDown)
+
+      return () => {
+        el.removeEventListener('mouseover', handleOnMouseOver)
+        el.removeEventListener('mousedown', handleOnMouseDown)
+      }
+    }
+  }, [nodeRef, handleOnMouseOver, handleOnMouseDown])
+
   // console.log('~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
   // console.log('element attributes', elementAttributes)
 
@@ -87,8 +102,6 @@ function RawLeafComponent(
     <Leaf
       ref={ref}
       node={node}
-      onMouseOver={handleOnMouseOver}
-      onMouseDown={handleOnMouseDown}
       data-aglyn-selected={isSelected ? 'selected' : undefined}
       {...rest}
     />

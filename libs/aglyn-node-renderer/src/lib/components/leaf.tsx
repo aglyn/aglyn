@@ -30,7 +30,7 @@ export interface LeafProps extends HTMLAttributes<any> {
   sx?: JSX.SxProps
 }
 
-function RawLeaf(props: LeafProps, ref: MutableRefObject<any>) {
+function LeafRaw(props: LeafProps, ref: MutableRefObject<any>) {
   const { children, node, sx, ...rest } = props
 
   const componentSchema = node?.componentSchema
@@ -52,8 +52,8 @@ function RawLeaf(props: LeafProps, ref: MutableRefObject<any>) {
 
   return (
     <Component
-      ref={ref}
       key={node?.$id}
+      ref={ref}
       data-aglyn={`leaf:${node?.$id}`}
       {...rest}
       {...merged}
@@ -63,10 +63,8 @@ function RawLeaf(props: LeafProps, ref: MutableRefObject<any>) {
     </Component>
   )
 }
-RawLeaf.displayName = 'Leaf'
-RawLeaf.aglyn = true
+LeafRaw.displayName = 'Leaf'
+LeafRaw.aglyn = true
 
-const Leaf = observer<LeafProps, any>(RawLeaf, { forwardRef: true })
-
-export { Leaf }
+const Leaf = observer<LeafProps, any>(LeafRaw, { forwardRef: true })
 export default Leaf

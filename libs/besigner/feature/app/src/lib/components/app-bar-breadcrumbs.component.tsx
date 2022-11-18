@@ -113,7 +113,7 @@ const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
   //     restrictChildren: schema?.restrictChildren,
   //   }
   // }, [nodeId, node, schema])
-  const [, dropRef] = useLeafDrop({ node })
+  const [, dropRef] = useLeafDrop(node)
 
   const handleClick = useCallback(
     (e) => {

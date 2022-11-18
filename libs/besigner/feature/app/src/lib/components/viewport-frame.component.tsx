@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { setBesignerCanvasHovered } from '@aglyn/besigner-data-app'
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
 import {
   useAglynAppContext,
   useAglynSiteTheme,
@@ -109,7 +109,7 @@ const SiteContainer = forwardRef<any, SiteShadowDomProps>((props, ref) => {
             }}
           >
             <AglynNodeRenderer
-              nodeId={CANVAS_ROOT_ELEMENT_ID}
+              node={Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)}
               LeafComponent={LeafComponent}
             />
           </Box>

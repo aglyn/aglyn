@@ -22,7 +22,7 @@ import { computedFn } from 'mobx-utils'
 
 export enum DragType {
   CANVAS = 'canvas',
-  TEMPLATE = 'template',
+  PRESET = 'preset',
   TREE = 'tree',
 }
 
@@ -172,4 +172,22 @@ export function isDraggingDropNode(node: DraggableNode): boolean {
 
 export function isDraggingOverDropNode(node: DraggableNode): boolean {
   return state.isDraggingOverDropNode(node)
+}
+
+export function canDragNode(node: Aglyn.AbstractNodeSchema): boolean {
+  if (!node) throw new Error('Invalid node')
+  switch (true) {
+    case !node:
+      throw new Error('Invalid node')
+    case Aglyn.screen.isRootNode(node):
+      return false
+    case node?.type === Aglyn.NodeType.PRESET:
+      return true
+    case node?.type === Aglyn.NodeType.NODE:
+      return Aglyn.components.isFeatureEnabled(
+        (node as Aglyn.NodeSchema<any>)?.componentSchema?.flags?.dragging,
+      )
+    default:
+      return false
+  }
 }
