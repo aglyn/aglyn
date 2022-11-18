@@ -15,27 +15,26 @@
  * limitations under the License.
  */
 
-import {_isArr} from '@aglyn/shared-util-guards'
-import {useRouter} from 'next/router'
-import {useCallback, useMemo} from 'react'
-import type {UrlObject} from 'url'
-
+import { _isArr } from '@aglyn/shared-util-guards'
+import { useRouter } from 'next/router'
+import { useCallback, useMemo } from 'react'
+import type { UrlObject } from 'url'
 
 export type UseContinueUrlDecodedRoutePusher = (
   url?: UrlObject | string,
   as?: UrlObject | string,
-  options?: {shallow?: boolean, locale?: string | false, scroll?: boolean},
+  options?: { shallow?: boolean; locale?: string | false; scroll?: boolean },
 ) => Promise<boolean>
 
 export type UseContinueUrlDecodedResponse = [
   decoded: string,
-  pushNext: UseContinueUrlDecodedRoutePusher
+  pushNext: UseContinueUrlDecodedRoutePusher,
 ]
 
 export type UseContinueUrlResponse = [
   encoded: string,
   decoded: string,
-  pushNext: UseContinueUrlDecodedRoutePusher
+  pushNext: UseContinueUrlDecodedRoutePusher,
 ]
 
 export const ContinueParamName = 'continue'
@@ -43,25 +42,33 @@ export const continueParam = (value: string) => `${ContinueParamName}=${value}`
 
 export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
   const router = useRouter()
+  const { query } = router
 
-  const nextUrl = useMemo(() => {
-    const {next} = router.query
-    const nextUrl = (_isArr(next) ? next[0] : next) || ''
-    return decodeURIComponent(nextUrl || '')
-  }, [router])
+  const continueUrl = useMemo(() => {
+    const { ['continue']: url } = query
+    const continueUrl = (_isArr(url) ? url[0] : url) || ''
+    return decodeURIComponent(continueUrl || '')
+  }, [query])
+  console.log('next url', continueUrl)
 
-  const pushNext = useCallback((
-    url: UrlObject | string = '/',
-    as: UrlObject | string | undefined = undefined,
-    options?: {shallow?: boolean, locale?: string | false, scroll?: boolean},
-  ): Promise<boolean> => {
-    return router.push(nextUrl || url, as, options)
-  }, [router, nextUrl])
-
+  const pushNext = useCallback(
+    (
+      url: UrlObject | string = '/',
+      as: UrlObject | string | undefined = undefined,
+      options?: {
+        shallow?: boolean
+        locale?: string | false
+        scroll?: boolean
+      },
+    ): Promise<boolean> => {
+      return router.push(continueUrl || url, as, options)
+    },
+    [router, continueUrl],
+  )
 
   return useMemo(() => {
-    return [nextUrl, pushNext]
-  }, [nextUrl, pushNext])
+    return [continueUrl, pushNext]
+  }, [continueUrl, pushNext])
 }
 
 export function useContinueUrlEncoded() {
@@ -77,15 +84,10 @@ export function useContinueUrl(): UseContinueUrlResponse {
   const encoded = useContinueUrlEncoded()
   const [decoded, pushNext] = useContinueUrlDecoded()
 
-  return useMemo(() => [
-    encoded,
-    decoded,
-    pushNext,
-  ], [
-    encoded,
-    decoded,
-    pushNext,
-  ])
+  return useMemo(
+    () => [encoded, decoded, pushNext],
+    [encoded, decoded, pushNext],
+  )
 }
 
 export default useContinueUrl

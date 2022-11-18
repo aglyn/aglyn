@@ -44,11 +44,6 @@ function ScreenDetails(props) {
   const hostId = query.hostId as string
   const screenId = query.screenId as string
   const versionId = query.versionId as string
-  const besignerUrl = buildRoute(Route.SCREEN_BESIGNER, {
-    hostId,
-    screenId,
-    versionId,
-  })
   const { queueLoading } = useLoading()
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const [{ status, data: screen }] = useScreen({ hostId, screenId })
@@ -142,7 +137,11 @@ function ScreenDetails(props) {
             size="large"
             variant="contained"
             componentVariant="button"
-            href={besignerUrl}
+            href={buildRoute(Route.SCREEN_BESIGNER, {
+              hostId,
+              screenId,
+              versionId,
+            })}
             title={'Open with besigner'}
             disabled={status !== 'success' || !screen}
             startIcon={

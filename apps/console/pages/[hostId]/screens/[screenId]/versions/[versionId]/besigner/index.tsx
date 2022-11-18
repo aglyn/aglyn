@@ -21,11 +21,9 @@ import {
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
   useAglynCanvasHistoryControls,
-  useBesignerAppContext,
   withBesignerContext,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-feature-app'
-import { getApp, setCanvasElements } from '@aglyn/core-data-app'
 import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
 import {
@@ -159,7 +157,6 @@ function Besigner(props) {
   const { query } = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-  const app = useBesignerAppContext()
   const hostId = query.hostId as string
   const screenId = query.screenId as string
   const versionId = query.versionId as string
@@ -187,7 +184,7 @@ function Besigner(props) {
 
   useEffect(() => {
     if (HAS_BROWSER()) {
-      console.log('page:/besigner app', getApp())
+      console.log('page:/besigner app', Aglyn)
     }
   }, [])
 
@@ -212,16 +209,10 @@ function Besigner(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
-  const updateCanvasElements = useCallback(
-    (e, value: any) => {
-      const nodes = Aglyn.screen.processNodesToDenormalized(value)
-      Aglyn.screen.setNodes(nodes)
-
-      // @TODO ⚠️ remove after full migration to Aglyn.*
-      setCanvasElements(app, { elements: nodes, type: 'normal' })
-    },
-    [app],
-  )
+  const updateCanvasElements = useCallback((e, value: any) => {
+    const nodes = Aglyn.screen.processNodesToDenormalized(value)
+    Aglyn.screen.setNodes(nodes)
+  }, [])
 
   useEffect(() => {
     if (nodes) {

@@ -22,7 +22,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import { Grid, Typography, type TypographyProps } from '@mui/material'
+import { Grid, Stack, Typography, type TypographyProps } from '@mui/material'
 import { useMemo } from 'react'
 import { isElement } from 'react-is'
 import BreadcrumbsComponent, {
@@ -87,7 +87,7 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
           spacing={2}
         >
           <Grid item>
-            <Container dense maxWidth={false}>
+            <Stack>
               <Typography
                 component="h1"
                 variant="h4"
@@ -143,7 +143,7 @@ function DashboardHeaderComponent(props: DashboardHeaderProps) {
                   }}
                 />
               )}
-            </Container>
+            </Stack>
           </Grid>
 
           {headerRight && <Grid item>{headerRight}</Grid>}
