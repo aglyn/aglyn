@@ -335,12 +335,23 @@ function deleteChildNodes(node: NodeSchema<any>) {
 
 export function reparentNode(
   node: NodeSchema<any>,
-  oldParent: NodeSchema<any>,
   newParent: NodeSchema<any>,
   index = NaN,
 ) {
-  removeNodeFromParent(node)
-  addNodeToParent(node, newParent, index)
+  if (!node || isRootNode(node)) throw new Error('Invalid node')
+  if (!newParent) throw new Error('Invalid parent node')
+
+  const oldParent = node?.parent
+  if (oldParent?.$id === newParent.$id) return reorderNode(node, index)
+
+  const oldIndex = oldParent.nodes?.indexOf(node?.$id)
+  if (oldIndex >= 0) runInAction(() => oldParent.nodes.splice(oldIndex, 1))
+
+  runInAction(() => {
+    node.parentId = newParent?.$id
+    if (isNaN(index)) newParent.nodes.push(node?.$id)
+    else newParent.nodes.splice(index, 0, node?.$id)
+  })
 }
 
 export function reorderNode(node: NodeSchema<any>, newIndex = NaN) {

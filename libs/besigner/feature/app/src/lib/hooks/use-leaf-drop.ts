@@ -99,7 +99,7 @@ export function useLeafDrop(
           Besigner.focus.setSelectedNode(newNode)
         } else {
           const dragNode = drag?.node as Aglyn.NodeSchema<any>
-          Aglyn.screen.reparentNode(dragNode, dragNode?.parent, node, NaN)
+          Aglyn.screen.reparentNode(dragNode, node, NaN)
           Besigner.focus.setSelectedNode(dragNode)
         }
 
