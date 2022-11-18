@@ -30,14 +30,14 @@ import { schema as listItemSchema } from './list-item'
 const ID: ComponentId = 'list'
 
 export const schema: AglynComponentSchema<ListProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: 'mui',
   displayName: 'List',
   icon: { path: mdiFormatListBulletedSquare.path },
   restrictChildren: [
     Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
-      components: [listItemSchema.componentId],
+      components: [listItemSchema.$id],
     },
   ],
   presets: [

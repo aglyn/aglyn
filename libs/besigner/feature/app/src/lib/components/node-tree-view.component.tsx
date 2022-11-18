@@ -237,7 +237,7 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
 
   const [dragCollect, dragRef, previewRef] = useLeafDrag(
     node,
-    Besigner.DragType.CANVAS,
+    Besigner.DragType.TREE,
   )
   const [dropCollect, dropRef] = useLeafDrop(node)
 

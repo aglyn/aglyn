@@ -28,7 +28,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'stack'
 
 export const schema: AglynComponentSchema<StackProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Stack',
   icon: {

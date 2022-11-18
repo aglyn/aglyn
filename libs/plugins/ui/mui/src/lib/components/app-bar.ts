@@ -30,7 +30,7 @@ import { schema as toolbarSchema } from './toolbar'
 const ID: ComponentId = 'app-bar'
 
 export const schema: AglynComponentSchema<AppBarProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'App Toolbar',
   icon: {

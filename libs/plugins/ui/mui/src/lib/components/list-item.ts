@@ -31,14 +31,14 @@ import { schema as listItemTextSchema } from './list-item-text'
 const ID: ComponentId = 'list-item'
 
 export const schema: AglynComponentSchema<ListItemProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List Item',
   icon: { path: mdiFormatListText.path },
   restrictChildren: [
     Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
-      components: [listItemTextSchema.componentId],
+      components: [listItemTextSchema.$id],
     },
   ],
   presets: [

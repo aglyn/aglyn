@@ -27,7 +27,8 @@ import { ID as toolbarId } from './toolbar'
 export const ID: Aglyn.ComponentId = 'muiAppBar'
 
 export const schema: Aglyn.ComponentSchema = {
-  componentId: ID,
+  $id: ID,
+  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'App Bar',
   category: Aglyn.ComponentCategory.SURFACE,

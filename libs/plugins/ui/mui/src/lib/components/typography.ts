@@ -66,7 +66,7 @@ const typographyVariants = [
 ]
 
 export const schema: AglynComponentSchema<TypographyProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Typography',
   icon: {

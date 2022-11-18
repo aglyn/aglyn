@@ -169,7 +169,7 @@ export interface AglynExoticComponent<PROPS = any, REF = any>
 }
 
 export interface AglynComponentSchema<P = any> {
-  componentId: ComponentId
+  $id: ComponentId
   pluginId?: BundleId
   kind?: 'element' | 'plaintext' | 'markdown'
 

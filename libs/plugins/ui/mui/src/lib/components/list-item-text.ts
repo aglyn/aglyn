@@ -30,7 +30,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'list-item-text'
 
 export const schema: AglynComponentSchema<ListItemTextProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'List Item Text',
   icon: { path: mdiFormatListChecks.path },

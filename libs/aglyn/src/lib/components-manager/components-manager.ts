@@ -48,6 +48,7 @@ export enum ComponentCategory {
   LAYOUT = 'Layout',
   DATA_DISPLAY = 'Data Display',
   TEXT = 'Text',
+  UNCATEGORIZED = 'Uncategorized',
 }
 
 export type ComponentId = string
@@ -82,7 +83,7 @@ export interface AttributeSchema extends Dictionary<any> {
 }
 
 export interface ComponentSchema<P = any> {
-  componentId: ComponentId
+  $id?: ComponentId
   pluginId?: PluginId
   kind?: 'element' | 'plaintext' | 'markdown'
 
@@ -212,7 +213,7 @@ export function registerComponent(
   component: ComponentFactory,
   schema: ComponentSchema,
 ) {
-  const { componentId, pluginId } = schema
+  const { $id, pluginId } = schema
 
   lifecycleEvent(
     () => {
@@ -224,15 +225,15 @@ export function registerComponent(
         ids.push(componentId)
       }*/
       runInAction(() => {
-        factories[componentId] = component
-        schemas[componentId] = schema
+        factories[$id] = component
+        schemas[$id] = schema
       })
     },
     {
       beforeEvent: AglynEvent.COMPONENT_REGISTERING,
-      beforePayload: [{ componentId, pluginId: pluginId }],
+      beforePayload: [{ $id: $id, pluginId: pluginId }],
       afterEvent: AglynEvent.COMPONENT_REGISTERED,
-      afterPayload: [{ componentId, pluginId: pluginId }],
+      afterPayload: [{ $id: $id, pluginId: pluginId }],
     },
   )
 }
@@ -268,7 +269,5 @@ export function unregisterComponent(componentId: ComponentId) {
 
 export function getComponentLabel(componentId?: ComponentId) {
   const schema = getSchema(componentId)
-  return (
-    schema?.displayName || schema?.title || schema?.componentId || componentId
-  )
+  return schema?.displayName || schema?.title || schema?.$id || componentId
 }

@@ -38,9 +38,9 @@ export function createAglynComponent<P = any, C = any>(
   options?: Partial<ErrorBoundaryProps>,
 ): ComponentRegisterPayload<P> {
   const _schema = cloneDeep(schema)
-  const { componentId, pluginId, flags, styledOptions } = _schema
+  const { $id, pluginId, flags, styledOptions } = _schema
   const pascalId = `${pluginId ? pascalCase(pluginId) + '-' : ''}${pascalCase(
-    componentId,
+    $id,
   )}`
 
   const Component =
@@ -53,7 +53,7 @@ export function createAglynComponent<P = any, C = any>(
   }) as AglynExoticComponent<P>
 
   AglynComponent.displayName = `AglynComponent(${pascalId})`
-  AglynComponent.componentId = componentId
+  AglynComponent.$id = $id
   AglynComponent.pluginId = pluginId
   AglynComponent.aglyn = true
   AglynComponent[AGLYN_OF] = COMPONENT_ELEMENT_TYPE

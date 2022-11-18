@@ -30,7 +30,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'toolbar'
 
 export const schema: AglynComponentSchema<ToolbarProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Toolbar Content',
   icon: {

@@ -162,7 +162,7 @@ const ElementInfo = function ElementInfo({
           {
             key: 'component-id',
             label: 'Component ID',
-            value: schema?.componentId,
+            value: schema?.$id,
           },
           {
             key: 'plugin-id',
@@ -186,6 +186,7 @@ const ElementInfo = function ElementInfo({
       <AccordionListComponent
         unique
         items={details}
+        getItemId={(item) => item.key}
         AccordionSummaryProps={{ dense: true }}
         SummaryContentComponent={({ item }) => <>{item?.label}</>}
         DetailsContentComponent={({ label, item }) => (

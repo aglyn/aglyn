@@ -98,7 +98,7 @@ export const handleCanvasAddElement = (
     {
       [parentId]: {
         $id: parentId,
-        componentId: state[parentId]?.componentId,
+        componentId: state[parentId]?.$id,
         nodes: [],
       },
     },

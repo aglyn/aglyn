@@ -29,7 +29,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'container'
 
 export const schema: AglynComponentSchema<ContainerProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Container',
   icon: {

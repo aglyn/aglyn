@@ -30,7 +30,7 @@ import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 
 const c1 = createAglynComponent(
   {
-    componentId: 'sample-element',
+    $id: 'sample-element',
     displayName: 'Sample Element',
     title: 'Sample Element',
   },
@@ -39,7 +39,7 @@ const c1 = createAglynComponent(
 
 const c2 = createAglynComponent(
   {
-    componentId: 'sample-element-1',
+    $id: 'sample-element-1',
     displayName: 'Sample Element 1',
     title: 'Sample Element 1',
   },
@@ -48,7 +48,7 @@ const c2 = createAglynComponent(
 
 const c3 = createAglynComponent(
   {
-    componentId: 'sample-element-2',
+    $id: 'sample-element-2',
     displayName: 'Sample Element 2',
     title: 'Sample Element 2',
   },
@@ -57,7 +57,7 @@ const c3 = createAglynComponent(
 
 const c4 = createAglynComponent(
   {
-    componentId: 'sample-element-3',
+    $id: 'sample-element-3',
     displayName: 'Sample Element 3',
     title: 'Sample Element 3',
   },
@@ -66,7 +66,7 @@ const c4 = createAglynComponent(
 
 const c5 = createAglynComponent(
   {
-    componentId: 'sample-element-4',
+    $id: 'sample-element-4',
     displayName: 'Sample Element 4',
     title: 'Sample Element 4',
     presets: [

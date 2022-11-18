@@ -28,7 +28,7 @@ import {
   AccordionSummary as MuiAccordionSummary,
   type AccordionSummaryProps as MuiAccordionSummaryProps,
 } from '@mui/material'
-import { Fragment, useCallback, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 
 const Accordion = styled((props: MuiAccordionProps) => {
   const { children, ...rest } = props
@@ -114,9 +114,7 @@ export interface AccordionRenderProps<
   openItems: JSX.Key[]
 }
 
-export interface AccordionListProps<
-  T extends AccordionListItem = AccordionListItem,
-> {
+export interface AccordionListProps<T extends AccordionListItem> {
   items: T[]
   unique?: boolean
   defaultExpanded?: JSX.Key[]
@@ -124,11 +122,12 @@ export interface AccordionListProps<
   DetailsContentComponent?: JSX.ElementType<AccordionRenderProps<T>>
   AccordionSummaryProps?: Partial<AccordionSummaryProps>
   AccordionDetailsProps?: Partial<AccordionDetailsProps>
+  getItemId(item: T): string | number
 }
 
-const AccordionListComponent = <T extends AccordionListItem>(
+function AccordionListComponent<T extends AccordionListItem>(
   props: AccordionListProps<T>,
-) => {
+) {
   const {
     items,
     defaultExpanded: initial,
@@ -137,6 +136,7 @@ const AccordionListComponent = <T extends AccordionListItem>(
     AccordionSummaryProps,
     AccordionDetailsProps,
     unique,
+    getItemId,
   } = props
   const [openItems, setOpenItems] = useState<JSX.Key[]>(() => {
     if (!_isArrEmpty(initial)) return [...initial]
@@ -160,9 +160,17 @@ const AccordionListComponent = <T extends AccordionListItem>(
     [unique],
   )
 
-  function getItemId(item: AccordionListItem, index: number) {
-    return item?.key ?? item?.id ?? index
-  }
+  const getItemIdRef = useRef(getItemId)
+
+  const getId = useCallback((item: AccordionListProps<T>['items'][number]) => {
+    const current = getItemIdRef.current
+    if (current) return current(item)
+    return item
+  }, [])
+
+  useEffect(() => {
+    getItemIdRef.current = getItemId
+  }, [getItemId])
 
   function isOpen(id: JSX.Key) {
     return unique
@@ -172,8 +180,8 @@ const AccordionListComponent = <T extends AccordionListItem>(
 
   return (
     <Fragment>
-      {items.map((item, index) => {
-        const itemId = getItemId(item, index)
+      {items.map((item) => {
+        const itemId = getId(item)
         const itemOpen = isOpen(itemId)
         const onToggle = handleToggle(itemId)
         return (

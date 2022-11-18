@@ -27,9 +27,9 @@ function BranchRaw(props: BranchProps) {
   const { node } = props
   const nodes = Array.isArray(node?.children) ? node.children : []
   return (
-    <RendererComponents.Consumer>
+    <RendererComponents.Consumer key={node?.$id}>
       {({ StemComponent }) =>
-        nodes.map((node) => <StemComponent node={node} />)
+        nodes.map((node) => <StemComponent key={node?.$id} node={node} />)
       }
     </RendererComponents.Consumer>
   )

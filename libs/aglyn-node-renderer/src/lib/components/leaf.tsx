@@ -35,7 +35,7 @@ function LeafRaw(props: LeafProps, ref: MutableRefObject<any>) {
 
   const componentSchema = node?.componentSchema
   const resolveProps = componentSchema?.resolveProps
-  const Factory = Aglyn.components.getFactory(componentSchema?.componentId)
+  const Factory = Aglyn.components.getFactory(componentSchema?.$id)
 
   const Component = useMemo(() => {
     return isValidElementType(Factory) ? Factory : DefaultComponent

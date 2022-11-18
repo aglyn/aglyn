@@ -28,7 +28,7 @@ import * as Typography from './components/typography'
 import { PLUGIN_ID } from './constants/common'
 
 Aglyn.plugins.addDependency({
-  id: PLUGIN_ID,
+  $id: PLUGIN_ID,
   displayName: 'Material UI',
   description: 'Material UI elements',
   title: 'Material UI',

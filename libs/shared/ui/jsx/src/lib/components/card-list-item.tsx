@@ -18,14 +18,13 @@
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import {
   Card as MuiCard,
-  CardActionArea as MuiCardActionArea,
   type CardActionAreaProps as MuiCardActionAreaProps,
   type CardProps as MuiCardProps,
   Typography,
   type TypographyProps,
 } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, type MouseEvent, useCallback } from 'react'
+import { forwardRef } from 'react'
 import ChildrenFunctionProp from './children-function-prop'
 import type { GridListItemData } from './grid-list'
 
@@ -84,9 +83,6 @@ export interface CardListItemProps
     | ((props: { item: GridListItemData; selected: boolean }) => JSX.Children)
   label?: JSX.Children
   selected?: boolean
-  onActionClick?: {
-    bivarianceHack<T>(event: MouseEvent<T>, selection: unknown): void
-  }['bivarianceHack']
   CardActionAreaProps?: Partial<MuiCardActionAreaProps>
   WrapperBoxProps?: Partial<JSX.ComponentProps<typeof CardBox>>
   ContentBoxProps?: Partial<JSX.ComponentProps<typeof CardBox>>
@@ -101,7 +97,6 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
       selected,
       item,
       label,
-      onActionClick,
       CardActionAreaProps,
       WrapperBoxProps,
       ContentBoxProps,
@@ -110,12 +105,6 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
     } = props
 
     const isSelected = Boolean(selected)
-    const handleClick = useCallback(
-      (e) => {
-        onActionClick && onActionClick(e, item)
-      },
-      [item, onActionClick],
-    )
 
     const innerContent = (
       <CardBox
@@ -155,17 +144,14 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
         className={clsx({ [cardClasses.selected]: isSelected }, className)}
         {...rest}
       >
-        <MuiCardActionArea
-          disabled={isSelected}
-          onClick={handleClick}
-          {...CardActionAreaProps}
+        <CardBox
           className={clsx(
             cardClasses.aspectContainer,
             CardActionAreaProps?.className,
           )}
         >
           {innerContent}
-        </MuiCardActionArea>
+        </CardBox>
       </Card>
     )
   },

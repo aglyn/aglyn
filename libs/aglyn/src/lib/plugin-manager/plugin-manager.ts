@@ -34,7 +34,7 @@ export type Dependents = Record<PluginId, true>
 export type PluginDependents = Record<PluginId, Dependents>
 
 export interface Plugin {
-  id?: PluginId
+  $id?: PluginId
   displayName?: string
   title?: string
   subtitle?: string
@@ -62,7 +62,7 @@ emitter.on(AglynEvent.PLUGIN_UNREGISTER, ({ pluginId }) => {
 // }
 //
 // export function registerBundle(schema: Plugin) {
-//   const { id: pluginId } = schema
+//   const { $id: pluginId } = schema
 //   lifecycleEvent(
 //     () => {
 //       addDependency(schema)
@@ -84,7 +84,7 @@ emitter.on(AglynEvent.PLUGIN_UNREGISTER, ({ pluginId }) => {
 //   const bundle = plugins[pluginId]
 //   lifecycleEvent(
 //     () => {
-//       if (!bundle) throw new Error(`No bundle exists with ID ${pluginId}`)
+//       if (!bundle) throw new Error(`No bundle exists with $id ${pluginId}`)
 //
 //       // for (const componentId of bundle.componentIds || []) {
 //       //   emitter.emit(AglynEvent.COMPONENT_UNREGISTER, { componentId, pluginId })
@@ -182,32 +182,32 @@ export function addDependencies(dependencies?: Array<Plugin>) {
 
 export function destroyDependencies() {
   const dependencyIds = Object.keys(dependencies)
-  for (const id of dependencyIds) {
-    removeDependency(id)
+  for (const $id of dependencyIds) {
+    removeDependency($id)
   }
 }
 
-export function removeDependency(id: PluginId) {
+export function removeDependency($id: PluginId) {
   lifecycleEvent(
     () => {
-      handleRemovingDependencyAndDependents(id)
+      handleRemovingDependencyAndDependents($id)
     },
     {
       beforeEvent: AglynEvent.PLUGIN_UNREGISTERING,
-      beforePayload: [{ id }],
+      beforePayload: [{ $id }],
       afterEvent: AglynEvent.PLUGIN_UNREGISTERED,
-      afterPayload: [{ id }],
+      afterPayload: [{ $id }],
     },
   )
   return
 }
 
-export function loadDependency(id: PluginId) {
-  return handleLoadingDependencyAndDependents(id)
+export function loadDependency($id: PluginId) {
+  return handleLoadingDependencyAndDependents($id)
 }
 
-export function unloadDependency(id: PluginId) {
-  return handleUnloadingDependencyAndDependents(id)
+export function unloadDependency($id: PluginId) {
+  return handleUnloadingDependencyAndDependents($id)
 }
 
 export function getDependencyCopy(
@@ -299,7 +299,7 @@ function handleUnloadingDependency(dependencyId: PluginId) {
 }
 
 function handleAddingDependencyAndDependents(dependency: Plugin) {
-  const dependencyId: PluginId = dependency.id
+  const dependencyId: PluginId = dependency.$id
   if (!dependency) throw new Error('Invalid dependency')
   if (!dependencyId) throw new Error('Invalid dependencyId')
   /**

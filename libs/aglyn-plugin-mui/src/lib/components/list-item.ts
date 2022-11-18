@@ -24,7 +24,8 @@ import { schema as listItemTextSchema } from './list-item-text'
 export const ID: Aglyn.ComponentId = 'muiListItem'
 
 export const schema: Aglyn.ComponentSchema = {
-  componentId: ID,
+  $id: ID,
+  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'List Item',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
@@ -32,7 +33,7 @@ export const schema: Aglyn.ComponentSchema = {
   restrictChildren: [
     Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
-      components: [listItemTextSchema.componentId],
+      components: [listItemTextSchema.$id],
     },
   ],
 }

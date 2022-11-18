@@ -24,7 +24,8 @@ import { FIELD_DISABLE_GUTTERS } from '../constants/field-presets'
 export const ID: Aglyn.ComponentId = 'muiToolbar'
 
 export const schema: Aglyn.ComponentSchema = {
-  componentId: ID,
+  $id: ID,
+  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Toolbar Content',
   category: Aglyn.ComponentCategory.SURFACE,

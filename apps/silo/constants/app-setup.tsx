@@ -27,7 +27,7 @@ import { samplePageData } from './sample-data'
 
 const c1 = createAglynComponent(
   {
-    componentId: 'root',
+    $id: 'root',
     displayName: 'Root Element',
     title: 'Root element',
   },
@@ -36,7 +36,7 @@ const c1 = createAglynComponent(
 
 const c2 = createAglynComponent(
   {
-    componentId: 'root1',
+    $id: 'root1',
     displayName: 'Root Element',
     title: 'Root element',
   },
@@ -45,7 +45,7 @@ const c2 = createAglynComponent(
 
 const c3 = createAglynComponent(
   {
-    componentId: 'root2',
+    $id: 'root2',
     displayName: 'Root Element',
     title: 'Root element',
   },
@@ -54,7 +54,7 @@ const c3 = createAglynComponent(
 
 const c4 = createAglynComponent(
   {
-    componentId: 'root3',
+    $id: 'root3',
     displayName: 'Root Element',
     title: 'Root element',
   },
@@ -63,7 +63,7 @@ const c4 = createAglynComponent(
 
 const c5 = createAglynComponent(
   {
-    componentId: 'root4',
+    $id: 'root4',
     displayName: 'Root Element',
     title: 'Root element',
     templates: [

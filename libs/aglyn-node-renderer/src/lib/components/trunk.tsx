@@ -29,7 +29,7 @@ function TrunkRaw(props: TrunkProps, ref: MutableRefObject<any>) {
   const { node } = props
 
   return (
-    <RendererComponents.Consumer>
+    <RendererComponents.Consumer key={node?.$id}>
       {({ StemComponent }) => <StemComponent ref={ref} node={node} />}
     </RendererComponents.Consumer>
   )

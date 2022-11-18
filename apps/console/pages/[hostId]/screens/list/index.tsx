@@ -17,7 +17,6 @@
 
 import {
   AccordionListComponent,
-  type AccordionListProps,
   type AccordionRenderProps,
 } from '@aglyn/besigner-feature-app'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
@@ -88,19 +87,6 @@ const SummaryContentComponent = forwardRef<any, AccordionRenderProps>(
     )
   },
 )
-// eslint-disable-next-line react/display-name
-const Accordion = (props: AccordionListProps) => {
-  const { items } = props
-  return (
-    <AccordionListComponent
-      unique
-      items={items}
-      AccordionSummaryProps={{ dense: true }}
-      DetailsContentComponent={DetailsContentComponent as any}
-      SummaryContentComponent={SummaryContentComponent as any}
-    />
-  )
-}
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -125,7 +111,7 @@ function Screens(props) {
   const firestore = useFirestore()
   const screensCollection = collection(firestore, 'hosts', hostId, 'screens')
   const screensQuery = query(screensCollection, limit(pageSize))
-  const { status, data } = useFirestoreCollectionData(screensQuery, {
+  const { status, data } = useFirestoreCollectionData<any>(screensQuery, {
     idField: '$id',
   })
   const screens = data || []
@@ -367,7 +353,14 @@ function Screens(props) {
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <WidgetCardComponent>
-            <Accordion items={screens as any} />
+            <AccordionListComponent
+              unique
+              items={screens}
+              AccordionSummaryProps={{ dense: true }}
+              DetailsContentComponent={DetailsContentComponent as any}
+              SummaryContentComponent={SummaryContentComponent as any}
+              getItemId={(item) => item.$id}
+            />
             <DataTableComponent
               rowHeight={TABLE_ROW_HEIGHT}
               getRowId={(row) => row.$id}

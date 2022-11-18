@@ -16,8 +16,8 @@
  */
 
 import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { observable, runInAction, toJS } from 'mobx'
-import type { ComponentCategory } from '../components-manager'
+import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
+import { ComponentCategory } from '../components-manager'
 import { createIdUrlSafe } from '../constants'
 import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
@@ -41,6 +41,29 @@ export interface PresetSchema<P = JSX.AnyProps>
 }
 export interface PresetState {
   byId?: Record<PresetId, PresetSchema<any>>
+}
+
+export class AglynPreset<P = JSX.AnyProps> implements PresetSchema<P> {
+  public $id: PresetId
+  public type: NodeType.PRESET = NodeType.PRESET
+  public category: string | ComponentCategory
+  public data: NodeSchemaNested<P>
+  public description: string
+  public displayName: string
+  public icon: MdiIconProps
+  public pluginId: PluginId
+
+  constructor(schema: PresetSchema<P>) {
+    this.$id = schema.$id
+    this.category = schema.category || ComponentCategory.UNCATEGORIZED
+    this.data = schema.data
+    this.description = schema.description
+    this.displayName = schema.displayName
+    this.icon = schema.icon
+    this.pluginId = schema.pluginId
+
+    makeAutoObservable(this)
+  }
 }
 
 export const state = observable<PresetState>({
@@ -71,8 +94,7 @@ export function registerPreset(presets: PresetSchema[] | PresetSchema) {
     lifecycleEvent(
       () => {
         runInAction(() => {
-          preset.type = NodeType.PRESET
-          state.byId[$id] = preset
+          state.byId[$id] = new AglynPreset(preset)
         })
       },
       {

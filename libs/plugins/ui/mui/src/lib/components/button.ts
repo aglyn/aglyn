@@ -35,7 +35,7 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'button'
 
 export const schema: AglynComponentSchema<ButtonProps> = {
-  componentId: ID,
+  $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Button',
   icon: {

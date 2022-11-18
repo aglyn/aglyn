@@ -29,7 +29,8 @@ import {
 export const ID: Aglyn.ComponentId = 'muiButton'
 
 export const schema: Aglyn.ComponentSchema = {
-  componentId: ID,
+  $id: ID,
+  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Button',
   category: Aglyn.ComponentCategory.INPUT,

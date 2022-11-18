@@ -52,7 +52,7 @@ function TreeRootRaw(props: TreeRootProps, ref: MutableRefObject<any>) {
   console.log('node', node)
 
   return (
-    <RendererComponents.Provider value={Components}>
+    <RendererComponents.Provider key={node?.$id} value={Components}>
       <Components.TrunkComponent ref={ref} node={node} />
     </RendererComponents.Provider>
   )

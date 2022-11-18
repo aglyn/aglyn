@@ -184,7 +184,7 @@ export class AglynComponentsController
 
   public registerComponent(payload: ComponentRegisterPayload): this {
     const { component, schema } = payload
-    const componentId = schema.componentId
+    const componentId = schema.$id
     const pluginId = schema.pluginId || undefined
     const key = this.buildMapKey({ pluginId, componentId })
 

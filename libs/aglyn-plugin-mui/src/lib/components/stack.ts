@@ -23,7 +23,8 @@ import { PLUGIN_ID } from '../constants/common'
 export const ID: Aglyn.ComponentId = 'muiStack'
 
 export const schema: Aglyn.ComponentSchema = {
-  componentId: ID,
+  $id: ID,
+  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Stack',
   category: Aglyn.ComponentCategory.LAYOUT,

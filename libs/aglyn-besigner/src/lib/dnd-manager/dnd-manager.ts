@@ -100,17 +100,17 @@ export const state = observable<DndState>({
     if (!this.hasDropTarget) return false
     if (this.drag?.type === Aglyn.NodeType.PRESET) {
       const itemNode = this.drag?.data
-      const itemSchema = Aglyn.components.getSchema(itemNode?.componentId)
+      const itemSchema = Aglyn.components.getSchema(itemNode?.$id)
       return confirmValidLinealRelationship(
         {
           pluginId: this.drag?.data?.pluginId,
-          componentId: itemNode?.componentId,
+          componentId: itemNode?.$id,
           restrictChildren: itemSchema?.restrictChildren,
           restrictParent: itemSchema?.restrictParent,
         },
         {
           pluginId: this.drop?.pluginId,
-          componentId: this.drop?.componentId,
+          componentId: this.drop?.$id,
           restrictChildren: this.drop?.componentSchema?.restrictChildren,
           restrictParent: this.drop?.componentSchema?.restrictParent,
         },
@@ -119,13 +119,13 @@ export const state = observable<DndState>({
     return confirmValidLinealRelationship(
       {
         pluginId: this.drag?.pluginId,
-        componentId: this.drag?.componentId,
+        componentId: this.drag?.$id,
         restrictChildren: this.drag?.componentSchema?.restrictChildren,
         restrictParent: this.drag?.componentSchema?.restrictParent,
       },
       {
         pluginId: this.drop?.pluginId,
-        componentId: this.drop?.componentId,
+        componentId: this.drop?.$id,
         restrictChildren: this.drop?.componentSchema?.restrictChildren,
         restrictParent: this.drop?.componentSchema?.restrictParent,
       },
