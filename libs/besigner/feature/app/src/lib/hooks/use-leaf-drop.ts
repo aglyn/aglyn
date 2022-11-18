@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import isEqual from 'lodash-es/isEqual'
 import { type ConnectDropTarget, useDrop } from 'react-dnd'
-import { type NodeDragItem } from './use-leaf-drag'
+import type { NodeDragItem } from './use-leaf-drag'
 
 export type DropCollected = {
   canDrop?: boolean
@@ -32,8 +32,6 @@ export type DropCollected = {
 }
 
 export type NodeDropArea = {
-  $id: Aglyn.NodeId
-  type?: Besigner.DropAreaType
   node?: Aglyn.NodeSchema<any>
 }
 
@@ -41,14 +39,13 @@ export function useLeafDrop(
   dropObject: NodeDropArea,
   accept: Besigner.DragType[] = Object.values(Besigner.DragType),
 ): [DropCollected, ConnectDropTarget] {
-  const deps = [dropObject, ...(Array.isArray(accept) ? accept : [accept])]
+  const deps = [...(Array.isArray(accept) ? accept : [accept])]
 
-  return useDrop<NodeDragItem<Besigner.DragType>, NodeDropArea, DropCollected>(
+  return useDrop<NodeDragItem, NodeDropArea, DropCollected>(
     {
       accept: accept,
       options: {
         arePropsEqual: (props, otherProps) => {
-          console.log('arePropsEqual', props, otherProps)
           return isEqual(props, otherProps)
         },
       },
@@ -61,9 +58,14 @@ export function useLeafDrop(
           Besigner.dnd.clearDndStatus()
           return
         }
+        const dropNode = dropObject?.node as Aglyn.NodeSchema<any>
+        const dropSchema = dropNode?.componentSchema
+        const dropBreadcrumbs = dropNode?.breadcrumbPath
+        const validRelationship = Besigner.dnd.state.isValidLinealRelationship
+
         const dragType = monitor.getItemType()
-        const breadcrumbs = dropObject?.node?.breadcrumbPath
-        const isOverDragItem = breadcrumbs?.indexOf(dragObject?.$id) >= 0
+
+        const isOverDragItem = dropBreadcrumbs?.indexOf(dropNode?.$id) >= 0
         const isOverSelf = monitor.isOver({ shallow: true })
 
         Besigner.focus.clearFocusStatus()
@@ -73,13 +75,9 @@ export function useLeafDrop(
           return
         }
 
-        const dropSchema = Aglyn.components.getSchema(
-          dropObject?.node?.componentId,
-        )
         const dropAllowed = Aglyn.components.isFeatureEnabled(
           dropSchema?.flags?.dropping,
         )
-        const validRelationship = Besigner.dnd.state.isValidLinealRelationship
 
         if (!dropAllowed || !validRelationship) {
           Besigner.dnd.clearDndStatus()
@@ -88,7 +86,6 @@ export function useLeafDrop(
 
         if (dragType === Besigner.DragType.TEMPLATE) {
           const dragNode = dragObject?.node as Aglyn.PresetSchema<any>
-          const dropNode = dropObject?.node as Aglyn.NodeSchema<any>
           const parent = dropNode || Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
           const $id = Aglyn.createNodeId()
           Aglyn.screen.setNodes(
@@ -104,30 +101,27 @@ export function useLeafDrop(
           Besigner.focus.setSelectedNode(node)
         } else {
           const dragNode = dragObject?.node as Aglyn.NodeSchema<any>
-          const dropNode = dropObject?.node as Aglyn.NodeSchema<any>
           Aglyn.screen.reparentNode(dragNode, dragNode?.parent, dropNode, NaN)
           Besigner.focus.setSelectedNode(dragNode)
         }
 
-        /**
-         * If already handled return
-         */
-        // if (monitor.didDrop()) return undefined
         return undefined
       },
       hover: (dragItem, monitor) => {
         // Make sure not to bubble up for parents
         if (!monitor.isOver({ shallow: true })) return
-        Besigner.focus.setHoveredNode(dropObject?.node)
-        Besigner.dnd.setDropNode(dropObject?.node)
+        const dropNode = dropObject?.node
+        Besigner.focus.setHoveredNode(dropNode)
+        Besigner.dnd.setDropNode(dropNode)
       },
       collect: (monitor) => {
         const canDrop = monitor.canDrop()
         const dragItem = monitor.getItem()
+        const dragNode = dragItem?.node
         const isOver = monitor.isOver({ shallow: false })
         const isOverSelf = monitor.isOver({ shallow: true })
         const isOverChildren = isOver && !isOverSelf
-        const isOverDragItem = Besigner.dnd.isDraggingOverDropNode(dragItem)
+        const isOverDragItem = Besigner.dnd.isDraggingOverDropNode(dragNode)
 
         return {
           canDrop,

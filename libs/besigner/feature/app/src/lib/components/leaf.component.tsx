@@ -39,14 +39,10 @@ function RawLeafComponent(
   const { node, ...rest } = props
 
   const [, dragHandle, dragPreview] = useLeafDrag(
-    { $id: node?.$id, node },
+    { node },
     Besigner.dnd.DragType.CANVAS,
   )
-  const [, dropRef] = useLeafDrop({
-    $id: node?.$id,
-    node,
-    type: Besigner.dnd.DropAreaType.INSIDE,
-  })
+  const [, dropRef] = useLeafDrop({ node })
   const [nodeRef, setNodeRef] = useState<HTMLElement>()
   const { setElementRef, deleteElementRef } = useRenderedCanvasElements()
   const ref = useForkedRefs<HTMLElement>(

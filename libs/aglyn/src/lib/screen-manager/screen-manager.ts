@@ -22,6 +22,7 @@ import _isStrT from '@aglyn/shared-util-guards/_is-str-t'
 import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
 import cloneDeep from 'lodash-es/cloneDeep'
 import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
+import * as Aglyn from '../../index'
 import {
   type ComponentId,
   type ComponentSchema,
@@ -258,6 +259,24 @@ export function nodeFactory<P = JSX.AnyProps>(
 
 export function isRootNode(node: NodeSchema<any>): boolean {
   return node?.$id === NODE_ROOT_ID
+}
+
+export function canDragNode(node: AbstractNodeSchema): boolean {
+  if (!node) throw new Error('Invalid node')
+  switch (true) {
+    case !node:
+      throw new Error('Invalid node')
+    case isRootNode(node):
+      return false
+    case node?.type === NodeType.PRESET:
+      return true
+    case node?.type === NodeType.NODE:
+      return Aglyn.components.isFeatureEnabled(
+        (node as NodeSchema<any>)?.componentSchema?.flags?.dragging,
+      )
+    default:
+      return false
+  }
 }
 
 export function toJSON() {

@@ -28,42 +28,24 @@ export type DragCollected = {
   isDragging: boolean
 }
 
-export type NodeDragItem<
-  T extends Besigner.DragType = Besigner.DragType.CANVAS,
-> = {
-  $id: Aglyn.NodeId
-  node?: T extends Besigner.DragType.TEMPLATE
-    ? Aglyn.PresetSchema<any>
-    : Aglyn.NodeSchema<any>
+export type NodeDragItem = {
+  node?: Aglyn.AbstractNodeSchema
 }
 
 export function useLeafDrag(
-  dragObject?: NodeDragItem<typeof type>,
-  type: Besigner.DragType = Besigner.DragType.CANVAS,
+  dragObject: NodeDragItem,
 ): [DragCollected, ConnectDragSource, ConnectDragPreview] {
-  const deps = [dragObject, type]
-
+  console.log('canDrag item', type)
   // console.log('dragItem item canDrag', dragItem, $id, type, canDrag, flags)
 
-  return useDrag<NodeDragItem<typeof type>, NodeDropArea, DragCollected>(
+  return useDrag<NodeDragItem, NodeDropArea, DragCollected>(
     /*() => */ {
-      type: type,
-      item: () => {
-        // Besigner.focus.setHoveredNode(Aglyn.screen.getNode(dropObject?.$id))
-        Besigner.dnd.setDragNode(dragObject?.node)
-        return dragObject
-      },
+      type: dragObject?.node?.type,
+      item: () => ({
+        node: Besigner.dnd.setDragNode(dragObject?.node),
+      }),
       canDrag: () => {
-        if (type !== Besigner.DragType.TEMPLATE) {
-          const node = dragObject?.node as Aglyn.NodeSchema<any>
-          const isRootNode = Aglyn.screen.isRootNodeId(dragObject?.$id)
-          const dragEnabled = Aglyn.components.isFeatureEnabled(
-            node?.componentSchema?.flags?.dragging,
-          )
-
-          return !isRootNode && dragEnabled
-        }
-        return true
+        return Aglyn.screen.canDragNode(dragObject?.node)
       },
       options: {
         dropEffect: 'move',
@@ -72,15 +54,14 @@ export function useLeafDrag(
         offsetY: -1,
       },
       isDragging: (monitor) => {
-        return Boolean(
-          dragObject?.$id && dragObject?.$id === monitor.getItem()?.$id,
-        )
+        const dragNode = dragObject?.node
+        const monitorNode = monitor.getItem().node
+        return Boolean(dragNode?.$id && dragNode?.$id === monitorNode?.$id)
       },
       collect: (monitor) => ({
         isDragging: monitor.isDragging(),
       }),
     },
-    deps,
   )
 }
 export default useLeafDrag

@@ -39,6 +39,7 @@ import {
   type ListItemButtonProps as MuiListItemButtonProps,
   listItemClasses,
   ListItemIcon as MuiListItemIcon,
+  type ListItemIconProps as MuiListItemIconProps,
   type ListItemProps as MuiListItemProps,
   ListItemText as MuiListItemText,
   type ListProps as MuiListProps,
@@ -50,7 +51,7 @@ import { observer } from 'mobx-react-lite'
 import {
   type ChangeEvent,
   createContext,
-  forwardRef,
+  type MutableRefObject,
   useCallback,
   useContext,
   useMemo,
@@ -187,6 +188,25 @@ const TreeItemButton = styled(MuiListItemButton, {
 })
 TreeItemButton.displayName = 'TreeItemButton'
 
+interface DragHandleProps extends MuiListItemIconProps {
+  draggingEnabled?: boolean
+}
+const DragHandle = styled(MuiListItemIcon, {
+  shouldForwardProp(propName) {
+    return propName !== 'draggingEnabled'
+  },
+})<DragHandleProps>(({ theme, draggingEnabled }) => ({
+  minWidth: 23,
+  padding: theme.spacing(0.75),
+  paddingLeft: 0,
+  borderRadius: '4px',
+  cursor: 'move',
+  pointerEvents: !draggingEnabled ? 'none' : undefined,
+  opacity: !draggingEnabled ? 0.5 : undefined,
+  zIndex: 1,
+}))
+DragHandle.displayName = 'DragHandle'
+
 interface NodeTreeItemProps
   extends Omit<JSX.ComponentProps<typeof TreeItem>, 'depth'> {
   nodeId: Aglyn.NodeId
@@ -216,21 +236,16 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   const dragDisabled = Boolean(isRootNode || !dragAllowed)
 
   const [{ isDragging }, dragHandle, dragPreview] = useLeafDrag(
-    { $id: node?.$id, node },
+    { node },
     Besigner.dnd.DragType.TREE,
   )
-  const [{ isOver }, dropRef] = useLeafDrop({
-    $id: node?.$id,
-    node,
-    type: Besigner.dnd.DropAreaType.INSIDE,
-  })
+  const [{ isOver }, dropRef] = useLeafDrop({ node })
 
   return (
     <TreeItem
       // ref={mouseEnterRef}
       data-aglyn-node={nodeId}
       depth={depth}
-      selected={isSelected}
       onMouseEnter={(e) => {
         onItemHover(e, nodeId)
       }}
@@ -249,7 +264,7 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
     >
       <Stack
         ref={(e) => {
-          dropRef(dragPreview(e as any))
+          dragPreview(dropRef(e as any))
         }}
         className={classKey.treeListItem}
         direction="row"
@@ -382,8 +397,15 @@ const TreeViewContext = createContext<{
   onItemFocus: noop,
 })
 
-const TreeViewContent = observer(() => {
-  const selected = Besigner.focus.state.selected
+export interface NodeTreeViewProps extends BoxProps {
+  TreeViewProps?: Partial<Omit<JSX.ComponentProps<typeof TreeView>, 'children'>>
+}
+
+const NodeTreeViewRaw = (
+  props: NodeTreeViewProps,
+  ref: MutableRefObject<any>,
+) => {
+  const { TreeViewProps, ...rest } = props
   const lastSelected = Besigner.focus.state.lastSelected
   const allExpanded = Besigner.focus.state.allExpanded
 
@@ -420,56 +442,48 @@ const TreeViewContent = observer(() => {
   }, [])
 
   return (
-    <TreeViewContext.Provider
-      value={{
-        expanded: expanded,
-        selected: lastSelected?.$id,
-        closeIcon: (
-          <MdiIcon
-            fontSize="small"
-            path={ICON_VARIANT_COLLAPSIBLE_CLOSE.path}
-          />
-        ),
-        expandIcon: (
-          <MdiIcon fontSize="small" path={ICON_VARIANT_COLLAPSIBLE_OPEN.path} />
-        ),
-        onItemFocus: handleTreeItemFocus,
-        onItemHover: handleTreeItemHover,
-        onItemSelect: handleTreeItemSelect,
-        onItemToggle: handleTreeItemToggle,
-      }}
+    <Box
+      ref={ref}
+      component="nav"
+      id={'aglyn:node-tree-view'}
+      aria-label="canvas nodes navigator"
+      {...rest}
     >
-      <NodeTreeItem nodeId={Aglyn.NODE_ROOT_ID} />
-    </TreeViewContext.Provider>
+      <TreeView className={classKey.root} {...TreeViewProps}>
+        <TreeViewContext.Provider
+          value={{
+            expanded: expanded,
+            selected: lastSelected?.$id,
+            closeIcon: (
+              <MdiIcon
+                fontSize="small"
+                path={ICON_VARIANT_COLLAPSIBLE_CLOSE.path}
+              />
+            ),
+            expandIcon: (
+              <MdiIcon
+                fontSize="small"
+                path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
+              />
+            ),
+            onItemFocus: handleTreeItemFocus,
+            onItemHover: handleTreeItemHover,
+            onItemSelect: handleTreeItemSelect,
+            onItemToggle: handleTreeItemToggle,
+          }}
+        >
+          <NodeTreeItem nodeId={Aglyn.NODE_ROOT_ID} />
+        </TreeViewContext.Provider>
+      </TreeView>
+    </Box>
   )
-})
-
-export interface NodeTreeViewProps extends BoxProps {
-  TreeViewProps?: Partial<Omit<JSX.ComponentProps<typeof TreeView>, 'children'>>
 }
 
-export const NodeTreeViewComponent = forwardRef<any, NodeTreeViewProps>(
-  (props, ref) => {
-    const { TreeViewProps, ...rest } = props
+NodeTreeViewRaw.displayName = 'NodeTreeViewComponent'
+NodeTreeViewRaw.aglyn = true
 
-    return (
-      <Box
-        ref={ref}
-        component="nav"
-        id={'aglyn:node-tree-view'}
-        aria-label="canvas nodes navigator"
-        {...rest}
-      >
-        <TreeView className={classKey.root} {...TreeViewProps}>
-          <TreeViewContent />
-        </TreeView>
-      </Box>
-    )
-  },
+export const NodeTreeViewComponent = observer<NodeTreeViewProps, any>(
+  NodeTreeViewRaw,
+  { forwardRef: true },
 )
-
-NodeTreeViewComponent.displayName = 'NodeTreeViewComponent'
-NodeTreeViewComponent.aglyn = true
-NodeTreeViewComponent.defaultProps = {}
-
 export default NodeTreeViewComponent

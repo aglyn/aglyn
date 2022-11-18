@@ -17,70 +17,17 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
-import type { NodeId } from '@aglyn/core-data-foundation'
-import { ICON_VARIANT_MODIFY_ADD } from '@aglyn/shared-data-enums'
 import type { KeyOf } from '@aglyn/shared-data-types'
-import MdiIcon from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'
-import { styled } from '@aglyn/shared-ui-theme'
 import {
-  Fab,
-  FabProps,
   Popper as MuiPopper,
   type PopperProps as MuiPopperProps,
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { type MutableRefObject, useMemo, useState } from 'react'
+import { type MutableRefObject, useMemo } from 'react'
 import { useRenderedCanvasElementRef } from '../contexts/rendered-canvas-elements'
-import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import ElementOverlayActionsComponent from './element-overlay-actions.component'
 import ElementOverlayLabelComponent from './element-overlay-label.component'
 import ElementOverlayOutlineComponent from './element-overlay-outline.component'
-
-type ActiveAddArea = 'top' | 'right' | 'bottom' | 'left' | null
-
-interface AddButtonProps extends FabProps {
-  active?: boolean
-  $id?: NodeId
-}
-
-const AddElementOverlay = styled(
-  (props: Omit<AddButtonProps, 'active'>) => {
-    const { $id, ...rest } = props
-    const handleAddElementClick = useAddElementDrawerCallback()
-    return (
-      <Fab
-        color="secondary"
-        variant="circular"
-        size="small"
-        onClick={(e) => handleAddElementClick(e, { $id })}
-        {...rest}
-      >
-        <MdiIcon
-          path={ICON_VARIANT_MODIFY_ADD.path}
-          fontSize="inherit"
-          color="inherit"
-        />
-      </Fab>
-    )
-  },
-  {
-    name: 'AddElementOverlay',
-    shouldForwardProp: (prop) => prop !== 'active',
-  },
-)<AddButtonProps>(({ active }) => ({
-  visibility: active ? undefined : 'hidden',
-  borderRadius: 4,
-  minWidth: 'unset',
-  minHeight: 'unset',
-  height: 24,
-  width: 48,
-  paddingLeft: 4,
-  paddingRight: 4,
-  paddingTop: 2,
-  paddingBottom: 2,
-  fontSize: 14,
-  boxShadow: 'none',
-}))
 
 const outerModifiers = [
   {
@@ -156,7 +103,6 @@ const ElementOverlayPopper = (
   const isSelected = Besigner.focus.isNodeSelected(node)
   const elementRef = useRenderedCanvasElementRef({ $id })
   const isOpen = Boolean(elementRef?.node)
-  const [outline, setOutline] = useState()
 
   const badgeElement = useMemo(() => {
     if (variant === 'selectedOverlay') {
@@ -164,8 +110,6 @@ const ElementOverlayPopper = (
     }
     return <ElementOverlayLabelComponent node={node} />
   }, [$id, node, variant])
-
-  const addHelperOpen = isOpen && !isSelected
 
   return (
     <>
@@ -184,7 +128,7 @@ const ElementOverlayPopper = (
         {({ placement, TransitionProps }) => {
           return (
             <>
-              <ElementOverlayOutlineComponent ref={setOutline} $id={$id} />
+              <ElementOverlayOutlineComponent $id={$id} />
 
               <MuiPopper
                 anchorEl={() => elementRef?.node}

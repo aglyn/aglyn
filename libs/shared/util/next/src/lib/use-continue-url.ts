@@ -49,7 +49,6 @@ export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
     const continueUrl = (_isArr(url) ? url[0] : url) || ''
     return decodeURIComponent(continueUrl || '')
   }, [query])
-  console.log('next url', continueUrl)
 
   const pushNext = useCallback(
     (

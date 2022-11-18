@@ -154,16 +154,12 @@ export function clearDndStatus() {
   })
 }
 
-export function setDragNode(dragNode: DraggableNode | null) {
-  runInAction(() => {
-    state.drag = dragNode || null
-  })
+export function setDragNode<T extends DraggableNode>(dragNode: T): T {
+  return runInAction(() => (state.drag = dragNode ||= null))
 }
 
-export function setDropNode(dropNode: DraggableNode | null) {
-  runInAction(() => {
-    state.drop = dropNode || null
-  })
+export function setDropNode<T extends DraggableNode>(dropNode: T): T {
+  return runInAction(() => (state.drop = dropNode || null))
 }
 
 export function isDraggingNode(node: DraggableNode): boolean {
