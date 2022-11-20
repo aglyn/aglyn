@@ -24,7 +24,6 @@ export const ID: Aglyn.ComponentId = 'muiContainer'
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
-  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Container',
   category: Aglyn.ComponentCategory.LAYOUT,

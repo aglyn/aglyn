@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Besigner from '@aglyn/besigner'
 import { ICON_VARIANT_MODIFY_ADD } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import {
@@ -37,7 +38,9 @@ const AddControlsComponent = forwardRef<any, AddControlsProps>((props, ref) => {
         <MuiIconButton
           aria-haspopup="menu"
           aria-label="add-element"
-          onClick={handleAddElementClick}
+          onClick={() =>
+            handleAddElementClick(Besigner.focus.state.lastSelected)
+          }
         >
           <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_ADD.path} />
         </MuiIconButton>

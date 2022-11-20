@@ -24,7 +24,6 @@ export const ID: Aglyn.ComponentId = 'muiStack'
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
-  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Stack',
   category: Aglyn.ComponentCategory.LAYOUT,

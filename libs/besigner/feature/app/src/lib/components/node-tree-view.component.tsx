@@ -241,6 +241,8 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   )
   const [dropCollect, dropRef] = useLeafDrop(node)
 
+  node?.componentId === 'list' && console.log('node comoonent', node)
+
   return (
     <TreeItem
       // ref={mouseEnterRef}
@@ -332,7 +334,7 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
               flexDirection: 'column',
             }}
           >
-            <ComponentIconComponent component={schema} />
+            <ComponentIconComponent component={node?.componentSchema} />
           </MuiListItemIcon>
           <MuiListItemText
             primary={nodeLabel}

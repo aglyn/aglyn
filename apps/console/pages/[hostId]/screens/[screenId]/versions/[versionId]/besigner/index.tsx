@@ -330,7 +330,8 @@ function Besigner(props) {
                     </Typography>
                   </Typography>
                 ),
-                onClick: handleAddElementClick,
+                onClick: () =>
+                  handleAddElementClick(Besigner.focus.state.lastSelected),
                 disabled: true,
                 ListItemTextProps: { inset: true },
               },
@@ -428,19 +429,20 @@ function Besigner(props) {
           setScreenDialog(false)
         }}
       />
-      {Aglyn.screen.nodes && Aglyn.screen.nodes[Aglyn.NODE_ROOT_ID] && (
-        <JsonEditorModal
-          open={jsonOpen}
-          onClose={closeJsonEditor}
-          onSave={handleJsonSave}
-          defaultValue={
-            Aglyn.screen.nestNodes(
-              Aglyn.screen.nodes,
-              Aglyn.screen.nodes[Aglyn.NODE_ROOT_ID],
-            ) as iJSON
-          }
-        />
-      )}
+      {Aglyn.screen.state.nodes &&
+        Aglyn.screen.state.nodes[Aglyn.NODE_ROOT_ID] && (
+          <JsonEditorModal
+            open={jsonOpen}
+            onClose={closeJsonEditor}
+            onSave={handleJsonSave}
+            defaultValue={
+              Aglyn.screen.nestNodes(
+                Aglyn.screen.state.nodes,
+                Aglyn.screen.state.nodes[Aglyn.NODE_ROOT_ID],
+              ) as iJSON
+            }
+          />
+        )}
     </>
   )
 }

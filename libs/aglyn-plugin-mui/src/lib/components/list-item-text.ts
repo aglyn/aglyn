@@ -24,7 +24,6 @@ export const ID: Aglyn.ComponentId = 'muiListItemText'
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
-  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'List Item Text',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,

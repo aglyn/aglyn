@@ -62,7 +62,6 @@ const typographyVariants = [
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
-  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Typography',
   category: Aglyn.ComponentCategory.TEXT,

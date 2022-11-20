@@ -28,7 +28,6 @@ export const ID: Aglyn.ComponentId = 'muiAppBar'
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
-  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'App Bar',
   category: Aglyn.ComponentCategory.SURFACE,

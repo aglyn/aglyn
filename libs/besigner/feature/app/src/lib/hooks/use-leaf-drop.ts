@@ -84,18 +84,7 @@ export function useLeafDrop(
 
         if (dragType === Besigner.DragType.PRESET) {
           const dragNode = drag?.node as Aglyn.PresetSchema<any>
-          const parent = node || Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
-          const $id = Aglyn.createNodeId()
-          Aglyn.screen.setNodes(
-            Aglyn.screen.processNodesToDenormalized({
-              ...dragNode?.data,
-              $id,
-              parentId: parent?.$id,
-            }),
-          )
-
-          const newNode = Aglyn.screen.getNode($id)
-          Aglyn.screen.addNodeToParent(newNode, parent, NaN)
+          const newNode = Aglyn.screen.addNodeFromPreset(dragNode, node, NaN)
           Besigner.focus.setSelectedNode(newNode)
         } else {
           const dragNode = drag?.node as Aglyn.NodeSchema<any>

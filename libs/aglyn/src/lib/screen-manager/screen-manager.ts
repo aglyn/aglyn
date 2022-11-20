@@ -22,6 +22,7 @@ import _isStrT from '@aglyn/shared-util-guards/_is-str-t'
 import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
 import cloneDeep from 'lodash-es/cloneDeep'
 import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
+import { computedFn } from 'mobx-utils'
 import {
   type ComponentId,
   type ComponentSchema,
@@ -31,6 +32,7 @@ import {
 import { createIdUrlSafe } from '../constants'
 import { AglynEvent, emitter } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
+import { PresetSchema } from '../preset-manager/index'
 
 export enum NodeType {
   NODE = 'node',
@@ -137,42 +139,6 @@ export type NodeBreadcrumbPath = [
   ...nodes: [...ancestors: NodeId[], node: NodeId],
 ]
 
-export const NODE_ROOT_ID = '_@_'
-export const NODE_ID_LENGTH = 10
-export const NODE_ROOT_LABEL = 'Document'
-
-export const nodes = observable<Record<NodeId, NodeSchema<any>>>({})
-
-emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
-  clearNodes()
-})
-emitter.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
-  setNodes(nodes)
-})
-emitter.on(AglynEvent.NODE_SET, ({ node, create }) => {
-  setNode(node, create)
-})
-emitter.on(AglynEvent.NODE_DELETE, ({ node }) => {
-  deleteNode(node)
-})
-emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
-  duplicateNode(node)
-})
-emitter.on(
-  AglynEvent.NODE_REPARENT,
-  ({ node, oldParent, newParent, index }) => {
-    reparentNode(node, oldParent, newParent, index)
-  },
-)
-
-export function createNodeId(): NodeId {
-  return createIdUrlSafe(NODE_ID_LENGTH)
-}
-
-export function isRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
-  return id === NODE_ROOT_ID
-}
-
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   public name: string
   public type: NodeType.NODE = NodeType.NODE
@@ -232,13 +198,74 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
 }
 
+export const NODE_ROOT_ID = '_@_'
+export const NODE_ID_LENGTH = 10
+export const NODE_ROOT_LABEL = 'Document'
+
+export interface ScreenState {
+  _history: Record<NodeId, NodeSchema<any>>[]
+  _activeIndex: number
+
+  readonly nodes: Record<NodeId, NodeSchema<any>>
+  readonly canRedo: boolean
+  readonly canUndo: boolean
+  getNode: ($id: NodeId) => NodeSchema<any> | undefined
+  redo(): void
+  undo(): void
+  saveHistory(): void
+}
+
+export const state = observable<ScreenState>({
+  _history: [{}],
+  _activeIndex: 0,
+
+  get nodes() {
+    return this._history[this._activeIndex]
+  },
+  get canRedo() {
+    return this._activeIndex === this._history.length - 1
+  },
+  get canUndo() {
+    return this._activeIndex > 0
+  },
+
+  getNode: computedFn(($id: NodeId): NodeSchema<any> | undefined => {
+    return state.nodes[$id]
+  }),
+
+  redo() {
+    if (this.canRedo) {
+      state._activeIndex++
+    }
+  },
+  undo() {
+    if (this.canRedo) {
+      state._activeIndex--
+    }
+  },
+  saveHistory() {
+    const state = cloneDeep(this._history[this._activeIndex])
+    this._history.splice(this._activeIndex, 0, state)
+    this._history.splice(this._activeIndex + 2, this._history.length)
+    this._activeIndex = this._history.length - 1
+  },
+})
+
+export function createNodeId(): NodeId {
+  return createIdUrlSafe(NODE_ID_LENGTH)
+}
+
+export function isRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
+  return id === NODE_ROOT_ID
+}
+
 export function isRootNode(node: NodeSchema<any>): boolean {
   return node?.$id === NODE_ROOT_ID
 }
 
 export function toJSON() {
   return {
-    nodes: toJS(nodes),
+    nodes: toJS(state.nodes),
   }
 }
 
@@ -249,9 +276,11 @@ export function nodeToJSON<P = JSX.AnyProps>(
 }
 
 export function clearNodes() {
-  runInAction(() => {
-    for (const nodeId in nodes) delete nodes[nodeId]
-  })
+  for (const nodeId in state.nodes) {
+    runInAction(() => {
+      delete state.nodes[nodeId]
+    })
+  }
 }
 
 export function createNode<P = JSX.AnyProps>(
@@ -263,7 +292,7 @@ export function createNode<P = JSX.AnyProps>(
 export function setNode(node: NodeSchema<any>, create = false) {
   if (!node || (!create && !node.$id)) throw new Error('Invalid node')
   return runInAction(() => {
-    return (nodes[node?.$id] = create ? createNode(node) : node)
+    return (state.nodes[node?.$id] = create ? createNode(node) : node)
   })
 }
 
@@ -279,13 +308,13 @@ export function setNodes(values: Record<NodeId, NodeSchema<any>>) {
 }
 
 export function hasNode($id: NodeId): boolean {
-  return Object.hasOwn(nodes, $id)
+  return Object.hasOwn(state.nodes, $id)
 }
 
 export function getNode<P = JSX.AnyProps>(
   $id: NodeId,
 ): NodeSchema<P> | undefined {
-  return nodes[$id]
+  return state.getNode($id)
 }
 
 export function getNodeIndex(node: NodeSchema<any>) {
@@ -310,6 +339,8 @@ export function getNodeComponentSchema(node: NodeSchema<any>): ComponentSchema {
 
 export function deleteNode<P = JSX.AnyProps>(node: NodeSchema<P>) {
   if (!node || isRootNode(node)) return
+  state.saveHistory()
+  console.log('state history', state)
   if (!_isArrEmpty(node.nodes)) {
     for (const childId of node.nodes) {
       deleteNode(getNode(childId))
@@ -319,18 +350,8 @@ export function deleteNode<P = JSX.AnyProps>(node: NodeSchema<P>) {
   runInAction(() => {
     const index = node.parent.nodes.indexOf(node.$id)
     if (index >= 0) node.parent.nodes.splice(index, 1)
-    delete nodes[node.$id]
+    delete state.nodes[node.$id]
   })
-}
-
-function deleteChildNodes(node: NodeSchema<any>) {
-  const childNodes = Array.isArray(node.nodes) ? node.nodes : []
-  for (const childId of childNodes) {
-    runInAction(() => {
-      const child = getNode(childId)
-      if (child) deleteNode(child)
-    })
-  }
 }
 
 export function reparentNode(
@@ -344,6 +365,7 @@ export function reparentNode(
   const oldParent = node?.parent
   if (oldParent?.$id === newParent.$id) return reorderNode(node, index)
 
+  state.saveHistory()
   const oldIndex = oldParent.nodes?.indexOf(node?.$id)
   if (oldIndex >= 0) runInAction(() => oldParent.nodes.splice(oldIndex, 1))
 
@@ -355,10 +377,10 @@ export function reparentNode(
 }
 
 export function reorderNode(node: NodeSchema<any>, newIndex = NaN) {
-  if (!node || !node.$id || !node?.parent) {
-    console.error('Invalid node or parent', node)
-    return
-  }
+  if (!node || isRootNode(node)) throw new Error('Invalid node')
+  if (!node?.parent) throw new Error('Invalid parent node')
+
+  state.saveHistory()
   return runInAction(() => {
     node.parent.nodes.splice(node?.index, 1)
     if (isNaN(newIndex)) {
@@ -370,14 +392,35 @@ export function reorderNode(node: NodeSchema<any>, newIndex = NaN) {
   })
 }
 
-export function removeNodeFromParent(node: NodeSchema<any>) {
-  const parent = getNode(node?.parentId)
-  const index = getNodeIndex(node)
-  if (!node || !parent || !(index >= 0)) return
+export function createDuplicateNode(
+  node: NodeSchemaNested<any>,
+): NodeSchemaNested<any> {
+  const $id = createNodeId()
+  const nodes = Array.isArray(node?.nodes) ? [...node.nodes] : []
+  const res = { ...node, $id, nodes: [] }
+  for (const child of nodes) {
+    const childDuplicate = createDuplicateNode({ ...child, parentId: $id })
+    res.nodes.push(childDuplicate)
+  }
+  return res
+}
 
-  runInAction(() => {
-    node.parentId = null
-    parent.nodes.splice(node?.index, 1)
+export function addNodeFromPreset(
+  preset: PresetSchema<any>,
+  parent: NodeSchema<any>,
+  index = NaN,
+) {
+  if (!parent) throw new Error('Invalid parent node')
+  const node = createDuplicateNode(toJS(preset).data)
+  node.parentId = parent.$id
+  const parsed = processNodesToDenormalized(node)
+  console.log('node', node, parsed)
+  state.saveHistory()
+  setNodes(parsed)
+  return runInAction(() => {
+    if (isNaN(index)) parent.nodes.push(node.$id)
+    else parent.nodes.splice(index, 0, node.$id)
+    return state.getNode(node.$id)
   })
 }
 
@@ -642,3 +685,22 @@ export function getNodeLabelShort(node: NodeSchema<any>) {
 //     },
 //   },
 // }
+
+emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
+  clearNodes()
+})
+emitter.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
+  setNodes(nodes)
+})
+emitter.on(AglynEvent.NODE_SET, ({ node, create }) => {
+  setNode(node, create)
+})
+emitter.on(AglynEvent.NODE_DELETE, ({ node }) => {
+  deleteNode(node)
+})
+emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
+  duplicateNode(node)
+})
+emitter.on(AglynEvent.NODE_REPARENT, ({ node, newParent, index }) => {
+  reparentNode(node, newParent, index)
+})

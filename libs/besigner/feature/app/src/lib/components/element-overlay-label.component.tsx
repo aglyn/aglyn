@@ -33,7 +33,7 @@ export interface ElementOverlayLabelProps extends StackProps {
 
 const ElementOverlayLabel = (props: ElementOverlayLabelProps) => {
   const { node, children, ...rest } = props
-  const handleAddElementClick = useAddElementDrawerCallback({ $id: node?.$id })
+  const handleAddElementClick = useAddElementDrawerCallback()
   return (
     <Stack
       id="aglyn:element-overlay-label"
@@ -99,7 +99,7 @@ const ElementOverlayLabel = (props: ElementOverlayLabelProps) => {
           children={'add'}
           disableInteractive
           ButtonProps={{
-            onClick: handleAddElementClick,
+            onClick: () => handleAddElementClick(node),
             variant: 'contained',
             color: 'primary',
             sx: { borderRadius: `0.2em`, ml: -0.2, pointerEvent: 'unset' },

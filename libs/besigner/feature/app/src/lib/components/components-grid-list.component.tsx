@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import type { AglynNodePresetSchema } from '@aglyn/core-data-foundation'
 import {
   ICON_VARIANT_MENU_DOWN,
@@ -24,7 +25,7 @@ import { GridList, type GridListProps, Menu } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { arrayFromLength } from '@aglyn/shared-util-tools'
-import { Box, Button, Tooltip } from '@mui/material'
+import { Box, Button, ButtonBase, Tooltip } from '@mui/material'
 import {
   forwardRef,
   type MouseEvent,
@@ -65,6 +66,7 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
     )
     const handleOnActionClick = useCallback(
       (e, item) => {
+        console.log('item', item)
         onActionClick?.call(null, e, { type: 'selection', data: item?.data })
       },
       [onActionClick],
@@ -81,10 +83,11 @@ const ComponentsGridListComponent = forwardRef<any, ComponentsGridListProps>(
     }, [handleColumnChange, columns, maxColumns])
 
     const renderItemContent = useCallback(
-      (item: AglynNodePresetSchema) => {
+      (item: Aglyn.PresetSchema<any>) => {
         return (
           <ElementCardComponent
-            onActionClick={handleOnActionClick}
+            component={ButtonBase}
+            onClick={(e) => handleOnActionClick(e, item)}
             label={item?.label}
             icon={item?.icon}
             item={{ id: item?.$id, ...item } as any}

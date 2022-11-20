@@ -53,7 +53,7 @@ const NodeContextMenuRaw = (props: NodeContextMenuProps) => {
 
   const isRootNode = Aglyn.screen.isRootNode(node)
   const app = useBesignerAppContext()
-  const handleAddElementClick = useAddElementDrawerCallback({ $id: node?.$id })
+  const handleAddElementClick = useAddElementDrawerCallback()
   const elementRef = useRenderedCanvasElementRef({ $id: node?.$id })
   const [moreOpen, setMoreOpen] = useState(false)
   const [moreButton, moreButtonRef] = useState(null)
@@ -127,7 +127,7 @@ const NodeContextMenuRaw = (props: NodeContextMenuProps) => {
   return (
     <Paper sx={{ width: 240 }} {...rest}>
       <MenuList dense>
-        <MenuItem onClick={handleAddElementClick}>
+        <MenuItem onClick={() => handleAddElementClick(node)}>
           <ListItemText inset>Add element</ListItemText>
         </MenuItem>
         <Divider />

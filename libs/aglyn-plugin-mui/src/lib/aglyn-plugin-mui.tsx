@@ -48,13 +48,13 @@ Aglyn.plugins.addDependency({
     Aglyn.components.registerComponent(Stack.default, Stack.schema)
     Aglyn.components.registerComponent(Typography.default, Typography.schema)
 
-    Aglyn.presets.registerPreset(AppBar.presets)
-    Aglyn.presets.registerPreset(Typography.presets)
+    Aglyn.components.registerPreset(AppBar.presets)
+    Aglyn.components.registerPreset(Typography.presets)
   },
   destroy(...args): void {
     console.log('mui destroy', ...args)
-    Aglyn.presets.unregisterPreset(AppBar.presets.map((i) => i.$id))
-    Aglyn.presets.unregisterPreset(Typography.presets.map((i) => i.$id))
+    Aglyn.components.unregisterPreset(AppBar.presets.map((i) => i.$id))
+    Aglyn.components.unregisterPreset(Typography.presets.map((i) => i.$id))
 
     Aglyn.components.unregisterComponent(AppBar.ID)
     Aglyn.components.unregisterComponent(Toolbar.ID)

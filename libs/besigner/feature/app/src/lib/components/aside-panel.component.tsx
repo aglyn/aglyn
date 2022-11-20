@@ -162,12 +162,12 @@ const ElementInfo = function ElementInfo({
           {
             key: 'component-id',
             label: 'Component ID',
-            value: schema?.$id,
+            value: node?.componentId,
           },
           {
             key: 'plugin-id',
             label: 'Plugin ID',
-            value: schema?.pluginId,
+            value: node?.pluginId,
             ValueTypographyProps: {},
           },
         ],
@@ -282,7 +282,9 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
           startIcon={
             <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_ADD.path} />
           }
-          onClick={handleAddElementClick}
+          onClick={() =>
+            handleAddElementClick(Besigner.focus.state.lastSelected)
+          }
         >
           {'Add Element'}
         </Button>

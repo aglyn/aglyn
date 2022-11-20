@@ -107,8 +107,8 @@ interface ComponentAccordionListProp
 
 function ComponentAccordionListRaw(props: ComponentAccordionListProp) {
   const { ...rest } = props
-  const presets = Aglyn.presets.state.byId
-  const schemas = Aglyn.components.schemas
+  const presets = Aglyn.components.state.presets
+  const schemas = Aglyn.components.state.schemas
   const allItems = [
     ...Object.values(presets || {}),
     ...Object.values(schemas || {}),

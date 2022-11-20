@@ -28,9 +28,14 @@ import type {
 import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
-import { observable, runInAction } from 'mobx'
+import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
 import type { ComponentClass, ComponentProps } from 'react'
-import * as Aglyn from '../../index'
+import {
+  type AbstractNodeSchema,
+  type NodeSchemaNested,
+  NodeType,
+} from '../screen-manager'
+import { createIdUrlSafe} from '../constants'
 import {
   FEATURE_FLAG,
   FieldComponentType,
@@ -52,6 +57,7 @@ export enum ComponentCategory {
 }
 
 export type ComponentId = string
+export type PresetId = string
 
 export type ComponentFactory<
   P extends ComponentProps<C> | any = any,
@@ -105,11 +111,11 @@ export interface ComponentSchema<P = any> {
   /**
    * Define a limitation for nodes allowed as direct descendents
    */
-  restrictChildren?: Aglyn.ComponentsLinealOrder
+  restrictChildren?: ComponentsLinealOrder
   /**
    * Define a limitation for nodes allowed to be direct ancestors
    */
-  restrictParent?: Aglyn.ComponentsLinealOrder
+  restrictParent?: ComponentsLinealOrder
 
   /**
    * Filter props
@@ -157,19 +163,55 @@ export interface ComponentSchema<P = any> {
   }
 }
 
+export interface PresetSchema<P = JSX.AnyProps>
+  extends AbstractNodeSchema<NodeType.PRESET> {
+  $id: PresetId
+  pluginId?: PluginId
+  displayName?: string
+  description?: string
+  category?: string | ComponentCategory
+  icon?: MdiIconProps
+  data: NodeSchemaNested<P>
+}
+
+export class AglynPreset<P = JSX.AnyProps> implements PresetSchema<P> {
+  public $id: PresetId
+  public type: NodeType.PRESET = NodeType.PRESET
+  public category: string | ComponentCategory
+  public data: NodeSchemaNested<P>
+  public description: string
+  public displayName: string
+  public icon: MdiIconProps
+  public pluginId: PluginId
+
+  constructor(schema: PresetSchema<P>) {
+    this.$id = schema.$id
+    this.category = schema.category || ComponentCategory.UNCATEGORIZED
+    this.data = schema.data
+    this.description = schema.description
+    this.displayName = schema.displayName
+    this.icon = schema.icon
+    this.pluginId = schema.pluginId
+
+    makeAutoObservable(this)
+  }
+}
+
 export type NodePresetData = Omit<NodeSchema, '$id' | 'nodes'> & {
   $id?: NodeId
   nodes?: NodePresetData[]
 }
 
-export const factories: Record<ComponentId, ComponentFactory> = observable({})
-export const schemas: Record<ComponentId, ComponentSchema> = observable({})
+export interface ComponentState {
+  factories: Record<ComponentId, ComponentFactory>
+  schemas: Record<ComponentId, ComponentSchema<any>>
+  presets: Record<PresetId, PresetSchema<any>>
+}
 
-emitter.on(AglynEvent.COMPONENT_REGISTER, ({ component, schema }) => {
-  registerComponent(component, schema)
-})
-emitter.on(AglynEvent.COMPONENT_UNREGISTER, ({ componentId }) => {
-  unregisterComponent(componentId)
+export const state = observable<ComponentState>({
+  factories: {},
+  schemas: {},
+  presets: {},
 })
 
 export function _isFeatureExplicitlyDisabled(val: FEATURE_FLAG) {
@@ -198,15 +240,16 @@ export function isFeatureEnabled(val: FEATURE_FLAG) {
 }
 
 export function getFactory(componentId: ComponentId) {
-  return factories[componentId]
+  return state.factories[componentId]
 }
 
 export function getSchema(componentId: ComponentId) {
-  return schemas[componentId]
+  console.log('schema', state.schemas)
+  return state.schemas[componentId]
 }
 
 export function hasComponent(componentId: ComponentId) {
-  return Object.hasOwn(factories, componentId)
+  return Object.hasOwn(state.factories, componentId)
 }
 
 export function registerComponent(
@@ -225,8 +268,8 @@ export function registerComponent(
         ids.push(componentId)
       }*/
       runInAction(() => {
-        factories[$id] = component
-        schemas[$id] = schema
+        state.factories[$id] = component
+        state.schemas[$id] = schema
       })
     },
     {
@@ -254,8 +297,8 @@ export function unregisterComponent(componentId: ComponentId) {
         )
       }*/
       runInAction(() => {
-        delete schemas[componentId]
-        delete factories[componentId]
+        delete state.schemas[componentId]
+        delete state.factories[componentId]
       })
     },
     {
@@ -271,3 +314,69 @@ export function getComponentLabel(componentId?: ComponentId) {
   const schema = getSchema(componentId)
   return schema?.displayName || schema?.title || schema?.$id || componentId
 }
+
+export function getPreset($id: PresetId) {
+  return (state.presets ||= {})[$id]
+}
+
+export function hasPreset($id: PresetId) {
+  return Boolean($id) && Object.hasOwn(state.presets, $id)
+}
+
+export function registerPreset(presets: PresetSchema[] | PresetSchema) {
+  if (!presets) return
+  const arr = Array.isArray(presets) ? presets : [presets]
+
+  for (const preset of arr) {
+    const $id = (preset.$id ||= createIdUrlSafe())
+    lifecycleEvent(
+      () => {
+        runInAction(() => {
+          state.presets[$id] = new AglynPreset(preset)
+        })
+      },
+      {
+        beforeEvent: AglynEvent.PRESET_REGISTERING,
+        beforePayload: [{preset: toJS(preset)}],
+        afterEvent: AglynEvent.PRESET_REGISTERED,
+        afterPayload: [{preset: toJS(preset)}],
+      },
+    )
+  }
+}
+
+export function unregisterPreset($ids: PresetId[] | PresetId) {
+  if (!$ids) return
+  const arr = Array.isArray($ids) ? $ids : [$ids]
+
+  for (const $id of arr) {
+    lifecycleEvent(
+      () => {
+        runInAction(() => {
+          delete state.presets[$id]
+        })
+      },
+      {
+        beforeEvent: AglynEvent.PRESET_UNREGISTERING,
+        beforePayload: [{$id}],
+        afterEvent: AglynEvent.PRESET_UNREGISTERED,
+        afterPayload: [{$id}],
+      },
+    )
+  }
+}
+
+emitter.on(AglynEvent.COMPONENT_REGISTER, ({ component, schema }) => {
+  registerComponent(component, schema)
+})
+emitter.on(AglynEvent.COMPONENT_UNREGISTER, ({ componentId }) => {
+  unregisterComponent(componentId)
+})
+
+
+emitter.on(AglynEvent.PRESET_REGISTER, ({preset}) => {
+  registerPreset(preset)
+})
+emitter.on(AglynEvent.PRESET_UNREGISTER, ({presetId}) => {
+  unregisterPreset(presetId)
+})

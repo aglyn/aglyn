@@ -31,59 +31,46 @@ export interface UseAddElementCallbackOptions {
   $id?: NodeId
 }
 
-export type AddElementCallback = {
-  bivarianceHack(e, options?: UseAddElementCallbackOptions): Promise<void>
-}['bivarianceHack']
+type Response = (
+  parent?: Aglyn.NodeSchema<any>,
+  options?: ElementDrawerOptions,
+) => Promise<void | Aglyn.NodeSchema<any>>
 
-export function useAddElementDrawerCallback(
-  options?: UseAddElementCallbackOptions,
-): AddElementCallback {
+export function useAddElementDrawerCallback(): Response {
   const { elementDrawer } = useElementDrawerContext()
 
   return useCallback(
-    async (e, callback) => {
-      await elementDrawer({
-        title: 'Add New Element',
-        ...options?.drawerOptions,
-        ...callback?.drawerOptions,
-      })
-        .then((res: any) => {
-          const data = res?.option?.data
-          if (!data) throw new TypeError('invalid response')
-          return data
+    async (parent?: Aglyn.NodeSchema<any>, options?: ElementDrawerOptions) => {
+      const drawerOptions = { title: 'Add New Element', ...options }
+      return await elementDrawer(drawerOptions)
+        .then((res: { option: Aglyn.PresetSchema<any> }) => {
+          if (!res?.option) throw new TypeError('invalid response')
+          return res.option
         })
-        .then((data: any) => {
-          const $id =
-            callback?.$id ||
-            Besigner.focus.state.lastSelected?.$id ||
-            Aglyn.NODE_ROOT_ID
-          const parent =
-            Aglyn.screen.getNode($id) ||
-            Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
-          const templateData = {
-            ...(data as any),
-            $id: Aglyn.createNodeId(),
-            parentId: parent?.$id,
-          }
-          Aglyn.screen.setNodes(
-            Aglyn.screen.denormalizeNodes([templateData as any], parent?.$id),
-          )
+        .then((preset) => {
+          const parentNode = parent || Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)
+          const node = Aglyn.screen.addNodeFromPreset(preset, parentNode, NaN)
 
-          const node = Aglyn.screen.getNode(templateData.$id)
-          console.log('Add New Element ', data, templateData)
+          // const templateData = {
+          //   ...(data as any),
+          //   $id: Aglyn.createNodeId(),
+          //   parentId: parent?.$id,
+          // }
+          // Aglyn.screen.setNodes(
+          //   Aglyn.screen.denormalizeNodes([templateData as any], parent?.$id),
+          // )
+          //
+          // const node = Aglyn.screen.getNode(templateData.$id)
+          console.log('Add New Element ', node)
 
-          Aglyn.screen.addNodeToParent(node, parent, NaN)
+          // Aglyn.screen.addNodeToParent(node, parent, NaN)
           Besigner.focus.setSelectedNode(node)
 
-          options?.onComplete?.(data)
-          callback?.onComplete?.(data)
+          return node
         })
-        .catch((reason) => {
-          options?.onError?.(reason)
-          callback?.onError?.(reason)
-        })
+        .catch(console.error)
     },
-    [elementDrawer, options],
+    [elementDrawer],
   )
 }
 

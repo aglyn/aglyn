@@ -25,7 +25,6 @@ export const ID: Aglyn.ComponentId = 'muiToolbar'
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
-  $id: ID,
   pluginId: PLUGIN_ID,
   displayName: 'Toolbar Content',
   category: Aglyn.ComponentCategory.SURFACE,
