@@ -17,19 +17,19 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import '@aglyn/aglyn-plugin-mui'
+import * as Besigner from '@aglyn/besigner'
 import {
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
-  useAglynCanvasHistoryControls,
   withBesignerContext,
   type WorkspaceEditorComponentProps,
 } from '@aglyn/besigner-feature-app'
-import { useAglynCanvasElementsNormalized } from '@aglyn/core-feature-renderer'
 // import '@aglyn/foundation-feature-singleton'
 import {
   HAS_BROWSER,
   ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_MODIFY_ADD,
+  ICON_VARIANT_MODIFY_SAVE,
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { iJSON } from '@aglyn/shared-data-types'
@@ -57,9 +57,10 @@ import {
 } from '@mui/material'
 import { githubDark } from '@uiw/codemirror-theme-github'
 import CodeEditor from '@uiw/react-codemirror'
+import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
@@ -97,8 +98,9 @@ interface JsonEditorDialogProps extends Omit<DialogProps, 'defaultValue'> {
 
 function JsonEditorModal(props: JsonEditorDialogProps) {
   const { onClose, onSave, defaultValue, ...rest } = props
-
   const [data, setData] = useState(defaultValue)
+  const value = useMemo(() => JSON.stringify(defaultValue, null, 2), [data])
+
   const handleChange = useCallback((value) => {
     try {
       const json = JSON.parse(value)
@@ -132,7 +134,7 @@ function JsonEditorModal(props: JsonEditorDialogProps) {
           <br />
           <CodeEditor
             // initialState={{ json: JSON.stringify(data, null, 2) }}
-            value={JSON.stringify(defaultValue, null, 2)}
+            value={value}
             onChange={handleChange}
             theme={githubDark}
             extensions={[codeMirrorJson() /*linter,*/ /*lintGutter()*/]}
@@ -153,34 +155,75 @@ function JsonEditorModal(props: JsonEditorDialogProps) {
   )
 }
 
-function Besigner(props) {
-  const { query } = useRouter()
+function setLocalNodes(value: Aglyn.ProcessableNodes) {
+  const parsed = Aglyn.screen.processNodesToDenormalized(value)
+  const nodes = Aglyn.screen.setNodes(parsed)
+  return nodes
+}
+
+function BesignerPage(props) {
+  const {
+    query: { hostId, screenId, versionId },
+  } = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-  const hostId = query.hostId as string
-  const screenId = query.screenId as string
-  const versionId = query.versionId as string
-  const saveAvailable = true
+  const saveAvailable = !Aglyn.screen.state.isInitialSame
   const [screenDialog, setScreenDialog] = useState(false)
   const handleAddElementClick = useAddElementDrawerCallback()
-  const [undo, redo, canUndo, canRedo] = useAglynCanvasHistoryControls()
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, {
-    hostId,
-    screenId,
-    versionId,
+    hostId: hostId as string,
+    screenId: screenId as string,
+    versionId: versionId as string,
   })
-  const normalized = useAglynCanvasElementsNormalized()
   const [result, updateScreen] = useScreenVersion({
-    hostId,
-    screenId,
-    versionId,
+    hostId: hostId as string,
+    screenId: screenId as string,
+    versionId: versionId as string,
   })
   const { data, status, error } = result
   const nodes = data?.nodes
+  const [sss] = useState(() => nodes)
+  console.log('result', result)
   const hasError = Boolean(error) || status === 'error'
   const notFound = status === 'success' && !data
 
-  console.log('result', result)
+  const handleSave = useCallback(async () => {
+    if (saveAvailable) enqueueSnackbar('Already saved', { variant: 'info' })
+    const dequeueLoading = queueLoading()
+
+    const nodes = Aglyn.screen.nodesToJSON()
+    await updateScreen({ nodes: nodes }, { merge: true })
+      .then((...args) => {
+        console.log('updaye screen then promise', args)
+        Aglyn.screen.updateInitialNodes(nodes)
+      })
+      .catch((e) => {
+        enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      })
+      .finally(() => {
+        dequeueLoading()
+      })
+  }, [saveAvailable, updateScreen, enqueueSnackbar, queueLoading])
+
+  const [jsonOpen, setJsonOpen] = useState(false)
+  const openJsonEditor = useCallback(() => setJsonOpen(true), [])
+  const closeJsonEditor = useCallback(() => setJsonOpen(false), [])
+  const handleJsonSave = useCallback((e, value) => {
+    setLocalNodes(value)
+    setJsonOpen(false)
+  }, [])
+
+  useEffect(() => {
+    if (nodes && !Aglyn.screen.state.didSetInitial) {
+      console.log('decoded update', nodes)
+      console.log('decoded update previous nodes', sss)
+      const updated = setLocalNodes(nodes)
+      Aglyn.screen.updateInitialNodes(updated)
+    }
+  }, [nodes, sss])
 
   useEffect(() => {
     if (HAS_BROWSER()) {
@@ -209,70 +252,7 @@ function Besigner(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
-  const updateCanvasElements = useCallback((e, value: any) => {
-    const nodes = Aglyn.screen.processNodesToDenormalized(value)
-    Aglyn.screen.setNodes(nodes)
-  }, [])
-
-  useEffect(() => {
-    if (nodes) {
-      console.log('decoded update', nodes)
-      updateCanvasElements(null, nodes)
-    }
-  }, [updateCanvasElements, nodes])
-
-  const handleSave = useCallback(async () => {
-    const dequeueLoading = queueLoading()
-    const nodes = normalized
-    const isNested = Array.isArray(nodes)
-    const denormalized = !isNested
-      ? Aglyn.screen.denormalizeNodes(
-          [
-            {
-              $id: Aglyn.NODE_ROOT_ID,
-              componentId: 'div',
-              nodes: [
-                { ...Aglyn.screen.nestNodes(nodes, nodes[Aglyn.NODE_ROOT_ID]) },
-              ],
-            },
-          ],
-          null,
-        )
-      : Aglyn.screen.denormalizeNodes(
-          [
-            {
-              $id: Aglyn.NODE_ROOT_ID,
-              componentId: 'div',
-              nodes: [...nodes],
-            },
-          ],
-          null,
-        )
-
-    console.log('denormalized', isNested, denormalized)
-    console.log(
-      'nested',
-      Aglyn.screen.nestNodes(denormalized, denormalized[Aglyn.NODE_ROOT_ID]),
-    )
-    // dequeueLoading()
-
-    // return
-    await updateScreen({ nodes: denormalized }, { merge: true })
-      .catch((e) => {
-        enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      })
-      .finally(() => {
-        dequeueLoading()
-      })
-  }, [updateScreen, enqueueSnackbar, normalized, queueLoading])
-
-  const [jsonOpen, setJsonOpen] = useState(false)
-  const openJsonEditor = useCallback(() => setJsonOpen(true), [])
-  const closeJsonEditor = useCallback(() => setJsonOpen(false), [])
-  const handleJsonSave = useCallback(updateCanvasElements, [])
+  console.log('Aglyn.screen.state.nodes', Aglyn.screen.state.rootNode)
 
   return (
     <>
@@ -300,14 +280,12 @@ function Besigner(props) {
             items: [
               {
                 id: 'center-nav-file-save',
+                disabled: !saveAvailable,
                 icon: saveAvailable
-                  ? undefined
-                  : {
-                      path: ICON_VARIANT_SYMBOL_CONFIRMED.path,
-                    },
+                  ? { path: ICON_VARIANT_MODIFY_SAVE.path }
+                  : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
                 children: saveAvailable ? 'Save' : 'Up to Date',
                 onClick: handleSave,
-                ListItemTextProps: { inset: Boolean(saveAvailable) },
               },
               {
                 id: 'center-nav-file-close',
@@ -356,15 +334,15 @@ function Besigner(props) {
               {
                 id: 'center-nav-edit-undo',
                 children: 'Undo',
-                onClick: () => undo(),
-                disabled: !canUndo,
+                onClick: () => Aglyn.screen.undo(),
+                disabled: !Aglyn.screen.canUndo(),
                 ListItemTextProps: { inset: true },
               },
               {
                 id: 'center-nav-edit-redo',
                 children: 'Redo',
-                onClick: () => redo(),
-                disabled: !canRedo,
+                onClick: () => Aglyn.screen.redo(),
+                disabled: !Aglyn.screen.canRedo(),
                 ListItemTextProps: { inset: true },
               },
               {
@@ -409,7 +387,7 @@ function Besigner(props) {
               detailsUrl={detailUrl}
               onSave={handleSave}
               onPropertiesEdit={() => setScreenDialog(true)}
-              saveAvailable
+              saveAvailable={saveAvailable}
             />
             <WorkspaceEditorComponent>
               <ViewportRootComponent>
@@ -429,28 +407,27 @@ function Besigner(props) {
           setScreenDialog(false)
         }}
       />
-      {Aglyn.screen.state.nodes &&
-        Aglyn.screen.state.nodes[Aglyn.NODE_ROOT_ID] && (
-          <JsonEditorModal
-            open={jsonOpen}
-            onClose={closeJsonEditor}
-            onSave={handleJsonSave}
-            defaultValue={
-              Aglyn.screen.nestNodes(
-                Aglyn.screen.state.nodes,
-                Aglyn.screen.state.nodes[Aglyn.NODE_ROOT_ID],
-              ) as iJSON
-            }
-          />
-        )}
+      {Aglyn.screen.state.rootNode && (
+        <JsonEditorModal
+          open={jsonOpen}
+          onClose={closeJsonEditor}
+          onSave={handleJsonSave}
+          defaultValue={
+            Aglyn.screen.nestNodes(
+              Aglyn.screen.state.nodes,
+              Aglyn.screen.state.rootNode,
+            ) as iJSON
+          }
+        />
+      )}
     </>
   )
 }
 
-Besigner.displayName = 'Page:Besigner'
-Besigner.layouts = [{ Component: AuthenticatedLayout }]
+BesignerPage.displayName = 'Page:Besigner'
+BesignerPage.layouts = [{ Component: AuthenticatedLayout }]
 
-export default withBesignerContext(Besigner)
+export default withBesignerContext(observer(BesignerPage))
 
 // export const getServerSideProps = async (ctx) => {
 //   // await setAdminTenant({$id: '-atN0g5dZgoDp4rfMaO_', displayName: 'sample tenant', hosts: []})

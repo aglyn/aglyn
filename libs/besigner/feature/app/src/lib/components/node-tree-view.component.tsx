@@ -224,6 +224,12 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
     onItemToggle,
     onItemFocus,
   } = useContext(TreeViewContext)
+  console.log(
+    'get node',
+    nodeId,
+    Aglyn.screen.getNode(nodeId),
+    Aglyn.screen.state.nodes[nodeId],
+  )
   const node = Aglyn.screen.getNode(nodeId)
   const schema = node?.componentSchema
   const nodeLabel = node?.labelShort
@@ -240,8 +246,6 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
     Besigner.DragType.TREE,
   )
   const [dropCollect, dropRef] = useLeafDrop(node)
-
-  node?.componentId === 'list' && console.log('node comoonent', node)
 
   return (
     <TreeItem

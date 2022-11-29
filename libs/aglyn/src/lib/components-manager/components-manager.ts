@@ -31,12 +31,7 @@ import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
 import type { ComponentClass, ComponentProps } from 'react'
 import {
-  type AbstractNodeSchema,
-  type NodeSchemaNested,
-  NodeType,
-} from '../screen-manager'
-import { createIdUrlSafe} from '../constants'
-import {
+  createIdUrlSafe,
   FEATURE_FLAG,
   FieldComponentType,
   LinealDirectiveFlag,
@@ -45,6 +40,11 @@ import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 import { hasDependency } from '../plugin-manager'
 import type { NodeId, NodeSchema } from '../screen-manager'
+import {
+  type AbstractNodeSchema,
+  type NodeSchemaNested,
+  NodeType,
+} from '../screen-manager'
 
 export enum ComponentCategory {
   INPUT = 'Input',
@@ -244,7 +244,6 @@ export function getFactory(componentId: ComponentId) {
 }
 
 export function getSchema(componentId: ComponentId) {
-  console.log('schema', state.schemas)
   return state.schemas[componentId]
 }
 
@@ -337,9 +336,9 @@ export function registerPreset(presets: PresetSchema[] | PresetSchema) {
       },
       {
         beforeEvent: AglynEvent.PRESET_REGISTERING,
-        beforePayload: [{preset: toJS(preset)}],
+        beforePayload: [{ preset: toJS(preset) }],
         afterEvent: AglynEvent.PRESET_REGISTERED,
-        afterPayload: [{preset: toJS(preset)}],
+        afterPayload: [{ preset: toJS(preset) }],
       },
     )
   }
@@ -358,9 +357,9 @@ export function unregisterPreset($ids: PresetId[] | PresetId) {
       },
       {
         beforeEvent: AglynEvent.PRESET_UNREGISTERING,
-        beforePayload: [{$id}],
+        beforePayload: [{ $id }],
         afterEvent: AglynEvent.PRESET_UNREGISTERED,
-        afterPayload: [{$id}],
+        afterPayload: [{ $id }],
       },
     )
   }
@@ -373,10 +372,9 @@ emitter.on(AglynEvent.COMPONENT_UNREGISTER, ({ componentId }) => {
   unregisterComponent(componentId)
 })
 
-
-emitter.on(AglynEvent.PRESET_REGISTER, ({preset}) => {
+emitter.on(AglynEvent.PRESET_REGISTER, ({ preset }) => {
   registerPreset(preset)
 })
-emitter.on(AglynEvent.PRESET_UNREGISTER, ({presetId}) => {
+emitter.on(AglynEvent.PRESET_UNREGISTER, ({ presetId }) => {
   unregisterPreset(presetId)
 })

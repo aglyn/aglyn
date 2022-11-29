@@ -49,8 +49,6 @@ function TreeRootRaw(props: TreeRootProps, ref: MutableRefObject<any>) {
     [TrunkComponent, StemComponent, BranchComponent, LeafComponent],
   ) as RenderComponentsContext
 
-  console.log('node', node)
-
   return (
     <RendererComponents.Provider key={node?.$id} value={Components}>
       <Components.TrunkComponent ref={ref} node={node} />

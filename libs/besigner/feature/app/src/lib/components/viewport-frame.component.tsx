@@ -29,6 +29,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { styled, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { Box, type BoxProps, CssBaseline, GlobalStyles } from '@mui/material'
+import { observer } from 'mobx-react-lite'
 // import {MuiShadowDom} from '@aglyn/shared-ui-jsx'
 import {
   type ComponentProps,
@@ -67,6 +68,18 @@ const SiteShadowDom = styled(MuiShadowDom.div, {
   transform: 'scale(1)',
 }))
 SiteShadowDom.displayName = 'SiteShadowDom'
+const FramePaper = styled('div', {
+  name: 'AglynFramePaper',
+})<SiteShadowDomProps>(({ theme }) => ({
+  backgroundColor: theme.palette.background.default,
+  height: '100%',
+  width: '100%',
+  [`> [data-aglyn="leaf\\:_@_"]`]: {
+    minHeight: '100%',
+    width: '100%',
+  },
+}))
+FramePaper.displayName = 'FramePaper'
 
 const ViewportGlobalStyles = (
   <GlobalStyles
@@ -88,36 +101,32 @@ const ThemedElementContainer = ({ children }) => {
   )
 }
 
-const SiteContainer = forwardRef<any, SiteShadowDomProps>((props, ref) => {
-  const { ...rest } = props
-  return (
-    <SiteShadowDom
-      ref={ref}
-      key="aglyn:site-container"
-      id="aglyn:site-container"
-      mode="closed"
-      {...rest}
-    >
-      <>
-        {ViewportGlobalStyles}
-        <ThemedElementContainer>
-          <Box
-            sx={{
-              bgcolor: 'background.paper',
-              minHeight: 1,
-              minWidth: 1,
-            }}
-          >
-            <AglynNodeRenderer
-              node={Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)}
-              LeafComponent={LeafComponent}
-            />
-          </Box>
-        </ThemedElementContainer>
-      </>
-    </SiteShadowDom>
-  )
-})
+const SiteContainer = observer(
+  forwardRef<any, SiteShadowDomProps>((props, ref) => {
+    const { ...rest } = props
+    return (
+      <SiteShadowDom
+        ref={ref}
+        key="aglyn:site-container"
+        id="aglyn:site-container"
+        mode="closed"
+        {...rest}
+      >
+        <>
+          {ViewportGlobalStyles}
+          <ThemedElementContainer>
+            <FramePaper>
+              <AglynNodeRenderer
+                node={Aglyn.screen.getNode(Aglyn.NODE_ROOT_ID)}
+                LeafComponent={LeafComponent}
+              />
+            </FramePaper>
+          </ThemedElementContainer>
+        </>
+      </SiteShadowDom>
+    )
+  }),
+)
 
 const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
   const { ...rest } = props

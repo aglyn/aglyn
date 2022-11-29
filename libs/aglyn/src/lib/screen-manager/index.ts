@@ -29,4 +29,5 @@ export {
   type NodeSchemaJSON,
   type NodeSchemaNested,
   type NodeBreadcrumbPath,
+  type ProcessableNodes,
 } from './screen-manager'

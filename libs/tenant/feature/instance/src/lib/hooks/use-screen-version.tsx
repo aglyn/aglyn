@@ -114,7 +114,7 @@ export function useScreenVersion(options: {
           onReject && onReject(e)
         })
     },
-    [$version, firestore, hostId, screenId, versionRef],
+    [versionRef],
   )
 
   return [$version, setVersion]

@@ -63,7 +63,6 @@ export function useAddElementDrawerCallback(): Response {
           // const node = Aglyn.screen.getNode(templateData.$id)
           console.log('Add New Element ', node)
 
-          // Aglyn.screen.addNodeToParent(node, parent, NaN)
           Besigner.focus.setSelectedNode(node)
 
           return node

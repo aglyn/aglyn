@@ -29,7 +29,6 @@ export interface ComponentIconProps extends MdiIconProps {
 const ComponentIcon = (props: ComponentIconProps) => {
   const { component, sx, ...rest } = props
   const Icon = component?.icon
-  console.log('icon', Icon, component)
   if (isElement(Icon)) return Icon
 
   return (

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   ICON_VARIANT_MODIFY_REDO,
   ICON_VARIANT_MODIFY_UNDO,
@@ -26,44 +27,47 @@ import {
   type StackProps,
   Tooltip as MuiTooltip,
 } from '@mui/material'
-import { forwardRef } from 'react'
-import useAglynCanvasHistoryControls from '../hooks/use-aglyn-elements-history'
+import { observer } from 'mobx-react-lite'
+import { type MutableRefObject } from 'react'
 
 export interface HistoryControlsProps extends StackProps {}
 
-const HistoryControlsComponent = forwardRef<any, HistoryControlsProps>(
-  (props, ref) => {
-    const [undo, redo, canUndo, canRedo] = useAglynCanvasHistoryControls()
-    return (
-      <MuiStack ref={ref} direction="row" spacing={0.25} {...props}>
-        <MuiTooltip title={'Undo (⌘Z)'}>
-          <span>
-            <MuiIconButton
-              aria-label="undo action"
-              onClick={undo}
-              disabled={!canUndo}
-            >
-              <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_UNDO.path} />
-            </MuiIconButton>
-          </span>
-        </MuiTooltip>
-        <MuiTooltip title={'Redo (⌘Y)'}>
-          <span>
-            <MuiIconButton
-              aria-label="redo action"
-              onClick={redo}
-              disabled={!canRedo}
-            >
-              <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_REDO.path} />
-            </MuiIconButton>
-          </span>
-        </MuiTooltip>
-      </MuiStack>
-    )
-  },
-)
-HistoryControlsComponent.displayName = 'HistoryControlsComponent'
-HistoryControlsComponent.aglyn = true
+function HistoryControls(
+  props: HistoryControlsProps,
+  ref: MutableRefObject<any>,
+) {
+  return (
+    <MuiStack ref={ref} direction="row" spacing={0.25} {...props}>
+      <MuiTooltip title={'Undo (⌘Z)'}>
+        <span>
+          <MuiIconButton
+            aria-label="undo action"
+            onClick={() => Aglyn.screen.undo()}
+            disabled={!Aglyn.screen.state.canUndo}
+          >
+            <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_UNDO.path} />
+          </MuiIconButton>
+        </span>
+      </MuiTooltip>
+      <MuiTooltip title={'Redo (⌘Y)'}>
+        <span>
+          <MuiIconButton
+            aria-label="redo action"
+            onClick={() => Aglyn.screen.redo()}
+            disabled={!Aglyn.screen.state.canRedo}
+          >
+            <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_REDO.path} />
+          </MuiIconButton>
+        </span>
+      </MuiTooltip>
+    </MuiStack>
+  )
+}
+HistoryControls.displayName = 'HistoryControlsComponent'
+HistoryControls.aglyn = true
 
-export { HistoryControlsComponent }
+export const HistoryControlsComponent = observer<HistoryControlsProps, any>(
+  HistoryControls,
+  { forwardRef: true },
+)
 export default HistoryControlsComponent

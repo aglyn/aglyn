@@ -17,11 +17,14 @@
 
 export * as components from './components-manager'
 export {
+  type AttributeSchema,
+  ComponentCategory,
+  type ComponentFactory,
   type ComponentId,
   type ComponentSchema,
-  type ComponentFactory,
   type ComponentsLinealOrder,
-  type AttributeSchema,
+  type ComponentState,
   type NodePresetData,
-  ComponentCategory,
+  type PresetId,
+  type PresetSchema,
 } from './components-manager'
