@@ -466,7 +466,7 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
 }
 
 export function updateInitialNodes(nodes?: NodesMap): NodesMap {
-  return runInAction(() => state.updateInitialNodes())
+  return runInAction(() => state.updateInitialNodes(nodes))
 }
 export function clearHistory() {
   return runInAction(() => state.clearHistory())
@@ -492,11 +492,11 @@ export function createNodeId(): NodeId {
 }
 
 export function isRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
-  return id === NODE_ROOT_ID
+  return runInAction(() => state.isRootNodeId(id))
 }
 
 export function isRootNode(node: NodeSchema<any>): boolean {
-  return node?.$id === NODE_ROOT_ID
+  return runInAction(() => state.isRootNode(node))
 }
 
 export function nodesToJSON(nodes?: NodesMap): NodesMap {
@@ -726,11 +726,11 @@ export function getNodeBreadcrumbPath(node: NodeSchema<any>): NodeBreadcrumbPath
 export function getNodeBreadcrumbPath(
   nodeOrId: NodeId | NodeSchema<any>,
 ): NodeBreadcrumbPath {
-  return state.getNodeBreadcrumbPath(nodeOrId)
+  return runInAction(() => state.getNodeBreadcrumbPath(nodeOrId))
 }
 
 export function getNodeLabelShort(node: NodeSchema<any>) {
-  return state.getNodeLabelShort(node)
+  return runInAction(() => state.getNodeLabelShort(node))
 }
 
 // export const NodeSchemaJsonSchema: JSONSchema7 = {
