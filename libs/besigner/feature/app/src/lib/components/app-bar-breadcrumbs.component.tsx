@@ -49,13 +49,13 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => ({
   fontSize: 11,
   overflowX: 'auto',
 
-  [`& .${breadcrumbsClasses.ol}`]: {
+  [`.${breadcrumbsClasses.ol}`]: {
     flexWrap: 'nowrap',
     whiteSpace: 'nowrap',
   },
-  [`& .${breadcrumbsClasses.separator}`]: {
+  [`.${breadcrumbsClasses.separator}`]: {
     margin: 0,
-    padding: theme.spacing(0.25),
+    padding: 0,
     // width: '0px',
     // height: '100%',
     // background: 'transparent',
@@ -63,12 +63,19 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => ({
     // borderBottom: '1em solid transparent',
     // borderTop: '1em solid transparent',
   },
-  [`& .${breadcrumbsClasses.li}`]: {
-    [`& .${breadcrumbItemClassKey.root}`]: {
+  [`.${breadcrumbsClasses.li}`]: {
+    marginLeft: theme.spacing(-0.5),
+    [`.${breadcrumbItemClassKey.root}`]: {
       padding: theme.spacing(0.75),
       background: 'transparent',
-      paddingLeft: '1em',
-      paddingRight: '1em',
+      paddingLeft: theme.spacing(1.75),
+      paddingRight: theme.spacing(1.75),
+      marginLeft: theme.spacing(-0.5),
+      clipPath: `polygon(calc(100% - ${theme.spacing(
+        1,
+      )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
+        1,
+      )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
 
       [`&:hover`]: {
         color: theme.palette.secondary.contrastText,
@@ -77,16 +84,48 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => ({
           theme.palette.action.hoverOpacity + 0.4,
         ),
       },
+    },
 
-      [`&.${breadcrumbItemClassKey.lastItem}`]: {
-        cursor: 'initial',
-        [`:hover`]: {
-          color: theme.palette.tertiary.contrastText,
-          background: alpha(
-            theme.palette.tertiary.light,
-            theme.palette.action.hoverOpacity + 0.4,
-          ),
-        },
+    [':before']: {
+      content: '""',
+      position: 'absolute',
+      top: 0,
+      height: '100%',
+      width: `calc(${theme.spacing(1)} + 1px)`,
+      backgroundColor: theme.palette.divider,
+      marginLeft: theme.spacing(-0.5),
+      clipPath: `polygon(calc(100% - ${theme.spacing(
+        1,
+      )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
+        1,
+      )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
+    },
+
+    [`:first-of-type .${breadcrumbItemClassKey.root}`]: {
+      // paddingLeft: theme.spacing(1),
+      clipPath: `polygon(calc(100% - ${theme.spacing(
+        1,
+      )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
+        1,
+      )}) 100%, 0% 100%, 0% 0%, 0% 0%)`,
+    },
+
+    [[
+      `:last-of-type .${breadcrumbItemClassKey.root}`,
+      `.${breadcrumbItemClassKey.root} .${breadcrumbItemClassKey.lastItem}`,
+    ].join()]: {
+      // cursor: 'initial',
+      color: theme.palette.tertiary.contrastText,
+      background: alpha(
+        theme.palette.tertiary.light,
+        theme.palette.action.focusOpacity,
+      ),
+      [`:hover`]: {
+        color: theme.palette.tertiary.contrastText,
+        background: alpha(
+          theme.palette.tertiary.light,
+          theme.palette.action.hoverOpacity + 0.4,
+        ),
       },
     },
   },
@@ -102,17 +141,6 @@ export interface BreadcrumbItemProps extends Partial<LinkProps<'button'>> {
 const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
   const { children, nodeId, lastItem, ...rest } = props
   const node = Aglyn.screen.getNode(nodeId)
-  // const schema = node?.componentSchema
-  // const dndData = useMemo(() => {
-  //   return {
-  //     $id: nodeId,
-  //     componentId: node?.componentId,
-  //     pluginId: schema?.pluginId,
-  //     trail: node?.breadcrumbPath,
-  //     restrictParent: schema?.restrictParent,
-  //     restrictChildren: schema?.restrictChildren,
-  //   }
-  // }, [nodeId, node, schema])
   const { setNodeRef: setDroppableNodeRef } = useLeafDrop(node)
 
   const handleClick = useCallback(
@@ -134,7 +162,7 @@ const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
       color="textSecondary"
       {...({ component: 'button' } as any)}
       fontSize="inherit"
-      underline={lastItem ? 'none' : undefined}
+      underline={'none'}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       className={clsx(breadcrumbItemClassKey.root, {
@@ -157,7 +185,12 @@ const Breadcrumbs = observer((props: BreadcrumbsProps) => {
   const lastSelected = Besigner.focus.state.lastSelected
 
   return (
-    <StyledBreadcrumbs separator="›" aria-label="breadcrumb" sx={sx} {...rest}>
+    <StyledBreadcrumbs
+      separator={null}
+      aria-label="breadcrumb"
+      sx={sx}
+      {...rest}
+    >
       {lastSelected?.breadcrumbPath.map(($id, index, arr) => (
         <BreadcrumbItem
           key={$id ?? index}

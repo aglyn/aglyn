@@ -42,7 +42,7 @@ const Card = styled(MuiCard, {
 })(({ theme }) => ({
   '& .MuiCardContent-root': {
     padding: 0,
-    ':last-child': {
+    ':last-of-type': {
       paddingBottom: 'initial',
     },
   },

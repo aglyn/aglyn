@@ -41,7 +41,7 @@ const Accordion = styled((props: MuiAccordionProps) => {
   border: `1px solid ${theme.palette.divider}`,
   borderLeft: 0,
   borderRight: 0,
-  '&:not(:last-child)': {
+  '&:not(:last-of-type)': {
     borderBottom: 0,
   },
   '&:before': {

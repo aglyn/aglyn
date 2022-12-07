@@ -15,21 +15,139 @@
  * limitations under the License.
  */
 
-/* eslint-disable-next-line */
+import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
+import type { iJSON } from '@aglyn/shared-data-types'
+import MdiIcon from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'
+import {
+  Alert,
+  AlertTitle,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  type DialogProps,
+  DialogTitle,
+  IconButton,
+} from '@mui/material'
 import dynamic from 'next/dynamic'
-import type { JsonModalProps } from './json-modal'
+import { forwardRef, useCallback, useMemo, useState } from 'react'
+import type { CodeMirrorProps } from './code-mirror'
 
-const BesignerJsonModal = dynamic(
-  async () => await import('./json-modal').then((mod) => mod.JsonModal),
+const CodeMirror = dynamic(
+  async () => await import('./code-mirror').then((mod) => mod.CodeMirror),
   { ssr: false },
 )
 
-export interface BesignerJsonEditorProps extends JsonModalProps {}
-
-export function BesignerJsonEditor(props: BesignerJsonEditorProps) {
-  const { open, ...rest } = props
-  return open ? <BesignerJsonModal open={open} {...rest} /> : null
+export interface BesignerJsonEditorProps
+  extends Omit<DialogProps, 'defaultValue'> {
+  defaultValue?: CodeMirrorProps['defaultValue']
+  onSave?: {
+    bivarianceHack(event: object, value: iJSON): void
+  }['bivarianceHack']
+  onClose?: {
+    bivarianceHack(
+      event: {},
+      reason: 'backdropClick' | 'escapeKeyDown' | 'saveClick' | 'cancelClick',
+    ): void
+  }['bivarianceHack']
 }
+
+const BesignerJsonEditor = forwardRef<any, BesignerJsonEditorProps>(
+  (props, ref) => {
+    const { onClose, onSave, defaultValue, open, ...rest } = props
+    const [data, setData] = useState(defaultValue)
+    const [warnOpen, setWarnOpen] = useState(true)
+    const closeWarn = useCallback(() => setWarnOpen(false), [])
+
+    const value = useMemo(() => JSON.stringify(defaultValue, null, 2), [data])
+
+    const handleChange = useCallback((value: any) => {
+      try {
+        const json = JSON.parse(value)
+        setData(json)
+      } catch (e) {
+        console.warn(e)
+      }
+    }, [])
+    const handleClose: BesignerJsonEditorProps['onClose'] = useCallback(
+      (event, reason) => {
+        onClose && onClose(event, reason)
+      },
+      [onClose],
+    )
+    const handleSave = useCallback(
+      (event: any) => {
+        onSave && onSave(event, data)
+        handleClose(event, 'saveClick')
+      },
+      [onSave, handleClose, data],
+    )
+
+    return (
+      <Dialog
+        ref={ref}
+        open={open}
+        maxWidth="lg"
+        fullWidth
+        onClose={handleClose}
+        {...rest}
+      >
+        <DialogTitle>Raw JSON</DialogTitle>
+        <DialogContent sx={{ position: 'relative', p: 0 }}>
+          {open && <CodeMirror value={value} onChange={handleChange} />}
+          {warnOpen && (
+            <Box
+              sx={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 0,
+                bottom: 0,
+                bgcolor: 'action.disabled',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backdropFilter: 'blur(2px)',
+                p: { xs: 2, sm: 3 },
+              }}
+            >
+              <Alert
+                severity="warning"
+                sx={{
+                  maxWidth: 620,
+                }}
+                action={
+                  <IconButton onClick={closeWarn} color="inherit">
+                    <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+                  </IconButton>
+                }
+              >
+                <AlertTitle>Warning: Advanced Feature Ahead!</AlertTitle>
+                Using the raw json editor is highly discouraged and should only
+                be used by individuals who understand the consequences. Changes
+                may potentially result in undesired outcomes which are{' '}
+                <strong>destructive and irreversible</strong>.
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            onClick={(e) => handleClose(e, 'cancelClick')}
+          >
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={handleSave}>
+            {'Save JSON'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    )
+  },
+)
 BesignerJsonEditor.displayName = 'BesignerJsonEditor'
 
+export { BesignerJsonEditor }
 export default BesignerJsonEditor

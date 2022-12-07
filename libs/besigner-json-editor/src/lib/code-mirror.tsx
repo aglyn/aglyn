@@ -20,6 +20,8 @@ import ReactCodeMirror, {
   type ReactCodeMirrorProps,
 } from '@uiw/react-codemirror'
 
+export interface CodeMirrorProps extends ReactCodeMirrorProps {}
+
 function CodeMirror(props: ReactCodeMirrorProps) {
   return (
     <ReactCodeMirror
@@ -28,6 +30,7 @@ function CodeMirror(props: ReactCodeMirrorProps) {
       extensions={[json() /*linter,*/ /*lintGutter()*/]}
       height="50vh"
       basicSetup={{ lintKeymap: true }}
+      autoFocus
       {...props}
     />
   )
