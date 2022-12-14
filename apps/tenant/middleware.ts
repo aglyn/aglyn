@@ -59,20 +59,32 @@ export const config = {
 }
 
 type EnvVercelEnv = 'production' | 'development' | 'preview' | undefined
+const previewRegex = /^tenant-aglyn-([a-zA-Z0-9]+)-zgover\.vercel\.app$/
+
+function logLabeled(...args: [string, any][]) {
+  console.log(...args.map(([k, v]) => [`${k}=`, v]).join('\n\n'))
+}
 
 export const middleware: NextMiddleware = (req, event) => {
   const reqHost = req?.headers?.get('host') || 'console.aglyn.io'
   const AGLYN_TENANT_HOST_CNAME = process.env.AGLYN_TENANT_HOST_CNAME
-  const VERCEL_ENV: EnvVercelEnv = process.env.VERCEL_ENV as EnvVercelEnv
+  const AGLYN_TENANT_DEMO = process.env.AGLYN_TENANT_DEMO
+  const VERCEL_ENV = process.env.VERCEL_ENV as EnvVercelEnv
+  const IS_VERCEL = process.env.VERCEL
   const NODE_ENV = process.env.NODE_ENV
   const PROD_NODE_ENV = NODE_ENV === 'production'
   const PROD_VERCEL_ENV = VERCEL_ENV === 'production'
   const PREV_VERCEL_ENV = VERCEL_ENV === 'preview'
-  const isProdVercel = PROD_NODE_ENV && PROD_VERCEL_ENV
 
-  console.log('process.env.VERCEL_ENV', PREV_VERCEL_ENV)
-  console.log('reqHost', reqHost)
-  console.log("req?.headers?.get('host')", req?.headers?.get('host'))
+  logLabeled(
+    ['process.env.VERCEL_ENV', VERCEL_ENV],
+    ['process.env.AGLYN_TENANT_DEMO', AGLYN_TENANT_DEMO],
+    ['process.env.VERCEL', IS_VERCEL],
+    ['reqHost', reqHost],
+    ["req?.headers?.get('host')", req?.headers?.get('host')],
+  )
+  console.log('reqHost=', reqHost)
+  console.log("req?.headers?.get('host')=", req?.headers?.get('host'))
 
   // If localhost, assign the host value manually
   // If prod, get the custom domain/subdomain value by removing the root URL
@@ -80,28 +92,58 @@ export const middleware: NextMiddleware = (req, event) => {
   let tenantHost: string
 
   switch (true) {
-    case isProdVercel && reqHost === AGLYN_TENANT_HOST_CNAME:
-    case isProdVercel && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
+    // Deployment
+    case IS_VERCEL && reqHost === AGLYN_TENANT_HOST_CNAME:
+    case IS_VERCEL && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
+      logLabeled(
+        ['Tenant Host Switch', 'assign'],
+        [
+          'reqHost == AGLYN_TENANT_HOST_CNAME',
+          reqHost === AGLYN_TENANT_HOST_CNAME,
+        ],
+        [
+          'reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`)',
+          reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`),
+        ],
+      )
       tenantHost = AGLYN_TENANT_HOST_CNAME
       break
-    case isProdVercel && reqHost.endsWith(`.aglyn.app`):
+    // Subdomain deployment
+    case IS_VERCEL && reqHost.endsWith(`.aglyn.app`):
+      logLabeled(
+        ['Tenant Host Switch', 'replace'],
+        ['request.endsWith', '.aglyn.app'],
+        ['.replace(`.aglyn.app`)', reqHost.replace(`.aglyn.app`, '')],
+      )
       tenantHost = reqHost.replace(`.aglyn.app`, '')
       break
-    case /*PREV_VERCEL_ENV && */ reqHost.endsWith(`.vercel.app`):
+    // Vercel preview deployment
+    case IS_VERCEL && reqHost.match(previewRegex).length > 0:
     case reqHost === 'console.aglyn.io':
     case reqHost === 'localhost:4500':
-      tenantHost = 'tenant'
+      logLabeled(
+        ['Tenant Host Switch', 'assign'],
+        ['previewRegex', IS_VERCEL && reqHost.match(previewRegex).length > 0],
+        ["reqHost === 'console.aglyn.io'", reqHost === 'console.aglyn.io'],
+        ["reqHost === 'localhost:4500'", reqHost === 'localhost:4500'],
+        ['request.match', AGLYN_TENANT_DEMO || 'tenant'],
+      )
+      tenantHost = AGLYN_TENANT_DEMO || 'tenant'
       break
+    // Local preview dev/test
     case reqHost.endsWith(`.localhost:4500`):
-      // Development and testing (localhost:4500)
+      logLabeled(
+        ['Tenant Host Switch', 'replace'],
+        ['request.endsWith', '.localhost:4500'],
+        ['.replace(`.localhost:4500`)', reqHost.replace(`.localhost:4500`, '')],
+      )
       tenantHost = reqHost.replace(`.localhost:4500`, '') || 'tenant'
       break
     default:
-      console.log(
-        'REDIR!!',
-        reqHost,
-        req.nextUrl.pathname,
-        'https://console.aglyn.io',
+      logLabeled(
+        ['Tenant Host Switch', 'Redirecting'],
+        ['req.nextUrl.pathname', req.nextUrl.pathname],
+        ['Destination', 'https://console.aglyn.io'],
       )
       return NextResponse.redirect('https://console.aglyn.io')
   }
@@ -111,13 +153,22 @@ export const middleware: NextMiddleware = (req, event) => {
     (req.cookies.get('next-auth.session-token') ||
       req.cookies.get('__Secure-next-auth.session-token'))
   ) {
-    console.log('REDIRECTING!!!!!', req.nextUrl.pathname, '/')
+    logLabeled(
+      ['Tenant Host Switch', 'Redirecting'],
+      ['/login', req.cookies.get('next-auth.session-token')],
+      ['"" OR', req.cookies.get('__Secure-next-auth.session-token')],
+    )
     return NextResponse.redirect('/')
   }
 
   // rewrite to the current hostname under the pages/_sites folder
   // the main logic component will happen in pages/_sites/[host]/[...path].tsx
   const rewrite = `/_sites/${tenantHost}${req.nextUrl.pathname}`
-  console.log('REWR!!', req.nextUrl.pathname, '', rewrite)
+  logLabeled(
+    ['Tenant Host Switch', 'Rewriting'],
+    ['rewrite', rewrite],
+    ['tenantHost', tenantHost],
+    ['req.nextUrl.pathname', req.nextUrl.pathname],
+  )
   return NextResponse.rewrite(new URL(rewrite, req.url))
 }
