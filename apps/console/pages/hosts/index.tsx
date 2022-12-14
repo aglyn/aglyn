@@ -24,7 +24,7 @@ import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
 import MdiIcon from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { alpha } from '@aglyn/shared-ui-theme'
-import { Stack, Typography } from '@mui/material'
+import { Typography } from '@mui/material'
 import { collection, query, where } from 'firebase/firestore'
 import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
@@ -98,12 +98,32 @@ function Hosts() {
                 children: (
                   <WidgetCardComponent
                     contentGutterX
-                    header={
-                      <Stack alignItems="center" direction="row" spacing={1}>
-                        <MdiIcon path={ICON_VARIANT_HOST.path} />
-                        <span>{host?.displayName}</span>
-                      </Stack>
-                    }
+                    contentGutterY
+                    contentBordered="bottom"
+                    HeaderProps={{
+                      sx: { '.MuiCardHeader-content': { overflow: 'hidden' } },
+                      avatar: (
+                        <MdiIcon
+                          color="secondary"
+                          path={ICON_VARIANT_HOST.path}
+                        />
+                      ),
+                      titleTypographyProps: {
+                        textOverflow: 'ellipsis',
+                        // variant: 'h6',
+                        noWrap: true,
+                        fontSize: ({ typography }) =>
+                          typography.subtitle1.fontSize,
+                        fontWeight: ({ typography }) =>
+                          typography.h6.fontWeight,
+                      },
+                      subheaderTypographyProps: {
+                        fontSize: ({ typography }) =>
+                          typography.caption.fontSize,
+                      },
+                    }}
+                    subheader={host?.$id}
+                    header={host?.displayName}
                     actions={
                       <>
                         <AppLink
@@ -128,7 +148,6 @@ function Hosts() {
                     }
                   >
                     <Typography color="textSecondary" component="div">
-                      <HostInfoItem label={'Unique ID'} value={host?.$id} />
                       <HostInfoItem
                         label={'Aglyn Domain'}
                         value={`${host?.subdomain}.aglyn.app`}

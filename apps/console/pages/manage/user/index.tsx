@@ -35,11 +35,18 @@ import {
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { Box, Button, FormControl, Grid, Tab } from '@mui/material'
+import { Button, FormControl, Grid, Tab } from '@mui/material'
+import { logEvent } from 'firebase/analytics'
 import { signInWithEmailAndPassword, updatePassword } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
 import { forwardRef, useCallback, useState } from 'react'
-import { useAuth, useFirestore, useFirestoreDocData, useUser } from 'reactfire'
+import {
+  useAnalytics,
+  useAuth,
+  useFirestore,
+  useFirestoreDocData,
+  useUser,
+} from 'reactfire'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
@@ -48,9 +55,13 @@ import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 
 const basicSchema: FormSchema = {
+  id: 'basic',
+  title: 'Basic info',
   fields: [FIELD_SCHEMA_FIRST_NAME, FIELD_SCHEMA_LAST_NAME],
 }
 const securitySchema: FormSchema = {
+  id: 'security',
+  title: 'Security',
   fields: [
     FIELD_SCHEMA_PASSWORD_OLD,
     FIELD_SCHEMA_PASSWORD,
@@ -63,86 +74,48 @@ const FormTemplate = forwardRef<any, FormTemplateRenderProps>((props, ref) => {
   const { handleSubmit } = useFormApi()
   const isLoading = status === 'loading'
   return (
-    <form ref={ref} onSubmit={handleSubmit} noValidate {...rest}>
-      {schema.title}
-      <Grid spacing={2} container>
-        {formFields}
-      </Grid>
-      <FormSpy>
-        {({ submitting, pristine, valid }) => (
-          <Box mt={2}>
-            <FormControl margin="normal" fullWidth>
+    <WidgetCardComponent
+      contentGutterY
+      contentGutterX
+      header={schema.title}
+      actions={
+        <FormSpy>
+          {({ submitting, pristine, valid }) => (
+            <FormControl margin="normal">
               <Button
                 color="secondary"
-                disabled={submitting /* || !valid || pristine*/ || isLoading}
-                style={{ marginRight: 8 }}
+                disabled={submitting || pristine || !valid || isLoading}
+                // style={{ marginRight: 8 }}
                 type="submit"
-                variant="contained"
-                fullWidth
+                // variant="contained"
               >
-                Save
+                Update
               </Button>
             </FormControl>
-          </Box>
-        )}
-      </FormSpy>
-    </form>
+          )}
+        </FormSpy>
+      }
+    >
+      <form ref={ref} onSubmit={handleSubmit} noValidate {...rest}>
+        <Grid spacing={2} container>
+          {formFields as any}
+        </Grid>
+      </form>
+    </WidgetCardComponent>
   )
 })
+FormTemplate.displayName = 'FormTemplate'
 
-const Settings: NextPageWithLayout = (props) => {
-  const [tab, setTab] = useState('1')
+const ManageUser: NextPageWithLayout = (props) => {
+  const [tab, setTab] = useState('basic')
   const { data: user } = useUser()
   const userRef = doc(useFirestore(), 'users', user.uid)
   const { data } = useFirestoreDocData(userRef)
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const firebaseAuth = useAuth()
+  const analytics = useAnalytics()
 
-  const onTabChange = useCallback((e, value) => {
-    setTab(value)
-  }, [])
-
-  const [fields, setFields] = useState({ ...data })
-  const updateData = useCallback(
-    async (fields: any) => {
-      const dequeueLoading = queueLoading()
-      await setDoc(userRef, { ...fields }, { merge: true })
-        .then(() => {
-          enqueueSnackbar('Saved!', { variant: 'success' })
-        })
-        .catch((e) => {
-          enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
-        })
-        .finally(() => {
-          dequeueLoading()
-        })
-    },
-    [enqueueSnackbar, queueLoading, userRef],
-  )
-
-  const handleFieldChange = useCallback(
-    (field: string) => (e) => {
-      const target = e.currentTarget
-      const value = target.value
-      setFields((prev) => ({ ...prev, [field]: value }))
-    },
-    [],
-  )
-
-  const handleFieldBlur = useCallback(
-    (field: string) => async (e) => {
-      const target = e.currentTarget
-      const value = target.value
-      if (data[field] === value) return
-      if (!value && target.required) {
-        enqueueSnackbar(`Field is required`, { variant: 'warning' })
-        return
-      }
-      await updateData({ [field]: value })
-    },
-    [data, updateData, enqueueSnackbar],
-  )
   const handleBasicSave = useCallback(
     async (fields: any) => {
       const dequeueLoading = queueLoading()
@@ -177,7 +150,31 @@ const Settings: NextPageWithLayout = (props) => {
           dequeueLoading()
         })
     },
-    [enqueueSnackbar, queueLoading, userRef],
+    [enqueueSnackbar, firebaseAuth, queueLoading, user],
+  )
+
+  const forms = [
+    {
+      schema: basicSchema,
+      initialValues: data,
+      onSubmit: handleBasicSave,
+    },
+    {
+      schema: securitySchema,
+      onSubmit: handleSecuritySave,
+    },
+  ]
+
+  const onTabChange = useCallback(
+    async (e, value) => {
+      setTab(value)
+      const form = forms.find(({ schema }) => schema.id === value)
+      logEvent(analytics, 'screen_view', {
+        firebase_screen: form.schema.title as string,
+        firebase_screen_class: ManageUser.displayName,
+      })
+    },
+    [forms, analytics],
   )
 
   return (
@@ -229,8 +226,13 @@ const Settings: NextPageWithLayout = (props) => {
                         }}
                         onChange={onTabChange}
                       >
-                        <Tab label={'Basic info'} value={'1'} />
-                        <Tab label={'Notifications'} value={'2'} />
+                        {forms.map(({ schema }) => (
+                          <Tab
+                            key={schema.id}
+                            value={schema.id}
+                            label={schema.title}
+                          />
+                        ))}
                       </TabList>
                     </WidgetCardComponent>
                   ),
@@ -240,34 +242,22 @@ const Settings: NextPageWithLayout = (props) => {
                   sm: 9,
                   children: (
                     <>
-                      <TabPanel sx={{ padding: 'unset' }} value={'1'}>
-                        <WidgetCardComponent header="Basic info">
-                          <Box sx={{ p: 2 }}>
-                            <FormRenderer
-                              FormTemplate={FormTemplate}
-                              componentMapper={simpleComponentMapper}
-                              onSubmit={handleBasicSave}
-                              schema={basicSchema}
-                              subscription={{ values: true }}
-                              initialValues={data}
-                            />
-                          </Box>
-                        </WidgetCardComponent>
-                      </TabPanel>
-                      <TabPanel sx={{ padding: 'unset' }} value={'2'}>
-                        <WidgetCardComponent header="Security">
-                          <Box sx={{ p: 2 }}>
-                            <FormRenderer
-                              FormTemplate={FormTemplate}
-                              componentMapper={simpleComponentMapper}
-                              onSubmit={handleSecuritySave}
-                              schema={securitySchema}
-                              subscription={{ values: true }}
-                              initialValues={data}
-                            />
-                          </Box>
-                        </WidgetCardComponent>
-                      </TabPanel>
+                      {forms.map(({ initialValues, onSubmit, schema }) => (
+                        <TabPanel
+                          key={schema.id}
+                          value={schema.id}
+                          sx={{ padding: 'unset' }}
+                        >
+                          <FormRenderer
+                            FormTemplate={FormTemplate}
+                            componentMapper={simpleComponentMapper}
+                            onSubmit={onSubmit}
+                            schema={schema}
+                            subscription={{ values: true }}
+                            initialValues={initialValues}
+                          />
+                        </TabPanel>
+                      ))}
                     </>
                   ),
                 },
@@ -279,17 +269,17 @@ const Settings: NextPageWithLayout = (props) => {
     </>
   )
 }
-Settings.displayName = 'Page:Settings'
-Settings.layouts = [
+ManageUser.displayName = 'Page:ManageUser'
+ManageUser.layouts = [
   {
     Component: AuthenticatedLayout,
   },
   {
     Component: MainLayout,
     props: {
-      title: 'User Settings',
+      title: 'User Manage',
     },
   },
 ]
 
-export default Settings
+export default ManageUser

@@ -165,7 +165,7 @@ function ScreenDetails(props) {
                     header={'Basic Details'}
                     // contentGutterX
                     contentGutterY
-                    contentBordered
+                    contentBordered="all"
                   >
                     <List dense disablePadding>
                       {details.map(
@@ -209,7 +209,7 @@ function ScreenDetails(props) {
                     header={'Raw JSON'}
                     contentGutterX
                     contentGutterY
-                    contentBordered
+                    contentBordered="all"
                   >
                     <pre>{JSON.stringify(screen, null, 2)}</pre>
                   </WidgetCardComponent>

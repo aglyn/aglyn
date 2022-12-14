@@ -33,53 +33,55 @@ import { forwardRef } from 'react'
 const classKeys = generateComponentClassKeys('AglynWidgetCard', [
   'contentGutterX',
   'contentGutterY',
-  'contentBordered',
   'headerCentered',
+  'headerBordered',
+  'actionsBordered',
 ])
 
-const Card = styled(MuiCard, {
-  name: 'AglynWidgetCard',
-})(({ theme }) => ({
-  '& .MuiCardContent-root': {
+const Card = styled(MuiCard)(({ theme }) => ({
+  '.MuiCardContent-root': {
     padding: 0,
+    borderWidth: 0,
+    borderStyle: 'solid',
+    borderColor: theme.palette.divider,
     ':last-of-type': {
       paddingBottom: 'initial',
     },
   },
-  '& .MuiCardHeader-root': {
+  '.MuiCardHeader-root': {
     fontWeight: theme.typography.fontWeightBold,
   },
   [`&.${classKeys.contentGutterX}`]: {
-    '& .MuiCardContent-root': {
+    '.MuiCardContent-root': {
       paddingLeft: theme.spacing(2),
       paddingRight: theme.spacing(2),
       [theme.breakpoints.up('md')]: {
-        paddingLeft: theme.spacing(3),
-        paddingRight: theme.spacing(3),
+        paddingLeft: theme.spacing(2),
+        paddingRight: theme.spacing(2),
       },
     },
   },
   [`&.${classKeys.contentGutterY}`]: {
-    '& .MuiCardContent-root': {
+    '.MuiCardContent-root': {
       paddingTop: theme.spacing(2),
       paddingBottom: theme.spacing(2),
       // '&:last-child': {paddingBottom: theme.spacing(3)},
     },
   },
-  [`&.${classKeys.contentBordered}`]: {
-    '& .MuiCardContent-root': {
-      borderStyle: 'solid',
-      borderColor: theme.palette.divider,
-      borderTopWidth: 1,
-      borderBottomWidth: 1,
-      borderLeftWidth: 0,
-      borderRightWidth: 0,
-    },
-  },
   [`&.${classKeys.headerCentered}`]: {
-    '& .MuiCardHeader-root': {
+    '.MuiCardHeader-root': {
       marginBottom: theme.spacing(-1),
       alignSelf: 'center',
+    },
+  },
+  [`&.${classKeys.headerBordered}`]: {
+    '.MuiCardContent-root': {
+      borderTopWidth: 1,
+    },
+  },
+  [`&.${classKeys.actionsBordered}`]: {
+    '.MuiCardContent-root': {
+      borderBottomWidth: 1,
     },
   },
 }))
@@ -87,11 +89,12 @@ const Card = styled(MuiCard, {
 export interface WidgetCardProps extends CardProps {
   contentGutterX?: boolean
   contentGutterY?: boolean
-  contentBordered?: boolean
+  contentBordered?: 'all' | 'top' | 'bottom' | undefined
   headerCentered?: boolean
   header?: JSX.Children
+  subheader?: JSX.Children
   actions?: JSX.Children
-  lastchildren?: JSX.Children
+  disableContentWrapper?: boolean
   HeaderProps?: CardHeaderProps
   ContentProps?: CardContentProps
   ActionProps?: CardActionsProps
@@ -104,7 +107,8 @@ const WidgetCardComponent = forwardRef<any, WidgetCardProps>((props, ref) => {
     children,
     className,
     header,
-    lastChildren,
+    subheader,
+    disableContentWrapper,
     ActionProps,
     HeaderProps,
     ContentProps,
@@ -115,14 +119,17 @@ const WidgetCardComponent = forwardRef<any, WidgetCardProps>((props, ref) => {
     ...rest
   } = props
 
+  const allBordered = contentBordered === 'all'
+  const headerBordered = contentBordered === 'top'
+  const actionsBordered = contentBordered === 'bottom'
+
   const cardClassName = clsx(
     {
       [classKeys.contentGutterX]: Boolean(contentGutterX),
       [classKeys.contentGutterY]: Boolean(contentGutterY),
-      [classKeys.contentBordered]: Boolean(contentBordered),
-      [classKeys.headerCentered]: Boolean(
-        HeaderProps?.subheader || headerCentered,
-      ),
+      [classKeys.headerBordered]: Boolean(allBordered || headerBordered),
+      [classKeys.actionsBordered]: Boolean(allBordered || actionsBordered),
+      [classKeys.headerCentered]: Boolean(headerCentered),
     },
     className,
   )
@@ -130,20 +137,26 @@ const WidgetCardComponent = forwardRef<any, WidgetCardProps>((props, ref) => {
   return (
     <Card ref={ref} className={cardClassName} {...rest}>
       <ErrorBoundaryComponent>
-        {header || HeaderProps ? (
+        {header || HeaderProps || subheader ? (
           <MuiCardHeader
             title={header}
-            titleTypographyProps={{ variant: 'h6' }}
+            subheader={subheader}
+            titleTypographyProps={{ variant: 'h6', component: 'div' }}
             {...HeaderProps}
           />
         ) : null}
-        {children || ContentProps ? (
-          <MuiCardContent children={children} {...ContentProps} />
+        {disableContentWrapper ? (
+          children
+        ) : children || ContentProps ? (
+          <MuiCardContent {...ContentProps}>
+            {ContentProps?.children || children}
+          </MuiCardContent>
         ) : null}
         {actions || ActionProps ? (
-          <MuiCardActions children={actions} {...ActionProps} />
+          <MuiCardActions {...ActionProps}>
+            {ActionProps?.children || actions}
+          </MuiCardActions>
         ) : null}
-        {lastChildren}
       </ErrorBoundaryComponent>
     </Card>
   )
