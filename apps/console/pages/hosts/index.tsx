@@ -16,8 +16,8 @@
  */
 
 import {
-  ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_HOST,
+  ICON_VARIANT_HOST_GROUP,
 } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
@@ -49,8 +49,8 @@ function HostInfoItem({ label, value }) {
           variant="body1"
           display="inline"
           sx={(theme) => ({
-            bgcolor: alpha(theme.palette.secondary.light, 0.18),
-            border: `1px solid ${alpha(theme.palette.secondary.light, 0.72)}`,
+            bgcolor: alpha(theme.palette.tertiary.light, 0.18),
+            border: `1px solid ${alpha(theme.palette.tertiary.light, 0.72)}`,
             borderRadius: '0.3em',
             px: 0.5,
             py: 0.15,
@@ -85,7 +85,7 @@ function Hosts() {
         ]}
         header={{
           children: 'All Hosts',
-          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+          icon: { path: ICON_VARIANT_HOST_GROUP.path },
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
@@ -101,10 +101,10 @@ function Hosts() {
                     contentGutterY
                     contentBordered="bottom"
                     HeaderProps={{
-                      sx: { '.MuiCardHeader-content': { overflow: 'hidden' } },
                       avatar: (
                         <MdiIcon
                           color="secondary"
+                          fontSize="large"
                           path={ICON_VARIANT_HOST.path}
                         />
                       ),
@@ -138,7 +138,7 @@ function Hosts() {
                         </AppLink>
                         <AppLink
                           componentVariant="button"
-                          href={buildRoute(Route.SCREEN_DASHBOARD, {
+                          href={buildRoute(Route.HOST_DASHBOARD, {
                             hostId: host.$id,
                           })}
                         >

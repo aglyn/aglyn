@@ -116,8 +116,25 @@ function ScreenDetails(props) {
   // console.log('Screens props', besignerUrl, props, status, screen)
 
   return (
-    <MainLayout title={[displayName, 'Screen']} enableAppBarElevation>
+    <MainLayout title={[displayName, 'Screen']}>
       <DashboardLayout
+        navTabItems={[
+          {
+            id: 'nav-tab-dashboard',
+            label: 'Dashboard',
+            href: buildRoute(Route.HOST_DASHBOARD, { hostId }),
+          },
+          {
+            id: 'nav-tab-screens',
+            label: 'Screens',
+            href: buildRoute(Route.SCREEN_LIST, { hostId }),
+          },
+          {
+            id: 'nav-tab-setup',
+            label: 'Setup',
+            href: buildRoute(Route.HOST_SETUP, { hostId }),
+          },
+        ]}
         activeTab={buildRoute(Route.SCREEN_LIST, { hostId })}
         breadcrumbItems={[
           {

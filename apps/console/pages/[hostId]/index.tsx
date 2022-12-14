@@ -18,24 +18,49 @@
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageWithLayout, useNextPageTitle } from '@aglyn/shared-ui-next'
+import { useRouter } from 'next/router'
 import DataTableComponent from '../../components/data-table.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import WidgetCardComponent from '../../components/widget-card.component'
+import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
 
 const Index: NextPageWithLayout = (props) => {
-  console.log('index props', props)
+  const { query } = useRouter()
+  const hostId = query.hostId as string
   useNextPageTitle({ screen: 'My Dashboard' })
 
   return (
     <DashboardLayout
-      breadcrumbItems={[]}
+      navTabItems={[
+        {
+          id: 'nav-tab-dashboard',
+          label: 'Dashboard',
+          href: buildRoute(Route.HOST_DASHBOARD, { hostId }),
+        },
+        {
+          id: 'nav-tab-screens',
+          label: 'Screens',
+          href: buildRoute(Route.SCREEN_LIST, { hostId }),
+        },
+        {
+          id: 'nav-tab-setup',
+          label: 'Setup',
+          href: buildRoute(Route.HOST_SETUP, { hostId }),
+        },
+      ]}
       header={{
         children: 'My Dashboard',
         icon: { path: ICON_VARIANT_HOME.path },
       }}
+      breadcrumbItems={[
+        {
+          children: hostId,
+          href: buildRoute(Route.HOST_DASHBOARD, { hostId }),
+        },
+      ]}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
         <GridItems

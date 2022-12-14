@@ -285,8 +285,29 @@ function Screens(props) {
     <>
       <NextPageTitle screen={'Screens'} />
       <DashboardLayout
+        navTabItems={[
+          {
+            id: 'nav-tab-dashboard',
+            label: 'Dashboard',
+            href: buildRoute(Route.HOST_DASHBOARD, { hostId }),
+          },
+          {
+            id: 'nav-tab-screens',
+            label: 'Screens',
+            href: buildRoute(Route.SCREEN_LIST, { hostId }),
+          },
+          {
+            id: 'nav-tab-setup',
+            label: 'Setup',
+            href: buildRoute(Route.HOST_SETUP, { hostId }),
+          },
+        ]}
         activeTab={buildRoute(Route.SCREEN_LIST, { hostId })}
         breadcrumbItems={[
+          {
+            children: hostId,
+            href: buildRoute(Route.HOST_DASHBOARD, { hostId }),
+          },
           {
             children: 'Screens',
             href: buildRoute(Route.SCREEN_LIST, { hostId }),

@@ -88,6 +88,7 @@ import {
   mdiVectorSquare,
   mdiWeatherNight,
   mdiWeb,
+  mdiWebBox,
   mdiWhiteBalanceSunny,
   mdiWindowClose,
 } from '@aglyn/shared-ui-mdi-jsx'
@@ -160,6 +161,7 @@ export const ICON_VARIANT_PAGES = mdiWeb
 export const ICON_VARIANT_SIGN_IN = mdiLoginVariant
 export const ICON_VARIANT_SIGN_OUT = mdiLogoutVariant
 export const ICON_VARIANT_USER_SETTINGS = mdiAccountSettings
+export const ICON_VARIANT_HOST_GROUP = mdiWebBox
 export const ICON_VARIANT_HOST = mdiWeb
 
 // Views + Panels

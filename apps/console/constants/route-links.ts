@@ -22,11 +22,12 @@ export enum Route {
   AUTH_SIGN_OUT = '/signout',
   AUTH_SIGN_UP = '/signup',
   AUTH_VERIFY_EMAIL = '/verify-email',
+  HOST_LIST = '/hosts',
+  HOST_DASHBOARD = '/[hostId]',
+  HOST_SETUP = '/[hostId]/setup',
   SCREEN_BESIGNER = '/[hostId]/screens/[screenId]/versions/[versionId]/besigner',
-  SCREEN_DASHBOARD = '/[hostId]',
   SCREEN_DETAILS = '/[hostId]/screens/[screenId]/versions/[versionId]/view',
   SCREEN_LIST = '/[hostId]/screens/list',
-  HOST_LIST = '/hosts',
 }
 
 export interface RoutePayload extends Record<keyof any, any> {
@@ -39,7 +40,7 @@ export interface RoutePayload extends Record<keyof any, any> {
     screenId: string
     versionId: string
   }
-  [Route.SCREEN_DASHBOARD]: { hostId: string }
+  [Route.HOST_DASHBOARD]: { hostId: string }
   [Route.SCREEN_DETAILS]: {
     hostId: string
     screenId: string

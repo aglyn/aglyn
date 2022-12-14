@@ -95,12 +95,13 @@ function DashboardLayout(props: DashboardLayoutProps) {
     <>
       <SecondaryAppBarComponent
         tabBarTitle={tabBarTitle ?? defaultTabBarTitle}
+        activeTab={activeTab}
         navTabItems={
           navTabItems ?? [
             {
               id: 'nav-tab-dashboard',
               label: 'Dashboard',
-              href: buildRoute(Route.SCREEN_DASHBOARD, {
+              href: buildRoute(Route.HOST_DASHBOARD, {
                 hostId,
               }),
             },
@@ -113,7 +114,6 @@ function DashboardLayout(props: DashboardLayoutProps) {
             },
           ]
         }
-        activeTab={activeTab}
       />
 
       <Stack component="main" direction="column" sx={{ flexGrow: 1 }}>

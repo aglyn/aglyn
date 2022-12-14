@@ -55,7 +55,7 @@ SignOut.layouts = [
   {
     Component: AuthenticatingLayout,
     props: {
-      isSignOut: true,
+      signingOut: true,
     },
   },
 ]
