@@ -228,7 +228,7 @@ const NodeTreeItem = observer((props: NodeTreeItemProps) => {
   //   'get node',
   //   nodeId,
   //   Aglyn.screen.getNode(nodeId),
-  //   Aglyn.screen.state.nodes[nodeId],
+  //   Aglyn.screen.nodes[nodeId],
   // )
   const node = Aglyn.screen.getNode(nodeId)
   const schema = node?.componentSchema

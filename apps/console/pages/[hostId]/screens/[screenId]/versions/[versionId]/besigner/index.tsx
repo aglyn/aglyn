@@ -86,7 +86,7 @@ function BesignerPage(props) {
   } = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
-  const saveAvailable = !Aglyn.screen.state.isInitialSame
+  const saveAvailable = !Aglyn.screen.isInitialSame
   const [screenDialog, setScreenDialog] = useState(false)
   const handleAddElementClick = useAddElementDrawerCallback()
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, {
@@ -141,7 +141,7 @@ function BesignerPage(props) {
   }, [])
 
   useEffect(() => {
-    if (nodes && !Aglyn.screen.state.didSetInitial) {
+    if (nodes && !Aglyn.screen.didSetInitial) {
       console.log('decoded update', nodes)
       console.log('decoded update previous nodes', sss)
       const updated = setLocalNodes(nodes)
@@ -176,7 +176,7 @@ function BesignerPage(props) {
     }
   }, [enqueueSnackbar, hasError, error, notFound])
 
-  console.log('Aglyn.screen.state.nodes', Aglyn.screen.state.rootNode)
+  console.log('Aglyn.screen.nodes', Aglyn.screen.rootNode)
 
   return (
     <>
@@ -259,14 +259,14 @@ function BesignerPage(props) {
                 id: 'center-nav-edit-undo',
                 children: 'Undo',
                 onClick: () => Aglyn.screen.undo(),
-                disabled: !Aglyn.screen.canUndo(),
+                disabled: !Aglyn.screen.canUndo,
                 ListItemTextProps: { inset: true },
               },
               {
                 id: 'center-nav-edit-redo',
                 children: 'Redo',
                 onClick: () => Aglyn.screen.redo(),
-                disabled: !Aglyn.screen.canRedo(),
+                disabled: !Aglyn.screen.canRedo,
                 ListItemTextProps: { inset: true },
               },
               {
@@ -332,10 +332,10 @@ function BesignerPage(props) {
         }}
       />
       <BesignerJsonEditor
-        open={Boolean(Aglyn.screen.state.rootNode && jsonOpen)}
+        open={Boolean(Aglyn.screen.rootNode && jsonOpen)}
         onClose={closeJsonEditor}
         onSave={handleJsonSave}
-        defaultValue={Aglyn.screen.state.nestedNodes as any}
+        defaultValue={Aglyn.screen.nestedNodes as any}
       />
     </>
   )

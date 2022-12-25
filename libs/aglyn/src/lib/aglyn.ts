@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import { ComponentManager } from './components-manager'
+import { AglynEvent, emitter } from './emit-manager'
+import { ScreenManager } from './screen-manager'
+import { UAManager } from './ua-manager'
+
 export * from './constants'
 export * from './types'
 export * from './utils'
@@ -24,3 +29,44 @@ export * from './emit-manager'
 export * from './plugin-manager'
 export * from './screen-manager'
 export * from './ua-manager'
+
+export const components = new ComponentManager()
+
+emitter.on(AglynEvent.COMPONENT_REGISTER, ({ component, schema }) => {
+  components.registerComponent(component, schema)
+})
+emitter.on(AglynEvent.COMPONENT_UNREGISTER, ({ componentId }) => {
+  components.unregisterComponent(componentId)
+})
+
+emitter.on(AglynEvent.PRESET_REGISTER, ({ preset }) => {
+  components.registerPreset(preset)
+})
+emitter.on(AglynEvent.PRESET_UNREGISTER, ({ presetId }) => {
+  components.unregisterPreset(presetId)
+})
+
+export const screen = new ScreenManager()
+
+emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
+  screen.clearNodes()
+})
+emitter.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
+  screen.setNodes(nodes)
+})
+emitter.on(AglynEvent.NODE_SET, ({ node, create }) => {
+  screen.setNode(node, create)
+})
+emitter.on(AglynEvent.NODE_DELETE, ({ node }) => {
+  screen.deleteNode(node)
+})
+emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
+  screen.duplicateNode(node)
+})
+emitter.on(AglynEvent.NODE_REPARENT, ({ node, newParent, index }) => {
+  screen.reparentNode(node, newParent, index)
+})
+
+export const ua = new UAManager()
+
+console.log('this/ aglyn', this)

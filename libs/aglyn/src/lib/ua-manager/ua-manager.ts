@@ -17,6 +17,11 @@
 
 import UAParserJS from 'ua-parser-js'
 
-export class UAParser extends UAParserJS {}
+export class UAManager extends UAParserJS {
+  constructor(uastring?: string, extensions?: Record<string, any>) {
+    super(uastring, extensions)
+    // makeObservable(this)
+  }
+}
 
-export const session = new UAParser()
+export default UAManager

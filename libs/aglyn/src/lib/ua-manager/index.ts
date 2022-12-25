@@ -15,4 +15,5 @@
  * limitations under the License.
  */
 
-export * as ua from './ua-manager'
+export { default } from './ua-manager'
+export * from './ua-manager'

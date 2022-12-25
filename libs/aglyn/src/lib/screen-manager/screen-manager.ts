@@ -22,18 +22,17 @@ import { ITimestamp } from '@aglyn/shared-util-timestamp'
 import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
 import cloneDeep from 'lodash-es/cloneDeep'
 import isEqual from 'lodash-es/isEqual'
-import { makeAutoObservable, observable, runInAction, toJS } from 'mobx'
+import { makeAutoObservable, toJS } from 'mobx'
 import { computedFn } from 'mobx-utils'
-import * as Aglyn from '../../index'
+import { components } from '../aglyn'
 import {
   type ComponentId,
-  components,
   type ComponentSchema,
   type PresetSchema,
 } from '../components-manager'
 import { createIdUrlSafe } from '../constants'
-import { AglynEvent, emitter } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
+import { HostUid } from '../types'
 
 export enum NodeType {
   NODE = 'node',
@@ -145,7 +144,7 @@ export interface ScreenSchema {
   nodes: NodeSchemaNested
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
-  hostId?: Aglyn.HostUid
+  hostId?: HostUid
 }
 
 export type NodeBreadcrumbPath = [
@@ -153,296 +152,14 @@ export type NodeBreadcrumbPath = [
   ...nodes: [...ancestors: NodeId[], node: NodeId],
 ]
 
+export type ProcessableNodes =
+  | NodeSchemaNested<any>[]
+  | NodeSchemaNested<any>
+  | Record<NodeId, NodeSchema>
+
 export const NODE_ROOT_ID = '_@_'
 export const NODE_ID_LENGTH = 10
 export const NODE_ROOT_LABEL = 'Document'
-
-export interface ScreenState {
-  _initial: NodesMap
-  _history: NodesMap[]
-  _activeIndex: number
-
-  readonly nodes: NodesMap
-  readonly canRedo: boolean
-  readonly canUndo: boolean
-  readonly isInitialSame: boolean
-  readonly didSetInitial: boolean
-  readonly rootNode: NodeSchema<any>
-  readonly nestedNodes: NodeSchemaNested<any>
-  hasNode: ($id: NodeId) => boolean
-  getNode: ($id: NodeId) => NodeSchema<any> | undefined
-  nodesAreEqual: (left: NodesMap, right?: NodesMap) => boolean
-  isRootNodeId: (id: NodeId) => id is string & typeof NODE_ROOT_ID
-  isRootNode: (node: NodeSchema<any>) => boolean
-  getNodeIndex: (node: NodeSchema<any>) => number
-  getNodeParent: (node: NodeSchema<any>) => typeof node['parent']
-  getNodeBreadcrumbPath: (
-    nodeOrId: NodeId | NodeSchema<any>,
-  ) => NodeBreadcrumbPath
-  getNodeLabelShort: (node: NodeSchema<any>) => any
-  nestNodes: (
-    nodes: NodesMap,
-    rootNode: NodeSchema<any>,
-  ) => NodeSchemaNested<any>
-  redo(): void
-  undo(): void
-  saveHistory(): void
-  clearHistory(): void
-  clearNodes(): void
-  updateInitialNodes(nodes?: NodesMap): NodesMap
-  setNode(node: NodeSchema<any>, create?: boolean): NodeSchema<any>
-  setNodes(nodes: NodesMap): NodesMap
-  deleteNode(node: NodeSchema<any>)
-  reparentNode(
-    node: NodeSchema<any>,
-    newParent: NodeSchema<any>,
-    index?: number,
-  ): typeof node
-  reorderNode(node: NodeSchema<any>, index?: number): typeof node
-  duplicateNode(node: NodeSchema<any>): NodeSchema<any>
-  addNodeFromPreset(
-    preset: PresetSchema<any>,
-    parent: NodeSchema<any>,
-    index?: number,
-  ): NodeSchema<any>
-  updateNodeProps(node: NodeSchema<any>, props: NodeSchema<any>['props']): void
-}
-
-export const state = observable<ScreenState>({
-  _initial: null,
-  _history: [{}],
-  _activeIndex: 0,
-
-  get nodes() {
-    console.log(
-      'nodes active',
-      this._activeIndex,
-      this._history.length,
-      this._history[this._activeIndex],
-    )
-    return this._history[this._activeIndex]
-  },
-  get canRedo() {
-    return this._activeIndex < this._history.length - 1
-  },
-  get canUndo() {
-    return this._activeIndex > 0
-  },
-  get isInitialSame() {
-    return isEqual(toJS(this._initial), toJS(this.nodes))
-  },
-  get didSetInitial() {
-    return Boolean(this._initial)
-  },
-  get rootNode() {
-    return this._history[this._activeIndex][NODE_ROOT_ID]
-  },
-  get nestedNodes(): NodeSchemaNested<any> {
-    const rootNode = this.rootNode
-    const nodes = this.nodes
-    if (!nodes || !rootNode) return {} as any
-    return this.nestNodes(nodes, rootNode)
-  },
-
-  hasNode: computedFn(($id: NodeId): boolean => {
-    return Boolean(state.nodes[$id])
-  }),
-  getNode: computedFn(($id: NodeId): NodeSchema<any> | undefined => {
-    return state.nodes[$id]
-  }),
-  nodesAreEqual: computedFn((left: NodesMap, right?: NodesMap): boolean => {
-    const _right = right ? right : state.nodes
-    return isEqual(toJS(left), toJS(_right))
-  }),
-  getNodeParent: computedFn((node: NodeSchema<any>): NodeSchema<any> => {
-    if (!node) throw new Error('Invalid node')
-    return state.getNode(node.parentId)
-  }),
-  getNodeIndex: computedFn((node: NodeSchema<any>): number => {
-    if (!node) throw new Error('Invalid node')
-    const parent = state.getNodeParent(node)
-    if (!parent) throw new Error('Invalid parent node')
-    return parent.nodes?.indexOf(node.$id)
-  }),
-  isRootNodeId: computedFn((id: NodeId): id is string & typeof NODE_ROOT_ID => {
-    return id === NODE_ROOT_ID
-  }),
-  isRootNode: computedFn((node: NodeSchema<any>): boolean => {
-    return node?.$id === NODE_ROOT_ID
-  }),
-  getNodeBreadcrumbPath: computedFn(
-    (nodeOrId: NodeId | NodeSchema<any>): NodeBreadcrumbPath => {
-      const hierarchy = [NODE_ROOT_ID]
-
-      let currentId = typeof nodeOrId !== 'string' ? nodeOrId?.$id : nodeOrId
-      while (currentId && !isRootNodeId(currentId)) {
-        hierarchy.splice(1, 0, currentId)
-        currentId = getNode(currentId)?.parentId
-      }
-
-      return hierarchy as NodeBreadcrumbPath
-    },
-  ),
-  getNodeLabelShort: computedFn((node: NodeSchema<any>): any => {
-    if (isRootNode(node)) return NODE_ROOT_LABEL
-    const componentLabel = components.getLabel(node?.componentId)
-    return node?.name || componentLabel || node?.$id
-  }),
-  nestNodes: computedFn(
-    (nodes: NodesMap, rootNode: NodeSchema<any>): NodeSchemaNested<any> => {
-      if (!nodes) throw new Error('Invalid nodes')
-      if (!rootNode) throw new Error('Invalid root node')
-
-      const node = toJS(rootNode) as unknown as NodeSchemaNested<any>
-      const childNodes = []
-      for (const childId of (node.nodes ||= []) as unknown as NodeId[]) {
-        if (!Object.hasOwn(nodes, childId)) continue
-        childNodes.push(state.nestNodes(nodes, nodes[childId]))
-      }
-      node.nodes = childNodes
-      return node
-    },
-  ),
-
-  redo() {
-    console.log('redo', this.canRedo, this._activeIndex)
-    if (this.canRedo) this._activeIndex = this._activeIndex + 1
-  },
-  undo() {
-    console.log('undo', this.canUndo, this._activeIndex)
-    if (this.canUndo) this._activeIndex = this._activeIndex - 1
-  },
-  saveHistory() {
-    const state = toJS(this._history[this._activeIndex])
-    this._history.splice(this._activeIndex, 0, state)
-    this._history.splice(this._activeIndex + 2, this._history.length)
-    this._activeIndex = this._history.length - 1
-  },
-  clearHistory() {
-    this._history = [{}]
-    this._activeIndex = 0
-  },
-  clearNodes() {
-    return (this._history[this._activeIndex] = {})
-  },
-  updateInitialNodes(nodes?: NodesMap) {
-    const value = nodes ? nodes : this._history[this._activeIndex]
-    return (this._initial = toJS(value))
-  },
-  setNode(node: NodeSchema<any>, create = false) {
-    if (!node || (!create && !node.$id)) throw new Error('Invalid node')
-    const _node = create ? createNode(node) : node
-    return (this.nodes[_node?.$id] = _node)
-  },
-  setNodes(schemas: NodesMap): NodesMap {
-    if (!schemas) throw new Error('Invalid schemas')
-    const cloned = cloneDeep(schemas)
-    const nodes = {}
-    for (const nodeId in cloned) {
-      if (!cloned[nodeId]) continue
-      nodes[nodeId] = createNode(cloned[nodeId])
-    }
-    return (this._history[this._activeIndex] = nodes)
-  },
-  deleteNode(node: NodeSchema<any>) {
-    if (!node) throw new Error('Invalid node')
-    if (isRootNode(node)) throw new Error('Cannot delete root node')
-    this.saveHistory()
-    const parent = this.getNode(node.parentId)
-    const index = parent.nodes.indexOf(node.$id)
-    for (const childId of toJS(node.nodes)) {
-      const child = this.getNode(childId)
-      this.deleteNode(child)
-    }
-
-    if (index > -1) parent.nodes.splice(index, 1)
-    delete this.nodes[node.$id]
-  },
-  reparentNode(
-    node: NodeSchema<any>,
-    newParent: NodeSchema<any>,
-    index = NaN,
-  ): typeof node {
-    if (!node) throw new Error('Invalid node')
-    if (isRootNode(node)) throw new Error('Cannot move root node')
-    if (!newParent) throw new Error('Invalid parent node')
-
-    this.saveHistory()
-    const oldParent = this.getNodeParent(node)
-    const oldIndex = oldParent?.nodes?.indexOf(node?.$id)
-    if (oldIndex > -1) oldParent.nodes.splice(oldIndex, 1)
-    if (oldParent?.$id !== newParent.$id) node.parentId = newParent?.$id
-
-    if (isNaN(index)) newParent.nodes.push(node?.$id)
-    else newParent.nodes.splice(index, 0, node?.$id)
-    return node
-  },
-  reorderNode(node: NodeSchema<any>, index = NaN): typeof node {
-    return this.reparentNode(node, this.getNodeParent(node), index)
-  },
-  duplicateNode(node: NodeSchema<any>): NodeSchema<any> {
-    if (!node) throw new Error('Invalid node')
-    if (isRootNode(node)) throw new Error('Cannot duplicate root node')
-    const parent = this.getNodeParent(node)
-    if (!parent) throw new Error('Invalid parent node')
-
-    const duplicateNodeAndChildren = (
-      node: NodeSchema<any>,
-      parentId: NodeId,
-    ): NodeSchema<any> => {
-      if (!node) return
-
-      const json = toJS(node)
-      const newNode = this.setNode(
-        createNode({ ...json, $id: createNodeId(), parentId, nodes: [] }),
-      )
-      for (const childId of arraySafe(json?.nodes)) {
-        const childNode = duplicateNodeAndChildren(
-          this.getNode(childId),
-          newNode.$id,
-        )
-        if (childNode) newNode.nodes.push(childNode?.$id)
-      }
-
-      return newNode
-    }
-
-    this.saveHistory()
-    const nodeIndex = this.getNodeIndex(node)
-    const index = nodeIndex === -1 ? parent.nodes.length - 1 : nodeIndex + 1
-    const newNode = duplicateNodeAndChildren(node, node?.parentId)
-    parent.nodes.splice(index, 0, newNode.$id)
-
-    return newNode
-  },
-  addNodeFromPreset(
-    preset: PresetSchema<any>,
-    parent: NodeSchema<any>,
-    index = NaN,
-  ): NodeSchema<any> {
-    if (!preset) throw new Error('Invalid preset')
-    if (!parent) throw new Error('Invalid parent node')
-    this.saveHistory()
-    const presetJS = toJS(preset)
-    const duplicate = createDuplicateNode(presetJS.data)
-    duplicate.parentId = parent.$id
-    const parsed = processNodesToDenormalized(duplicate)
-    this.setNodes(parsed)
-
-    if (isNaN(index)) parent.nodes.push(duplicate.$id)
-    else parent.nodes.splice(index, 0, duplicate.$id)
-
-    return this.getNode(duplicate.$id)
-  },
-  updateNodeProps(
-    node: NodeSchema<any>,
-    props: NodeSchema<any>['props'],
-  ): void {
-    if (!node) throw new Error('Invalid node')
-    this.saveHistory()
-    node.props = { ...props }
-  },
-})
 
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   public $id: NodeId
@@ -457,24 +174,24 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   public className?: string
 
   get parent(): NodeSchema<any> | null {
-    return getNode(this.parentId)
+    return this.screen.getNode(this.parentId)
   }
   get index(): number | null {
-    return getNodeIndex(this)
+    return this.screen.getNodeIndex(this)
   }
   get children(): NodeSchema<any>[] {
     const res: NodeSchema[] = []
     for (const $id of this.nodes) {
-      const node = getNode($id)
+      const node = this.screen.getNode($id)
       res.push(node)
     }
     return res
   }
   get labelShort(): string {
-    return getNodeLabelShort(this)
+    return this.screen.getNodeLabelShort(this)
   }
   get breadcrumbPath(): NodeBreadcrumbPath {
-    return getNodeBreadcrumbPath(this)
+    return this.screen.getNodeBreadcrumbPath(this)
   }
   get componentSchema(): ComponentSchema | undefined {
     return getNodeComponentSchema(this)
@@ -490,7 +207,7 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     return this.props
   }
 
-  constructor(schema: NodeSchema<P>) {
+  constructor(schema: NodeSchema<P>, private screen: ScreenManager) {
     this.$id = schema.$id
     this.name = schema.name
     this.type = schema.type || NodeType.NODE
@@ -510,259 +227,409 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
 }
 
-export function updateInitialNodes(nodes?: NodesMap): NodesMap {
-  return runInAction(() => state.updateInitialNodes(nodes))
-}
-export function clearHistory() {
-  return runInAction(() => state.clearHistory())
-}
-export function saveHistory() {
-  return runInAction(() => state.saveHistory())
-}
-export function canUndo() {
-  return state.undo
-}
-export function undo() {
-  return runInAction(() => state.undo())
-}
-export function canRedo() {
-  return state.canRedo
-}
-export function redo() {
-  return runInAction(() => state.redo())
-}
+export class ScreenManager {
+  private _initial = null
+  private _history = [{}]
+  private _activeIndex = 0
 
-export function createNodeId(): NodeId {
-  return createIdUrlSafe(NODE_ID_LENGTH)
-}
+  state = this
 
-export function isRootNodeId(id: NodeId): id is typeof NODE_ROOT_ID {
-  return runInAction(() => state.isRootNodeId(id))
-}
+  public get nodes() {
+    console.log(
+      'nodes active',
+      this._activeIndex,
+      this._history.length,
+      this._history[this._activeIndex],
+    )
+    return this._history[this._activeIndex]
+  }
+  public get canRedo() {
+    return this._activeIndex < this._history.length - 1
+  }
+  public get canUndo() {
+    return this._activeIndex > 0
+  }
+  public get isInitialSame() {
+    return isEqual(toJS(this._initial), toJS(this.nodes))
+  }
+  public get didSetInitial() {
+    return Boolean(this._initial)
+  }
+  public get rootNode() {
+    return this._history[this._activeIndex][NODE_ROOT_ID]
+  }
+  public get nestedNodes(): NodeSchemaNested<any> {
+    const rootNode = this.rootNode
+    const nodes = this.nodes
+    if (!nodes || !rootNode) return {} as any
+    return this.nestNodes(nodes, rootNode)
+  }
 
-export function isRootNode(node: NodeSchema<any>): boolean {
-  return runInAction(() => state.isRootNode(node))
-}
+  public hasNode = computedFn(($id: NodeId): boolean => {
+    return Boolean(this.nodes[$id])
+  })
+  public getNode = computedFn(($id: NodeId): NodeSchema<any> | undefined => {
+    return this.nodes[$id]
+  })
+  public nodesAreEqual = computedFn(
+    (left: NodesMap, right?: NodesMap): boolean => {
+      const _right = right ? right : this.nodes
+      return isEqual(toJS(left), toJS(_right))
+    },
+  )
+  public getNodeParent = computedFn(
+    (node: NodeSchema<any>): NodeSchema<any> => {
+      if (!node) throw new Error('Invalid node')
+      return this.getNode(node.parentId)
+    },
+  )
+  public getNodeIndex = computedFn((node: NodeSchema<any>): number => {
+    if (!node) throw new Error('Invalid node')
+    const parent = this.getNodeParent(node)
+    if (!parent) throw new Error('Invalid parent node')
+    return parent.nodes?.indexOf(node.$id)
+  })
+  public isRootNodeId = computedFn(
+    (id: NodeId): id is string & typeof NODE_ROOT_ID => {
+      return id === NODE_ROOT_ID
+    },
+  )
+  public isRootNode = computedFn((node: NodeSchema<any>): boolean => {
+    return node?.$id === NODE_ROOT_ID
+  })
+  public getNodeBreadcrumbPath = computedFn(
+    (nodeOrId: NodeId | NodeSchema<any>): NodeBreadcrumbPath => {
+      const hierarchy = [NODE_ROOT_ID]
 
-export function nodesToJSON(nodes?: NodesMap): NodesMap {
-  const _nodes = nodes ? nodes : state.nodes
-  return toJS(_nodes)
-}
+      let currentId = typeof nodeOrId !== 'string' ? nodeOrId?.$id : nodeOrId
+      while (currentId && !this.isRootNodeId(currentId)) {
+        hierarchy.splice(1, 0, currentId)
+        currentId = this.getNode(currentId)?.parentId
+      }
 
-export function toJSON() {
-  return {
-    nodes: nodesToJSON(),
+      return hierarchy as NodeBreadcrumbPath
+    },
+  )
+  public getNodeLabelShort = computedFn((node: NodeSchema<any>): any => {
+    if (this.isRootNode(node)) return NODE_ROOT_LABEL
+    const componentLabel = components.getLabel(node?.componentId)
+    return node?.name || componentLabel || node?.$id
+  })
+  public nestNodes = computedFn(
+    (nodes: NodesMap, rootNode: NodeSchema<any>): NodeSchemaNested<any> => {
+      if (!nodes) throw new Error('Invalid nodes')
+      if (!rootNode) throw new Error('Invalid root node')
+
+      const node = toJS(rootNode) as unknown as NodeSchemaNested<any>
+      const childNodes = []
+      for (const childId of (node.nodes ||= []) as unknown as NodeId[]) {
+        if (!Object.hasOwn(nodes, childId)) continue
+        childNodes.push(this.nestNodes(nodes, nodes[childId]))
+      }
+      node.nodes = childNodes
+      return node
+    },
+  )
+
+  constructor() {
+    makeAutoObservable(this)
+  }
+
+  public toJSON() {
+    return {
+      nodes: toJS(this.nodes),
+    }
+  }
+
+  public redo() {
+    console.log('redo', this.canRedo, this._activeIndex)
+    if (this.canRedo) this._activeIndex = this._activeIndex + 1
+  }
+  public undo() {
+    console.log('undo', this.canUndo, this._activeIndex)
+    if (this.canUndo) this._activeIndex = this._activeIndex - 1
+  }
+  public saveHistory() {
+    const state = toJS(this._history[this._activeIndex])
+    this._history.splice(this._activeIndex, 0, state)
+    this._history.splice(this._activeIndex + 2, this._history.length)
+    this._activeIndex = this._history.length - 1
+  }
+  public clearHistory() {
+    this._history = [{}]
+    this._activeIndex = 0
+  }
+  public createNodeId(): NodeId {
+    return createIdUrlSafe(NODE_ID_LENGTH)
+  }
+  public createNode(
+    schema: PartialKeys<NodeSchema<any>, '$id'>,
+  ): NodeSchema<any> {
+    return new AglynNode<any>(
+      {
+        ...schema,
+        $id: schema?.$id ?? this.createNodeId(),
+      },
+      this,
+    )
+  }
+  public clearNodes() {
+    return (this._history[this._activeIndex] = {})
+  }
+  public updateInitialNodes(nodes?: NodesMap) {
+    const value = nodes ? nodes : this._history[this._activeIndex]
+    return (this._initial = toJS(value))
+  }
+  public setNode(node: NodeSchema<any>, create = false) {
+    if (!node || (!create && !node.$id)) throw new Error('Invalid node')
+    const _node = create ? this.createNode(node) : node
+    return (this.nodes[_node?.$id] = _node)
+  }
+  public setNodes(schemas: NodesMap): NodesMap {
+    if (!schemas) throw new Error('Invalid schemas')
+    const cloned = cloneDeep(schemas)
+    const nodes = {}
+    for (const nodeId in cloned) {
+      if (!cloned[nodeId]) continue
+      nodes[nodeId] = this.createNode(cloned[nodeId])
+    }
+    return (this._history[this._activeIndex] = nodes)
+  }
+  public deleteNode(node: NodeSchema<any>) {
+    if (!node) throw new Error('Invalid node')
+    if (this.isRootNode(node)) throw new Error('Cannot delete root node')
+    this.saveHistory()
+    const parent = this.getNode(node.parentId)
+    const index = parent.nodes.indexOf(node.$id)
+    for (const childId of toJS(node.nodes)) {
+      const child = this.getNode(childId)
+      this.deleteNode(child)
+    }
+
+    if (index > -1) parent.nodes.splice(index, 1)
+    delete this.nodes[node.$id]
+  }
+  public reparentNode(
+    node: NodeSchema<any>,
+    newParent: NodeSchema<any>,
+    index = NaN,
+  ): typeof node {
+    if (!node) throw new Error('Invalid node')
+    if (this.isRootNode(node)) throw new Error('Cannot move root node')
+    if (!newParent) throw new Error('Invalid parent node')
+
+    this.saveHistory()
+    const oldParent = this.getNodeParent(node)
+    const oldIndex = oldParent?.nodes?.indexOf(node?.$id)
+    if (oldIndex > -1) oldParent.nodes.splice(oldIndex, 1)
+    if (oldParent?.$id !== newParent.$id) node.parentId = newParent?.$id
+
+    if (isNaN(index)) newParent.nodes.push(node?.$id)
+    else newParent.nodes.splice(index, 0, node?.$id)
+    return node
+  }
+  public reorderNode(node: NodeSchema<any>, index = NaN): typeof node {
+    return this.reparentNode(node, this.getNodeParent(node), index)
+  }
+  public duplicateNode(node: NodeSchema<any>): NodeSchema<any> {
+    if (!node) throw new Error('Invalid node')
+    if (this.isRootNode(node)) throw new Error('Cannot duplicate root node')
+    const parent = this.getNodeParent(node)
+    if (!parent) throw new Error('Invalid parent node')
+
+    const duplicateNodeAndChildren = (
+      node: NodeSchema<any>,
+      parentId: NodeId,
+    ): NodeSchema<any> => {
+      if (!node) return
+
+      const json = toJS(node)
+      const newNode = this.setNode(
+        this.createNode({
+          ...json,
+          $id: this.createNodeId(),
+          parentId,
+          nodes: [],
+        }),
+      )
+      for (const childId of arraySafe(json?.nodes)) {
+        const childNode = duplicateNodeAndChildren(
+          this.getNode(childId),
+          newNode.$id,
+        )
+        if (childNode) newNode.nodes.push(childNode?.$id)
+      }
+
+      return newNode
+    }
+
+    this.saveHistory()
+    const nodeIndex = this.getNodeIndex(node)
+    const index = nodeIndex === -1 ? parent.nodes.length - 1 : nodeIndex + 1
+    const newNode = duplicateNodeAndChildren(node, node?.parentId)
+    parent.nodes.splice(index, 0, newNode.$id)
+
+    return newNode
+  }
+  public createDuplicateNode(
+    node: NodeSchemaNested<any>,
+  ): NodeSchemaNested<any> {
+    const $id = this.createNodeId()
+    const cloned = toJS(node)
+    const nodes = Array.isArray(cloned?.nodes) ? [...cloned.nodes] : []
+    const res = { ...cloned, $id, nodes: [] }
+    for (const child of nodes) {
+      const childDuplicate = this.createDuplicateNode({
+        ...child,
+        parentId: $id,
+      })
+      res.nodes.push(childDuplicate)
+    }
+    return res
+  }
+  public addNodeFromPreset(
+    preset: PresetSchema<any>,
+    parent: NodeSchema<any>,
+    index = NaN,
+  ): NodeSchema<any> {
+    if (!preset) throw new Error('Invalid preset')
+    if (!parent) throw new Error('Invalid parent node')
+    this.saveHistory()
+    const presetJS = toJS(preset)
+    const duplicate = this.createDuplicateNode(presetJS.data)
+    duplicate.parentId = parent.$id
+    const parsed = this.processNodesToDenormalized(duplicate)
+    this.setNodes(parsed)
+
+    if (isNaN(index)) parent.nodes.push(duplicate.$id)
+    else parent.nodes.splice(index, 0, duplicate.$id)
+
+    return this.getNode(duplicate.$id)
+  }
+  public updateNodeProps(
+    node: NodeSchema<any>,
+    props: NodeSchema<any>['props'],
+  ): void {
+    if (!node) throw new Error('Invalid node')
+    this.saveHistory()
+    node.props = { ...props }
+  }
+
+  public denormalizeNodes(
+    nodes: NodeSchemaNested<any>[],
+    parentId: NodeId,
+    accumulator: NodesMap = {},
+  ): NodesMap {
+    for (const childNode of Array.isArray(nodes) ? nodes : []) {
+      const child =
+        _isStrT(childNode) && accumulator[childNode]
+          ? accumulator[childNode]
+          : childNode
+      if (!_isObj(child)) continue
+
+      const node = cloneDeep(child) as unknown as NodeSchema<any>
+
+      // TODO: Remove after migration to nodes property
+      if (node['elements']) {
+        node.nodes = node['elements']
+        delete node['elements']
+      }
+      // TODO: Remove after migration to pluginId property
+      if (node['bundleId']) {
+        node.pluginId = node['bundleId']
+        delete node['bundleId']
+      }
+
+      const nodes = (node as unknown as NodeSchemaNested<any>)?.nodes
+      const nodesArray = [...(Array.isArray(nodes) ? nodes : [])].filter(
+        Boolean,
+      )
+      accumulator[node.$id] = {
+        ...node,
+        parentId,
+        nodes: [...nodesArray]
+          .map((i) => {
+            if (_isStrT(i)) return i
+            if (_isObj(i)) return i.$id
+            return null
+          })
+          .filter(Boolean),
+      }
+      this.denormalizeNodes(nodesArray, node.$id, accumulator)
+    }
+
+    return accumulator
+  }
+
+  public processNodesToDenormalized(value: ProcessableNodes): NodesMap {
+    let response: NodesMap = {}
+    const isArray = Array.isArray(value)
+
+    if (isArray && value.length === 1) {
+      const item = value[0]
+      if (item?.$id === NODE_ROOT_ID) {
+        response = this.denormalizeNodes(
+          [{ ...item, parentId: null }],
+          NODE_ROOT_ID,
+          response,
+        )
+      } else if (item?.parentId === NODE_ROOT_ID || !item?.parentId) {
+        response = this.denormalizeNodes(
+          [{ $id: NODE_ROOT_ID, componentId: 'div', nodes: [item] }],
+          NODE_ROOT_ID,
+          response,
+        )
+      } else if (item?.parentId) {
+        response = this.denormalizeNodes(
+          [{ $id: item?.parentId, componentId: 'div', nodes: [item] }],
+          item?.parentId,
+          response,
+        )
+      } else {
+        response = this.denormalizeNodes(
+          [{ $id: NODE_ROOT_ID, componentId: 'div', nodes: [] }],
+          NODE_ROOT_ID,
+          response,
+        )
+      }
+    } else if (isArray) {
+      response = this.denormalizeNodes(
+        [{ $id: NODE_ROOT_ID, componentId: 'div', nodes: [...value] }],
+        NODE_ROOT_ID,
+        response,
+      )
+    } else if (
+      _isObj(value) &&
+      Array.isArray(value?.nodes) &&
+      typeof value.nodes[0] !== 'string'
+    ) {
+      const _value = { ...(value as NodeSchemaNested<any>) }
+      response = this.denormalizeNodes(
+        [_value],
+        _value?.parentId || NODE_ROOT_ID,
+        response,
+      )
+    } else {
+      response = value as unknown as NodesMap
+    }
+
+    return response
   }
 }
 
-export function nodeToJSON(node: NodeSchema<any>): NodeSchemaJSON<any> {
-  return toJS(node)
-}
-
-export function clearNodes() {
-  return runInAction(() => state.clearNodes())
-}
-
-export function createNode(
-  schema: PartialKeys<NodeSchema<any>, '$id'>,
-): NodeSchema<any> {
-  return new AglynNode<any>({ ...schema, $id: schema?.$id ?? createNodeId() })
-}
-
-export function setNode(node: NodeSchema<any>, create = false) {
-  return runInAction(() => state.setNode(node, create))
-}
-
-export function setNodes(schemas: NodesMap) {
-  return runInAction(() => state.setNodes(schemas))
-}
-
-export function hasNode($id: NodeId): boolean {
-  return runInAction(() => state.hasNode($id))
-}
-
-export function getNode($id: NodeId): NodeSchema<any> | undefined {
-  return state.getNode($id)
-}
-
-export function getNodeIndex(node: NodeSchema<any>) {
-  return runInAction(() => state.getNodeIndex(node))
-}
+export default ScreenManager
 
 export function getNodeComponentSchema(node: NodeSchema<any>): ComponentSchema {
   return components.getSchema(node?.componentId)
 }
 
-export function deleteNode(node: NodeSchema<any>) {
-  return runInAction(() => state.deleteNode(node))
-}
-
-export function reparentNode(
-  node: NodeSchema<any>,
-  newParent: NodeSchema<any>,
-  index?: number,
-) {
-  return runInAction(() => state.reparentNode(node, newParent, index))
-}
-
-export function reorderNode(node: NodeSchema<any>, index = NaN) {
-  return runInAction(() => state.reorderNode(node, index))
-}
-
-export function createDuplicateNode(
-  node: NodeSchemaNested<any>,
-): NodeSchemaNested<any> {
-  const $id = createNodeId()
-  const cloned = toJS(node)
-  const nodes = Array.isArray(cloned?.nodes) ? [...cloned.nodes] : []
-  const res = { ...cloned, $id, nodes: [] }
-  for (const child of nodes) {
-    const childDuplicate = createDuplicateNode({ ...child, parentId: $id })
-    res.nodes.push(childDuplicate)
-  }
-  return res
-}
-
-export function addNodeFromPreset(
-  preset: PresetSchema<any>,
-  parent: NodeSchema<any>,
-  index = NaN,
-) {
-  return runInAction(() => state.addNodeFromPreset(preset, parent, index))
-}
-
-export function duplicateNode(node: NodeSchema<any>): NodeSchema<any> {
-  return runInAction(() => state.duplicateNode(node))
-}
-export function updateNodeProps(
-  node: NodeSchema<any>,
-  props: NodeSchema<any>['props'],
-): void {
-  return runInAction(() => state.updateNodeProps(node, props))
-}
-
-export function nestNodes(
-  nodes: NodesMap,
-  rootNode: NodeSchema<any>,
-): NodeSchemaNested<any> {
-  return runInAction(() => state.nestNodes(nodes, rootNode))
-}
-
-export function denormalizeNodes(
-  nodes: NodeSchemaNested<any>[],
-  parentId: NodeId,
-  accumulator: NodesMap = {},
-): NodesMap {
-  for (const childNode of Array.isArray(nodes) ? nodes : []) {
-    const child =
-      _isStrT(childNode) && accumulator[childNode]
-        ? accumulator[childNode]
-        : childNode
-    if (!_isObj(child)) continue
-
-    const node = cloneDeep(child) as unknown as NodeSchema<any>
-
-    // TODO: Remove after migration to nodes property
-    if (node['elements']) {
-      node.nodes = node['elements']
-      delete node['elements']
-    }
-    // TODO: Remove after migration to pluginId property
-    if (node['bundleId']) {
-      node.pluginId = node['bundleId']
-      delete node['bundleId']
-    }
-
-    const nodes = (node as unknown as NodeSchemaNested<any>)?.nodes
-    const nodesArray = [...(Array.isArray(nodes) ? nodes : [])].filter(Boolean)
-    accumulator[node.$id] = {
-      ...node,
-      parentId,
-      nodes: [...nodesArray]
-        .map((i) => {
-          if (_isStrT(i)) return i
-          if (_isObj(i)) return i.$id
-          return null
-        })
-        .filter(Boolean),
-    }
-    denormalizeNodes(nodesArray, node.$id, accumulator)
-  }
-
-  return accumulator
-}
-
-export type ProcessableNodes =
-  | NodeSchemaNested<any>[]
-  | NodeSchemaNested<any>
-  | Record<NodeId, NodeSchema>
-
-export function processNodesToDenormalized(value: ProcessableNodes): NodesMap {
-  let response: NodesMap = {}
-  const isArray = Array.isArray(value)
-
-  if (isArray && value.length === 1) {
-    const item = value[0]
-    if (item?.$id === NODE_ROOT_ID) {
-      response = denormalizeNodes(
-        [{ ...item, parentId: null }],
-        NODE_ROOT_ID,
-        response,
-      )
-    } else if (item?.parentId === NODE_ROOT_ID || !item?.parentId) {
-      response = denormalizeNodes(
-        [{ $id: NODE_ROOT_ID, componentId: 'div', nodes: [item] }],
-        NODE_ROOT_ID,
-        response,
-      )
-    } else if (item?.parentId) {
-      response = denormalizeNodes(
-        [{ $id: item?.parentId, componentId: 'div', nodes: [item] }],
-        item?.parentId,
-        response,
-      )
-    } else {
-      response = denormalizeNodes(
-        [{ $id: NODE_ROOT_ID, componentId: 'div', nodes: [] }],
-        NODE_ROOT_ID,
-        response,
-      )
-    }
-  } else if (isArray) {
-    response = denormalizeNodes(
-      [{ $id: NODE_ROOT_ID, componentId: 'div', nodes: [...value] }],
-      NODE_ROOT_ID,
-      response,
-    )
-  } else if (
-    _isObj(value) &&
-    Array.isArray(value?.nodes) &&
-    typeof value.nodes[0] !== 'string'
-  ) {
-    const _value = { ...(value as NodeSchemaNested<any>) }
-    response = denormalizeNodes(
-      [_value],
-      _value?.parentId || NODE_ROOT_ID,
-      response,
-    )
-  } else {
-    response = value as unknown as NodesMap
-  }
-
-  return response
-}
-
-export function getNodeBreadcrumbPath(nodeId: NodeId): NodeBreadcrumbPath
-export function getNodeBreadcrumbPath(node: NodeSchema<any>): NodeBreadcrumbPath
-export function getNodeBreadcrumbPath(
-  nodeOrId: NodeId | NodeSchema<any>,
-): NodeBreadcrumbPath {
-  return runInAction(() => state.getNodeBreadcrumbPath(nodeOrId))
-}
-
-export function getNodeLabelShort(node: NodeSchema<any>) {
-  return runInAction(() => state.getNodeLabelShort(node))
-}
+// export function getNodeBreadcrumbPath(nodeId: NodeId): NodeBreadcrumbPath
+// export function getNodeBreadcrumbPath(node: NodeSchema<any>): NodeBreadcrumbPath
+// export function getNodeBreadcrumbPath(
+//   nodeOrId: NodeId | NodeSchema<any>,
+// ): NodeBreadcrumbPath {
+//   return runInAction(() => state.getNodeBreadcrumbPath(nodeOrId))
+// }
 
 // export const NodeSchemaJsonSchema: JSONSchema7 = {
 //   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -818,22 +685,3 @@ export function getNodeLabelShort(node: NodeSchema<any>) {
 //     },
 //   },
 // }
-
-emitter.on(AglynEvent.NODE_CLEAR_ITEMS, () => {
-  clearNodes()
-})
-emitter.on(AglynEvent.NODE_SET_ITEMS, ({ nodes }) => {
-  setNodes(nodes)
-})
-emitter.on(AglynEvent.NODE_SET, ({ node, create }) => {
-  setNode(node, create)
-})
-emitter.on(AglynEvent.NODE_DELETE, ({ node }) => {
-  deleteNode(node)
-})
-emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
-  duplicateNode(node)
-})
-emitter.on(AglynEvent.NODE_REPARENT, ({ node, newParent, index }) => {
-  reparentNode(node, newParent, index)
-})

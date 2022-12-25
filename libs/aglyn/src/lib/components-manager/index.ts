@@ -15,5 +15,5 @@
  * limitations under the License.
  */
 
-export { default as components } from './components-manager'
+export { default } from './components-manager'
 export * from './components-manager'

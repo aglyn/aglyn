@@ -37,7 +37,7 @@ import {
   FieldComponentType,
   LinealDirectiveFlag,
 } from '../constants'
-import { AglynEvent, emitter, lifecycleEvent } from '../emit-manager'
+import { AglynEvent, lifecycleEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 import type { NodeSchema } from '../screen-manager'
 import {
@@ -307,19 +307,5 @@ export class ComponentManager {
     }
   }
 }
-export const state = new ComponentManager()
-export default state
 
-emitter.on(AglynEvent.COMPONENT_REGISTER, ({ component, schema }) => {
-  state.registerComponent(component, schema)
-})
-emitter.on(AglynEvent.COMPONENT_UNREGISTER, ({ componentId }) => {
-  state.unregisterComponent(componentId)
-})
-
-emitter.on(AglynEvent.PRESET_REGISTER, ({ preset }) => {
-  state.registerPreset(preset)
-})
-emitter.on(AglynEvent.PRESET_UNREGISTER, ({ presetId }) => {
-  state.unregisterPreset(presetId)
-})
+export default ComponentManager

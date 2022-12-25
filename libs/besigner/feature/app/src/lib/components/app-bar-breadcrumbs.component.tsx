@@ -78,7 +78,7 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => ({
         1,
       )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
 
-      color: theme.palette.primary.contrastText,
+      color: theme.palette.text.primary,
       background: alpha(
         theme.palette.primary.light,
         theme.palette.action.hoverOpacity,
@@ -132,7 +132,7 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => ({
       `.${breadcrumbItemClassKey.root} .${breadcrumbItemClassKey.lastItem}`,
     ].join()]: {
       // cursor: 'initial',
-      color: theme.palette.tertiary.contrastText,
+      color: theme.palette.text.primary,
       background: alpha(
         theme.palette.tertiary.light,
         theme.palette.action.selectedOpacity,
