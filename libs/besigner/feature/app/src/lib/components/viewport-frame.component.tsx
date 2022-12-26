@@ -37,8 +37,8 @@ import {
   HTMLAttributes,
   useCallback,
 } from 'react'
-import ElementOverlayPopperComponent from './element-overlay-popper.component'
 import LeafComponent from './leaf.component'
+import NodeOverlay from './node-overlay'
 
 const ViewportFrame = styled('div', {
   name: 'AglynViewportFrame',
@@ -140,14 +140,8 @@ const Overlays = forwardRef<any, Partial<BoxProps>>((props, ref) => {
       }}
       {...rest}
     >
-      <ElementOverlayPopperComponent
-        data-aglyn="popover:selected"
-        variant="selectedOverlay"
-      />
-      <ElementOverlayPopperComponent
-        data-aglyn="popover:hovered"
-        variant="hoveredOverlay"
-      />
+      <NodeOverlay data-aglyn="overlay:selected" variant="selected" />
+      <NodeOverlay data-aglyn="overlay:hovered" variant="hovered" />
     </Box>
   )
 })

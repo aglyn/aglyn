@@ -128,6 +128,7 @@ function BesignerDndContext<T, U>(props: BesignerDndContextProps<T, U>) {
     Besigner.dnd.clearDndStatus()
   }, [])
   const handleDragCancel = useCallback((e: DragCancelEvent) => {
+    console.log('handleDragCancel')
     Besigner.dnd.clearDndStatus()
   }, [])
 

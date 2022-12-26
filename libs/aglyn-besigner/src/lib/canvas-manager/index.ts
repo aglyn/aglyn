@@ -16,4 +16,4 @@
  */
 
 export * as canvas from './canvas-manager'
-export { EditorMode } from './canvas-manager'
+export * from './canvas-manager'

@@ -53,7 +53,6 @@ import {
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { type ChangeEvent, forwardRef, useCallback, useState } from 'react'
-import { useRenderedCanvasElementRef } from '../contexts/rendered-canvas-elements'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
@@ -83,9 +82,7 @@ export const BadgeButton = forwardRef<any, BadgeButtonProps>((props, ref) => {
         )}
       >
         <MdiIcon fontSize="inherit" {...icon} />
-        <SrOnly component="span" {...SrOnlyProps}>
-          {children}
-        </SrOnly>
+        <SrOnly {...SrOnlyProps}>{children}</SrOnly>
       </MuiButton>
     </MuiTooltip>
   )
@@ -141,7 +138,7 @@ const ElementOverlayActionsComponentRaw = (
   const app = useBesignerAppContext()
   const node = Aglyn.canvas.getNode($id)
   const parent = node?.parent
-  const elementRef = useRenderedCanvasElementRef({ $id })
+  const elementRef = Besigner.refs.get($id)
   const [moreOpen, setMoreOpen] = useState(false)
   const [moreButton, moreButtonRef] = useState(null)
 
@@ -313,8 +310,7 @@ const ElementOverlayActionsComponentRaw = (
 ElementOverlayActionsComponentRaw.displayName = 'ElementOverlayActionsComponent'
 ElementOverlayActionsComponentRaw.aglyn = true
 
-export const ElementOverlayActionsComponent = observer<
-  ElementOverlayActionsProps,
-  any
->(ElementOverlayActionsComponentRaw)
+export const ElementOverlayActionsComponent = observer(
+  ElementOverlayActionsComponentRaw,
+)
 export default ElementOverlayActionsComponent

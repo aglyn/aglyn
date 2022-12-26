@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import '@aglyn/shared-data-jsx'
+
 export * from './lib/constants/sample-data'
 export * from './lib/constants/shared'
 
@@ -56,15 +58,15 @@ export * from './lib/components/component-icon.component'
 export * from './lib/components/components-grid-list.component'
 export * from './lib/components/device-preview-controls.component'
 export * from './lib/components/element-overlay-actions.component'
-export * from './lib/components/element-overlay-label.component'
-export * from './lib/components/element-overlay-outline.component'
-export * from './lib/components/element-overlay-popper.component'
 export * from './lib/components/element-props-form.component'
 export * from './lib/components/element-styles-form.component'
 export * from './lib/components/history-controls.component'
 export * from './lib/components/interact-controls.component'
 export * from './lib/components/leaf.component'
 export * from './lib/components/node-context-menu'
+export * from './lib/components/node-outline'
+export * from './lib/components/node-overlay'
+export * from './lib/components/node-quick-actions'
 export * from './lib/components/node-tree-view.component'
 export * from './lib/components/panel-controls.component'
 export * from './lib/components/properties-dialog.component'

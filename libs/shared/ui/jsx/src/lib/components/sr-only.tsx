@@ -18,7 +18,7 @@
 import { styled } from '@mui/material'
 import { visuallyHidden } from '@mui/utils'
 
-export const SrOnly = styled('div', { name: 'SrOnly' })({ ...visuallyHidden })
+export const SrOnly = styled('span', { name: 'SrOnly' })({ ...visuallyHidden })
 SrOnly.displayName = 'SrOnly'
 
 export type SrOnlyProps = JSX.ComponentProps<typeof SrOnly>

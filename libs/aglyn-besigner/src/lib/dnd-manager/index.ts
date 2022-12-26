@@ -16,9 +16,4 @@
  */
 
 export * as dnd from './dnd-manager'
-export {
-  type DndState,
-  type DraggableNode,
-  DragType,
-  DropAreaType,
-} from './dnd-manager'
+export * from './dnd-manager'

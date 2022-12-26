@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 
+export * from './canvas-manager'
 export * from './dnd-manager'
 export * from './focus-manager'
-
-export function aglynBesigner(): string {
-  return 'aglyn-besigner'
-}
+export * from './panel-manager'

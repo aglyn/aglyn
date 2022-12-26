@@ -117,5 +117,3 @@ emitter.on(AglynEvent.NODE_DUPLICATE, ({ node }) => {
 emitter.on(AglynEvent.NODE_REPARENT, ({ node, newParent, index }) => {
   canvas.reparentNode(node, newParent, index)
 })
-
-console.log('this/ aglyn', this, aglyn)

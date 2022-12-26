@@ -17,17 +17,17 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
-import type { KeyOf } from '@aglyn/shared-data-types'
 import {
   Popper as MuiPopper,
   type PopperProps as MuiPopperProps,
 } from '@mui/material'
+import { VirtualElement } from '@popperjs/core'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, type MutableRefObject, useMemo } from 'react'
-import { useRenderedCanvasElementRef } from '../contexts/rendered-canvas-elements'
+import { forwardRef } from 'react'
+import { Else, If, Then } from 'react-if'
 import ElementOverlayActionsComponent from './element-overlay-actions.component'
-import ElementOverlayLabelComponent from './element-overlay-label.component'
-import ElementOverlayOutlineComponent from './element-overlay-outline.component'
+import NodeOutline from './node-outline'
+import NodeQuickActions from './node-quick-actions'
 
 const outerModifiers = [
   {
@@ -75,50 +75,46 @@ const innerModifiers = [
   },
 ]
 
-const variantToStoreName: Record<
-  PopperVariant,
-  KeyOf<Pick<typeof Besigner.focus.state, 'lastSelected' | 'hovered'>>
-> = {
-  selectedOverlay: 'lastSelected',
-  hoveredOverlay: 'hovered',
+export interface NodeOverlayProps extends Partial<MuiPopperProps> {
+  variant: 'hovered' | 'selected'
 }
 
-export type PopperVariant = string & ('hoveredOverlay' | 'selectedOverlay')
-
-export interface ElementOverlayPopperComponentProps
-  extends Partial<MuiPopperProps> {
-  variant: PopperVariant
-}
-
-const ElementOverlayPopper = forwardRef<
-  any,
-  ElementOverlayPopperComponentProps
->((props: ElementOverlayPopperComponentProps, ref: MutableRefObject<any>) => {
+const NodeOverlayRaw = forwardRef<any, NodeOverlayProps>((props, ref) => {
   const { variant, ...rest } = props || {}
 
-  const state = Besigner.focus.state[variantToStoreName[variant] || 'hovered']
+  const state =
+    variant === 'selected'
+      ? Besigner.focus.state.lastSelected
+      : Besigner.focus.state.hovered
   const $id = state?.$id
   const node = Aglyn.canvas.getNode($id)
 
-  const isSelected = Besigner.focus.isNodeSelected(node)
-  const elementRef = useRenderedCanvasElementRef({ $id })
-  const isOpen = Boolean(elementRef?.node)
+  const elementRef = Besigner.refs.get($id)
+  const isOpen = Boolean(elementRef?.node.current)
 
-  const badgeElement = useMemo(() => {
-    if (variant === 'selectedOverlay') {
-      return <ElementOverlayActionsComponent $id={$id} />
-    }
-    return <ElementOverlayLabelComponent node={node} />
-  }, [$id, node, variant])
+  const virtualElement: VirtualElement = {
+    getBoundingClientRect: (): DOMRect => {
+      if (elementRef?.node.current) {
+        return elementRef?.node.current.getBoundingClientRect()
+      }
+      return {
+        top: 10,
+        left: 10,
+        bottom: 20,
+        right: 100,
+        width: 90,
+        height: 10,
+      } as DOMRect
+    },
+    contextElement: elementRef?.node.current,
+  }
 
   return (
     <MuiPopper
       ref={ref}
-      anchorEl={() => elementRef?.node}
+      anchorEl={virtualElement}
       placement="top-start"
       modifiers={outerModifiers}
-      data-aglyn-node={$id}
-      data-aglyn-kind={'overlay-popper-out'}
       open={isOpen}
       keepMounted
       disablePortal
@@ -127,15 +123,13 @@ const ElementOverlayPopper = forwardRef<
       {({ placement, TransitionProps }) => {
         return (
           <>
-            <ElementOverlayOutlineComponent $id={$id} />
+            <NodeOutline node={node} />
 
             <MuiPopper
-              anchorEl={() => elementRef?.node}
-              data-aglyn-node={$id}
-              data-aglyn-kind={'overlay-popper-in'}
-              placement={variant === 'hoveredOverlay' ? 'top-start' : undefined}
+              open
+              anchorEl={virtualElement}
+              placement={variant === 'hovered' ? 'top-start' : undefined}
               modifiers={innerModifiers}
-              open={isOpen}
               sx={{
                 ['&[data-popper-placement^=top] #aglyn\\:element-overlay-label']:
                   {
@@ -155,7 +149,14 @@ const ElementOverlayPopper = forwardRef<
               disablePortal
               {...rest}
             >
-              <div>{badgeElement}</div>
+              <If condition={variant === 'selected'}>
+                <Then>
+                  <ElementOverlayActionsComponent $id={$id} />
+                </Then>
+                <Else>
+                  <NodeQuickActions node={node} />
+                </Else>
+              </If>
             </MuiPopper>
           </>
         )
@@ -164,9 +165,7 @@ const ElementOverlayPopper = forwardRef<
   )
 })
 
-ElementOverlayPopper.displayName = 'ElementOverlayPopperComponent'
-ElementOverlayPopper.aglyn = true
+NodeOverlayRaw.displayName = 'NodeOverlay'
 
-export const ElementOverlayPopperComponent = observer(ElementOverlayPopper)
-
-export default ElementOverlayPopperComponent
+export const NodeOverlay = observer(NodeOverlayRaw)
+export default NodeOverlay

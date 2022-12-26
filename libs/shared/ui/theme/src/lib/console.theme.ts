@@ -307,7 +307,7 @@ const baseOptions: ThemeOptions = {
     createShadowInset(0, 11, 15, -7, 0, 24, 38, -3, 0, 9, 46, -8),
   ],
   shape: {
-    borderRadius: 10,
+    borderRadius: 4,
     appIconBorderRadius: `17.544%`,
   },
   spacing: 8,

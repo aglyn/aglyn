@@ -21,7 +21,6 @@ import {
   BesignerPanelTabFlag,
   setBesignerPanels,
 } from '@aglyn/besigner-data-app'
-import { useRenderedCanvasElementRef } from '@aglyn/besigner-feature-app/contexts/rendered-canvas-elements'
 import useAddElementDrawerCallback from '@aglyn/besigner-feature-app/hooks/use-add-element-drawer-callback'
 import useBesignerAppContext from '@aglyn/besigner-feature-app/hooks/use-besigner-app-context'
 import useDeleteElementCallback from '@aglyn/besigner-feature-app/hooks/use-delete-element-callback'
@@ -54,7 +53,7 @@ const NodeContextMenuRaw = (props: NodeContextMenuProps) => {
   const isRootNode = Aglyn.canvas.isRootNode(node)
   const app = useBesignerAppContext()
   const handleAddElementClick = useAddElementDrawerCallback()
-  const elementRef = useRenderedCanvasElementRef({ $id: node?.$id })
+  const elementRef = Besigner.refs.get(node?.$id)
   const [moreOpen, setMoreOpen] = useState(false)
   const [moreButton, moreButtonRef] = useState(null)
 

@@ -17,11 +17,9 @@
 
 import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { useForkedRefs, useIsomorphicLayoutEffect } from '@aglyn/shared-ui-jsx'
-import { Box } from '@mui/material'
+import { useForkedRefs } from '@aglyn/shared-ui-jsx'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
-import { useRenderedCanvasElements } from '../contexts/rendered-canvas-elements'
+import { forwardRef, useEffect, useRef } from 'react'
 import useLeafDrag from '../hooks/use-leaf-drag'
 import useLeafDrop from '../hooks/use-leaf-drop'
 
@@ -31,7 +29,8 @@ const RawLeafComponent = forwardRef<any, ElementLeafComponentProps>(
   (props, forwardRef) => {
     const { node, ...rest } = props
     const localRef = useRef<HTMLElement>(null)
-    const [nodeRef, setNodeRef] = useState<HTMLElement>()
+    const isSelected = Besigner.focus.isNodeSelected(node)
+    const $id = node?.$id
 
     const {
       setNodeRef: setDraggableNodeRef,
@@ -40,96 +39,63 @@ const RawLeafComponent = forwardRef<any, ElementLeafComponentProps>(
       transform,
     } = useLeafDrag(node, Besigner.DragType.CANVAS)
     const { setNodeRef: setDroppableNodeRef } = useLeafDrop(node)
-    const { setElementRef, deleteElementRef } = useRenderedCanvasElements()
-    const ref = useForkedRefs<HTMLElement>(
-      forwardRef,
-      setDraggableNodeRef,
-      setDroppableNodeRef,
-      // dragPreview,
-      // dropRef,
-      setNodeRef,
-      localRef,
-    )
-    const style = transform
-      ? {
-          transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-          cursor: 'grab',
-        }
-      : undefined
 
-    /**
-     * Update context element ref
-     */
     useEffect(() => {
-      setElementRef(node?.$id, {
-        $id: node?.$id,
-        node: nodeRef,
+      Besigner.refs.set($id, {
+        node: localRef,
         dragHandle: {
           ...listeners,
           style: transform ? { cursor: 'grab' } : { cursor: 'move' },
         },
       })
       return () => {
-        deleteElementRef(node?.$id)
+        Besigner.refs.delete($id)
       }
-    })
+    }, [$id, listeners, transform])
 
-    const handleOnMouseOver = useCallback(
-      (e: Event) => {
+    useEffect(() => {
+      const el = localRef.current
+      if (el) {
+        el.addEventListener('mouseover', handleMouseOver)
+        el.addEventListener('mousedown', handleMouseDown)
+
+        return () => {
+          el.removeEventListener('mouseover', handleMouseOver)
+          el.removeEventListener('mousedown', handleMouseDown)
+        }
+      }
+      function handleMouseOver(e: Event) {
         e.preventDefault()
         e.stopPropagation()
         Besigner.focus.setHoveredNode(node)
-      },
-      [node],
-    )
-    const handleOnMouseDown = useCallback(
-      (e: Event) => {
+      }
+      function handleMouseDown(e: Event) {
         e.preventDefault()
         e.stopPropagation()
         Besigner.focus.handleNodeSelection(node)
-      },
-      [node],
-    )
-    const isSelected = Besigner.focus.isNodeSelected(node)
-
-    useIsomorphicLayoutEffect(() => {
-      const el = localRef.current
-      if (el) {
-        el.addEventListener('mouseover', handleOnMouseOver)
-        el.addEventListener('mousedown', handleOnMouseDown)
-
-        return () => {
-          el.removeEventListener('mouseover', handleOnMouseOver)
-          el.removeEventListener('mousedown', handleOnMouseDown)
-        }
       }
-    }, [handleOnMouseOver, handleOnMouseDown])
+    }, [node])
 
     return (
       <>
         <Leaf
-          ref={ref}
+          ref={useForkedRefs<HTMLElement>(
+            forwardRef,
+            localRef,
+            setDraggableNodeRef,
+            setDroppableNodeRef,
+          )}
           node={node}
           data-aglyn-selected={isSelected ? 'selected' : undefined}
-          style={style}
+          style={
+            transform && {
+              transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+              cursor: 'grab',
+            }
+          }
           {...attributes}
           {...rest}
         />
-        <Box
-          sx={{
-            position: 'absolute',
-            pointerEvents: 'none',
-            top: 0,
-            left: 0,
-            opacity: 0.2,
-            width: () => nodeRef?.offsetWidth,
-            height: () => nodeRef?.offsetHeight,
-            transform: () =>
-              `translate3d(${nodeRef?.offsetLeft}px,${nodeRef?.offsetTop}px,0)`,
-          }}
-        >
-          <Box sx={{}}>top</Box>
-        </Box>
       </>
     )
   },

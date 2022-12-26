@@ -15,8 +15,19 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
+import { observable } from 'mobx'
+import type { MutableRefObject } from 'react'
+
 export enum EditorMode { //BesignerDeviceFlag
   SELECT = 0x1,
   REARRANGE = 0x2,
   PREVIEW = 0x3,
 }
+
+type RefEntry = {
+  node: MutableRefObject<HTMLElement>
+  dragHandle?: any
+}
+
+export const refs = observable.map<Aglyn.NodeId, RefEntry>({}, { deep: false })
