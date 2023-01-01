@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,25 +17,25 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observer } from 'mobx-react-lite'
-import { type MutableRefObject } from 'react'
+import { forwardRef } from 'react'
 import RendererComponents from '../contexts/renderer-components'
-import type { StemProps } from './stem'
 
 export interface TrunkProps {
   node: Aglyn.NodeSchema<any>
 }
 
-function TrunkRaw(props: TrunkProps, ref: MutableRefObject<any>) {
-  const { node } = props
+export const Trunk = observer(
+  forwardRef<any, TrunkProps>((props, ref) => {
+    const { node } = props
 
-  return (
-    <RendererComponents.Consumer key={node?.$id}>
-      {({ StemComponent }) => <StemComponent ref={ref} node={node} />}
-    </RendererComponents.Consumer>
-  )
-}
-TrunkRaw.displayName = 'Trunk'
-TrunkRaw.aglyn = true
+    return (
+      <RendererComponents.Consumer key={node?.$id}>
+        {({ StemComponent }) => <StemComponent ref={ref} node={node} />}
+      </RendererComponents.Consumer>
+    )
+  }),
+)
+Trunk.displayName = 'Trunk'
+Trunk['aglyn'] = true
 
-export const Trunk = observer<StemProps, any>(TrunkRaw, { forwardRef: true })
 export default Trunk

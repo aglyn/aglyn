@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observer } from 'mobx-react-lite'
-import { type MutableRefObject, useMemo } from 'react'
+import { forwardRef, useMemo } from 'react'
 import RendererComponents, {
   type RenderComponentsContext,
 } from '../contexts/renderer-components'
@@ -30,35 +30,34 @@ export interface TreeRootProps extends Partial<RenderComponentsContext> {
   node: Aglyn.NodeSchema
 }
 
-function TreeRootRaw(props: TreeRootProps, ref: MutableRefObject<any>) {
-  const {
-    node,
-    TrunkComponent,
-    StemComponent,
-    BranchComponent,
-    LeafComponent,
-  } = props
+export const TreeRoot = observer(
+  forwardRef<any, TreeRootProps>((props, ref) => {
+    const {
+      node,
+      TrunkComponent,
+      StemComponent,
+      BranchComponent,
+      LeafComponent,
+    } = props
 
-  const Components = useMemo(
-    () => ({
-      TrunkComponent: TrunkComponent || Trunk,
-      StemComponent: StemComponent || Stem,
-      BranchComponent: BranchComponent || Branch,
-      LeafComponent: LeafComponent || Leaf,
-    }),
-    [TrunkComponent, StemComponent, BranchComponent, LeafComponent],
-  ) as RenderComponentsContext
+    const Components = useMemo<RenderComponentsContext>(
+      () => ({
+        TrunkComponent: TrunkComponent ?? Trunk,
+        StemComponent: StemComponent ?? Stem,
+        BranchComponent: BranchComponent ?? Branch,
+        LeafComponent: LeafComponent ?? Leaf,
+      }),
+      [TrunkComponent, StemComponent, BranchComponent, LeafComponent],
+    )
 
-  return (
-    <RendererComponents.Provider key={node?.$id} value={Components}>
-      <Components.TrunkComponent ref={ref} node={node} />
-    </RendererComponents.Provider>
-  )
-}
-TreeRootRaw.displayName = 'TreeRoot'
-TreeRootRaw.aglyn = true
+    return (
+      <RendererComponents.Provider key={node?.$id} value={Components}>
+        <Components.TrunkComponent ref={ref} node={node} />
+      </RendererComponents.Provider>
+    )
+  }),
+)
+TreeRoot.displayName = 'TreeRoot'
+TreeRoot['aglyn'] = true
 
-export const TreeRoot = observer<TreeRootProps, any>(TreeRootRaw, {
-  forwardRef: true,
-})
 export default TreeRoot

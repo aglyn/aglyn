@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,10 +112,18 @@ export class DndManager {
   }
 }
 
-export const state = observable<DndState>({
-  drag: null,
-  drop: null,
-  dropRegion: null,
+export const state = observable({
+  drag: null as DraggableNode,
+  drop: null as DraggableNode,
+  dropRegion: null as DropRegion,
+
+  get computedDrop() {
+    if (!this.drop) return this.drop
+    if (Aglyn.canvas.isRootNode(this.drop)) return this.drop
+    if (!this.dropRegion) return this.drop
+    if (this.dropRegion === DropRegion.CHILDREN) return this.drop
+    return Aglyn.canvas.getNode(this.drop.$id).parent
+  },
 
   get hasDragTarget(): boolean {
     return Boolean(this.drag)
@@ -131,9 +139,21 @@ export const state = observable<DndState>({
     if (!this.hasDropTarget) return false
     return this.drop?.breadcrumbPath
   },
+  get dropIsInsideDrag() {
+    return Boolean(
+      this.computedDrop?.breadcrumbPath?.some((i) => i === this.drag?.$id),
+    )
+  },
   get isValidLinealRelationship(): boolean {
     if (!this.hasDragTarget) return false
     if (!this.hasDropTarget) return false
+    const parent = {
+      pluginId: this.computedDrop?.pluginId,
+      componentId: this.computedDrop?.$id,
+      restrictChildren: this.computedDrop?.componentSchema?.restrictChildren,
+      restrictParent: this.computedDrop?.componentSchema?.restrictParent,
+    }
+
     if (this.drag?.type === Aglyn.NodeType.PRESET) {
       const itemNode = this.drag?.data
       const itemSchema = Aglyn.components.getSchema(itemNode?.$id)
@@ -144,12 +164,7 @@ export const state = observable<DndState>({
           restrictChildren: itemSchema?.restrictChildren,
           restrictParent: itemSchema?.restrictParent,
         },
-        {
-          pluginId: this.drop?.pluginId,
-          componentId: this.drop?.$id,
-          restrictChildren: this.drop?.componentSchema?.restrictChildren,
-          restrictParent: this.drop?.componentSchema?.restrictParent,
-        },
+        parent,
       )[0]
     }
     return confirmValidLinealRelationship(
@@ -159,12 +174,7 @@ export const state = observable<DndState>({
         restrictChildren: this.drag?.componentSchema?.restrictChildren,
         restrictParent: this.drag?.componentSchema?.restrictParent,
       },
-      {
-        pluginId: this.drop?.pluginId,
-        componentId: this.drop?.$id,
-        restrictChildren: this.drop?.componentSchema?.restrictChildren,
-        restrictParent: this.drop?.componentSchema?.restrictParent,
-      },
+      parent,
     )[0]
   },
 
@@ -197,10 +207,58 @@ export const state = observable<DndState>({
     }
   }),
 
-  clearDndStatus(): void {
+  clearDndStatus() {
     this.drag = null
     this.drop = null
     this.dropRegion = null
+    return this
+  },
+
+  setDragNode(node: DraggableNode) {
+    this.drag = node || null
+    return this
+  },
+  setDropNode(node: DraggableNode) {
+    this.drop = node || null
+    return this
+  },
+  setDropRegion(region: DropRegion) {
+    this.dropRegion = region || null
+    return this
+  },
+  onDragEnd() {
+    if (!this.drop || !this.drag) return
+    if (this.dropIsInsideDrag) return
+    if (!this.isValidLinealRelationship) return
+
+    const dragNode = this.drag
+    const dropNode = this.drop
+    const region = this.dropRegion
+    const before = region === DropRegion.TOP || region === DropRegion.LEFT
+    const after = region === DropRegion.RIGHT || region === DropRegion.BOTTOM
+    let position = NaN
+    let parent = null
+
+    if (before || after) {
+      parent = Aglyn.canvas.getNode(dropNode.parentId)
+      position = Aglyn.canvas.getNodeIndex(dropNode)
+      if (after) position = position + 1
+    } else {
+      parent = Aglyn.canvas.getNode(dropNode.$id)
+    }
+
+    if (dragNode.type === Aglyn.NodeType.PRESET) {
+      // console.log('drag node', dragNode)
+      const newNode = Aglyn.canvas.addNodeFromPreset(dragNode, parent, position)
+      console.log('new node', newNode)
+      // Besigner.focus.setSelectedNode(newNode)
+    } else {
+      Aglyn.canvas.reparentNode(dragNode, parent, position)
+    }
+
+    console.log('handleDragEnd dragNode', dragNode)
+    console.log('handleDragEnd dropNode', dropNode)
+    this.clearDndStatus()
   },
 })
 

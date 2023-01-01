@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -128,7 +128,7 @@ ComponentGridItem.displayName = 'ComponentGridItem'
 interface ComponentAccordionListProp
   extends AccordionListProps<ComponentGridGroupItemData> {}
 
-function ComponentAccordionListRaw(props: ComponentAccordionListProp) {
+const ComponentAccordionList = observer((props: ComponentAccordionListProp) => {
   const { ...rest } = props
   const byCategory = Aglyn.components.schemasByCategory
 
@@ -159,12 +159,11 @@ function ComponentAccordionListRaw(props: ComponentAccordionListProp) {
 
   return (
     <AccordionListComponent
-      unique
       items={itemsByCategory}
       getItemId={(item) => item?.$id}
       renderSummary={(item) => <>{item?.label}</>}
       renderDetails={(item) => (
-        <Box {...rest}>
+        <Box>
           <Grid container spacing={2}>
             {item?.items?.map((i, index) => (
               <Grid key={i?.$id ?? index} xs={6} item>
@@ -174,13 +173,10 @@ function ComponentAccordionListRaw(props: ComponentAccordionListProp) {
           </Grid>
         </Box>
       )}
+      {...rest}
     />
   )
-}
+})
+ComponentAccordionList.displayName = 'ComponentAccordionList'
 
-ComponentAccordionListRaw.displayName = 'ComponentAccordionList'
-
-export const ComponentAccordionList = observer<ComponentAccordionListProp>(
-  ComponentAccordionListRaw,
-)
 export default ComponentAccordionList

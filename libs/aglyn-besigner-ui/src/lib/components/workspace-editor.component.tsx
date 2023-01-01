@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { LOADING_OVERLAY_ELEMENT, useForkedRefs } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
@@ -32,7 +31,7 @@ import dynamic from 'next/dynamic'
 import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
 import { useMouse } from 'react-use'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
-import { determineDropRegion, REGION } from '../utils/droppable-region-utils'
+import { determineDropRegion } from '../utils/droppable-region-utils'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import type { AsidePanelComponentProps } from './aside-panel.component'
 import ViewportZoomControlsComponent from './viewport-zoom-controls.component'
@@ -108,7 +107,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       }
     }, [])
 
-    const localRef = useRef()
+    const localRef = useRef(null)
     const mouse = useMouse(localRef)
 
     useDndMonitor({
@@ -129,40 +128,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       },
       onDragEnd(e: DragEndEvent) {
         e.activatorEvent.stopPropagation()
-        if (!e.over) return
-        const dragNode = e.active?.data.current
-        const dropNode = e.over?.data.current
-        const region = dropNode.region
-        const before = region === REGION.TOP || region === REGION.LEFT
-        const after = region === REGION.RIGHT || region === REGION.BOTTOM
-        let position = NaN
-        let parent = null
-
-        if (before || after) {
-          parent = Aglyn.canvas.getNode(dropNode.node.parentId)
-          position = Aglyn.canvas.getNodeIndex(dropNode.node)
-          if (after) position = position + 1
-        } else {
-          parent = Aglyn.canvas.getNode(dropNode.node.$id)
-        }
-
-        if (dragNode.type === Aglyn.NodeType.PRESET) {
-          // console.log('drag node', dragNode)
-          const newNode = Aglyn.canvas.addNodeFromPreset(
-            dragNode.node,
-            parent,
-            position,
-          )
-          console.log('new node', newNode)
-          // Besigner.focus.setSelectedNode(newNode)
-        } else {
-          Aglyn.canvas.reparentNode(dragNode.node, parent, position)
-        }
-
-        console.log('handleDragEnd dragNode', dragNode)
-        console.log('handleDragEnd dropNode', dropNode)
-        console.log('handleDragEnd collisions', e.collisions)
-        Besigner.dnd.clearDndStatus()
+        return Besigner.dnd.state.onDragEnd()
       },
     })
 

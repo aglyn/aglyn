@@ -47,7 +47,7 @@ export interface NodeContextMenuProps extends PaperProps {
   node: Aglyn.NodeSchema<any>
 }
 
-const NodeContextMenuRaw = (props: NodeContextMenuProps) => {
+export const NodeContextMenu = observer((props: NodeContextMenuProps) => {
   const { node, ...rest } = props
 
   const isRootNode = Aglyn.canvas.isRootNode(node)
@@ -184,8 +184,7 @@ const NodeContextMenuRaw = (props: NodeContextMenuProps) => {
       </MenuList>
     </Paper>
   )
-}
-NodeContextMenuRaw.displayName = 'NodeContextMenuRaw'
+})
+NodeContextMenu.displayName = 'NodeContextMenu'
 
-export const NodeContextMenu = observer(NodeContextMenuRaw)
 export default NodeContextMenu

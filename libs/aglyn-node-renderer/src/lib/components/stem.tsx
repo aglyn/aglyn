@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,32 +17,34 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observer } from 'mobx-react-lite'
+import { forwardRef } from 'react'
 import RendererComponents from '../contexts/renderer-components'
 
 export interface StemProps {
   node: Aglyn.NodeSchema<any>
 }
 
-function StemRaw(props, ref) {
-  const { node } = props
+export const Stem = observer(
+  forwardRef<any, StemProps>((props, ref) => {
+    const { node } = props
 
-  if (!node) {
-    console.error(`Error rendering`, node)
-    return <div></div>
-  }
+    if (!node) {
+      console.error(`Error rendering`, node)
+      return <div></div>
+    }
 
-  return (
-    <RendererComponents.Consumer key={node?.$id}>
-      {({ LeafComponent, BranchComponent }) => (
-        <LeafComponent ref={ref} node={node}>
-          <BranchComponent node={node} />
-        </LeafComponent>
-      )}
-    </RendererComponents.Consumer>
-  )
-}
-StemRaw.displayName = 'Stem'
-StemRaw.aglyn = true
+    return (
+      <RendererComponents.Consumer key={node?.$id}>
+        {({ LeafComponent, BranchComponent }) => (
+          <LeafComponent ref={ref} node={node}>
+            <BranchComponent node={node} />
+          </LeafComponent>
+        )}
+      </RendererComponents.Consumer>
+    )
+  }),
+)
+Stem.displayName = 'Stem'
+Stem['aglyn'] = true
 
-export const Stem = observer<StemProps, any>(StemRaw, { forwardRef: true })
 export default Stem

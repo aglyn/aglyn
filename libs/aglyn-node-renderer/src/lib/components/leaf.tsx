@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { styled } from '@aglyn/shared-ui-theme'
 import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, type HTMLAttributes, useMemo } from 'react'
+import { forwardRef, type HTMLAttributes } from 'react'
 import { isValidElementType } from 'react-is'
 
 const DefaultComponent = styled('div')({})
@@ -30,33 +30,30 @@ export interface LeafProps extends HTMLAttributes<any> {
   sx?: JSX.SxProps
 }
 
-const LeafRaw = forwardRef<any, LeafProps>((props, ref) => {
-  const { children, node, sx, ...rest } = props
+export const Leaf = observer(
+  forwardRef<any, LeafProps>((props, ref) => {
+    const { children, node, sx, ...rest } = props
 
-  const componentSchema = node?.componentSchema
-  const resolvedProps = node?.resolvedProps
-  const Factory = Aglyn.components.getFactory(componentSchema?.$id)
+    const resolvedProps = node?.resolvedProps
+    const Factory = Aglyn.components.getFactory(node?.componentId)
+    const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
-  const Component = useMemo(() => {
-    return isValidElementType(Factory) ? Factory : DefaultComponent
-  }, [Factory])
+    return (
+      <Component
+        key={node?.$id}
+        ref={ref}
+        data-aglyn={`leaf:${node?.$id}`}
+        sx={mergeSxProps(sx, node?.sx, resolvedProps?.sx)}
+        {...resolvedProps}
+        {...rest}
+      >
+        {children}
+        {resolvedProps?.['children']}
+      </Component>
+    )
+  }),
+)
+Leaf.displayName = 'Leaf'
+Leaf['aglyn'] = true
 
-  return (
-    <Component
-      key={node?.$id}
-      ref={ref}
-      data-aglyn={`leaf:${node?.$id}`}
-      sx={mergeSxProps(sx, node?.sx, resolvedProps?.sx)}
-      {...resolvedProps}
-      {...rest}
-    >
-      {children}
-      {resolvedProps?.['children']}
-    </Component>
-  )
-})
-LeafRaw.displayName = 'Leaf'
-LeafRaw.aglyn = true
-
-export const Leaf = observer(LeafRaw)
 export default Leaf

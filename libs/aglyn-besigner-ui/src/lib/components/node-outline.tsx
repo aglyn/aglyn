@@ -24,7 +24,6 @@ import { Box, BoxProps } from '@mui/material'
 import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
 import { forwardRef } from 'react'
-import { REGION } from '../utils/droppable-region-utils'
 
 const classKeys = generateComponentClassKeys('NodeOutline', [
   'hoveringSelf',
@@ -37,109 +36,89 @@ export interface NodeOutlineProps extends BoxProps {
   node: Aglyn.NodeSchema<any>
 }
 
-const NodeOutlineRaw = forwardRef<any, NodeOutlineProps>((props, ref) => {
-  const { className, node, sx, ...rest } = props
-  const $id = node?.$id
-  const elementRef = Besigner.refs.get($id)
-  const isSelected = Besigner.focus.isNodeSelected(node)
-  const isHovered = Besigner.focus.isNodeHovered(node)
-  const isDragging = Besigner.dnd.state.isDraggingNode(node)
-  const isDraggingOver = Besigner.dnd.isDraggingOverDropNode(node)
-  const rect = getElementClientRectBounding(elementRef?.node.current)
-  const region = Besigner.dnd.state.dropRegion
+export const NodeOutline = observer(
+  forwardRef<any, NodeOutlineProps>((props, ref) => {
+    const { className, node, sx, ...rest } = props
+    const $id = node?.$id
+    const elementRef = Besigner.refs.get($id)
+    const isSelected = Besigner.focus.isNodeSelected(node)
+    const isHovered = Besigner.focus.isNodeHovered(node)
+    const isDragging = Besigner.dnd.state.isDraggingNode(node)
+    const isDraggingOver = Besigner.dnd.isDraggingOverDropNode(node)
+    const rect = getElementClientRectBounding(elementRef?.node.current)
 
-  return (
-    <Box
-      ref={ref}
-      data-aglyn={`outline:${$id}`}
-      style={{ width: rect?.width, height: rect?.height }}
-      className={clsx(
-        {
-          [classKeys.selectedSelf]: Boolean(isSelected),
-          [classKeys.hoveringSelf]: Boolean(isHovered),
-          [classKeys.draggingSelf]: Boolean(isDragging),
-          [classKeys.draggingOver]: Boolean(isDraggingOver),
-          [`region-${region}`]: Boolean(isDraggingOver && region),
-        },
-        className,
-      )}
-      sx={mergeSxProps(
-        {
-          pointerEvents: 'none',
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          right: 0,
-          bottom: 0,
-          outlineColor: 'transparent',
-          outlineOffset: 1,
-          outlineWidth: 1,
-          outlineStyle: 'dashed',
-          content: '""',
-          // transition: theme.transitions.create([
-          //   'outline-width',
-          //   'outline-offset',
-          //   'outline-style',
-          //   'outline-color',
-          //   'background-color',
-          // ], {
-          //   duration: theme.transitions.duration.standard,
-          //   easing: theme.transitions.easing.easeInOut,
-          // }),
-
-          [`&.${classKeys.selectedSelf}`]: {
-            outlineWidth: 2,
-            outlineStyle: 'solid',
-            outlineColor: (theme) => theme.palette.tertiary.main,
+    return (
+      <Box
+        ref={ref}
+        data-aglyn={`outline:${$id}`}
+        style={{ width: rect?.width, height: rect?.height }}
+        className={clsx(
+          {
+            [classKeys.selectedSelf]: Boolean(isSelected),
+            [classKeys.hoveringSelf]: Boolean(isHovered),
+            [classKeys.draggingSelf]: Boolean(isDragging),
+            [classKeys.draggingOver]: Boolean(isDraggingOver),
           },
-          [`&.${classKeys.hoveringSelf}`]: {
-            outlineColor: (theme) => theme.palette.secondary.main,
-            backgroundColor: (theme) =>
-              alpha(theme.palette.secondary.main, 0.12),
-          },
-          [`&.${classKeys.draggingSelf}`]: {
-            outlineColor: 'transparent',
-            backgroundColor: (theme) =>
-              alpha(theme.palette.secondary.light, 0.76),
-          },
-          [`&.${classKeys.draggingOver}`]: {
-            outlineColor: (theme) => theme.palette.tertiary.main,
-            backgroundColor: (theme) =>
-              alpha(theme.palette.tertiary.dark, 0.76),
-          },
-          [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
-            outlineColor: (theme) => theme.palette.grey['500'],
-            backgroundColor: (theme) => alpha(theme.palette.grey['500'], 0.64),
-          },
-          [`&.region-${REGION.LEFT}:before,&.region-${REGION.TOP}:before`]: {
-            content: '""',
+          className,
+        )}
+        sx={mergeSxProps(
+          {
+            pointerEvents: 'none',
             position: 'absolute',
-            display: 'block',
-            background: (theme) => theme.palette.secondary.main,
-            width: 10,
-            height: '100%',
             left: 0,
             top: 0,
-          },
-          [`&.region-${REGION.RIGHT}:after,&.region-${REGION.BOTTOM}:after`]: {
-            content: '""',
-            position: 'absolute',
-            display: 'block',
-            background: (theme) => theme.palette.secondary.main,
-            width: 10,
-            height: '100%',
-            top: 0,
             right: 0,
+            bottom: 0,
+            outlineColor: 'transparent',
+            outlineOffset: 1,
+            outlineWidth: 1,
+            outlineStyle: 'dashed',
+            content: '""',
+            // transition: theme.transitions.create([
+            //   'outline-width',
+            //   'outline-offset',
+            //   'outline-style',
+            //   'outline-color',
+            //   'background-color',
+            // ], {
+            //   duration: theme.transitions.duration.standard,
+            //   easing: theme.transitions.easing.easeInOut,
+            // }),
+
+            [`&.${classKeys.selectedSelf}`]: {
+              outlineWidth: 2,
+              outlineStyle: 'solid',
+              outlineColor: (theme) => theme.palette.tertiary.main,
+            },
+            [`&.${classKeys.hoveringSelf}`]: {
+              outlineColor: (theme) => theme.palette.secondary.main,
+              backgroundColor: (theme) =>
+                alpha(theme.palette.secondary.main, 0.12),
+            },
+            [`&.${classKeys.draggingSelf}`]: {
+              outlineColor: 'transparent',
+              backgroundColor: (theme) =>
+                alpha(theme.palette.secondary.light, 0.76),
+            },
+            [`&.${classKeys.draggingOver}`]: {
+              outlineColor: (theme) => theme.palette.tertiary.main,
+              backgroundColor: (theme) =>
+                alpha(theme.palette.tertiary.dark, 0.76),
+            },
+            [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
+              outlineColor: (theme) => theme.palette.grey['500'],
+              backgroundColor: (theme) =>
+                alpha(theme.palette.grey['500'], 0.64),
+            },
           },
-        },
-        sx,
-      )}
-      {...rest}
-    />
-  )
-})
+          sx,
+        )}
+        {...rest}
+      />
+    )
+  }),
+)
 
-NodeOutlineRaw.displayName = 'NodeOutline'
+NodeOutline.displayName = 'NodeOutline'
 
-export const NodeOutline = observer(NodeOutlineRaw)
 export default NodeOutline

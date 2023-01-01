@@ -23,10 +23,9 @@ import DraggableDroppable from './dnd/draggable-droppable'
 
 export interface ElementLeafComponentProps extends LeafProps {}
 
-const RawLeafComponent = forwardRef<any, ElementLeafComponentProps>(
-  (props, ref) => {
+export const LeafComponent = observer(
+  forwardRef<any, ElementLeafComponentProps>((props, ref) => {
     const { node, ...rest } = props
-    const isSelected = Besigner.focus.isNodeSelected(node)
 
     return (
       <>
@@ -39,19 +38,15 @@ const RawLeafComponent = forwardRef<any, ElementLeafComponentProps>(
           <Leaf
             ref={ref}
             node={node}
-            data-aglyn={`leaf:${node?.$id}`}
-            data-aglyn-selected={isSelected ? 'selected' : undefined}
+            data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
             {...rest}
           />
         </DraggableDroppable>
       </>
     )
-  },
+  }),
 )
-RawLeafComponent.displayName = 'BesignerLeafComponent'
-RawLeafComponent.aglyn = true
+LeafComponent.displayName = 'BesignerLeafComponent'
+LeafComponent.aglyn = true
 
-export const LeafComponent = observer<ElementLeafComponentProps, any>(
-  RawLeafComponent,
-)
 export default LeafComponent

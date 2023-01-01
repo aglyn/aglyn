@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { createContext, RefAttributes } from 'react'
+import { createContext, type RefAttributes } from 'react'
 import type { BranchProps } from '../components/branch'
 import type { LeafProps } from '../components/leaf'
 import type { StemProps } from '../components/stem'
@@ -24,9 +24,7 @@ import type { TrunkProps } from '../components/trunk'
 export interface RenderComponentsContext {
   TrunkComponent: JSX.ForwardRefExoticComponent<TrunkProps & RefAttributes<any>>
   StemComponent: JSX.ForwardRefExoticComponent<StemProps & RefAttributes<any>>
-  BranchComponent: JSX.ForwardRefExoticComponent<
-    BranchProps & RefAttributes<any>
-  >
+  BranchComponent: JSX.FunctionComponent<BranchProps>
   LeafComponent: JSX.ForwardRefExoticComponent<LeafProps & RefAttributes<any>>
 }
 export const RendererComponents = createContext<RenderComponentsContext>({
@@ -35,4 +33,7 @@ export const RendererComponents = createContext<RenderComponentsContext>({
   BranchComponent: null,
   LeafComponent: null,
 })
+RendererComponents.displayName = 'RendererComponents'
+RendererComponents['aglyn'] = true
+
 export default RendererComponents

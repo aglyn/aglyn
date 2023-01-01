@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ export const DropIndicator = observer((props: DropIndicatorProps) => {
   const { ...rest } = props
   const [dragging, setDragging] = useState(false)
   const [{ rect, region }, setRect] = useState<State>({
-    rect: {} as ClientRect,
+    rect: { ...DEFAULT.rect } as ClientRect,
     region: REGION.CHILDREN,
   })
   const before = region === REGION.LEFT || region === REGION.TOP
@@ -99,10 +99,8 @@ export const DropIndicator = observer((props: DropIndicatorProps) => {
       }}
       alignItems="center"
       justifyContent="center"
-      {...rest}
-    >
-      <Box
-        sx={{
+      sx={{
+        ['.vectorPoint']: {
           bgcolor: 'surface.main',
           borderRadius: 8,
           borderWidth: 1,
@@ -110,8 +108,11 @@ export const DropIndicator = observer((props: DropIndicatorProps) => {
           borderColor: 'secondary.dark',
           width: 8,
           height: 8,
-        }}
-      />
+        },
+      }}
+      {...rest}
+    >
+      <div className={'vectorPoint'} />
       <Box
         sx={{
           bgcolor: 'secondary.main',
@@ -120,17 +121,7 @@ export const DropIndicator = observer((props: DropIndicatorProps) => {
           height: asChild ? 3 : undefined,
         }}
       />
-      <Box
-        sx={{
-          bgcolor: 'surface.main',
-          borderRadius: 8,
-          borderWidth: 1,
-          borderStyle: 'solid',
-          borderColor: 'secondary.dark',
-          width: 8,
-          height: 8,
-        }}
-      />
+      <div className={'vectorPoint'} />
     </Stack>
   )
 })

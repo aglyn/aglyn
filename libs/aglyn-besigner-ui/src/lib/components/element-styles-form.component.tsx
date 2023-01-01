@@ -42,6 +42,7 @@ import {
 } from '@mui/material'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
+import { observer } from 'mobx-react-lite'
 import { type ChangeEvent, forwardRef, useCallback, useMemo } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 import { ElementPropsFormTemplate } from './element-props-form.component'
@@ -434,8 +435,8 @@ export interface ElementStylesFormProps extends FormRendererProps {
   node?: Aglyn.NodeSchema
 }
 
-const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
-  (props, ref) => {
+const ElementStylesForm = observer(
+  forwardRef<any, ElementStylesFormProps>((props, ref) => {
     const { node, ...rest } = props
     const deleteElementCallback = useDeleteElementCallback()
     const nodeSx = node?.sx
@@ -568,10 +569,8 @@ const ElementStylesForm = forwardRef<any, ElementStylesFormProps>(
         </FormControl>
       </>
     )
-  },
+  }),
 )
 ElementStylesForm.displayName = 'ElementStylesForm'
-ElementStylesForm.aglyn = true
 
-export { ElementStylesForm }
 export default ElementStylesForm
