@@ -17,85 +17,33 @@
 
 import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { useForkedRefs } from '@aglyn/shared-ui-jsx'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useEffect, useRef } from 'react'
-import useLeafDrag from '../hooks/use-leaf-drag'
-import useLeafDrop from '../hooks/use-leaf-drop'
+import { forwardRef } from 'react'
+import DraggableDroppable from './dnd/draggable-droppable'
 
 export interface ElementLeafComponentProps extends LeafProps {}
 
 const RawLeafComponent = forwardRef<any, ElementLeafComponentProps>(
   (props, ref) => {
     const { node, ...rest } = props
-    const localRef = useRef<HTMLElement>(null)
     const isSelected = Besigner.focus.isNodeSelected(node)
-    const $id = node?.$id
-
-    const {
-      setNodeRef: setDraggableNodeRef,
-      attributes,
-      listeners,
-      transform,
-    } = useLeafDrag(node, Besigner.DragType.CANVAS)
-    const { setNodeRef: setDroppableNodeRef } = useLeafDrop(node)
-
-    useEffect(() => {
-      Besigner.refs.set($id, {
-        node: localRef,
-        dragHandle: {
-          ...listeners,
-          style: transform ? { cursor: 'grab' } : { cursor: 'move' },
-        },
-      })
-      return () => {
-        Besigner.refs.delete($id)
-      }
-    }, [$id, listeners, transform])
-
-    useEffect(() => {
-      const el = localRef.current
-      if (el) {
-        el.addEventListener('mouseover', handleMouseOver)
-        el.addEventListener('mousedown', handleMouseDown)
-
-        return () => {
-          el.removeEventListener('mouseover', handleMouseOver)
-          el.removeEventListener('mousedown', handleMouseDown)
-        }
-      }
-      function handleMouseOver(e: Event) {
-        e.preventDefault()
-        e.stopPropagation()
-        Besigner.focus.setHoveredNode(node)
-      }
-      function handleMouseDown(e: Event) {
-        e.preventDefault()
-        e.stopPropagation()
-        Besigner.focus.handleNodeSelection(node)
-      }
-    }, [node])
 
     return (
       <>
-        <Leaf
-          ref={useForkedRefs<HTMLElement>(
-            ref,
-            localRef,
-            setDraggableNodeRef,
-            setDroppableNodeRef,
-          )}
+        <DraggableDroppable
           node={node}
-          data-aglyn-selected={isSelected ? 'selected' : undefined}
-          style={
-            transform && {
-              transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-              cursor: 'grab',
-            }
-          }
-          {...attributes}
-          {...rest}
-        />
+          type={Besigner.DragType.CANVAS}
+          accept={Object.values(Besigner.DragType)}
+          disableDragging={!Besigner.dnd.canDragNode(node)}
+        >
+          <Leaf
+            ref={ref}
+            node={node}
+            data-aglyn={`leaf:${node?.$id}`}
+            data-aglyn-selected={isSelected ? 'selected' : undefined}
+            {...rest}
+          />
+        </DraggableDroppable>
 
         {/*<Draggable node={node} type={DragType.CANVAS}>*/}
         {/*  <Box sx={{ h: 100, w: 100 }}>Move me! ;)</Box>*/}

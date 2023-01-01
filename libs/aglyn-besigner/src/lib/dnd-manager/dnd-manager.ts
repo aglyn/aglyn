@@ -43,6 +43,7 @@ export interface DndState {
    * The current drop object
    */
   drop: DraggableNode | null
+  dropRegion: any
   /**
    * Computed guard to check if dragging
    */
@@ -88,6 +89,7 @@ export interface DndState {
 export const state = observable<DndState>({
   drag: null,
   drop: null,
+  dropRegion: null,
 
   get hasDragTarget(): boolean {
     return Boolean(this.drag)
@@ -172,6 +174,7 @@ export const state = observable<DndState>({
   clearDndStatus(): void {
     this.drag = null
     this.drop = null
+    this.dropRegion = null
   },
 })
 
@@ -185,6 +188,9 @@ export function setDragNode<T extends DraggableNode>(dragNode: T): T {
 
 export function setDropNode<T extends DraggableNode>(dropNode: T): T {
   return runInAction(() => (state.drop = dropNode || null))
+}
+export function setDropRegion(region: any) {
+  return runInAction(() => (state.dropRegion = region || null))
 }
 
 export function isDraggingNode(node: DraggableNode): boolean {

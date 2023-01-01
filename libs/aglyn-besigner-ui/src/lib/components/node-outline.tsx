@@ -24,6 +24,7 @@ import { Box, BoxProps } from '@mui/material'
 import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
 import { forwardRef } from 'react'
+import { REGION } from '../utils/droppable-region-utils'
 
 const classKeys = generateComponentClassKeys('NodeOutline', [
   'hoveringSelf',
@@ -45,6 +46,7 @@ const NodeOutlineRaw = forwardRef<any, NodeOutlineProps>((props, ref) => {
   const isDragging = Besigner.dnd.state.isDraggingNode(node)
   const isDraggingOver = Besigner.dnd.isDraggingOverDropNode(node)
   const rect = getElementClientRectBounding(elementRef?.node.current)
+  const region = Besigner.dnd.state.dropRegion
 
   return (
     <Box
@@ -57,6 +59,7 @@ const NodeOutlineRaw = forwardRef<any, NodeOutlineProps>((props, ref) => {
           [classKeys.hoveringSelf]: Boolean(isHovered),
           [classKeys.draggingSelf]: Boolean(isDragging),
           [classKeys.draggingOver]: Boolean(isDraggingOver),
+          [`region-${region}`]: Boolean(isDraggingOver && region),
         },
         className,
       )}
@@ -107,6 +110,26 @@ const NodeOutlineRaw = forwardRef<any, NodeOutlineProps>((props, ref) => {
           [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
             outlineColor: (theme) => theme.palette.grey['500'],
             backgroundColor: (theme) => alpha(theme.palette.grey['500'], 0.64),
+          },
+          [`&.region-${REGION.LEFT}:before,&.region-${REGION.TOP}:before`]: {
+            content: '""',
+            position: 'absolute',
+            display: 'block',
+            background: (theme) => theme.palette.secondary.main,
+            width: 10,
+            height: '100%',
+            left: 0,
+            top: 0,
+          },
+          [`&.region-${REGION.RIGHT}:after,&.region-${REGION.BOTTOM}:after`]: {
+            content: '""',
+            position: 'absolute',
+            display: 'block',
+            background: (theme) => theme.palette.secondary.main,
+            width: 10,
+            height: '100%',
+            top: 0,
+            right: 0,
           },
         },
         sx,

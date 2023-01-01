@@ -15,14 +15,23 @@
  * limitations under the License.
  */
 
-import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
+import * as Besigner from '@aglyn/besigner'
+import { LOADING_OVERLAY_ELEMENT, useForkedRefs } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { _isFnT } from '@aglyn/shared-util-guards'
+import {
+  DragEndEvent,
+  DragMoveEvent,
+  DragStartEvent,
+  useDndMonitor,
+} from '@dnd-kit/core'
 import { Stack } from '@mui/material'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
 import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
+import { useMouse } from 'react-use'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
+import { determineDropRegion } from '../utils/droppable-region-utils'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import type { AsidePanelComponentProps } from './aside-panel.component'
 import ViewportZoomControlsComponent from './viewport-zoom-controls.component'
@@ -98,9 +107,39 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       }
     }, [])
 
+    const localRef = useRef()
+    const mouse = useMouse(localRef)
+
+    useDndMonitor({
+      onDragMove(event: DragMoveEvent): void {
+        event.activatorEvent.stopPropagation()
+        let region: any = null
+        if (event.over) {
+          region = determineDropRegion(event.over.rect, mouse.docX, mouse.docY)
+          event.over.data.current.region = region
+        }
+        Besigner.dnd.setDropRegion(region)
+        Besigner.dnd.setDropNode(event.over?.data.current.node)
+      },
+      onDragStart({ active }: DragStartEvent) {
+        const node = active?.data.current.node
+        console.log('handleDragStart', node)
+        Besigner.dnd.setDragNode(node)
+      },
+      onDragEnd(e: DragEndEvent) {
+        e.activatorEvent.stopPropagation()
+        const dragNode = e.active?.data.current
+        const dropNode = e.over?.data.current
+        console.log('handleDragEnd dragNode', dragNode)
+        console.log('handleDragEnd dropNode', dropNode)
+        console.log('handleDragEnd collisions', e.collisions)
+        Besigner.dnd.clearDndStatus()
+      },
+    })
+
     return (
       <WorkspaceEditor
-        ref={ref}
+        ref={useForkedRefs(ref, localRef)}
         id="aglyn:besigner-workspace"
         className={elemClassName}
         {...rest}

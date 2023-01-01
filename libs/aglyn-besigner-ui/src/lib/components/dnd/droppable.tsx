@@ -18,47 +18,40 @@
 import * as Besigner from '@aglyn/besigner'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import useId from '@aglyn/shared-ui-jsx/hooks/use-id'
-import { useDraggable } from '@dnd-kit/core'
+import { useDroppable } from '@dnd-kit/core'
 import { mergeProps } from '@react-aria/utils'
-import type * as CSS from 'csstype'
 import { Children, cloneElement } from 'react'
 
-export interface DraggableProps<T extends { $id: string }> {
+export interface DroppableProps<T extends { $id: string }> {
   children: JSX.Element
   node: T
   type: Besigner.DragType
+  accept: Besigner.DragType[]
   disabled?: boolean
 }
 
-const Draggable = <T extends { $id: string }>(props: DraggableProps<T>) => {
-  const { node, type, disabled, children } = props
+export const Droppable = <T extends { $id: string }>(
+  props: DroppableProps<T>,
+) => {
+  const { node, type, disabled, accept, children } = props
   const id = useId(node?.$id)
 
-  const draggable = useDraggable({
-    id: `drag:${id}:${type}`,
-    data: { type, node },
+  const droppable = useDroppable({
+    id: `drop:${id}:${type}`,
+    data: { type, node, accept },
     disabled,
   })
 
-  const transform = draggable.transform
   const child = Children.only(children)
-  const style: CSS.Properties = { ...child.props.style, cursor: 'move' }
-
-  if (transform) {
-    style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0)`
-    style.cursor = 'grab'
-  }
 
   return cloneElement(
     child,
     mergeProps(child.props, {
-      ref: mergeRefs(child.props.ref, draggable.setNodeRef),
-      style,
-      ...draggable.listeners,
-      ...draggable.attributes,
+      ref: mergeRefs(child.props.ref, droppable.setNodeRef),
     }),
   )
 }
-Draggable.displayName = 'Draggable'
 
-export default Draggable
+Droppable.displayName = 'Droppable'
+
+export default Droppable
