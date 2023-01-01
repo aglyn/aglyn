@@ -168,7 +168,7 @@ export const NODE_ID_LENGTH = 10
 export const NODE_ROOT_LABEL = 'Document'
 
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
-  public store: CanvasManager = null
+  // public store: CanvasManager = null
   public $id: NodeId = null
   public name: string = null
   public type: NodeType = null
@@ -218,7 +218,7 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     return this.toJSON()
   }
 
-  constructor(schema: NodeSchema<P>, store: CanvasManager) {
+  constructor(schema: NodeSchema<P>, public store: CanvasManager) {
     makeAutoObservable(this, {
       store: false,
     })
@@ -234,7 +234,8 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.props = { ...schema.props } as P
     this.sx = Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx }
 
-    this.store = store
+    // this.store = store
+    console.log('canvase node', this)
   }
 
   public delete() {
