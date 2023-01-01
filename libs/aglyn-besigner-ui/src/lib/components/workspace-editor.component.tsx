@@ -147,6 +147,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
         }
 
         if (dragNode.type === Aglyn.NodeType.PRESET) {
+          // console.log('drag node', dragNode)
           const newNode = Aglyn.canvas.addNodeFromPreset(
             dragNode.node,
             parent,

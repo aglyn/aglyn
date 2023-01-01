@@ -475,7 +475,7 @@ export class CanvasManager {
     this.nodes.set(_node.$id, _node)
     return this.nodes.get(_node.$id)
   }
-  public setNodes(schemas: NodesMap): this {
+  public setNodes(schemas: NodesMap, merge = false): this {
     if (!schemas) throw new Error('Invalid schemas')
     const cloned = toJS(schemas)
     const nodes = {}
@@ -483,7 +483,11 @@ export class CanvasManager {
       if (!cloned[nodeId]) continue
       nodes[nodeId] = this.createNode(cloned[nodeId])
     }
-    this.nodes.replace(nodes)
+    if (merge) {
+      this.nodes.merge(nodes)
+    } else {
+      this.nodes.replace(nodes)
+    }
     return this
   }
   public deleteNode(node: NodeSchema<any>): this {
@@ -591,7 +595,7 @@ export class CanvasManager {
     const duplicate = this.createDuplicateNode(presetJS.data)
     duplicate.parentId = parent.$id
     const parsed = this.processNodesToDenormalized(duplicate)
-    this.setNodes(parsed)
+    this.setNodes(parsed, true)
 
     if (isNaN(index)) parent.nodes.push(duplicate.$id)
     else parent.nodes.splice(index, 0, duplicate.$id)
