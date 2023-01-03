@@ -1,24 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-114
-/**
- * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,6 +24,7 @@ import {
 } from '@aglyn/shared-ui-theme'
 import { Fragment } from 'react'
 
+// enableStaticRendering(true)
 const withThemeProvider = createWithThemeProvider({
   theme: [consoleThemeLight, consoleThemeDark],
 })
@@ -57,9 +40,7 @@ const MainComponent = withThemeProvider((props: any) => {
   )
 })
 
-export type _Props<Props, InitialProps> = _AppProps<Props, InitialProps>
-
-function _App<Props, InitialProps>(props: _Props<Props, InitialProps>) {
+function _App<Props, Initial>(props: _AppProps<Props, Initial>) {
   const { headChildren, ...rest } = props
 
   return (

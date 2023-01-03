@@ -98,12 +98,12 @@ export const NodeOutline = observer(
             [`&.${classKeys.draggingSelf}`]: {
               outlineColor: 'transparent',
               backgroundColor: (theme) =>
-                alpha(theme.palette.secondary.light, 0.76),
+                alpha(theme.palette.secondary.light, 0.12),
             },
             [`&.${classKeys.draggingOver}`]: {
               outlineColor: (theme) => theme.palette.tertiary.main,
               backgroundColor: (theme) =>
-                alpha(theme.palette.tertiary.dark, 0.76),
+                alpha(theme.palette.tertiary.dark, 0.12),
             },
             [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
               outlineColor: (theme) => theme.palette.grey['500'],

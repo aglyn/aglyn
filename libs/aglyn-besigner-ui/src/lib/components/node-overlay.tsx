@@ -79,88 +79,90 @@ export interface NodeOverlayProps extends Partial<MuiPopperProps> {
   variant: 'hovered' | 'selected'
 }
 
-const NodeOverlayRaw = forwardRef<any, NodeOverlayProps>((props, ref) => {
-  const { variant, ...rest } = props || {}
+const NodeOverlay = observer(
+  forwardRef<any, NodeOverlayProps>((props, ref) => {
+    const { variant, ...rest } = props || {}
 
-  const state =
-    variant === 'selected'
-      ? Besigner.focus.state.lastSelected
-      : Besigner.focus.state.hovered
-  const $id = state?.$id
-  const node = Aglyn.canvas.getNode($id)
+    const state =
+      variant === 'selected'
+        ? Besigner.focus.state.lastSelected
+        : Besigner.focus.state.hovered
+    const $id = state?.$id
+    const node = Aglyn.canvas.getNode($id)
 
-  const elementRef = Besigner.refs.get($id)
-  const isOpen = Boolean(elementRef?.current)
+    const elementRef = Besigner.refs.get($id)
+    const isOpen = Boolean(elementRef?.current)
 
-  const virtualElement = useMemo<VirtualElement>(() => {
-    const el = elementRef?.current
-    return {
-      getBoundingClientRect() {
-        if (el) return el.getBoundingClientRect()
-        return {
-          top: 0,
-          left: 0,
-          width: 0,
-          height: 0,
-        } as DOMRect
-      },
-      contextElement: el,
-    }
-  }, [elementRef])
+    const virtualElement = useMemo<() => VirtualElement>(() => {
+      const el = elementRef?.current
+      return () => ({
+        getBoundingClientRect: () => {
+          if (el) return el.getBoundingClientRect()
+          return {
+            top: 0,
+            left: 0,
+            width: 0,
+            height: 0,
+          } as DOMRect
+        },
+        contextElement: el,
+      })
+    }, [elementRef])
 
-  return (
-    <MuiPopper
-      ref={ref}
-      anchorEl={virtualElement}
-      placement="top-start"
-      modifiers={outerModifiers}
-      open={isOpen}
-      keepMounted
-      disablePortal
-      transition
-      {...rest}
-    >
-      <>
-        <NodeOutline node={node} />
+    return (
+      <MuiPopper
+        ref={ref}
+        anchorEl={virtualElement}
+        placement="top-start"
+        modifiers={outerModifiers}
+        open={isOpen}
+        // keepMounted
+        // disablePortal
+        {...rest}
+      >
+        <>
+          <NodeOutline node={node} />
 
-        <MuiPopper
-          open={isOpen}
-          anchorEl={virtualElement}
-          placement={variant === 'hovered' ? 'top-start' : undefined}
-          modifiers={innerModifiers}
-          sx={{
-            ['&[data-popper-placement^=top] #aglyn\\:element-overlay-label']: {
-              borderTopLeftRadius: 3,
-              borderTopRightRadius: 3,
-              borderBottomLeftRadius: 0,
-              borderBottomRightRadius: 0,
-            },
-            ['&[data-popper-placement^=bottom] #aglyn\\:element-overlay-label']:
-              {
-                borderTopLeftRadius: 0,
-                borderTopRightRadius: 0,
-                borderBottomLeftRadius: 3,
-                borderBottomRightRadius: 3,
-              },
-          }}
-          disablePortal
-          {...rest}
-        >
-          <If condition={variant === 'selected'}>
-            <Then>
-              <ElementOverlayActionsComponent $id={$id} />
-            </Then>
-            <Else>
-              <NodeQuickActions node={node} />
-            </Else>
-          </If>
-        </MuiPopper>
-      </>
-    </MuiPopper>
-  )
-})
+          <MuiPopper
+            open={isOpen}
+            anchorEl={virtualElement}
+            placement={variant === 'hovered' ? 'top-start' : undefined}
+            modifiers={innerModifiers}
+            // keepMounted
+            // disablePortal
+            // transition
+            sx={{
+              ['&[data-popper-placement^=top] #aglyn\\:element-overlay-label']:
+                {
+                  borderTopLeftRadius: 3,
+                  borderTopRightRadius: 3,
+                  borderBottomLeftRadius: 0,
+                  borderBottomRightRadius: 0,
+                },
+              ['&[data-popper-placement^=bottom] #aglyn\\:element-overlay-label']:
+                {
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0,
+                  borderBottomLeftRadius: 3,
+                  borderBottomRightRadius: 3,
+                },
+            }}
+          >
+            <If condition={variant === 'selected'}>
+              <Then>
+                <ElementOverlayActionsComponent $id={$id} />
+              </Then>
+              <Else>
+                <NodeQuickActions node={node} />
+              </Else>
+            </If>
+          </MuiPopper>
+        </>
+      </MuiPopper>
+    )
+  }),
+)
 
-NodeOverlayRaw.displayName = 'NodeOverlay'
+NodeOverlay.displayName = 'NodeOverlay'
 
-export const NodeOverlay = observer(NodeOverlayRaw)
 export default NodeOverlay
