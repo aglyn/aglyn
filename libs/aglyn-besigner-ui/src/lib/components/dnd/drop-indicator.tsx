@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
 import {
   type ClientRect,
   type DragEndEvent,
@@ -21,9 +22,9 @@ import {
   type DragStartEvent,
   useDndMonitor,
 } from '@dnd-kit/core'
-import { Box, type BoxProps, Stack } from '@mui/material'
+import { type BoxProps, Stack } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { useState } from 'react'
+import { forwardRef, useState } from 'react'
 import { REGION } from '../../utils/droppable-region-utils'
 
 type State = {
@@ -44,87 +45,99 @@ const DEFAULT = {
 
 export interface DropIndicatorProps extends Partial<BoxProps> {}
 
-export const DropIndicator = observer((props: DropIndicatorProps) => {
-  const { ...rest } = props
-  const [dragging, setDragging] = useState(false)
-  const [{ rect, region }, setRect] = useState<State>({
-    rect: { ...DEFAULT.rect } as ClientRect,
-    region: REGION.CHILDREN,
-  })
-  const before = region === REGION.LEFT || region === REGION.TOP
-  const after = region === REGION.RIGHT || region === REGION.BOTTOM
-  const asChild = region === REGION.CHILDREN
+export const DropIndicator = observer(
+  forwardRef<HTMLDivElement, DropIndicatorProps>((props, ref) => {
+    const { style, sx, ...rest } = props
+    const [visible, setVisible] = useState(false)
+    const [{ rect, region }, setRect] = useState<State>({
+      rect: { ...DEFAULT.rect } as ClientRect,
+      region: REGION.CHILDREN,
+    })
+    const vertical = region === REGION.LEFT || region === REGION.RIGHT
 
-  useDndMonitor({
-    onDragStart(event: DragStartEvent): void {
-      setDragging(true)
-    },
-    onDragEnd(event: DragEndEvent): void {
-      setDragging(false)
-    },
-    onDragMove(event: DragMoveEvent): void {
-      const droppable = event.over
-      setRect({
-        rect: droppable?.rect || DEFAULT.rect,
-        region: droppable?.data.current.region || DEFAULT.region,
-      })
-    },
-  })
+    useDndMonitor({
+      onDragStart: (event: DragStartEvent) => setVisible(true),
+      onDragEnd: (event: DragEndEvent) => setVisible(false),
+      onDragMove: (event: DragMoveEvent) =>
+        setRect({
+          rect: event.over?.rect || DEFAULT.rect,
+          region: event.over?.data.current.region || DEFAULT.region,
+        }),
+    })
 
-  const beforeStyles = {
-    left: rect.left - 4,
-    top: rect.top - 4,
-    height: rect.height + 8,
-  }
-  const afterStyles = {
-    left: rect.left + rect.width - 4,
-    top: rect.top - 4,
-    height: rect.height + 8,
-  }
-  const childStyles = {
-    left: rect.left + 4,
-    top: rect.top + rect.height / 2 - 4,
-    width: rect.width - 8,
-  }
+    const styles = {
+      [REGION.LEFT]: {
+        left: rect.left - 4,
+        top: rect.top - 4,
+        height: rect.height + 8,
+      },
+      [REGION.TOP]: {
+        left: rect.left - 4,
+        top: rect.top - 4,
+        width: rect.width + 8,
+      },
+      [REGION.RIGHT]: {
+        left: rect.left + rect.width - 4,
+        top: rect.top - 4,
+        height: rect.height + 8,
+      },
+      [REGION.BOTTOM]: {
+        left: rect.left - 4,
+        top: rect.top + rect.height - 4,
+        width: rect.width + 8,
+      },
+      [REGION.CHILDREN]: {
+        left: rect.left + 4,
+        top: rect.top + rect.height / 2 - 4,
+        width: rect.width - 8,
+      },
+    }
 
-  return (
-    <Stack
-      direction={asChild ? 'row' : 'column'}
-      style={{
-        visibility: dragging ? 'visible' : 'hidden',
-        position: 'absolute',
-        ...(before ? beforeStyles : undefined),
-        ...(after ? afterStyles : undefined),
-        ...(asChild ? childStyles : undefined),
-      }}
-      alignItems="center"
-      justifyContent="center"
-      sx={{
-        ['.vectorPoint']: {
-          bgcolor: 'surface.main',
-          borderRadius: 8,
-          borderWidth: 1,
-          borderStyle: 'solid',
-          borderColor: 'secondary.dark',
-          width: 8,
-          height: 8,
-        },
-      }}
-      {...rest}
-    >
-      <div className={'vectorPoint'} />
-      <Box
-        sx={{
-          bgcolor: 'secondary.main',
-          flexGrow: 1,
-          width: asChild ? undefined : 3,
-          height: asChild ? 3 : undefined,
+    return (
+      <Stack
+        ref={ref}
+        direction={!vertical ? 'row' : 'column'}
+        style={{
+          visibility: visible ? 'visible' : 'hidden',
+          position: 'absolute',
+          ...styles[region],
+          ...style,
         }}
-      />
-      <div className={'vectorPoint'} />
-    </Stack>
-  )
-})
+        alignItems="center"
+        justifyContent="center"
+        sx={mergeSxProps(
+          {
+            ['& .vectorLine']: {
+              bgcolor: 'secondary.main',
+              flexGrow: 1,
+              width: !vertical ? undefined : 3,
+              height: !vertical ? 3 : undefined,
+              display: 'block',
+              content: '""',
+            },
+            ['& .vectorPoint']: {
+              bgcolor: 'surface.main',
+              borderRadius: 8,
+              borderWidth: 1,
+              borderStyle: 'solid',
+              borderColor: 'secondary.dark',
+              width: 8,
+              height: 8,
+              display: 'block',
+              content: '""',
+            },
+          },
+          sx,
+        )}
+        {...rest}
+      >
+        <div className={'vectorPoint'} />
+        <div className={'vectorLine'} />
+        <div className={'vectorPoint'} />
+      </Stack>
+    )
+  }),
+)
 DropIndicator.displayName = 'DropIndicator'
 
 export default DropIndicator
