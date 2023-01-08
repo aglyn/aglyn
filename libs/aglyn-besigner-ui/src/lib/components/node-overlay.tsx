@@ -17,16 +17,17 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
+import useIsomorphicLayoutEffect from '@aglyn/shared-ui-jsx/hooks/use-isomorphic-layout-effect'
 import {
   Popper as MuiPopper,
   type PopperProps as MuiPopperProps,
 } from '@mui/material'
 import { VirtualElement } from '@popperjs/core'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, useMemo, useState } from 'react'
 import { Else, If, Then } from 'react-if'
-import ElementOverlayActionsComponent from './element-overlay-actions.component'
 import NodeOutline from './node-outline'
+import NodePinnedActions from './node-pinned-actions'
 import NodeQuickActions from './node-quick-actions'
 
 const outerModifiers = [
@@ -75,6 +76,17 @@ const innerModifiers = [
   },
 ]
 
+const DEFAULT_RECT = {
+  top: 0,
+  left: 0,
+  width: 0,
+  height: 0,
+} as DOMRect
+
+export function serializeRect(rect: DOMRect): any {
+  return JSON.parse(JSON.stringify(rect || DEFAULT_RECT))
+}
+
 export interface NodeOverlayProps extends Partial<MuiPopperProps> {
   variant: 'hovered' | 'selected'
 }
@@ -92,22 +104,20 @@ const NodeOverlay = observer(
 
     const elementRef = Besigner.refs.get($id)
     const isOpen = Boolean(elementRef?.current)
+    const [rect, setRect] = useState<DOMRect>(DEFAULT_RECT)
+
+    useIsomorphicLayoutEffect(() => {
+      const el = elementRef?.current
+      if (el && 'getBoundingClientRect' in el) {
+        setRect(serializeRect(el.getBoundingClientRect()))
+      }
+    }, [elementRef])
 
     const virtualElement = useMemo<() => VirtualElement>(() => {
-      const el = elementRef?.current
       return () => ({
-        getBoundingClientRect: () => {
-          if (el) return el.getBoundingClientRect()
-          return {
-            top: 0,
-            left: 0,
-            width: 0,
-            height: 0,
-          } as DOMRect
-        },
-        contextElement: el,
+        getBoundingClientRect: () => rect,
       })
-    }, [elementRef])
+    }, [rect])
 
     return (
       <MuiPopper
@@ -116,11 +126,12 @@ const NodeOverlay = observer(
         placement="top-start"
         modifiers={outerModifiers}
         open={isOpen}
-        // keepMounted
+        keepMounted
         // disablePortal
+        // transition
         {...rest}
       >
-        <>
+        <div>
           <NodeOutline node={node} />
 
           <MuiPopper
@@ -150,14 +161,14 @@ const NodeOverlay = observer(
           >
             <If condition={variant === 'selected'}>
               <Then>
-                <ElementOverlayActionsComponent $id={$id} />
+                <NodePinnedActions $id={$id} />
               </Then>
               <Else>
                 <NodeQuickActions node={node} />
               </Else>
             </If>
           </MuiPopper>
-        </>
+        </div>
       </MuiPopper>
     )
   }),

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,8 +77,8 @@ export interface NodeQuickActionsProps extends StackProps {
   node: Aglyn.NodeSchema
 }
 
-const NodeQuickActionsRaw = forwardRef<any, NodeQuickActionsProps>(
-  (props, ref) => {
+export const NodeQuickActions = observer(
+  forwardRef<any, NodeQuickActionsProps>((props, ref) => {
     const { node, children, ...rest } = props
     const handleAddElementClick = useAddElementDrawerCallback()
     return (
@@ -172,9 +172,8 @@ const NodeQuickActionsRaw = forwardRef<any, NodeQuickActionsProps>(
         </Stack>
       </Stack>
     )
-  },
+  }),
 )
-NodeQuickActionsRaw.displayName = 'NodeQuickActions'
+NodeQuickActions.displayName = 'NodeQuickActions'
 
-export const NodeQuickActions = observer(NodeQuickActionsRaw)
 export default NodeQuickActions

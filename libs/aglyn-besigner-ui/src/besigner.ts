@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,7 +57,7 @@ export * from './lib/components/component-accordion-list'
 export * from './lib/components/component-icon.component'
 export * from './lib/components/components-grid-list.component'
 export * from './lib/components/device-preview-controls.component'
-export * from './lib/components/element-overlay-actions.component'
+export * from './lib/components/node-pinned-actions'
 export * from './lib/components/element-props-form.component'
 export * from './lib/components/element-styles-form.component'
 export * from './lib/components/history-controls.component'
@@ -67,7 +67,7 @@ export * from './lib/components/node-context-menu'
 export * from './lib/components/node-outline'
 export * from './lib/components/node-overlay'
 export * from './lib/components/node-quick-actions'
-export * from './lib/components/node-tree-view.component'
+export * from './lib/components/node-tree-view'
 export * from './lib/components/panel-controls.component'
 export * from './lib/components/properties-dialog.component'
 export * from './lib/components/viewport-canvas.component'
