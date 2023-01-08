@@ -46,9 +46,13 @@ function _App<Props, Initial>(props: _AppProps<Props, Initial>) {
   return (
     <_AppComponent
       MainComponent={MainComponent}
-      metaElements={[
-        ['viewport', 'width=device-width, initial-scale=1'],
-        ['description', APP_CONSOLE.DESCRIPTION],
+      meta={[
+        {
+          key: 'viewport',
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1',
+        },
+        { key: 'desc', name: 'description', content: APP_CONSOLE.DESCRIPTION },
       ]}
       headChildren={
         <Fragment>
