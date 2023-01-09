@@ -16,7 +16,7 @@
  */
 
 import * as Besigner from '@aglyn/besigner'
-import { LOADING_OVERLAY_ELEMENT, useForkedRefs } from '@aglyn/shared-ui-jsx'
+import { LOADING_OVERLAY_ELEMENT, useMergeRefs } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import {
@@ -134,7 +134,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
 
     return (
       <WorkspaceEditor
-        ref={useForkedRefs(ref, localRef)}
+        ref={useMergeRefs(ref, localRef)}
         id="aglyn:besigner-workspace"
         className={elemClassName}
         {...rest}

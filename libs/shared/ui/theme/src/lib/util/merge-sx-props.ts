@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,33 +15,19 @@
  * limitations under the License.
  */
 
-import '@aglyn/shared-data-jsx'
-import { _isArr } from '@aglyn/shared-util-guards'
 import { useMemo } from 'react'
 import type { Theme as DefaultTheme } from '../../vendor/mui'
 
-export function useForkedSxProps<Theme extends DefaultTheme>(
+export function useMergeSxProps<Theme extends DefaultTheme>(
   ...sxProps: JSX.SxProps<Theme>[]
 ): JSX.SxStyleArrayProp<Theme> {
-  const deps = useMemo(() => [...sxProps], [sxProps])
-  return useMemo(
-    () => mergeSxProps(...sxProps),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    deps,
-  )
+  return useMemo(() => mergeSxProps(...sxProps), [sxProps])
 }
 
 export function mergeSxProps<Theme extends DefaultTheme>(
   ...sxProps: JSX.SxProps<Theme>[]
 ): JSX.SxStyleArrayProp<Theme> {
-  const merged = []
-
-  for (const sx of sxProps) {
-    if (_isArr(sx)) merged.push(...sx.map((i) => i || false))
-    else merged.push(sx || false)
-  }
-
-  return merged
+  return sxProps.flat(2)
 }
 
 export default mergeSxProps

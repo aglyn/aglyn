@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
-import { CardListItemProps, useForkedRefs } from '@aglyn/shared-ui-jsx'
+import { CardListItemProps, useMergeRefs } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import {
   Box,
@@ -76,7 +76,7 @@ const ComponentGridItem = observer(
 
     return (
       <Card
-        ref={useForkedRefs(ref, setDraggableNodeRef)}
+        ref={useMergeRefs(ref, setDraggableNodeRef)}
         variant="outlined"
         style={style}
         sx={{ height: 1, minHeight: 100 }}

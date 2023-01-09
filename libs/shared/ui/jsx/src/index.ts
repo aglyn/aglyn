@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,6 @@ export * from './lib/contexts/loading.context'
 
 export * from './lib/hooks/router-events'
 export * from './lib/hooks/use-client-rect'
-export * from './lib/hooks/use-ref-forked'
 export * from './lib/hooks/use-debounce'
 export * from './lib/hooks/use-debounced-transition'
 export * from './lib/hooks/use-effect-post-mount'
@@ -57,6 +56,7 @@ export * from './lib/hooks/use-id'
 export * from './lib/hooks/use-intersection-observer'
 export * from './lib/hooks/use-interval'
 export * from './lib/hooks/use-isomorphic-layout-effect'
+export * from './lib/hooks/use-merge-refs'
 export * from './lib/hooks/use-mouse-enter'
 export * from './lib/hooks/use-mouse-over'
 export * from './lib/hooks/use-mouse-position'

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import React, {
 } from 'react'
 import ReactFrameComponent from 'react-frame-component'
 
-import { useForkedRefs } from '../hooks/use-ref-forked'
+import { useMergeRefs } from '../hooks/use-merge-refs'
 
 export type FrameComponentProps = JSX.ComponentProps<typeof ReactFrameComponent>
 export type SandboxFrameDocument = HTMLIFrameElement['contentDocument']
@@ -84,7 +84,7 @@ export const SandboxFrame = forwardRef<HTMLIFrameElement, SandboxFrameProps>(
     // Reference for frame context
     const styleRef = useRef(null)
     const frameRef = useRef(null)
-    const rootRef = useForkedRefs(frameRef, ref)
+    const rootRef = useMergeRefs(frameRef, ref)
     const head = useMemo(
       () => (
         <Fragment>

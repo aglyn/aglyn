@@ -20,7 +20,8 @@ import _isEqualitySameType from '@aglyn/shared-util-guards/_is-equality-same-typ
 import { type ClientRect } from '@dnd-kit/core'
 import { styled } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, HTMLProps } from 'react'
+import { motion } from 'framer-motion'
+import { forwardRef } from 'react'
 import { REGION } from '../../utils/droppable-region-utils'
 
 const classes = generateComponentClassKeys('DropIndicator', [
@@ -29,11 +30,15 @@ const classes = generateComponentClassKeys('DropIndicator', [
   'handle',
 ])
 
-type IndicatorProps = HTMLProps<HTMLDivElement> & {
+type IndicatorProps = JSX.ComponentProps<typeof motion.div> & {
   variant?: 'vertical' | 'horizontal'
 }
 
-const Indicator = styled('div', {
+const lineW = 6
+const handleW = lineW + lineW * 1.27
+const handleHalf = handleW / 2
+
+const Indicator = styled(motion.div, {
   name: 'DropIndicator',
   shouldForwardProp: (propName) =>
     !_isEqualitySameType(propName, null, 'variant', 'visible'),
@@ -46,21 +51,22 @@ const Indicator = styled('div', {
     flexDirection: vertical ? 'column' : 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: theme.zIndex.modal,
 
     [`& .${classes.line}`]: {
-      backgroundColor: theme.palette.secondary.main,
+      border: `${lineW / 2}px solid ${theme.palette.secondary.main}`,
       flexGrow: 1,
-      width: !vertical ? undefined : 3,
-      height: !vertical ? 3 : undefined,
+      width: !vertical ? undefined : lineW,
+      height: !vertical ? lineW : undefined,
       display: 'block',
       content: '""',
     },
     [`& .${classes.handle}`]: {
       backgroundColor: theme.palette.surface.main,
-      borderRadius: 8,
+      borderRadius: handleW,
       border: `1px solid ${theme.palette.secondary.dark}`,
-      width: 8,
-      height: 8,
+      width: handleW,
+      height: handleW,
       display: 'block',
       content: '""',
     },
@@ -80,29 +86,34 @@ export const DropIndicator = forwardRef<HTMLDivElement, DropIndicatorProps>(
 
     const styles = {
       [REGION.LEFT]: {
-        left: rect.left - 4,
-        top: rect.top - 4,
-        height: rect.height + 8,
+        left: rect.left - handleHalf,
+        top: rect.top - handleHalf,
+        height: rect.height + handleW,
+        width: null,
       },
       [REGION.TOP]: {
-        left: rect.left - 4,
-        top: rect.top - 4,
-        width: rect.width + 8,
+        left: rect.left - handleHalf,
+        top: rect.top - handleHalf,
+        width: rect.width + handleW,
+        height: null,
       },
       [REGION.RIGHT]: {
-        left: rect.left + rect.width - 4,
-        top: rect.top - 4,
-        height: rect.height + 8,
+        left: rect.left + rect.width - handleHalf,
+        top: rect.top - handleHalf,
+        height: rect.height + handleW,
+        width: null,
       },
       [REGION.BOTTOM]: {
-        left: rect.left - 4,
-        top: rect.top + rect.height - 4,
-        width: rect.width + 8,
+        left: rect.left - handleHalf,
+        top: rect.top + rect.height - handleHalf,
+        width: rect.width + handleW,
+        height: null,
       },
       [REGION.CHILDREN]: {
-        left: rect.left + 4,
-        top: rect.top + rect.height / 2 - 4,
-        width: rect.width - 8,
+        left: rect.left + handleHalf,
+        top: rect.top + rect.height / 2 - handleHalf,
+        width: rect.width - handleW,
+        height: null,
       },
     }
 
@@ -113,11 +124,12 @@ export const DropIndicator = forwardRef<HTMLDivElement, DropIndicatorProps>(
         ref={ref}
         className={clsx(classes.root)}
         variant={vertical ? 'vertical' : 'horizontal'}
-        style={{
+        style={style}
+        animate={{
           ...styles[region],
           visibility: visible ? 'visible' : 'hidden',
-          ...style,
         }}
+        transition={{ type: 'spring' }}
         {...rest}
       >
         <div className={classes.handle} />

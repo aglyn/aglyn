@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ Aglyn.plugins.addDependency({
   description: 'Material UI elements',
   title: 'Material UI',
   dependencies: {},
+  // components: [],
   load(...args): void {
     console.log('mui load', ...args)
     Aglyn.components.registerComponent(AppBar.default, AppBar.schema)

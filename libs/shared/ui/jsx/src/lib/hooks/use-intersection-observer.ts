@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,62 +15,48 @@
  * limitations under the License.
  */
 
-import React from 'react'
+import { useCallback, useRef } from 'react'
 
 // Create an observer instance linked to the callback function
 // const Observer = new MutationObserver(callback)
 
-// const observerCtx = React.createContext(observer)
+// const observerCtx = createContext(observer)
 
 export function useIntersectionObserver(
   callback: IntersectionObserverCallback,
   options?: IntersectionObserverInit,
 ): [
-  IntersectionObserver['observe'],
-  IntersectionObserver['unobserve'],
-  IntersectionObserver['disconnect'],
-  IntersectionObserver['takeRecords']
+  observe: IntersectionObserver['observe'],
+  unobserve: IntersectionObserver['unobserve'],
+  disconnect: IntersectionObserver['disconnect'],
+  takeRecords: IntersectionObserver['takeRecords'],
+  getObserver: () => IntersectionObserver,
 ] {
-  const ref = React.useRef<IntersectionObserver>(null)
+  const ref = useRef<IntersectionObserver>(null)
 
   // This avoids creating an expensive object until it’s truly needed for the first time.
-  function getObserver(): IntersectionObserver {
-    if (ref.current === null) {
-      ref.current = new IntersectionObserver(callback, options)
-    }
+  const getObserver = useCallback((): IntersectionObserver => {
+    return (ref.current ??= new IntersectionObserver(callback, options))
+  }, [callback, options])
 
-    return ref.current
-  }
-
-  const observe = React.useCallback(
-    (target: Element) => {
-      const observer = getObserver()
-      if (observer) observer.observe(target)
-    },
-    [ref],
+  const observe = useCallback(
+    (target: Element) => getObserver()?.observe(target),
+    [getObserver],
+  )
+  const unobserve = useCallback(
+    (target: Element) => getObserver()?.unobserve(target),
+    [getObserver],
+  )
+  const disconnect = useCallback(
+    () => getObserver()?.disconnect(),
+    [getObserver],
+  )
+  const takeRecords = useCallback(
+    () => getObserver()?.takeRecords(),
+    [getObserver],
   )
 
-  const unobserve = React.useCallback(
-    (target: Element) => {
-      const observer = getObserver()
-      if (observer) observer.unobserve(target)
-    },
-    [ref],
-  )
-
-  const disconnect = React.useCallback(() => {
-    const observer = getObserver()
-    if (observer) observer.disconnect()
-  }, [ref])
-
-  const takeRecords = React.useCallback(() => {
-    const observer = getObserver()
-    if (observer) {
-      return observer.takeRecords()
-    }
-  }, [ref])
-
-  return [observe, unobserve, disconnect, takeRecords]
+  return [observe, unobserve, disconnect, takeRecords, getObserver]
 }
 
 export default useIntersectionObserver

@@ -16,10 +16,11 @@
  */
 
 import {
-  ClientRect,
-  DragEndEvent,
-  DragMoveEvent,
-  DragStartEvent,
+  type ClientRect,
+  type DragCancelEvent,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
   useDndMonitor,
 } from '@dnd-kit/core'
 import { observer } from 'mobx-react-lite'
@@ -49,6 +50,7 @@ export const CanvasDropIndicator = observer(() => {
   useDndMonitor({
     onDragStart: (event: DragStartEvent) => setVisible(true),
     onDragEnd: (event: DragEndEvent) => setVisible(false),
+    onDragCancel: (event: DragCancelEvent) => setVisible(false),
     onDragMove: (event: DragMoveEvent) =>
       setRect({
         rect: event.over?.rect || DEFAULT.rect,
