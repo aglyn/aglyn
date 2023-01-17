@@ -1,4 +1,5 @@
 {
+  "name": "www",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/www",
   "projectType": "application",
@@ -45,7 +46,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/apps/www"],
+      "outputs": ["{workspaceRoot}/coverage/apps/www"],
       "options": {
         "jestConfig": "apps/www/jest.config.ts",
         "passWithNoTests": true

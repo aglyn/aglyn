@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import { forwardRef, type Ref, useState } from 'react'
-import { useForkedRefs } from '../hooks/use-ref-forked'
+import { useMergeRefs } from '../hooks/use-merge-refs'
 import ElevateOnScroll from './elevate-on-scroll'
 
 const classKeys = generateComponentClassKeys('AglynNavigationDrawer', [
@@ -156,7 +156,7 @@ const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
           )}
         </ElevateOnScroll>
         <Box
-          ref={useForkedRefs(setLocalContentRef, contentRef)}
+          ref={useMergeRefs(setLocalContentRef, contentRef)}
           {...ContentProps}
           className={clsx(classKeys.content, ContentProps?.className)}
           sx={mergeSxProps(

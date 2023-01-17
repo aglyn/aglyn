@@ -1,19 +1,14 @@
 {
-  "implicitDependencies": {
-    "workspace.json": "*",
-    "package.json": {
-      "dependencies": "*",
-      "devDependencies": "*"
-    },
-    "tsconfig.base.json": "*",
-    "tslint.json": "*",
-    ".eslintrc.json": "*",
-    "nx.json": "*"
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultProject": "console",
+  "npmScope": "aglyn",
+  "workspaceLayout": {
+    "appsDir": "apps",
+    "libsDir": "libs"
   },
   "affected": {
     "defaultBase": "main"
   },
-  "npmScope": "aglyn",
   "tasksRunnerOptions": {
     "default": {
       "runner": "@nrwl/nx-cloud",
@@ -26,18 +21,95 @@
     }
   },
   "generators": {
+    "@nrwl/js": {
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
+        "linter": "eslint"
+      }
+    },
+    "@nrwl/node": {
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
+        "linter": "eslint"
+      }
+    },
     "@nrwl/react": {
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
+        "linter": "eslint"
+      },
       "application": {
+        "swc": true,
         "babel": true
       }
     },
     "@nrwl/next": {
       "application": {
-        "style": "@emotion/styled",
+        "swc": true,
+        "standaloneConfig": true,
+        "linter": "eslint",
+        "unitTestRunner": "jest",
+        "e2eTestRunner": "cypress"
+      },
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
         "linter": "eslint"
       }
     }
   },
-  "defaultProject": "console",
-  "$schema": "./node_modules/nx/schemas/nx-schema.json"
+  "targetDefaults": {
+    "e2e": {
+      "inputs": ["default", "^default"]
+    },
+    "test": {
+      "inputs": ["default", "^default", "{workspaceRoot}/jest.preset.js"]
+    },
+    "lint": {
+      "inputs": ["default", "{workspaceRoot}/.eslintrc.js"]
+    },
+    "build-storybook": {
+      "inputs": ["default", "^default", "{workspaceRoot}/.storybook/**/*"]
+    },
+    "build": {
+      "inputs": ["production", "^production"]
+    }
+  },
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "sharedGlobals": [
+      "{workspaceRoot}/workspace.json",
+      "{workspaceRoot}/tsconfig.base.json",
+      "{workspaceRoot}/tslint.json",
+      "{workspaceRoot}/nx.json"
+    ],
+    "production": ["default"]
+  }
 }

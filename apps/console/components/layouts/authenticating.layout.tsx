@@ -29,32 +29,32 @@ import { useSigninCheck } from 'reactfire'
 export interface AuthenticatingLayoutProps
   extends Partial<BackgroundImageComponentProps> {
   requireEmailVerification?: boolean
-  isSignOut?: boolean
+  signingOut?: boolean
 }
 
 function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
-  const { children, sx, requireEmailVerification, isSignOut, ...rest } = props
+  const { children, sx, requireEmailVerification, signingOut, ...rest } = props
   const router = useRouter()
   const { status, data: signInCheckResult } = useSigninCheck()
   const authLoading = status === 'loading'
   const signedIn = signInCheckResult?.signedIn === true
   const emailVerified = signInCheckResult?.user?.emailVerified
-  const [, , pushNext] = useContinueUrl()
+  const [, , pushContinued] = useContinueUrl()
 
   useEffect(() => {
     if (authLoading) return void 0
-    if (isSignOut && signedIn) return void 0
-    if (!signedIn && !isSignOut) return void 0
-    if (isSignOut) return void router.push('/signin')
+    if (signedIn && signingOut) return void 0
+    if (!signedIn && !signingOut) return void 0
+    if (signingOut) return void router.push('/signin')
     if (requireEmailVerification && !emailVerified)
       return void router.push('/validate-email')
 
-    return void pushNext('/')
+    return void pushContinued('/')
   }, [
     authLoading,
     emailVerified,
-    isSignOut,
-    pushNext,
+    signingOut,
+    pushContinued,
     requireEmailVerification,
     router,
     signedIn,

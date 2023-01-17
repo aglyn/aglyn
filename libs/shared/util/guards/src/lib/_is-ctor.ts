@@ -22,7 +22,12 @@
  * @param {*} val
  * @returns {val is new Function}
  */
-export function _isCtor(val: unknown): val is new (...args: unknown[]) => unknown {
-  if (typeof val !== 'function') {return false}
+export function _isCtor(
+  val: unknown,
+): val is new (...args: unknown[]) => unknown {
+  if (typeof val !== 'function') {
+    return false
+  }
   return Boolean(val.prototype.constructor)
 }
+export default _isCtor

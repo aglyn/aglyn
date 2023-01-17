@@ -25,7 +25,7 @@ export type CANVAS_ROOT_ELEMENT_ID = string & typeof CANVAS_ROOT_ELEMENT_ID
 
 export const DEFAULT_ROOT_ELEMENT: AglynNodeSchema = {
   $id: CANVAS_ROOT_ELEMENT_ID,
-  elements: [],
+  nodes: [],
   parentId: null,
   componentId: undefined,
 }

@@ -125,13 +125,13 @@ const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>((props, ref) => {
     >
       {children}
       {items.map(({ icon, href, ...item }, key) => (
-        <AppLink
+        <TabItem
           key={item.key ?? item.id ?? key}
           href={href ?? ''}
           value={href ?? item.key ?? item.id ?? key}
-          icon={!icon?.path ? icon : <MdiIcon {...icon} />}
+          icon={(icon?.path ? <MdiIcon {...icon} /> : undefined) as any}
           componentVariant="naked"
-          anchorComponent={TabItem}
+          component={AppLink}
           color="inherit"
           underline="none"
           wrapped

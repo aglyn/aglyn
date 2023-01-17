@@ -24,6 +24,5 @@ export interface IActionStates {
 
 export interface ColorPropOverrides {
   tertiary: true
-  quaternary: true
   surface: true
 }

@@ -30,8 +30,8 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'toolbar'
 
 export const schema: AglynComponentSchema<ToolbarProps> = {
-  componentId: ID,
-  bundleId: BUNDLE_ID,
+  $id: ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Toolbar Content',
   icon: {
     path: mdiBorderInside.path,
@@ -53,7 +53,7 @@ export const schema: AglynComponentSchema<ToolbarProps> = {
   ],
   presets: [
     {
-      id: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'Toolbar Content',
       icon: {
         path: mdiBorderInside.path,
@@ -62,7 +62,7 @@ export const schema: AglynComponentSchema<ToolbarProps> = {
       category: ComponentCategory.SURFACE,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
       },
     },
   ],

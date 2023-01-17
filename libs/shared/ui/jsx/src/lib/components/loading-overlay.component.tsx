@@ -26,82 +26,87 @@ import {
   Stack,
 } from '@mui/material'
 import { forwardRef } from 'react'
-import { LoadingConsumer } from '../contexts/loading.context'
+import { LoadingContext } from '../contexts/loading.context'
 import LoadingTextComponent from './loading-text.component'
 
-export interface LoadingOverlayComponentProps extends Partial<MuiModalProps<any, any>> {}
+export interface LoadingOverlayComponentProps
+  extends Partial<MuiModalProps<any, any>> {}
 
-const LoadingOverlayComponent = forwardRef<any, LoadingOverlayComponentProps>(function RefRenderFn(
-  props,
-  ref
-) {
-  const { open, children, sx, ...rest } = props
+const LoadingOverlayComponent = forwardRef<any, LoadingOverlayComponentProps>(
+  (props, ref) => {
+    const { open, children, sx, ...rest } = props
 
-  return (
-    <>
-      {children}
-      <LoadingConsumer>
-        {({ loading }) => (
-          <Modal
-            ref={ref}
-            open={open || loading}
-            sx={mergeSxProps(
-              {
-                zIndex: 'blocking',
-                color: 'text.primary',
+    return (
+      <>
+        {children}
+        <LoadingContext.Consumer>
+          {({ loading }) => (
+            <Modal
+              ref={ref}
+              open={Boolean(open || loading)}
+              sx={mergeSxProps(
+                {
+                  zIndex: 'max',
+                  color: 'text.primary',
 
-                '& .MuiBackdrop-root': {
-                  backdropFilter: 'blur(5px)',
-                  backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.48),
+                  '& .MuiBackdrop-root': {
+                    backdropFilter: 'blur(5px)',
+                    backgroundColor: (theme) =>
+                      alpha(theme.palette.background.paper, 0.48),
+                  },
                 },
-              },
-              sx
-            )}
-            {...rest}
-          >
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                bottom: 0,
-                left: 0,
-                flexDirection: 'column',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+                sx,
+              )}
+              {...rest}
             >
-              <LinearProgress
-                color="secondary"
+              <Box
                 sx={{
                   position: 'absolute',
                   top: 0,
+                  right: 0,
+                  bottom: 0,
                   left: 0,
-                  backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.86),
-                  width: '100%',
+                  flexDirection: 'column',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
-              />
-              <Stack direction="column" justifyContent="center" alignItems="center" spacing={2}>
-                <CircularProgress color="secondary" />
-                <LoadingTextComponent
-                  component="div"
-                  variant="overline"
-                  sx={{ fontWeight: 'fontWeightBold' }}
+              >
+                <LinearProgress
+                  color="secondary"
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    backgroundColor: (theme) =>
+                      alpha(theme.palette.primary.main, 0.86),
+                    width: '100%',
+                  }}
+                />
+                <Stack
+                  direction="column"
+                  justifyContent="center"
+                  alignItems="center"
+                  spacing={2}
                 >
-                  {'Loading'}
-                </LoadingTextComponent>
-              </Stack>
-            </Box>
-          </Modal>
-        )}
-      </LoadingConsumer>
-    </>
-  )
-})
+                  <CircularProgress color="secondary" />
+                  <LoadingTextComponent
+                    variant="overline"
+                    sx={{ fontWeight: 'fontWeightBold' }}
+                  >
+                    {'Loading'}
+                  </LoadingTextComponent>
+                </Stack>
+              </Box>
+            </Modal>
+          )}
+        </LoadingContext.Consumer>
+      </>
+    )
+  },
+)
 
 LoadingOverlayComponent.displayName = 'LoadingOverlayComponent'
-LoadingOverlayComponent.aglyn = true
 
 export { LoadingOverlayComponent }
 export default LoadingOverlayComponent

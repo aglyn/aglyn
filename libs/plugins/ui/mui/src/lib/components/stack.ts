@@ -28,8 +28,8 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'stack'
 
 export const schema: AglynComponentSchema<StackProps> = {
-  componentId: ID,
-  bundleId: BUNDLE_ID,
+  $id: ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Stack',
   icon: {
     path: mdiViewColumn.path,
@@ -38,7 +38,7 @@ export const schema: AglynComponentSchema<StackProps> = {
   attributes: [],
   presets: [
     {
-      id: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'Stack Horizontal',
       icon: {
         path: mdiViewColumn.path,
@@ -47,13 +47,13 @@ export const schema: AglynComponentSchema<StackProps> = {
       category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {},
         sx: { flexDirection: 'row' },
       },
     },
     {
-      id: generatePresetId(ID, 'vertical'),
+      $id: generatePresetId(ID, 'vertical'),
       label: 'Stack Vertical',
       icon: {
         path: mdiViewSequential.path,
@@ -62,7 +62,7 @@ export const schema: AglynComponentSchema<StackProps> = {
       category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {},
         sx: { flexDirection: 'column' },
       },

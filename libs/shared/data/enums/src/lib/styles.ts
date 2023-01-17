@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,36 +15,64 @@
  * limitations under the License.
  */
 
+import { _isEqualitySameType, _isNum, _isStrT } from '@aglyn/shared-util-guards'
+
 export enum CssUnit {
-  CH = 'ch',
-  CENTIMETERS = 'cm',
-  DEG = 'deg',
-  DPCM = 'dpcm',
-  DPI = 'dpi',
-  DPPX = 'dppx',
-  EM = 'em',
-  EX = 'ex',
-  FR = 'fr',
-  GRAD = 'grad',
-  HZ = 'Hz',
-  INCHES = 'in',
-  K_HZ = 'kHz',
-  MILLIMETERS = 'mm',
-  MS = 'ms',
-  PICAS = 'pc',
-  POINTS = 'pt',
+  INITIAL = 'initial',
+  UNSET = 'unset',
+  INHERIT = 'inherit',
+  AUTO = 'auto',
   PIXELS = 'px',
-  Q = 'Q',
-  RAD = 'rad',
+  EM = 'em',
+  PERCENT = '%',
   REM = 'rem',
-  S = 's',
-  TURN = 'turn',
+  POINTS = 'pt',
+  PICAS = 'pc',
+  CH = 'ch',
+  VIEWPORT_WIDTH = 'vw',
   VIEWPORT_HEIGHT = 'vh',
   VIEWPORT_MAX = 'vmax',
   VIEWPORT_MIN = 'vmin',
-  VIEWPORT_WIDTH = 'vw',
-  X = 'x',
-  PERCENT = '%',
+  DPI = 'dpi',
+  MILLIMETERS = 'mm',
+  CENTIMETERS = 'cm',
+  INCHES = 'in',
+}
+
+export function isGlobalUnit(unit: CssUnit) {
+  return _isEqualitySameType(
+    unit,
+    null,
+    CssUnit.INITIAL,
+    CssUnit.UNSET,
+    CssUnit.INHERIT,
+    CssUnit.AUTO,
+  )
+}
+
+export function parseCssMeasurement(value: string | undefined): Measurement {
+  const result: Measurement = { quantity: undefined, unit: undefined }
+  if (!value || !_isStrT(value)) return result
+  if (isGlobalUnit(value as any)) {
+    result.unit = `${value}` as any
+  } else {
+    result.quantity = `${value}`.replace(/\D+$/, '') as any
+    result.unit = `${value}`.replace(/^-?\d+/, '') as any
+  }
+  return result
+}
+
+export function buildCssMeasurement(
+  measurement: Measurement,
+): string | undefined {
+  if (measurement?.unit && isGlobalUnit(measurement?.unit as any)) {
+    return `${measurement.unit}`
+  }
+  if (_isNum(measurement?.quantity) && measurement?.unit) {
+    return `${measurement.quantity}${measurement?.unit}`
+  }
+
+  return undefined
 }
 
 export enum FontWeight {
@@ -59,4 +87,9 @@ export enum FontWeight {
   BLACK = 900,
   LIGHTER = 'lighter',
   BOLDER = 'bolder',
+}
+
+export type Measurement = {
+  quantity?: number
+  unit: CssUnit
 }

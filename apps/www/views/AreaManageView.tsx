@@ -26,7 +26,7 @@ import {type ChangeEvent, Fragment, useCallback, useEffect, useState} from 'reac
 import DataTableComponent, {
   type DataTableProps,
 } from '../../console/components/data-table.component'
-import WidgetCardComponent from '../../console/components/widget-card.component'
+import CardDisplay from '../../console/components/card-display'
 import {type AppContextType, withAppContext} from '../contexts/app-context'
 import {type Fields} from '../forms'
 import ConsoleLayout from '../layouts/ConsoleLayout'
@@ -226,7 +226,7 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
             xs: 12,
             md: 9,
             children: (
-              <WidgetCardComponent
+              <CardDisplay
                 header={{
                   title: `All ${documentName.plural}`,
                   action: (
@@ -254,7 +254,7 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
                   noRowsLabel={documentName.plural}
                   rows={rows}
                 />
-              </WidgetCardComponent>
+              </CardDisplay>
             ),
           },
         ]}

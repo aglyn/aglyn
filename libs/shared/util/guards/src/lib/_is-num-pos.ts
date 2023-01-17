@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {_isNum} from './_is-num'
-
+import { _isNum } from './_is-num'
 
 /**
  * Checks if the value is a positive number
@@ -28,3 +27,4 @@ import {_isNum} from './_is-num'
 export function _isNumPos(val: unknown): val is number & boolean {
   return _isNum(val) && Number(val) > 0
 }
+export default _isNumPos

@@ -1,4 +1,5 @@
 {
+  "name": "shared-data-regex",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/data/regex/src",
   "projectType": "library",

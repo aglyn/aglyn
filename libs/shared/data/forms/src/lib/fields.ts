@@ -35,11 +35,15 @@ const VALIDATE_LENGTH_RANGE: (min: number, max: number) => Validator = (
   max: number,
 ) => ({
   type: FieldValidatorType.PATTERN,
-  pattern: RegExp(`/^.{${min},${max}}$/`),
+  pattern: new RegExp(`/^.{${min},${max}}$/gmi`),
   message: `Length must between ${min}–${max} characters`,
 })
 
-const VALIDATE_PATTERN_RANGE_PASSWORD: Validator = VALIDATE_LENGTH_RANGE(6, 30)
+const VALIDATE_PATTERN_RANGE_PASSWORD: Validator = {
+  type: FieldValidatorType.PATTERN,
+  pattern: /.{6,30}/,
+  message: `Length must between 6–30 characters`,
+}
 const VALIDATE_PATTERN_EMAIL: Validator = {
   type: FieldValidatorType.PATTERN,
   pattern: REGEX_EMAIL,
@@ -102,6 +106,15 @@ export const FIELD_SCHEMA_EMAIL: FieldSchema = {
   validate: [...VALIDATOR_LIST_EMAIL],
 }
 
+export const FIELD_SCHEMA_PASSWORD_OLD: FieldSchema = {
+  component: FieldComponentType.TEXT_FIELD,
+  name: 'OldPasswd',
+  label: 'Old password',
+  type: 'password',
+  isRequired: true,
+  validate: [...VALIDATOR_LIST_PASSWORD],
+}
+
 export const FIELD_SCHEMA_PASSWORD: FieldSchema = {
   component: FieldComponentType.TEXT_FIELD,
   name: 'Passwd',
@@ -114,18 +127,9 @@ export const FIELD_SCHEMA_PASSWORD: FieldSchema = {
 export const FIELD_SCHEMA_PASSWORD_CONFIRM: FieldSchema = {
   component: FieldComponentType.TEXT_FIELD,
   name: 'ConfirmPasswd',
-  label: 'Confirm',
+  label: 'Confirm password',
   type: 'password',
   required: true,
-  condition: {
-    or: [
-      {
-        when: [FIELD_SCHEMA_PASSWORD.name],
-        isEmpty: true,
-      },
-    ],
-    then: { visible: false },
-  },
   validate: [
     {
       type: FieldValidatorType.REQUIRED,

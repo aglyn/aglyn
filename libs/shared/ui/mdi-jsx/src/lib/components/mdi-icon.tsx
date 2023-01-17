@@ -21,54 +21,33 @@ import {
   SvgIcon as MuiSvgIcon,
   type SvgIconProps as MuiSvgIconProps,
 } from '@mui/material'
-import { motion } from 'framer-motion'
+// import { motion } from 'framer-motion'
 import { forwardRef, useMemo } from 'react'
 
 export type MdiIconBaseProps = Omit<MuiSvgIconProps, 'children'>
 export type MdiIconFeatureProps = {
   path?: string
-  PathProps?: JSX.ComponentProps<typeof motion.path>
 } & { children?: (d: string) => JSX.Children }
-
-const variants = {
-  hidden: {
-    opacity: 0,
-    fill: 'none',
-  },
-  visible: {
-    opacity: 1,
-    fill: 'inherit',
-  },
-}
 
 export type MdiIconProps = MdiIconBaseProps & MdiIconFeatureProps
 
-const MdiIcon = forwardRef<any, MdiIconProps>((props, ref) => {
-  const { path, children, PathProps, ...rest } = props
+export const MdiIcon = forwardRef<any, MdiIconProps>((props, ref) => {
+  const { path, children, ...rest } = props
 
   const d = useMemo<string>(() => {
     return (typeof path === 'string' && path) || DEFAULT_ICON.path
   }, [path])
 
   return (
-    <MuiSvgIcon ref={ref} {...rest}>
-      {typeof children === 'function' ? (
-        children(d)
-      ) : (
-        <motion.path
-          d={d}
-          variants={variants}
-          initial="hidden"
-          animate="visible"
-          {...PathProps}
-        />
-      )}
-    </MuiSvgIcon>
+    <MuiSvgIcon
+      ref={ref}
+      children={typeof children === 'function' ? children(d) : <path d={d} />}
+      {...rest}
+    />
   )
 })
 
 MdiIcon.displayName = 'MdiIcon'
 MdiIcon.aglyn = true
 
-export { MdiIcon }
 export default MdiIcon

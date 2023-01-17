@@ -29,8 +29,8 @@ import { generatePresetId } from '../utils/generate-preset-id'
 const ID: ComponentId = 'container'
 
 export const schema: AglynComponentSchema<ContainerProps> = {
-  componentId: ID,
-  bundleId: BUNDLE_ID,
+  $id: ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Container',
   icon: {
     path: mdiViewArrayOutline.path,
@@ -69,7 +69,7 @@ export const schema: AglynComponentSchema<ContainerProps> = {
   ],
   presets: [
     {
-      id: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'Container',
       icon: {
         path: mdiViewArrayOutline.path,
@@ -78,7 +78,7 @@ export const schema: AglynComponentSchema<ContainerProps> = {
       category: ComponentCategory.LAYOUT,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {},
       },
     },

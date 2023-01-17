@@ -73,6 +73,9 @@ declare module '@mui/material/AppBar' {
 declare module '@mui/material/IconButton' {
   interface AppBarPropsColorOverrides extends ColorPropOverrides {}
 }
+declare module '@mui/material/Tabs' {
+  interface TabsPropsIndicatorColorOverrides extends ColorPropOverrides {}
+}
 declare module '@mui/system/createTheme/shape' {
   interface Shape {
     appIconBorderRadius: number | string
@@ -86,19 +89,18 @@ declare module '@mui/material/styles/createPalette' {
 
   interface PaletteOptions {
     tertiary?: ExtraColorOptions
-    quaternary?: ExtraColorOptions
     surface?: ExtraColorOptions
   }
 
   interface Palette {
     tertiary: ExtraColor
-    quaternary: ExtraColor
     surface: ExtraColor
   }
 }
 declare module '@mui/material/styles/zIndex' {
   interface ZIndex {
-    blocking: number
+    max: number
+    min: number
   }
 }
 declare module '@mui/material/styles/createMixins' {
@@ -157,7 +159,6 @@ declare module '@mui/material/styles' {
   interface PaletteOptions {
     background?: PaletteOptions['background']
     tertiary?: ExtraColorOptions
-    quaternary?: ExtraColorOptions
     surface?: ExtraColorOptions
     svgBackground?: IActionStates
     svgFilled?: IActionStates
@@ -168,7 +169,6 @@ declare module '@mui/material/styles' {
   interface Palette {
     background: Palette['background']
     tertiary: ExtraColor
-    quaternary: ExtraColor
     surface: ExtraColor
     svgBackground: IActionStates
     svgFilled: IActionStates

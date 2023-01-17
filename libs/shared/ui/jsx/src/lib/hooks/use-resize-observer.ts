@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,47 +15,43 @@
  * limitations under the License.
  */
 
-import {useRef, useCallback} from 'react'
+import { useCallback, useRef } from 'react'
 import ResizeObserver from 'resize-observer-polyfill'
 
-
 export function useResizeObserver(
-  callback: ResizeObserverCallback
-): [ResizeObserver['observe'], ResizeObserver['unobserve'], ResizeObserver['disconnect']] {
+  callback: ResizeObserverCallback,
+): [
+  observe: ResizeObserver['observe'],
+  unobserve: ResizeObserver['unobserve'],
+  disconnect: ResizeObserver['disconnect'],
+  getObserver: () => ResizeObserver,
+] {
   const ref = useRef<ResizeObserver>(null)
 
   // This avoids creating an expensive object until it’s truly needed for the
   // first time. If you use Flow or TypeScript, you can also give getObserver()
   // a non-nullable type for convenience.
-  const getObserver = () => {
-    if (ref.current === null) {
-      ref.current = new ResizeObserver(callback)
-    }
-    return ref.current
-  }
+  const getObserver = useCallback(
+    () => (ref.current ??= new ResizeObserver(callback)),
+    [callback],
+  )
 
   const observe = useCallback(
-    (target: Element) => {
-      const observer = getObserver()
-      if (observer) observer.observe(target)
-    },
-    [ref]
+    (target: Element) => getObserver()?.observe(target),
+    [getObserver],
   )
 
   const unobserve = useCallback(
-    (target: Element) => {
-      const observer = getObserver()
-      if (observer) observer.unobserve(target)
-    },
-    [ref]
+    (target: Element) => getObserver()?.unobserve(target),
+    [getObserver],
   )
 
-  const disconnect = useCallback(() => {
-    const observer = getObserver()
-    if (observer) observer.disconnect()
-  }, [ref])
+  const disconnect = useCallback(
+    () => getObserver()?.disconnect(),
+    [getObserver],
+  )
 
-  return [observe, unobserve, disconnect]
+  return [observe, unobserve, disconnect, getObserver]
 }
 
 export default useResizeObserver

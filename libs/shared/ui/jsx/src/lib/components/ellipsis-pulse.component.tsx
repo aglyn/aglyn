@@ -19,7 +19,15 @@ import { styled } from '@aglyn/shared-ui-theme'
 import type { BoxProps } from '@mui/material'
 
 export interface EllipsisPulseProps extends BoxProps {
-  color?: 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' | 'inherit' | string
+  color?:
+    | 'primary'
+    | 'secondary'
+    | 'error'
+    | 'info'
+    | 'success'
+    | 'warning'
+    | 'inherit'
+    | string
 }
 
 const EllipsisPulseComponent = styled('span', {
@@ -64,7 +72,6 @@ const EllipsisPulseComponent = styled('span', {
   }
 })
 EllipsisPulseComponent.displayName = 'EllipsisPulseComponent'
-EllipsisPulseComponent.aglyn = true
 
 export { EllipsisPulseComponent }
 export default EllipsisPulseComponent

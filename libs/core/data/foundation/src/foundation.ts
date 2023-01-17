@@ -32,7 +32,6 @@ export * from './lib/definitions/extensions.types'
 export * from './lib/definitions/extensions.types'
 export * from './lib/definitions/module.types'
 export * from './lib/definitions/module.types'
-export * from './lib/definitions/tenancy.types'
 export * from './lib/definitions/shared'
 
 //    __________  _   ________________    _   _____________
@@ -56,5 +55,4 @@ export * from './lib/constants/logger'
 export * from './lib/constants/platform'
 export * from './lib/constants/shared'
 export * from './lib/constants/symbol'
-export * from './lib/constants/tenancy'
 export * from './lib/constants/version'

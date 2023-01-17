@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import {_isArrEmpty} from './_is-arr-empty'
-import {_isStrEmpty} from './_is-str-empty'
-
+import { _isArrEmpty } from './_is-arr-empty'
+import { _isStrEmpty } from './_is-str-empty'
 
 /**
  * Is type empty array or empty string
@@ -29,3 +28,4 @@ import {_isStrEmpty} from './_is-str-empty'
 export function _isEmptyStrOrArr(val: unknown): val is '' | [] {
   return _isStrEmpty(val) || _isArrEmpty(val)
 }
+export default _isEmptyStrOrArr

@@ -74,7 +74,6 @@ export enum FontFamily {
 export const buildFontFamilyList = (fontFamily = FontFamily.ROBOTO_FLEX) =>
   [
     fontFamily,
-    FontFamily.ROBOTO,
     FontFamily.APPLE_SYSTEM,
     FontFamily.BLINK_MAC_SYSTEM_FONT,
     FontFamily.SEGOE_UI,

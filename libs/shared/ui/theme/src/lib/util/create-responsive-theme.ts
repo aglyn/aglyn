@@ -119,7 +119,6 @@ export function createResponsiveTheme(
   const { themeOptions, responsiveFontSizesOptions } = options
   let theme = createTheme(themeOptions)
   addShadeVariants(theme.palette.tertiary, theme.palette.tonalOffset)
-  addShadeVariants(theme.palette.quaternary, theme.palette.tonalOffset)
   addShadeVariants(theme.palette.surface, theme.palette.tonalOffset)
 
   theme = responsiveFontSizes(createTheme(theme), {

@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import { AglynLogoFull } from '@aglyn/shared-ui-jsx'
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
@@ -26,6 +25,7 @@ import {
   Stack,
 } from '@mui/material'
 import { forwardRef } from 'react'
+import { AglynLogoFull } from '../const/svg-icons'
 import LoadingTextComponent from './loading-text.component'
 
 export interface SplashScreenProps extends Partial<MuiModalProps<any, any>> {}
@@ -34,7 +34,7 @@ const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
   const { sx, ...rest } = props
   const _sx = mergeSxProps(
     {
-      zIndex: 'blocking',
+      zIndex: 'max',
       color: 'text.primary',
 
       '& .MuiBackdrop-root': {
@@ -68,7 +68,6 @@ const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
           <AglynLogoFull sx={{ fontSize: 175 }} />
           <CircularProgress color="secondary" />
           <LoadingTextComponent
-            component="div"
             variant="overline"
             sx={{ fontWeight: 'fontWeightBold' }}
           >

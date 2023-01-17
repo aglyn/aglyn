@@ -50,27 +50,35 @@ export const LINK_PREF: MakeLinkElementsConfig = [
   [
     'shortcut icon',
     '/_static/images/favicons/favicon.ico',
-    { type: 'image/x-icon', id: 'shortcut-icon-favicon-ico' },
+    { type: 'image/x-icon', id: 'icon-favicon-ico' },
   ],
   [
     'alternate icon',
     '/_static/images/favicons/favicon.png',
-    { type: 'image/png', id: 'alternate-icon-favicon-png' },
+    { type: 'image/png', id: 'icon-favicon-png' },
   ],
   ['manifest', '/_static/_pwa/manifest.json', { id: 'manifest-pwa' }],
   [
     'stylesheet',
-    'https://fonts.googleapis.com/css2?family=Roboto+Flex:ital,wght@300;400;500;700;900;&display=swap',
-    { id: 'google-font-robot-flex-css2' },
-  ],
-  [
-    'stylesheet',
-    'https://fonts.googleapis.com/css?family=Roboto:300,400,500,700,900&display=swap',
-    { id: 'google-font-roboto-css' },
+    'https://fonts.googleapis.com/css2?family=Roboto+Flex:wght@300;400;500;700;900&display=swap',
+    { id: 'font-roboto-flex' },
   ],
 ]
 
 export const LINK_PRIORITY: MakeLinkElementsConfig = [
+  [
+    'preconnect',
+    'https://fonts.googleapis.com',
+    { id: 'preconnect-fonts-googleapis' },
+  ],
+  [
+    'preconnect',
+    'https://fonts.gstatic.com',
+    {
+      crossOrigin: 'anonymous',
+      id: 'preconnect-fonts-gstatic',
+    },
+  ],
   [
     'preconnect',
     'https://www.googletagmanager.com',
@@ -95,10 +103,5 @@ export const LINK_PRIORITY: MakeLinkElementsConfig = [
     'preconnect',
     'https://googleads.g.doubleclick.net',
     { id: 'preconnect-googleads-g' },
-  ],
-  [
-    'preconnect',
-    'https://fonts.gstatic.com',
-    { crossOrigin: 'anonymous', id: 'preconnect-fonts-gstatic' },
   ],
 ]

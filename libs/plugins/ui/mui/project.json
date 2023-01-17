@@ -1,4 +1,5 @@
 {
+  "name": "plugins-ui-mui",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/ui/mui/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/plugins/ui/mui"],
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/ui/mui"],
       "options": {
         "jestConfig": "libs/plugins/ui/mui/jest.config.ts",
         "passWithNoTests": true

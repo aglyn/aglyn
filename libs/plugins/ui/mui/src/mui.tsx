@@ -54,7 +54,7 @@ export const components: ComponentRegisterPayload[] = [
 ]
 
 export const schema: AglynBundleSchema = {
-  bundleId: BUNDLE_ID,
+  pluginId: BUNDLE_ID,
   displayName: 'Mui Components',
   description: 'Material-UI view components',
   icon: { path: mdiViewArray.path },
@@ -62,4 +62,4 @@ export const schema: AglynBundleSchema = {
 
 export const bundle = createComponentsBundle(schema, components)
 export default bundle
-export function activate(unknown, context) {}
+// export function activate(unknown, context) {}

@@ -1,4 +1,5 @@
 {
+  "name": "tenant",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/tenant",
   "projectType": "application",
@@ -45,7 +46,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/apps/tenant"],
+      "outputs": ["{workspaceRoot}/coverage/apps/tenant"],
       "options": {
         "jestConfig": "apps/tenant/jest.config.ts",
         "passWithNoTests": true

@@ -15,42 +15,37 @@
  * limitations under the License.
  */
 
-import { forwardRef, Fragment } from 'react'
-import { LeafComponentContext } from '../contexts/leaf-context'
-import { TreeContext } from '../contexts/tree-context'
-import type { TreeType } from '../definitions/tree'
+import { forwardRef } from 'react'
+import {
+  type LeafType,
+  TreeComponentContext,
+  TreeContext,
+} from '../contexts/tree-context'
+import LeafComponent from './leaf.component'
 
-export interface TreeProps<T extends TreeType = any>
-  extends JSX.OverrideableComponentProps {
-  data?: T
+export interface TreeProps {
+  leafs?: LeafType[]
+  renderLeaf?: (leaf: LeafType) => JSX.Node
 }
 
-const TreeComponent = forwardRef<any, TreeProps>(function RefRenderFn(
-  props,
-  ref,
-) {
-  const { component: Component, data, ...rest } = props
-  const { items } = data
+const TreeComponent = forwardRef<any, TreeProps>((props, ref) => {
+  const { leafs, renderLeaf } = props
 
   return (
-    <TreeContext.Provider value={data}>
-      <Component ref={ref} {...rest}>
-        {Array.isArray(items) &&
-          items.map((item) => (
-            <LeafComponentContext.Consumer>
-              {(Leaf) => <Leaf key={item.id} data={item} />}
-            </LeafComponentContext.Consumer>
-          ))}
-      </Component>
+    <TreeContext.Provider value={leafs}>
+      <TreeComponentContext.Consumer>
+        {(TreeComponent) => (
+          <TreeComponent ref={ref}>{leafs.map(renderLeaf)}</TreeComponent>
+        )}
+      </TreeComponentContext.Consumer>
     </TreeContext.Provider>
   )
 })
 
 TreeComponent.displayName = 'TreeComponent'
 TreeComponent.defaultProps = {
-  component: Fragment,
-  children: null,
-  data: { items: [] },
+  leafs: [],
+  renderLeaf: (leaf) => <LeafComponent key={leaf.id} data={leaf} />,
 }
 
 export { TreeComponent }

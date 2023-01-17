@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import {_isStrEmpty, _isUndOrNull} from '@aglyn/shared-util-guards'
-import {arraySafe} from '@aglyn/shared-util-tools'
-import {BehaviorSubject} from 'rxjs'
-import {map} from 'rxjs/operators'
-
+import { _isStrEmpty, _isUndOrNull } from '@aglyn/shared-util-guards'
+import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
+import { makeAutoObservable } from 'mobx'
+import { BehaviorSubject } from 'rxjs'
+import { map } from 'rxjs/operators'
 
 export type PageTitleObject = {
   number?
@@ -28,46 +28,66 @@ export type PageTitleObject = {
   separator?
 }
 
-let _values: PageTitleObject = {suffix: 'My App'}
-export const $_screenObj = new BehaviorSubject<PageTitleObject>({suffix: 'My App'})
+export class PageTitle {
+  public pagination?: number
+  public separator?: string
+  public prefix?: string[] | string
+  public suffix?: string[] | string
+  public view?: string[] | string
+
+  public get value(): string {
+    return [
+      ...arraySafe(this.prefix, null, true),
+      ...arraySafe(this.view, null, true),
+      ...(this.pagination ? [`Page ${this.pagination}`] : []),
+      ...arraySafe(this.suffix, null, true),
+    ].join(` ${this.separator} `)
+  }
+
+  constructor() {
+    makeAutoObservable(this)
+  }
+}
+
+export const $title = new PageTitle()
+
+let _values: PageTitleObject = { suffix: 'My App' }
+export const $_screenObj = new BehaviorSubject<PageTitleObject>({
+  suffix: 'My App',
+})
 export const $pageTitle = $_screenObj.pipe(map(buildScreenTitle))
 
 function buildScreenTitle(values: PageTitleObject): string {
-  const {
-    number,
-    screen,
-    suffix,
-    separator,
-  } = buildValues(values)
+  const { number, screen, suffix, separator } = buildValues(values)
 
   const newTitle = arraySafe(screen, [screen])
     .concat(!number ? null : ` - Page ${number}`, suffix)
-    .filter(i => !_isUndOrNull(i) && !_isStrEmpty(i))
+    .filter((i) => !_isUndOrNull(i) && !_isStrEmpty(i))
     .join(separator || ' – ')
 
   return newTitle
 }
 
 function buildValues(values?: PageTitleObject): PageTitleObject {
-  return _values = {
+  return (_values = {
     number: values.number ?? _values.number,
     screen: values.screen || _values.screen,
     suffix: values.suffix || _values.suffix,
     separator: values.separator || _values.separator,
-  }
+  })
 }
 
 export function setScreenName(screen, number?): void {
-  $_screenObj.next(buildValues({screen, number}))
+  $_screenObj.next(buildValues({ screen, number }))
 }
 export function setScreenSeparator(separator): void {
-  $_screenObj.next(buildValues({separator}))
+  $_screenObj.next(buildValues({ separator }))
 }
 export function setScreenSuffix(suffix): void {
-  $_screenObj.next(buildValues({suffix}))
+  $_screenObj.next(buildValues({ suffix }))
 }
 export function setScreenNumber(number?): void {
-  $_screenObj.next(buildValues({number}))
+  $_screenObj.next(buildValues({ number }))
 }
 export function setScreenTitle(values: PageTitleObject): void {
   $_screenObj.next(buildValues(values))

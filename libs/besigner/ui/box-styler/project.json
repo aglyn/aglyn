@@ -1,0 +1,44 @@
+{
+  "name": "besigner-ui-box-styler",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/besigner/ui/box-styler/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:ui", "aglyn:besigner"],
+  "targets": {
+    "build": {
+      "executor": "@nrwl/rollup:rollup",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/besigner/ui/box-styler",
+        "tsConfig": "libs/besigner/ui/box-styler/tsconfig.lib.json",
+        "project": "libs/besigner/ui/box-styler/package.json",
+        "entryFile": "libs/besigner/ui/box-styler/src/index.ts",
+        "external": ["react/jsx-runtime"],
+        "rollupConfig": "@nrwl/react/plugins/bundle-rollup",
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/besigner/ui/box-styler/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nrwl/linter:eslint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": ["libs/besigner/ui/box-styler/**/*.{ts,tsx,js,jsx}"]
+      }
+    },
+    "test": {
+      "executor": "@nrwl/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/besigner/ui/box-styler"],
+      "options": {
+        "jestConfig": "libs/besigner/ui/box-styler/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-
 /**
  * Mutates the existing array by adding new items onto the array at the provided
  * zero-based index. When the index is NaN, new items will be pushed onto the end
  * of the array. When the index is greater than or equal to 0, new items will be
  * pushed to the that index while any existing items previously located at or
  * following the index will be shifted to right. Returns the mutated array.
- * @param array - The array to mutate and push the new elements onto
- * @param index - The zero index to start the new elements.
+ * @param array - The array to mutate and push the new nodes onto
+ * @param index - The zero index to start the new nodes.
  * @param items - New items to push onto the array
  */
 export function arrayPushAtIndex<T>(

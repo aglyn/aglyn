@@ -1,10 +1,11 @@
 {
+  "name": "shared-ui-jsx",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/ui/jsx/src",
   "projectType": "library",
   "targets": {
     "build": {
-      "executor": "@nrwl/web:rollup",
+      "executor": "@nrwl/rollup:rollup",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/shared/ui/jsx",
@@ -32,7 +33,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/ui/jsx"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/ui/jsx"],
       "options": {
         "jestConfig": "libs/shared/ui/jsx/jest.config.ts",
         "passWithNoTests": true

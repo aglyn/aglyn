@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,11 @@ import {
   forwardRef,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { renderToString } from 'react-dom/server'
-import { useRefForked } from '../hooks/use-ref-forked'
+import { useMergeRefs } from '../hooks/use-merge-refs'
 import EmotionCacheProvider from './emotion-cache-provider'
 
 export type ShadowRendererProps = {
@@ -74,36 +75,30 @@ export function withShadowRoot(
 
   const ShadowRoot = forwardRef<Element, ShadowRootProps>((props, ref) => {
     const { mode, delegatesFocus, styleSheets, ssr, children, ...rest } = props
-    const [_ref, local] = useRefForked(ref)
+    const local = useRef<Element>()
     const [container, setContainer] = useState(null)
     const key = `node_${mode}${delegatesFocus}`
 
     useEffect(() => {
-      if (local.current) {
-        try {
-          if (ssr) {
-            const root = local.current.shadowRoot
-            setContainer(root)
-            return
-          }
+      const node = local.current
+      if (!node) return void 0
+      try {
+        let shadowRoot: ShadowRoot = null
 
-          const root = local.current.attachShadow({
-            mode,
-            delegatesFocus,
-          })
-
-          if (styleSheets.length > 0) {
-            container.adoptedStyleSheets = styleSheets
-          }
-          setContainer(root)
-        } catch (error) {
-          handleError({ error, styleSheets, container })
+        if (ssr) shadowRoot = node.shadowRoot
+        else {
+          shadowRoot = local.current.attachShadow({ mode, delegatesFocus })
+          shadowRoot.adoptedStyleSheets = styleSheets
         }
+
+        setContainer(shadowRoot)
+      } catch (error) {
+        handleError({ error, styleSheets, container })
       }
-    }, [ref, local, styleSheets, ssr, mode, delegatesFocus, container])
+    }, [styleSheets, ssr, mode, delegatesFocus, container])
 
     return (
-      <Tag key={key} ref={_ref} {...rest}>
+      <Tag key={key} ref={useMergeRefs(ref, local)} {...rest}>
         {(container || ssr) && (
           <ShadowDomContext.Provider value={container}>
             {ssr ? (

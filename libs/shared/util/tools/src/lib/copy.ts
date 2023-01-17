@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import copy from 'lodash-es/cloneDeep'
+import cloneDeep from 'lodash-es/cloneDeep'
 
-
-export {copy}
-export default copy
+export { cloneDeep }
+export default cloneDeep

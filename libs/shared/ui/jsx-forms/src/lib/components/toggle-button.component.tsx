@@ -15,11 +15,16 @@
  * limitations under the License.
  */
 
-import {FormFieldGrid, validationError} from '@data-driven-forms/mui-component-mapper'
-import {useFieldApi, type UseFieldApiConfig} from '@data-driven-forms/react-form-renderer'
+import {
+  FormFieldGrid,
+  validationError,
+} from '@data-driven-forms/mui-component-mapper'
+import {
+  useFieldApi,
+  type UseFieldApiConfig,
+} from '@data-driven-forms/react-form-renderer'
 import {
   FormControl,
-  FormControlLabel,
   FormGroup,
   FormHelperText,
   FormLabel,
@@ -28,7 +33,6 @@ import {
   type ToggleButtonGroupProps,
   type ToggleButtonProps as MuiToggleButtonProps,
 } from '@mui/material'
-
 
 export type ToggleButtonProps = UseFieldApiConfig & {
   ToggleButtonProps?: Partial<MuiToggleButtonProps>
@@ -59,11 +63,15 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
     ...rest
   } = useFieldApi({
     ...props,
-    type: 'checkbox',
   })
   const invalid = validationError(meta, validateOnMount)
   const hasError = Boolean(invalid)
-  const text = invalid || ((meta.touched || validateOnMount) && meta.warning) || helperText || description
+  const text =
+    invalid ||
+    ((meta.touched || validateOnMount) && meta.warning) ||
+    helperText ||
+    description
+
   return (
     <FormFieldGrid {...FormFieldGridProps}>
       <FormControl
@@ -73,33 +81,42 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
         {...FormControlProps}
       >
         <FormGroup {...FormGroupProps}>
-          <FormControlLabel
-            {...FormControlLabelProps}
-            control={
-              <ToggleButtonGroup
-                color="primary"
-                {...input}
-                {...ToggleButtonGroupProps}
-                disabled={isDisabled || isReadOnly}
-                value={input.value}
-                exclusive
-                {...rest}
-              >
-                {Array.isArray(options) && options.map(({value, label, children, ...option}) => (
+          <FormLabel
+            htmlFor={input.id || input.name}
+            sx={{ marginBottom: 1 }}
+            {...FormLabelProps}
+          >
+            {label}
+          </FormLabel>
+          <div>
+            <ToggleButtonGroup
+              color="primary"
+              id={input.id || input.name}
+              {...input}
+              {...ToggleButtonGroupProps}
+              disabled={isDisabled || isReadOnly}
+              value={input.value}
+              onChange={input.onChange}
+              exclusive
+              {...rest}
+            >
+              {Array.isArray(options) &&
+                options.map(({ value, label, children, ...option }) => (
                   <ToggleButton
                     {...ToggleButtonProps}
-                    key={value || label || children}
-                    children={children || label || value}
-                    value={value || label || children}
+                    key={value}
+                    value={value}
+                    disabled={isDisabled || isReadOnly}
                     {...option}
-                  />
+                  >
+                    {label || children}
+                  </ToggleButton>
                 ))}
-              </ToggleButtonGroup>
-            }
-            disabled={isDisabled || isReadOnly}
-            label={<FormLabel {...FormLabelProps}>{label}</FormLabel>}
-          />
-          {text && <FormHelperText {...FormHelperTextProps}>{text}</FormHelperText>}
+            </ToggleButtonGroup>
+          </div>
+          {text && (
+            <FormHelperText {...FormHelperTextProps}>{text}</FormHelperText>
+          )}
         </FormGroup>
       </FormControl>
     </FormFieldGrid>

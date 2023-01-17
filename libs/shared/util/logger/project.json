@@ -1,4 +1,5 @@
 {
+  "name": "shared-util-logger",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/util/logger/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/util/logger"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/logger"],
       "options": {
         "jestConfig": "libs/shared/util/logger/jest.config.ts",
         "passWithNoTests": true

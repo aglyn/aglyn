@@ -18,7 +18,7 @@
 import {
   ColorPicker as AglynColorPicker,
   type ColorPickerProps as AglynColorPickerProps,
-} from '@aglyn/shared-ui-color-picker'
+} from '@aglyn/besigner-ui-color-picker'
 import { styled } from '@aglyn/shared-ui-theme'
 import {
   FormFieldGrid,

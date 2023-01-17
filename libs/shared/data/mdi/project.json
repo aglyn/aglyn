@@ -1,4 +1,5 @@
 {
+  "name": "shared-data-mdi",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/data/mdi/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/data/mdi"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/data/mdi"],
       "options": {
         "jestConfig": "libs/shared/data/mdi/jest.config.ts",
         "passWithNoTests": true

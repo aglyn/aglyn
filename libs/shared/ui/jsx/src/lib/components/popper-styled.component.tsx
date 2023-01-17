@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ export interface PopperStyledComponentProps extends MuiPopperProps {
 const PopperStyledComponent = styled(MuiPopper, {
   name: 'AglynPopperStyled',
   shouldForwardProp: (prop) =>
-    !_isEqualitySameType(prop, 'disableArrow', 'arrowGap'),
+    !_isEqualitySameType(prop, null, 'disableArrow', 'arrowGap'),
 })<PopperStyledComponentProps>(({ theme, disableArrow, arrowGap }) => ({
   zIndex: 1,
   '& > div': {

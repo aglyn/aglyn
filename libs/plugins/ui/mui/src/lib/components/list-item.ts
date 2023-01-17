@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   type AglynComponentSchema,
   ComponentCategory,
   type ComponentId,
-  ComponentsLinealDirectiveFlag,
 } from '@aglyn/core-data-foundation'
 import { mdiFormatListText } from '@aglyn/shared-ui-mdi-jsx'
 
@@ -31,26 +31,26 @@ import { schema as listItemTextSchema } from './list-item-text'
 const ID: ComponentId = 'list-item'
 
 export const schema: AglynComponentSchema<ListItemProps> = {
-  componentId: ID,
-  bundleId: BUNDLE_ID,
+  $id: ID,
+  pluginId: BUNDLE_ID,
   displayName: 'List Item',
   icon: { path: mdiFormatListText.path },
   restrictChildren: [
-    ComponentsLinealDirectiveFlag.LIMIT_TO,
+    Aglyn.LinealDirectiveFlag.LIMIT_TO,
     {
-      components: [listItemTextSchema.componentId],
+      components: [listItemTextSchema.$id],
     },
   ],
   presets: [
     {
-      id: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'List Item',
       icon: { path: mdiFormatListText.path },
       category: ComponentCategory.DATA_DISPLAY,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
-        elements: [
+        pluginId: BUNDLE_ID,
+        nodes: [
           {
             ...listItemTextSchema.presets![0]!.data,
           },

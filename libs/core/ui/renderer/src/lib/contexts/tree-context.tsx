@@ -15,13 +15,36 @@
  * limitations under the License.
  */
 
-import { createContext, useContext } from 'react'
-import TreeComponent from '../components/tree.component'
-import type { TreeComponentType, TreeType } from '../definitions/tree'
+import '@aglyn/shared-data-jsx'
+import {
+  createContext,
+  type ForwardRefExoticComponent,
+  useContext,
+} from 'react'
 
-export const TreeComponentContext =
-  createContext<TreeComponentType>(TreeComponent)
+export interface LeafType {
+  id: string
+  props?: Record<string, any>
+}
+
+export type TreeComponentType =
+  | ForwardRefExoticComponent<any>
+  | JSX.IntrinsicElement
+export type LeafComponentType =
+  | ForwardRefExoticComponent<any>
+  | JSX.IntrinsicElement
+
+export const TreeComponentContext = createContext<TreeComponentType>('div')
+TreeComponentContext.displayName = 'TreeComponentContext'
+export const TreeContext = createContext<LeafType[] | null>(null)
+TreeContext.displayName = 'TreeContext'
+
+export const LeafComponentContext = createContext<LeafComponentType>('div')
+LeafComponentContext.displayName = 'LeafComponentContext'
+export const LeafContext = createContext<LeafType | null>(null)
+LeafContext.displayName = 'LeafContext'
+
 export const useTreeComponentContext = () => useContext(TreeComponentContext)
-
-export const TreeContext = createContext<TreeType | null>(null)
+export const useLeafComponentContext = () => useContext(LeafComponentContext)
 export const useTreeContext = () => useContext(TreeContext)
+export const useLeafContext = () => useContext(LeafContext)

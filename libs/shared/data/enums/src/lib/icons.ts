@@ -17,11 +17,14 @@
 
 import {
   mdiAccountSettings,
+  mdiAlignHorizontalDistribute,
+  mdiAlignVerticalCenter,
   mdiAlphabetical,
   mdiArrowDown,
   mdiArrowExpandHorizontal,
   mdiArrowLeft,
   mdiArrowRight,
+  mdiArrowRightBottom,
   mdiArrowULeftTop,
   mdiArrowUp,
   mdiBookVariant,
@@ -42,12 +45,20 @@ import {
   mdiCubeOutline,
   mdiCursorDefault,
   mdiCursorMove,
-  mdiDeleteOutline,
   mdiDockBottom,
   mdiDockLeft,
   mdiDockRight,
+  mdiDotsHorizontal,
+  mdiDotsVertical,
   mdiDrag,
   mdiFileTree,
+  mdiFormatAlignCenter,
+  mdiFormatAlignJustify,
+  mdiFormatAlignLeft,
+  mdiFormatAlignRight,
+  mdiFormatHorizontalAlignCenter,
+  mdiFormatHorizontalAlignLeft,
+  mdiFormatHorizontalAlignRight,
   mdiFormDropdown,
   mdiGroup,
   mdiHomeVariant,
@@ -59,6 +70,7 @@ import {
   mdiLogoutVariant,
   mdiMathCompass,
   mdiMenuDown,
+  mdiMinus,
   mdiMonitor,
   mdiMonitorSmall,
   mdiOpenInNew,
@@ -76,7 +88,9 @@ import {
   mdiVectorSquare,
   mdiWeatherNight,
   mdiWeb,
+  mdiWebBox,
   mdiWhiteBalanceSunny,
+  mdiWindowClose,
 } from '@aglyn/shared-ui-mdi-jsx'
 
 // Data-Type
@@ -94,6 +108,22 @@ export const ICON_VARIANT_PROPERTY = mdiVariable
 export const ICON_VARIANT_STRING = mdiCodeString
 export const ICON_VARIANT_TEXT = mdiAlphabetical
 
+// Flexbox
+export const ICON_VARIANT_FLEX_START = mdiFormatHorizontalAlignRight
+export const ICON_VARIANT_FLEX_END = mdiFormatHorizontalAlignLeft
+export const ICON_VARIANT_FLEX_CENTER = mdiFormatHorizontalAlignCenter
+export const ICON_VARIANT_FLEX_SPACE_EVENLY = mdiAlignHorizontalDistribute
+export const ICON_VARIANT_FLEX_SPACE_AROUND = mdiAlignHorizontalDistribute
+export const ICON_VARIANT_FLEX_SPACE_BETWEEN = mdiAlignVerticalCenter
+
+// Global CSS Values
+export const ICON_VARIANT_CSS_DEFAULT = mdiMinus
+export const ICON_VARIANT_CSS_INHERIT = mdiArrowRightBottom
+export const ICON_VARIANT_ALIGN_LEFT = mdiFormatAlignLeft
+export const ICON_VARIANT_ALIGN_CENTER = mdiFormatAlignCenter
+export const ICON_VARIANT_ALIGN_RIGHT = mdiFormatAlignRight
+export const ICON_VARIANT_ALIGN_JUSTIFY = mdiFormatAlignJustify
+
 // Action + Navigation
 export const ICON_VARIANT_CLOSE = mdiClose
 export const ICON_VARIANT_LEFT = mdiArrowLeft
@@ -105,7 +135,7 @@ export const ICON_VARIANT_DOCK_LEFT_TOGGLE = mdiDockLeft
 export const ICON_VARIANT_DOCK_RIGHT_TOGGLE = mdiDockRight
 export const ICON_VARIANT_MENU_DOWN = mdiMenuDown
 export const ICON_VARIANT_MODIFY_ADD = mdiPlus
-export const ICON_VARIANT_MODIFY_DELETE = mdiDeleteOutline
+export const ICON_VARIANT_MODIFY_DELETE = mdiWindowClose
 export const ICON_VARIANT_MODIFY_DRAG = mdiDrag
 export const ICON_VARIANT_MODIFY_DUPLICATE = mdiContentDuplicate
 export const ICON_VARIANT_MODIFY_EDIT = mdiPencil
@@ -119,6 +149,8 @@ export const ICON_VARIANT_MODIFY_SAVE = mdiContentSave
 export const ICON_VARIANT_NEW_TAB = mdiOpenInNew
 export const ICON_VARIANT_SELECT_PARENT = mdiArrowULeftTop
 export const ICON_VARIANT_SHOW_DETAIL = mdiPageNextOutline
+export const ICON_VARIANT_SHOW_MORE = mdiDotsHorizontal
+export const ICON_VARIANT_SHOW_MORE_VERTICAL = mdiDotsVertical
 
 // Areas + Pages
 export const ICON_VARIANT_APP_PREFERENCES = mdiTune
@@ -129,6 +161,8 @@ export const ICON_VARIANT_PAGES = mdiWeb
 export const ICON_VARIANT_SIGN_IN = mdiLoginVariant
 export const ICON_VARIANT_SIGN_OUT = mdiLogoutVariant
 export const ICON_VARIANT_USER_SETTINGS = mdiAccountSettings
+export const ICON_VARIANT_HOST_GROUP = mdiWebBox
+export const ICON_VARIANT_HOST = mdiWeb
 
 // Views + Panels
 export const ICON_VARIANT_ELEMENT_BROWSE = mdiGroup

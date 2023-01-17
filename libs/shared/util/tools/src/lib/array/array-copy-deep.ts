@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import copy from '../copy'
+import cloneDeep from '../copy'
 
 
 /**
@@ -22,6 +22,6 @@ import copy from '../copy'
  * @param target - Iterable list to deep copy
  */
 export function arrayCopyDeep<T>(target: T[]): T[] {
-  return copy(target)
+  return cloneDeep(target)
 }
 export default arrayCopyDeep

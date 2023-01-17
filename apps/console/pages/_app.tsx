@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,9 +28,11 @@ import {
   createWithThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import { Fragment } from 'react'
+import HostIdProvider from '../components/host-id-provider'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
 import './styles.css'
 
+// enableStaticRendering(true)
 const withThemeProvider = createWithThemeProvider({
   theme: [consoleThemeLight, consoleThemeDark],
 })
@@ -42,7 +44,9 @@ const MainComponent = withThemeProvider((props: any) => {
     <FirebaseAppLayout>
       <LoadingLayoutComponent>
         <ConfirmationProviderComponent>
-          <SnackbarProvider>{children}</SnackbarProvider>
+          <SnackbarProvider>
+            <HostIdProvider>{children}</HostIdProvider>
+          </SnackbarProvider>
         </ConfirmationProviderComponent>
       </LoadingLayoutComponent>
     </FirebaseAppLayout>
@@ -57,9 +61,13 @@ function _App<Props, InitialProps>(props: _Props<Props, InitialProps>) {
   return (
     <_AppComponent
       MainComponent={MainComponent}
-      metaElements={[
-        ['viewport', 'width=device-width, initial-scale=1'],
-        ['description', APP_CONSOLE.DESCRIPTION],
+      meta={[
+        {
+          key: 'viewport',
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1',
+        },
+        { key: 'desc', name: 'description', content: APP_CONSOLE.DESCRIPTION },
       ]}
       headChildren={
         <Fragment>

@@ -30,8 +30,8 @@ import { schema as toolbarSchema } from './toolbar'
 const ID: ComponentId = 'app-bar'
 
 export const schema: AglynComponentSchema<AppBarProps> = {
-  componentId: ID,
-  bundleId: BUNDLE_ID,
+  $id: ID,
+  pluginId: BUNDLE_ID,
   displayName: 'App Toolbar',
   icon: {
     path: mdiPageLayoutHeader.path,
@@ -40,7 +40,7 @@ export const schema: AglynComponentSchema<AppBarProps> = {
   attributes: [FIELD_COLOR_ALT1, FIELD_POSITION],
   presets: [
     {
-      id: generatePresetId(ID),
+      $id: generatePresetId(ID),
       label: 'App Toolbar',
       icon: {
         path: mdiPageLayoutHeader.path,
@@ -49,11 +49,11 @@ export const schema: AglynComponentSchema<AppBarProps> = {
       category: ComponentCategory.SURFACE,
       data: {
         componentId: ID,
-        bundleId: BUNDLE_ID,
+        pluginId: BUNDLE_ID,
         props: {
           position: 'sticky',
         },
-        elements: [
+        nodes: [
           {
             ...toolbarSchema.presets![0]!.data,
           },

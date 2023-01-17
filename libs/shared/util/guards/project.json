@@ -1,4 +1,5 @@
 {
+  "name": "shared-util-guards",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/util/guards/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/util/guards"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/guards"],
       "options": {
         "jestConfig": "libs/shared/util/guards/jest.config.ts",
         "passWithNoTests": true

@@ -25,3 +25,4 @@
 export function _isNumT(val: unknown): val is number {
   return typeof val === 'number'
 }
+export default _isNumT

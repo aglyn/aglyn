@@ -1,4 +1,5 @@
 {
+  "name": "shared-util-timestamp",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/util/timestamp/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/util/timestamp"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/timestamp"],
       "options": {
         "jestConfig": "libs/shared/util/timestamp/jest.config.ts",
         "passWithNoTests": true

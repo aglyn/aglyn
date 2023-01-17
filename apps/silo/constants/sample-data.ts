@@ -26,7 +26,7 @@ export const samplePageData: AglynElementsNormalized = [
     componentId: 'root',
     props: {},
     parentId: CANVAS_ROOT_ELEMENT_ID,
-    elements: [
+    nodes: [
       {
         $id: 'root12',
         componentId: 'root1',
@@ -55,7 +55,7 @@ export const samplePageData: AglynElementsNormalized = [
     componentId: 'root4',
     props: {},
     parentId: CANVAS_ROOT_ELEMENT_ID,
-    elements: [
+    nodes: [
       {
         $id: 'root13',
         componentId: 'root1',
@@ -85,7 +85,7 @@ export const samplePageData: AglynElementsNormalized = [
     componentId: 'root4',
     props: {},
     parentId: CANVAS_ROOT_ELEMENT_ID,
-    elements: [
+    nodes: [
       {
         $id: 'root14',
         componentId: 'root1',

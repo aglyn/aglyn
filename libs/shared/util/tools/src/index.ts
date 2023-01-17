@@ -69,8 +69,8 @@ export * from './lib/number/number-from-hexadecimal'
 
 // OBJECT
 
-export * from './lib/object/object-copy'
-export * from './lib/object/object-copy-deep'
+export * from '@aglyn/shared-util-tools/object/object-clone'
+export * from '@aglyn/shared-util-tools/object/object-clone-deep'
 export * from './lib/object/object-delete-property'
 export * from './lib/object/object-get-deep-property'
 export * from './lib/object/object-get-keys-and-symbol-properties'
@@ -81,8 +81,8 @@ export * from './lib/object/object-update'
 
 // SERIALIZE
 
-export * from '@aglyn/shared-util-tools/serialize/base64-isomorphic-decode'
-export * from '@aglyn/shared-util-tools/serialize/base64-isomorphic-encode'
+export * from './lib/serialize/base64-isomorphic-decode'
+export * from './lib/serialize/base64-isomorphic-encode'
 export * from './lib/serialize/php-serial-deserialize-from-byte-stream'
 export * from './lib/serialize/php-serial-is-serialized-byte-stream'
 export * from './lib/serialize/php-serial-serialize-to-byte-stream'

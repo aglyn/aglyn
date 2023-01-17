@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import {render} from '@testing-library/react'
-import Page from '../pages/_sites/[host]/[...path]'
-
+import { render } from '@testing-library/react'
+import Page from '../pages/_sites/[host]/[[...slug]]'
 
 describe('Index', () => {
   it('should render successfully', () => {
-    const {baseElement} = render(<Page />)
+    const { baseElement } = render(<Page />)
     expect(baseElement).toBeTruthy()
   })
 })

@@ -15,4 +15,14 @@
  * limitations under the License.
  */
 
-export * from './lib/rest-api'
+export * from './lib/auth'
+export * from './lib/create-new-json-response'
+export * from './lib/csrf'
+export * from './lib/get-api-request-cookie'
+export * from './lib/http-request-method-middleware'
+export * from './lib/initialize-middleware'
+export * from './lib/next-handle-json-error'
+export * from './lib/next-handle-json-response'
+export * from './lib/next-handle-json-success'
+export * from './lib/set-api-response-cookie'
+export * from './lib/types'

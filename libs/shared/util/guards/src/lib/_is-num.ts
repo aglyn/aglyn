@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {_isStrT} from './_is-str-t'
-
+import { _isStrT } from './_is-str-t'
 
 /**
  * Is value a number, allows even if string (e.g. "6" vs 6)
@@ -29,3 +28,4 @@ import {_isStrT} from './_is-str-t'
 export function _isNum(val: unknown, noStr?: boolean): val is number {
   return noStr && _isStrT(val) ? false : !isNaN(Number(val))
 }
+export default _isNum

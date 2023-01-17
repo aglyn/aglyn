@@ -15,61 +15,53 @@
  * limitations under the License.
  */
 
-import type { AglynScreenVersion } from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import { compress, decompress } from '@aglyn/core-util-app'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { copy } from '@aglyn/shared-util-tools'
-import { Bytes, doc, setDoc, type SetOptions } from 'firebase/firestore'
-import { useCallback, useMemo } from 'react'
-import {
-  type ObservableStatus,
-  type ReactFireOptions,
-  useFirestore,
-  useFirestoreDocDataOnce,
-} from 'reactfire'
+import { DocumentReference } from '@firebase/firestore'
+import { Bytes, doc } from 'firebase/firestore'
+import { ReactFireOptions, useFirestore } from 'reactfire'
+import useDoc from './helpers/use-doc'
 
-export type UseScreenVersionOptions = {
-  screenId: string
-  versionId: string
-  useFirestoreDocDataOptions?: ReactFireOptions
-}
-
-export type UpdateScreenVersion = {
-  (value: Partial<AglynScreenVersion>, options: SetOptions): Promise<void>
-}
-export type UpdateScreenResult = ObservableStatus<AglynScreenVersion>
-
-export function useScreenVersion(
-  options: UseScreenVersionOptions,
-): [UpdateScreenResult, UpdateScreenVersion] {
-  const { screenId, versionId, useFirestoreDocDataOptions } = options
+export const useScreenVersionRef = ({ hostId, screenId, versionId }) => {
   const firestore = useFirestore()
-  const reference = doc(firestore, 'screens', screenId, 'versions', versionId)
-
-  const value = useFirestoreDocDataOnce(reference, {
-    idField: '$id',
-    ...useFirestoreDocDataOptions,
-  }) as ObservableStatus<AglynScreenVersion>
-
-  const response = useMemo(() => {
-    const copied = copy(value)
-    const elements = copied?.data?.elements
-    if (elements && elements instanceof Bytes) {
-      copied.data.elements = decompress(elements)
-    }
-    return copied
-  }, [value])
-
-  const update = useCallback(
-    async (value, options: SetOptions) => {
-      if (value.elements) value.elements = compress(value.elements)
-      value.updatedAt = Timestamp.now()
-      return await setDoc(reference, value, options)
-    },
-    [reference],
+  const ref = doc(
+    firestore,
+    'hosts',
+    hostId,
+    'screens',
+    screenId,
+    'versions',
+    versionId,
   )
+  return ref.withConverter({
+    toFirestore(data) {
+      if (!(data?.nodes instanceof Bytes)) {
+        data.nodes = compress(data.nodes || {})
+      }
+      data.updatedAt = Timestamp.now()
+      return data
+    },
+    fromFirestore(snapshot, options) {
+      if (!snapshot.exists()) return undefined
+      const data = snapshot.data(options)
+      if (data?.nodes instanceof Bytes) {
+        data.nodes = decompress(data.nodes)
+      }
+      return data as Aglyn.AglynScreenVersion
+    },
+  }) as DocumentReference<Aglyn.AglynScreenVersion>
+}
 
-  return [response, update]
+export const useScreenVersion = (
+  data: {
+    screenId: string
+    versionId: string
+    hostId: string
+  },
+  options?: ReactFireOptions<Aglyn.AglynScreenVersion>,
+) => {
+  return useDoc(useScreenVersionRef(data), options)
 }
 
 export default useScreenVersion

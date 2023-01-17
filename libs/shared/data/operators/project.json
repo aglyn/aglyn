@@ -1,4 +1,5 @@
 {
+  "name": "shared-data-operators",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/data/operators/src",
   "projectType": "library",

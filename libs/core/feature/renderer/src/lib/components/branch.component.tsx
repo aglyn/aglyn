@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import type { NodeId } from '@aglyn/core-data-foundation'
 import { forwardRef, Fragment, useMemo } from 'react'
-import useAglynElementData from '../hooks/use-aglyn-element-data'
 import LeafComponent from './leaf.component'
 
 export interface BranchComponentProps extends JSX.OverrideableComponentProps {
@@ -28,12 +28,12 @@ export interface BranchComponentProps extends JSX.OverrideableComponentProps {
 const BranchComponent = forwardRef<any, BranchComponentProps>((props, ref) => {
   const { component: Component, leafComponent, $id, ...rest } = props
 
-  const elements = useAglynElementData($id, 'elements')
+  const node = Aglyn.canvas.getNode($id)
   const Leaf = useMemo(() => leafComponent || LeafComponent, [leafComponent])
 
-  return Array.isArray(elements) && elements.length ? (
+  return Array.isArray(node?.nodes) && node?.nodes.length ? (
     <Component ref={ref} {...rest}>
-      {elements.map(($id) => (
+      {node?.nodes.map(($id) => (
         <Leaf key={`element-leaf-${$id}`} $id={$id} leafComponent={Leaf} />
       ))}
     </Component>

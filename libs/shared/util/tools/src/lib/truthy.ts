@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-export type TruthyParams = unknown[]
+export function truth(...val: unknown[]): boolean {
+  return val.some(Boolean)
+}
 
 /**
  * Shortcut for checking multiple truthy values e.g., `Boolean(i of val)`
  * @returns return true unless any value is falsy otherwise returns false
  */
-export function truthy(...val: TruthyParams): boolean {
+export function truthy(...val: unknown[]): boolean {
   for (const i of val) {
     if (!i) return false
   }

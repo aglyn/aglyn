@@ -98,18 +98,18 @@ export const handleCanvasAddElement = (
     {
       [parentId]: {
         $id: parentId,
-        componentId: state[parentId]?.componentId,
-        elements: [],
+        componentId: state[parentId]?.$id,
+        nodes: [],
       },
     },
   )
 
-  // Add all if the descendent elements to the state
+  // Add all if the descendent nodes to the state
   for (const [$id, element] of Object.entries(newElements)) {
     state[$id] = element
   }
-  // Add the new element to the parents' elements property
-  arrayPushAtIndex((state[parentId].elements ||= []), index, element.$id)
+  // Add the new element to the parents' nodes property
+  arrayPushAtIndex((state[parentId].nodes ||= []), index, element.$id)
   return state
 }
 
@@ -154,7 +154,7 @@ export const handleCanvasMoveElement = (
 
   if (parentId === currentParentId && state[parentId]) {
     console.log('reordering')
-    const parentElements = (state[parentId].elements ||= [])
+    const parentElements = (state[parentId].nodes ||= [])
     // Move current index
     arrayMoveAtIndex(
       parentElements,
@@ -166,13 +166,9 @@ export const handleCanvasMoveElement = (
     // Update element parentId property
     state[payload.$id].parentId = parentId
     // Remove from current parent
-    arrayRemoveItem(state[currentParentId]?.elements || [], payload.$id)
+    arrayRemoveItem(state[currentParentId]?.nodes || [], payload.$id)
     // Add to new parent
-    arrayPushAtIndex(
-      state[parentId]?.elements || [],
-      payload.index,
-      payload.$id,
-    )
+    arrayPushAtIndex(state[parentId]?.nodes || [], payload.index, payload.$id)
   }
 
   return state
@@ -192,7 +188,7 @@ export const handleCanvasDuplicateElement = (
   return handleCanvasAddElement(state, {
     element: createComponentElementDataCopy(element.$id, state),
     parentId: parent?.$id,
-    index: (parent?.elements || []).indexOf(element.$id) + 1,
+    index: (parent?.nodes || []).indexOf(element.$id) + 1,
   })
 }
 
@@ -204,13 +200,13 @@ export const handleCanvasDeleteElement = (
   if (!element || element.$id === CANVAS_ROOT_ELEMENT_ID) {
     throw new Error('Failed deleting. Non-existent or forbidden deletion.')
   }
-  // Remove all child elements first
-  for (const childId in (element.elements ||= [])) {
+  // Remove all child nodes first
+  for (const childId in (element.nodes ||= [])) {
     handleCanvasDeleteElement(state, { $id: childId })
   }
   // Secondly remove the element from the parent
   if (element.parentId && state[element.parentId]) {
-    arrayRemoveItem((state[element.parentId].elements ||= []), element.$id)
+    arrayRemoveItem((state[element.parentId].nodes ||= []), element.$id)
   }
   // Lastly remove the element
   delete state[element.$id]

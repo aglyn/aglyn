@@ -16,8 +16,8 @@
   },
   "module": {
     "type": "commonjs",
-    "strict": true,
-    "noInterop": true
+    "strict": false,
+    "noInterop": false
   },
   "sourceMaps": true,
   "exclude": ["jest.config.ts",".*.spec.tsx?$",".*.test.tsx?$","./src/jest-setup.ts$","./**/jest-setup.ts$",".*.js$"]

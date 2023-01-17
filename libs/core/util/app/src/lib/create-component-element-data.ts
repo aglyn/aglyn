@@ -19,7 +19,7 @@ import type {
   AglynNodeItemDenormalized,
   AglynNodePresetSchema,
 } from '@aglyn/core-data-foundation'
-import { copy } from '@aglyn/shared-util-tools'
+import { cloneDeep } from '@aglyn/shared-util-tools'
 import defaultsDeep from 'lodash-es/defaultsDeep'
 import createComponentElementId from './create-component-element-id'
 
@@ -29,12 +29,12 @@ export function traverseNodePreset(
   const response: AglynNodeItemDenormalized = {
     ...data,
     $id: createComponentElementId(),
-    elements: [],
+    nodes: [],
     props: { ...data?.props },
   }
-  const current = Array.isArray(data?.elements) ? data.elements : []
+  const current = Array.isArray(data?.nodes) ? data.nodes : []
   for (const child of current) {
-    response.elements.push(traverseNodePreset(child))
+    response.nodes.push(traverseNodePreset(child))
   }
   return response
 }
@@ -45,15 +45,15 @@ export type CreateComponentElementDataOptions =
 
 export const ELEMENT_DEFAULTS: Partial<AglynNodeItemDenormalized> = {
   props: {},
-  elements: [],
+  nodes: [],
 }
 
 export function createComponentElementData(
   options?: CreateComponentElementDataOptions,
 ): AglynNodeItemDenormalized {
   return defaultsDeep(
-    traverseNodePreset(copy(options?.data)),
-    copy(ELEMENT_DEFAULTS),
+    traverseNodePreset(cloneDeep(options?.data)),
+    cloneDeep(ELEMENT_DEFAULTS),
   )
 }
 export default createComponentElementData

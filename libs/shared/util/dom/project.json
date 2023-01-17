@@ -1,4 +1,5 @@
 {
+  "name": "shared-util-dom",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/util/dom/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/util/dom"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/dom"],
       "options": {
         "jestConfig": "libs/shared/util/dom/jest.config.ts",
         "passWithNoTests": true

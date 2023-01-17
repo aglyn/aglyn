@@ -1,38 +1,26 @@
 {
+  "name": "core-data-foundation",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/core/data/foundation/src",
   "projectType": "library",
   "targets": {
     "build": {
       "executor": "@nrwl/js:swc",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/core/data/foundation",
         "main": "libs/core/data/foundation/src/index.ts",
         "tsConfig": "libs/core/data/foundation/tsconfig.lib.json",
-        "assets": [
-          "libs/core/data/foundation/*.md"
-        ]
+        "assets": ["libs/core/data/foundation/*.md"]
       }
     },
     "lint": {
       "executor": "@nrwl/linter:eslint",
-      "outputs": [
-        "{options.outputFile}"
-      ],
+      "outputs": ["{options.outputFile}"],
       "options": {
-        "lintFilePatterns": [
-          "libs/core/data/foundation/**/*.ts"
-        ]
+        "lintFilePatterns": ["libs/core/data/foundation/**/*.ts"]
       }
     }
   },
-  "tags": [
-    "scope:lib",
-    "scope:aglyn",
-    "scope:data",
-    "aglyn:framework"
-  ]
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:framework"]
 }

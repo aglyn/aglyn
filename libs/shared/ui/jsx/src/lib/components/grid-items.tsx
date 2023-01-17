@@ -16,7 +16,9 @@
  */
 
 import type { ReplaceKey } from '@aglyn/shared-data-types'
-import { Grid as MuiGrid, type GridProps as MuiGridProps } from '@mui/material'
+import MuiGrid, {
+  type Grid2Props as MuiGridProps,
+} from '@mui/material/Unstable_Grid2'
 import { forwardRef } from 'react'
 
 /* eslint-disable-next-line */

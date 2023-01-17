@@ -55,7 +55,7 @@ import {
   nodeDataDenormalize,
   nodeDataNormalize,
 } from '@aglyn/core-util-app'
-import { copy } from '@aglyn/shared-util-tools'
+import { cloneDeep } from '@aglyn/shared-util-tools'
 import defaultsDeep from 'lodash-es/defaultsDeep'
 import isEqual from 'lodash-es/isEqual'
 import { BehaviorSubject, Observable } from 'rxjs'
@@ -164,7 +164,7 @@ export class AglynCanvasController
   ) {
     const state = this.getState()
     const prev = state.present
-    const now = callback(copy(prev), payload)
+    const now = callback(cloneDeep(prev), payload)
     const updated = handleStateModificationHistoryChange(state, now)
     if (this.isDeepEqual(prev, now)) return this
     if (clear) {

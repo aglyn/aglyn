@@ -1,4 +1,5 @@
 {
+  "name": "core-data-app",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/core/data/app/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/core/data/app"],
+      "outputs": ["{workspaceRoot}/coverage/libs/core/data/app"],
       "options": {
         "jestConfig": "libs/core/data/app/jest.config.ts",
         "passWithNoTests": true

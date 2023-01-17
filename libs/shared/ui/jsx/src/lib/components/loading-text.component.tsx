@@ -16,28 +16,23 @@
  */
 
 import { Typography, type TypographyProps } from '@mui/material'
-import { type ElementType, forwardRef } from 'react'
+import { forwardRef } from 'react'
 import EllipsisPulseComponent from './ellipsis-pulse.component'
 
-export type LoadingTextProps<C extends ElementType> = TypographyProps<
-  C,
-  { component?: C }
-> & {}
+export interface LoadingTextProps extends TypographyProps<'div'> {}
 
-const LoadingTextComponent = forwardRef(function RefRenderFn<
-  C extends ElementType,
->(props: LoadingTextProps<C>, ref) {
-  const { children, ...rest } = props
+const LoadingTextComponent = forwardRef<HTMLDivElement, LoadingTextProps>(
+  (props, ref) => {
+    const { children, ...rest } = props
 
-  return (
-    <Typography ref={ref} {...rest}>
-      {children}
-      <EllipsisPulseComponent />
-    </Typography>
-  )
-})
+    return (
+      <Typography ref={ref} component="div" {...rest}>
+        {children} <EllipsisPulseComponent />
+      </Typography>
+    )
+  },
+)
 LoadingTextComponent.displayName = 'LoadingTextComponent'
-LoadingTextComponent.aglyn = true
 LoadingTextComponent.defaultProps = {}
 
 export { LoadingTextComponent }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,51 +15,23 @@
  * limitations under the License.
  */
 
-
-import {_hasOwnProperty} from './_has-own-property'
-
-
 export enum Equality {
-  STRICT,
-  LOOSE,
+  STRICT = 'strict',
+  LOOSE = 'loose',
   DEFAULT = STRICT,
 }
 
-export interface IsEqualitySameTypeOptions {
-  truthiness?: 'strict' | 'loose'
-}
-
-type IsEqualitySameTypeRestParams<T, U extends T> =
-  | [...possibilities: U[]]
-  | [...possibilities: U[], options: IsEqualitySameTypeOptions]
-
 export function _isEqualitySameType<T, U extends T>(
   value: T,
-  possibilities: U[],
-  options?: IsEqualitySameTypeOptions,
-): value is U
-export function _isEqualitySameType<T, U extends T>(
-  value: T,
+  options: { truthiness?: Equality } | null,
   ...possibilities: U[]
-): value is U
-export function _isEqualitySameType<T, U extends T>(
-  value: T,
-  ...possibilities: IsEqualitySameTypeRestParams<T, U>
 ): value is U {
-  const _lastItem = possibilities.pop(),
-    _withOptions = _hasOwnProperty('equality', _lastItem),
-    _options = {
-      truthiness: Equality.DEFAULT,
-      ..._withOptions ? _lastItem : undefined,
-    }
-  if (!_withOptions) {
-    possibilities.push(_lastItem as U)
-  }
-  return possibilities.some((possibility) => {
-    if (_options.truthiness === 'loose') {
+  for (const possibility of possibilities) {
+    if (options?.truthiness === Equality.LOOSE) {
       // noinspection EqualityComparisonWithCoercionJS
-      return possibility == value
-    }
-    return possibility === value
-  })
+      if (possibility == value) return true
+    } else if (possibility === value) return true
+  }
+  return false
 }
+export default _isEqualitySameType

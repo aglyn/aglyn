@@ -1,4 +1,5 @@
 {
+  "name": "shared-util-vendor",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/util/vendor/src",
   "projectType": "library",
@@ -22,7 +23,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/util/vendor"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/vendor"],
       "options": {
         "jestConfig": "libs/shared/util/vendor/jest.config.ts",
         "passWithNoTests": true

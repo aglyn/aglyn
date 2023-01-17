@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,15 @@
  */
 
 import { APP_CONSOLE, IS_PRODUCTION } from '@aglyn/shared-data-enums'
+import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
 import {
   consoleThemeDark,
   consoleThemeLight,
   createWithThemeProvider,
 } from '@aglyn/shared-ui-theme'
-import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
 import { Fragment } from 'react'
 
+// enableStaticRendering(true)
 const withThemeProvider = createWithThemeProvider({
   theme: [consoleThemeLight, consoleThemeDark],
 })
@@ -31,20 +32,27 @@ const withThemeProvider = createWithThemeProvider({
 const MainComponent = withThemeProvider((props: any) => {
   const { children } = props
 
-  return <>{children}</>
+  return (
+    <>
+      {children}
+      {/*<HostProvider>{children}</HostProvider>*/}
+    </>
+  )
 })
 
-export interface _Props<Props, InitialProps> extends _AppProps<Props, InitialProps> {}
-
-function _App<Props, InitialProps>(props: _Props<Props, InitialProps>) {
+function _App<Props, Initial>(props: _AppProps<Props, Initial>) {
   const { headChildren, ...rest } = props
 
   return (
     <_AppComponent
       MainComponent={MainComponent}
-      metaElements={[
-        ['viewport', 'width=device-width, initial-scale=1'],
-        ['description', APP_CONSOLE.DESCRIPTION],
+      meta={[
+        {
+          key: 'viewport',
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1',
+        },
+        { key: 'desc', name: 'description', content: APP_CONSOLE.DESCRIPTION },
       ]}
       headChildren={
         <Fragment>

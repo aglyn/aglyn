@@ -14,11 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {HttpStatusCode} from '@aglyn/shared-data-enums'
+import { HttpStatusCode } from '@aglyn/shared-data-enums'
 import getAllowedHeaders from './get-allowed-headers'
 import getOriginHeadersFromRequest from './get-origin-headers-from-request'
-import type {CorsOptions} from './types'
-
+import type { CorsOptions } from './types'
 
 const defaultOptions: CorsOptions = {
   origin: '*',
@@ -29,7 +28,7 @@ const defaultOptions: CorsOptions = {
 
 /**
  * Handle cors for HTTP requests
- * @example - pages/_middleware.ts
+ * @example - pages/middleware.ts
  * export function middleware(req: NextRequest) {
  *   // `cors` also takes care of handling OPTIONS requests
  *   return cors(
@@ -51,9 +50,12 @@ export async function corsHandleResponse(
   res: Response,
   options?: CorsOptions,
 ) {
-  const opts = {...defaultOptions, ...options}
-  const {headers} = res
-  const originHeaders = await getOriginHeadersFromRequest(req, opts.origin ?? false)
+  const opts = { ...defaultOptions, ...options }
+  const { headers } = res
+  const originHeaders = await getOriginHeadersFromRequest(
+    req,
+    opts.origin ?? false,
+  )
   const mergeHeaders = (v: string, k: string) => {
     if (k === 'Vary') headers.append(k, v)
     else headers.set(k, v)
@@ -95,7 +97,7 @@ export async function corsHandleResponse(
     if (opts.preflightContinue) return res
 
     headers.set('Content-Length', '0')
-    return new Response(null, {status: opts.optionsSuccessStatus, headers})
+    return new Response(null, { status: opts.optionsSuccessStatus, headers })
   }
 
   // If we got here, it's a normal request

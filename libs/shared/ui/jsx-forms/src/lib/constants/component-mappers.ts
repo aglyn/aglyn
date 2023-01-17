@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type {ComponentMapper} from '../vendor/data-driven-forms'
+import type { ComponentMapper } from '../vendor/data-driven-forms'
 import {
   FIELD_MAP_CHECKBOX,
   FIELD_MAP_COLOR_PICKER,
@@ -34,12 +34,13 @@ import {
   FIELD_MAP_TIME_PICKER,
   FIELD_MAP_TOGGLE_BUTTON,
   FIELD_MAP_WIZARD,
+  FIELD_SUB_FORM,
 } from './field-configurations'
-import {FieldComponentType} from './flags'
-
+import { FieldComponentType } from './flags'
 
 export const componentMapper: ComponentMapper = {
   [FieldComponentType.SELECT]: FIELD_MAP_SELECT,
+  [FieldComponentType.SUB_FORM]: FIELD_SUB_FORM,
   [FieldComponentType.SWITCH]: FIELD_MAP_SWITCH,
   [FieldComponentType.TEXT_FIELD]: FIELD_MAP_TEXT_FIELD,
   [FieldComponentType.TEXTAREA]: FIELD_MAP_TEXTAREA,
@@ -60,6 +61,7 @@ export const componentMapper: ComponentMapper = {
 
 export const simpleComponentMapper = {
   [FieldComponentType.SELECT]: FIELD_MAP_SELECT,
+  [FieldComponentType.SUB_FORM]: FIELD_SUB_FORM,
   [FieldComponentType.SWITCH]: FIELD_MAP_SWITCH,
   [FieldComponentType.TEXT_FIELD]: FIELD_MAP_TEXT_FIELD,
   [FieldComponentType.TEXTAREA]: FIELD_MAP_TEXTAREA,

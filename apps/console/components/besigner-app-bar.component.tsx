@@ -20,7 +20,7 @@ import {
   DevicePreviewControlsComponent,
   HistoryControlsComponent,
   PanelControlsComponent,
-} from '@aglyn/besigner-feature-app'
+} from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_MODIFY_SAVE,

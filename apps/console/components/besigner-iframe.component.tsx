@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ScreenUid, VersionUid } from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import { AGLYN_SILOED_HOST } from '@aglyn/shared-data-enums'
 import { mergeSxProps, styled, type SxProps } from '@aglyn/shared-ui-theme'
 import { type IframeHTMLAttributes, useMemo } from 'react'
@@ -29,8 +29,8 @@ const BesignerFrame = styled('iframe', {
 })
 
 export interface BesignerProps extends IframeHTMLAttributes<HTMLIFrameElement> {
-  screenId: ScreenUid
-  versionId: VersionUid
+  screenId: Aglyn.ScreenUid
+  versionId: Aglyn.VersionUid
   sx?: SxProps
 }
 

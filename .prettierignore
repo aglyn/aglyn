@@ -3,5 +3,5 @@
 /dist
 /coverage
 /nx.json
-/.eslintrc.json
+/.eslintrc.js
 /workspace.json

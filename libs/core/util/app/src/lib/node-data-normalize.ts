@@ -26,7 +26,7 @@ import {
   CANVAS_ROOT_ELEMENT_ID,
   DEFAULT_ROOT_ELEMENT,
 } from '@aglyn/core-data-foundation'
-import { arraySafe, copy } from '@aglyn/shared-util-tools'
+import { arraySafe, cloneDeep } from '@aglyn/shared-util-tools'
 
 const normalizeData = (
   element: AglynNodeItemDenormalized,
@@ -35,11 +35,11 @@ const normalizeData = (
 ): AglynNodesById => {
   if (element?.$id && parentId && accumulator[parentId]) {
     const _element = element as unknown as AglynNodeItemNormalized
-    const childElements: AglynNodesList = [...arraySafe(element.elements)]
+    const childElements: AglynNodesList = [...arraySafe(element.nodes)]
     _element.parentId = parentId
-    _element.elements = []
+    _element.nodes = []
     accumulator[_element.$id] = _element
-    ;(accumulator[parentId].elements ||= []).push(_element.$id)
+    ;(accumulator[parentId].nodes ||= []).push(_element.$id)
     for (const child of childElements) {
       if (!child?.$id) continue
       normalizeData(child, _element.$id, accumulator)
@@ -68,14 +68,14 @@ export function nodeDataNormalize(
   else if (parentId === CANVAS_ROOT_ELEMENT_ID) {
     normalized = {
       [DEFAULT_ROOT_ELEMENT.$id]: {
-        ...(copy(DEFAULT_ROOT_ELEMENT) as AglynNodeItemNormalized),
+        ...(cloneDeep(DEFAULT_ROOT_ELEMENT) as AglynNodeItemNormalized),
       },
     }
   } else {
     normalized = {
       [parentId]: {
         $id: parentId,
-        elements: [],
+        nodes: [],
         parentId: null,
         componentId: undefined,
       },
@@ -83,7 +83,7 @@ export function nodeDataNormalize(
   }
 
   if (!data) return normalized
-  const state = copy(data)
+  const state = cloneDeep(data)
 
   try {
     for (const element of arraySafe(state, [state])) {

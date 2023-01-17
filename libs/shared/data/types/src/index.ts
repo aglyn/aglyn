@@ -16,6 +16,7 @@
  */
 
 export * as DoD from './lib/dod'
+export * from './lib/arithmetic'
 export * from './lib/basic'
 export * from './lib/crud'
 export * from './lib/fallback'

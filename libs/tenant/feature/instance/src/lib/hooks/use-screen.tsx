@@ -15,40 +15,46 @@
  * limitations under the License.
  */
 
-import { doc, setDoc, type SetOptions } from 'firebase/firestore'
-import { useCallback } from 'react'
+import * as Aglyn from '@aglyn/aglyn'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
-  type ObservableStatus,
-  type ReactFireOptions,
-  useFirestore,
-  useFirestoreDocDataOnce,
-} from 'reactfire'
+  doc,
+  type DocumentSnapshot,
+  type SnapshotOptions,
+} from 'firebase/firestore'
+import { ReactFireOptions, useFirestore } from 'reactfire'
+import useDoc from './helpers/use-doc'
 
-export type UseScreenOptions = {
-  screenId: string
-  useFirestoreDocDataOptions?: ReactFireOptions
+export const useScreenRef = ({ hostId, screenId }) => {
+  const firestore = useFirestore()
+  const ref = doc(firestore, 'hosts', hostId, 'screens', screenId)
+  return ref.withConverter({
+    toFirestore(data: Aglyn.AglynScreen) {
+      if (data.$id) delete data.$id
+      data.updatedAt = Timestamp.now()
+      data.nodes = data.versionRef?.get()?.nodes
+      return data
+    },
+    fromFirestore(
+      snapshot: DocumentSnapshot<Aglyn.AglynScreen>,
+      options: SnapshotOptions,
+    ) {
+      if (!snapshot.exists()) return undefined
+      const data = snapshot.data(options)
+      // data.nodes = data.versionRef?.get()
+      return data as Aglyn.AglynScreen
+    },
+  })
 }
 
-export const useScreen = <T,>(
-  options: UseScreenOptions,
-): [ObservableStatus<T>, (value: T, options: SetOptions) => Promise<void>] => {
-  const { screenId, useFirestoreDocDataOptions } = options
-  const firestore = useFirestore()
-  const reference = doc(firestore, 'screens', screenId)
-
-  const value = useFirestoreDocDataOnce(reference, {
-    idField: '$id',
-    ...useFirestoreDocDataOptions,
-  }) as ObservableStatus<T>
-
-  const update = useCallback(
-    async (value, options: SetOptions) => {
-      return await setDoc(reference, value, options)
-    },
-    [reference],
-  )
-
-  return [value, update]
+export const useScreen = (
+  data: {
+    hostId: Aglyn.HostUid
+    screenId: Aglyn.ScreenUid
+  },
+  options?: ReactFireOptions<Aglyn.AglynScreen>,
+) => {
+  return useDoc(useScreenRef(data), options)
 }
 
 export default useScreen

@@ -23,7 +23,7 @@ import type {
 // eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
 import { FieldComponentType } from '@aglyn/shared-ui-jsx-forms'
 
-export { FieldComponentType }
+// export { FieldComponentType }
 
 export enum ComponentsLinealDirectiveFlag {
   LIMIT_TO = 'limitedTo',

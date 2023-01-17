@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,21 +28,26 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { arraySafe } from '@aglyn/shared-util-tools'
 import Head from 'next/head'
-import { Fragment, useEffect, useMemo } from 'react'
+import { Fragment, type MetaHTMLAttributes, useEffect, useMemo } from 'react'
 import NextPageTitleProvider from '../contexts/next-page-title-provider'
 import NextPageDecoratedLayoutComponent, {
   type NextPageDecoratedLayoutComponentProps,
 } from './next-page-decorated-layout.component'
 
-export type _AppProps<Props, InitialProps> =
-  NextPageDecoratedLayoutComponentProps<Props, InitialProps> &
-    EmotionCacheProps & {
-      children?: JSX.Children
-      headChildren?: JSX.Children
-      linkElements?: MakeLinkElementsConfig
-      MainComponent?: JSX.ElementType<{ children?: JSX.Children }>
-      metaElements?: MakeMetaElementsConfig
-    }
+type BaseProps<Props, InitialProps> = NextPageDecoratedLayoutComponentProps<
+  Props,
+  InitialProps
+> &
+  EmotionCacheProps
+
+export type _AppProps<Props, InitialProps> = BaseProps<Props, InitialProps> & {
+  children?: JSX.Children
+  headChildren?: JSX.Children
+  linkElements?: MakeLinkElementsConfig
+  MainComponent?: JSX.ElementType<{ children?: JSX.Children }>
+  metaElements?: MakeMetaElementsConfig
+  meta?: (MetaHTMLAttributes<HTMLMetaElement> & { key?: JSX.Key })[]
+}
 
 /**
  * Next.js custom _app.jsx with cached emotion styles
@@ -91,6 +96,7 @@ function _AppComponent<Props, InitialProps>(
     linkElements,
     MainComponent,
     emotionCache,
+    meta,
     ...rest
   } = props
 
@@ -116,6 +122,10 @@ function _AppComponent<Props, InitialProps>(
     <EmotionCacheProvider emotionCache={emotionCache}>
       <NextPageTitleProvider>
         <Head>
+          {meta &&
+            meta.map((props, i) => (
+              <meta {...props} key={props.id ?? props.key ?? i} />
+            ))}
           {makeMetaElements(metaElementsMemoed)}
           {makeLinkElements(linkElementsMemoed)}
           {headChildren}
@@ -132,7 +142,7 @@ _AppComponent.aglyn = true
 _AppComponent.defaultProps = {
   metaElements: [],
   linkElements: [],
-  MainComponent: function MainComponent(props) {
+  MainComponent: (props) => {
     const { children } = props
 
     return <Fragment>{children}</Fragment>

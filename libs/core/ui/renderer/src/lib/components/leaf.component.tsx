@@ -15,34 +15,37 @@
  * limitations under the License.
  */
 
-import '@aglyn/shared-data-jsx'
 import { forwardRef } from 'react'
-import { LeafContext } from '../contexts/leaf-context'
-import type { LeafType } from '../definitions/leaf'
+import {
+  LeafComponentContext,
+  LeafContext,
+  type LeafType,
+} from '../contexts/tree-context'
 
-export interface LeafProps<T extends LeafType = any>
-  extends JSX.OverrideableComponentProps {
-  data: T
+export interface LeafProps {
+  data: LeafType
+  children?: JSX.Children
 }
 
-const LeafComponent = forwardRef<any, LeafProps>(function RefRenderFn(
-  props,
-  ref,
-) {
-  const { component: Component, children, data, ...rest } = props
+const LeafComponent = forwardRef<any, LeafProps>((props, ref) => {
+  const { children, data } = props
+  const { id, props: componentProps } = data
 
   return (
     <LeafContext.Provider value={data}>
-      <Component ref={ref} {...rest}>
-        {children}
-      </Component>
+      <LeafComponentContext.Consumer>
+        {(LeafComponent) => (
+          <LeafComponent ref={ref} data-leaf-id={id} {...componentProps}>
+            {children}
+          </LeafComponent>
+        )}
+      </LeafComponentContext.Consumer>
     </LeafContext.Provider>
   )
 })
 
 LeafComponent.displayName = 'LeafComponent'
 LeafComponent.defaultProps = {
-  component: 'div',
   children: null,
 }
 

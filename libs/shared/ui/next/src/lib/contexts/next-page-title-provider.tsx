@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -76,8 +76,13 @@ export interface NextPageTitleContextProps {
   children?: JSX.Children
 }
 
-const NextPageTitleProvider = (props: NextPageTitleContextProps) => {
-  const { children } = props
+export function NextPageTitleProvider(props: NextPageTitleContextProps) {
+  const {
+    // initialScreen = 'Welcome',
+    // initialSuffix = 'My App',
+    // initialSeparator = ' – ',
+    children,
+  } = props
 
   const title = useSubscribable($pageTitle)
   const state = useMemo(
@@ -102,12 +107,5 @@ const NextPageTitleProvider = (props: NextPageTitleContextProps) => {
   )
 }
 NextPageTitleProvider.displayName = 'NextPageTitleComponent'
-NextPageTitleProvider.aglyn = true
-NextPageTitleProvider.defaultProps = {
-  initialScreen: 'Welcome',
-  initialSuffix: 'My App',
-  initialSeparator: ' – ',
-}
 
-export { NextPageTitleProvider }
 export default NextPageTitleProvider

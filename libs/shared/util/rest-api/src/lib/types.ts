@@ -15,14 +15,18 @@
  * limitations under the License.
  */
 
-import type {HttpRefCode, HttpResponseStatus, HttpStatusCode} from '@aglyn/shared-data-enums'
-
+// eslint-disable-next-line @nrwl/nx/enforce-module-boundaries
+import type {
+  HttpRefCode,
+  HttpResponseStatus,
+  HttpStatusCode,
+} from '@aglyn/shared-data-enums'
 
 export type JsonResponse = {
   error?: any
   errorCode?: HttpRefCode
-  status?: HttpResponseStatus | true,
-  statusCode?: HttpStatusCode,
-  statusMessage?: string,
-  data?: any,
+  status?: HttpResponseStatus | true
+  statusCode?: HttpStatusCode
+  statusMessage?: string
+  data?: any
 }

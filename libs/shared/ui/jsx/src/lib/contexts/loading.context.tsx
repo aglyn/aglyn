@@ -18,71 +18,121 @@
 import { type ConditionalNonDist } from '@aglyn/shared-data-types'
 import { noop } from '@aglyn/shared-util-tools'
 import { createUid } from '@aglyn/shared-util-vendor'
-import { createContext, useContext, useRef, useState } from 'react'
+import { makeAutoObservable } from 'mobx'
+import { computedFn } from 'mobx-utils'
+import { ContextType, createContext, useContext, useRef, useState } from 'react'
 import {
   createHocWithContextConsumer,
   type InjectedContextConsumerProps,
 } from '../hocs/create-hoc-with-context-consumer'
 
 export type QueueId = string
-export type Queues = Array<QueueId>
+export type Queues = QueueId[]
 export type TupledDequeue = [QueueId, DequeueLoading]
-export type QueueResponse<T extends boolean = false> = ConditionalNonDist<
+export type QueueResponse<T extends boolean> = ConditionalNonDist<
   T,
   true,
   TupledDequeue,
   DequeueLoading
 >
 
-export type EnqueueLoading = <T extends boolean = false>(
-  asTuple?: T,
-) => QueueResponse<T>
-export type DequeueLoading = (
-  queueId?: QueueId,
-) => void /* Call to dequeue/end loading event */
-export type DequeueAllLoading = () => void
-export type CheckLoading = (queueId?: QueueId) => boolean
-
-export type LoadingContextType = {
-  // queues: Queues
-  loading: boolean
-  queueLoading: EnqueueLoading
-  dequeueLoading: DequeueLoading
-  dequeueAllLoading: DequeueAllLoading
-  checkLoading: CheckLoading
+export interface LoadingHelper {
+  enqueue<T extends boolean = false>(asTuple?: T): QueueResponse<T>
+  dequeue(queueId?: QueueId): void
+  dequeueAll(): void
+  check(queueId?: QueueId): boolean
 }
 
-export const LOADING_CONTEXT_DEFAULT_VALUE: LoadingContextType = {
+export type EnqueueLoading = LoadingHelper['enqueue']
+export type DequeueLoading = LoadingHelper['dequeue']
+export type DequeueAllLoading = LoadingHelper['dequeueAll']
+export type CheckLoading = LoadingHelper['check']
+
+export type EnqueueResponse = {
+  (): LoadingManager
+  readonly queueId: QueueId
+}
+
+export class LoaderItem {
+  public loading(): boolean {
+    return this.manager.queues.has(this.id)
+  }
+
+  constructor(
+    public readonly id: QueueId,
+    private readonly manager: LoadingManager,
+  ) {
+    makeAutoObservable(this)
+  }
+
+  public dequeue() {
+    this.manager.dequeue(this.id)
+    return this
+  }
+}
+
+export class LoadingManager {
+  public queues: Map<QueueId, LoaderItem> = new Map()
+
+  public get loading(): boolean {
+    return this.queues.size > 0
+  }
+
+  constructor() {
+    makeAutoObservable(this)
+  }
+
+  public check = computedFn((id: QueueId) => {
+    return this.queues.has(id)
+  })
+
+  public static createQueueId() {
+    return createUid()
+  }
+
+  public enqueue(): LoaderItem {
+    const id = LoadingManager.createQueueId()
+    const loader = new LoaderItem(id, this)
+    this.queues.set(id, new LoaderItem(id, this))
+    return loader
+  }
+
+  public dequeue(id: QueueId): this {
+    if (this.queues.has(id)) {
+      this.queues.delete(id)
+    } else {
+      console.error('Invalid loading queue ID', id)
+    }
+    return this
+  }
+}
+
+export const LoadingContext = createContext({
   loading: false,
-  queueLoading: noop as any,
-  dequeueLoading: noop as any,
-  dequeueAllLoading: noop as any,
-  checkLoading: noop as any,
-}
-
-export const LoadingContext = createContext<LoadingContextType>(
-  LOADING_CONTEXT_DEFAULT_VALUE,
-)
+  queueLoading: noop as EnqueueLoading,
+  dequeueLoading: noop as DequeueLoading,
+  dequeueAllLoading: noop as DequeueAllLoading,
+  checkLoading: noop as CheckLoading,
+})
 LoadingContext.displayName = 'LoadingContext'
-LoadingContext.aglyn = true
 
-export const { Provider: LoadingProvider, Consumer: LoadingConsumer } =
-  LoadingContext
+export type LoadingContextType = ContextType<typeof LoadingContext>
+
+export const { Consumer: LoadingConsumer } = LoadingContext
 
 const createQueueId = () => {
   return createUid()
 }
 
 export const useLoading = () => {
-  const context = useContext(LoadingContext)
-  return context
+  return useContext(LoadingContext)
 }
 
-export interface LoadingProviderComponentProps {
+export interface LoadingProviderProps {
   children?: JSX.Children
 }
 
-export function LoadingProviderComponent(props: LoadingProviderComponentProps) {
+export function LoadingProviderComponent(props: LoadingProviderProps) {
   const { children } = props
   const localRef = useRef<Queues>([])
   const [state, setState] = useState<LoadingContextType>(() => ({
@@ -111,14 +161,16 @@ export function LoadingProviderComponent(props: LoadingProviderComponentProps) {
     },
   }))
 
-  return <LoadingProvider value={state}>{children}</LoadingProvider>
+  return (
+    <LoadingContext.Provider value={state}>{children}</LoadingContext.Provider>
+  )
 }
 
 const WithN = '_contextLoading'
 type WithN = typeof WithN
 export type LoadingConsumer = typeof LoadingConsumer
 export type WithInjectedLoadingContextProps = InjectedContextConsumerProps<
-  LoadingConsumer,
+  typeof LoadingContext.Consumer,
   WithN
 >
 
@@ -126,6 +178,6 @@ export type WithInjectedLoadingContextProps = InjectedContextConsumerProps<
  * App loading context HOC prop injector
  */
 export const withInjectedLoadingContext = createHocWithContextConsumer(
-  LoadingConsumer,
+  LoadingContext.Consumer,
   WithN,
 )

@@ -25,3 +25,4 @@
 export function _isFnT(val: unknown): val is (...args: unknown[]) => unknown {
   return typeof val === 'function'
 }
+export default _isFnT

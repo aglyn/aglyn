@@ -21,7 +21,9 @@ import {
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { Box, Stack } from '@mui/material'
+import { useRouter } from 'next/router'
 import { useMemo } from 'react'
+import { buildRoute, Route } from '../../constants/route-links'
 import DashboardHeaderComponent, {
   type DashboardHeaderProps,
 } from '../dashboard-header.component'
@@ -29,19 +31,6 @@ import FooterComponent from '../footer.component'
 import SecondaryAppBarComponent, {
   type SecondaryAppBarProps,
 } from '../secondary-app-bar.component'
-
-const defaultNavTabItems: SecondaryAppBarProps['navTabItems'] = [
-  {
-    id: 'nav-tab-dashboard',
-    label: 'Dashboard',
-    href: '/',
-  },
-  {
-    id: 'nav-tab-screens',
-    label: 'Screens',
-    href: '/screens/list',
-  },
-]
 
 const defaultTabBarTitle = (
   <Stack
@@ -92,6 +81,8 @@ function DashboardLayout(props: DashboardLayoutProps) {
     aside,
     activeTab,
   } = props
+  const { query: routerQuery } = useRouter()
+  const hostId = routerQuery.hostId as string
 
   const breadcrumbs = useMemo(() => {
     return [
@@ -104,8 +95,25 @@ function DashboardLayout(props: DashboardLayoutProps) {
     <>
       <SecondaryAppBarComponent
         tabBarTitle={tabBarTitle ?? defaultTabBarTitle}
-        navTabItems={navTabItems ?? defaultNavTabItems}
         activeTab={activeTab}
+        navTabItems={
+          navTabItems ?? [
+            {
+              id: 'nav-tab-dashboard',
+              label: 'Dashboard',
+              href: buildRoute(Route.HOST_DASHBOARD, {
+                hostId,
+              }),
+            },
+            {
+              id: 'nav-tab-screens',
+              label: 'Screens',
+              href: buildRoute(Route.SCREEN_LIST, {
+                hostId,
+              }),
+            },
+          ]
+        }
       />
 
       <Stack component="main" direction="column" sx={{ flexGrow: 1 }}>
@@ -129,7 +137,9 @@ function DashboardLayout(props: DashboardLayoutProps) {
 }
 DashboardLayout.displayName = 'DashboardLayout'
 DashboardLayout.aglyn = true
-DashboardLayout.defaultProps = {}
+DashboardLayout.defaultProps = {
+  disableDefaultBreadcrumb: false,
+}
 
 export { DashboardLayout }
 export default DashboardLayout

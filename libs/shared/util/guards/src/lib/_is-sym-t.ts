@@ -25,3 +25,4 @@
 export function _isSymT(val: unknown): val is symbol {
   return typeof val === 'symbol'
 }
+export default _isSymT

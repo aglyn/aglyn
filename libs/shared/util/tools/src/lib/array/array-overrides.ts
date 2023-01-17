@@ -23,13 +23,12 @@ import arrayRemoveAtIndex from './array-remove-at-index'
 import arrayRemoveItem from './array-remove-item'
 import arrayUpdateAtIndex from './array-update-at-index'
 
-
 declare global {
   interface Array<T> {
     $_cloneShallow(): Array<T>
     $_cloneDeep(): Array<T>
-    $_moveAtIndex(elem: T, index: number, newIndex: number): Array<T>
-    $_pushAtIndex(elem: T, index: number, newIndex: number): Array<T>
+    $_moveAtIndex(index: number, newIndex: number): Array<T>
+    $_pushAtIndex(index: number, newIndex: number): Array<T>
     $_removeItem(elem: T): Array<T>
     $_removeAtIndex(index: number): Array<T>
     $_replaceAtIndex(index: number, elem: T): Array<T>
@@ -50,32 +49,50 @@ if (!Array.prototype.$_cloneDeep) {
   }
 }
 if (!Array.prototype.$_moveAtIndex) {
-  Array.prototype.$_moveAtIndex = function <T>(this: Array<T>, index: number, newIndex: number): Array<T> {
+  Array.prototype.$_moveAtIndex = function <T>(
+    this: Array<T>,
+    index: number,
+    newIndex: number,
+  ): Array<T> {
     return arrayMoveAtIndex(this, index, newIndex)
   }
 }
 if (!Array.prototype.$_pushAtIndex) {
-  Array.prototype.$_pushAtIndex = function <T>(this: Array<T>, index: number, ...elems: Array<T>): Array<T> {
+  Array.prototype.$_pushAtIndex = function <T>(
+    this: Array<T>,
+    index: number,
+    ...elems: Array<T>
+  ): Array<T> {
     return arrayPushAtIndex(this, index, ...elems)
   }
 }
 if (!Array.prototype.$_removeItem) {
-  Array.prototype.$_removeItem = function <T>(this: Array<T>, elem: T): Array<T> {
+  Array.prototype.$_removeItem = function <T>(
+    this: Array<T>,
+    elem: T,
+  ): Array<T> {
     return arrayRemoveItem(this, elem)
   }
 }
 if (!Array.prototype.$_removeAtIndex) {
-  Array.prototype.$_removeAtIndex = function <T>(this: Array<T>, index: number): Array<T> {
+  Array.prototype.$_removeAtIndex = function <T>(
+    this: Array<T>,
+    index: number,
+  ): Array<T> {
     return arrayRemoveAtIndex(this, index)
   }
 }
 if (!Array.prototype.$_replaceAtIndex) {
-  Array.prototype.$_replaceAtIndex = function <T>(this: Array<T>, index: number, elem: T): Array<T>  {
+  Array.prototype.$_replaceAtIndex = function <T>(
+    this: Array<T>,
+    index: number,
+    elem: T,
+  ): Array<T> {
     return arrayUpdateAtIndex(this, index, elem)
   }
 }
 if (!Array.prototype.$_truthy) {
-  Array.prototype.$_truthy = function <T>(this: Array<T>): Array<T>  {
+  Array.prototype.$_truthy = function <T>(this: Array<T>): Array<T> {
     return this.filter(Boolean)
   }
 }

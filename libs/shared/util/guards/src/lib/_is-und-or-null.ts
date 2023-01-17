@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import {_isNull} from './_is-null'
-import {_isUndT} from './_is-und-t'
-
+import { _isNull } from './_is-null'
+import { _isUndT } from './_is-und-t'
 
 /**
  * Is literal type null or undefined
@@ -29,3 +28,4 @@ import {_isUndT} from './_is-und-t'
 export function _isUndOrNull(val: unknown): val is null | undefined {
   return _isNull(val) || _isUndT(val)
 }
+export default _isUndOrNull

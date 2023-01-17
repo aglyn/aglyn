@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,33 @@
  * limitations under the License.
  */
 
-import {getMdiIconFromId, type IconResponse, type IdParam} from '@aglyn/shared-data-mdi'
-import {useMemo} from 'react'
+import DEFAULT_ICON from '@aglyn/shared-data-mdi/constants/default-icon'
+import type * as MdiJs from '@mdi/js'
+import { useEffect, useState } from 'react'
 
+type IconPath<T> = [T] extends [keyof typeof MdiJs] ? typeof MdiJs[T] : string
 
-export function useMdiIcon<T extends IdParam>(iconId: T): IconResponse<T> {
-  return useMemo(() => getMdiIconFromId(iconId), [iconId])
+export function useMdiIcon<T>(id: T): IconPath<T> {
+  const [path, setPath] = useState<IconPath<T>>(() => DEFAULT_ICON.path)
+
+  useEffect(() => {
+    let unmounted = false
+
+    ;(async () => {
+      if (!id || typeof id !== 'string') return
+      const data = await import('@mdi/js')
+        .then(({ [id]: path }) => path as IconPath<T>)
+        .catch(console.error)
+      if (unmounted) return
+      if (data) setPath(data)
+    })()
+
+    return () => {
+      unmounted = true
+    }
+  }, [id])
+
+  return path
 }
+
 export default useMdiIcon

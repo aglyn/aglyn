@@ -31,7 +31,7 @@ export function useAglynElementIndexInParent(
   $id: NodeId,
 ): useAglynElementParentPosition {
   const parentId = useAglynElementData($id, 'parentId')
-  const _elements = useAglynElementData(parentId, 'elements')
+  const _elements = useAglynElementData(parentId, 'nodes')
   const elements = useMemo(() => _elements || [], [_elements])
   const length = elements.length
   const index = useMemo(() => elements.indexOf($id), [$id, elements])

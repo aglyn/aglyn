@@ -28,7 +28,7 @@ import {
   withErrorBoundary,
 } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
-import { copy } from '@aglyn/shared-util-tools'
+import { cloneDeep } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics, pascalCase } from '@aglyn/shared-util-vendor'
 import { forwardRef } from 'react'
 
@@ -37,10 +37,10 @@ export function createAglynComponent<P = any, C = any>(
   component: C | any,
   options?: Partial<ErrorBoundaryProps>,
 ): ComponentRegisterPayload<P> {
-  const _schema = copy(schema)
-  const { componentId, bundleId, flags, styledOptions } = _schema
-  const pascalId = `${bundleId ? pascalCase(bundleId) + '-' : ''}${pascalCase(
-    componentId,
+  const _schema = cloneDeep(schema)
+  const { $id, pluginId, flags, styledOptions } = _schema
+  const pascalId = `${pluginId ? pascalCase(pluginId) + '-' : ''}${pascalCase(
+    $id,
   )}`
 
   const Component =
@@ -53,8 +53,8 @@ export function createAglynComponent<P = any, C = any>(
   }) as AglynExoticComponent<P>
 
   AglynComponent.displayName = `AglynComponent(${pascalId})`
-  AglynComponent.componentId = componentId
-  AglynComponent.bundleId = bundleId
+  AglynComponent.$id = $id
+  AglynComponent.pluginId = pluginId
   AglynComponent.aglyn = true
   AglynComponent[AGLYN_OF] = COMPONENT_ELEMENT_TYPE
   hoistNonReactStatics(AglynComponent, component)
@@ -64,7 +64,7 @@ export function createAglynComponent<P = any, C = any>(
       AglynComponent,
       options,
     ) as AglynExoticComponent<P>,
-    schema: copy(schema),
+    schema: cloneDeep(schema),
   }
 }
 

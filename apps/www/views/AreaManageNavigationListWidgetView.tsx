@@ -29,9 +29,9 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import { forwardRef, Fragment, useCallback, useState } from 'react'
-import WidgetCardComponent, {
-  type WidgetCardProps,
-} from '../../console/components/widget-card.component'
+import CardDisplay, {
+  type CardDisplayProps,
+} from '../../console/components/card-display'
 import { type AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
 
 const classKeys = generateComponentClassKeys('AreaManageNavigationListWidgetView', [
@@ -78,7 +78,7 @@ const StyledListItem = styled(ListItemButton, {
   },
 }))
 
-export interface AreaManageNavigationListWidgetViewProps extends Partial<WidgetCardProps> {
+export interface AreaManageNavigationListWidgetViewProps extends Partial<CardDisplayProps> {
   aggregatedPageMeta: AggregatedPageMeta
 }
 
@@ -134,7 +134,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     })
 
   return (
-    <WidgetCardComponent ref={ref} {...rest}>
+    <CardDisplay ref={ref} {...rest}>
       <List
         subheader={
           <ListSubheader children={'Manage Navigation'} sx={{ fontWeight: 'fontWeightMedium' }} />
@@ -199,7 +199,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
           </Fragment>
         ))}
       </List>
-    </WidgetCardComponent>
+    </CardDisplay>
   )
 })
 

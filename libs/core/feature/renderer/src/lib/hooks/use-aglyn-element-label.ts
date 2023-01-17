@@ -15,15 +15,11 @@
  * limitations under the License.
  */
 
-import type { NodeId } from '@aglyn/core-data-foundation'
-import useAglynComponentSchema from './use-aglyn-component-schema'
-import useAglynElementData from './use-aglyn-element-data'
+import * as Aglyn from '@aglyn/aglyn'
 
-export function useAglynElementLabel($id: NodeId) {
-  const displayName = useAglynElementData($id, 'displayName')
-  const componentId = useAglynElementData($id, 'componentId')
-  const bundleId = useAglynElementData($id, 'bundleId')
-  const schema = useAglynComponentSchema(componentId, bundleId)
-  return displayName || schema?.displayName || $id
+export function useAglynElementLabel($id: Aglyn.NodeId) {
+  const node = Aglyn.canvas.getNode($id)
+  const schema = Aglyn.components.getSchema(node?.componentId)
+  return node?.name || schema?.displayName || schema?.title || $id
 }
 export default useAglynElementLabel

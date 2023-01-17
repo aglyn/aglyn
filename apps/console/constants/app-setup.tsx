@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   doesBesignerAppExist,
   getBesignerApp,
   IBesignerAppController,
   initializeBesignerApp,
 } from '@aglyn/besigner-data-app'
-import { samplePageData } from '@aglyn/besigner-feature-app'
+import { samplePageData } from '@aglyn/besigner-ui'
 import { registerBundle, registerComponent } from '@aglyn/core-data-app'
 import { createAglynComponent } from '@aglyn/core-feature-renderer'
 import { bundle as muiBundle } from '@aglyn/plugins-ui-mui'
@@ -29,7 +30,7 @@ import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 
 const c1 = createAglynComponent(
   {
-    componentId: 'sample-element',
+    $id: 'sample-element',
     displayName: 'Sample Element',
     title: 'Sample Element',
   },
@@ -38,7 +39,7 @@ const c1 = createAglynComponent(
 
 const c2 = createAglynComponent(
   {
-    componentId: 'sample-element-1',
+    $id: 'sample-element-1',
     displayName: 'Sample Element 1',
     title: 'Sample Element 1',
   },
@@ -47,7 +48,7 @@ const c2 = createAglynComponent(
 
 const c3 = createAglynComponent(
   {
-    componentId: 'sample-element-2',
+    $id: 'sample-element-2',
     displayName: 'Sample Element 2',
     title: 'Sample Element 2',
   },
@@ -56,7 +57,7 @@ const c3 = createAglynComponent(
 
 const c4 = createAglynComponent(
   {
-    componentId: 'sample-element-3',
+    $id: 'sample-element-3',
     displayName: 'Sample Element 3',
     title: 'Sample Element 3',
   },
@@ -65,12 +66,12 @@ const c4 = createAglynComponent(
 
 const c5 = createAglynComponent(
   {
-    componentId: 'sample-element-4',
+    $id: 'sample-element-4',
     displayName: 'Sample Element 4',
     title: 'Sample Element 4',
     presets: [
       {
-        id: 'sample-element-4',
+        $id: 'sample-element-4',
         label: 'Sample Element 4',
         data: {
           componentId: 'sample-element-4',
@@ -85,6 +86,10 @@ const c5 = createAglynComponent(
 )
 const components = [c1, c2, c3, c4, c5]
 
+components.forEach((i) => {
+  Aglyn.components.registerComponent(i.component, i.schema)
+})
+
 declare global {
   // eslint-disable-next-line no-var
   var Aglyn: IBesignerAppController
@@ -97,11 +102,11 @@ declare global {
 }
 
 const hasWindow = typeof window !== 'undefined'
-let Aglyn = globalThis.Aglyn
+let _Aglyn = globalThis.Aglyn
 
 try {
-  if (!Aglyn && !doesBesignerAppExist() && hasWindow) {
-    Aglyn = globalThis.Aglyn = initializeBesignerApp({
+  if (!_Aglyn && !doesBesignerAppExist() && hasWindow) {
+    _Aglyn = globalThis.Aglyn = initializeBesignerApp({
       logLevel: 'debug',
       modulesOptions: {
         canvas: {
@@ -111,19 +116,19 @@ try {
         },
       },
     })
-    console.log('set global Aglyn', Aglyn, globalThis)
+    console.log('set global Aglyn', _Aglyn, globalThis)
     if (!IS_PRODUCTION) {
       // @ts-ignore
       window.Aglyn = Aglyn
     }
 
-    components.forEach((i) => registerComponent(Aglyn, i))
-    registerBundle(Aglyn, muiBundle)
-  } else if (!Aglyn && doesBesignerAppExist() && hasWindow) {
-    Aglyn = getBesignerApp()
+    components.forEach((i) => registerComponent(_Aglyn, i))
+    registerBundle(_Aglyn, muiBundle)
+  } else if (!_Aglyn && doesBesignerAppExist() && hasWindow) {
+    _Aglyn = getBesignerApp()
   }
 } catch (e) {
   console.error(e, 'initialize aglyn app')
 }
 
-export { Aglyn }
+export { _Aglyn as Aglyn }

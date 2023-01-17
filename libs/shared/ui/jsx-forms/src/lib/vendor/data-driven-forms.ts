@@ -79,6 +79,13 @@ export {
   type WizardContextValue,
 } from '@data-driven-forms/react-form-renderer'
 
+declare module '@data-driven-forms/react-form-renderer' {
+  interface Schema extends Record<string, any> {
+    id?: string
+    name?: string
+  }
+}
+
 export {
   default as validation,
   type ValidationOptions,
@@ -90,22 +97,12 @@ export {
   memoize,
 } from '@data-driven-forms/react-form-renderer/common'
 
-export {
-  default as prepareComponentProps,
-} from '@data-driven-forms/react-form-renderer/prepare-component-props'
+export { default as prepareComponentProps } from '@data-driven-forms/react-form-renderer/prepare-component-props'
 
-export {
-  default as getVisibleFields,
-} from '@data-driven-forms/react-form-renderer/get-visible-fields'
+export { default as getVisibleFields } from '@data-driven-forms/react-form-renderer/get-visible-fields'
 
-export {
-  default as getValidates,
-} from '@data-driven-forms/react-form-renderer/get-validates'
+export { default as getValidates } from '@data-driven-forms/react-form-renderer/get-validates'
 
-export {
-  default as getConditionTriggers,
-} from '@data-driven-forms/react-form-renderer/get-condition-triggers'
+export { default as getConditionTriggers } from '@data-driven-forms/react-form-renderer/get-condition-triggers'
 
-export {
-  default as Condition,
-} from '@data-driven-forms/react-form-renderer/condition'
+export { default as Condition } from '@data-driven-forms/react-form-renderer/condition'

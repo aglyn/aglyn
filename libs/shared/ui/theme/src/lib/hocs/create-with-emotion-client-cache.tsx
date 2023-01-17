@@ -34,11 +34,16 @@ export type WithEmotionClientCacheOptions = {
   emotionCacheOptions?: CreateEmotionCacheOptions
 }
 
-export function createWithEmotionClientCache(options: WithEmotionClientCacheOptions) {
+export function createWithEmotionClientCache(
+  options: WithEmotionClientCacheOptions,
+) {
   const { emotionCache, emotionCacheOptions } = options
-  const defaultEmotionCache = emotionCache || createEmotionCache(emotionCacheOptions)
+  const defaultEmotionCache =
+    emotionCache || createEmotionCache(emotionCacheOptions)
 
-  return function withEmotionClientCache<P>(WrappedComponent: ComponentType<P>) {
+  return function withEmotionClientCache<P>(
+    WrappedComponent: ComponentType<P>,
+  ) {
     const displayName = getDisplayName(WrappedComponent)
 
     function WithEmotionClientCache(props: InjectedEmotionCacheProps & P) {
@@ -51,7 +56,7 @@ export function createWithEmotionClientCache(options: WithEmotionClientCacheOpti
         </CacheProvider>
       )
     }
-    WithEmotionClientCache.displayName = `WithEmotionClientCache(${displayName})`
+    WithEmotionClientCache.name = `WithEmotionClientCache(${displayName})`
     hoistNonReactStatics(WithEmotionClientCache, WrappedComponent)
 
     return WithEmotionClientCache

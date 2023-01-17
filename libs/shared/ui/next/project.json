@@ -1,10 +1,11 @@
 {
+  "name": "shared-ui-next",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/ui/next/src",
   "projectType": "library",
   "targets": {
     "build": {
-      "executor": "@nrwl/web:rollup",
+      "executor": "@nrwl/rollup:rollup",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/shared/ui/next",
@@ -32,7 +33,7 @@
     },
     "test": {
       "executor": "@nrwl/jest:jest",
-      "outputs": ["coverage/libs/shared/ui/next"],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/ui/next"],
       "options": {
         "jestConfig": "libs/shared/ui/next/jest.config.ts",
         "passWithNoTests": true

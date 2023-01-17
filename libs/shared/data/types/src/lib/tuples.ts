@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-/** Tuple with exactly two elements */
+/** Tuple with exactly two nodes */
 export interface Tuple<T1, T2 = T1> extends Array<T1 | T2> {
   0: T1
   1: T2

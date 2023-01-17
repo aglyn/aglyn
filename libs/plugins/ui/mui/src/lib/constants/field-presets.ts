@@ -45,7 +45,7 @@ export const FIELD_COLOR_ALT1: AglynAttributeSchema = {
     { value: 'transparent', label: 'Transparent' },
     { value: 'primary', label: 'Primary' },
     { value: 'secondary', label: 'Secondary' },
-    { value: 'secondary', label: 'Secondary' },
+    { value: 'tertiary', label: 'Tertiary' },
   ],
 }
 export const FIELD_DISABLED: AglynAttributeSchema = {

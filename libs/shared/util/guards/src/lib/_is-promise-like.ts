@@ -28,3 +28,4 @@ export function _isPromiseLike<T>(
   if (typeof value !== 'object' && typeof value !== 'function') return false
   return typeof (value as PromiseLike<T>).then === 'function'
 }
+export default _isPromiseLike

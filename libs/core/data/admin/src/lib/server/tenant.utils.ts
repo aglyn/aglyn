@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynTenant, TenantUid } from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import firebaseAdmin from './firebase-admin'
 
 let db: firebaseAdmin.database.Database
@@ -36,13 +36,13 @@ if (!db) {
 }
 const ref = db.ref(`tenants`)
 
-export function setAdminTenant(tenant: AglynTenant): Promise<void> {
+export function setAdminTenant(tenant: Aglyn.AglynTenant): Promise<void> {
   const { $id, ...rest } = tenant
   return ref.child($id).set(rest)
 }
 
 export function getAdminTenant(
-  tenantId: TenantUid,
+  tenantId: Aglyn.TenantUid,
 ): Promise<firebaseAdmin.database.DataSnapshot> {
   console.log('getAdminTenant', tenantId)
   return ref.child(tenantId).get()

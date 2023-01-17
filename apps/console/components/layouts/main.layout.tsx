@@ -43,10 +43,11 @@ import {
   useThemeMode,
 } from '@aglyn/shared-ui-theme'
 import { _isArr, _isArrEmpty } from '@aglyn/shared-util-guards'
-import { useUserPhotoUrl } from '@aglyn/tenant-feature-instance'
+import { useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
   AppBar,
   Avatar,
+  type AvatarProps,
   Button,
   type ButtonProps,
   Divider,
@@ -58,8 +59,7 @@ import {
   Typography,
 } from '@mui/material'
 import { Fragment, useMemo } from 'react'
-import { useUser } from 'reactfire'
-import { Route } from '../../constants/route-links'
+import { buildRoute, Route } from '../../constants/route-links'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 
 // eslint-disable-next-line react/display-name
@@ -67,6 +67,7 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
   const { avatar, icon, children, id, key, items, MenuProps, ...rest } = item
   const isMenu = !_isArrEmpty(items)
   const itemKey = key || id || i
+
   const rendered =
     type === 'text' ? (
       <Button
@@ -108,6 +109,7 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
 
   return isMenu ? (
     <Menu
+      dense
       key={itemKey}
       items={items}
       {...MenuProps}
@@ -129,7 +131,7 @@ export interface TopAppBarProps {
   appBarSuffix?: JSX.Node
   centerNavigationItems?: CenterNavMenuItem[]
   customCenter?: JSX.Node
-  disableAppBarElevation?: boolean
+  enableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
   besigner?: boolean
   backButton?: Partial<ButtonProps>
@@ -140,7 +142,7 @@ const TopAppBar = (props: TopAppBarProps) => {
     appBarSuffix,
     centerNavigationItems,
     customCenter,
-    disableAppBarElevation,
+    enableAppBarElevation,
     quickActions,
     besigner,
     backButton,
@@ -153,8 +155,8 @@ const TopAppBar = (props: TopAppBarProps) => {
           component="header"
           color="surface"
           variant="elevation"
-          elevation={!disableAppBarElevation && activeWithoutHysteresis ? 4 : 0}
-          position={disableAppBarElevation ? 'relative' : 'sticky'}
+          elevation={enableAppBarElevation && activeWithoutHysteresis ? 4 : 0}
+          position={!enableAppBarElevation ? 'relative' : 'sticky'}
           sx={{
             height: `${TOP_BAR_HEIGHT - 1}px`,
             borderBottomWidth: `1px`,
@@ -291,7 +293,7 @@ TopAppBar.displayName = 'TopAppBar'
 
 export interface QuickActionsMenuItem extends IconButtonProps {
   icon?: MdiIconProps
-  avatar?: any
+  avatar?: AvatarProps
   dense?: boolean
   href?: any
   items?: MenuItemProps[]
@@ -322,15 +324,13 @@ function MainLayout(props: MainLayoutProps) {
     appBarSuffix,
     centerNavigationItems,
     customCenter,
-    disableAppBarElevation,
+    enableAppBarElevation,
     quickActions,
     besigner,
     backButton,
     ...rest
   } = props
-
-  const { data: user } = useUser()
-  const userPhotoUrl = useUserPhotoUrl()
+  const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
   const [, toggleThemeMode, themeMode] = useThemeMode()
   const themeModeDisplayName = getThemeModeDisplayName(themeMode)
   const layoutTitle = useMemo(() => {
@@ -351,7 +351,7 @@ function MainLayout(props: MainLayoutProps) {
         {...rest}
       >
         <TopAppBar
-          disableAppBarElevation={disableAppBarElevation}
+          enableAppBarElevation={enableAppBarElevation}
           backButton={backButton}
           centerNavigationItems={
             centerNavigationItems || [
@@ -360,9 +360,9 @@ function MainLayout(props: MainLayoutProps) {
               //   children: ,
               // },
               {
-                id: 'center-nav-dashboard',
-                children: 'Home',
-                href: Route.SCREEN_DASHBOARD,
+                id: 'center-nav-hosts',
+                children: 'Hosts',
+                href: buildRoute(Route.HOST_LIST),
               },
               // {
               //   id: 'center-nav-app',
@@ -389,6 +389,10 @@ function MainLayout(props: MainLayoutProps) {
               edge: 'end',
               avatar: {
                 src: userPhotoUrl,
+                imgProps: {
+                  // user.photoURL https://stackoverflow.com/a/61042200/16134372
+                  referrerPolicy: 'no-referrer',
+                },
               },
               items: [
                 {
@@ -408,7 +412,7 @@ function MainLayout(props: MainLayoutProps) {
                 {
                   children: 'Settings',
                   component: AppLink,
-                  href: Route.ACCOUNT_MANAGE_SETTINGS,
+                  href: Route.MANAGE_USER_SETTINGS,
                   icon: { path: ICON_VARIANT_USER_SETTINGS.path },
                 },
                 {

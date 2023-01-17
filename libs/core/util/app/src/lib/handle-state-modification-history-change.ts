@@ -16,7 +16,7 @@
  */
 
 import type { ModificationHistoryState } from '@aglyn/core-data-foundation'
-import { copy } from '@aglyn/shared-util-tools'
+import { cloneDeep } from '@aglyn/shared-util-tools'
 
 const MAX_HISTORY = 50
 
@@ -28,7 +28,7 @@ export const handleStateModificationHistoryChange = <
   newState: S,
   maxHistory = MAX_HISTORY,
 ): ModificationHistoryState<S> => {
-  const len = state.past.unshift(copy(state.present))
+  const len = state.past.unshift(cloneDeep(state.present))
   if (len > maxHistory) state.past.splice(maxHistory - 1, len - maxHistory)
   state.present = newState
   state.future = []

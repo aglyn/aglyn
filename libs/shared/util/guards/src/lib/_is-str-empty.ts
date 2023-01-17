@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {_isStrT} from './_is-str-t'
-
+import { _isStrT } from './_is-str-t'
 
 /**
  * Is type empty string (e.g. "" vs "foo")
@@ -28,3 +27,4 @@ import {_isStrT} from './_is-str-t'
 export function _isStrEmpty(val: unknown): val is '' {
   return _isStrT(val) && !val.length
 }
+export default _isStrEmpty

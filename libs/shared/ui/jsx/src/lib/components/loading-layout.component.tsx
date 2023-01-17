@@ -42,10 +42,12 @@ function RouterLoading({ children }) {
     }
 
     router.events.on(NextRouterEvent.ROUTE_CHANGE_START, handleStart)
+    router.events.on(NextRouterEvent.HASH_CHANGE_START, handleStart)
     router.events.on(NextRouterEvent.ROUTE_CHANGE_COMPLETE, handleStop)
     router.events.on(NextRouterEvent.ROUTE_CHANGE_ERROR, handleStop)
     return () => {
       router.events.off(NextRouterEvent.ROUTE_CHANGE_START, handleStart)
+      router.events.off(NextRouterEvent.HASH_CHANGE_COMPLETE, handleStart)
       router.events.off(NextRouterEvent.ROUTE_CHANGE_COMPLETE, handleStop)
       router.events.off(NextRouterEvent.ROUTE_CHANGE_ERROR, handleStop)
       if (dequeue.length > 0) dequeue.forEach((i) => i())

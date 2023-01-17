@@ -66,7 +66,7 @@ export function withAglynElementData<U = any, T = any>(
       const elementData = useAglynElementData($id)
       const component = useAglynComponent(
         elementData.componentId,
-        elementData.bundleId,
+        elementData.pluginId,
       )
       const {
         children,

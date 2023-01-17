@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@
  * @param {T} obj
  * @returns {K[]}
  */
-export function objectGetKeysAndSymbolProperties<T, K extends keyof T>(obj: T): K[] {
+export function objectGetKeysAndSymbolProperties<T, K extends keyof T>(
+  obj: T,
+): K[] {
   const keys: K[] = Object.keys(obj) as K[]
   if (Object.getOwnPropertySymbols) {
     const propertySymbols = Object.getOwnPropertySymbols(obj)
@@ -28,3 +30,5 @@ export function objectGetKeysAndSymbolProperties<T, K extends keyof T>(obj: T): 
   }
   return keys
 }
+
+export default objectGetKeysAndSymbolProperties

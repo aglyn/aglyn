@@ -47,19 +47,19 @@ export type FKey = string
 /** Alternate key */
 export type AKey = string
 
-/** Tuple with exactly two elements */
+/** Tuple with exactly two nodes */
 export interface TupleLn2<T1, T2 = T1> extends Array<T1 | T2> {
   0: T1
   1: T2
   length: 2 // using the numeric literal type '2'
 }
 
-/** Tuple with a minimum of one elements */
+/** Tuple with a minimum of one nodes */
 interface TupleMinLn1<T> extends Array<T> {
   0: T
 }
 
-/** Tuple with a minimum of two elements */
+/** Tuple with a minimum of two nodes */
 interface TupleMinLn2<T1, T2 = T1> extends TupleMinLn1<T1 | T2> {
   0: T1
   1: T2

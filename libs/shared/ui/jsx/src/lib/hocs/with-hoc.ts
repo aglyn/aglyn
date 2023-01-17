@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-import {MapKey} from '@aglyn/shared-data-types'
-import {_isFnT} from '@aglyn/shared-util-guards'
-import {getDisplayName} from '@aglyn/shared-util-tools'
-import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
-import {ComponentType, createElement} from 'react'
-
+import { MapKey } from '@aglyn/shared-data-types'
+import { _isFnT } from '@aglyn/shared-util-guards'
+import { getDisplayName } from '@aglyn/shared-util-tools'
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
+import { ComponentType, createElement } from 'react'
 
 /** Merge props for WithHoc utility functions */
 export type WithHocProps<P, N extends MapKey, T> = P & { [K in N]: T }
 
 /** Component with merge props from WithHocProps for WithHoc utility functions */
-export type WithHocComponent<P, N extends MapKey, T> = ComponentType<WithHocProps<P, N, T>>
+export type WithHocComponent<P, N extends MapKey, T> = ComponentType<
+  WithHocProps<P, N, T>
+>
 
 /** "with*" HOC function type */
 export type WithHocFn<P, T, K extends MapKey> = {
@@ -35,11 +36,14 @@ export type WithHocFn<P, T, K extends MapKey> = {
 
 /** Utility "with*" HOC utility function builder  */
 export type WithHocFnBuilder = {
-  <P, T, U extends string>(value: T | ((props: P) => T), injectedPropName: U): WithHocFn<P, T, U>
+  <P, T, U extends string>(
+    value: T | ((props: P) => T),
+    injectedPropName: U,
+  ): WithHocFn<P, T, U>
 }
 
 function withHocFactoryBuilderImpl<P, T, U extends MapKey>(
-  value: T | {(props: P): T},
+  value: T | { (props: P): T },
   injectedPropName: U,
 ) {
   return function withHocFactory(
@@ -49,10 +53,12 @@ function withHocFactoryBuilderImpl<P, T, U extends MapKey>(
     const propName = overrideInjectedPropName || injectedPropName
     function WithHocFactory(props: P) {
       const _value = _isFnT(value) ? value(props) : value
-      const mergedProps = {...props, [propName]: _value} as P & { [K in U]: T }
+      const mergedProps = { ...props, [propName]: _value } as P & {
+        [K in U]: T
+      }
       return createElement(Component, mergedProps)
     }
-    WithHocFactory.displayName = `WithHocFactory(${getDisplayName(Component)})`
+    WithHocFactory.name = `WithHocFactory(${getDisplayName(Component)})`
     hoistNonReactStatics(WithHocFactory, Component)
     return WithHocFactory
   }

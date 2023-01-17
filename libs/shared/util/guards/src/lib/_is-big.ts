@@ -25,3 +25,4 @@
 export function _isBig(val: unknown): val is bigint {
   return typeof val === 'bigint'
 }
+export default _isBig

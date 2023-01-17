@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { ReplaceKey } from '@aglyn/shared-data-types'
 import { styled } from '@aglyn/shared-ui-theme'
 import Link, { type LinkProps } from 'next/link'
 import { type AnchorHTMLAttributes, forwardRef } from 'react'
@@ -32,7 +31,7 @@ NextAnchor.aglyn = true
 
 export type NextLinkBaseProps = Omit<NextAnchorProps, 'href'> &
   Omit<LinkProps, 'as' | 'href'> &
-  ReplaceKey<JSX.OverrideableComponentProps, 'component', 'anchorComponent'>
+  JSX.OverrideableComponentProps
 
 export interface NextLinkProps extends NextLinkBaseProps, NextLinkBaseProps {
   hrefTo?: LinkProps['href']
@@ -51,12 +50,13 @@ const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
     shallow,
     prefetch,
     locale,
-    anchorComponent: Anchor,
+    children,
     ...rest
   } = props as LinkProps & NextLinkProps
 
   return (
     <Link
+      ref={ref}
       as={hrefAs}
       href={hrefTo}
       locale={locale}
@@ -65,8 +65,9 @@ const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
       replace={replace}
       scroll={scroll}
       shallow={shallow}
+      {...rest}
     >
-      <Anchor ref={ref} {...rest} />
+      {children}
     </Link>
   )
 })
@@ -75,7 +76,6 @@ NextLink.displayName = 'NextLink'
 NextLink.aglyn = true
 NextLink.defaultProps = {
   passHref: true,
-  anchorComponent: NextAnchor,
 }
 
 export { NextLink }

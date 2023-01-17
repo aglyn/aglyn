@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import {_isNum} from './_is-num'
-
+import { _isNum } from './_is-num'
 
 /**
  * Checks if the value is a negative number
@@ -28,3 +27,4 @@ import {_isNum} from './_is-num'
 export function _isNumNeg(val: unknown): val is number & boolean {
   return _isNum(val) && Number(val) < 0
 }
+export default _isNumNeg

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynTenant, TenantUid } from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import {
   child,
   type DataSnapshot,
@@ -26,13 +26,13 @@ import {
 } from 'firebase/database'
 import firebaseApp from './firebase-app'
 
-export function setTenant(tenant: AglynTenant): Promise<void> {
+export function setTenant(tenant: Aglyn.AglynTenant): Promise<void> {
   const { $id, ...rest } = tenant
   const db = getDatabase(firebaseApp)
   return set(ref(db, 'tenants/' + $id), rest)
 }
 
-export function getTenant(tenantId: TenantUid): Promise<DataSnapshot> {
+export function getTenant(tenantId: Aglyn.TenantUid): Promise<DataSnapshot> {
   const db = getDatabase(firebaseApp)
   return get(child(ref(db), `tenants/${tenantId}`))
 }

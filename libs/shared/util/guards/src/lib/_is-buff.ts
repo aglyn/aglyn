@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import {_isFnT} from './_is-fn-t'
-import {_isObjT} from './_is-obj-t'
-
+import { _isFnT } from './_is-fn-t'
+import { _isObjT } from './_is-obj-t'
 
 /**
  * Is type Buffer
@@ -35,3 +34,5 @@ export function _isBuff(val: unknown): val is Buffer {
     (val.constructor as any).isBuffer(val)
   )
 }
+
+export default _isBuff

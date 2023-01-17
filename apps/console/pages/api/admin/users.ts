@@ -25,8 +25,8 @@ import {
   HttpResponseStatus,
   HttpStatusCode,
 } from '@aglyn/shared-data-enums'
-import { csrfApiMiddleware } from '@aglyn/shared-util-next'
 import {
+  csrfApiMiddleware,
   httpRequestMethodMiddleware,
   nextHandleJsonResponse,
 } from '@aglyn/shared-util-rest-api'

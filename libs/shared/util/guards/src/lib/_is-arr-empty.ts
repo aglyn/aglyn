@@ -21,5 +21,7 @@
  * @param invalid - the result if {@link val} is not an array
  */
 export function _isArrEmpty(val: unknown, invalid: any = true): val is [] {
-  return Array.isArray(val) ? !val.length : true
+  return Array.isArray(val) ? !val.length : invalid
 }
+
+export default _isArrEmpty
