@@ -47,9 +47,7 @@
       "options": {
         "uiFramework": "@storybook/react",
         "port": 4400,
-        "config": {
-          "configFolder": "libs/besigner/ui/color-picker/.storybook"
-        }
+        "configDir": "libs/besigner/ui/color-picker/.storybook"
       },
       "configurations": {
         "ci": {
@@ -59,13 +57,11 @@
     },
     "build-storybook": {
       "executor": "@nrwl/storybook:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": ["{options.outputDir}"],
       "options": {
         "uiFramework": "@storybook/react",
-        "outputPath": "dist/storybook/besigner-ui-color-picker",
-        "config": {
-          "configFolder": "libs/besigner/ui/color-picker/.storybook"
-        }
+        "configDir": "libs/besigner/ui/color-picker/.storybook",
+        "outputDir": "dist/storybook/besigner-ui-color-picker"
       },
       "configurations": {
         "ci": {
