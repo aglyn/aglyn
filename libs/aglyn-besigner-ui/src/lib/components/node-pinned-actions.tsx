@@ -34,7 +34,6 @@ import {
 } from '@aglyn/shared-data-enums'
 import { SrOnly, type SrOnlyProps } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
-import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   Button as MuiButton,
   ButtonGroup as MuiButtonGroup,
@@ -56,31 +55,20 @@ import { type ChangeEvent, forwardRef, useCallback, useState } from 'react'
 import useBesignerAppContext from '../hooks/use-besigner-app-context'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
-export interface BadgeButtonProps extends Omit<TooltipProps, 'children'> {
+export interface BadgeButtonProps extends ButtonProps {
   children?: SrOnlyProps['children']
   icon: MdiIconProps
-  ButtonProps?: ButtonProps
+  TooltipProps?: Partial<TooltipProps>
+  tooltip?: TooltipProps['title']
   SrOnlyProps?: SrOnlyProps
 }
 
 export const BadgeButton = forwardRef<any, BadgeButtonProps>((props, ref) => {
-  const { children, ButtonProps, icon, SrOnlyProps, ...rest } = props
+  const { children, tooltip, TooltipProps, icon, SrOnlyProps, ...rest } = props
 
   return (
-    <MuiTooltip ref={ref} {...rest}>
-      <MuiButton
-        {...ButtonProps}
-        sx={mergeSxProps(
-          {
-            py: 0.5,
-            px: 0.585,
-            fontSize: 16,
-            minWidth: 24,
-            '&.MuiButtonGroup-grouped': { minWidth: 30 },
-          },
-          ButtonProps?.sx,
-        )}
-      >
+    <MuiTooltip title={tooltip} {...TooltipProps}>
+      <MuiButton ref={ref} {...rest}>
         <MdiIcon fontSize="inherit" {...icon} />
         <SrOnly {...SrOnlyProps}>{children}</SrOnly>
       </MuiButton>
@@ -97,15 +85,16 @@ const MoveUpButton = observer(({ node }: { node: Aglyn.NodeSchema }) => {
     [node],
   )
 
-  return node?.index > 0 ? (
+  return (
     <BadgeButton
-      title="Move up"
+      tooltip="Move up"
       children={'move up'}
-      ButtonProps={{ onClick: handleMoveUp }}
+      onClick={handleMoveUp}
+      disabled={node?.index < 1}
       icon={{ path: ICON_VARIANT_MODIFY_MOVE_UP.path }}
-      disableInteractive
+      TooltipProps={{ disableInteractive: true }}
     />
-  ) : null
+  )
 })
 const MoveDownButton = observer(({ node }: { node: Aglyn.NodeSchema }) => {
   const handleMoveDown = useCallback(
@@ -115,15 +104,16 @@ const MoveDownButton = observer(({ node }: { node: Aglyn.NodeSchema }) => {
     [node],
   )
 
-  return node?.index < node?.parent?.nodes?.length - 1 ? (
+  return (
     <BadgeButton
-      title="Move down"
+      tooltip="Move down"
       children={'move down'}
-      ButtonProps={{ onClick: handleMoveDown }}
+      onClick={handleMoveDown}
+      disabled={!(node?.index < node?.parent?.nodes?.length - 1)}
       icon={{ path: ICON_VARIANT_MODIFY_MOVE_DOWN.path }}
-      disableInteractive
+      TooltipProps={{ disableInteractive: true }}
     />
-  ) : null
+  )
 })
 
 export interface NodePinnedActionsProps extends ButtonGroupProps {
@@ -196,49 +186,58 @@ export const NodePinnedActions = observer(
           variant="contained"
           color="secondary"
           aria-label="element controls"
+          size="small"
           sx={{
             boxShadow: 4,
+
             pointerEvents: 'auto',
+            // bgcolor: 'surface.main',
+
+            '& .MuiButton-root': {
+              px: 0.5,
+              py: 0.5,
+              // px: 0.5,
+              fontSize: 16,
+              '&.MuiButtonGroup-grouped': {
+                minWidth: 28,
+                minHeight: 28,
+              },
+            },
           }}
           {...rest}
         >
           {!isRootElementId($id) && (
             <BadgeButton
-              title="Drag"
+              tooltip="Drag"
               children="drag"
               sx={{ '&, &:hover, &:focus': { cursor: 'move' } }}
               // ref={dragHandleRef}
-              ButtonProps={{
-                // ref: elementRef?.dragHandle,
-                ...handleProps,
-                sx: { '&, &:hover, &:focus': { cursor: 'move' } },
-              }}
+              // ref={elementRef?.dragHandle}
               icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
-              disableInteractive
+              TooltipProps={{ disableInteractive: true }}
+              {...handleProps}
             />
           )}
 
           {!isRootElementId($id) && (
             <BadgeButton
-              title="Duplicate"
+              tooltip="Duplicate"
               children="duplicate"
-              ButtonProps={{ onClick: handleDuplicateClick }}
+              onClick={handleDuplicateClick}
               icon={{ path: ICON_VARIANT_MODIFY_DUPLICATE.path }}
-              disableInteractive
+              TooltipProps={{ disableInteractive: true }}
             />
           )}
 
           {!isRootElementId($id) && (
             <BadgeButton
-              title="Select parent"
+              tooltip="Select parent"
               children={'select parent'}
-              ButtonProps={{
-                onClick: handleParentOnClick,
-                onMouseEnter: handleParentOnMouseEnter,
-                onMouseLeave: handleParentOnMouseLeave,
-              }}
+              onClick={handleParentOnClick}
+              onMouseEnter={handleParentOnMouseEnter}
+              onMouseLeave={handleParentOnMouseLeave}
               icon={{ path: ICON_VARIANT_SELECT_PARENT.path }}
-              disableInteractive
+              TooltipProps={{ disableInteractive: true }}
             />
           )}
 
@@ -247,15 +246,13 @@ export const NodePinnedActions = observer(
 
           <BadgeButton
             ref={moreButtonRef}
-            title="More options"
+            tooltip="More options"
             children={'more options'}
-            ButtonProps={{
-              onClick: openMore,
-              // onMouseEnter: handleParentOnMouseEnter,
-              // onMouseLeave: handleParentOnMouseLeave,
-            }}
+            onClick={openMore}
+            // onMouseEnter={handleParentOnMouseEnter}
+            // onMouseLeave={handleParentOnMouseLeave}
             icon={{ path: ICON_VARIANT_SHOW_MORE.path }}
-            disableInteractive
+            TooltipProps={{ disableInteractive: true }}
           />
         </MuiButtonGroup>
         <Popper
@@ -277,7 +274,7 @@ export const NodePinnedActions = observer(
               <Paper sx={{ bgcolor: 'secondary.main' }}>
                 <ClickAwayListener onClickAway={closeMore}>
                   <MenuList
-                    color="secondary"
+                    color="inherit"
                     id="split-button-menu"
                     dense
                     autoFocusItem

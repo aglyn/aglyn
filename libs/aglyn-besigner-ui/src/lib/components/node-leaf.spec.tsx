@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 
 import { render } from '@testing-library/react'
 
-import ElementLeafComponent from './leaf.component'
+import ElementLeafComponent from './node-leaf'
 
-describe('ElementLeafComponent', () => {
+describe('NodeLeaf', () => {
   it('should render successfully', () => {
     const { baseElement } = render(<ElementLeafComponent />)
     expect(baseElement).toBeTruthy()

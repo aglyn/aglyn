@@ -18,12 +18,13 @@
 import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { observer } from 'mobx-react-lite'
-
 import { forwardRef } from 'react'
 import DraggableDroppable from './dnd/draggable-droppable'
 
-export const LeafComponent = observer(
-  forwardRef<any, ElementLeafComponentProps>((props, ref) => {
+export interface NodeLeafProps extends LeafProps {}
+
+export const NodeLeaf = observer(
+  forwardRef<any, NodeLeafProps>((props, ref) => {
     const { node, ...rest } = props
 
     return (
@@ -43,10 +44,7 @@ export const LeafComponent = observer(
     )
   }),
 )
-export default LeafComponent
+NodeLeaf.displayName = 'BesignerLeafComponent'
+NodeLeaf.aglyn = true
 
-export interface ElementLeafComponentProps extends LeafProps {}
-
-LeafComponent.aglyn = true
-
-LeafComponent.displayName = 'BesignerLeafComponent'
+export default NodeLeaf

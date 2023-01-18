@@ -57,19 +57,26 @@ export const DraggableDroppable = observer(
     const style: CSS.Properties = {
       ...child.props.style,
       // cursor: 'move',
-      outline: `1px dotted grey`,
-      outlineWidth: 1,
+      outlineWidth: 2,
+      outlineOffset: -1,
       outlineColor: 'grey',
       outlineStyle: 'dotted',
-      outlineOffset: 1,
     }
     if (isTransforming) {
       style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0)`
       // style.cursor = 'grab'
     }
     if (droppable.isOver) {
-      style.outlineColor = 'red'
+      style.outlineColor = 'lime'
       style.outlineStyle = 'solid'
+      style.outlineOffset = '3'
+    }
+    if (draggable.isDragging) {
+      style.outlineColor = 'grey'
+      style.outlineStyle = 'double'
+      style.outlineOffset = -1 as any
+      style.opacity = 0.5
+      style.cursor = 'move'
     }
 
     const ref = useRef<HTMLElement>(null)
@@ -120,16 +127,24 @@ export const DraggableDroppable = observer(
 
     return cloneElement(
       child,
-      mergeProps(child.props, {
-        ref: mergeRefs(
-          ref,
-          child.props.ref,
-          draggable.setNodeRef,
-          droppable.setNodeRef,
-        ),
-        style,
-        ...draggable.attributes,
-      }),
+      mergeProps(
+        child.props,
+        {
+          ref: mergeRefs(
+            ref,
+            child.props.ref,
+            draggable.setNodeRef,
+            droppable.setNodeRef,
+          ),
+          style,
+          sx: {
+            '&, &:hover, &:focus': {
+              cursor: draggable.isDragging ? 'move' : 'initial',
+            },
+          },
+        },
+        draggable.attributes,
+      ),
     )
   },
 )

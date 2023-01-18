@@ -48,7 +48,8 @@
     "readme:table-of-contents": "markdown-toc -i ./README.md",
     "migrate:latest": "nx migrate latest",
     "migrate:run-migrations": "nx migrate --run-migrations",
-    "vercel:env-pull": "vercel env pull"
+    "vercel:env-pull": "vercel env pull",
+    "profile:nx-run-console:serve:development": "cargo instruments -t time --bin nx run console:serve:development profile"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.0",
@@ -253,4 +254,3 @@
     }
   }
 }
-

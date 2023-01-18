@@ -38,7 +38,7 @@ import {
   useCallback,
 } from 'react'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
-import LeafComponent from './leaf.component'
+import NodeLeaf from './node-leaf'
 import NodeOverlay from './node-overlay'
 
 const ViewportFrame = styled('div', {
@@ -118,7 +118,7 @@ const SiteContainer = observer(
             <FramePaper>
               <AglynNodeRenderer
                 node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)}
-                LeafComponent={LeafComponent}
+                LeafComponent={NodeLeaf}
               />
             </FramePaper>
           </ThemedElementContainer>

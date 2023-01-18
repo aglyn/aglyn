@@ -2,8 +2,13 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="82ba5000-a6b8-4471-b6cb-674a712743db" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/../apps/console/app/layout.tsx" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../apps/console/app/page.tsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../libs/shared/ui/jsx/src/lib/hooks/use-local-storage-item-state.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/besigner.ts" beforeDir="false" afterPath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/besigner.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/dnd/draggable-droppable.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/dnd/draggable-droppable.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/leaf.component.spec.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/node-leaf.spec.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/leaf.component.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/node-leaf.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/node-pinned-actions.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/node-pinned-actions.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/viewport-frame.component.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/../libs/aglyn-besigner-ui/src/lib/components/viewport-frame.component.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -23,6 +28,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
     "WebServerToolWindowFactoryState": "false",
     "dart.analysis.tool.window.visible": "false",
     "eu.ydp.idea.ts.spec.generator.settings.spec.template": "import {$ClassName$} from '$TestsRelativePath$../src/$classRelativePath$/$ClassName$';\n\ndescribe('$ClassName$', () => {\n  let $ObjName$:$ClassName$;\n\n  beforeEach(() => {\n    $ObjName$ = new $ClassName$();\n  });\n\n  describe('', () => {\n    it('', () => {\n      // given\n\n      // when\n\n      // then\n    });\n  });\n});\n",
@@ -39,6 +45,7 @@
       <option name="presentableId" value="Default" />
       <updated>1673173900981</updated>
       <workItem from="1673173901876" duration="4000" />
+      <workItem from="1673958296522" duration="4000" />
     </task>
     <servers />
   </component>
