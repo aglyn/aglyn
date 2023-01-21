@@ -23,9 +23,11 @@ import {
 import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
 import { SnackbarProvider } from '@aglyn/shared-ui-snackstack'
 import {
+  consoleThemeCssVar,
   consoleThemeDark,
   consoleThemeLight,
   createWithThemeProvider,
+  withThemeCssVarProvider,
 } from '@aglyn/shared-ui-theme'
 import { Fragment } from 'react'
 import HostIdProvider from '../components/host-id-provider'
@@ -37,21 +39,24 @@ const withThemeProvider = createWithThemeProvider({
   theme: [consoleThemeLight, consoleThemeDark],
 })
 
-const MainComponent = withThemeProvider((props: any) => {
-  const { children } = props
+const MainComponent = withThemeCssVarProvider(
+  (props: any) => {
+    const { children } = props
 
-  return (
-    <FirebaseAppLayout>
-      <LoadingLayoutComponent>
-        <ConfirmationProviderComponent>
-          <SnackbarProvider>
-            <HostIdProvider>{children}</HostIdProvider>
-          </SnackbarProvider>
-        </ConfirmationProviderComponent>
-      </LoadingLayoutComponent>
-    </FirebaseAppLayout>
-  )
-})
+    return (
+      <FirebaseAppLayout>
+        <LoadingLayoutComponent>
+          <ConfirmationProviderComponent>
+            <SnackbarProvider>
+              <HostIdProvider>{children}</HostIdProvider>
+            </SnackbarProvider>
+          </ConfirmationProviderComponent>
+        </LoadingLayoutComponent>
+      </FirebaseAppLayout>
+    )
+  },
+  { theme: consoleThemeCssVar },
+)
 
 export type _Props<Props, InitialProps> = _AppProps<Props, InitialProps>
 

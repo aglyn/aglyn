@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,10 @@ import {
   createEmotionCache,
   createEmotionServer,
   type EmotionCache,
-  getInitColorSchemeScript,
 } from '@aglyn/shared-ui-theme'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
+import { getInitColorSchemeScript } from '@mui/material/styles'
 import crypto from 'crypto'
 import type { AppType, Enhancer } from 'next/dist/shared/lib/utils'
 // eslint-disable-next-line @next/next/no-document-import-in-page
@@ -48,6 +48,7 @@ const cspHashOf = (text: string) => {
   hash.update(text)
   return `'sha256-${hash.digest('base64')}'`
 }
+
 export type LangParam = { lang?: string }
 export type InitPropsResponse = Promise<DocumentInitialProps & LangParam>
 
@@ -90,7 +91,7 @@ export interface _EmotionDocumentProps extends LangParam {}
  * 4. render page {@link NextPageWithLayout.render}
  * @see {@link NextAppThemedComponent}
  */
-class _EmotionDocumentComponent<
+export class _EmotionDocumentComponent<
   P extends _EmotionDocumentProps,
 > extends NextDocument<P> {
   public static displayName = '_EmotionDocumentComponent'
@@ -123,10 +124,10 @@ class _EmotionDocumentComponent<
     return function withEmotionCache<P>(
       Component: ComponentType<P & { emotionCache?: EmotionCache }>,
     ): ComponentType<P> {
-      const displayName = getDisplayName(Component)
       function WithEmotionCache(props: P) {
         return <Component emotionCache={cache} {...props} />
       }
+      const displayName = getDisplayName(Component)
       WithEmotionCache.displayName = `WithEmotionCache(${displayName})`
       hoistNonReactStatics(WithEmotionCache, Component)
       return WithEmotionCache
@@ -199,5 +200,4 @@ class _EmotionDocumentComponent<
   }
 }
 
-export { _EmotionDocumentComponent }
 export default _EmotionDocumentComponent

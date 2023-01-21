@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ export * from './lib/theme.types'
 export * from './lib/constants'
 
 export * from './lib/console.theme'
+
+export * from './lib/components/theme-css-var-provider'
 
 export * from './lib/hocs/create-with-emotion-client-cache'
 export * from './lib/hocs/create-with-theme-provider'

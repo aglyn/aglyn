@@ -77,12 +77,7 @@ export interface NextPageTitleContextProps {
 }
 
 export function NextPageTitleProvider(props: NextPageTitleContextProps) {
-  const {
-    // initialScreen = 'Welcome',
-    // initialSuffix = 'My App',
-    // initialSeparator = ' – ',
-    children,
-  } = props
+  const { children } = props
 
   const title = useSubscribable($pageTitle)
   const state = useMemo(

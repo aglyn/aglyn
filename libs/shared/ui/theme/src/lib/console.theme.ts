@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,9 @@
 import { lightBlue } from '@mui/material/colors'
 import type { PaletteOptions, Theme, ThemeOptions } from '../vendor/mui'
 import { buildFontFamilyList } from './constants'
-import createResponsiveTheme from './util/create-responsive-theme'
+import createResponsiveTheme, {
+  createResponsiveCssVarTheme,
+} from './util/create-responsive-theme'
 
 export type ColorVariant = 'light' | 'dark'
 export type BackgroundRecord = PaletteOptions['background']
@@ -341,6 +343,12 @@ export const consoleThemeLight: Theme = createResponsiveTheme({
 export const consoleThemeDark: Theme = createResponsiveTheme({
   themeOptions: { ...consoleOptionsDark },
 })
+
+export const consoleThemeCssVar = createResponsiveCssVarTheme(
+  consoleThemeLight,
+  consoleThemeDark,
+)
+
 export const getConsoleTheme = (mode: 'light' | 'dark' = 'light') => {
   const theme = {
     light: consoleThemeLight,

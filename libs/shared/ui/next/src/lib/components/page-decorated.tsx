@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ function GetLayout(page: JSX.Element, initialProps?: any) {
   return page
 }
 
-export function getNextPageLayout<Props, InitialProps>(
+function getNextPageLayout<Props, InitialProps>(
   props: NextAppWithLayoutProps<Props, InitialProps>,
 ): NextPageGetLayoutFn {
   const { Component } = props
@@ -69,4 +69,19 @@ export function getNextPageLayout<Props, InitialProps>(
   return GetLayout
 }
 
-export default getNextPageLayout
+export interface PageDecoratedProps<Props, InitialProps>
+  extends NextAppWithLayoutProps<Props, InitialProps> {}
+
+/**
+ * Decorate next page with defined layout
+ * Uses the layout defined at the page level, if available
+ */
+export function PageDecorated<Props, InitialProps>(
+  props: PageDecoratedProps<Props, InitialProps>,
+) {
+  const Component = props.Component
+  return getNextPageLayout(props)(<Component {...props.pageProps} />, props)
+}
+
+PageDecorated.displayName = 'PageDecorated'
+export default PageDecorated

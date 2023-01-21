@@ -16,37 +16,29 @@
  */
 
 import { HAS_DOCUMENT } from '@aglyn/shared-data-enums'
-import type {
-  MakeLinkElementsConfig,
-  MakeMetaElementsConfig,
-} from '@aglyn/shared-ui-jsx'
 import {
   type EmotionCacheProps,
   EmotionCacheProvider,
-  makeLinkElements,
-  makeMetaElements,
 } from '@aglyn/shared-ui-jsx'
-import { arraySafe } from '@aglyn/shared-util-tools'
 import Head from 'next/head'
-import { Fragment, type MetaHTMLAttributes, useEffect, useMemo } from 'react'
+import {
+  Fragment,
+  type LinkHTMLAttributes,
+  type MetaHTMLAttributes,
+  useEffect,
+} from 'react'
 import NextPageTitleProvider from '../contexts/next-page-title-provider'
-import NextPageDecoratedLayoutComponent, {
-  type NextPageDecoratedLayoutComponentProps,
-} from './next-page-decorated-layout.component'
+import PageDecorated, { type PageDecoratedProps } from './page-decorated'
 
-type BaseProps<Props, InitialProps> = NextPageDecoratedLayoutComponentProps<
-  Props,
-  InitialProps
-> &
+type BaseProps<Props, InitialProps> = PageDecoratedProps<Props, InitialProps> &
   EmotionCacheProps
 
 export type _AppProps<Props, InitialProps> = BaseProps<Props, InitialProps> & {
   children?: JSX.Children
   headChildren?: JSX.Children
-  linkElements?: MakeLinkElementsConfig
   MainComponent?: JSX.ElementType<{ children?: JSX.Children }>
-  metaElements?: MakeMetaElementsConfig
   meta?: (MetaHTMLAttributes<HTMLMetaElement> & { key?: JSX.Key })[]
+  link?: (LinkHTMLAttributes<HTMLLinkElement> & { key?: JSX.Key })[]
 }
 
 /**
@@ -87,28 +79,11 @@ export type _AppProps<Props, InitialProps> = BaseProps<Props, InitialProps> & {
  *
  * @see {@link _EmotionDocumentComponent}
  */
-function _AppComponent<Props, InitialProps>(
+export function _AppComponent<Props, InitialProps>(
   props: _AppProps<Props, InitialProps>,
 ) {
-  const {
-    headChildren,
-    metaElements,
-    linkElements,
-    MainComponent,
-    emotionCache,
-    meta,
-    ...rest
-  } = props
-
-  const metaElementsMemoed: MakeMetaElementsConfig = useMemo(
-    () => arraySafe(metaElements),
-    [metaElements],
-  )
-
-  const linkElementsMemoed: MakeLinkElementsConfig = useMemo(
-    () => arraySafe(linkElements),
-    [linkElements],
-  )
+  const { headChildren, MainComponent, emotionCache, meta, link, ...rest } =
+    props
 
   useEffect(() => {
     if (HAS_DOCUMENT()) {
@@ -122,16 +97,16 @@ function _AppComponent<Props, InitialProps>(
     <EmotionCacheProvider emotionCache={emotionCache}>
       <NextPageTitleProvider>
         <Head>
-          {meta &&
-            meta.map((props, i) => (
-              <meta {...props} key={props.id ?? props.key ?? i} />
-            ))}
-          {makeMetaElements(metaElementsMemoed)}
-          {makeLinkElements(linkElementsMemoed)}
+          {meta?.map((props, i) => (
+            <meta {...props} key={props.id ?? props.key ?? i} />
+          ))}
+          {link?.map((props, i) => (
+            <link {...props} key={props.id ?? props.key ?? i} />
+          ))}
           {headChildren}
         </Head>
         <MainComponent>
-          <NextPageDecoratedLayoutComponent {...rest} />
+          <PageDecorated {...rest} />
         </MainComponent>
       </NextPageTitleProvider>
     </EmotionCacheProvider>
@@ -140,8 +115,6 @@ function _AppComponent<Props, InitialProps>(
 _AppComponent.displayName = '_AppComponent'
 _AppComponent.aglyn = true
 _AppComponent.defaultProps = {
-  metaElements: [],
-  linkElements: [],
   MainComponent: (props) => {
     const { children } = props
 
@@ -149,5 +122,4 @@ _AppComponent.defaultProps = {
   },
 }
 
-export { _AppComponent }
 export default _AppComponent

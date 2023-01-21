@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,11 @@ import {
 } from '@aglyn/shared-data-enums'
 import { AglynSvgIcon, BesignerSvgLogo } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
-import {
-  getThemeModeDisplayName,
-  styled,
-  useThemeMode,
-} from '@aglyn/shared-ui-theme'
+import { getThemeModeDisplayName, styled } from '@aglyn/shared-ui-theme'
 import AppBar, { type AppBarProps } from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import MuiIconButton from '@mui/material/IconButton'
+import { useColorScheme } from '@mui/material/styles'
 import Toolbar from '@mui/material/Toolbar'
 import MuiTooltip from '@mui/material/Tooltip'
 import { forwardRef } from 'react'
@@ -49,8 +46,8 @@ export const AppBarPrimaryComponent = forwardRef<
   AppBarPrimaryComponentProps
 >((props, ref) => {
   const { children, ...rest } = props
-  const [, toggleThemeMode, themeMode] = useThemeMode()
-  const themeModeDisplayName = getThemeModeDisplayName(themeMode)
+  const { mode, setMode } = useColorScheme()
+  const themeModeDisplayName = getThemeModeDisplayName(mode)
 
   return (
     <AppBarPrimary
@@ -82,12 +79,24 @@ export const AppBarPrimaryComponent = forwardRef<
           aria-label="switch theme mode"
           title={`${themeModeDisplayName} theme`}
         >
-          <MuiIconButton onClick={toggleThemeMode}>
+          <MuiIconButton
+            onClick={() => {
+              setMode(
+                mode === 'dark'
+                  ? 'system'
+                  : mode === 'light'
+                  ? 'dark'
+                  : mode === 'system' || mode === undefined
+                  ? 'light'
+                  : 'system',
+              )
+            }}
+          >
             <MdiIcon
               path={
-                themeMode === 'dark'
+                mode === 'dark'
                   ? ICON_VARIANT_THEME_DARK.path
-                  : themeMode === 'light'
+                  : mode === 'light'
                   ? ICON_VARIANT_THEME_LIGHT.path
                   : ICON_VARIANT_THEME_SYSTEM.path
               }

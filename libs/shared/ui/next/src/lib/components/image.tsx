@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,10 +27,12 @@ const NextEmotionImage = styled(NextImageRaw, {
   name: 'NextEmotionImage',
 })<NextImageProps>({})
 
-const shimmer = (props: {
+interface ShimmerProps {
   width?: number | string
   height?: number | string
-}) => {
+}
+
+function shimmer(props: ShimmerProps) {
   const { width: w, height: h } = props
   return `<svg width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
   <defs>
@@ -54,34 +56,33 @@ export interface ImageProps extends NextEmotionImageProps {
   disableShimmer?: boolean
 }
 
-function Image(props: ImageProps): JSX.Element {
-  const { width, height, disableShimmer, ...rest } = props
+export function Image(props: ImageProps): JSX.Element {
+  const {
+    width = 100,
+    height = 100,
+    disableShimmer = false,
+    placeholder = 'blur',
+    ...rest
+  } = props
 
-  const shimmeredImage = useMemo(() => {
-    return Image.shimmer({ width, height })
-  }, [width, height])
-  const base64Shimmer = useMemo(() => {
-    return Image.shimmerToBase64(shimmeredImage)
-  }, [shimmeredImage])
+  const blurDataURL = useMemo(() => {
+    if (disableShimmer) return undefined
+    return Image.shimmerToBase64(Image.shimmer({ width, height }))
+  }, [disableShimmer, width, height])
 
   return (
     <NextEmotionImage
       width={width}
       height={height}
-      blurDataURL={!disableShimmer ? base64Shimmer : undefined}
+      blurDataURL={blurDataURL}
+      placeholder={placeholder}
       {...rest}
     />
   )
 }
-Image.displayName = 'Image'
-Image.aglyn = true
-Image.defaultProps = {
-  width: 100,
-  height: 100,
-  placeholder: 'blur',
-}
 Image.shimmerToBase64 = shimmerToBase64
 Image.shimmer = shimmer
+Image.displayName = 'Image'
+Image.aglyn = true
 
-export { Image }
 export default Image

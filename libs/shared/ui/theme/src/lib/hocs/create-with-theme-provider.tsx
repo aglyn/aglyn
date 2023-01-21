@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ export type WithThemeProviderOptions = {
   disableCssBaseline?: boolean
 }
 
-function createWithThemeProvider(options: WithThemeProviderOptions) {
+export function createWithThemeProvider(options: WithThemeProviderOptions) {
   const { theme, disableCssBaseline } = options
   const [lightTheme, darkTheme] = !_isArr(theme)
     ? [
@@ -155,8 +155,6 @@ function createWithThemeProvider(options: WithThemeProviderOptions) {
     : theme
 
   return function withThemeProvider<P>(WrappedComponent: JSX.ComponentType<P>) {
-    const displayName = getDisplayName(WrappedComponent)
-
     const WithThemeProvider = forwardRef<any, P>((props, ref) => {
       const { ...rest } = props
       const ThemeModeState = useThemeModeState()
@@ -178,11 +176,11 @@ function createWithThemeProvider(options: WithThemeProviderOptions) {
         </ThemeContextDispatch.Provider>
       )
     })
+    const displayName = getDisplayName(WrappedComponent)
     WithThemeProvider.displayName = `WithThemeProvider(${displayName})`
     hoistNonReactStatics(WithThemeProvider, WrappedComponent)
 
     return WithThemeProvider
   }
 }
-export { createWithThemeProvider }
 export default createWithThemeProvider

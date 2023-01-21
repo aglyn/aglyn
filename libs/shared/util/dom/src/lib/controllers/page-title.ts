@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,23 +29,54 @@ export type PageTitleObject = {
 }
 
 export class PageTitle {
-  public pagination?: number
-  public separator?: string
-  public prefix?: string[] | string
-  public suffix?: string[] | string
-  public view?: string[] | string
+  public separator?: string = '–'
+  public page?: number = 1
+  public view?: string = 'Page Title'
+  public area?: string = ''
+  public prefix?: string = ''
+  public suffix?: string = 'My App'
 
   public get value(): string {
-    return [
-      ...arraySafe(this.prefix, null, true),
-      ...arraySafe(this.view, null, true),
-      ...(this.pagination ? [`Page ${this.pagination}`] : []),
-      ...arraySafe(this.suffix, null, true),
-    ].join(` ${this.separator} `)
+    let title = `${this.view}`
+
+    if (this.page > 1) title = `${title} (Page ${this.page})`
+
+    return [this.prefix, title, this.area, this.suffix]
+      .filter(Boolean)
+      .join(` ${this.separator} `)
   }
 
   constructor() {
     makeAutoObservable(this)
+  }
+
+  public setPage(page?: number) {
+    this.page = page || 1
+    return this
+  }
+
+  public setView(view?: string) {
+    this.view = view || ''
+    return this
+  }
+
+  public setArea(area?: string) {
+    this.area = area || ''
+    return this
+  }
+
+  public setPrefix(prefix?: string) {
+    this.prefix = prefix || ''
+    return this
+  }
+
+  public setSuffix(suffix?: string) {
+    this.suffix = suffix || ''
+    return this
+  }
+
+  public toString(): string {
+    return this.value
   }
 }
 
