@@ -19,8 +19,9 @@ import * as Besigner from '@aglyn/besigner'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import useId from '@aglyn/shared-ui-jsx/hooks/use-id'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { CSS as css } from '@dnd-kit/utilities'
 import { mergeProps } from '@react-aria/utils'
-import * as CSS from 'csstype'
+import type * as CSS from 'csstype'
 import { observer } from 'mobx-react-lite'
 import { Children, cloneElement, useEffect, useRef } from 'react'
 
@@ -40,13 +41,13 @@ export const DraggableDroppable = observer(
     const id = useId(node?.$id)
 
     const draggable = useDraggable({
-      id: `drag:${id}:${type}`,
+      id: `${id}:${type}`,
       data: { type, node },
       disabled: disableDragging,
     })
 
     const droppable = useDroppable({
-      id: `drop:${id}:${type}`,
+      id: `${id}:${type}`,
       data: { type, node, accept },
       disabled: disableDropping,
     })
@@ -61,9 +62,12 @@ export const DraggableDroppable = observer(
       outlineOffset: -1,
       outlineColor: 'grey',
       outlineStyle: 'dotted',
+      // transform: css.Transform.toString(transform),
+      // scale: css.Scale.toString(transform),
+      translate: css.Translate.toString(transform),
     }
     if (isTransforming) {
-      style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      // style.transform = `translate3d(${transform.x}px, ${transform.y}px, 0)`
       // style.cursor = 'grab'
     }
     if (droppable.isOver) {
@@ -127,24 +131,20 @@ export const DraggableDroppable = observer(
 
     return cloneElement(
       child,
-      mergeProps(
-        child.props,
-        {
-          ref: mergeRefs(
-            ref,
-            child.props.ref,
-            draggable.setNodeRef,
-            droppable.setNodeRef,
-          ),
-          style,
-          sx: {
-            '&, &:hover, &:focus': {
-              cursor: draggable.isDragging ? 'move' : 'initial',
-            },
+      mergeProps(child.props, draggable.attributes, {
+        ref: mergeRefs(
+          ref,
+          child.props.ref,
+          draggable.setNodeRef,
+          droppable.setNodeRef,
+        ),
+        style,
+        sx: {
+          '&, &:hover, &:focus': {
+            cursor: draggable.isDragging ? 'move' : 'initial',
           },
         },
-        draggable.attributes,
-      ),
+      }),
     )
   },
 )
