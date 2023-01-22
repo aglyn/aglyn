@@ -19,7 +19,6 @@
     "**/*.tsx",
     "next-env.d.ts",
     ".next/types/**/*.ts",
-    "../../apps/console/.next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

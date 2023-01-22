@@ -82,8 +82,14 @@ export type _AppProps<Props, InitialProps> = BaseProps<Props, InitialProps> & {
 export function _AppComponent<Props, InitialProps>(
   props: _AppProps<Props, InitialProps>,
 ) {
-  const { headChildren, MainComponent, emotionCache, meta, link, ...rest } =
-    props
+  const {
+    headChildren,
+    MainComponent = ({ children }) => <Fragment>{children}</Fragment>,
+    emotionCache,
+    meta,
+    link,
+    ...rest
+  } = props
 
   useEffect(() => {
     if (HAS_DOCUMENT()) {
@@ -114,12 +120,5 @@ export function _AppComponent<Props, InitialProps>(
 }
 _AppComponent.displayName = '_AppComponent'
 _AppComponent.aglyn = true
-_AppComponent.defaultProps = {
-  MainComponent: (props) => {
-    const { children } = props
-
-    return <Fragment>{children}</Fragment>
-  },
-}
 
 export default _AppComponent
