@@ -17,6 +17,7 @@
 
 import type { Measurement } from '@aglyn/shared-data-enums'
 import '@aglyn/shared-data-jsx'
+import { Box as MuiBox, ButtonBase } from '@mui/material'
 import { forwardRef, useCallback } from 'react'
 import Box, { type BoxProps } from './components/box'
 import Contents from './components/contents'
@@ -26,6 +27,9 @@ import PaddingStyler from './components/padding-styler'
 import type { Measurements } from './types'
 
 export { Measurements }
+
+const BTN_SIZE = 20
+const HEIGHT = 200
 
 export interface BoxStylerProps extends Omit<BoxProps, 'onChange'> {
   measurements?: Measurements
@@ -46,38 +50,234 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>((props, ref) => {
   )
 
   return (
-    <Box ref={ref} {...rest}>
-      <MarginStyler
-        onChange={handleChange}
-        marginTop={measurements?.marginTop}
-        marginRight={measurements?.marginRight}
-        marginBottom={measurements?.marginBottom}
-        marginLeft={measurements?.marginLeft}
+    <>
+      <MuiBox
+        width={1}
+        height={HEIGHT}
+        sx={{
+          bgcolor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+          textAlign: 'center',
+        }}
       >
-        <PaddingStyler
-          onChange={handleChange}
-          paddingTop={measurements?.paddingTop}
-          paddingRight={measurements?.paddingRight}
-          paddingBottom={measurements?.paddingBottom}
-          paddingLeft={measurements?.paddingLeft}
+        <ButtonBase
+          sx={{
+            textAlign: 'center',
+            width: 1,
+            height: `${BTN_SIZE}%`,
+            clipPath: `polygon(0% 0%, 100% 0%, ${
+              100 - BTN_SIZE
+            }% 100%, ${BTN_SIZE}% 100%)`,
+            bgcolor: 'secondary.light',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            backfaceVisibility: 'hidden',
+          }}
         >
-          <Contents />
-        </PaddingStyler>
-      </MarginStyler>
+          mt
+        </ButtonBase>
+        <ButtonBase
+          sx={{
+            height: 1,
+            width: `${BTN_SIZE}%`,
+            textAlign: 'center',
+            clipPath: `polygon(0% 0%, 100% ${BTN_SIZE}%, 100% ${
+              100 - BTN_SIZE
+            }%, 0% 100%)`,
+            bgcolor: 'secondary.dark',
+            position: 'absolute',
+            cursor: 'pointer',
+            top: 0,
+            left: 0,
+            overflow: 'hidden',
+            backfaceVisibility: 'hidden',
+          }}
+        >
+          ml
+        </ButtonBase>
 
-      <Legend
-        direction="row"
-        alignItems="center"
-        justifyContent="space-around"
-        spacing={1}
-        marginTop={1}
-        marginBottom={2}
-      >
-        <LegendItem item={'margin'} />
-        <LegendItem item={'padding'} />
-        <LegendItem item={'contents'} />
-      </Legend>
-    </Box>
+        <MuiBox
+          width={`calc(100% - ${BTN_SIZE * 2}%)`}
+          height={`calc(100% - ${BTN_SIZE * 2}%)`}
+          sx={{
+            // bgcolor: 'background.default',
+            display: 'flex',
+            flexDirection: 'column',
+            margin: '0 auto',
+            position: 'relative',
+            textAlign: 'center',
+            overflow: 'hidden',
+          }}
+        >
+          <ButtonBase
+            sx={{
+              textAlign: 'center',
+              width: 1,
+              height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+              clipPath: `polygon(0% 0%, 100% 0%, calc(${BTN_SIZE * 2}% + (${
+                100 - BTN_SIZE
+              }% * 0.3333334)) 100%, calc(${BTN_SIZE}% + (${
+                BTN_SIZE * 2
+              }% * 0.3333334)) 100%)`,
+              bgcolor: 'secondary.main',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              backfaceVisibility: 'hidden',
+            }}
+          >
+            pt
+          </ButtonBase>
+          <ButtonBase
+            sx={{
+              height: 1,
+              width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+              textAlign: 'center',
+              clipPath: `polygon(0% 0%, 100% calc(${BTN_SIZE}% + (${
+                BTN_SIZE * 2
+              }% * 0.3333334)), 100% calc(${BTN_SIZE * 2}% + (${
+                100 - BTN_SIZE
+              }% * 0.3333334)), 0% 100%)`,
+              bgcolor: 'secondary.dark',
+              position: 'absolute',
+              cursor: 'pointer',
+              top: 0,
+              left: 0,
+              overflow: 'hidden',
+              backfaceVisibility: 'hidden',
+              // --sizes: calc(${BTN_SIZE*2}% * (${BTN_SIZE} * 100) / (100 - ${BTN_SIZE*2})/100);
+              // --ssss: calc(${BTN_SIZE}% + (${BTN_SIZE*2}% * 0.3333333));
+            }}
+          >
+            pl
+          </ButtonBase>
+
+          <MuiBox
+            width={`calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`}
+            height={`calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`}
+            sx={{
+              // bgcolor: 'background.default',
+              display: 'flex',
+              flexDirection: 'column',
+              margin: '0 auto',
+              position: 'relative',
+              textAlign: 'center',
+            }}
+          >
+            <MuiBox>Contents</MuiBox>
+          </MuiBox>
+
+          <ButtonBase
+            sx={{
+              height: 1,
+              width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+              textAlign: 'center',
+              clipPath: `polygon(0% calc(${BTN_SIZE}% + (${
+                BTN_SIZE * 2
+              }% * 0.3333334)), 100% 0%, 100% 100%, 0% calc(${
+                BTN_SIZE * 2
+              }% + (${100 - BTN_SIZE}% * 0.3333334)))`,
+              bgcolor: 'secondary.dark',
+              position: 'absolute',
+              cursor: 'pointer',
+              top: 0,
+              right: 0,
+              overflow: 'hidden',
+              backfaceVisibility: 'hidden',
+            }}
+          >
+            pr
+          </ButtonBase>
+          <ButtonBase
+            sx={{
+              width: 1,
+              height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+              textAlign: 'center',
+              clipPath: `polygon(calc(${BTN_SIZE}% + (${
+                BTN_SIZE * 2
+              }% * 0.3333334)) 0%, calc(${BTN_SIZE * 2}% + (${
+                100 - BTN_SIZE
+              }% * 0.3333334)) 0%, 100% 100%, 0% 100%)`,
+              bgcolor: 'secondary.light',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              backfaceVisibility: 'hidden',
+            }}
+          >
+            pb
+          </ButtonBase>
+        </MuiBox>
+        <ButtonBase
+          sx={{
+            height: 1,
+            width: `${BTN_SIZE}%`,
+            textAlign: 'center',
+            clipPath: `polygon(0% ${BTN_SIZE}%, 100% 0%, 100% 100%, 0% ${
+              100 - BTN_SIZE
+            }%)`,
+            bgcolor: 'secondary.dark',
+            position: 'absolute',
+            cursor: 'pointer',
+            top: 0,
+            right: 0,
+            overflow: 'hidden',
+            backfaceVisibility: 'hidden',
+          }}
+        >
+          mr
+        </ButtonBase>
+        <ButtonBase
+          sx={{
+            width: 1,
+            height: `${BTN_SIZE}%`,
+            textAlign: 'center',
+            clipPath: `polygon(${BTN_SIZE}% 0%, ${
+              100 - BTN_SIZE
+            }% 0%, 100% 100%, 0% 100%)`,
+            bgcolor: 'secondary.main',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            backfaceVisibility: 'hidden',
+          }}
+        >
+          mb
+        </ButtonBase>
+      </MuiBox>
+
+      <Box ref={ref} {...rest}>
+        <MarginStyler
+          onChange={handleChange}
+          marginTop={measurements?.marginTop}
+          marginRight={measurements?.marginRight}
+          marginBottom={measurements?.marginBottom}
+          marginLeft={measurements?.marginLeft}
+        >
+          <PaddingStyler
+            onChange={handleChange}
+            paddingTop={measurements?.paddingTop}
+            paddingRight={measurements?.paddingRight}
+            paddingBottom={measurements?.paddingBottom}
+            paddingLeft={measurements?.paddingLeft}
+          >
+            <Contents />
+          </PaddingStyler>
+        </MarginStyler>
+
+        <Legend
+          direction="row"
+          alignItems="center"
+          justifyContent="space-around"
+          spacing={1}
+          marginTop={1}
+          marginBottom={2}
+        >
+          <LegendItem item={'margin'} />
+          <LegendItem item={'padding'} />
+          <LegendItem item={'contents'} />
+        </Legend>
+      </Box>
+    </>
   )
 })
 BoxStyler.displayName = 'BoxStyler'

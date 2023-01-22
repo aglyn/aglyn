@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,14 +23,22 @@ import {
   parseCssMeasurement,
 } from '@aglyn/shared-data-enums'
 import {
+  Button,
+  Collapse,
   FormControl,
+  FormHelperText,
   IconButton,
   Input,
   InputAdornment,
+  InputLabel,
   ListSubheader,
   Menu,
   MenuItem,
+  Select,
+  Stack,
+  Tooltip,
 } from '@mui/material'
+import { observer } from 'mobx-react-lite'
 import { useCallback, useEffect, useState } from 'react'
 
 interface DimensionControlProps {
@@ -38,16 +46,19 @@ interface DimensionControlProps {
   onChange?: (dimension: Measurement) => void
 }
 
+const cssUnits = Object.entries(CssUnit)
 const buildLocalValue = (dimension: string) => ({
   raw: dimension,
   ...parseCssMeasurement(dimension),
 })
-export const DimensionControl = (props: DimensionControlProps) => {
+
+export const DimensionControl = observer((props: DimensionControlProps) => {
   const { dimension, onChange } = props
   const [parsed, setParsed] = useState(buildLocalValue(dimension))
   useEffect(() => setParsed(buildLocalValue(dimension)), [dimension])
   const [menuOpen, setMenuOpen] = useState(false)
   const [iconRef, setIconRef] = useState<any>()
+  const [btnRef, setBtnRef] = useState<any>()
   const toggleMenu = () => setMenuOpen((prev) => !prev)
   const handleChange = useCallback(
     (type: 'quantity' | 'unit') => (newValue: any) => {
@@ -69,15 +80,15 @@ export const DimensionControl = (props: DimensionControlProps) => {
           break
         case type === 'unit':
           res.raw = buildCssMeasurement({
-            quantity: parsed.quantity,
+            value: parsed.value,
             unit: newValue,
           })
-          res.quantity = parsed.quantity
+          res.quantity = parsed.value
           res.unit = newValue
           break
         default:
           res.raw = buildCssMeasurement({
-            quantity: newValue,
+            value: newValue,
             unit: parsed.unit,
           })
           res.quantity = newValue
@@ -109,11 +120,83 @@ export const DimensionControl = (props: DimensionControlProps) => {
   return (
     <div>
       <FormControl sx={{ m: 0, width: '7ch' }} variant="standard">
+        <Tooltip
+          componentsProps={{ tooltip: { sx: { bgcolor: 'background.paper' } } }}
+          title={
+            <Stack direction="row" alignItems="center" justifyContent="center">
+              <FormControl sx={{ w: 1, flexGrow: 1 }}>
+                <InputLabel>Css Unit</InputLabel>
+                <Select
+                  // onClose={handleClose}
+                  // onOpen={handleOpen}
+                  // value={age}
+
+                  label="Unit"
+                  value={parsed?.unit || ''}
+                  onChange={(e) => {
+                    const val = e.target.value as string
+                    if (val) handleChange('unit')(val)
+                    else {
+                      handleChange('unit')(undefined)
+                      handleChange('quantity')(undefined)
+                    }
+                  }}
+                  sx={{ '&': { minHeight: 'unset' } }}
+                  inputProps={{
+                    sx: { '&': { minHeight: 'unset', px: 1, py: 0.2 } },
+                  }}
+                  MenuProps={{ disablePortal: true }}
+                >
+                  <ListSubheader>{'Dimension Units'}</ListSubheader>
+                  <MenuItem value={''}>
+                    <em>{'default'}</em>
+                  </MenuItem>
+                  {cssUnits.map(([key, value]) => (
+                    <MenuItem key={key} value={value}>
+                      {key}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Collapse in={Boolean(parsed?.raw)}>
+                  <FormControl sx={{ m: 1, width: '25ch' }} variant="filled">
+                    <Input
+                      type="text"
+                      endAdornment={
+                        <InputAdornment position="end">kg</InputAdornment>
+                      }
+                      inputProps={{
+                        'aria-label': 'weight',
+                      }}
+                    />
+                    <FormHelperText id="filled-weight-helper-text">
+                      Weight
+                    </FormHelperText>
+                  </FormControl>
+                </Collapse>
+              </FormControl>
+            </Stack>
+          }
+        >
+          <Button
+            onClick={toggleMenu}
+            sx={{
+              fontSize: (theme) => theme.typography.pxToRem(10),
+              padding: 0,
+              borderRadius: `2px`,
+              minHeight: 'unset',
+              minWidth: 'unset',
+              // textTransform: 'unset',
+            }}
+          >
+            {parsed.raw || 'default'}
+          </Button>
+        </Tooltip>
+
         {!parsed.unit || isGlobalUnit(parsed.unit) ? (
           unitModifier
         ) : (
           <Input
-            value={parsed.quantity || ''}
+            value={parsed.value || ''}
             type={'number'}
             placeholder={'--'}
             onChange={(e) => handleChange('quantity')(e.target.value)}
@@ -151,7 +234,7 @@ export const DimensionControl = (props: DimensionControlProps) => {
           >
             <em>{'default'}</em>
           </MenuItem>
-          {Object.entries(CssUnit).map(([key, value]) => (
+          {cssUnits.map(([key, value]) => (
             <MenuItem
               onClick={(event) => handleChange('unit')(value)}
               key={key}
@@ -164,7 +247,7 @@ export const DimensionControl = (props: DimensionControlProps) => {
       </FormControl>
     </div>
   )
-}
+})
 DimensionControl.displayName = 'DimensionControl'
 
 export default DimensionControl

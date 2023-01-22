@@ -17,6 +17,20 @@
 
 import { _isEqualitySameType, _isNum, _isStrT } from '@aglyn/shared-util-guards'
 
+export enum FontWeight {
+  THIN = 100,
+  EXTRA_LIGHT = 200,
+  LIGHT = 300,
+  NORMAL = 400,
+  MEDIUM = 500,
+  SEMI_BOLD = 600,
+  BOLD = 700,
+  EXTRA_BOLD = 800,
+  BLACK = 900,
+  LIGHTER = 'lighter',
+  BOLDER = 'bolder',
+}
+
 export enum CssUnit {
   INITIAL = 'initial',
   UNSET = 'unset',
@@ -51,12 +65,12 @@ export function isGlobalUnit(unit: CssUnit) {
 }
 
 export function parseCssMeasurement(value: string | undefined): Measurement {
-  const result: Measurement = { quantity: undefined, unit: undefined }
+  const result: Measurement = { value: undefined, unit: undefined }
   if (!value || !_isStrT(value)) return result
   if (isGlobalUnit(value as any)) {
     result.unit = `${value}` as any
   } else {
-    result.quantity = `${value}`.replace(/\D+$/, '') as any
+    result.value = `${value}`.replace(/\D+$/, '') as any
     result.unit = `${value}`.replace(/^-?\d+/, '') as any
   }
   return result
@@ -68,28 +82,14 @@ export function buildCssMeasurement(
   if (measurement?.unit && isGlobalUnit(measurement?.unit as any)) {
     return `${measurement.unit}`
   }
-  if (_isNum(measurement?.quantity) && measurement?.unit) {
-    return `${measurement.quantity}${measurement?.unit}`
+  if (_isNum(measurement?.value) && measurement?.unit) {
+    return `${measurement.value}${measurement?.unit}`
   }
 
   return undefined
 }
 
-export enum FontWeight {
-  THIN = 100,
-  EXTRA_LIGHT = 200,
-  LIGHT = 300,
-  NORMAL = 400,
-  MEDIUM = 500,
-  SEMI_BOLD = 600,
-  BOLD = 700,
-  EXTRA_BOLD = 800,
-  BLACK = 900,
-  LIGHTER = 'lighter',
-  BOLDER = 'bolder',
-}
-
-export type Measurement = {
-  quantity?: number
-  unit: CssUnit
+export interface Measurement {
+  unit?: CssUnit
+  value?: number
 }

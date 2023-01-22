@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import { classKeys } from '../constants'
 import Box from './box'
 
 export const Contents = () => {
-  // const size = (dimension: any) => <span>{dimension?.quantity ?? '--'}</span>
+  // const size = (dimension: any) => <span>{dimension?.value ?? '--'}</span>
 
   return (
     <Box className={classKeys.contents}>
