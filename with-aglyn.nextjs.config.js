@@ -69,7 +69,7 @@ const PRODUCTION_DOMAINS = [
   // 'hostname.aglyn.com',
 ]
 
-const DEVELOPMENT_DOMAINS = IS_DEVELOPMENT
+const DEVELOPMENT_DOMAINS = IS_PRODUCTION
   ? []
   : [
       'localhost',
@@ -227,7 +227,7 @@ const AGLYN_CONFIG = {
      */
     esmExternals: false,
 
-    optimizeCss: true,
+    // optimizeCss: true,
   },
   /**
    * Next.js can automatically create a standalone folder which copies only
