@@ -55,7 +55,6 @@ const ViewportArtboard = styled('div', {
     easing: theme.transitions.easing.sharp,
     duration: theme.transitions.duration.leavingScreen,
   }),
-  width: '100%',
   [`&, &.${canvasArtboardClassKeys.responsive}`]: { width: '100%' },
   [`&.${canvasArtboardClassKeys.deviceXs}`]: { width: 390 },
   [`&.${canvasArtboardClassKeys.deviceSm}`]: {

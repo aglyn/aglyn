@@ -31,17 +31,17 @@ import { renderToString } from 'react-dom/server'
 import { useMergeRefs } from '../hooks/use-merge-refs'
 import EmotionCacheProvider from './emotion-cache-provider'
 
-export type ShadowRendererProps = {
+export type MuiShadowRendererProps = {
   container?: Node
   ssr?: boolean
   children?: JSX.Children
 }
-export type ShadowRenderer = (props: ShadowRendererProps) => JSX.Node
+export type MuiShadowRenderer = (props: MuiShadowRendererProps) => JSX.Node
 export type CreateShadowRootOptions = {
-  render: ShadowRenderer
+  render: MuiShadowRenderer
 }
 
-export interface ShadowRootProps {
+export interface MuiShadowRootProps {
   mode?: 'open' | 'closed'
   delegatesFocus?: boolean
   styleSheets?: globalThis.CSSStyleSheet[]
@@ -53,7 +53,7 @@ const tags = new Map()
 const cacheMap = new WeakMap()
 const ShadowDomContext = createContext<Element>(null)
 
-export function useShadowDomContext() {
+export function useMuiShadowDomContext() {
   return useContext(ShadowDomContext)
 }
 
@@ -67,13 +67,13 @@ function handleError({ error, styleSheets, container }) {
   }
 }
 
-export function withShadowRoot(
+export function withMuiShadowRoot(
   Tag: any | keyof JSX.IntrinsicElements,
   options: CreateShadowRootOptions,
 ) {
   const { render } = options
 
-  const ShadowRoot = forwardRef<Element, ShadowRootProps>((props, ref) => {
+  const ShadowRoot = forwardRef<Element, MuiShadowRootProps>((props, ref) => {
     const {
       mode = 'open',
       delegatesFocus,
@@ -135,10 +135,10 @@ export function withShadowRoot(
   return ShadowRoot
 }
 
-export function createShadowDomProxy(
+export function createMuiShadowDomProxy(
   target: Partial<JSX.IntrinsicElementMap> = {},
   key = 'core',
-  render: ShadowRenderer = ({ children }) => children,
+  render: MuiShadowRenderer = ({ children }) => children,
 ) {
   return new Proxy(target, {
     get: function get(_, name) {
@@ -146,7 +146,7 @@ export function createShadowDomProxy(
       const id = `${key}-${tag}`
 
       if (!tags.has(id)) {
-        tags.set(id, withShadowRoot(tag, { render }))
+        tags.set(id, withMuiShadowRoot(tag, { render }))
       }
       return tags.get(id)
     },
@@ -157,7 +157,7 @@ function getStyles(children) {
   return renderStylesToString(renderToString(<>{children}</>))
 }
 
-export const MuiShadowDomRenderer = (props: ShadowRendererProps) => {
+export const MuiShadowDomRenderer = (props: MuiShadowRendererProps) => {
   const { ssr, container, children } = props
   const cache = !cacheMap.has(container)
     ? (() => {
@@ -188,7 +188,7 @@ export const MuiShadowDomRenderer = (props: ShadowRendererProps) => {
   )
 }
 
-export const MuiShadowDom = createShadowDomProxy(
+export const MuiShadowDom = createMuiShadowDomProxy(
   {},
   'mui',
   MuiShadowDomRenderer,

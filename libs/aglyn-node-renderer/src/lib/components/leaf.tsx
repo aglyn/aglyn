@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import ShadowDom from '@aglyn/shared-ui-jsx/components/shadow-dom/index'
 import { styled } from '@aglyn/shared-ui-theme'
 import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
 import { observer } from 'mobx-react-lite'
@@ -48,7 +49,8 @@ export const Leaf = observer(
         {...rest}
       >
         {children}
-        {resolvedProps?.['children']}
+
+        <ShadowDom.AglynText>{resolvedProps?.['children']}</ShadowDom.AglynText>
       </Component>
     )
   }),

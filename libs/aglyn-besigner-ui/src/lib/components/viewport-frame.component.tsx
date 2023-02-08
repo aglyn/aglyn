@@ -17,15 +17,12 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
-import { setBesignerCanvasHovered } from '@aglyn/besigner-data-app'
-import {
-  useAglynAppContext,
-  useAglynSiteTheme,
-} from '@aglyn/core-feature-renderer'
+import * as Besigner from '@aglyn/besigner'
+import { useAglynSiteTheme } from '@aglyn/core-feature-renderer'
 import {
   MuiShadowDom,
-  type ShadowRootProps,
-  useShadowDomContext,
+  type MuiShadowRootProps,
+  useMuiShadowDomContext,
 } from '@aglyn/shared-ui-jsx'
 import { styled, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { Box, type BoxProps, CssBaseline, GlobalStyles } from '@mui/material'
@@ -56,7 +53,7 @@ const ViewportFrame = styled('div', {
 }))
 ViewportFrame.displayName = 'ViewportFrame'
 
-type SiteShadowDomProps = HTMLAttributes<HTMLDivElement> & ShadowRootProps
+type SiteShadowDomProps = HTMLAttributes<HTMLDivElement> & MuiShadowRootProps
 const SiteShadowDom = styled(MuiShadowDom.div, {
   name: 'AglynViewportShadowDom',
 })<SiteShadowDomProps>(({ theme }) => ({
@@ -92,7 +89,7 @@ const ViewportGlobalStyles = (
   />
 )
 const ThemedElementContainer = ({ children }) => {
-  const shadowDom = useShadowDomContext()
+  const shadowDom = useMuiShadowDomContext()
   const hostTheme = useAglynSiteTheme({ container: shadowDom })
   return (
     <ThemeProvider theme={hostTheme}>
@@ -157,21 +154,21 @@ export const ViewportFrameComponent = forwardRef<
 >((props, ref) => {
   const { onMouseLeave, ...rest } = props
 
-  const app = useAglynAppContext()
-  const handleMouseLeave = useCallback(
+  const handlePointerLeave = useCallback(
     (e) => {
-      e.stopPropagation()
-      setBesignerCanvasHovered(app, { hovered: () => ({}) })
+      // e.stopPropagation()
+      Besigner.focus.clearHover()
       onMouseLeave && onMouseLeave(e)
     },
-    [app, onMouseLeave],
+    [onMouseLeave],
   )
 
   return (
     <ViewportFrame
       ref={ref}
       data-aglyn="viewport:frame"
-      onMouseLeave={handleMouseLeave}
+      onMouseLeave={handlePointerLeave}
+      onPointerLeave={handlePointerLeave}
       {...rest}
     >
       <SiteContainer />
