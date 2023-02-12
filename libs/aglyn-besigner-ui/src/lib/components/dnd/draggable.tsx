@@ -24,17 +24,17 @@ import type * as CSS from 'csstype'
 import { observer } from 'mobx-react-lite'
 import { Children, cloneElement, forwardRef, MutableRefObject } from 'react'
 
-export interface DraggableChildProps<T extends { $id: string }>
+export interface DraggableChildProps<T extends { $id?: string }>
   extends Omit<DraggableProps<T>, 'children'> {
   draggable: ReturnType<typeof useDraggable>
   style: CSS.Properties
   forwardRef: MutableRefObject<any>
 }
-export type DraggableChild<T extends { $id: string }> = (
+export type DraggableChild<T extends { $id?: string }> = (
   props: DraggableChildProps<T>,
 ) => JSX.Element
 
-export interface DraggableProps<T extends { $id: string }> {
+export interface DraggableProps<T extends { $id?: string }> {
   children: JSX.Element | DraggableChild<T>
   node: T
   type: Besigner.DragType
@@ -43,7 +43,7 @@ export interface DraggableProps<T extends { $id: string }> {
 }
 
 const Draggable = observer(
-  forwardRef(<T extends { $id: string }>(props: DraggableProps<T>, ref) => {
+  forwardRef(<T extends { $id?: string }>(props: DraggableProps<T>, ref) => {
     const { children, ...rest } = props
     const { node, type, disabled, idSuffix } = rest
     const id = useId(node?.$id)

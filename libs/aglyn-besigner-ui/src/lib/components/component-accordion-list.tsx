@@ -17,94 +17,21 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { DragType } from '@aglyn/besigner'
-import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { DragOverlay } from '@dnd-kit/core'
-import {
-  Box,
-  Card,
-  type CardProps,
-  Grid,
-  ListItemAvatar,
-  ListItemText,
-  Stack,
-} from '@mui/material'
+import { Box, Grid } from '@mui/material'
 import { Observer, observer } from 'mobx-react-lite'
-import { forwardRef } from 'react'
 import { AccordionListComponent } from './accordion-list.component'
 import Draggable from './dnd/draggable'
-
-export type ComponentGridItemData =
-  | Aglyn.PresetSchema<any>
-  | Aglyn.ComponentSchema<any>
+import NodeCard, { type NodeCardItemData } from './node-card'
 
 export type ComponentGridGroupItemData = {
   $id: string
   label: string
-  items: ComponentGridItemData[]
+  items: NodeCardItemData[]
 }
 
-export interface ComponentGridItemProps extends CardProps {
-  node: ComponentGridItemData
-}
-
-const ComponentGridItem = observer(
-  forwardRef<any, ComponentGridItemProps>((props, ref) => {
-    const { node, ...rest } = props
-    const label =
-      node?.['label'] ||
-      node?.displayName ||
-      Aglyn.components.getLabel(node?.$id) ||
-      node?.$id
-
-    return (
-      <Card
-        ref={ref}
-        variant="outlined"
-        sx={{ height: 1, minHeight: 100, cursor: 'grab', zIndex: 99999 }}
-        {...rest}
-      >
-        <Stack
-          height={1}
-          minHeight={100}
-          alignItems="center"
-          justifyContent="space-evenly"
-          textAlign="center"
-          p={0.25}
-          spacing={0.5}
-        >
-          <ListItemAvatar
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <MdiIcon
-              {...node?.icon}
-              sx={{ fontSize: '2rem' }}
-              color="inherit"
-              path={node?.icon?.path || ICON_VARIANT_ELEMENT.path}
-            />
-          </ListItemAvatar>
-          <div>
-            <ListItemText
-              primaryTypographyProps={{
-                fontWeight: 'fontWeightMedium',
-                lineHeight: 'normal',
-                fontSize: 'subtitle2.fontSize',
-              }}
-            >
-              {label}
-            </ListItemText>
-          </div>
-        </Stack>
-      </Card>
-    )
-  }),
-)
-ComponentGridItem.displayName = 'ComponentGridItem'
+NodeCard.displayName = 'NodeCard'
 
 interface ComponentAccordionListProp {}
 
@@ -121,6 +48,9 @@ export const ComponentAccordionList = observer(
         onRenderSummary={({ item }) => (
           <Observer>{() => <>{item?.label}</>}</Observer>
         )}
+        AccordionDetailsProps={{
+          sx: { overflowX: 'hidden' },
+        }}
         onRenderDetail={({ item }) => (
           <Observer>
             {() => (
@@ -135,7 +65,7 @@ export const ComponentAccordionList = observer(
                       >
                         {({ draggable, node, forwardRef }) => (
                           <>
-                            <ComponentGridItem
+                            <NodeCard
                               ref={mergeRefs(forwardRef, draggable.setNodeRef)}
                               node={node}
                               style={
@@ -144,9 +74,7 @@ export const ComponentAccordionList = observer(
                               {...draggable.listeners}
                             />
                             <DragOverlay dropAnimation={null}>
-                              {draggable.isDragging && (
-                                <ComponentGridItem node={node} />
-                              )}
+                              {draggable.isDragging && <NodeCard node={node} />}
                             </DragOverlay>
                           </>
                         )}
