@@ -67,14 +67,16 @@ export const ComponentAccordionList = observer(
                           <>
                             <NodeCard
                               ref={mergeRefs(forwardRef, draggable.setNodeRef)}
-                              node={node}
+                              node={node as any}
                               style={
                                 draggable.isDragging ? { opacity: 0.5 } : {}
                               }
                               {...draggable.listeners}
                             />
                             <DragOverlay dropAnimation={null}>
-                              {draggable.isDragging && <NodeCard node={node} />}
+                              {draggable.isDragging && (
+                                <NodeCard node={node as any} />
+                              )}
                             </DragOverlay>
                           </>
                         )}

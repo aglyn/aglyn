@@ -49,6 +49,7 @@ export * from './lib/contexts/loading.context'
 
 export * from './lib/hooks/router-events'
 export * from './lib/hooks/use-callback-param-ref'
+export * from './lib/hooks/use-async-effect'
 export * from './lib/hooks/use-client-rect'
 export * from './lib/hooks/use-debounce'
 export * from './lib/hooks/use-debounced-transition'

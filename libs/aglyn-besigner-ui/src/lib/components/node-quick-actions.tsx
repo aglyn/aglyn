@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef } from 'react'
+import { Else, If, Then } from 'react-if'
 import useAddElementDrawerCallback from '../hooks/use-add-element-drawer-callback'
 import ComponentIconComponent from './component-icon.component'
 import NodeContextMenu from './node-context-menu'
@@ -126,94 +127,97 @@ export const NodeQuickActions = observer(
             fontSize="inherit"
           />
         </Stack>
-        {variant === 'actions' ? null : (
-          <Typography
-            component="div"
-            textOverflow="ellipsis"
-            overflow="hidden"
-            whiteSpace="nowrap"
-            fontSize="inherit"
-            color="inherit"
-            maxWidth={100}
-            title={node?.labelShort}
-          >
-            {node?.labelShort}
-          </Typography>
-        )}
-
-        {variant !== 'actions' ? null : (
-          <Stack
-            direction="row"
-            justifyContent="flex-start"
-            alignItems="center"
-            spacing={0.25}
-          >
-            <LabelAction
-              title="move"
-              disableInteractive
-              ButtonProps={{
-                ...handleProps,
-                onClick: () => handleAddElementClick(node),
-              }}
-              icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
+        <If condition={variant !== 'actions'}>
+          <Then>
+            <Typography
+              component="div"
+              textOverflow="ellipsis"
+              overflow="hidden"
+              whiteSpace="nowrap"
+              fontSize="inherit"
+              color="inherit"
+              maxWidth={100}
+              title={node?.labelShort}
             >
-              {'move'}
-            </LabelAction>
-            <LabelAction
-              title="Add"
-              disableInteractive
-              ButtonProps={{
-                onClick: () => handleAddElementClick(node),
-              }}
-              icon={{ path: ICON_VARIANT_MODIFY_ADD.path }}
+              {node?.labelShort}
+            </Typography>
+          </Then>
+          <Else>
+            <Stack
+              direction="row"
+              justifyContent="flex-start"
+              alignItems="center"
+              spacing={0.25}
             >
-              {'add'}
-            </LabelAction>
-            <LabelAction
-              placement="right"
-              children={'add'}
-              icon={{ path: ICON_VARIANT_SHOW_MORE_VERTICAL.path }}
-              componentsProps={{
-                popper: {
-                  disablePortal: false,
-                  modifiers: [
-                    {
-                      name: 'flip',
-                      enabled: true,
-                      options: {
-                        altBoundary: true,
-                        rootBoundary: 'document',
-                        padding: 100,
+              <LabelAction
+                title="move"
+                disableInteractive
+                ButtonProps={{
+                  ...handleProps,
+                  onClick: () => handleAddElementClick(node),
+                }}
+                icon={{ path: ICON_VARIANT_MODIFY_DRAG.path }}
+              >
+                {'move'}
+              </LabelAction>
+              <LabelAction
+                title="Add"
+                disableInteractive
+                ButtonProps={{
+                  onClick: () => handleAddElementClick(node),
+                }}
+                icon={{ path: ICON_VARIANT_MODIFY_ADD.path }}
+              >
+                {'add'}
+              </LabelAction>
+              <LabelAction
+                placement="right"
+                children={'add'}
+                icon={{ path: ICON_VARIANT_SHOW_MORE_VERTICAL.path }}
+                enterDelay={200}
+                leaveDelay={500}
+                componentsProps={{
+                  popper: {
+                    disablePortal: false,
+                    modifiers: [
+                      {
+                        name: 'flip',
+                        enabled: true,
+                        options: {
+                          altBoundary: true,
+                          rootBoundary: 'document',
+                          padding: 100,
+                        },
                       },
-                    },
-                    {
-                      name: 'preventOverflow',
-                      enabled: true,
-                      options: {
-                        altAxis: true,
-                        altBoundary: true,
-                        tether: true,
-                        rootBoundary: 'document',
-                        padding: 100,
+                      {
+                        name: 'preventOverflow',
+                        enabled: true,
+                        options: {
+                          altAxis: true,
+                          altBoundary: true,
+                          tether: true,
+                          rootBoundary: 'document',
+                          padding: 100,
+                        },
                       },
-                    },
-                    {
-                      name: 'arrow',
-                      enabled: true,
-                    },
-                  ],
-                },
-                tooltip: {
-                  sx: {
-                    padding: 0,
-                    m: -2,
+                      {
+                        name: 'arrow',
+                        enabled: true,
+                      },
+                    ],
                   },
-                },
-              }}
-              title={<NodeContextMenu node={node} />}
-            />
-          </Stack>
-        )}
+                  tooltip: {
+                    sx: {
+                      padding: 0,
+                      m: -2,
+                    },
+                  },
+                }}
+                title={<NodeContextMenu node={node} />}
+              />
+            </Stack>
+          </Else>
+        </If>
       </Stack>
     )
   }),

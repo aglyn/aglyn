@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import {
   BesignerPanelTabFlag,
   setBesignerPanels,
 } from '@aglyn/besigner-data-app'
+import Typography from '@aglyn/plugins-ui-mui/components/typography'
 import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_DUPLICATE,
@@ -29,6 +30,7 @@ import {
 } from '@aglyn/shared-data-enums'
 import MdiIcon from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'
 import {
+  alpha,
   Divider,
   ListItemIcon,
   ListItemText,
@@ -124,13 +126,36 @@ export const NodeContextMenu = observer((props: NodeContextMenuProps) => {
   const deleteElementCallback = useDeleteElementCallback()
 
   return (
-    <Paper sx={{ width: 240 }} {...rest}>
+    <Paper sx={{ width: 240, overflow: 'hidden' }} {...rest}>
       <MenuList dense>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          align="center"
+          textOverflow="ellipsis"
+          component="div"
+          bgcolor="primary.dark"
+          px={1}
+          py={0.15}
+          mb={1}
+          sx={{
+            backgroundColor: (theme) => alpha(theme.palette.primary.dark, 0.12),
+          }}
+        >
+          {node?.labelShort}
+        </Typography>
         <MenuItem onClick={() => handleAddElementClick(node)}>
           <ListItemText inset>Add element</ListItemText>
         </MenuItem>
         <Divider />
-        <MenuItem onClick={handleParentOnClick} disabled={isRootNode}>
+        <MenuItem
+          onClick={handleParentOnClick}
+          disabled={isRootNode}
+          onMouseEnter={handleParentOnMouseEnter}
+          onPointerEnter={handleParentOnMouseEnter}
+          onMouseLeave={handleParentOnMouseLeave}
+          onPointerLeave={handleParentOnMouseLeave}
+        >
           <ListItemText inset>Select parent</ListItemText>
         </MenuItem>
         <MenuItem

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,30 +16,42 @@
  */
 
 import DEFAULT_ICON from '@aglyn/shared-data-mdi/constants/default-icon'
+import { useAsyncEffect } from '@aglyn/shared-ui-jsx'
 import type * as MdiJs from '@mdi/js'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 type IconPath<T> = [T] extends [keyof typeof MdiJs] ? typeof MdiJs[T] : string
 
 export function useMdiIcon<T>(id: T): IconPath<T> {
   const [path, setPath] = useState<IconPath<T>>(() => DEFAULT_ICON.path)
 
-  useEffect(() => {
-    let unmounted = false
-
-    ;(async () => {
+  useAsyncEffect(
+    async (isMounted) => {
       if (!id || typeof id !== 'string') return
       const data = await import('@mdi/js')
         .then(({ [id]: path }) => path as IconPath<T>)
         .catch(console.error)
-      if (unmounted) return
-      if (data) setPath(data)
-    })()
+      if (isMounted() && data) setPath(data)
+    },
+    [id],
+  )
 
-    return () => {
-      unmounted = true
-    }
-  }, [id])
+  // useEffect(() => {
+  //   let unmounted = false
+  //
+  //   ;(async () => {
+  //     if (!id || typeof id !== 'string') return
+  //     const data = await import('@mdi/js')
+  //       .then(({ [id]: path }) => path as IconPath<T>)
+  //       .catch(console.error)
+  //     if (unmounted) return
+  //     if (data) setPath(data)
+  //   })()
+  //
+  //   return () => {
+  //     unmounted = true
+  //   }
+  // }, [id])
 
   return path
 }
