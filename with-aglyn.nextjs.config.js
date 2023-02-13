@@ -252,14 +252,14 @@ const AGLYN_CONFIG = {
      * deviceSizes
      * DEFAULT [640, 750, 828, 1080, 1200, 1920, 2048, 3840]
      */
-    deviceSizes: [600, 768, 900, 1080, 1200, 1536, 1920, 2560],
+    deviceSizes: [640, 768, 828, 1080, 1200, 1920, 2048, 3840],
     disableStaticImages: false,
     domains: SAFE_DOMAINS,
     /**
      * imageSizes
      * DEFAULT: [16, 32, 48, 64, 96, 128, 256, 384]
      */
-    imageSizes: [24, 40, 64, 96, 144, 256, 390, 512],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     formats: ['image/avif', 'image/webp'],
     loader: 'default',
     minimumCacheTTL: 60 * 60 * 24, // 24hrs = 86400sec
@@ -352,8 +352,10 @@ function withAglyn(nextConfig = {}) {
    * @returns WithAglynOptions
    **/
   const handleUserConfig = (userConfig = {}) => {
-    const merged = deepFillIn(AGLYN_CONFIG, userConfig),
-      aglynConfig = merged.aglyn
+    const { aglyn: aglynConfig, ...merged } = deepFillIn(
+      AGLYN_CONFIG,
+      userConfig,
+    )
 
     return {
       ...merged,

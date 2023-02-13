@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import useCallbackParamRef from '@aglyn/shared-ui-jsx/hooks/use-callback-param-ref'
-import { Promise } from 'cypress/types/cy-bluebird'
+import { useCallbackParamRef } from '@aglyn/shared-ui-jsx'
 import { DependencyList, useEffect } from 'react'
 
 export type EffectCallback<T = unknown> = (

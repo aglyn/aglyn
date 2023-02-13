@@ -44,8 +44,11 @@
     "firebase:emulate": "firebase emulators:start --import=./.firebase --export-on-exit",
     "cz": "cz",
     "prepare": "husky install",
-    "check:build-console": "npx nx build console --verbose --prod",
     "readme:table-of-contents": "markdown-toc -i ./README.md",
+    "build:console:dev": "nx build console --verbose --dev",
+    "build:console:prod": "nx build console --prod",
+    "serve:console:dev": "nx serve console --verbose --dev",
+    "serve:console:prod": "nx serve console --prod",
     "migrate:latest": "nx migrate latest",
     "migrate:run-migrations": "nx migrate --run-migrations",
     "vercel:env-pull": "vercel env pull",
@@ -254,4 +257,3 @@
     }
   }
 }
-
