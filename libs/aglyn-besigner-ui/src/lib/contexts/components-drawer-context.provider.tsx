@@ -21,6 +21,7 @@ import {
   CloseableDrawerComponent,
   type CloseableDrawerProps,
 } from '../components/closeable-drawer.component'
+import ComponentsDrawer from '../components/components-drawer'
 import ComponentsGridListComponent from '../components/components-grid-list.component'
 import {
   buildOptions,
@@ -78,6 +79,7 @@ export function ComponentsDrawerContextProvider(
     <Fragment>
       <ElementDrawerContext.Provider value={{ elementDrawer }}>
         {children}
+        <ComponentsDrawer />
       </ElementDrawerContext.Provider>
       <AglynComponentsContext.Consumer>
         {({ nodePresets }) => (

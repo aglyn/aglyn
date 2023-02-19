@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,6 +52,7 @@ import {
   mdiDotsVertical,
   mdiDrag,
   mdiFileTree,
+  mdiFilter,
   mdiFormatAlignCenter,
   mdiFormatAlignJustify,
   mdiFormatAlignLeft,
@@ -68,6 +69,7 @@ import {
   mdiLaptop,
   mdiLoginVariant,
   mdiLogoutVariant,
+  mdiMagnify,
   mdiMathCompass,
   mdiMenuDown,
   mdiMinus,
@@ -125,14 +127,15 @@ export const ICON_VARIANT_ALIGN_RIGHT = mdiFormatAlignRight
 export const ICON_VARIANT_ALIGN_JUSTIFY = mdiFormatAlignJustify
 
 // Action + Navigation
+export const ICON_VARIANT_CLEAR = mdiClose
 export const ICON_VARIANT_CLOSE = mdiClose
-export const ICON_VARIANT_LEFT = mdiArrowLeft
-export const ICON_VARIANT_RIGHT = mdiArrowRight
 export const ICON_VARIANT_COLLAPSIBLE_CLOSE = mdiChevronDown
 export const ICON_VARIANT_COLLAPSIBLE_OPEN = mdiChevronRight
 export const ICON_VARIANT_DOCK_BOTTOM_TOGGLE = mdiDockBottom
 export const ICON_VARIANT_DOCK_LEFT_TOGGLE = mdiDockLeft
 export const ICON_VARIANT_DOCK_RIGHT_TOGGLE = mdiDockRight
+export const ICON_VARIANT_FILTER = mdiFilter
+export const ICON_VARIANT_LEFT = mdiArrowLeft
 export const ICON_VARIANT_MENU_DOWN = mdiMenuDown
 export const ICON_VARIANT_MODIFY_ADD = mdiPlus
 export const ICON_VARIANT_MODIFY_DELETE = mdiWindowClose
@@ -144,9 +147,11 @@ export const ICON_VARIANT_MODIFY_MODE_SELECT = mdiCursorDefault
 export const ICON_VARIANT_MODIFY_MOVE_DOWN = mdiArrowDown
 export const ICON_VARIANT_MODIFY_MOVE_UP = mdiArrowUp
 export const ICON_VARIANT_MODIFY_REDO = mdiRedo
-export const ICON_VARIANT_MODIFY_UNDO = mdiUndo
 export const ICON_VARIANT_MODIFY_SAVE = mdiContentSave
+export const ICON_VARIANT_MODIFY_UNDO = mdiUndo
 export const ICON_VARIANT_NEW_TAB = mdiOpenInNew
+export const ICON_VARIANT_RIGHT = mdiArrowRight
+export const ICON_VARIANT_SEARCH = mdiMagnify
 export const ICON_VARIANT_SELECT_PARENT = mdiArrowULeftTop
 export const ICON_VARIANT_SHOW_DETAIL = mdiPageNextOutline
 export const ICON_VARIANT_SHOW_MORE = mdiDotsHorizontal

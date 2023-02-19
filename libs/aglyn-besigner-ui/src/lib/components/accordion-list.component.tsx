@@ -121,6 +121,7 @@ export const AccordionListComponent = observer(
               {...AccordionProps}
             >
               <MuiAccordionSummary
+                sx={{ position: 'sticky', top: 0 }}
                 expandIcon={
                   <MdiIcon
                     path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}

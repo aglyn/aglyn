@@ -22,36 +22,30 @@ import {
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
-import { styled, sx, Theme } from '@aglyn/shared-ui-theme'
+import { styled } from '@aglyn/shared-ui-theme'
 import { Button, IconButton, Typography } from '@mui/material'
 import { forwardRef, type SyntheticEvent, useCallback } from 'react'
 
-const StyledDrawer = styled(NavigationDrawerComponent)(
-  sx<Theme>({
-    '& .AglynNavigationDrawer-content': {
-      backgroundColor: 'background.default',
-      overflow: 'auto',
+const StyledDrawer = styled(NavigationDrawerComponent)(({ theme }) => ({
+  '& > .MuiDrawer-paper': {
+    margin: '0 auto',
+    maxHeight: '100vh',
+    height: {
+      xs: '100%',
+      sm: '50%',
     },
-    '& > .MuiDrawer-paper': {
-      margin: '0 auto',
-      maxHeight: '100vh',
-      height: {
-        xs: '100%',
-        sm: '50%',
-      },
+  },
+  '& .MuiDrawer-paper': {
+    margin: '0 auto',
+    maxHeight: { sm: '100%' },
+    height: { xs: '100%', sm: '720px' },
+    maxWidth: { sm: '100%' },
+    width: '100%',
+    [theme.breakpoints.up('sm')]: {
+      width: theme.breakpoints.values.sm,
     },
-    '& .MuiDrawer-paper': {
-      margin: '0 auto',
-      maxHeight: { sm: '100%' },
-      height: { xs: '100%', sm: '720px' },
-      maxWidth: { sm: '100%' },
-      width: (theme) => ({
-        xs: '100%',
-        sm: theme.breakpoints.values.sm,
-      }),
-    },
-  }),
-)
+  },
+}))
 
 export interface CloseableDrawerProps extends Partial<NavigationDrawerProps> {
   drawerTitle?: JSX.Node
@@ -63,6 +57,7 @@ export interface CloseableDrawerProps extends Partial<NavigationDrawerProps> {
     ): void
   }['bivarianceHack']
   action?: JSX.Node
+  extraActions?: JSX.Node
   onActionClick?: {
     bivarianceHack(event: SyntheticEvent, reason: 'actionButtonClick'): void
   }['bivarianceHack']
@@ -77,6 +72,7 @@ export const CloseableDrawerComponent = forwardRef<any, CloseableDrawerProps>(
       onActionClick,
       children,
       drawerTitle,
+      extraActions,
       ...rest
     } = props
 
@@ -126,9 +122,12 @@ export const CloseableDrawerComponent = forwardRef<any, CloseableDrawerProps>(
     )
 
     const appBarRight = action ? (
-      <Button color="inherit" onClick={handleActionClick} sx={{ mr: -1.2 }}>
-        {action}
-      </Button>
+      <>
+        {extraActions}
+        <Button color="inherit" onClick={handleActionClick} sx={{ mr: -1.2 }}>
+          {action}
+        </Button>
+      </>
     ) : null
 
     return (

@@ -59,7 +59,7 @@ export interface NavigationDrawerProps extends Partial<DrawerProps> {
 }
 
 export const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
-  function RefRenderFn(props, ref) {
+  function RefRenderFn(props, forwardRef) {
     const {
       children,
       className,
@@ -75,12 +75,11 @@ export const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
       ...rest
     } = props
 
-    // const localContentRef = useRef<any>()
     const [localContentRef, setLocalContentRef] = useState<any>()
 
     return (
       <Drawer
-        ref={ref}
+        ref={forwardRef}
         className={clsx(classKeys.root, className)}
         sx={mergeSxProps(
           {
@@ -111,6 +110,15 @@ export const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
                   borderBottomWidth: 1,
                   borderBottomStyle: 'solid',
                   borderBottomColor: 'divider',
+                  zIndex: '5',
+                  transition: (theme) =>
+                    theme.transitions.create(
+                      ['background-image', 'box-shadow'],
+                      {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.standard,
+                      },
+                    ),
                 },
                 AppBarProps?.sx,
               )}
@@ -157,16 +165,13 @@ export const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
         </ElevateOnScroll>
         <Box
           ref={useMergeRefs(setLocalContentRef, contentRef)}
+          height={1}
+          width={1}
+          overflow="auto"
+          bgcolor="background.default"
+          zIndex="1"
           {...ContentProps}
           className={clsx(classKeys.content, ContentProps?.className)}
-          sx={mergeSxProps(
-            {
-              height: '100%',
-              width: '100%',
-              overflow: 'auto',
-            },
-            ContentProps?.sx,
-          )}
         >
           {children}
         </Box>
