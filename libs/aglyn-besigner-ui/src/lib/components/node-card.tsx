@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
 import {
   Card,
   CardProps,
@@ -38,7 +39,7 @@ export interface NodeCardProps extends CardProps {
 
 export const NodeCard = observer(
   forwardRef<any, NodeCardProps>((props, ref) => {
-    const { node, ...rest } = props
+    const { node, sx, ...rest } = props
     const label =
       node?.['label'] ||
       node?.displayName ||
@@ -49,7 +50,10 @@ export const NodeCard = observer(
       <Card
         ref={ref}
         variant="outlined"
-        sx={{ height: 1, minHeight: 100, cursor: 'grab', zIndex: 99999 }}
+        sx={mergeSxProps(
+          { height: 1, minHeight: 100, cursor: 'grab', zIndex: 99999 },
+          sx,
+        )}
         {...rest}
       >
         <Stack

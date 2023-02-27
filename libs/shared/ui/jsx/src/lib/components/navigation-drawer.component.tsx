@@ -15,27 +15,22 @@
  * limitations under the License.
  */
 
+import NavigationView from '@aglyn/shared-ui-jsx/components/navigation-view/navigation-view'
 import {
   generateComponentClassKeys,
   mergeSxProps,
 } from '@aglyn/shared-ui-theme'
 
 import {
-  AppBar,
   type AppBarProps,
-  Box,
   type BoxProps,
   Drawer,
   type DrawerProps,
-  Stack,
   type StackProps,
-  Toolbar,
   type ToolbarProps,
 } from '@mui/material'
 import clsx from 'clsx'
-import { forwardRef, type Ref, useState } from 'react'
-import { useMergeRefs } from '../hooks/use-merge-refs'
-import ElevateOnScroll from './elevate-on-scroll'
+import { forwardRef, type Ref } from 'react'
 
 const classKeys = generateComponentClassKeys('AglynNavigationDrawer', [
   'root',
@@ -77,8 +72,6 @@ export const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
       ...rest
     } = props
 
-    const [localContentRef, setLocalContentRef] = useState<any>()
-
     return (
       <Drawer
         ref={forwardRef}
@@ -97,87 +90,16 @@ export const NavigationDrawerComponent = forwardRef<any, NavigationDrawerProps>(
         )}
         {...rest}
       >
-        <ElevateOnScroll target={localContentRef}>
-          {({ activeWithoutHysteresis }) => (
-            <AppBar
-              color="inherit"
-              position="relative"
-              variant="elevation"
-              elevation={activeWithoutHysteresis ? 4 : 0}
-              enableColorOnDark
-              {...AppBarProps}
-              className={clsx(classKeys.appBar, AppBarProps?.className)}
-              sx={mergeSxProps(
-                {
-                  borderBottomWidth: 1,
-                  borderBottomStyle: 'solid',
-                  borderBottomColor: 'divider',
-                  zIndex: '5',
-                  transition: (theme) =>
-                    theme.transitions.create(
-                      ['background-image', 'box-shadow'],
-                      {
-                        easing: theme.transitions.easing.sharp,
-                        duration: theme.transitions.duration.standard,
-                      },
-                    ),
-                },
-                AppBarProps?.sx,
-              )}
-            >
-              <Toolbar
-                {...ToolbarProps}
-                className={clsx(classKeys.toolbar, ToolbarProps?.className)}
-              >
-                <Stack
-                  alignItems="center"
-                  justifyContent="space-between"
-                  direction="row"
-                  spacing={2}
-                  width={1}
-                >
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="flex-start"
-                    {...AppBarLeftProps}
-                    className={clsx(
-                      classKeys.appBarLeft,
-                      AppBarLeftProps?.className,
-                    )}
-                  >
-                    {appBarLeft}
-                  </Stack>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="flex-start"
-                    {...AppBarRightProps}
-                    className={clsx(
-                      classKeys.appBarRight,
-                      AppBarRightProps?.className,
-                    )}
-                  >
-                    {appBarRight}
-                  </Stack>
-                </Stack>
-              </Toolbar>
-              {childrenAfterToolbar}
-            </AppBar>
-          )}
-        </ElevateOnScroll>
-        <Box
-          ref={useMergeRefs(setLocalContentRef, contentRef)}
-          height={1}
-          width={1}
-          overflow="auto"
-          bgcolor="background.default"
-          zIndex="1"
-          {...ContentProps}
-          className={clsx(classKeys.content, ContentProps?.className)}
+        <NavigationView
+          AppBarProps={AppBarProps}
+          appBarLeft={appBarLeft}
+          appBarRight={appBarRight}
+          AppBarLeftProps={AppBarLeftProps}
+          AppBarRightProps={AppBarRightProps}
+          childrenAfterToolbar={childrenAfterToolbar}
         >
           {children}
-        </Box>
+        </NavigationView>
       </Drawer>
     )
   },

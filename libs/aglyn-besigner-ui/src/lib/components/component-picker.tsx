@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { AccordionListComponent } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_CLEAR,
   ICON_VARIANT_FILTER,
@@ -34,17 +33,20 @@ import {
 } from '@mui/material'
 import { Observer, observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useState } from 'react'
+import AccordionListComponent from './accordion-list.component'
 import CloseableDrawerComponent, {
   type CloseableDrawerProps,
 } from './closeable-drawer.component'
 import EmptyResults from './empty-results'
 import NodeCard from './node-card'
 
-export interface ComponentsDrawerProps extends CloseableDrawerProps {}
+export interface ComponentPickerProps extends CloseableDrawerProps {
+  onSelect?: (item?: Aglyn.NodeSchema<any>) => void
+}
 
-export const ComponentsDrawer = observer(
-  forwardRef<any, ComponentsDrawerProps>((props, forwardRef) => {
-    const { ...rest } = props
+export const ComponentPicker = observer(
+  forwardRef<any, ComponentPickerProps>((props, forwardRef) => {
+    const { open, ...rest } = props
     const allItems = Aglyn.components.schemasBySortedCategories
 
     const [searching, setSearching] = useState(false)
@@ -94,7 +96,7 @@ export const ComponentsDrawer = observer(
         ref={forwardRef}
         action={'Close'}
         drawerTitle={'Add new element'}
-        open={true}
+        open={open}
         extraActions={
           <>
             <IconButton
@@ -177,8 +179,11 @@ export const ComponentsDrawer = observer(
                   <Box>
                     <Grid spacing={3} container sx={{ overflowX: 'hidden' }}>
                       {item?.items?.map((node, index) => (
-                        <Grid key={node?.$id ?? index} xs={4} item>
-                          <NodeCard node={node as any} />
+                        <Grid key={node?.$id ?? index} xs={4} sm={3} item>
+                          <NodeCard
+                            sx={{ cursor: 'pointer' }}
+                            node={node as any}
+                          />
                         </Grid>
                       ))}
                     </Grid>
@@ -192,6 +197,6 @@ export const ComponentsDrawer = observer(
     )
   }),
 )
-ComponentsDrawer.displayName = 'ComponentsDrawer'
+ComponentPicker.displayName = 'ComponentPicker'
 
-export default ComponentsDrawer
+export default ComponentPicker

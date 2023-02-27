@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,5 @@
  * limitations under the License.
  */
 
-import {render} from '@testing-library/react'
-import React from 'react'
-
-import ElevateOnScroll from './elevate-on-scroll'
-
-
-describe('ElevateOnScroll', () => {
-  it('should render successfully', () => {
-    const {baseElement} = render(
-      <ElevateOnScroll>
-        <div />
-      </ElevateOnScroll>,
-    )
-    expect(baseElement).toBeTruthy()
-  })
-})
+export * from './navigation-view'
+export { default } from './navigation-view'

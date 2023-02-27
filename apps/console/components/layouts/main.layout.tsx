@@ -29,10 +29,10 @@ import {
   AglynConsoleLogoFull,
   AppLink,
   type AppLinkProps,
-  ElevateOnScroll,
   Menu,
   type MenuItemProps,
   type MenuProps,
+  ScrollResponse,
   SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
@@ -146,7 +146,7 @@ const TopAppBar = (props: TopAppBarProps) => {
   } = props
 
   return (
-    <ElevateOnScroll>
+    <ScrollResponse>
       {({ activeWithoutHysteresis }) => (
         <AppBar
           component="header"
@@ -283,7 +283,7 @@ const TopAppBar = (props: TopAppBarProps) => {
           </Toolbar>
         </AppBar>
       )}
-    </ElevateOnScroll>
+    </ScrollResponse>
   )
 }
 TopAppBar.displayName = 'TopAppBar'

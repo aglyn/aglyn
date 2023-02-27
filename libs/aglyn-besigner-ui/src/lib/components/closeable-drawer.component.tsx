@@ -105,7 +105,7 @@ export const CloseableDrawerComponent = forwardRef<any, CloseableDrawerProps>(
             sx={{ mr: 2 }}
           >
             <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-            <SrOnly>close drawer</SrOnly>
+            <SrOnly>close</SrOnly>
           </IconButton>
         )}
 
@@ -138,7 +138,6 @@ export const CloseableDrawerComponent = forwardRef<any, CloseableDrawerProps>(
         appBarLeft={appBarLeft}
         appBarRight={appBarRight}
         onClose={handleClose}
-        AppBarProps={{ color: 'surface' }}
         {...rest}
       >
         {children}
