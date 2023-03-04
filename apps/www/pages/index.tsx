@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,23 +19,21 @@ import img3 from '/public/_static/images/designer/website-designer-custom-elemen
 import img2 from '/public/_static/images/designer/website-designer-element-categories.png'
 import img4 from '/public/_static/images/designer/website-designer-functional-operations.png'
 import img1 from '/public/_static/images/designer/website-designer-preview-collage.png'
-import {APP_WWW, BRAND_NAMES} from '@aglyn/shared-data-enums'
-import {ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
-import {Image} from '@aglyn/shared-ui-next'
+import { APP_WWW, BRAND_NAMES } from '@aglyn/shared-data-enums'
+import { Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { Image } from '@aglyn/shared-ui-next'
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'
 import BackgroundImage from '../components/BackgroundImage'
-import {mainNavigation} from '../const'
+import { mainNavigation } from '../const'
 import MainLayout from '../layouts/MainLayout'
 import PromoSectionView from '../views/PromoSectionView'
 import SiteFooterView from '../views/SiteFooterView'
 
-
 const TITLE = 'Build websites for your business goals'
 
 function Index(props) {
-
   return (
     <MainLayout
       title={APP_WWW.TITLE}
@@ -47,10 +45,7 @@ function Index(props) {
         url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
       >
         <Box py={6}>
-          <ContainerComponent
-            maxWidth={'lg'}
-            gutterY
-          >
+          <Container maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
               direction="row-reverse"
@@ -64,13 +59,14 @@ function Index(props) {
                         variant={'h2'}
                         component={'h1'}
                         children={TITLE}
-                        sx={{mb: 4}}
+                        sx={{ mb: 4 }}
                       />
                     </>
                   ),
                 },
                 {
-                  xs: 12, md: 5,
+                  xs: 12,
+                  md: 5,
                   children: (
                     <Image
                       src={img1}
@@ -83,7 +79,8 @@ function Index(props) {
                   ),
                 },
                 {
-                  xs: 12, md: 7,
+                  xs: 12,
+                  md: 7,
                   children: (
                     <>
                       <Typography
@@ -92,22 +89,23 @@ function Index(props) {
                         // variantMapping={{'h4': 'h3'}}
                         children={'The essentials to keep your workflow simple'}
                         color="quaternary.main"
-                        sx={{mb: 2}}
+                        sx={{ mb: 2 }}
                       />
                       <Typography
                         variant={'h6'}
                         component={'div'}
                         color="text.secondary"
-                        sx={{mb: 4, '& > b': {color: 'text.secondary'}}}
+                        sx={{ mb: 4, '& > b': { color: 'text.secondary' } }}
                       >
-                        <b>A</b>pps <b>G</b>iving <b>L</b>ove for <b>Y</b>our <b>N</b>etwork
+                        <b>A</b>pps <b>G</b>iving <b>L</b>ove for <b>Y</b>our{' '}
+                        <b>N</b>etwork
                       </Typography>
                     </>
                   ),
                 },
               ]}
             />
-          </ContainerComponent>
+          </Container>
         </Box>
       </BackgroundImage>
       <main>
@@ -120,7 +118,8 @@ function Index(props) {
               spacing={2}
               items={[
                 {
-                  xs: 12, md: 4,
+                  xs: 12,
+                  md: 4,
                   children: (
                     <Image
                       src={img2}
@@ -132,19 +131,22 @@ function Index(props) {
                   ),
                 },
                 {
-                  xs: 12, md: 7,
+                  xs: 12,
+                  md: 7,
                   children: (
                     <>
                       <Typography
                         variant={'h4'}
                         component={'h2'}
                         children={'Build Your Pages How You Like'}
-                        sx={{mb: 4}}
+                        sx={{ mb: 4 }}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
-                        children={'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'}
+                        children={
+                          'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'
+                        }
                         color="text.secondary"
                       />
                     </>
@@ -163,7 +165,8 @@ function Index(props) {
               spacing={2}
               items={[
                 {
-                  xs: 12, md: 4,
+                  xs: 12,
+                  md: 4,
                   children: (
                     <Image
                       src={img3}
@@ -175,19 +178,22 @@ function Index(props) {
                   ),
                 },
                 {
-                  xs: 12, md: 7,
+                  xs: 12,
+                  md: 7,
                   children: (
                     <>
                       <Typography
                         variant={'h4'}
                         component={'h2'}
                         children={'Custom Elements & Attributes'}
-                        sx={{mb: 4}}
+                        sx={{ mb: 4 }}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
-                        children={'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'}
+                        children={
+                          'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'
+                        }
                         color="text.secondary"
                       />
                     </>
@@ -206,7 +212,8 @@ function Index(props) {
               spacing={2}
               items={[
                 {
-                  xs: 12, md: 4,
+                  xs: 12,
+                  md: 4,
                   children: (
                     <Image
                       src={img4}
@@ -218,19 +225,22 @@ function Index(props) {
                   ),
                 },
                 {
-                  xs: 12, md: 7,
+                  xs: 12,
+                  md: 7,
                   children: (
                     <>
                       <Typography
                         variant={'h4'}
                         component={'h2'}
                         children={'Perform Operations & Calculate Output'}
-                        sx={{mb: 4}}
+                        sx={{ mb: 4 }}
                       />
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
-                        children={'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'}
+                        children={
+                          'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'
+                        }
                         color="text.secondary"
                       />
                     </>
@@ -243,7 +253,9 @@ function Index(props) {
       </main>
       <SiteFooterView>
         <PromoSectionView
-          backgroundUrl={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
+          backgroundUrl={
+            '/_static/images/backgrounds/patterns/abstract-wave-lines.svg'
+          }
           heading={'Get Access and Make Your New Website'}
           link={{
             hrefAs: '/contact',

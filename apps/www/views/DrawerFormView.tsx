@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,9 @@
  * limitations under the License.
  */
 
-import {
-  alpha,
-  createStyles,
-  // type ExtendPropsOfWithStyles,
-  withStyles,
-} from '@aglyn/shared-ui-theme'
-import { NavigationDrawerComponent, type NavigationDrawerProps } from '@aglyn/shared-ui-jsx'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx'
 import { mdiClose, MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { alpha, createStyles, withStyles } from '@aglyn/shared-ui-theme'
 import { _isStrT } from '@aglyn/shared-util-guards'
 import { objectRemap } from '@aglyn/shared-util-tools'
 import { Box, Button } from '@mui/material'
@@ -30,7 +25,12 @@ import Container from '@mui/material/Container'
 import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
-import { ChangeEventHandler, forwardRef, Fragment, MouseEventHandler } from 'react'
+import {
+  ChangeEventHandler,
+  forwardRef,
+  Fragment,
+  MouseEventHandler,
+} from 'react'
 import FieldSet from '../components/FieldSet'
 import { Fields } from '../forms'
 
@@ -62,94 +62,112 @@ export interface DrawerFormViewProps {
   error?: string | boolean
   onClose: MouseEventHandler
   onSave: MouseEventHandler<HTMLButtonElement>
-  onUpdate: (fieldId: string) => ChangeEventHandler<HTMLTextAreaElement | HTMLInputElement>
+  onUpdate: (
+    fieldId: string,
+  ) => ChangeEventHandler<HTMLTextAreaElement | HTMLInputElement>
 }
 
-const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn(props, ref) {
-  const {
-    id,
-    fields,
-    open,
-    loading,
-    error,
-    formVariant = 'creating',
-    label,
-    onClose,
-    onSave,
-    onUpdate,
-    classes,
-    ...rest
-  } = props
+const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      id,
+      fields,
+      open,
+      loading,
+      error,
+      formVariant = 'creating',
+      label,
+      onClose,
+      onSave,
+      onUpdate,
+      classes,
+      ...rest
+    } = props
 
-  const isCreating = formVariant === 'creating'
-  const actionLabel = isCreating ? 'Create' : 'Update'
+    const isCreating = formVariant === 'creating'
+    const actionLabel = isCreating ? 'Create' : 'Update'
 
-  return (
-    <NavigationDrawerComponent
-      ref={ref}
-      appBarLeft={
-        <Fragment>
-          <IconButton
-            children={<MdiIcon path={mdiClose.path} />}
-            className={classes.closeButton}
-            color="default"
-            edge="start"
-            onClick={onClose}
-          />
-          <Typography
-            children={`${actionLabel} ${label}`}
-            color="inherit"
-            component="div"
-            variant="h6"
-          />
-        </Fragment>
-      }
-      appBarRight={
-        <Button
-          children={actionLabel}
-          color="secondary"
-          disabled={loading}
-          variant="contained"
-          onClick={onSave}
-        />
-      }
-      open={open}
-      onClose={onClose}
-      {...rest}
-    >
-      <div className={classes.wrapper}>
-        {loading && (
+    return (
+      <NavigationDrawerComponent
+        ref={ref}
+        appBarLeft={
           <Fragment>
-            <LinearProgress classes={{ root: classes.loadingBar }} color="secondary" />
+            <IconButton
+              children={<MdiIcon path={mdiClose.path} />}
+              className={classes.closeButton}
+              color="default"
+              edge="start"
+              onClick={onClose}
+            />
+            <Typography
+              children={`${actionLabel} ${label}`}
+              color="inherit"
+              component="div"
+              variant="h6"
+            />
           </Fragment>
-        )}
-
-        <ContainerComponent>
-          <br />
-          {error && (_isStrT(error) ? error : 'Error loading...')}
-          {!error && (
+        }
+        appBarRight={
+          <Button
+            children={actionLabel}
+            color="secondary"
+            disabled={loading}
+            variant="contained"
+            onClick={onSave}
+          />
+        }
+        open={open}
+        onClose={onClose}
+        {...rest}
+      >
+        <div className={classes.wrapper}>
+          {loading && (
             <Fragment>
-              <Typography children={'Unique ID'} variant="subtitle2" />
-              <Typography children={id ?? '(none)'} variant="subtitle1" />
-              <FieldSet fields={fields} loading={loading} onUpdate={onUpdate} />
-              <Box mt={2}>
-                <Typography children={'JSON Output'} variant="subtitle2" />
-                <Box bgcolor="background.default" mt={1} overflow="scroll" px={1}>
-                  <pre>
-                    {JSON.stringify(
-                      objectRemap(fields, (f) => f.value ?? ''),
-                      null,
-                      2
-                    )}
-                  </pre>
-                </Box>
-              </Box>
+              <LinearProgress
+                classes={{ root: classes.loadingBar }}
+                color="secondary"
+              />
             </Fragment>
           )}
-        </ContainerComponent>
-      </div>
-    </NavigationDrawerComponent>
-  )
-})
 
-export default withStyles(drawerFormViewStyles, { name: 'DrawerFormView' })(DrawerFormView)
+          <Container>
+            <br />
+            {error && (_isStrT(error) ? error : 'Error loading...')}
+            {!error && (
+              <Fragment>
+                <Typography children={'Unique ID'} variant="subtitle2" />
+                <Typography children={id ?? '(none)'} variant="subtitle1" />
+                <FieldSet
+                  fields={fields}
+                  loading={loading}
+                  onUpdate={onUpdate}
+                />
+                <Box mt={2}>
+                  <Typography children={'JSON Output'} variant="subtitle2" />
+                  <Box
+                    bgcolor="background.default"
+                    mt={1}
+                    overflow="scroll"
+                    px={1}
+                  >
+                    <pre>
+                      {JSON.stringify(
+                        objectRemap(fields, (f) => f.value ?? ''),
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </Box>
+                </Box>
+              </Fragment>
+            )}
+          </Container>
+        </div>
+      </NavigationDrawerComponent>
+    )
+  },
+)
+
+export default withStyles(drawerFormViewStyles, { name: 'DrawerFormView' })(
+  DrawerFormView,
+)

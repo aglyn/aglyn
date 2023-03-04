@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import {BRAND_NAMES} from '@aglyn/shared-data-enums'
-import {ContainerComponent, GridItems} from '@aglyn/shared-ui-jsx'
+import { BRAND_NAMES } from '@aglyn/shared-data-enums'
+import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import {
   FormRenderer,
   FormSpy,
@@ -24,18 +24,32 @@ import {
   simpleComponentMapper,
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
-import {Alert, AlertTitle, Box, Button, Grid, LinearProgress, Typography} from '@mui/material'
-import {useCallback} from 'react'
-import {mainNavigation} from '../const'
-import {DdfForms} from '../forms'
+import {
+  Alert,
+  AlertTitle,
+  Box,
+  Button,
+  Grid,
+  LinearProgress,
+  Typography,
+} from '@mui/material'
+import { useCallback } from 'react'
+import { mainNavigation } from '../const'
+import { DdfForms } from '../forms'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
 
-
 const FormTemplate = (props: FormTemplateRenderProps) => {
-  const {formFields, schema} = props
-  const {handleSubmit, getState} = useFormApi()
-  const {submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine} = getState()
+  const { formFields, schema } = props
+  const { handleSubmit, getState } = useFormApi()
+  const {
+    submitting,
+    submitSucceeded,
+    submitFailed,
+    submitErrors,
+    valid,
+    pristine,
+  } = getState()
 
   if (submitFailed) {
     return (
@@ -43,8 +57,8 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         <Box mt={2}>
           <Alert severity="error">
             <AlertTitle>Error — Form Submission Failed</AlertTitle>
-            Sorry, please try again later. If the issue persists please send a direct email to{' '}
-            <em>info@aglyn.com</em>
+            Sorry, please try again later. If the issue persists please send a
+            direct email to <em>info@aglyn.com</em>
             <br />
             <br />
             <small>Error details:</small>
@@ -61,8 +75,8 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         <Box mt={2}>
           <Alert severity="success">
             <AlertTitle>Success</AlertTitle>
-            We have received your submission. If you have any immediate questions, send them to{' '}
-            <em>info@aglyn.com</em>
+            We have received your submission. If you have any immediate
+            questions, send them to <em>info@aglyn.com</em>
           </Alert>
         </Box>
       </>
@@ -73,7 +87,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
     <Grid
       container
       component={'form'}
-      style={{width: '100%'}}
+      style={{ width: '100%' }}
       onSubmit={handleSubmit}
       spacing={3}
     >
@@ -85,7 +99,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
       {/*})}*/}
       <FormSpy>
         {() => (
-          <Grid item xs={12} sx={{textAlign: 'center'}}>
+          <Grid item xs={12} sx={{ textAlign: 'center' }}>
             {submitting && (
               <Box mb={1}>
                 <LinearProgress color="secondary" />
@@ -107,7 +121,6 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
 }
 
 function Contact(props) {
-
   const handleSubmit = useCallback(async (values) => {
     return await fetch(`/api/h/f/${DdfForms.formIds.contact}`, {
       method: 'POST',
@@ -129,7 +142,7 @@ function Contact(props) {
     >
       <main>
         <Box py={12} bgcolor={'background.paper'}>
-          <ContainerComponent maxWidth={'lg'} gutterY>
+          <Container maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
               direction="column"
@@ -159,7 +172,8 @@ function Contact(props) {
                           mb: 4,
                         }}
                       >
-                        Looking for more information or need support? Complete the form below.
+                        Looking for more information or need support? Complete
+                        the form below.
                       </Typography>
                     </>
                   ),
@@ -168,19 +182,19 @@ function Contact(props) {
                   xs: 12,
                   md: 9,
                   children: (
-                    <ContainerComponent maxWidth="sm">
+                    <Container maxWidth="sm">
                       <FormRenderer
                         FormTemplate={FormTemplate}
                         componentMapper={simpleComponentMapper}
                         schema={DdfForms.ContactFormSchema}
                         onSubmit={handleSubmit}
                       />
-                    </ContainerComponent>
+                    </Container>
                   ),
                 },
               ]}
             />
-          </ContainerComponent>
+          </Container>
         </Box>
       </main>
       <SiteFooterView />

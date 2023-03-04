@@ -34,7 +34,7 @@ const isBoolean = (value: unknown) => {
   return typeof value === 'boolean'
 }
 
-const Container = styled(MuiContainer, {
+export const Container = styled(MuiContainer, {
   name: 'AglynContainer',
   shouldForwardProp: (propName) =>
     !_isEqualitySameType(propName, null, 'gutterMode', 'gutterY', 'dense'),
@@ -80,5 +80,4 @@ const Container = styled(MuiContainer, {
 Container.displayName = 'Container'
 Container.aglyn = true
 
-export { Container }
 export default Container

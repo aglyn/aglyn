@@ -15,11 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  ContainerComponent,
-  GridItems,
-  type GridItemsProps,
-} from '@aglyn/shared-ui-jsx'
+import { Container, GridItems, type GridItemsProps } from '@aglyn/shared-ui-jsx'
 import {
   mdiCogOutline,
   MdiIcon,
@@ -138,7 +134,7 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
     >
       <header>
         <StyledNavBarSpacer />
-        <ContainerComponent maxWidth={CONTENT_MAX_WIDTH}>
+        <Container maxWidth={CONTENT_MAX_WIDTH}>
           <Typography component="h1" variant="h4">
             {!header?.icon || isElement(header.icon) ? (
               header.icon
@@ -148,15 +144,15 @@ function ConsoleLayoutRaw(props: ConsoleLayoutProps) {
             {header?.children ?? title}
           </Typography>
           <Breadcrumbs items={breadcrumbItems} />
-        </ContainerComponent>
+        </Container>
       </header>
       <main /*className={classes.content}*/>
-        <ContainerComponent maxWidth={CONTENT_MAX_WIDTH}>
+        <Container maxWidth={CONTENT_MAX_WIDTH}>
           {items || ContentGridItemsProps ? (
             <GridItems items={items} spacing={3} {...ContentGridItemsProps} />
           ) : null}
           {children}
-        </ContainerComponent>
+        </Container>
       </main>
     </MainLayout>
   )

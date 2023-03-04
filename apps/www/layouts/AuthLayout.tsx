@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+import { AglynSvgLogo, Container } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
-import { AglynSvgLogo, ContainerComponent } from '@aglyn/shared-ui-jsx'
 import { Box, Slide, Typography } from '@mui/material'
 import { forwardRef, useEffect, useState } from 'react'
-import BackgroundImage, { type BackgroundImageProps } from '../components/BackgroundImage'
+import BackgroundImage, {
+  type BackgroundImageProps,
+} from '../components/BackgroundImage'
 import Copyright from '../components/Copyright'
 
 const AuthLayoutBackground = styled(BackgroundImage, {
@@ -47,7 +49,10 @@ export interface AuthLayoutProps extends BackgroundImageProps {
   text: string
 }
 
-const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(props, ref) {
+const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(
+  props,
+  ref,
+) {
   const { text, children, classes, ...rest } = props
   const [animated, setAnimated] = useState({ left: false, right: false })
 
@@ -78,7 +83,7 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(props, 
       {...rest}
     >
       <Box alignItems="center" display="flex" flexGrow={1}>
-        <ContainerComponent maxWidth="lg">
+        <Container maxWidth="lg">
           <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
             <div>
               <AuthLayoutLogo />
@@ -86,11 +91,16 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(props, 
             </div>
           </Slide>
           <AuthLayoutCopyright />
-        </ContainerComponent>
+        </Container>
       </Box>
       <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
-        <Box alignItems="center" bgcolor="common.white" display="flex" width={450}>
-          <ContainerComponent>{children}</ContainerComponent>
+        <Box
+          alignItems="center"
+          bgcolor="common.white"
+          display="flex"
+          width={450}
+        >
+          <Container>{children}</Container>
         </Box>
       </Slide>
     </AuthLayoutBackground>

@@ -20,7 +20,7 @@ import {
   AglynSvgLogo,
   AppLink,
   type AppLinkProps,
-  ContainerComponent,
+  Container,
   GridButtons,
   type GridButtonsProps,
   Menu,
@@ -343,7 +343,7 @@ export function MainLayout(props: MainLayoutProps) {
           color="primary"
           position="relative"
         >
-          <ContainerComponent maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
+          <Container maxWidth={NAVIGATION_MAX_WIDTH} disableGutters>
             <Toolbar>
               <StyledLeft>
                 <StyledLogoWrapper>
@@ -366,7 +366,7 @@ export function MainLayout(props: MainLayoutProps) {
                 {(quickActions ?? []).map(buildNav('qa', buildIconButton))}
               </StyledRight>
             </Toolbar>
-          </ContainerComponent>
+          </Container>
         </InnerAppBarTop>
         {tabBarTitle || (_isArr(navTabItems) && !_isArrEmpty(navTabItems)) ? (
           <AppBar
@@ -375,7 +375,7 @@ export function MainLayout(props: MainLayoutProps) {
             elevation={0}
             position="static"
           >
-            <ContainerComponent maxWidth={NAVIGATION_MAX_WIDTH}>
+            <Container maxWidth={NAVIGATION_MAX_WIDTH}>
               <Tabs
                 aria-label="area navigation"
                 indicatorColor="secondary"
@@ -403,13 +403,13 @@ export function MainLayout(props: MainLayoutProps) {
                     />
                   ))}
               </Tabs>
-            </ContainerComponent>
+            </Container>
           </AppBar>
         ) : null}
       </AppBar>
       <StyledContent>{children}</StyledContent>
       <footer>
-        <ContainerComponent maxWidth={FOOTER_MAX_WIDTH}>
+        <Container maxWidth={FOOTER_MAX_WIDTH}>
           <Box
             component={'div'}
             sx={{
@@ -455,7 +455,7 @@ export function MainLayout(props: MainLayoutProps) {
               </Typography>
             </Box>
           </Box>
-        </ContainerComponent>
+        </Container>
       </footer>
     </Fragment>
   )
