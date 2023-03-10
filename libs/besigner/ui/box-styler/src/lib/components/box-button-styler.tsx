@@ -18,89 +18,285 @@
 import type { Measurement } from '@aglyn/shared-data-enums'
 import '@aglyn/shared-data-jsx'
 import { alpha, darken } from '@aglyn/shared-ui-theme'
-import { Box as MuiBox, type BoxProps, ButtonBase, styled } from '@mui/material'
+import { ButtonBase, Collapse, lighten, styled } from '@mui/material'
 import { emphasize } from '@mui/system/colorManipulator'
-import { forwardRef, useCallback } from 'react'
+import { forwardRef, useCallback, useState } from 'react'
 import type { Measurements } from '../types'
 
 export { Measurements }
 
+const GAP = 1
 const BTN_SIZE = 20
 const HEIGHT = 200
 
-export interface BoxButtonStylerProps extends Omit<BoxProps, 'onChange'> {
+const StyledWrapper = styled('div')(({ theme }) => ({
+  width: '100%',
+  height: HEIGHT,
+  backgroundColor: theme.palette.surface.dark,
+  display: 'flex',
+  flexDirection: 'column',
+  position: 'relative',
+  textAlign: 'center',
+  overflow: 'hidden',
+
+  '.marginButton': {
+    overflow: 'hidden',
+    textAlign: 'center',
+    bgcolor: 'secondary.light',
+    cursor: 'pointer',
+    backfaceVisibility: 'hidden',
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: theme.palette.warning.dark,
+    backgroundColor: alpha(theme.palette.surface.main, 0.96),
+    color: theme.palette.getContrastText(
+      alpha(theme.palette.surface.main, 0.96),
+    ),
+    background: [
+      'linear-gradient(',
+      '260deg, ',
+      `${darken(theme.palette.surface.light, 0.08)}, `,
+      `${lighten(theme.palette.surface.light, 0.12)}`,
+      ') content-box',
+    ].join(''),
+
+    '&.marginTop': {
+      width: `calc(100% - ${GAP * 2}px)`,
+      marginLeft: GAP,
+      marginBottom: GAP,
+      height: `${BTN_SIZE}%`,
+      borderBottomWidth: 0,
+      clipPath: `polygon(0% 0%, 100% 0%, ${
+        100 - BTN_SIZE
+      }% 100%, ${BTN_SIZE}% 100%)`,
+    },
+
+    '&.marginLeft': {
+      top: 0,
+      left: 0,
+      position: 'absolute',
+      borderRightWidth: 0,
+      height: '100%',
+      width: `calc(${BTN_SIZE}% - ${GAP}px)`,
+      marginRight: GAP,
+      clipPath: `polygon(0% 0%, 100% ${BTN_SIZE}%, 100% ${
+        100 - BTN_SIZE
+      }%, 0% 100%)`,
+    },
+
+    '&.marginRight': {
+      top: 0,
+      right: 0,
+      borderLeftWidth: 0,
+      height: '100%',
+      width: `calc(${BTN_SIZE}% - ${GAP}px)`,
+      marginLeft: GAP,
+      position: 'absolute',
+      clipPath: `polygon(0% ${BTN_SIZE}%, 100% 0%, 100% 100%, 0% ${
+        100 - BTN_SIZE
+      }%)`,
+    },
+
+    '&.marginBottom': {
+      width: `calc(100% - ${GAP * 2}px)`,
+      marginLeft: GAP,
+      marginTop: GAP,
+      borderTopWidth: 0,
+      height: `${BTN_SIZE}%`,
+      clipPath: `polygon(${BTN_SIZE}% 0%, ${
+        100 - BTN_SIZE
+      }% 0%, 100% 100%, 0% 100%)`,
+    },
+  },
+
+  '.paddingContainer': {
+    width: `calc(100% - ${BTN_SIZE * 2}%)`,
+    height: `calc(100% - ${BTN_SIZE * 2}%)`,
+    display: 'flex',
+    flexDirection: 'column',
+    margin: '0 auto',
+    position: 'relative',
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
+
+  '.paddingButton': {
+    overflow: 'hidden',
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: theme.palette.success.dark,
+    backfaceVisibility: 'hidden',
+    backgroundColor: darken(theme.palette.surface.main, 0.12),
+    background: [
+      'linear-gradient(',
+      '65deg, ',
+      `${lighten(theme.palette.tertiary.main, 0.76)}, `,
+      `${lighten(theme.palette.secondary.main, 0.76)}`,
+      ') content-box',
+    ].join(''),
+    color: theme.palette.getContrastText(
+      lighten(theme.palette.tertiary.main, 0.76),
+    ),
+
+    '&.paddingTop': {
+      width: `calc(100% - ${GAP * 2}px)`,
+      marginLeft: GAP,
+      marginBottom: GAP,
+      height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+      borderBottomWidth: 0,
+      clipPath: `polygon(0% 0%, 100% 0%, calc(${BTN_SIZE * 2}% + (${
+        100 - BTN_SIZE
+      }% * 0.3333334)) 100%, calc(${BTN_SIZE}% + (${
+        BTN_SIZE * 2
+      }% * 0.3333334)) 100%)`,
+    },
+
+    '&.paddingLeft': {
+      top: 0,
+      left: 0,
+      position: 'absolute',
+      borderRightWidth: 0,
+      height: '100%',
+      width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+      clipPath: `polygon(0% 0%, 100% calc(${BTN_SIZE}% + (${
+        BTN_SIZE * 2
+      }% * 0.3333334)), 100% calc(${BTN_SIZE * 2}% + (${
+        100 - BTN_SIZE
+      }% * 0.3333334)), 0% 100%)`,
+    },
+
+    '&.paddingRight': {
+      top: 0,
+      right: 0,
+      position: 'absolute',
+      height: '100%',
+      marginLeft: GAP,
+      width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+      borderLeftWidth: 0,
+      clipPath: `polygon(0% calc(${BTN_SIZE}% + (${
+        BTN_SIZE * 2
+      }% * 0.3333334)), 100% 0%, 100% 100%, 0% calc(${BTN_SIZE * 2}% + (${
+        100 - BTN_SIZE
+      }% * 0.3333334)))`,
+    },
+
+    '&.paddingBottom': {
+      width: `calc(100% - ${GAP * 2}px)`,
+      marginLeft: GAP,
+      marginTop: GAP,
+      height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+      borderTopWidth: 0,
+      clipPath: `polygon(calc(${BTN_SIZE}% + (${
+        BTN_SIZE * 2
+      }% * 0.3333334)) 0%, calc(${BTN_SIZE * 2}% + (${
+        100 - BTN_SIZE
+      }% * 0.3333334)) 0%, 100% 100%, 0% 100%)`,
+    },
+  },
+
+  '.contents': {
+    borderStyle: 'solid',
+    borderWidth: 1,
+    borderColor: theme.palette.info.dark,
+    color: theme.palette.text.primary,
+    backgroundColor: theme.palette.surface.light,
+    width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+    height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
+    margin: '0 auto',
+    position: 'relative',
+    textAlign: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: 12,
+
+    ':before': {
+      content: '""',
+      position: 'absolute',
+      left: '-0.09em',
+      top: '-0.29em',
+      width: '0',
+      height: '0.5em',
+      background: 'transparent',
+      borderRight: `0.5em solid ${alpha(theme.palette.info.dark, 0.36)}`,
+      borderBottom: '0.5em solid transparent',
+      borderTop: '0.5em solid transparent',
+      transform: 'rotate(45deg)',
+    },
+  },
+
+  '.label': {
+    width: 'auto',
+    position: 'absolute',
+    textAlign: 'left',
+    pointerEvents: 'none',
+    left: 0,
+    top: 0,
+    paddingLeft: theme.spacing(0.5),
+    paddingRight: theme.spacing(0.5),
+    paddingTop: theme.spacing(0.25),
+    paddingBottom: theme.spacing(0.25),
+    borderBottom: `1px solid ${theme.palette.text.secondary}`,
+    borderRight: `1px solid ${theme.palette.text.secondary}`,
+    color: theme.palette.getContrastText(
+      alpha(theme.palette.surface.main, 0.76),
+    ),
+    backgroundColor: alpha(emphasize(theme.palette.surface.main, 0.36), 0.12),
+    fontSize: theme.typography.pxToRem(12),
+
+    ':before': {
+      content: '""',
+      position: 'absolute',
+      left: '-0.09em',
+      top: '-0.29em',
+      width: '0',
+      height: '0.5em',
+      background: 'transparent',
+      borderRight: `0.5em solid ${alpha(theme.palette.surface.main, 0.36)}`,
+      borderBottom: '0.5em solid transparent',
+      borderTop: '0.5em solid transparent',
+      transform: 'rotate(45deg)',
+    },
+
+    '&.margin': {
+      borderColor: theme.palette.warning.dark,
+      backgroundColor: alpha(emphasize(theme.palette.warning.dark, 0.36), 0.12),
+      color: theme.palette.getContrastText(
+        darken(theme.palette.surface.light, 0.08),
+      ),
+
+      ':before': {
+        borderColor: alpha(theme.palette.warning.dark, 0.36),
+      },
+    },
+
+    '&.padding': {
+      borderColor: theme.palette.success.dark,
+      backgroundColor: alpha(emphasize(theme.palette.success.dark, 0.36), 0.12),
+      color: theme.palette.getContrastText(
+        lighten(theme.palette.tertiary.main, 0.76),
+      ),
+
+      ':before': {
+        borderColor: alpha(theme.palette.success.dark, 0.36),
+      },
+    },
+  },
+}))
+
+export interface BoxButtonStylerProps
+  extends Omit<JSX.ComponentProps<typeof StyledWrapper>, 'onChange'> {
   measurements?: Measurements
   size?: { width?: Measurement; height: Measurement }
   onChange?: (measurements?: Measurements) => void
 }
 
-const MarginButton = styled(ButtonBase)(({ theme }) => ({
-  overflow: 'hidden',
-  textAlign: 'center',
-  bgcolor: 'secondary.light',
-  cursor: 'pointer',
-  backfaceVisibility: 'hidden',
-  borderStyle: 'dashed',
-  borderWidth: 1,
-  borderColor: theme.palette.warning.dark,
-  backgroundColor: alpha(theme.palette.surface.main, 0.96),
-  color: theme.palette.getContrastText(alpha(theme.palette.surface.main, 0.96)),
-}))
-
-const PaddingButton = styled(ButtonBase)(({ theme }) => ({
-  overflow: 'hidden',
-  borderStyle: 'dashed',
-  borderWidth: 1,
-  borderColor: theme.palette.success.dark,
-  backfaceVisibility: 'hidden',
-  backgroundColor: alpha(darken(theme.palette.surface.main, 0.12), 0.96),
-  background: [
-    'linear-gradient(',
-    '65deg, ',
-    `${alpha(theme.palette.tertiary.main, 0.12)}, `,
-    `${alpha(theme.palette.secondary.main, 0.12)}`,
-    ') content-box',
-  ].join(''),
-  color: theme.palette.getContrastText(
-    alpha(darken(theme.palette.surface.main, 0.12), 0.96),
-  ),
-}))
-
-const Label = styled(MuiBox)(({ theme }) => ({
-  width: 'auto',
-  position: 'absolute',
-  textAlign: 'left',
-  left: 0,
-  top: 0,
-  paddingLeft: theme.spacing(0.5),
-  paddingRight: theme.spacing(0.5),
-  paddingTop: theme.spacing(0.25),
-  paddingBottom: theme.spacing(0.25),
-  borderBottom: `1px solid ${theme.palette.text.secondary}`,
-  borderRight: `1px solid ${theme.palette.text.secondary}`,
-  color: theme.palette.getContrastText(alpha(theme.palette.surface.main, 0.76)),
-  backgroundColor: alpha(emphasize(theme.palette.surface.main, 0.36), 0.12),
-  fontSize: theme.typography.pxToRem(12),
-
-  ':before': {
-    content: '""',
-    position: 'absolute',
-    left: '-0.09em',
-    top: '-0.29em',
-    width: '0',
-    height: '0.5em',
-    background: 'transparent',
-    borderRight: `0.5em solid ${alpha(theme.palette.surface.main, 0.36)}`,
-    borderBottom: '0.5em solid transparent',
-    borderTop: '0.5em solid transparent',
-    transform: 'rotate(45deg)',
-  },
-}))
-
 export const BoxButtonStyler = forwardRef<any, BoxButtonStylerProps>(
   (props, ref) => {
     const { measurements, size, onChange, ...rest } = props
     const { width, height } = { ...size }
+    const [editing, setEditing] = useState(null)
 
     const handleChange = useCallback(
       (key: keyof Measurements) => (dimension: Measurement) => {
@@ -111,224 +307,31 @@ export const BoxButtonStyler = forwardRef<any, BoxButtonStylerProps>(
     )
 
     return (
-      <MuiBox
-        ref={ref}
-        width={1}
-        height={HEIGHT}
-        bgcolor="background.default"
-        display="flex"
-        flexDirection="column"
-        position="relative"
-        textAlign="center"
-        overflow="hidden"
-        {...rest}
-      >
-        <MarginButton
-          sx={{
-            width: 1,
-            height: `${BTN_SIZE}%`,
-            borderBottomWidth: 0,
-            clipPath: `polygon(0% 0%, 100% 0%, ${
-              100 - BTN_SIZE
-            }% 100%, ${BTN_SIZE}% 100%)`,
-          }}
-        >
-          mt
-        </MarginButton>
-        <MarginButton
-          sx={{
-            top: 0,
-            left: 0,
-            position: 'absolute',
-            borderRightWidth: 0,
-            height: 1,
-            width: `${BTN_SIZE}%`,
-            clipPath: `polygon(0% 0%, 100% ${BTN_SIZE}%, 100% ${
-              100 - BTN_SIZE
-            }%, 0% 100%)`,
-          }}
-        >
-          ml
-        </MarginButton>
+      <>
+        <StyledWrapper ref={ref} {...rest}>
+          <ButtonBase className="marginButton marginTop">mt</ButtonBase>
+          <ButtonBase className="marginButton marginLeft">ml</ButtonBase>
 
-        <MuiBox
-          width={`calc(100% - ${BTN_SIZE * 2}%)`}
-          height={`calc(100% - ${BTN_SIZE * 2}%)`}
-          display="flex"
-          flexDirection="column"
-          margin="0 auto"
-          position="relative"
-          textAlign="center"
-          overflow="hidden"
-        >
-          <PaddingButton
-            sx={{
-              width: 1,
-              height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-              borderBottomWidth: 0,
-              clipPath: `polygon(0% 0%, 100% 0%, calc(${BTN_SIZE * 2}% + (${
-                100 - BTN_SIZE
-              }% * 0.3333334)) 100%, calc(${BTN_SIZE}% + (${
-                BTN_SIZE * 2
-              }% * 0.3333334)) 100%)`,
-            }}
-          >
-            pt
-          </PaddingButton>
-          <PaddingButton
-            sx={{
-              top: 0,
-              left: 0,
-              position: 'absolute',
-              borderRightWidth: 0,
-              height: 1,
-              width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-              clipPath: `polygon(0% 0%, 100% calc(${BTN_SIZE}% + (${
-                BTN_SIZE * 2
-              }% * 0.3333334)), 100% calc(${BTN_SIZE * 2}% + (${
-                100 - BTN_SIZE
-              }% * 0.3333334)), 0% 100%)`,
-            }}
-          >
-            pl
-          </PaddingButton>
+          <div className="paddingContainer">
+            <ButtonBase className="paddingButton paddingTop">pt</ButtonBase>
+            <ButtonBase className="paddingButton paddingLeft">pl</ButtonBase>
 
-          <MuiBox
-            width={`calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`}
-            height={`calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`}
-            margin="0 auto"
-            position="relative"
-            textAlign="center"
-            display="flex"
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            fontSize={12}
-            sx={(theme) => ({
-              borderStyle: 'solid',
-              borderWidth: 1,
-              borderColor: theme.palette.info.dark,
-              color: theme.palette.getContrastText(
-                alpha(darken(theme.palette.surface.main, 0.26), 0.12),
-              ),
-              backgroundColor: alpha(
-                darken(theme.palette.surface.main, 0.26),
-                0.12,
-              ),
+            <div className="contents">
+              <div>Contents</div>
+            </div>
 
-              ':before': {
-                content: '""',
-                position: 'absolute',
-                left: '-0.09em',
-                top: '-0.29em',
-                width: '0',
-                height: '0.5em',
-                background: 'transparent',
-                borderRight: `0.5em solid ${alpha(
-                  theme.palette.info.dark,
-                  0.36,
-                )}`,
-                borderBottom: '0.5em solid transparent',
-                borderTop: '0.5em solid transparent',
-                transform: 'rotate(45deg)',
-              },
-            })}
-          >
-            <div>Contents</div>
-          </MuiBox>
+            <ButtonBase className="paddingButton paddingRight">pr</ButtonBase>
+            <ButtonBase className="paddingButton paddingBottom">pb</ButtonBase>
 
-          <PaddingButton
-            sx={{
-              top: 0,
-              right: 0,
-              position: 'absolute',
-              height: 1,
-              width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-              borderLeftWidth: 0,
-              clipPath: `polygon(0% calc(${BTN_SIZE}% + (${
-                BTN_SIZE * 2
-              }% * 0.3333334)), 100% 0%, 100% 100%, 0% calc(${
-                BTN_SIZE * 2
-              }% + (${100 - BTN_SIZE}% * 0.3333334)))`,
-            }}
-          >
-            pr
-          </PaddingButton>
-          <PaddingButton
-            sx={{
-              width: 1,
-              height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334))`,
-              borderTopWidth: 0,
-              clipPath: `polygon(calc(${BTN_SIZE}% + (${
-                BTN_SIZE * 2
-              }% * 0.3333334)) 0%, calc(${BTN_SIZE * 2}% + (${
-                100 - BTN_SIZE
-              }% * 0.3333334)) 0%, 100% 100%, 0% 100%)`,
-            }}
-          >
-            pb
-          </PaddingButton>
+            <div className="label padding">{'Padding'}</div>
+          </div>
+          <ButtonBase className="marginButton marginRight">mr</ButtonBase>
+          <ButtonBase className="marginButton marginBottom">mb</ButtonBase>
 
-          <Label
-            sx={(theme) => ({
-              borderColor: theme.palette.success.dark,
-              backgroundColor: alpha(
-                emphasize(theme.palette.success.dark, 0.36),
-                0.12,
-              ),
-
-              ':before': {
-                borderColor: alpha(theme.palette.success.dark, 0.36),
-              },
-            })}
-          >
-            {'Padding'}
-          </Label>
-        </MuiBox>
-        <MarginButton
-          sx={{
-            top: 0,
-            right: 0,
-            borderLeftWidth: 0,
-            height: 1,
-            width: `${BTN_SIZE}%`,
-            position: 'absolute',
-            clipPath: `polygon(0% ${BTN_SIZE}%, 100% 0%, 100% 100%, 0% ${
-              100 - BTN_SIZE
-            }%)`,
-          }}
-        >
-          mr
-        </MarginButton>
-        <MarginButton
-          sx={{
-            width: 1,
-            borderTopWidth: 0,
-            height: `${BTN_SIZE}%`,
-            clipPath: `polygon(${BTN_SIZE}% 0%, ${
-              100 - BTN_SIZE
-            }% 0%, 100% 100%, 0% 100%)`,
-          }}
-        >
-          mb
-        </MarginButton>
-
-        <Label
-          sx={(theme) => ({
-            borderColor: theme.palette.warning.dark,
-            backgroundColor: alpha(
-              emphasize(theme.palette.warning.dark, 0.36),
-              0.12,
-            ),
-
-            ':before': {
-              borderColor: alpha(theme.palette.warning.dark, 0.36),
-            },
-          })}
-        >
-          {'Margin'}
-        </Label>
-      </MuiBox>
+          <div className="label margin">{'Margin'}</div>
+        </StyledWrapper>
+        <Collapse in={editing}></Collapse>
+      </>
     )
   },
 )
