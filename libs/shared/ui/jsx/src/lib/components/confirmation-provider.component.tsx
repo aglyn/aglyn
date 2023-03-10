@@ -34,7 +34,7 @@ import DialogConfirm from './dialog-confirm'
 export interface ConfirmationProviderComponentProps {
   defaultOptions?: ConfirmationContextConfig
   children?: JSX.Children
-  component: ElementType<{
+  component?: ElementType<{
     open: boolean
     options: ConfirmationContextConfig
     onClose: MouseEventHandler<unknown>

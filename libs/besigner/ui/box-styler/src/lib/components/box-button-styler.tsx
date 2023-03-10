@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { FlexboxButtonGroup } from '@aglyn/besigner-ui-form-fields'
 import type { Measurement } from '@aglyn/shared-data-enums'
 import '@aglyn/shared-data-jsx'
 import { alpha, darken } from '@aglyn/shared-ui-theme'
@@ -231,8 +232,8 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     position: 'absolute',
     textAlign: 'left',
     pointerEvents: 'none',
-    left: 0,
-    top: 0,
+    left: 1,
+    top: 1,
     paddingLeft: theme.spacing(0.5),
     paddingRight: theme.spacing(0.5),
     paddingTop: theme.spacing(0.25),
@@ -245,41 +246,39 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     backgroundColor: alpha(emphasize(theme.palette.surface.main, 0.36), 0.12),
     fontSize: theme.typography.pxToRem(12),
 
-    ':before': {
+    '& > .arrow:before': {
       content: '""',
       position: 'absolute',
-      left: '-0.09em',
-      top: '-0.29em',
-      width: '0',
-      height: '0.5em',
-      background: 'transparent',
-      borderRight: `0.5em solid ${alpha(theme.palette.surface.main, 0.36)}`,
-      borderBottom: '0.5em solid transparent',
-      borderTop: '0.5em solid transparent',
-      transform: 'rotate(45deg)',
+      left: 0,
+      top: 0,
+      width: 0,
+      height: 0,
+      borderTop: `0.5em solid ${emphasize(theme.palette.surface.main, 0.36)}`,
+      borderRight: '0.5em solid transparent',
+      overflow: 'hidden',
     },
 
     '&.margin': {
       borderColor: theme.palette.warning.dark,
-      backgroundColor: alpha(emphasize(theme.palette.warning.dark, 0.36), 0.12),
+      backgroundColor: lighten(theme.palette.warning.dark, 0.48),
       color: theme.palette.getContrastText(
-        darken(theme.palette.surface.light, 0.08),
+        emphasize(theme.palette.warning.dark, 0.48),
       ),
 
-      ':before': {
-        borderColor: alpha(theme.palette.warning.dark, 0.36),
+      '& > .arrow:before': {
+        borderTopColor: darken(theme.palette.warning.dark, 0.12),
       },
     },
 
     '&.padding': {
       borderColor: theme.palette.success.dark,
-      backgroundColor: alpha(emphasize(theme.palette.success.dark, 0.36), 0.12),
+      backgroundColor: lighten(theme.palette.success.dark, 0.48),
       color: theme.palette.getContrastText(
-        lighten(theme.palette.tertiary.main, 0.76),
+        emphasize(theme.palette.success.dark, 0.48),
       ),
 
-      ':before': {
-        borderColor: alpha(theme.palette.success.dark, 0.36),
+      '& > .arrow:before': {
+        borderTopColor: darken(theme.palette.success.dark, 0.12),
       },
     },
   },
@@ -323,12 +322,18 @@ export const BoxButtonStyler = forwardRef<any, BoxButtonStylerProps>(
             <ButtonBase className="paddingButton paddingRight">pr</ButtonBase>
             <ButtonBase className="paddingButton paddingBottom">pb</ButtonBase>
 
-            <div className="label padding">{'Padding'}</div>
+            <div className="label padding">
+              <div className="arrow"></div>
+              {'Padding'}
+            </div>
           </div>
           <ButtonBase className="marginButton marginRight">mr</ButtonBase>
           <ButtonBase className="marginButton marginBottom">mb</ButtonBase>
 
-          <div className="label margin">{'Margin'}</div>
+          <div className="label margin">
+            <div className="arrow"></div>
+            {'Margin'}
+          </div>
         </StyledWrapper>
         <Collapse in={editing}></Collapse>
       </>
