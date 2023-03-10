@@ -34,8 +34,10 @@ import {
   DrawerProps,
   Grid,
   IconButton,
+  InputAdornment,
   InputBase,
   Slide,
+  Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
@@ -70,11 +72,21 @@ export const ComponentPicker = observer(
     const [filterOpen, setFilterOpen] = useState(false)
     const [filter, setFilter] = useState('')
     const [items, setItems] = useState(allItems)
+    const [selected, setSelected] = useState<Aglyn.NodeSchema<any>>(null)
+
+    const clearSelected = useCallback(() => setSelected(null), [])
+    const handleConfirm = useCallback(
+      (e: SyntheticEvent) => {
+        onSelectItem?.(e, { option: selected })
+      },
+      [selected, onSelectItem],
+    )
 
     const handleFilterChange = useCallback(
       async (e) => {
         const filter = e.currentTarget?.value || ''
         setFilter(filter)
+        clearSelected()
         let items = allItems
 
         if (filter) {
@@ -104,7 +116,7 @@ export const ComponentPicker = observer(
 
         setItems(items)
       },
-      [allItems],
+      [allItems, clearSelected],
     )
 
     const handleClose = useCallback(
@@ -121,6 +133,7 @@ export const ComponentPicker = observer(
         open={open}
         maxWidth="sm"
         PaperProps={{ sx: { width: '100%' } }}
+        TransitionComponent={Transition}
         {...rest}
       >
         <AppBar position="relative">
@@ -133,7 +146,13 @@ export const ComponentPicker = observer(
             >
               <MdiIcon path={ICON_VARIANT_CLOSE.path} />
             </IconButton>
-            <Typography sx={{ ml: 2, flex: 1 }} variant="h6" component="div">
+            <Typography
+              sx={{ ml: 2, flex: 1 }}
+              variant="h6"
+              component="div"
+              textOverflow="ellipsis"
+              noWrap
+            >
               {'Choose element'}
             </Typography>
             <IconButton
@@ -152,53 +171,45 @@ export const ComponentPicker = observer(
           </Toolbar>
 
           <Collapse orientation="vertical" in={filterOpen}>
-            <Toolbar>
-              <Box
-                component="form"
-                color="inherit"
-                sx={{
-                  p: '2px 4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  width: 1,
-                  borderTop: 1,
-                  borderColor: 'divider',
-                }}
-              >
-                {/*<Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />*/}
-                <InputBase
-                  sx={{ ml: 1, flex: 1, color: 'inherit' }}
-                  placeholder="Search Elements"
-                  inputProps={{ 'aria-label': 'search elements' }}
-                  value={filter}
-                  onChange={handleFilterChange}
-                />
-                {Boolean(filter) && (
-                  <>
-                    <Divider
-                      sx={{ height: 28, m: 0.5 }}
-                      orientation="vertical"
-                    />
-                    <IconButton
-                      type="button"
-                      color="inherit"
-                      sx={{ p: '10px' }}
-                      aria-label="clear filter"
-                      onClick={handleFilterChange}
-                    >
-                      <MdiIcon path={ICON_VARIANT_CLEAR.path} />
-                    </IconButton>
-                  </>
-                )}
-                <IconButton
-                  type="button"
-                  sx={{ p: '10px' }}
-                  aria-label="search"
-                  disabled
-                >
-                  <MdiIcon path={ICON_VARIANT_SEARCH.path} />
-                </IconButton>
-              </Box>
+            <Toolbar
+              component="form"
+              variant="dense"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                width: 1,
+                borderTop: 1,
+                borderColor: 'divider',
+              }}
+            >
+              {/*<Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />*/}
+              <InputBase
+                sx={{ flex: 1, color: 'inherit' }}
+                placeholder="Search elements"
+                inputProps={{ 'aria-label': 'search elements' }}
+                value={filter}
+                onChange={handleFilterChange}
+                startAdornment={
+                  <InputAdornment sx={{ color: 'inherit' }} position="start">
+                    <MdiIcon path={ICON_VARIANT_SEARCH.path} />
+                  </InputAdornment>
+                }
+                endAdornment={
+                  filter && (
+                    <InputAdornment sx={{ color: 'inherit' }} position="end">
+                      <IconButton
+                        type="button"
+                        color="inherit"
+                        sx={{ p: '10px' }}
+                        aria-label="clear filter"
+                        onClick={handleFilterChange}
+                      >
+                        <MdiIcon path={ICON_VARIANT_CLEAR.path} />
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }
+              />
             </Toolbar>
           </Collapse>
         </AppBar>
@@ -227,11 +238,14 @@ export const ComponentPicker = observer(
                             {() => (
                               <Grid xs={4} sm={3} item>
                                 <NodeCard
-                                  sx={{ cursor: 'pointer' }}
+                                  sx={[
+                                    { cursor: 'pointer' },
+                                    selected?.$id === node?.$id
+                                      ? { borderColor: 'secondary.main' }
+                                      : null,
+                                  ]}
                                   node={node as any}
-                                  onClick={(e) =>
-                                    onSelectItem(e, { option: node })
-                                  }
+                                  onClick={(e) => setSelected(node)}
                                 />
                               </Grid>
                             )}
@@ -245,6 +259,25 @@ export const ComponentPicker = observer(
             />
           )}
         </DialogContent>
+        <Box sx={{ flex: '0 0 auto', display: 'flex' }}>
+          <Collapse in={Boolean(selected)} sx={{ p: 1, pl: 2, width: 1 }}>
+            <Stack
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Typography
+                variant="subtitle1"
+                textOverflow="ellipsis"
+                color="textSecondary"
+                noWrap
+              >
+                {selected?.['displayName'] || selected?.$id}
+              </Typography>
+              <Button onClick={handleConfirm}>{'Confirm'}</Button>
+            </Stack>
+          </Collapse>
+        </Box>
       </Dialog>
     )
   }),

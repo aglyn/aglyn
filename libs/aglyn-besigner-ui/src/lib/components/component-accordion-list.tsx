@@ -75,7 +75,10 @@ export const ComponentAccordionList = observer(
                             />
                             <DragOverlay dropAnimation={null}>
                               {draggable.isDragging && (
-                                <NodeCard node={node as any} />
+                                <NodeCard
+                                  node={node as any}
+                                  sx={{ zIndex: 9999 }}
+                                />
                               )}
                             </DragOverlay>
                           </>

@@ -18,16 +18,22 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_ELEMENT } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
-import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
 import {
   Card,
   CardProps,
   ListItemAvatar,
   ListItemText,
   Stack,
+  styled,
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef } from 'react'
+
+const StyledCard = styled(Card)(({ theme }) => ({
+  height: '100%',
+  minHeight: 100,
+  cursor: 'grab',
+}))
 
 export type NodeCardItemData =
   | Aglyn.PresetSchema<any>
@@ -39,7 +45,7 @@ export interface NodeCardProps extends CardProps {
 
 export const NodeCard = observer(
   forwardRef<any, NodeCardProps>((props, ref) => {
-    const { node, sx, ...rest } = props
+    const { node, ...rest } = props
     const label =
       node?.['label'] ||
       node?.displayName ||
@@ -47,15 +53,7 @@ export const NodeCard = observer(
       node?.$id
 
     return (
-      <Card
-        ref={ref}
-        variant="outlined"
-        sx={mergeSxProps(
-          { height: 1, minHeight: 100, cursor: 'grab', zIndex: 99999 },
-          sx,
-        )}
-        {...rest}
-      >
+      <StyledCard ref={ref} variant="outlined" {...rest}>
         <Stack
           height={1}
           minHeight={100}
@@ -91,7 +89,7 @@ export const NodeCard = observer(
             </ListItemText>
           </div>
         </Stack>
-      </Card>
+      </StyledCard>
     )
   }),
 )
