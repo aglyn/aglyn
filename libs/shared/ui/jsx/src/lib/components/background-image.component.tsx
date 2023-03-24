@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-import { CSSObject, styled } from '@aglyn/shared-ui-theme'
+import { styled } from '@aglyn/shared-ui-theme'
 import { _isEqualitySameType } from '@aglyn/shared-util-guards'
 import { Box, type BoxProps as MuiBoxProps } from '@mui/material'
+import type { CSSProperties } from 'react'
 
 interface OverrideProps {
   url: string
   parallax?: boolean
-  bgPosition?: CSSObject['backgroundPosition']
-  bgRepeat?: CSSObject['backgroundRepeat']
-  bgSize?: CSSObject['backgroundSize']
+  bgPosition?: CSSProperties['backgroundPosition']
+  bgRepeat?: CSSProperties['backgroundRepeat']
+  bgSize?: CSSProperties['backgroundSize']
 }
 
 export type BackgroundImageComponentProps = MuiBoxProps<any, OverrideProps>

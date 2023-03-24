@@ -21,9 +21,8 @@ import useId from '@aglyn/shared-ui-jsx/hooks/use-id'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { CSS as css } from '@dnd-kit/utilities'
 import { mergeProps } from '@react-aria/utils'
-import type * as CSS from 'csstype'
 import { observer } from 'mobx-react-lite'
-import { Children, cloneElement, useEffect, useRef } from 'react'
+import { Children, cloneElement, CSSProperties, useEffect, useRef } from 'react'
 
 export interface DraggableDroppableProps<T extends { $id: string }> {
   children: JSX.Element
@@ -63,7 +62,7 @@ export const DraggableDroppable = observer(
     const transform = draggable.transform
     const isTransforming = Boolean(draggable.transform)
     const child = Children.only(children)
-    const style: CSS.Properties = {
+    const style: CSSProperties = {
       ...child.props.style,
       // cursor: 'move',
       outlineWidth: 2,

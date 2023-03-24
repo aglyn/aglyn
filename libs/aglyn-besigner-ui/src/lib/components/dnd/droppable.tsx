@@ -20,14 +20,19 @@ import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import useId from '@aglyn/shared-ui-jsx/hooks/use-id'
 import { useDroppable } from '@dnd-kit/core'
 import { mergeProps } from '@react-aria/utils'
-import type * as CSS from 'csstype'
 import { observer } from 'mobx-react-lite'
-import { Children, cloneElement, forwardRef, MutableRefObject } from 'react'
+import {
+  Children,
+  cloneElement,
+  CSSProperties,
+  forwardRef,
+  MutableRefObject,
+} from 'react'
 
 export interface DroppableChildProps<T extends { $id: string }>
   extends Omit<DroppableProps<T>, 'children'> {
   droppable: ReturnType<typeof useDroppable>
-  style: CSS.Properties
+  style: CSSProperties
   forwardRef: MutableRefObject<any>
 }
 export type DroppableChild<T extends { $id: string }> = (
@@ -55,7 +60,7 @@ export const Droppable = observer(
       disabled,
     })
 
-    const style: CSS.Properties = {
+    const style: CSSProperties = {
       outlineWidth: '2',
       outlineOffset: '-1',
       outlineColor: 'grey',

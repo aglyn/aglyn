@@ -20,14 +20,19 @@ import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import useId from '@aglyn/shared-ui-jsx/hooks/use-id'
 import { useDraggable } from '@dnd-kit/core'
 import { mergeProps } from '@react-aria/utils'
-import type * as CSS from 'csstype'
 import { observer } from 'mobx-react-lite'
-import { Children, cloneElement, forwardRef, MutableRefObject } from 'react'
+import {
+  Children,
+  cloneElement,
+  CSSProperties,
+  forwardRef,
+  MutableRefObject,
+} from 'react'
 
 export interface DraggableChildProps<T extends { $id?: string }>
   extends Omit<DraggableProps<T>, 'children'> {
   draggable: ReturnType<typeof useDraggable>
-  style: CSS.Properties
+  style: CSSProperties
   forwardRef: MutableRefObject<any>
 }
 export type DraggableChild<T extends { $id?: string }> = (
@@ -55,7 +60,7 @@ const Draggable = observer(
     })
 
     const transform = draggable.transform
-    const style: CSS.Properties = {
+    const style: CSSProperties = {
       cursor: 'move',
       ...(draggable.isDragging
         ? {
