@@ -16,6 +16,7 @@
  */
 
 export * from './lib/components/app-link'
+export * from './lib/components/aspect-ratio'
 export * from './lib/components/background-image.component'
 export * from './lib/components/card-list-item'
 export * from './lib/components/children-function-prop'
