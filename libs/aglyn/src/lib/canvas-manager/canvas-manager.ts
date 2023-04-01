@@ -39,7 +39,8 @@ import {
 } from '../components-manager'
 import { createIdUrlSafe } from '../constants'
 import type { PluginId } from '../plugin-manager'
-import type { HostUid } from '../types'
+
+import { HostUid } from '../types/workspace'
 
 export enum NodeType {
   NODE = 'node',
