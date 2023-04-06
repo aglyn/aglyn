@@ -32,20 +32,18 @@ import {
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
 import { NodeType } from '../aglyn'
-import {
-  ComponentId,
-  ComponentSchema,
-  PresetSchema,
-} from '../components-manager'
 import { createIdUrlSafe } from '../constants'
 import type { PluginId } from '../plugin-manager'
 import type {
+  ComponentId,
+  ComponentSchema,
   NodeBreadcrumbPath,
   NodeId,
   NodeSchema,
   NodeSchemaJSON,
   NodeSchemaNested,
   NodesMap,
+  PresetSchema,
   ProcessableNodes,
 } from '../types/nodes'
 
@@ -135,19 +133,9 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
 }
 
 class HistoryManager<K extends string, T> {
-  public past = observable.array<Map<K, T>>([], { deep: false })
-
   public present = observable.map<K, T>({})
-
+  public past = observable.array<Map<K, T>>([], { deep: false })
   public future = observable.array<Map<K, T>>([], { deep: false })
-
-  public get canUndo() {
-    return this.past.length >= 1
-  }
-
-  public get canRedo() {
-    return this.future.length >= 1
-  }
 
   constructor() {
     makeObservable(this, {
@@ -160,6 +148,14 @@ class HistoryManager<K extends string, T> {
       clearHistory: action,
       saveHistory: action,
     })
+  }
+
+  public get canUndo() {
+    return this.past.length >= 1
+  }
+
+  public get canRedo() {
+    return this.future.length >= 1
   }
 
   public undo() {
@@ -200,6 +196,26 @@ class HistoryManager<K extends string, T> {
 export class CanvasManager {
   private _initial = null
   private _history: HistoryManager<NodeId, NodeSchema<any>> = null
+
+  constructor(public aglyn?: Aglyn) {
+    makeObservable(this, {
+      nodes: computed,
+      undo: action,
+      redo: action,
+      saveHistory: action,
+      clearHistory: action,
+      clearNodes: action,
+      updateInitialNodes: action,
+      setNode: action,
+      setNodes: action,
+      deleteNode: action,
+      reparentNode: action,
+      reorderNode: action,
+    })
+
+    this._history = new HistoryManager<NodeId, NodeSchema<any>>()
+  }
+
   public get nodes() {
     return this._history.present
   }
@@ -286,25 +302,6 @@ export class CanvasManager {
 
     return newNode
   })
-
-  constructor(public aglyn?: Aglyn) {
-    makeObservable(this, {
-      nodes: computed,
-      undo: action,
-      redo: action,
-      saveHistory: action,
-      clearHistory: action,
-      clearNodes: action,
-      updateInitialNodes: action,
-      setNode: action,
-      setNodes: action,
-      deleteNode: action,
-      reparentNode: action,
-      reorderNode: action,
-    })
-
-    this._history = new HistoryManager<NodeId, NodeSchema<any>>()
-  }
 
   public toJSON() {
     return {
