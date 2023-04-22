@@ -364,4 +364,3 @@ export const getConsoleMetaThemeColor = (mode: 'light' | 'dark' = 'light') => {
   return themeColor[mode]
 }
 export default consoleThemeLight
-//test-gpg
