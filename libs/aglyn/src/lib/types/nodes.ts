@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { AglynDocument } from '@aglyn/aglyn/types/shared'
 import type { Dictionary } from '@aglyn/shared-data-types'
 import type {
   ConditionDefinition,
@@ -27,12 +26,6 @@ import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
 import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { ComponentClass, ComponentProps } from 'react'
-
-import type {
-  Literal as UnistLiteral,
-  Node as UnistNode,
-  Parent as UnistParent,
-} from 'unist'
 import type { NODE_ROOT_ID } from '../canvas-manager'
 
 import type {
@@ -41,55 +34,51 @@ import type {
   LinealDirectiveFlag,
 } from '../constants'
 import type { PluginId } from '../plugin-manager'
+import type { ElementContentMap, Node, Props, Taxonomic } from './ast'
+import type { AglynDocument } from './shared'
 import type { HostUid } from './workspace'
 
-export { UnistNode as Node }
+declare module './ast' {
+  /**
+   * This map registers all node types that may be used as top-level content in
+   * the document.
+   *
+   * These types are accepted inside `root` nodes.
+   *
+   * This interface can be augmented to register custom node types.
+   *
+   * @example
+   * declare module 'hast' {
+   *   interface RootContentMap {
+   *     // Allow using raw nodes defined by `rehype-raw`.
+   *     raw: Raw;
+   *   }
+   * }
+   */
+  export interface RootContentMap {
+    canvasNode: CanvasNode
+    canvasElement: CanvasElement
+  }
 
-/**
- * This map registers all node types that may be used as top-level content in
- * the document.
- *
- * These types are accepted inside `root` nodes.
- *
- * This interface can be augmented to register custom node types.
- *
- * @example
- * declare module 'hast' {
- *   interface RootContentMap {
- *     // Allow using raw nodes defined by `rehype-raw`.
- *     raw: Raw;
- *   }
- * }
- */
-export interface RootContentMap {
-  comment: Comment
-  doctype: DocType
-  element: Element
-  text: Text
-  canvasNode: CanvasNode
-  canvasElement: CanvasElement
-}
-
-/**
- * This map registers all node types that may be used as content in an element.
- *
- * These types are accepted inside `element` nodes.
- *
- * This interface can be augmented to register custom node types.
- *
- * @example
- * declare module 'hast' {
- *   interface RootContentMap {
- *     custom: Custom;
- *   }
- * }
- */
-export interface ElementContentMap {
-  comment: Comment
-  element: Element
-  text: Text
-  canvasNode: CanvasNode
-  canvasElement: CanvasElement
+  /**
+   * This map registers all node types that may be used as content in an
+   * element.
+   *
+   * These types are accepted inside `element` nodes.
+   *
+   * This interface can be augmented to register custom node types.
+   *
+   * @example
+   * declare module 'hast' {
+   *   interface RootContentMap {
+   *     custom: Custom;
+   *   }
+   * }
+   */
+  export interface ElementContentMap {
+    canvasNode: CanvasNode
+    canvasElement: CanvasElement
+  }
 }
 
 /**
@@ -107,196 +96,17 @@ export interface ElementContentMap {
  *   }
  * }
  */
-export interface CanvasNodeContentMap {
-  comment: Comment
-  element: Element
-  text: Text
+export interface CanvasNodeContentMap extends ElementContentMap {
   canvasNode: CanvasNode
   canvasElement: CanvasElement
 }
 
-export type Content = RootContent | ElementContent
-
-export type RootContent = RootContentMap[keyof RootContentMap]
-
-export type ElementContent = ElementContentMap[keyof ElementContentMap]
-
 export type CanvasNodeContent = CanvasNodeContentMap[keyof CanvasNodeContentMap]
-
-/**
- * Node in hast containing other nodes.
- */
-export interface Parent extends UnistParent {
-  /**
-   * List representing the children of a node.
-   */
-  children: Content[]
-}
-
-/**
- * Nodes in hast containing a value.
- */
-export interface Literal extends UnistLiteral {
-  value: string
-}
-
-/**
- * Root represents a document.
- * Can be used as the rood of a tree, or as a value of the
- * content field on a 'template' Element, never as a child.
- */
-export interface Root extends Parent {
-  /**
-   * Represents this variant of a Node.
-   */
-  type: 'root'
-
-  /**
-   * List representing the children of a node.
-   */
-  children: RootContent[]
-}
-
-/**
- * Element represents an HTML Element.
- */
-export interface Element extends Parent {
-  /**
-   * Represents this variant of a Node.
-   */
-  type: 'element'
-
-  /**
-   * Represents the element’s local name.
-   */
-  tagName: string
-
-  /**
-   * Represents information associated with the element.
-   */
-  properties?: Properties | undefined
-
-  /**
-   * If the tagName field is 'template', a content field can be present.
-   */
-  content?: Root | undefined
-
-  /**
-   * List representing the children of a node.
-   */
-  children: ElementContent[]
-}
-
-/**
- * Represents information associated with an element.
- */
-export interface Properties {
-  // prettier-ignore
-  [PropertyName: string]:
-    | boolean
-    | number
-    | string
-    | null
-    | undefined
-    | Array<string | number>
-}
-
-/**
- * Represents information associated with a dynamic element after js.
- */
-export interface Props {
-  // prettier-ignore
-  [PropertyName: string]:
-    | boolean
-    | number
-    | string
-    | null
-    | undefined
-    | Array<string | number>
-    | any
-}
-
-/**
- * Represents an HTML DocumentType.
- */
-export interface DocType extends UnistNode {
-  /**
-   * Represents this variant of a Node.
-   */
-  type: 'doctype'
-
-  name: string
-}
-
-/**
- * Represents an HTML Comment.
- */
-export interface Comment extends Literal {
-  /**
-   * Represents this variant of a Literal.
-   */
-  type: 'comment'
-}
-
-/**
- * Represents an HTML Text.
- */
-export interface Text extends Literal {
-  /**
-   * Represents this variant of a Literal.
-   */
-  type: 'text'
-}
-
-/**
- * Nodes in hast containing a value of the taxonomy name displayed.
- *
- * `domain` kind is reserved for representing top-level vertical
- * taxonomies. Examples would include things comparative to
- * - `education`
- * - `evolution`
- * - `television`
- *
- * `category` kind is reserved for representing low-level vertical
- * taxonomies. Examples would include things comparative to
- * - `science`
- * - `philosophy`
- * - `biology`
- *
- * `tag` kind is reserved for representing high-level taxonomies, potentially
- * shared across multiple categories and domains. Examples would include things
- * comparative to
- * - `healthy lifestyle`
- * - `intimacy`
- * - `2019 pandemic`
- *
- */
-export interface Taxonomy extends Literal {
-  /**
-   * Represents this variant of a Node.
-   */
-  type: 'taxonomy'
-
-  /**
-   * Represents the variant categorization of a Node.
-   */
-  kind: 'domain' | 'category' | 'tag'
-}
-
-/**
- * Taxonomic represents any node that may be categorized/classified
- */
-export interface Taxonomic {
-  /**
-   * Represents the additional property to declare taxonomies
-   */
-  taxonomies?: Taxonomy[] | undefined
-}
 
 /**
  * CanvasNode represents a the schema for building a JSX Element.
  */
-export interface CanvasNode extends UnistNode {
+export interface CanvasNode extends Node {
   /**
    * Represents this variant of a Node.
    */
@@ -379,7 +189,7 @@ export interface AbstractNodeSchema<P = JSX.AnyProps> extends CanvasNode {
  * CanvasPreset represents an encapsulated 'node' type as the root node for
  * crafting a living JSX Element
  */
-export interface CanvasPreset extends UnistNode<CanvasNode>, Taxonomic {
+export interface CanvasPreset extends Node<CanvasNode>, Taxonomic {
   /**
    * Represents this variant of a Node.
    */
