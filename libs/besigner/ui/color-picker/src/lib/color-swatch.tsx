@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import '@aglyn/shared-data-jsx'
 import { styled } from '@mui/material'
 import { forwardRef } from 'react'
 

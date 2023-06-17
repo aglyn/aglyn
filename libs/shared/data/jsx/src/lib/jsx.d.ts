@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import type {
   OverwriteCSSProperties,
   StandardCSSProperties,
 } from '@mui/system'
-import type * as CSS from 'csstype'
+import type { Pseudos } from 'csstype'
 
 declare global {
   namespace JSX {
@@ -35,10 +35,10 @@ declare global {
       | { [key: string]: T | null }
 
     /**
-     * Map of all CSS pseudo selectors (`:hover`, `:focus`, ...).
+     * Map of all CSS pseudo selectors (e.g., hover, focus).
      */
     export type CSSPseudoSelectorProps<Theme extends object = EmptyObj> = {
-      [K in CSS.Pseudos]?:
+      [K in Pseudos]?:
         | ((theme: Theme) => SystemStyleObject<Theme>)
         | SystemStyleObject<Theme>
     }

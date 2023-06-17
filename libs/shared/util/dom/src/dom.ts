@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,68 @@
  * limitations under the License.
  */
 
+import type { clippingParents, viewport } from './constants/enums'
+
+export type VisualViewport = EventTarget & {
+  width: number
+  height: number
+  offsetLeft: number
+  offsetTop: number
+  scale: number
+}
+
+export type Rect = {
+  width: number
+  height: number
+  x: number
+  y: number
+}
+
+export type ElementOffsets = {
+  y: number
+  x: number
+}
+
+export type ClientRectObject = {
+  x: number
+  y: number
+  top: number
+  left: number
+  right: number
+  bottom: number
+  width: number
+  height: number
+}
+
+export type VirtualElement = {
+  getBoundingClientRect: () => ClientRect | DOMRect
+  contextElement?: Element
+}
+
+export type Coordinates = {
+  x: number
+  y: number
+}
+
+export interface LayoutRect {
+  width: number
+  height: number
+  offsetLeft: number
+  offsetTop: number
+}
+
+export interface ViewRect extends LayoutRect {
+  top: number
+  left: number
+  right: number
+  bottom: number
+}
+
+export type Boundary = HTMLElement | Array<HTMLElement> | typeof clippingParents
+
+export type RootBoundary = typeof viewport | 'document'
+
 export * from './constants/enums'
-export * from './dom.d'
 
 export * from './lib/controllers/page-title'
 

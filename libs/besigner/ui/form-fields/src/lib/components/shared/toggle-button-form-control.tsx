@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import '@aglyn/shared-data-jsx'
 import MdiIcon, {
   type MdiIconProps,
 } from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'

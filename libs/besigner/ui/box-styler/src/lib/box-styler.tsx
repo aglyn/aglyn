@@ -16,7 +16,6 @@
  */
 
 import type { Measurement } from '@aglyn/shared-data-enums'
-import '@aglyn/shared-data-jsx'
 import { forwardRef, useCallback } from 'react'
 import Box, { type BoxProps } from './components/box'
 import BoxButtonStyler from './components/box-button-styler'

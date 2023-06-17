@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-import '@aglyn/shared-data-jsx'
-
 export * from './lib/constants/sample-data'
 export * from './lib/constants/shared'
 

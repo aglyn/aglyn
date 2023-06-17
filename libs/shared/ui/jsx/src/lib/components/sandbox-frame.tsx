@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import '@aglyn/shared-data-jsx'
 import { jssPreset, StylesProvider, useTheme } from '@mui/styles'
 
 import { create, type Jss, type JssOptions } from 'jss'
@@ -32,6 +31,7 @@ import React, {
   useRef,
   useState,
 } from 'react'
+
 import ReactFrameComponent from 'react-frame-component'
 
 import { useMergeRefs } from '../hooks/use-merge-refs'

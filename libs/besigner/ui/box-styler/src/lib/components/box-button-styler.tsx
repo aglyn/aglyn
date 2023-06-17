@@ -16,7 +16,6 @@
  */
 
 import type { Measurement } from '@aglyn/shared-data-enums'
-import '@aglyn/shared-data-jsx'
 import { alpha, darken } from '@aglyn/shared-ui-theme'
 import { ButtonBase, Collapse, lighten, styled } from '@mui/material'
 import { emphasize } from '@mui/system/colorManipulator'
