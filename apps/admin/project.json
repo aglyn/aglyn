@@ -6,10 +6,11 @@
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "defaultConfiguration": "production",
       "options": {
-        "root": "apps/admin",
         "outputPath": "dist/apps/admin"
       },
       "configurations": {
@@ -45,7 +46,9 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/admin"],
+      "outputs": [
+        "{workspaceRoot}/coverage/apps/admin"
+      ],
       "options": {
         "jestConfig": "apps/admin/jest.config.ts",
         "passWithNoTests": true
@@ -53,11 +56,18 @@
     },
     "lint": {
       "executor": "@nx/linter:eslint",
-      "outputs": ["{options.outputFile}"],
+      "outputs": [
+        "{options.outputFile}"
+      ],
       "options": {
-        "lintFilePatterns": ["apps/admin/**/*.{ts,tsx,js,jsx}"]
+        "lintFilePatterns": [
+          "apps/admin/**/*.{ts,tsx,js,jsx}"
+        ]
       }
     }
   },
-  "tags": ["scope:app", "scope:private"]
+  "tags": [
+    "scope:app",
+    "scope:private"
+  ]
 }

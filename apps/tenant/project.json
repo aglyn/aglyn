@@ -6,10 +6,11 @@
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "defaultConfiguration": "production",
       "options": {
-        "root": "apps/tenant",
         "outputPath": "dist/apps/tenant"
       },
       "configurations": {
@@ -46,7 +47,9 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/tenant"],
+      "outputs": [
+        "{workspaceRoot}/coverage/apps/tenant"
+      ],
       "options": {
         "jestConfig": "apps/tenant/jest.config.ts",
         "passWithNoTests": true
@@ -54,11 +57,18 @@
     },
     "lint": {
       "executor": "@nx/linter:eslint",
-      "outputs": ["{options.outputFile}"],
+      "outputs": [
+        "{options.outputFile}"
+      ],
       "options": {
-        "lintFilePatterns": ["apps/tenant/**/*.{ts,tsx,js,jsx}"]
+        "lintFilePatterns": [
+          "apps/tenant/**/*.{ts,tsx,js,jsx}"
+        ]
       }
     }
   },
-  "tags": ["scope:app", "scope:public"]
+  "tags": [
+    "scope:app",
+    "scope:public"
+  ]
 }
