@@ -22,6 +22,7 @@ import type {
 } from 'prop-types'
 import type {
   Component as ReactComponent,
+  JSXElementConstructor,
   ReactElement,
   ReactNode,
 } from 'react'
@@ -85,7 +86,9 @@ declare global {
 
     interface Element<
       P = any,
-      T extends string | ComponentType<any> = string | ComponentType<any>,
+      T extends string | JSXElementConstructor<any> =
+        | string
+        | JSXElementConstructor<any>,
     > {
       type: T
       props: P
