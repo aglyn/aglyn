@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="console:serve" type="js.build_tools.nx" singleton="false">
+  <configuration default="false" name="console:serve" type="js.build_tools.nx" singleton="true">
     <node-interpreter value="project" />
     <nxfile value="$PROJECT_DIR$/nx.json" />
     <tasks>

@@ -15,22 +15,10 @@
  * limitations under the License.
  */
 
-'use client' // @TODO ⚠️ Fix server runtime and remove directive to allow SSR
+'use client'
 
-// import { getInitColorSchemeScript } from '@mui/system'
-import ThemeProvider from './_components/theme/theme-provider'
+import { createTheme } from '@mui/material/styles'
 
+const defaultTheme = createTheme({})
 
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en">
-      <body>
-        {/*{getInitColorSchemeScript({*/}
-        {/*  defaultMode: 'system',*/}
-        {/*})}*/}
-
-        <ThemeProvider>{children}</ThemeProvider>
-      </body>
-    </html>
-  )
-}
+export default defaultTheme

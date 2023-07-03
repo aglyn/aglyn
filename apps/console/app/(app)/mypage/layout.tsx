@@ -18,11 +18,5 @@
 'use client'
 
 export default function Layout({ children }) {
-  return (
-    <>
-      dashboard
-      {children}
-      layout
-    </>
-  )
+  return <>{children}</>
 }
