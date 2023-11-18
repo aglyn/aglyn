@@ -9,9 +9,13 @@
   "devDependencies": {
     "eslint": "^8.48.0",
     "prettier": "^3.0.3",
-    "tsconfig": "workspace:*",
+    "tsconfig": "*",
     "turbo": "latest"
   },
-  "packageManager": "pnpm@8.9.0",
-  "name": "turbo"
+  "name": "turbo",
+  "packageManager": "npm@10.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }
