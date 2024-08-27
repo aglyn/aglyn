@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { Serializable } from '@aglyn/shared-data-types'
 import type { LogLevelString } from '@aglyn/shared-util-logger'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { AglynEmitter } from '../constants/emitter'

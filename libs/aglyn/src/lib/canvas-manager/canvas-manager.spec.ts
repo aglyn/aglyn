@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-import type { NodeId, NodeSchema, NodeSchemaNested } from '../types/nodes'
+import { NodeId, NodeSchema, NodeSchemaNested, NodeType } from '../types/nodes'
 import { CanvasManager, NODE_ROOT_ID } from './canvas-manager'
 
 describe('Aglyn: Screen Manager', () => {
   const nodes: Record<NodeId, NodeSchema> = {
     [NODE_ROOT_ID]: {
       $id: NODE_ROOT_ID,
+      type: NodeType.NODE,
       parentId: null,
       componentId: 'div',
       props: {},
@@ -30,6 +31,7 @@ describe('Aglyn: Screen Manager', () => {
     },
     child1: {
       $id: 'child1',
+      type: NodeType.NODE,
       parentId: NODE_ROOT_ID,
       componentId: 'div',
       props: {},
@@ -38,6 +40,7 @@ describe('Aglyn: Screen Manager', () => {
     },
     child2: {
       $id: 'child2',
+      type: NodeType.NODE,
       parentId: NODE_ROOT_ID,
       componentId: 'div',
       props: {},
@@ -46,6 +49,7 @@ describe('Aglyn: Screen Manager', () => {
     },
     'child1-1': {
       $id: 'child1-1',
+      type: NodeType.NODE,
       parentId: 'child1',
       componentId: 'div',
       props: {},
@@ -54,6 +58,7 @@ describe('Aglyn: Screen Manager', () => {
     },
     'child1-2': {
       $id: 'child1-2',
+      type: NodeType.NODE,
       parentId: 'child1',
       componentId: 'div',
       props: {},

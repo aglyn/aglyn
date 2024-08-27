@@ -17,21 +17,23 @@
 
 declare global {
   /** A type of null or undefined */
-  export type NUN = null | undefined
+  type NUN = null | undefined
   /** A type of which evaluates to true */
-  export type TRUTHY = object | any[] | true | string | symbol | number
+  type TRUTHY = object | any[] | true | string | symbol | number
   /** A type of which evaluates to true */
-  export type FALSY = null | undefined | false | never | 0
+  type FALSY = null | undefined | false | never | 0
   /** Construct a type from type of T or null */
-  export type OrNull<T> = T | null
+  type OrNull<T> = T | null
   /** Construct a type from type of T or undefined */
-  export type OrUndef<T> = T | undefined
+  type OrUndef<T> = T | undefined
   /** Construct a type from type of T or null or undefined */
-  export type OrNUN<T> = T | NUN
+  type OrNUN<T> = T | NUN
   /** Construct a type from type of T or never */
-  export type OrNever<T> = T | never
+  type OrNever<T> = T | never
   /** Construct a type from type of T or unknown */
-  export type OrUnk<T> = T | unknown
+  type OrUnk<T> = T | unknown
   /** Construct a type from type of T or any */
-  export type OrAny<T> = T | any
+  type OrAny<T> = T | any
 }
+
+export {}

@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-export * as DoD from './lib/dod'
-export * from './lib/crud'
-export * from './lib/initializable'
-export * from './lib/lifecycle'
-export * from './lib/normalized'
-export * from './lib/semantic'
+import { types as t } from 'mobx-state-tree'
+import { createIdUrlSafe } from '../constants'
+
+export const SafeId = t.optional(t.identifier, () => createIdUrlSafe(), [
+  null,
+  undefined,
+])

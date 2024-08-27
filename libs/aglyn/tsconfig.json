@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "strict": true,
     "types": ["@tshelpers", "@jsx"]
   },
   "files": [],

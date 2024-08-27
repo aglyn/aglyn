@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,6 @@ import {
 } from '../types/nodes'
 
 export const NODE_ROOT_ID = '_@_'
-export const NODE_ID_LENGTH = 10
 export const NODE_ROOT_LABEL = 'Document'
 
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
@@ -346,7 +345,7 @@ export class CanvasManager {
     this._history.clearPast()
   }
   public createNodeId(): NodeId {
-    return createIdUrlSafe(NODE_ID_LENGTH)
+    return createIdUrlSafe()
   }
   public createNode(
     schema: PartialKeys<NodeSchema<any>, '$id'>,
@@ -377,7 +376,7 @@ export class CanvasManager {
   public setNodes(schemas: NodesMap, merge = false): this {
     if (!schemas) throw new Error('Invalid schemas')
     const cloned = toJS(schemas)
-    const nodes = {}
+    const nodes: Record<NodeId, NodeSchema<any>> = {}
     for (const nodeId in cloned) {
       const node = cloned[nodeId]
       if (node) nodes[nodeId] = this.createNode(node)

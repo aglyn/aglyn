@@ -16,7 +16,9 @@
  */
 
 declare global {
-  export interface LengthLike {
+  interface LengthLike {
     readonly length: number
   }
 }
+
+export {}

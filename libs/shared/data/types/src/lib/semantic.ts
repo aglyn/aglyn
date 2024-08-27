@@ -34,21 +34,21 @@ export namespace Version {
   export type Patch<N extends NiD = 0> = `.${N}`
 
   export type Pre<
-    PRN extends PreName = null,
-    PRV extends NiD = 0,
+    PRN extends OrUndef<PreName> = undefined,
+    PRV extends OrUndef<NiD> = 0,
   > = Conditional<
     PRN,
     PreName,
     Conditional<PRV, NiD, `-${PRN}.${PRV}`, `-${PRN}`>
   >
-  export type Build<N extends NiD = null> = Conditional<N, NiD, `+${N}`>
+  export type Build<N extends OrUndef<NiD> = undefined> = Conditional<N, NiD, `+${N}`>
 
   export type Semantic<
     MAJ extends NiD = 0,
     MIN extends NiD = 0,
     PAT extends NiD = 0,
-    PRN extends PreName = null,
-    PRV extends NiD = null,
-    BLD extends NiD = null,
+    PRN extends OrUndef<PreName> = undefined,
+    PRV extends OrUndef<NiD> = undefined,
+    BLD extends OrUndef<NiD> = undefined,
   > = `${Major<MAJ>}${Minor<MIN>}${Patch<PAT>}${Pre<PRN, PRV>}${Build<BLD>}`
 }

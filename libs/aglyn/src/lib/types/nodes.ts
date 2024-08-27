@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -125,7 +125,7 @@ export interface CanvasNode extends Node {
   /**
    * Represents the element's parent unique identifier
    */
-  parentId?: string | undefined
+  parentId?: string | undefined | null
 
   /**
    * Represents the elements' component unique identifier

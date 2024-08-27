@@ -15,9 +15,6 @@
  * limitations under the License.
  */
 
-export * as DoD from './lib/dod'
-export * from './lib/crud'
-export * from './lib/initializable'
-export * from './lib/lifecycle'
-export * from './lib/normalized'
-export * from './lib/semantic'
+export * from './common'
+export * from './json'
+export * from './types'

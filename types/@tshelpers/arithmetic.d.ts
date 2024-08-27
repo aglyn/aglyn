@@ -24,12 +24,16 @@ declare global {
 
   type Length<T extends any[]> = T extends { length: infer L } ? L : never
 
-  export type Add<A extends number, B extends number> = Length<
+  type Add<A extends number, B extends number> = Length<
     [...BuildTuple<A>, ...BuildTuple<B>]
   >
 
-  export type Subtract<
-    A extends number,
-    B extends number,
-  > = BuildTuple<A> extends [...infer U, ...BuildTuple<B>] ? Length<U> : never
+  type Subtract<A extends number, B extends number> = BuildTuple<A> extends [
+    ...infer U,
+    ...BuildTuple<B>,
+  ]
+    ? Length<U>
+    : never
 }
+
+export {}

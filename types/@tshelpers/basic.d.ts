@@ -17,73 +17,69 @@
 
 declare global {
   /** The index key when symbol is not supported */
-  export type Key = string | number
+  type Key = string | number
 
   /** The index signature for an object key  */
-  export type PKey = string | number | symbol
+  type PKey = string | number | symbol
 
   /** The index signature for a mapped object */
-  export type MapKey = string | symbol
+  type MapKey = string | symbol
 
   /** The index signature type of T */
-  export type KeyOf<T> = keyof T
+  type KeyOf<T> = keyof T
 
   /** The index value type of T  */
-  export type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
+  type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
 
   /** From T, omit properties whose values are in union U */
-  export type OmitIndexOfType<T, U> = {
+  type OmitIndexOfType<T, U> = {
     [K in IndexOf<T, KeyOf<T>> extends U ? never : KeyOf<T>]: T[K]
   }
 
   /** From T, omit properties in union with 'K' "distributively" for union types */
-  export type DistributiveOmit<T, K extends PKey> = T extends any
-    ? Omit<T, K>
-    : never
+  type DistributiveOmit<T, K extends PKey> = T extends any ? Omit<T, K> : never
 
   /** Plain old dictionary of key(K)-value(T) pairs with string signatures */
-  export type KeyValueMap<K extends PKey = PKey, T = unknown> = Record<K, T>
+  type KeyValueMap<K extends PKey = PKey, T = unknown> = Record<K, T>
 
   /** Dictionary collection with string index types (optionally specify value by setting T) */
-  export type Dictionary<T = unknown> = KeyValueMap<string, T>
+  type Dictionary<T = unknown> = KeyValueMap<string, T>
 
   /** Any type of object record with string index types */
-  export type AnyProps = Partial<Record<string, unknown>>
+  type AnyProps = Partial<Record<string, unknown>>
 
   /** Dictionary collection optionally specify values to T */
-  export type EmptyObj<K extends PKey = PKey> = Record<K, never>
+  type EmptyObj<K extends PKey = PKey> = Record<K, never>
 
   /** Type safe object "{}" record (optionally specify index type) */
-  export type AnyObj<K extends PKey = PKey> = Record<K, unknown>
+  type AnyObj<K extends PKey = PKey> = Record<K, unknown>
 
   /** Record with only readonly properties */
-  export type ReadonlyRecord<K extends PKey, T> = Readonly<{ [P in K]: T }>
+  type ReadonlyRecord<K extends PKey, T> = Readonly<{ [P in K]: T }>
 
   /** Response value, Promise or Promise-Like value  */
-  export type ValueOrPromise<T> = T extends Promise<unknown>
-    ? T
-    : T | PromiseLike<T>
+  type ValueOrPromise<T> = T extends Promise<unknown> ? T : T | PromiseLike<T>
 
   /** Allows conditional typing ype alias */
-  export type Conditional<L, R, T, F = never> = L extends R ? T : F
+  type Conditional<L, R, T, F = never> = L extends R ? T : F
 
   /** Allows conditional non-distributive typing type alias @see https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types */
-  export type ConditionalNonDist<L, R, T, F = never> = [L] extends [R] ? T : F
+  type ConditionalNonDist<L, R, T, F = never> = [L] extends [R] ? T : F
 
   /** If X extends true then Y */
-  export type IfTrueOr<TRUE, ELSE> = Conditional<TRUE, true, ELSE>
+  type IfTrueOr<TRUE, ELSE> = Conditional<TRUE, true, ELSE>
 
   /** If X extends true then Y */
-  export type IfTrueOrNonDist<TRUE, ELSE> = ConditionalNonDist<TRUE, true, ELSE>
+  type IfTrueOrNonDist<TRUE, ELSE> = ConditionalNonDist<TRUE, true, ELSE>
 
   /** From T, make all top level keys mutable (removes readonly status) */
-  export type MutableShallow<T> = { -readonly [P in keyof T]: T[P] }
+  type MutableShallow<T> = { -readonly [P in keyof T]: T[P] }
 
   /** From T, make all top level keys immutable (adds readonly status) */
-  export type ImmutableShallow<T> = { readonly [P in keyof T]: T[P] }
+  type ImmutableShallow<T> = { readonly [P in keyof T]: T[P] }
 
   /** From T, make all keys mutable (removes readonly) */
-  export type MutableDeep<T> = {
+  type MutableDeep<T> = {
     -readonly [P in keyof T]: T[P] extends ReadonlyArray<infer U>
       ? MutableDeep<U>[]
       : T[P] extends ReadonlySet<infer U>
@@ -94,7 +90,7 @@ declare global {
   }
 
   /** From T, make all top level and second level keys mutable (removes readonly) */
-  export type MutableSlightlyDeep<T> = {
+  type MutableSlightlyDeep<T> = {
     -readonly [P in keyof T]: T[P] extends ReadonlyArray<infer U>
       ? MutableShallow<U>[]
       : T[P] extends ReadonlySet<infer U>
@@ -105,7 +101,7 @@ declare global {
   }
 
   /** From T, make all keys immutable (adds readonly status) */
-  export type ImmutableDeep<T> = {
+  type ImmutableDeep<T> = {
     readonly [P in keyof T]: T[P] extends ReadonlyArray<infer U>
       ? ImmutableDeep<U>[]
       : T[P] extends ReadonlySet<infer U>
@@ -116,7 +112,7 @@ declare global {
   }
 
   /** From T, make all top level and second keys mutable (adds readonly status) */
-  export type ImmutableSlightlyDeep<T> = {
+  type ImmutableSlightlyDeep<T> = {
     readonly [P in keyof T]: T[P] extends ReadonlyArray<infer U>
       ? ImmutableShallow<U>[]
       : T[P] extends ReadonlySet<infer U>
@@ -127,44 +123,42 @@ declare global {
   }
 
   /** From T, make mutable properties whose keys are in union K (make specific keys mutable) */
-  export type MutableKeys<T, K extends keyof T> = Omit<T, K> &
+  type MutableKeys<T, K extends keyof T> = Omit<T, K> &
     MutableShallow<Pick<T, K>>
 
   /** From T, make mutable properties whose keys are in union K (make specific keys mutable) */
-  export type ImmutableKeys<T, K extends keyof T> = Omit<T, K> &
+  type ImmutableKeys<T, K extends keyof T> = Omit<T, K> &
     ImmutableShallow<Pick<T, K>>
 
   /** From T, require properties whose keys are in union K (make specific keys required) */
-  export type RequireKeys<T, K extends keyof T> = Omit<T, K> &
-    Required<Pick<T, K>>
+  type RequireKeys<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
 
   /** From T, require properties whose keys are in union K and the rest as partial (make specific keys required) */
-  export type PartialWithRequired<T, K extends keyof T> = Partial<Omit<T, K>> &
+  type PartialWithRequired<T, K extends keyof T> = Partial<Omit<T, K>> &
     Required<Pick<T, K>>
 
   /** From T, make properties partial whose keys are in union K (Make specific keys optional) */
-  export type PartialKeys<T, K extends keyof T> = Partial<Pick<T, K>> &
-    Omit<T, K>
+  type PartialKeys<T, K extends keyof T> = Partial<Pick<T, K>> & Omit<T, K>
 
   /** From T, make properties partial whose keys are in union K and the rest as required (Make specific keys optional and rest required) */
-  export type RequiredWithPartial<
+  type RequiredWithPartial<
     T,
     Opt extends keyof T,
     Req extends keyof T = Opt,
   > = Required<Omit<T, Req>> & Partial<Pick<T, Opt>>
 
   /** From T, extract keys whose types are required (excludes optional properties) (optionally narrow keys in union by specifying K) */
-  export type ExtractRequiredKeys<T, K extends keyof T = keyof T> = {
+  type ExtractRequiredKeys<T, K extends keyof T = keyof T> = {
     [P in K]-?: Pick<T, P> extends AnyObj ? never : P
   }[K]
 
   /** From T, extract keys whose types are optional (excludes required properties) (optionally narrow keys in union by specifying K) */
-  export type ExtractPartialKeys<T, K extends keyof T = keyof T> = {
+  type ExtractPartialKeys<T, K extends keyof T = keyof T> = {
     [P in K]-?: Pick<T, P> extends AnyObj ? P : never
   }[K]
 
   /** From T, pick a set of properties whose keys are in the union with required keys only, (optionally narrow results by specifying K) */
-  export type PickRequired<T, K extends keyof T = keyof T> = Pick<
+  type PickRequired<T, K extends keyof T = keyof T> = Pick<
     T,
     {
       [P in K]-?: Pick<T, P> extends AnyObj ? never : P
@@ -172,7 +166,7 @@ declare global {
   >
 
   /** From T, pick a set of properties whose keys are in the union with partial keys only, (optionally narrow results by specifying K) */
-  export type PickPartial<T, K extends keyof T = keyof T> = Pick<
+  type PickPartial<T, K extends keyof T = keyof T> = Pick<
     T,
     {
       [P in K]-?: Pick<T, P> extends AnyObj ? P : never
@@ -180,25 +174,22 @@ declare global {
   >
 
   /** From T, replace a property whose key is in the union K (old key) with that of N[K]:V (key: value)  */
-  export type Replace<T, K extends keyof T, V, N extends PKey = K> = Omit<
-    T,
-    K
-  > & {
+  type Replace<T, K extends keyof T, V, N extends PKey = K> = Omit<T, K> & {
     [P in N]: V
   }
 
   /** From T, rename a property whose key is in the union K (old key) with that of N (new key)  */
-  export type ReplaceKey<T, K extends keyof T, N extends PKey> = Omit<T, K> & {
+  type ReplaceKey<T, K extends keyof T, N extends PKey> = Omit<T, K> & {
     [P in N]: T[K]
   }
 
   /** From T, replace a property value whose key is in the union K (old key) with that of V (new value)  */
-  export type ReplaceIndex<T, K extends keyof T, V> = Omit<T, K> & {
+  type ReplaceIndex<T, K extends keyof T, V> = Omit<T, K> & {
     [P in K]: V
   }
 
   /** From T, replace a property value whose key is in the union K (old key) with that of V (new value)  */
-  export type PrefixKeys<
+  type PrefixKeys<
     T,
     Prefix extends keyof any,
     K extends keyof T = keyof T,
@@ -207,7 +198,7 @@ declare global {
   }
 
   /** With L (left), spread properties with R (right) (e.g. [...L, ...R], {...L, ...R}) */
-  export type Spreaded<L, R = never> =
+  type Spreaded<L, R = never> =
     /* With L (left), omit keys not in union with keys of R (right)*/
     Omit<L, keyof R> &
       /* With R (right), omit keys in union with partial types*/
@@ -224,17 +215,17 @@ declare global {
       }
 
   /** Field property getters */
-  export type Getters<T> = {
+  type Getters<T> = {
     [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K]
   }
 
   /** Field property setters */
-  export type Setters<T> = {
+  type Setters<T> = {
     [K in keyof T as `set${Capitalize<string & K>}`]: (value: T[K] | null) => T
   }
 
   /** Field property setters e.g. Implements<'get', 'id', ()=>string> === { getId:()=>this.id } */
-  export type Implements<
+  type Implements<
     Verb extends string,
     Noun extends string,
     T extends (...args: unknown[]) => unknown | void,
@@ -243,11 +234,13 @@ declare global {
   }
 
   /** Field property setters */
-  export type ImplementsOn<
+  type ImplementsOn<
     K extends string,
     T extends (...args: unknown[]) => void,
   > = Implements<'on', K, T>
 
-  // export type Constructor
-  export type BasicConstructor<T = unknown> = new (...args: T[]) => any
+  // type Constructor
+  type BasicConstructor<T = unknown> = new (...args: T[]) => any
 }
+
+export {}

@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
-export * as DoD from './lib/dod'
-export * from './lib/crud'
-export * from './lib/initializable'
-export * from './lib/lifecycle'
-export * from './lib/normalized'
-export * from './lib/semantic'
+import type { Instance, ISimpleType, SnapshotIn } from 'mobx-state-tree'
+import { JsonableValue } from 'ts-jest'
+
+export type Identifier = Instance<ISimpleType<string>>
+export type SnapshotInOrId<T> = SnapshotIn<T> | Identifier
+export type SnapshotInOrInstance<T> =
+  | SnapshotIn<T>
+  | Instance<T>
+  | JsonableValue

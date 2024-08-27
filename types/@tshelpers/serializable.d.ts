@@ -15,9 +15,24 @@
  * limitations under the License.
  */
 
-export * as DoD from './lib/dod'
-export * from './lib/crud'
-export * from './lib/initializable'
-export * from './lib/lifecycle'
-export * from './lib/normalized'
-export * from './lib/semantic'
+declare global {
+  type iJSONMapKey = string
+  type iJSONPrimitive =
+    | string
+    | number
+    | boolean
+    | undefined
+    | null
+    | symbol
+    | Date
+  type iJSONMap = Record<iJSONMapKey, iJSONPrimitive | iJSONMap | iJSONList>
+  type iJSONList = ArrayLike<iJSONPrimitive | iJSONMap>
+  type iJSON = iJSONMap | iJSONList
+
+  /** Implements a toJSON method */
+  interface Serializable<T = iJSON> {
+    toJSON?(): T
+  }
+}
+
+export {}

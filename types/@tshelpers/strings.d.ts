@@ -16,8 +16,10 @@
  */
 
 declare global {
-  export interface StringLike {
+  interface StringLike {
     toString?(): string
     [Symbol.toStringTag]?: string
   }
 }
+
+export {}

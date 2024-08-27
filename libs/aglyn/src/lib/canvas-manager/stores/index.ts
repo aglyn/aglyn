@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,24 +15,4 @@
  * limitations under the License.
  */
 
-export type iJSONMapKey = string
-export type iJSONListIndex = number
-export type iJSONPrimitive =
-  | string
-  | number
-  | boolean
-  | undefined
-  | null
-  | symbol
-export type iJSONMap = { [key: iJSONMapKey]: iJSONValue }
-export type iJSONList = ArrayLike<iJSONValue>
-export type iJSONValue = iJSONPrimitive | iJSONMap | iJSONList
-export type iJSON =
-  | iJSONValue
-  | Record<iJSONMapKey, iJSONValue>
-  | ArrayLike<iJSONValue>
-
-/** Implements a toJSON method */
-export interface Serializable<T = iJSON> {
-  toJSON?(): T
-}
+export * from './node.store'
