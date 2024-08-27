@@ -16,9 +16,6 @@
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "options": {
-        "lintFilePatterns": ["libs/shared/util/dom/**/*.ts"]
-      },
       "outputs": ["{options.outputFile}"]
     },
     "test": {

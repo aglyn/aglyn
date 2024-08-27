@@ -27,12 +27,7 @@
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"],
-      "options": {
-        "lintFilePatterns": [
-          "libs/besigner/feature/canvas-designer/**/*.{ts,tsx,js,jsx}"
-        ]
-      }
+      "outputs": ["{options.outputFile}"]
     }
   },
   "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:canvas-designer"]
