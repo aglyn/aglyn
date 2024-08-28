@@ -55,7 +55,8 @@
         "standaloneConfig": true,
         "linter": "eslint",
         "unitTestRunner": "jest",
-        "e2eTestRunner": "cypress"
+        "e2eTestRunner": "cypress",
+        "style": "none"
       },
       "library": {
         "buildable": true,
@@ -95,6 +96,11 @@
     "@nx/eslint:lint": {
       "inputs": ["default", "{workspaceRoot}/.eslintrc.js"],
       "cache": true
+    },
+    "@nx/next:build": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     }
   },
   "namedInputs": {
