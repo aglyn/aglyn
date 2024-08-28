@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,17 @@
  * limitations under the License.
  */
 
-import type { GridProps as MuiGridProps } from '@mui/material'
-import { Button, ButtonProps as MuiButtonProps } from '@mui/material'
+import {
+  Button,
+  type ButtonProps as MuiButtonProps,
+  type Grid2Props,
+} from '@mui/material'
 import { type ElementType, forwardRef } from 'react'
 import GridItems from './grid-items'
 
 /* eslint-disable-next-line */
-export interface GridButtonsProps<P = MuiButtonProps> extends MuiGridProps {
-  items: (P & { GridItemProps?: MuiGridProps })[]
+export interface GridButtonsProps<P = MuiButtonProps> extends Grid2Props {
+  items: (P & { GridItemProps?: Grid2Props })[]
   ItemComponent?: ElementType<P>
 }
 

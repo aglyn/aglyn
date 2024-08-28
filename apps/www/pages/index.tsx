@@ -274,7 +274,6 @@ function Index(props) {
           }
           heading={'Get Access and Make Your New Website'}
           link={{
-            hrefAs: '/contact',
             href: '/contact',
             children: 'Get Your Access',
           }}

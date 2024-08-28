@@ -28,7 +28,7 @@ import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useScreen } from '@aglyn/tenant-feature-instance'
 import { List, ListItem, ListItemIcon, ListItemText } from '@mui/material'
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { useEffect, useMemo } from 'react'
 import CardDisplay from '../../../../../../../components/card-display'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
@@ -40,10 +40,12 @@ import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 const whiteSpace = '--'
 
 function ScreenDetails(props) {
-  const { query } = useRouter()
-  const hostId = query.hostId as string
-  const screenId = query.screenId as string
-  const versionId = query.versionId as string
+  const params = useParams<{
+    hostId: string
+    screenId: string
+    versionId: string
+  }>()
+  const { hostId, screenId, versionId } = params
   const { queueLoading } = useLoading()
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { createContext, useContext } from 'react'
 
 export const HostIdContext = createContext<string>(null)
@@ -24,13 +24,11 @@ export const useHostId = () => {
 }
 
 export function HostIdProvider({ children }) {
-  const router = useRouter()
-  const hostParam = router.query.hostId as string
+  const params = useParams<{ hostId: string }>()
+  const hostId = params?.hostId as string
 
   return (
-    <HostIdContext.Provider value={hostParam}>
-      {children}
-    </HostIdContext.Provider>
+    <HostIdContext.Provider value={hostId}>{children}</HostIdContext.Provider>
   )
 }
 HostIdProvider.displayName = 'HostIdProvider'

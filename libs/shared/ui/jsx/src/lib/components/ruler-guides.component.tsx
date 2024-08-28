@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -146,7 +146,7 @@ const GuideComponent = styled(
 GuideComponent.displayName = 'GuideComponent'
 GuideComponent.aglyn = true
 
-const RulerGuidesContainer = styled(Box, { name: 'RulerGuidesContainer' })(
+const RulerGuidesContainer = styled('div', { name: 'RulerGuidesContainer' })(
   ({ theme }) => ({
     zIndex: theme.zIndex.speedDial,
     // pointerEvents: 'none',

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ import {
   enableMultiTabIndexedDbPersistence,
   getFirestore,
 } from 'firebase/firestore'
+import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
 import {
@@ -66,17 +67,18 @@ FirestoreProvider['displayName'] = 'FirestoreProvider'
 function AnalyticsGlobalEvents({ children }) {
   const analytics = useAnalytics()
   const router = useRouter()
+  const pathname = usePathname()
   const user = useUser()
 
   useEffect(() => {
-    const logPageView = (asPath) => {
+    const logPageView = (pathname) => {
       logEvent(analytics, 'page_view', {
-        page_location: asPath,
+        page_location: pathname,
       })
     }
-    const logRouteError = (error, asPath) => {
+    const logRouteError = (error, pathname) => {
       logEvent(analytics, 'exception', {
-        page_location: asPath,
+        page_location: pathname,
         description: `code(${error.code || 'none'}): ${
           error.message || 'none'
         }`,

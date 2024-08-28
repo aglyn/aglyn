@@ -18,7 +18,7 @@
 import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageWithLayout, useNextPageTitle } from '@aglyn/shared-ui-next'
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import CardDisplay from '../../components/card-display'
 import DataTableComponent from '../../components/data-table.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
@@ -28,8 +28,8 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
 
 const Index: NextPageWithLayout = (props) => {
-  const { query } = useRouter()
-  const hostId = query.hostId as string
+  const params = useParams<{ hostId: string }>()
+  const hostId = params.hostId
   useNextPageTitle({ screen: 'My Dashboard' })
 
   return (

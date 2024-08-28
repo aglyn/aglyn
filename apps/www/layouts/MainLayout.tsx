@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ import {
   Typography,
 } from '@mui/material'
 import { cyan } from '@mui/material/colors'
-import { useRouter } from 'next/router'
+import { usePathname } from 'next/navigation'
 import { type ElementType, Fragment, type ReactNode } from 'react'
 // import {BreadcrumbsComponent, BreadcrumbsProps} from
 // '../components/BreadcrumbsComponent'
@@ -261,7 +261,7 @@ export interface MainLayoutProps {
 }
 
 export function MainLayout(props: MainLayoutProps) {
-  const router = useRouter()
+  const pathname = usePathname()
   const {
     children,
     title,
@@ -274,7 +274,7 @@ export function MainLayout(props: MainLayoutProps) {
   } = props
   const tabValue = navTabItems
     ? navTabItems
-        .filter((i) => router.asPath.includes(i.href))
+        .filter((i) => pathname.includes(i.href))
         .reduce((prev, current) => {
           const currentHref = (
             _isObj(current.href) ? current.href.paths : current.href
@@ -347,7 +347,7 @@ export function MainLayout(props: MainLayoutProps) {
             <Toolbar>
               <StyledLeft>
                 <StyledLogoWrapper>
-                  <AppLink hrefAs="/" color="inherit" href="/" underline="none">
+                  <AppLink color="inherit" href="/" underline="none">
                     <StyledLogoInner>
                       <StyledLogo color="inherit" />
                     </StyledLogoInner>

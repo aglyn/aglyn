@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,14 @@ import type {
   IconButtonProps as MuiIconButtonProps,
   LinkProps as MuiLinkProps,
 } from '@mui/material'
-import MuiButton from '@mui/material/Button'
-import MuiButtonBase from '@mui/material/ButtonBase'
-import MuiLink from '@mui/material/Link'
+import {
+  Button as MuiButton,
+  ButtonBase as MuiButtonBase,
+  Link as MuiLink,
+} from '@mui/material'
 import clsx from 'clsx'
 import dynamic, { type DynamicOptionsLoadingProps } from 'next/dynamic'
-import { useRouter } from 'next/router'
+import { usePathname } from 'next/navigation'
 import { forwardRef, useMemo } from 'react'
 import NextLink, { type NextLinkProps } from './next-link'
 
@@ -61,7 +63,7 @@ export type AppLinkVariant =
   | undefined
   | never
 
-type BaseLinkProps = Omit<NextLinkProps, 'as' | 'hrefTo'>
+type BaseLinkProps = Omit<NextLinkProps, 'hrefTo'>
 export type ButtonBaseProps = MuiButtonBaseProps<any, BaseLinkProps>
 export type ButtonProps = MuiButtonProps<any, BaseLinkProps>
 export type DefaultProps = TextProps
@@ -80,16 +82,16 @@ export type AppLinkProps<T = AppLinkVariant> = T extends string
     ? T extends AppLinkVariantDefault
       ? DefaultProps & { componentVariant?: T }
       : T extends 'button'
-      ? ButtonProps & { componentVariant: T }
-      : T extends 'button-base'
-      ? ButtonBaseProps & { componentVariant: T }
-      : T extends 'icon-button'
-      ? IconButtonProps & { componentVariant: T }
-      : T extends 'fab'
-      ? FabProps & { componentVariant: T }
-      : T extends 'naked'
-      ? NakedProps & { componentVariant: T }
-      : never
+        ? ButtonProps & { componentVariant: T }
+        : T extends 'button-base'
+          ? ButtonBaseProps & { componentVariant: T }
+          : T extends 'icon-button'
+            ? IconButtonProps & { componentVariant: T }
+            : T extends 'fab'
+              ? FabProps & { componentVariant: T }
+              : T extends 'naked'
+                ? NakedProps & { componentVariant: T }
+                : never
     : never
   : DefaultProps & { componentVariant?: undefined | never }
 
@@ -123,30 +125,22 @@ export const appLinkClassKey = generateComponentClassKeys('AglynAppLink', [
  */
 const AppLink = forwardRef(
   <T extends AppLinkVariant>(props: AppLinkProps<T>, ref) => {
-    const { className, componentVariant, href, hrefAs, ...rest } = props
+    const { className, componentVariant, href, ...rest } = props
 
     const variant = componentVariant
-    const { pathname, asPath } = useRouter()
+    const pathname = usePathname()
     const [active, activeAsAncestor] = useMemo(() => {
       const hrefPath = _isObj(href) ? href['pathname'] : href,
-        samePath = hrefPath === pathname || hrefPath === asPath,
-        sameAsPath = hrefAs === pathname || hrefAs === asPath,
-        isRootHref = hrefPath === '/' || hrefAs === '/',
-        pathIsAncestor =
-          pathname.startsWith(hrefPath) || pathname.startsWith(hrefAs),
-        asPathIsAncestor =
-          asPath.startsWith(hrefPath) || asPath.startsWith(hrefAs),
-        currentlyNested =
-          pathname.lastIndexOf('/') > 0 || asPath.lastIndexOf('/') > 0,
-        isSpecified = truthy(hrefPath || hrefAs)
-      const active = isSpecified && (samePath || sameAsPath)
+        samePath = hrefPath === pathname,
+        isRootHref = hrefPath === '/',
+        pathIsAncestor = pathname.startsWith(hrefPath),
+        currentlyNested = pathname.lastIndexOf('/') > 0,
+        isSpecified = truthy(hrefPath)
+      const active = isSpecified && samePath
       const activeAsAncestor =
-        isSpecified &&
-        !isRootHref &&
-        currentlyNested &&
-        (pathIsAncestor || asPathIsAncestor)
+        isSpecified && !isRootHref && currentlyNested && pathIsAncestor
       return [active, !active && activeAsAncestor]
-    }, [asPath, href, hrefAs, pathname])
+    }, [href, pathname])
 
     const elemClassName = clsx(
       {
@@ -172,7 +166,6 @@ const AppLink = forwardRef(
             ref={ref}
             className={elemClassName}
             hrefTo={href || ''}
-            hrefAs={hrefAs}
             {...rest}
           />
         )
@@ -184,7 +177,6 @@ const AppLink = forwardRef(
             className={elemClassName}
             component={NextLink}
             hrefTo={href || ''}
-            hrefAs={hrefAs}
             {...rest}
           />
         )
@@ -196,7 +188,6 @@ const AppLink = forwardRef(
             className={elemClassName}
             component={NextLink}
             hrefTo={href || ''}
-            hrefAs={hrefAs}
             {...rest}
           />
         )
@@ -208,7 +199,6 @@ const AppLink = forwardRef(
             className={elemClassName}
             component={NextLink}
             hrefTo={href || ''}
-            hrefAs={hrefAs}
             {...rest}
           />
         )
@@ -220,7 +210,6 @@ const AppLink = forwardRef(
             className={elemClassName}
             component={NextLink}
             hrefTo={href || ''}
-            hrefAs={hrefAs}
             {...rest}
           />
         )
@@ -232,7 +221,6 @@ const AppLink = forwardRef(
             className={elemClassName}
             component={NextLink}
             hrefTo={href || ''}
-            hrefAs={hrefAs}
             {...rest}
           />
         )

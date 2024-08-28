@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import { SplashScreen, useLoading } from '@aglyn/shared-ui-jsx'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
-import { useRouter } from 'next/router'
+import { useRouter } from 'next/navigation'
 import { Fragment, useEffect } from 'react'
 import { useSigninCheck } from 'reactfire'
 

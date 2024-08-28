@@ -72,10 +72,9 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
                       <br />
                       <br />
                       Email:{' '}
-                      <MuiLink
-                        href="mailto:info@aglyn.com"
-                        children={'info@aglyn.com'}
-                      />
+                      <MuiLink href="mailto:info@aglyn.com">
+                        {'info@aglyn.com'}
+                      </MuiLink>
                       <br />
                     </>
                   ),
@@ -89,7 +88,7 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
                   children: (
                     <>
                       <Typography variant="overline">
-                        <b children={item.children} />
+                        <b>{item.children}</b>
                       </Typography>
                       <Typography component="ul">
                         {items.map((item, key) => (

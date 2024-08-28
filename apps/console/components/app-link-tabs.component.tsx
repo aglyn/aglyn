@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import {
   Tabs as MuiTabs,
   type TabsProps as MuiTabsProps,
 } from '@mui/material'
-import { useRouter } from 'next/router'
+import { usePathname } from 'next/navigation'
 import { forwardRef, useMemo } from 'react'
 import { TAB_HEIGHT } from '../constants/shared'
 
@@ -70,21 +70,20 @@ export interface AppLinkTabsProps extends Partial<MuiTabsProps> {
 export const AppLinkTabsComponent = forwardRef<any, AppLinkTabsProps>(
   (props, ref) => {
     const { children, items = [], activeTab, sx, ...rest } = props
-    const router = useRouter()
+    const pathname = usePathname()
+
     const tabValue = useMemo(() => {
-      const asPath = router.asPath,
-        active = activeTab,
-        specific = typeof active !== 'undefined'
+      const active = activeTab
+      const specific = typeof active !== 'undefined'
       return (
         items.find((i) => {
           const href = i?.href,
-            as = i?.hrefAs,
             id = i?.id
-          if (specific) return active === href || active === as || active === id
-          return asPath === href || asPath === as || asPath === id
+          if (specific) return active === href || active === id
+          return pathname === href || pathname === id
         })?.href || false
       )
-    }, [router, items, activeTab])
+    }, [pathname, items, activeTab])
 
     return (
       <MuiTabs

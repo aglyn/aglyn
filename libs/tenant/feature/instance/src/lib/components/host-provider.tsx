@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { createContext, useContext } from 'react'
 import useHost from '../hooks/use-host'
 
@@ -25,8 +25,9 @@ export const useHostContext = () => {
 }
 
 export function HostProvider({ children }) {
-  const router = useRouter()
-  const $doc = useHost({ hostId: router.query.hostId }, { suspense: true })
+  const params = useParams<{ hostId: string }>()
+  const hostId = params?.hostId as string
+  const $doc = useHost({ hostId: hostId }, { suspense: true })
 
   return <HostContext.Provider value={$doc}>{children}</HostContext.Provider>
 }

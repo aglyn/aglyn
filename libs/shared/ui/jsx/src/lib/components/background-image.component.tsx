@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import { styled } from '@aglyn/shared-ui-theme'
 import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import { Box, type BoxProps as MuiBoxProps } from '@mui/material'
+import { type BoxProps as MuiBoxProps } from '@mui/material'
 import type { CSSProperties } from 'react'
 
 interface OverrideProps {
@@ -30,7 +30,7 @@ interface OverrideProps {
 
 export type BackgroundImageComponentProps = MuiBoxProps<any, OverrideProps>
 
-export const BackgroundImageComponent = styled(Box, {
+export const BackgroundImageComponent = styled('div', {
   name: 'BackgroundImage',
   shouldForwardProp(propName) {
     return !_isEqualitySameType(

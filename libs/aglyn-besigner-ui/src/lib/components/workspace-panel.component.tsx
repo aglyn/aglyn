@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import Box, { type BoxProps as MuiBoxProps } from '@mui/material/Box'
+import { type BoxProps as MuiBoxProps } from '@mui/material/Box'
 import MuiDrawer, {
   type DrawerProps as MuiDrawerProps,
 } from '@mui/material/Drawer'
@@ -38,7 +38,7 @@ interface WorkspacePanelProps extends MuiBoxProps {
   size?: string | number
 }
 
-const WorkspacePanel = styled(Box, {
+const WorkspacePanel = styled('div', {
   name: 'AglynWorkspacePanel',
   shouldForwardProp(propName: any) {
     return !_isEqualitySameType(propName, null, 'size')

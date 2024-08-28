@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-import {mdiHome, type MdiIconProps, mdiVectorPolylineEdit} from '@aglyn/shared-ui-mdi-jsx'
-import {getDisplayName} from '@aglyn/shared-util-tools'
-import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
-import {type NextRouter, Router, useRouter} from 'next/router'
-import {type ComponentType, forwardRef} from 'react'
-import {Normalized} from './aglyn-deprecated'
-
+import {
+  mdiHome,
+  type MdiIconProps,
+  mdiVectorPolylineEdit,
+} from '@aglyn/shared-ui-mdi-jsx'
+import { getDisplayName } from '@aglyn/shared-util-tools'
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
+import { usePathname } from 'next/navigation'
+import { type ComponentType, forwardRef } from 'react'
+import { Normalized } from './aglyn-deprecated'
 
 type ID = string // The slug of the page excluding parent
 type Paths = ID[] // The paths to be used to join with a `/`
@@ -36,7 +39,7 @@ type NameMeta = {
 type PageMeta = {
   id?: ID // Dynamically set from the full url path
   slug: ID
-  dynamic?: boolean,
+  dynamic?: boolean
   title: PageTitle
   name: NameMeta
   icon?: MdiIconProps
@@ -48,10 +51,8 @@ type PageMeta = {
 }
 type PageMetaWithoutId = Omit<PageMeta, 'id'>
 
-
 const areas: Normalized<PageMeta> = new Normalized<PageMeta>()
 const pages: Normalized<PageMeta> = new Normalized<PageMeta>()
-
 
 export function getPage(id: ID): PageMeta | null {
   return pages.get(id)
@@ -60,7 +61,7 @@ export function getArea(id: ID): PageMeta {
   return areas.get(id)
 }
 export function getAreaPages(id: ID): PageMeta[] {
-  return getArea(id)?.pages?.map(path => getPage(path)) ?? []
+  return getArea(id)?.pages?.map((path) => getPage(path)) ?? []
 }
 export function getAreaParent(area: PageMeta): PageMeta | null {
   return area?.parent ? getArea(area.parent) : null
@@ -71,37 +72,39 @@ export function getPageParent(page: PageMeta): PageMeta | null {
 export function getAreaParents(area: PageMeta): PageMeta[] {
   const parent = getAreaParent(area)
   const parentParents = parent ? getAreaParents(parent) : []
-  return [...parentParents, parent].filter(i => Boolean(i))
+  return [...parentParents, parent].filter((i) => Boolean(i))
 }
 export function getPageParents(page: PageMeta): PageMeta[] {
   const parent = getPageParent(page)
   const parentParents = parent ? getPageParents(parent) : []
-  return [...parentParents, parent].filter(i => Boolean(i))
+  return [...parentParents, parent].filter((i) => Boolean(i))
 }
 export function getPageArea(page: PageMeta): PageMeta {
-  const area = page?.area ?? getPageParents(page).reduceRight((
-    a,
-    c,
-  ) => a ? a : (c.area ? c : null), null)?.area
+  const area =
+    page?.area ??
+    getPageParents(page).reduceRight(
+      (a, c) => (a ? a : c.area ? c : null),
+      null,
+    )?.area
   return getArea(area) ?? getArea(ROOT_META.id)
 }
 export function getPageAncestors(page: PageMeta): PageMeta[] {
   const parents = getPageParents(page)
   const area = getPageArea(page)
-  return [...getAreaParents(area), area, ...parents].filter(i => Boolean(i))
+  return [...getAreaParents(area), area, ...parents].filter((i) => Boolean(i))
 }
 export function buildPagePath(page: PageMeta): ID {
-  const parentSlugs = getPageAncestors(page).map(i => i?.slug)
-  const paths = [...parentSlugs, page?.slug].filter(i => Boolean(i))
+  const parentSlugs = getPageAncestors(page).map((i) => i?.slug)
+  const paths = [...parentSlugs, page?.slug].filter((i) => Boolean(i))
   return `/${paths.join('/')}`
 }
 export function addArea(meta: PageMetaWithoutId): PageMeta {
   const path = buildPagePath(meta)
-  const area = areas.set(path, {...meta, id: path}).get(path)
+  const area = areas.set(path, { ...meta, id: path }).get(path)
   const parent = getAreaParent(area)
   if (parent) {
-    // (parent.areas ??= []).push(area.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2
-    // bug
+    // (parent.areas ??= []).push(area.id) // TODO: SHORT CIRCUIT ASSIGNMENT
+    // NOT WORKING? TS v4.1.2 bug
     parent.areas.push(area.id)
     areas.set(parent.id, parent)
   }
@@ -109,30 +112,28 @@ export function addArea(meta: PageMetaWithoutId): PageMeta {
 }
 export function addPage(meta: PageMetaWithoutId, pathname?: string): PageMeta {
   const path = pathname ?? buildPagePath(meta)
-  const page = pages.set(path, {...meta, id: path}).get(path)
+  const page = pages.set(path, { ...meta, id: path }).get(path)
   const parent = getPageParent(page)
   if (parent) {
-    // (parent.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2
-    // bug
-    (parent.pages ?? (parent.pages = [])).push(page.id)
+    // (parent.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT
+    // NOT WORKING? TS v4.1.2 bug
+    ;(parent.pages ?? (parent.pages = [])).push(page.id)
     pages.set(parent.id, parent)
-  }
-  else if (page.area) {
-    const area = getArea(page.area);
-    // (area.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT WORKING? TS v4.1.2
-    // bug
-    (area.pages ?? (parent.pages = [])).push(page.id)
+  } else if (page.area) {
+    const area = getArea(page.area)
+    // (area.pages ??= []).push(page.id) // TODO: SHORT CIRCUIT ASSIGNMENT NOT
+    // WORKING? TS v4.1.2 bug
+    ;(area.pages ?? (parent.pages = [])).push(page.id)
     areas.set(area.id, area)
   }
   return page
 }
 
-
 export const ROOT_META: PageMeta = {
   id: '/',
   slug: '',
   title: 'App Dashboard',
-  icon: {path: mdiHome.path},
+  icon: { path: mdiHome.path },
   pages: [],
   areas: [],
   name: {
@@ -144,13 +145,12 @@ export const ROOT_META: PageMeta = {
 }
 areas.set(ROOT_META.id, ROOT_META)
 
-
 // AREAS
 const manageArea = addArea({
   slug: 'manage',
   title: 'Manage',
   parent: ROOT_META.id,
-  icon: {path: mdiVectorPolylineEdit.path},
+  icon: { path: mdiVectorPolylineEdit.path },
   pages: [],
   areas: [],
   name: {
@@ -289,9 +289,9 @@ addPage({
   },
 })
 
-type AggregatedRouterProps = Pick<Router, 'asPath' | 'basePath' | 'pathname' | 'query' | 'route'>
-type DenormalizedPage = Omit<PageMeta, 'pages'> & {pages: (PageMeta & any)[]}
-export type AggregatedPageMeta = AggregatedRouterProps & {
+type DenormalizedPage = Omit<PageMeta, 'pages'> & { pages: (PageMeta & any)[] }
+export type AggregatedPageMeta = {
+  pathname: string
   pageMeta: PageMeta
   overrideMeta?: PageMeta
   areaMeta: PageMeta
@@ -300,25 +300,20 @@ export type AggregatedPageMeta = AggregatedRouterProps & {
   denormalizedAreaPages: DenormalizedPage[]
 }
 
-export const getAggregatedPageMeta = (router: NextRouter): AggregatedPageMeta => {
-  const {pathname, asPath, basePath, route, query} = router
+export const getAggregatedPageMeta = (pathname: string): AggregatedPageMeta => {
   const pageMeta = getPage(pathname)
   const overrideMeta = pageMeta?.dynamic ? getPage(pageMeta.parent) : null
   const areaMeta = getPageArea(overrideMeta ?? pageMeta)
   const pageAncestors = getPageAncestors(overrideMeta ?? pageMeta)
   const areaPages = getAreaPages(areaMeta?.id)
-  const denormalizedAreaPages = getAreaPages(areaMeta?.id).map(i => ({
+  const denormalizedAreaPages = getAreaPages(areaMeta?.id).map((i) => ({
     ...i,
-    pages: (i.pages ?? []).map(i => getPage(i)),
+    pages: (i.pages ?? []).map((i) => getPage(i)),
   }))
   // console.log('pathname', pathname)
 
   return {
-    asPath,
-    basePath,
     pathname,
-    route,
-    query,
     pageMeta,
     overrideMeta,
     areaMeta,
@@ -334,18 +329,22 @@ export type WithPageMetaProps<P> = P & Record<WithN, AggregatedPageMeta>
 export type WithPageMetaComponent<P> = ComponentType<WithPageMetaProps<P>>
 
 export function withAggregatedPageMeta<P>(
-  WrappedComponent: ComponentType<P & {aggregatedPageMeta?: AggregatedPageMeta}>,
+  WrappedComponent: ComponentType<
+    P & {
+      aggregatedPageMeta?: AggregatedPageMeta
+    }
+  >,
 ) {
   const displayName = getDisplayName(WrappedComponent)
   const WithAggregatedPageMeta = forwardRef<any, Omit<P, 'aggregatedPageMeta'>>(
     function RefRenderFn(props, ref) {
-      const router = useRouter()
-      const aggregatedPageMeta = getAggregatedPageMeta(router)
+      const pathname = usePathname()
+      const aggregatedPageMeta = getAggregatedPageMeta(pathname)
       return (
         <WrappedComponent
           ref={ref}
           aggregatedPageMeta={aggregatedPageMeta}
-          {...props as P}
+          {...(props as P)}
         />
       )
     },

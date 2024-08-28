@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import { mdiFilterVariant, MdiIcon, mdiPlus } from '@aglyn/shared-ui-mdi-jsx'
 import { objectRemap, str } from '@aglyn/shared-util-tools'
 import { createUid } from '@aglyn/shared-util-vendor'
 import IconButton from '@mui/material/IconButton'
-import { useRouter } from 'next/router'
+import { useRouter } from 'next/navigation'
 import { useSnackbar } from 'notistack'
 import {
   type ChangeEvent,

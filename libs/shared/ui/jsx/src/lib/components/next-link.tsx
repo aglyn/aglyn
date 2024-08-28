@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { styled } from '@aglyn/shared-ui-theme'
+import { styled } from '@mui/material/styles'
 import Link, { type LinkProps } from 'next/link'
 import { type AnchorHTMLAttributes, forwardRef } from 'react'
 
@@ -30,19 +30,16 @@ NextAnchor.displayName = 'NextAnchor'
 NextAnchor.aglyn = true
 
 export type NextLinkBaseProps = Omit<NextAnchorProps, 'href'> &
-  Omit<LinkProps, 'as' | 'href'> &
+  Omit<LinkProps, 'href'> &
   JSX.OverrideableComponentProps
 
 export interface NextLinkProps extends NextLinkBaseProps, NextLinkBaseProps {
   hrefTo?: LinkProps['href']
-  hrefAs?: LinkProps['as']
 }
 
 export const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
   const {
-    as: _1,
     href: _2,
-    hrefAs,
     hrefTo,
     replace,
     scroll,
@@ -57,7 +54,6 @@ export const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
   return (
     <Link
       ref={ref}
-      as={hrefAs}
       href={hrefTo}
       locale={locale}
       passHref={passHref}

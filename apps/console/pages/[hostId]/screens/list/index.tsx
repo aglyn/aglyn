@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
@@ -93,8 +93,8 @@ const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
 CellItemLinkComponent.displayName = 'CellItemLinkComponent'
 
 function Screens(props) {
-  const { query: routerQuery } = useRouter()
-  const hostId = routerQuery.hostId as string
+  const params = useParams<{ hostId: string }>()
+  const hostId = params.hostId as string
   const { queueLoading, loading } = useLoading()
   const { confirm } = useConfirmationContext()
   const [quickDrawerOpen, setQuickDrawerOpen] = useState<boolean>(false)

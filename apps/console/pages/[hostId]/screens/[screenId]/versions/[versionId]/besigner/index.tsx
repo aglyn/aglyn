@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ import { useScreenVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
@@ -59,16 +59,16 @@ const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
 )
 const ViewportRootComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('@aglyn/besigner-ui').then((mod) => mod.ViewportRootComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 const ViewportCanvasComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('@aglyn/besigner-ui').then((mod) => mod.ViewportCanvasComponent),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 const BesignerJsonEditor = dynamic<BesignerJsonEditorProps>(
   () =>
     import('@aglyn/besigner-json-editor').then((mod) => mod.BesignerJsonEditor),
-  { ssr: false, loading: () => LOADING_OVERLAY_ELEMENT },
+  {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
 function setLocalNodes(value: Aglyn.ProcessableNodes) {
@@ -78,11 +78,14 @@ function setLocalNodes(value: Aglyn.ProcessableNodes) {
 }
 
 function BesignerPage(props) {
-  const {
-    query: { hostId, screenId, versionId },
-  } = useRouter()
-  const { enqueueSnackbar } = useSnackbar()
-  const { queueLoading } = useLoading()
+  const params = useParams<{
+    hostId: string,
+    screenId: string,
+    versionId: string
+  }>()
+  const {hostId, screenId, versionId} = params
+  const {enqueueSnackbar} = useSnackbar()
+  const {queueLoading} = useLoading()
   const saveAvailable = !Aglyn.canvas.isInitialSame
   const [screenDialog, setScreenDialog] = useState(false)
   const handleAddElementClick = useAddElementDrawerCallback()
@@ -91,12 +94,12 @@ function BesignerPage(props) {
     screenId: screenId as string,
     versionId: versionId as string,
   })
-  const { doc: result, setDoc: updateScreen } = useScreenVersion({
+  const {doc: result, setDoc: updateScreen} = useScreenVersion({
     hostId: hostId as string,
     screenId: screenId as string,
     versionId: versionId as string,
   })
-  const { data, status, error } = result
+  const {data, status, error} = result
   const nodes = data?.nodes
   const [sss] = useState(() => nodes)
   console.log('result', result)
@@ -130,7 +133,7 @@ function BesignerPage(props) {
     const dequeueLoading = queueLoading()
 
     const nodes = Aglyn.canvas.nodesToJSON()
-    await updateScreen({ nodes: nodes }, { merge: true })
+    await updateScreen({nodes: nodes}, {merge: true})
       .then((...args) => {
         console.log('updaye screen then promise', args)
         Aglyn.canvas.updateInitialNodes(nodes)
@@ -187,7 +190,8 @@ function BesignerPage(props) {
         variant: 'error',
         allowDuplicate: true,
       })
-    } else if (notFound) {
+    }
+    else if (notFound) {
       enqueueSnackbar('404: Screen not found', {
         variant: 'error',
         allowDuplicate: true,
@@ -223,8 +227,8 @@ function BesignerPage(props) {
                 id: 'center-nav-file-save',
                 disabled: !saveAvailable,
                 icon: saveAvailable
-                  ? { path: ICON_VARIANT_MODIFY_SAVE.path }
-                  : { path: ICON_VARIANT_SYMBOL_CONFIRMED.path },
+                  ? {path: ICON_VARIANT_MODIFY_SAVE.path}
+                  : {path: ICON_VARIANT_SYMBOL_CONFIRMED.path},
                 children: saveAvailable ? 'Save' : 'Up to Date',
                 onClick: handleSave,
               },
@@ -234,7 +238,7 @@ function BesignerPage(props) {
                 href: detailUrl,
                 component: AppLink,
                 componentVariant: 'naked',
-                ListItemTextProps: { inset: true },
+                ListItemTextProps: {inset: true},
               },
               {
                 type: 'divider',
@@ -252,7 +256,7 @@ function BesignerPage(props) {
                 onClick: () =>
                   handleAddElementClick(Besigner.focus.state.lastSelected),
                 disabled: true,
-                ListItemTextProps: { inset: true },
+                ListItemTextProps: {inset: true},
               },
               {
                 type: 'divider',
@@ -277,14 +281,14 @@ function BesignerPage(props) {
                 children: 'Undo',
                 onClick: () => Aglyn.canvas.undo(),
                 disabled: !Aglyn.canvas.canUndo,
-                ListItemTextProps: { inset: true },
+                ListItemTextProps: {inset: true},
               },
               {
                 id: 'center-nav-edit-redo',
                 children: 'Redo',
                 onClick: () => Aglyn.canvas.redo(),
                 disabled: !Aglyn.canvas.canRedo,
-                ListItemTextProps: { inset: true },
+                ListItemTextProps: {inset: true},
               },
               {
                 type: 'divider',
@@ -293,7 +297,7 @@ function BesignerPage(props) {
                 id: 'center-nav-edit-rawjson',
                 children: 'Raw JSON',
                 onClick: () => openJsonEditor(),
-                ListItemTextProps: { inset: true },
+                ListItemTextProps: {inset: true},
               },
             ],
           },
@@ -361,7 +365,7 @@ function BesignerPage(props) {
 }
 
 BesignerPage.displayName = 'Page:Besigner'
-BesignerPage.layouts = [{ Component: AuthenticatedLayout }]
+BesignerPage.layouts = [{Component: AuthenticatedLayout}]
 
 export default withBesignerContext(observer(BesignerPage))
 
