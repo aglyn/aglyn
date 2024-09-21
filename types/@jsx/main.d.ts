@@ -154,10 +154,10 @@ declare global {
 
     // will show `ForwardRef(${Component.displayName || Component.name})` in
     // devtools by default, but can be given its own specific name
-    interface ForwardRefExoticComponent<P> extends NamedExoticComponent<P> {
-      defaultProps?: Partial<P> | undefined
-      propTypes?: WeakValidationMap<P> | undefined
-    }
+    // interface ForwardRefExoticComponent<P> extends NamedExoticComponent<P> {
+    //   defaultProps?: Partial<P> | undefined
+    //   propTypes?: WeakValidationMap<P> | undefined
+    // }
 
     type RefCallback<T> = {
       bivarianceHack(instance: T | null): void

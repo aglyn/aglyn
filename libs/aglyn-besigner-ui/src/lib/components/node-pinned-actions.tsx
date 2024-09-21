@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -175,6 +175,10 @@ export const NodePinnedActions = observer(
     }, [])
 
     const deleteElementCallback = useDeleteElementCallback()
+    const handleDeleteClick = useCallback(() => {
+      closeMore()
+      deleteElementCallback(node)
+    }, [node, closeMore, deleteElementCallback])
 
     return (
       <>
@@ -256,7 +260,7 @@ export const NodePinnedActions = observer(
           />
         </MuiButtonGroup>
         <Popper
-          sx={{ zIndex: 1 }}
+          sx={{ zIndex: -1 }}
           open={Boolean(moreButton) && moreOpen}
           anchorEl={moreButton}
           role={undefined}
@@ -289,7 +293,7 @@ export const NodePinnedActions = observer(
                     )}
 
                     {!isRootElementId($id) && (
-                      <MenuItem onClick={() => deleteElementCallback(node)}>
+                      <MenuItem onClick={handleDeleteClick}>
                         <ListItemIcon>
                           <MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} />
                         </ListItemIcon>

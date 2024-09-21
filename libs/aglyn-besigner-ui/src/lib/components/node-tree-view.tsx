@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -183,6 +183,7 @@ TreeItem.displayName = 'TreeItem'
 interface DragHandleProps extends MuiListItemIconProps {
   draggingEnabled?: boolean
 }
+
 const DragHandle = styled(MuiListItemIcon, {
   shouldForwardProp(propName) {
     return propName !== 'draggingEnabled'
@@ -216,16 +217,11 @@ const NodeTreeItem = observer(
       onItemToggle,
       onItemFocus,
     } = useContext(TreeViewContext)
-    // console.log(
-    //   'get node',
-    //   nodeId,
-    //   Aglyn.canvas.getNode(nodeId),
-    //   Aglyn.canvas.nodes[nodeId],
-    // )
+    console.log('NodeTreeItem', [...expanded])
     const node = Aglyn.canvas.getNode(nodeId)
     const schema = node?.componentSchema
     const nodeLabel = node?.labelShort
-    const breadcrumbPath = node?.breadcrumbPath
+    const breadcrumbPath = node?.breadcrumbPath || []
     const depth = breadcrumbPath?.length - 1
     const isRootNode = Aglyn.canvas.isRootNode(node)
     const dragAllowed = Aglyn.isFeatureEnabled(schema?.flags?.dragging)
@@ -250,6 +246,7 @@ const NodeTreeItem = observer(
       : undefined
     const { setNodeRef: setDroppableNodeRef, isOver } = useLeafDrop(node)
 
+    if (!node) return <>'Invalid node'</>
     return (
       <TreeItem
         ref={ref}
@@ -408,77 +405,82 @@ export interface NodeTreeViewProps extends BoxProps {
   TreeViewProps?: Partial<Omit<JSX.ComponentProps<typeof TreeView>, 'children'>>
 }
 
+const CloseIcon = (
+  <MdiIcon fontSize="small" path={ICON_VARIANT_COLLAPSIBLE_CLOSE.path} />
+)
+const ExpandIcon = (
+  <MdiIcon fontSize="small" path={ICON_VARIANT_COLLAPSIBLE_OPEN.path} />
+)
+
 export const NodeTreeView = observer(
   forwardRef<any, NodeTreeViewProps>((props, ref) => {
     const { TreeViewProps, ...rest } = props
     const allExpanded = Besigner.focus.state.allExpanded
 
     const expanded = useMemo(() => {
-      return uniq(
-        allExpanded.reduce(
-          (acc, item) => [...acc, ...(item?.breadcrumbPath || [])],
-          [],
-        ),
-      )
+      const paths = allExpanded.reduce((acc, i) => {
+        return [...acc, ...(i?.breadcrumbPath || [])]
+      }, [])
+      return uniq(paths)
     }, [allExpanded])
 
     const handleTreeItemToggle = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
       e.preventDefault()
-      Besigner.focus.toggleNodeExpansion(Aglyn.canvas.getNode($id))
+      const node = Aglyn.canvas.getNode($id)
+      if (!node) return
+      Besigner.focus.toggleNodeExpansion(node)
     }, [])
+
+    console.log('allExpanded', allExpanded)
+    console.log('expanded', expanded)
 
     const handleTreeItemSelect = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
       e.preventDefault()
       const node = Aglyn.canvas.getNode($id)
+      if (!node) return
       Besigner.focus.toggleNodeExpansion(node)
       Besigner.focus.handleNodeSelection(node)
     }, [])
 
     const handleTreeItemHover = useCallback((e, $id: Aglyn.NodeId) => {
-      Besigner.focus.setHoveredNode(Aglyn.canvas.getNode($id))
+      const node = Aglyn.canvas.getNode($id)
+      if (!node) return
+      Besigner.focus.setHoveredNode(node)
     }, [])
 
     const handleTreeItemFocus = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
-      Besigner.focus.setHoveredNode(Aglyn.canvas.getNode($id))
+      const node = Aglyn.canvas.getNode($id)
+      if (!node) return
+      Besigner.focus.setHoveredNode(node)
     }, [])
 
     return (
-      <Box
-        ref={ref}
-        component="nav"
-        id={'aglyn:node-tree-view'}
-        aria-label="canvas nodes navigator"
-        {...rest}
+      <TreeViewContext.Provider
+        value={{
+          expanded: expanded,
+          closeIcon: CloseIcon,
+          expandIcon: ExpandIcon,
+          onItemFocus: handleTreeItemFocus,
+          onItemHover: handleTreeItemHover,
+          onItemSelect: handleTreeItemSelect,
+          onItemToggle: handleTreeItemToggle,
+        }}
       >
-        <TreeView className={classKey.root} {...TreeViewProps}>
-          <TreeViewContext.Provider
-            value={{
-              expanded: expanded,
-              closeIcon: (
-                <MdiIcon
-                  fontSize="small"
-                  path={ICON_VARIANT_COLLAPSIBLE_CLOSE.path}
-                />
-              ),
-              expandIcon: (
-                <MdiIcon
-                  fontSize="small"
-                  path={ICON_VARIANT_COLLAPSIBLE_OPEN.path}
-                />
-              ),
-              onItemFocus: handleTreeItemFocus,
-              onItemHover: handleTreeItemHover,
-              onItemSelect: handleTreeItemSelect,
-              onItemToggle: handleTreeItemToggle,
-            }}
-          >
+        <Box
+          ref={ref}
+          component="nav"
+          id={'aglyn:node-tree-view'}
+          aria-label="canvas nodes navigator"
+          {...rest}
+        >
+          <TreeView className={classKey.root} {...TreeViewProps}>
             <NodeTreeItem nodeId={Aglyn.NODE_ROOT_ID} />
-          </TreeViewContext.Provider>
-        </TreeView>
-      </Box>
+          </TreeView>
+        </Box>
+      </TreeViewContext.Provider>
     )
   }),
 )

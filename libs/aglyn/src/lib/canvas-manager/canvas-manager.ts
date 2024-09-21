@@ -395,7 +395,9 @@ export class CanvasManager {
     const parent = this.getNode(node.parentId)
     if (!parent) throw new Error('Invalid parent node')
     const index = parent.nodes?.indexOf(node.$id) ?? -1
-    for (const childId of toJS(node.nodes || [])) {
+    const nodes = toJS(node.nodes || [])
+
+    for (const childId of [...nodes]) {
       const child = this.getNode(childId)
       if (child) this.deleteNode(child)
     }

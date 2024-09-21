@@ -125,7 +125,7 @@ export interface CanvasNode extends Node {
   /**
    * Represents the element's parent unique identifier
    */
-  parentId?: string | undefined | null
+  parentId?: string | undefined
 
   /**
    * Represents the elements' component unique identifier

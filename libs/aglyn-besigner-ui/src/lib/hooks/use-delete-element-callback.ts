@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ export function useDeleteElementCallback(): (
       return confirm({
         title: 'Are you sure?',
         description:
-          "You are about to delete an element from the canvas, please confirm the desired option. Press 'Delete' to confirm and delete the item. Press 'Cancel' to void the operation and close this dialog.",
+          "You are about to delete an element and all of its child elements from the canvas, please confirm the desired option. Press 'Delete' to confirm and delete the item(s). Press 'Cancel' to void the operation and close this dialog.",
         confirmationText: 'Delete',
         confirmationButtonProps: {
           color: 'error',

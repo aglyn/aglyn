@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,13 +54,13 @@ export const state = observable<FocusState>({
   expanded: [],
 
   get allExpanded(): Aglyn.NodeSchema<any>[] {
-    const res = []
-    this.expanded.forEach((i) => {
-      res.push(i)
-    })
-    this.selected.forEach((i) => {
-      res.push(i)
-    })
+    const res = [...this.expanded, ...this.selected]
+    // this.expanded.forEach((i) => {
+    //   res.push(i)
+    // })
+    // this.selected.forEach((i) => {
+    //   res.push(i)
+    // })
     return res
   },
   get lastSelected(): Aglyn.NodeSchema<any> | undefined {
@@ -130,7 +130,7 @@ export function collapseNode(node: Aglyn.NodeSchema<any>) {
 export function toggleNodeExpansion(node: Aglyn.NodeSchema<any>) {
   if (!node) return
   if (isNodeExpanded(node)) return collapseNode(node)
-  expandNode(node)
+  return expandNode(node)
 }
 
 export function handleNodeSelection(
