@@ -217,7 +217,7 @@ const NodeTreeItem = observer(
       onItemToggle,
       onItemFocus,
     } = useContext(TreeViewContext)
-    // console.log('NodeTreeItem', [...expanded])
+    console.log('NodeTreeItem', [...expanded])
     const node = Aglyn.canvas.getNode(nodeId)
     const schema = node?.componentSchema
     const nodeLabel = node?.labelShort

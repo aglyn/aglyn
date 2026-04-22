@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,11 +23,9 @@ import isEqual from 'lodash-es/isEqual'
 import {
   action,
   computed,
-  type IObservableArray,
   makeAutoObservable,
   makeObservable,
   observable,
-  type ObservableMap,
   toJS,
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
@@ -124,7 +122,7 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.sx = Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx }
 
     // this.store = store
-    // console.log('canvas node', this)
+    console.log('canvas node', this)
   }
 
   public delete() {
@@ -132,20 +130,8 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
 
   public toJSON = computedFn((): NodeSchemaJSON<P> => {
-    if (this.$id === NODE_ROOT_ID) console.log('toJSON', this.nodes)
-    const node = toJS(this)
-    return {
-      $id: node.$id,
-      name: node.name,
-      type: node.type,
-      parentId: node.parentId,
-      pluginId: node.pluginId,
-      componentId: node.componentId,
-      className: node.className,
-      nodes: node.nodes,
-      props: node.props,
-      sx: node.sx,
-    } as NodeSchemaJSON<P>
+    const { store, ...node } = toJS(this)
+    return node as NodeSchemaJSON<P>
   })
 }
 
@@ -167,26 +153,6 @@ class HistoryManager<K extends string, T> {
     })
   }
 
-  public get [Symbol.toStringTag]() {
-    return 'HistoryManager'
-  }
-
-  public toString(): string {
-    return '[object HistoryManager]'
-  }
-
-  public toJSON(): {
-    past: IObservableArray<Map<K, T>>
-    present: ObservableMap<K, T>
-    future: IObservableArray<Map<K, T>>
-  } {
-    return {
-      past: toJS(this.past),
-      present: toJS(this.present),
-      future: toJS(this.future),
-    }
-  }
-
   public get canUndo() {
     return this.past.length >= 1
   }
@@ -195,16 +161,16 @@ class HistoryManager<K extends string, T> {
     return this.future.length >= 1
   }
 
-  public undo(): Map<K, T> {
+  public undo() {
     if (!this.canUndo) throw new Error('No history to undo')
     this.future.push(toJS(this.present))
-    return this.past.pop()!
+    return this.past.pop()
   }
 
-  public redo(): Map<K, T> {
+  public redo() {
     if (!this.canRedo) throw new Error('No history to redo')
     this.past.push(toJS(this.present))
-    return this.future.pop()!
+    return this.future.pop()
   }
 
   public clearPast(): this {
@@ -225,10 +191,6 @@ class HistoryManager<K extends string, T> {
 
   public saveHistory(): this {
     this.clearFuture()
-    console.log(
-      'save history',
-      toJS(Object.fromEntries(this.present.entries())),
-    )
     this.past.push(toJS(this.present))
     return this
   }
@@ -365,18 +327,14 @@ export class CanvasManager {
     const state = this._history.redo()
     const json = Object.fromEntries(state!.entries())
     console.log('redo', json)
-    console.log('redo present state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     this.setNodes(json)
-    console.log('redo new state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     return this
   }
   public undo(): this {
     const state = this._history.undo()
     const json = Object.fromEntries(state!.entries())
     console.log('undo', json)
-    console.log('undo present state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     this.setNodes(json)
-    console.log('undo new state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     return this
   }
   public saveHistory(): this {
@@ -421,7 +379,6 @@ export class CanvasManager {
     const nodes: Record<NodeId, NodeSchema<any>> = {}
     for (const nodeId in cloned) {
       const node = cloned[nodeId]
-      if (node.$id === NODE_ROOT_ID) console.log('root node!!!!!!', node)
       if (node) nodes[nodeId] = this.createNode(node)
     }
     if (merge) {
@@ -432,31 +389,21 @@ export class CanvasManager {
     return this
   }
   public deleteNode(node: NodeSchema<any>): this {
-    const validateNode = (node: NodeSchema<any>) => {
-      if (!node || !node?.$id || !node?.parentId)
-        throw new Error('Invalid node')
-      if (this.isRootNode(node)) throw new Error('Cannot delete root node')
-    }
-
-    validateNode(node)
+    if (!node || !node.$id || !node.parentId) throw new Error('Invalid node')
+    if (this.isRootNode(node)) throw new Error('Cannot delete root node')
     this.saveHistory()
+    const parent = this.getNode(node.parentId)
+    if (!parent) throw new Error('Invalid parent node')
+    const index = parent.nodes?.indexOf(node.$id) ?? -1
+    const nodes = toJS(node.nodes || [])
 
-    const del = (node: NodeSchema<any>) => {
-      validateNode(node)
-      const parent = this.getNode(node.parentId!)
-      if (!parent) throw new Error('Invalid parent node')
-      const index = parent.nodes?.indexOf(node.$id) ?? -1
-      const nodes = toJS(node.nodes || [])
-
-      for (const childId of [...nodes]) {
-        const child = this.getNode(childId)
-        if (child) del(child)
-      }
-
-      if (index > -1) parent.nodes?.splice(index, 1)
-      this.nodes.delete(node.$id)
+    for (const childId of [...nodes]) {
+      const child = this.getNode(childId)
+      if (child) this.deleteNode(child)
     }
-    del(node)
+
+    if (index > -1) parent.nodes?.splice(index, 1)
+    this.nodes.delete(node.$id)
     return this
   }
   public reparentNode(
