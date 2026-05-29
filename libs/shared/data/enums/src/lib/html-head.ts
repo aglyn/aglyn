@@ -16,9 +16,17 @@
  */
 
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import type { MakeLinkElementsConfig, MakeMetaElementsConfig, } from '@aglyn/shared-ui-jsx'
-// eslint-disable-next-line @nx/enforce-module-boundaries
 import { getConsoleMetaThemeColor } from '@aglyn/shared-ui-theme'
+
+
+type MetaElementAttrs = { [key: string]: string | undefined }
+type LinkElementAttrs = { [key: string]: string | undefined }
+type MakeMetaElementsConfig = Array<
+  [name?: string, content?: string, other?: MetaElementAttrs]
+>
+type MakeLinkElementsConfig = Array<
+  [rel?: string, href?: string, other?: LinkElementAttrs]
+>
 
 export const META_PREF: MakeMetaElementsConfig = [
   [

@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { ComparisonOperator } from '@aglyn/shared-data-operators'
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import type { ComparisonOperator } from '@aglyn/shared-data-operators'
 import { _isNum } from './_is-num'
 import compare from './utils/compare'
 

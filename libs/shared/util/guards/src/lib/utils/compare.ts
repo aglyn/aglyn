@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { ComparisonOperator } from '@aglyn/shared-data-operators'
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import type { ComparisonOperator } from '@aglyn/shared-data-operators'
 
 /**
  * Perform comparison operation to check provided equality operator. If no
@@ -24,9 +25,9 @@ import { ComparisonOperator } from '@aglyn/shared-data-operators'
  * @param right - right-hand side operand for operation
  * @param operator - provide js comparison operator syntax as string literal
  */
-export function compare(
-  left: unknown,
-  right: unknown,
+export function compare<T>(
+  left: Iterable<T> | ArrayLike<T> | number | string,
+  right: Iterable<T> | ArrayLike<T> | number | string,
   operator: ComparisonOperator = '===',
 ): boolean {
   switch (operator) {
