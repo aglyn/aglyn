@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,13 @@ import {
   ICON_VARIANT_PRIMARY_KEY,
   ICON_VARIANT_TEXT,
 } from '@aglyn/shared-data-enums'
-import { AppLink, Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import {
+  AppLink,
+  Container,
+  GridItems,
+  MdiIcon,
+  useLoading,
+} from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useScreen } from '@aglyn/tenant-feature-instance'
 import { List, ListItem, ListItemIcon, ListItemText } from '@mui/material'

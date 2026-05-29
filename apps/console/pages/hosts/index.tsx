@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import {
 } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
-import MdiIcon from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'
+import MdiIcon from '@aglyn/shared-ui-jsx/components/mdi-icon'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { alpha } from '@aglyn/shared-ui-theme'
 import { Typography } from '@mui/material'

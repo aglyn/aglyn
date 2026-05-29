@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import type { MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { makeAutoObservable, toJS } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import { type Aglyn, lifecycleEvent } from '../aglyn'

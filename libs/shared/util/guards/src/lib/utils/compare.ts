@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-// eslint-disable-next-line @nx/enforce-module-boundaries
 import type { ComparisonOperator } from '@aglyn/shared-data-operators'
+
 
 /**
  * Perform comparison operation to check provided equality operator. If no

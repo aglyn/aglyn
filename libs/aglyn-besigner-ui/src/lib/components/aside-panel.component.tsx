@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import {
   ICON_VARIANT_ELEMENT_TREE_VIEW,
   ICON_VARIANT_MODIFY_ADD,
 } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { alpha, mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
   getDisplayName,

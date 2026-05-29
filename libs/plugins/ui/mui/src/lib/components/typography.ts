@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import {
   mdiFormatHeader6,
   mdiFormatParagraph,
   mdiFormatText,
-} from '@aglyn/shared-ui-mdi-jsx'
+} from '@aglyn/shared-ui-jsx'
 import Typography from '@mui/material/Typography'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'

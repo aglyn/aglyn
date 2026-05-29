@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-import fs from 'fs'
-import {dirname} from 'path'
-import {convertIdToModuleName} from '../../src/lib/utils/convert-id-to-module-name'
+import * as fs from 'fs'
+import { dirname } from 'path'
+import { convertIdToModuleName } from '../../src/lib/utils/convert-id-to-module-name'
 
 
 type FileOptionsJson = {
-  type: 'json',
+  type: 'json'
   data: Record<any, any>
   minify?: boolean
 }
 type FileOptionsExportDefault = {
-  type: 'module',
+  type: 'module'
   data: Record<any, any>
 }
 type FileOptionsExportDefaultArray = {
-  type: 'module-array',
+  type: 'module-array'
   data: Record<any, any>[] | Record<any, any>
   importDir: string
 }
 type FileOptionsExportName = {
-  type: 'named',
+  type: 'named'
   data: Record<any, any>[]
   importDir: string
 }
@@ -47,39 +47,43 @@ type FileUnionOptions =
   | FileOptionsExportName
 
 type FileOptions = FileUnionOptions & {
-  file: string,
+  file: string
   dir?: string
 }
 
 function writeFile(dir, fileName, contents) {
   const outFile = `${dir}${fileName}`
-  fs.mkdir(dirname(outFile), {recursive: true}, function(err) {
+  fs.mkdir(dirname(outFile), { recursive: true }, function (err) {
     if (err) {
-      console.error('Error creating directory for file', fileName, `(${outFile})`, err)
-    }
-    else {
+      console.error(
+        'Error creating directory for file',
+        fileName,
+        `(${outFile})`,
+        err,
+      )
+    } else {
       fs.writeFile(outFile, contents, (err) => {
         if (err) {
           console.error('Error generating file', fileName, `(${outFile})`, err)
-        }
-        else {
+        } else {
           console.log('\u2714 Generated file', fileName, `(${outFile})`)
         }
       })
     }
   })
-
 }
 
 function generateJsonFile(opts: FileOptions & FileOptionsJson) {
-  const data = Array.isArray(opts.data) ? {data: opts.data} : opts.data
+  const data = Array.isArray(opts.data) ? { data: opts.data } : opts.data
   const contents = JSON.stringify(data, null, opts.minify ? null : 2)
   const filename = `${opts.file}${opts.minify ? '.min' : ''}.json`
   writeFile(opts.dir, filename, contents)
 }
 
-function generateExportDefaultFile(opts: FileOptions & FileOptionsExportDefault) {
-  const {file, data, dir} = opts
+function generateExportDefaultFile(
+  opts: FileOptions & FileOptionsExportDefault,
+) {
+  const { file, data, dir } = opts
   const filename = `${file}.ts`
   const dataStr = JSON.stringify(data, null, 2)
   const exportName = convertIdToModuleName(data.id)
@@ -90,14 +94,18 @@ function generateExportDefaultFile(opts: FileOptions & FileOptionsExportDefault)
   writeFile(dir, filename, contents)
 }
 
-function generateExportDefaultArray(opts: FileOptions & FileOptionsExportDefaultArray) {
+function generateExportDefaultArray(
+  opts: FileOptions & FileOptionsExportDefaultArray,
+) {
   const filename = `${opts.file}.ts`
   const imports = []
-  const names = opts.data.map((icon) => {
-    const name = convertIdToModuleName(icon.id)
-    imports.push(`import ${name} from '${opts.importDir}${icon.id}'`)
-    return name
-  }).join(',\r\n  ')
+  const names = opts.data
+    .map((icon) => {
+      const name = convertIdToModuleName(icon.id)
+      imports.push(`import ${name} from '${opts.importDir}${icon.id}'`)
+      return name
+    })
+    .join(',\r\n  ')
   const contents = [
     `${imports.join('\r\n')}`,
     `export default [\r\n  ${names}\r\n]`,
@@ -107,9 +115,11 @@ function generateExportDefaultArray(opts: FileOptions & FileOptionsExportDefault
 
 function generateExportNamedFile(opts: FileOptions & FileOptionsExportName) {
   const filename = `${opts.file}.ts`
-  const contents = opts.data.map((icon) => {
-    return `export * from '${opts.importDir}${icon.id}'`
-  }).join('\r\n')
+  const contents = opts.data
+    .map((icon) => {
+      return `export * from '${opts.importDir}${icon.id}'`
+    })
+    .join('\r\n')
   writeFile(opts.dir, filename, contents)
 }
 
@@ -129,8 +139,7 @@ export function generateFile(opts: FileOptions): void {
         generateExportNamedFile(opts)
         break
     }
-  }
-  catch (e) {
+  } catch (e) {
     console.error(e)
   }
 }

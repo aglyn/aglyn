@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import type { IconId } from '@aglyn/shared-data-mdi'
 import { forwardRef } from 'react'
-import { useMdiIcon } from '../hooks/use-mdi-icon'
+import { useMdiIcon } from '../../hooks/mdi-icon/use-mdi-icon'
 import MdiIcon, { type MdiIconProps } from './mdi-icon'
 
 export interface MdiSvgIconProps extends MdiIconProps {

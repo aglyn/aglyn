@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +32,12 @@ import {
   ICON_VARIANT_SELECT_PARENT,
   ICON_VARIANT_SHOW_MORE,
 } from '@aglyn/shared-data-enums'
-import { SrOnly, type SrOnlyProps } from '@aglyn/shared-ui-jsx'
-import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import {
+  MdiIcon,
+  type MdiIconProps,
+  SrOnly,
+  type SrOnlyProps,
+} from '@aglyn/shared-ui-jsx'
 import {
   Button as MuiButton,
   ButtonGroup as MuiButtonGroup,

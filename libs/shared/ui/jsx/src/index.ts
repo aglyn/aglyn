@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ export * from './lib/components/grid-buttons'
 export * from './lib/components/grid-items'
 export * from './lib/components/grid-list'
 export * from './lib/components/loading-layout.component'
-export * from '@aglyn/shared-ui-jsx/components/loading-modal'
+export * from './lib/components/loading-modal'
 export * from './lib/components/loading-text.component'
 export * from './lib/components/menu'
 export * from './lib/components/mui-shadow-dom'
@@ -84,3 +84,22 @@ export * from './lib/hocs/with-hoc'
 export * from './lib/utils/make-link-elements'
 export * from './lib/utils/make-meta-elements'
 export * from './lib/utils/vendor'
+
+export * from './types'
+
+export * from './lib/hooks/mdi-icon/use-mdi-icon'
+export * from './lib/hooks/mdi-icon/use-mdi-icons'
+export * from './lib/hooks/mdi-icon/use-mdi-icons-fuzzy'
+
+export * from './lib/components/mdi-icon/mdi-icon'
+export * from './lib/components/mdi-icon/mdi-icon-from-id'
+
+export * from '@aglyn/shared-data-mdi'
+
+// import dynamic from 'next/dynamic'
+// export const MdiIconFromId = dynamic(
+//   () => import('./components/mdi-svg-icon'),
+//   {loading: () => (<span />)},
+// )
+// MdiIconFromId.displayName = 'MdiIconFromId'
+// MdiIconFromId.aglyn = true

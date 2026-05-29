@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiPageLayoutHeader } from '@aglyn/shared-ui-mdi-jsx'
+import { mdiPageLayoutHeader } from '@aglyn/shared-ui-jsx'
 import AppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'

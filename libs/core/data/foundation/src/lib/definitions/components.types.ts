@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import type {
   Validator,
 } from '@aglyn/shared-ui-jsx-forms'
 // eslint-disable-next-line @nx/enforce-module-boundaries
-import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx' // eslint-disable-next-line
+import type { MdiIconProps } from '@aglyn/shared-ui-jsx' // eslint-disable-next-line
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 // eslint-disable-next-line @nx/enforce-module-boundaries

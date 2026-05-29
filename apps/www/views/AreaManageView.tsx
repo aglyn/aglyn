@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,12 @@
  */
 'use client'
 
-import { useLoading } from '@aglyn/shared-ui-jsx'
-import { mdiFilterVariant, MdiIcon, mdiPlus } from '@aglyn/shared-ui-mdi-jsx'
+import {
+  mdiFilterVariant,
+  MdiIcon,
+  mdiPlus,
+  useLoading,
+} from '@aglyn/shared-ui-jsx'
 import { objectRemap, str } from '@aglyn/shared-util-tools'
 import { createUid } from '@aglyn/shared-util-vendor'
 import IconButton from '@mui/material/IconButton'

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ import {
   type FormRendererProps,
 } from '@aglyn/shared-ui-jsx-forms'
 import Container from '@aglyn/shared-ui-jsx/components/container'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
   FormHelperText,

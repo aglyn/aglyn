@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import * as Besigner from '@aglyn/besigner'
 import { ICON_VARIANT_MODIFY_ADD } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   IconButton as MuiIconButton,
   Stack as MuiStack,

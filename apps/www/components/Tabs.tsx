@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import {
   mdiHome,
   MdiIcon,
   mdiVariable,
-} from '@aglyn/shared-ui-mdi-jsx'
+} from '@aglyn/shared-ui-jsx'
 import { alpha, styled } from '@aglyn/shared-ui-theme'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import type {
   ResolvePropsFunction,
   Validator,
 } from '@aglyn/shared-ui-jsx-forms'
-import type { MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import type { MdiIconProps } from '@aglyn/shared-ui-jsx'
 import type { MuiStyledOptions } from '@aglyn/shared-ui-theme'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type { ComponentClass, ComponentProps } from 'react'

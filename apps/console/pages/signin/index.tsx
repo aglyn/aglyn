@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import {
 import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
-import { mdiGoogle, MdiIcon } from '@aglyn/shared-ui-mdi-jsx'
+import { mdiGoogle, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next'
 import { Button, Divider, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'

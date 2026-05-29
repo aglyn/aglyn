@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-import type {Icon, IconId} from '@aglyn/shared-data-mdi'
-import {Fuse} from '@aglyn/shared-util-vendor'
-import {useCallback, useMemo, useState} from 'react'
-import type {ApplyFilterFn, ClearFilterFn} from '../types'
-import {useMdiIcons} from './use-mdi-icons'
-
+import type { Icon, IconId } from '@aglyn/shared-data-mdi'
+import { Fuse } from '@aglyn/shared-util-vendor'
+import { useCallback, useMemo, useState } from 'react'
+import type { ApplyFilterFn, ClearFilterFn } from '../../../types'
+import { useMdiIcons } from './use-mdi-icons'
 
 type UseMdiIconsReturn = [
   filteredIcons: Icon[],
   allIcons: Icon[],
   applyFilter: ApplyFilterFn,
-  clearFilter: ClearFilterFn
+  clearFilter: ClearFilterFn,
 ]
 export function useMdiIconsFuzzy(iconId?: IconId[]): UseMdiIconsReturn {
   const allIcons = useMdiIcons(iconId)
@@ -35,9 +34,9 @@ export function useMdiIconsFuzzy(iconId?: IconId[]): UseMdiIconsReturn {
   const fuzzy = useMemo(() => {
     return new Fuse(allIcons, {
       keys: [
-        {name: 'name', weight: 0.5},
-        {name: 'as', weight: 0.25},
-        {name: 'tags', weight: 0.25},
+        { name: 'name', weight: 0.5 },
+        { name: 'as', weight: 0.25 },
+        { name: 'tags', weight: 0.25 },
       ],
       includeScore: true,
       shouldSort: true,
@@ -50,10 +49,13 @@ export function useMdiIconsFuzzy(iconId?: IconId[]): UseMdiIconsReturn {
     setFilteredIcons(allIcons)
   }, [allIcons, setFilteredIcons])
 
-  const applyFilter: ApplyFilterFn = useCallback(async (query: string) => {
-    const results = fuzzy.search(query)
-    setFilteredIcons(results.map((i) => i.item))
-  }, [fuzzy, setFilteredIcons])
+  const applyFilter: ApplyFilterFn = useCallback(
+    async (query: string) => {
+      const results = fuzzy.search(query)
+      setFilteredIcons(results.map((i) => i.item))
+    },
+    [fuzzy, setFilteredIcons],
+  )
 
   return [filteredIcons, allIcons, applyFilter, clearFilter]
 }

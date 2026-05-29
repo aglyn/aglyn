@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import {
   type GridButtonsProps,
   Menu,
 } from '@aglyn/shared-ui-jsx'
-import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next'
 import { styled } from '@aglyn/shared-ui-theme'
 import { _isArr, _isArrEmpty, _isObj } from '@aglyn/shared-util-guards'

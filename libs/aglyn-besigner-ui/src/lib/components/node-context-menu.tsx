@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import {
   ICON_VARIANT_MODIFY_MOVE_DOWN,
   ICON_VARIANT_MODIFY_MOVE_UP,
 } from '@aglyn/shared-data-enums'
-import MdiIcon from '@aglyn/shared-ui-mdi-jsx/components/mdi-icon'
+import MdiIcon from '@aglyn/shared-ui-jsx/components/mdi-icon/mdi-icon'
 import {
   alpha,
   Divider,

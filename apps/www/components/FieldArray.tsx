@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
  */
 
 import { DoD } from '@aglyn/shared-data-types'
-import { MdiIcon, mdiPlus } from '@aglyn/shared-ui-mdi-jsx'
+import { MdiIcon, mdiPlus } from '@aglyn/shared-ui-jsx'
 import { useCallback, useState } from 'react'
 import { Components } from '../lib/input-fields'
 import FormFields, { type Props as FormFieldsProps } from './FormFields'
