@@ -229,6 +229,22 @@ const AGLYN_CONFIG = {
 
     // optimizeCss: true,
   },
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: [
+          {
+            loader: '@svgr/webpack',
+            options: {
+              exportType: 'named',
+              namedExport: 'ReactComponent',
+            },
+          },
+        ],
+        as: '*.js',
+      },
+    },
+  },
   /**
    * Next.js can automatically create a standalone folder which copies only
    * the necessary files for a production deployment including select files in

@@ -1,7 +1,7 @@
 {
   "name": "@aglyn/core-data-admin",
   "version": "0.0.1",
-  "type": "commonjs",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/aglyn/core.git",
