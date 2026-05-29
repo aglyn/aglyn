@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ export {
    * snakeCase("version 1.2.10"); //=> "version_1_2_10"
    */
   snakeCase,
-  type Options,
+  // type Options,
 } from 'change-case'
 
 /**
