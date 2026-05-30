@@ -37,13 +37,15 @@ export interface BoxStylerProps extends Omit<BoxProps, 'onChange'> {
   onChange?: (measurements?: Measurements) => void
 }
 
-export const BoxStyler = forwardRef<any, BoxStylerProps>((props, ref) => {
-  const { measurements, width, height, onChange, ...rest } = props
+export const BoxStyler = forwardRef<any, BoxStylerProps>((
+  { measurements, width, height, onChange, ...rest }: BoxStylerProps,
+  ref,
+) => {
 
   const handleChange = useCallback(
     (key: keyof Measurements) => (dimension: Measurement) => {
-      const res = { ...(measurements ?? {}), [key]: dimension }
-      onChange && onChange(res)
+      const res: Measurements = Object.assign({}, measurements, { [key]: dimension })
+      onChange?.(res)
     },
     [onChange, measurements],
   )

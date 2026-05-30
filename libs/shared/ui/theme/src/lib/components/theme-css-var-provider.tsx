@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2024 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-import { createResponsiveCssVarTheme } from '../util/create-responsive-theme';
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { CssBaseline } from '@mui/material'
 import { CssVarsProvider as MuiCssVarsProvider } from '@mui/material/styles'
+import type { ComponentProps } from 'react'
 import { type ComponentType, forwardRef, useMemo } from 'react'
+import { createResponsiveCssVarTheme } from '../util/create-responsive-theme'
 
 export interface ThemeCssVarProviderProps
-  extends Omit<JSX.ComponentProps<typeof MuiCssVarsProvider>, 'theme'> {
+  extends Omit<ComponentProps<typeof MuiCssVarsProvider>, 'theme'> {
   theme?: {
     light: Parameters<typeof createResponsiveCssVarTheme>[0]
     dark: Parameters<typeof createResponsiveCssVarTheme>[1]

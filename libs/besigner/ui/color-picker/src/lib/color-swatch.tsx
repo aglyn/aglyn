@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
  */
 
 import { styled } from '@mui/material'
+import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
 
 interface SwatchProps {
@@ -37,7 +38,7 @@ const Swatch = styled('div', {
   borderColor: theme.palette.divider,
 }))
 
-export interface ColorSwatchProps extends JSX.ComponentProps<typeof Swatch> {}
+export interface ColorSwatchProps extends ComponentProps<typeof Swatch> {}
 
 export const ColorSwatch = forwardRef<any, ColorSwatchProps>((props, ref) => {
   const { children, ...rest } = props

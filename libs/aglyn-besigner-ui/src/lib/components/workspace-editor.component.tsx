@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,21 +19,18 @@ import * as Besigner from '@aglyn/besigner'
 import { LOADING_OVERLAY_ELEMENT, useMergeRefs } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { _isFnT } from '@aglyn/shared-util-guards'
-import {
-  DragEndEvent,
-  DragMoveEvent,
-  DragStartEvent,
-  useDndMonitor,
-} from '@dnd-kit/core'
+import { DragEndEvent, DragMoveEvent, DragStartEvent, useDndMonitor, } from '@dnd-kit/core'
 import { Stack } from '@mui/material'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
+import type { ComponentProps } from 'react'
 import { ChangeEvent, forwardRef, useCallback, useRef } from 'react'
 import { useMouse } from 'react-use'
 import useAglynBesignerPanelValue from '../hooks/use-aglyn-besigner-panel-value'
 import AppBarBreadcrumbsComponent from './app-bar-breadcrumbs.component'
 import type { AsidePanelComponentProps } from './aside-panel.component'
 import ViewportZoomControls from './viewport-zoom-controls'
+
 
 const classKeys = generateComponentClassKeys('AglynViewport', [
   'panelLeftOpen',
@@ -67,7 +64,7 @@ const WorkspaceEditor = styled('div', {
 })
 
 export interface WorkspaceEditorComponentProps
-  extends JSX.ComponentProps<typeof WorkspaceEditor> {}
+  extends ComponentProps<typeof WorkspaceEditor> {}
 
 const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
   (props, ref) => {

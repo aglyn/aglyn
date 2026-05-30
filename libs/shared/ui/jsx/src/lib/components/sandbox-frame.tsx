@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import { jssPreset, StylesProvider, useTheme } from '@mui/styles'
 
 import { create, type Jss, type JssOptions } from 'jss'
 import rtl from 'jss-rtl'
+import type { ComponentProps } from 'react'
 import React, {
   Children,
   cloneElement,
@@ -36,7 +37,7 @@ import ReactFrameComponent from 'react-frame-component'
 
 import { useMergeRefs } from '../hooks/use-merge-refs'
 
-export type FrameComponentProps = JSX.ComponentProps<typeof ReactFrameComponent>
+export type FrameComponentProps = ComponentProps<typeof ReactFrameComponent>
 export type SandboxFrameDocument = HTMLIFrameElement['contentDocument']
 export type SandboxFrameWindow = HTMLIFrameElement['contentWindow']
 type State = {

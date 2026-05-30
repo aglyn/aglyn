@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import { getElementClientRectBounding } from '@aglyn/shared-util-dom'
 import { styled } from '@mui/material'
 import clsx from 'clsx'
 import { observer } from 'mobx-react-lite'
+import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
 
 const classKeys = generateComponentClassKeys('NodeOutline', [
@@ -82,7 +83,7 @@ const NodeOutlineRoot = styled('div', {
 }))
 
 export interface NodeOutlineProps
-  extends JSX.ComponentProps<typeof NodeOutlineRoot> {
+  extends ComponentProps<typeof NodeOutlineRoot> {
   node: Aglyn.NodeSchema<any>
 }
 

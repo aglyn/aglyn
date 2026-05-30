@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import { type ClientRect } from '@dnd-kit/core'
 import { Portal, styled } from '@mui/material'
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
+import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
 
 const classes = generateComponentClassKeys('DropIndicator', [
@@ -30,7 +31,7 @@ const classes = generateComponentClassKeys('DropIndicator', [
   'handle',
 ])
 
-type IndicatorProps = JSX.ComponentProps<typeof motion.div> & {
+type IndicatorProps = ComponentProps<typeof motion.div> & {
   variant?: 'vertical' | 'horizontal'
 }
 
@@ -73,8 +74,7 @@ const Indicator = styled(motion.div, {
   }
 })
 
-export interface DropIndicatorProps
-  extends JSX.ComponentProps<typeof Indicator> {
+export interface DropIndicatorProps extends ComponentProps<typeof Indicator> {
   visible?: boolean
   rect: ClientRect
   region: Besigner.DropRegion

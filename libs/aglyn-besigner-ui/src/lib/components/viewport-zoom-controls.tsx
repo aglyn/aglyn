@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-import { SrOnly } from '@aglyn/shared-ui-jsx'
 import {
   mdiFitToPage,
   MdiIcon,
   mdiMagnifyMinus,
   mdiMagnifyPlus,
+  SrOnly,
 } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
 import { _isFnT } from '@aglyn/shared-util-guards'
 import Button from '@mui/material/Button'
 import ButtonGroup from '@mui/material/ButtonGroup'
 import Tooltip from '@mui/material/Tooltip'
+import type { ComponentProps } from 'react'
 import {
   type ChangeEvent,
   type EventHandler,
@@ -56,7 +57,7 @@ const ZoomControlsWrapper = styled('div', {
 }))
 
 export interface ViewportZoomControlsComponentProps
-  extends JSX.ComponentProps<typeof ZoomControlsWrapper> {
+  extends ComponentProps<typeof ZoomControlsWrapper> {
   disableZoomReset?: boolean
   disableZoomDecrease?: boolean
   disableZoomIncrease?: boolean

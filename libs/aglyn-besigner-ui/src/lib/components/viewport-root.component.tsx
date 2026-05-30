@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
  */
 
 import { alpha, styled } from '@aglyn/shared-ui-theme'
+import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
 
 const AglynViewport = styled('main', {
@@ -92,7 +93,7 @@ const AglynViewport = styled('main', {
 })
 
 export interface ViewportRootComponentProps
-  extends JSX.ComponentProps<typeof AglynViewport> {}
+  extends ComponentProps<typeof AglynViewport> {}
 
 export const ViewportRootComponent = forwardRef<
   any,

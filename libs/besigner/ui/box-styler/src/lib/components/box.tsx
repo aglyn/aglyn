@@ -17,6 +17,7 @@
 
 import { alpha, darken, styled } from '@aglyn/shared-ui-theme'
 import { emphasize } from '@mui/system/colorManipulator'
+import type { ComponentProps } from 'react'
 import { classKeys } from '../constants'
 
 export const Box = styled('div')(({ theme }) => {
@@ -159,6 +160,6 @@ export const Box = styled('div')(({ theme }) => {
   }
 })
 
-export type BoxProps = JSX.ComponentProps<typeof Box>
+export type BoxProps = ComponentProps<typeof Box>
 
 export default Box

@@ -47,6 +47,7 @@ import {
 import clsx from 'clsx'
 import uniq from 'lodash-es/uniq'
 import { observer } from 'mobx-react-lite'
+import type { ComponentProps } from 'react'
 import {
   type ChangeEvent,
   createContext,
@@ -201,7 +202,7 @@ const DragHandle = styled(MuiListItemIcon, {
 DragHandle.displayName = 'DragHandle'
 
 interface NodeTreeItemProps
-  extends Omit<JSX.ComponentProps<typeof TreeItem>, 'depth'> {
+  extends Omit<ComponentProps<typeof TreeItem>, 'depth'> {
   nodeId: Aglyn.NodeId
 }
 
@@ -402,7 +403,7 @@ const TreeViewContext = createContext<{
 })
 
 export interface NodeTreeViewProps extends BoxProps {
-  TreeViewProps?: Partial<Omit<JSX.ComponentProps<typeof TreeView>, 'children'>>
+  TreeViewProps?: Partial<Omit<ComponentProps<typeof TreeView>, 'children'>>
 }
 
 const CloseIcon = (

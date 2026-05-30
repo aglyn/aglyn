@@ -19,7 +19,7 @@ import type { Measurement } from '@aglyn/shared-data-enums'
 import { alpha, darken } from '@aglyn/shared-ui-theme'
 import { ButtonBase, Collapse, lighten, styled } from '@mui/material'
 import { emphasize } from '@mui/system/colorManipulator'
-import { forwardRef, useCallback, useState } from 'react'
+import { type ComponentProps, forwardRef, useCallback, useState } from 'react'
 import type { Measurements } from '../types'
 import Legend, { LegendItem } from './legend'
 
@@ -363,7 +363,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
 }))
 
 export interface BoxButtonStylerProps
-  extends Omit<JSX.ComponentProps<typeof StyledWrapper>, 'onChange'> {
+  extends Omit<ComponentProps<typeof StyledWrapper>, 'onChange'> {
   measurements?: Measurements
   size?: { width?: Measurement; height: Measurement }
   onChange?: (measurements?: Measurements) => void

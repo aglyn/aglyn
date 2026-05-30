@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@
 import { styled } from '@aglyn/shared-ui-theme'
 import { base64IsomorphicEncode } from '@aglyn/shared-util-tools'
 import NextImageRaw, { type ImageProps as NextImageProps } from 'next/image'
+import type { ComponentProps } from 'react'
 import { useMemo } from 'react'
 
 interface NextEmotionImageProps
-  extends JSX.ComponentProps<typeof NextEmotionImage> {}
+  extends ComponentProps<typeof NextEmotionImage> {}
 
 const NextEmotionImage = styled(NextImageRaw, {
   name: 'NextEmotionImage',

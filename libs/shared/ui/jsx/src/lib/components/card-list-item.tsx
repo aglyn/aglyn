@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import {
   type TypographyProps,
 } from '@mui/material'
 import clsx from 'clsx'
+import type { ComponentProps } from 'react'
 import { forwardRef } from 'react'
 import ChildrenFunctionProp from './children-function-prop'
 import type { GridListItemData } from './grid-list'
@@ -85,8 +86,8 @@ export interface CardListItemProps
   label?: JSX.Children
   selected?: boolean
   CardActionAreaProps?: Partial<MuiCardActionAreaProps>
-  WrapperBoxProps?: Partial<JSX.ComponentProps<typeof CardBox>>
-  ContentBoxProps?: Partial<JSX.ComponentProps<typeof CardBox>>
+  WrapperBoxProps?: Partial<ComponentProps<typeof CardBox>>
+  ContentBoxProps?: Partial<ComponentProps<typeof CardBox>>
   LabelTypographyProps?: Partial<TypographyProps>
 }
 
