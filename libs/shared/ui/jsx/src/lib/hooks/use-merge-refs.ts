@@ -56,7 +56,6 @@ export function mergeRefs<T>(...refs: ForwardedRef<T>[]): RefCallback<T> {
     for (const ref of refs) {
       assignRef(ref, value)
     }
-    return value
   }
 }
 

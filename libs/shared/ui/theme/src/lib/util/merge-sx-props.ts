@@ -15,19 +15,22 @@
  * limitations under the License.
  */
 
+import type { SxProps } from '@mui/system'
 import { useMemo } from 'react'
 import type { Theme as DefaultTheme } from '../../vendor/mui'
 
+type MaybeSxProps<Theme extends object> = SxProps<Theme> | boolean | null | undefined
+
 export function useMergeSxProps<Theme extends DefaultTheme>(
-  ...sxProps: JSX.SxProps<Theme>[]
-): JSX.SxStyleArrayProp<Theme> {
+  ...sxProps: MaybeSxProps<Theme>[]
+): SxProps<Theme> {
   return useMemo(() => mergeSxProps(...sxProps), [sxProps])
 }
 
 export function mergeSxProps<Theme extends DefaultTheme>(
-  ...sxProps: JSX.SxProps<Theme>[]
-): JSX.SxStyleArrayProp<Theme> {
-  return sxProps.flat(2)
+  ...sxProps: MaybeSxProps<Theme>[]
+): SxProps<Theme> {
+  return sxProps.flat(2) as SxProps<Theme>
 }
 
 export default mergeSxProps

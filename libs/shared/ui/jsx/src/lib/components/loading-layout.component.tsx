@@ -83,8 +83,8 @@ export function withLoadingLayoutComponent<P>(
   const displayName = getDisplayName(WrappedComponent)
   const WithLoadingLayoutComponent = forwardRef<any, P>((props, ref) => {
     return (
-      <LoadingLayoutComponent ref={ref} {...loadingLoadingProps}>
-        <WrappedComponent {...props} />
+      <LoadingLayoutComponent ref={ref as any} {...loadingLoadingProps}>
+        <WrappedComponent {...(props as any)} />
       </LoadingLayoutComponent>
     )
   })

@@ -85,7 +85,7 @@ const ItemWrapper = styled(
   },
 )({})
 
-export type VirtualizedGridProps = VirtuosoGridProps & {
+export type VirtualizedGridProps = VirtuosoGridProps<any> & {
   sx?: SxProps
   as?: any
 }

@@ -54,7 +54,7 @@ export const AglynLogoMark = styled(
   },
   {
     name: 'AglynLogoMark',
-    shouldForwardProps: (prop) => prop !== 'variant',
+    shouldForwardProp: (prop) => prop !== 'variant',
   },
 )<AglynLogoProps>(({ theme, variant }) => {
   let compass: string
@@ -102,7 +102,7 @@ export const AglynLogoText = styled(
   },
   {
     name: 'AglynLogoText',
-    shouldForwardProps: (prop) => prop !== 'variant',
+    shouldForwardProp: (prop) => prop !== 'variant',
   },
 )<AglynLogoProps>(({ theme, variant }) => {
   if (variant === 'white') {
@@ -162,7 +162,7 @@ export const AglynLogoFull = styled(
   },
   {
     name: 'AglynLogoFull',
-    shouldForwardProps: (prop) => prop !== 'variant',
+    shouldForwardProp: (prop) => prop !== 'variant',
   },
 )<AglynLogoProps>(({ theme, variant }) => {
   let compass: string
@@ -252,7 +252,7 @@ export const AglynConsoleLogoFull = styled(
   },
   {
     name: 'AglynConsoleLogoFull',
-    shouldForwardProps: (prop) => prop !== 'variant',
+    shouldForwardProp: (prop) => prop !== 'variant',
   },
 )<AglynLogoProps>(({ theme, variant }) => {
   let boundingBox: string

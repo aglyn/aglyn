@@ -21,6 +21,11 @@
             "glob": "libs/shared/ui/theme/README.md",
             "input": ".",
             "output": "."
+          },
+          {
+            "glob": "index.d.ts",
+            "input": "libs/shared/ui/theme/types-proxy",
+            "output": "./src"
           }
         ],
         "updateBuildableProjectDepsInPackageJson": true

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { SvgIcon, type SvgIconProps } from '@mui/material'
 import { Children, cloneElement, forwardRef, type ReactElement } from 'react'
 import useId from '../../hooks/use-id'

@@ -100,7 +100,8 @@ export function withErrorBoundary<P, T>(
   const WithErrorBoundary = forwardRef<T, P>((props, ref) => {
     return (
       <ErrorBoundaryComponentClass {...options}>
-        <WrappedComponent ref={ref} {...props} />
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        <WrappedComponent ref={ref as any} {...(props as any)} />
       </ErrorBoundaryComponentClass>
     )
   })

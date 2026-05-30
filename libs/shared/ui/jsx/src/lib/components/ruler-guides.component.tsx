@@ -146,7 +146,7 @@ const GuideComponent = styled(
 GuideComponent.displayName = 'GuideComponent'
 GuideComponent.aglyn = true
 
-const RulerGuidesContainer = styled('div', { name: 'RulerGuidesContainer' })(
+const RulerGuidesContainer = styled(Box, { name: 'RulerGuidesContainer' })(
   ({ theme }) => ({
     zIndex: theme.zIndex.speedDial,
     // pointerEvents: 'none',

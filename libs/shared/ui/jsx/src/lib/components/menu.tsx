@@ -103,8 +103,8 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
   } = props
 
   const [state, setState] = useState(defaultState)
-  const child = Children.only(children)
-  const onChildClick = child.props?.onClick?.bind(null) as MouseEventHandler
+  const child = Children.only(children) as ReactElement<any>
+  const onChildClick = (child.props as any)?.onClick?.bind(null) as MouseEventHandler
   const handleClose = () => setState(defaultState)
   const handleClick = useCallback(
     (event: MouseEvent<any>) => {

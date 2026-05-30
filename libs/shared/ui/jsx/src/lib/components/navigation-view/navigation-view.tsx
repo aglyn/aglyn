@@ -16,7 +16,7 @@
  */
 
 import { generateComponentClassKeys } from '@aglyn/shared-ui-theme'
-import mergeSxProps from '@aglyn/shared-ui-theme/util/merge-sx-props'
+import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import {
   AppBar,
   type AppBarProps,
