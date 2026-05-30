@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-import type { OverridableComponent } from '@mui/material/OverridableComponent'
 import type { Theme as MuiTheme } from '@mui/material/styles'
 // eslint-disable-next-line no-restricted-imports
 import type { CSSProperties } from '@mui/material/styles/createMixins'
@@ -41,20 +40,9 @@ declare module '@mui/material/ButtonGroup' {
   interface ButtonGroupPropsColorOverrides extends ColorPropOverrides {}
 }
 declare module '@mui/material/Container' {
-  interface VariantProps {
-    props: {
-      variant?: 'vertical' | 'horizontal' | 'boxed'
-    }
+  interface ContainerOwnProps {
+    variant?: 'vertical' | 'horizontal' | 'boxed'
   }
-
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  interface ContainerTypeMap<P = {}, D extends React.ElementType = 'div'>
-    extends VariantProps {
-    props: P & ContainerTypeMap['props']
-    defaultComponent: D
-  }
-
-  const Container: OverridableComponent<ContainerTypeMap>
 }
 declare module '@mui/material/ToggleButtonGroup' {
   interface ToggleButtonGroupPropsColorOverrides extends ColorPropOverrides {}

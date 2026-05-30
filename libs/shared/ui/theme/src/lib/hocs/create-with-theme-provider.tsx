@@ -21,6 +21,7 @@ import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { CssBaseline, useMediaQuery } from '@mui/material'
 import { get as getCookie, set as setCookie } from 'js-cookie'
 import {
+  type ComponentType,
   createContext,
   forwardRef,
   type SyntheticEvent,
@@ -162,14 +163,16 @@ export function createWithThemeProvider(options: WithThemeProviderOptions) {
         const [[, themeMode]] = ThemeModeState
         return themeMode === 'dark' ? darkTheme : lightTheme
       }, [ThemeModeState])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const WrappedAny = WrappedComponent as ComponentType<any>
       return (
         <ThemeContextDispatch.Provider value={ThemeModeState}>
           <ThemeProvider theme={activeTheme}>
             {disableCssBaseline ? (
-              <WrappedComponent ref={ref} {...rest} />
+              <WrappedAny ref={ref} {...rest} />
             ) : (
               <CssBaseline enableColorScheme>
-                <WrappedComponent ref={ref} {...rest} />
+                <WrappedAny ref={ref} {...rest} />
               </CssBaseline>
             )}
           </ThemeProvider>

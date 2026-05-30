@@ -20,7 +20,7 @@ import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { CssBaseline } from '@mui/material'
 import { CssVarsProvider as MuiCssVarsProvider } from '@mui/material/styles'
-import { forwardRef, useMemo } from 'react'
+import { type ComponentType, forwardRef, useMemo } from 'react'
 
 export interface ThemeCssVarProviderProps
   extends Omit<JSX.ComponentProps<typeof MuiCssVarsProvider>, 'theme'> {
@@ -66,13 +66,15 @@ export function withThemeCssVarProvider<P>(
 
   const WithThemeCssVarProvider = forwardRef<any, P>((props, ref) => {
     const { ...rest } = props
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const WrappedAny = WrappedComponent as ComponentType<any>
     return (
       <ThemeCssVarProvider {...opts}>
         {disableCssBaseline ? (
-          <WrappedComponent ref={ref} {...rest} />
+          <WrappedAny ref={ref} {...rest} />
         ) : (
           <CssBaseline enableColorScheme>
-            <WrappedComponent ref={ref} {...rest} />
+            <WrappedAny ref={ref} {...rest} />
           </CssBaseline>
         )}
       </ThemeCssVarProvider>

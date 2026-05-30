@@ -35,8 +35,7 @@ enum ContrastText {
 }
 
 function getContrastTextColor(background, contrastThreshold) {
-  return getContrastRatio(background, ContrastText.DARK) >= contrastThreshold ??
-    3
+  return getContrastRatio(background, ContrastText.DARK) >= (contrastThreshold ?? 3)
     ? ContrastText.DARK
     : ContrastText.LIGHT
 }
@@ -147,8 +146,8 @@ export function createResponsiveCssVarTheme(
     ...options,
     colorSchemes: {
       ...options?.colorSchemes,
-      light: { palette: lightPalette, ...options?.colorSchemes?.light },
-      dark: { palette: darkPalette, ...options?.colorSchemes?.dark },
+      light: { palette: lightPalette, ...((options?.colorSchemes?.light ?? {}) as object) },
+      dark: { palette: darkPalette, ...((options?.colorSchemes?.dark ?? {}) as object) },
     },
   })
 }
