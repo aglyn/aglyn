@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "../../../../dist/out-tsc",
     "typeRoots": ["../../../../types", "../../../../node_modules/@types"],
+    "incremental": false,
     "types": ["@tshelpers", "node", "@jsx"]
   },
   "files": ["../../../../node_modules/@nx/react/typings/cssmodule.d.ts", "../../../../node_modules/@nx/react/typings/image.d.ts"],

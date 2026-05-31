@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "../../../../dist/out-tsc",
     "declaration": true,
+    "incremental": false,
     "types": ["@tshelpers", "node", "@jsx"],
     "paths": {
       "@aglyn/shared-util-guards": ["libs/shared/util/guards/src/index.ts"],

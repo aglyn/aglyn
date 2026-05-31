@@ -16,7 +16,7 @@
         "external": ["react/jsx-runtime"],
         "rollupConfig": [
           "@nx/react/plugins/bundle-rollup",
-          "./rollup.config.cjs"
+          "libs/core/feature/renderer/rollup.config.cjs"
         ],
         "compiler": "swc",
         "assets": [

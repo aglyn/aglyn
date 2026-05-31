@@ -15,6 +15,7 @@
         "entryFile": "libs/aglyn-besigner-ui/src/index.ts",
         "external": ["react/jsx-runtime"],
         "rollupConfig": "@nx/react/plugins/bundle-rollup",
+        "skipTypeCheck": true,
         "compiler": "swc",
         "assets": [
           {

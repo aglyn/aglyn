@@ -16,14 +16,11 @@
  */
 
 import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
 import Container from '@mui/material/Container'
 import Typography from '@mui/material/Typography'
 import type { Metadata } from 'next'
-import NextLink from 'next/link'
+import Link from 'next/link'
 import * as React from 'react'
-// import Copyright from '@/components/Copyright'
-// import ProTip from '@/components/ProTip'
 
 export const metadata: Metadata = {
   title: 'About',
@@ -45,12 +42,8 @@ export default function About() {
           Material UI - Next.js example in TypeScript
         </Typography>
         <Box sx={{ maxWidth: 'sm' }}>
-          <Button variant="contained" component={NextLink} href="/unstable">
-            Go to the home pagemmm
-          </Button>
+          <Link href="/unstable">Go to the home pagemmm</Link>
         </Box>
-        {/*<ProTip />*/}
-        {/*<Copyright />*/}
       </Box>
     </Container>
   )

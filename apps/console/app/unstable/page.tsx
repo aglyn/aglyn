@@ -17,13 +17,10 @@
 
 import Box from '@mui/material/Box'
 import Container from '@mui/material/Container'
-import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
 import { Metadata } from 'next'
-import NextLink from 'next/link'
+import Link from 'next/link'
 import * as React from 'react'
-// import Copyright from '@/components/Copyright'
-// import ProTip from '@/components/ProTip'
 
 export const metadata: Metadata = {
   title: 'Home',
@@ -44,11 +41,7 @@ export default function Home() {
         <Typography variant="h4" component="h1" sx={{ mb: 2 }}>
           Material UI - Next.js App Router example in TypeScript
         </Typography>
-        <Link href="/unstable/about" color="secondary" component={NextLink}>
-          Go to the about page
-        </Link>
-        {/*<ProTip />*/}
-        {/*<Copyright />*/}
+        <Link href="/unstable/about">Go to the about page</Link>
       </Box>
     </Container>
   )

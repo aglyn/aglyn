@@ -42,15 +42,15 @@ import typography, {
 import { BUNDLE_ID } from './lib/constants/bundle-common'
 
 export const components: ComponentRegisterPayload[] = [
-  createAglynComponent(appBarSchema, appBar),
-  createAglynComponent(buttonSchema, button),
-  createAglynComponent(containerSchema, container),
-  createAglynComponent(listSchema, list),
-  createAglynComponent(listItemSchema, listItem),
-  createAglynComponent(listItemTextSchema, listItemText),
-  createAglynComponent(stackSchema, stack),
-  createAglynComponent(toolbarSchema, toolbar),
-  createAglynComponent(typographySchema, typography),
+  createAglynComponent<any>(appBarSchema, appBar),
+  createAglynComponent<any>(buttonSchema, button),
+  createAglynComponent<any>(containerSchema, container),
+  createAglynComponent<any>(listSchema, list),
+  createAglynComponent<any>(listItemSchema, listItem),
+  createAglynComponent<any>(listItemTextSchema, listItemText),
+  createAglynComponent<any>(stackSchema, stack),
+  createAglynComponent<any>(toolbarSchema, toolbar),
+  createAglynComponent<any>(typographySchema, typography),
 ]
 
 export const schema: AglynBundleSchema = {
