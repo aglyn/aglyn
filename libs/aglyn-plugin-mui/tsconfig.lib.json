@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
+    "rootDir": "../../",
     "types": ["@tshelpers", "node", "@jsx"],
     "paths": {
       "@aglyn/shared-util-timestamp": ["dist/libs/shared/util/timestamp"],
