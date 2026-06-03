@@ -14,7 +14,10 @@
         "project": "libs/shared/ui/next/package.json",
         "entryFile": "libs/shared/ui/next/src/index.ts",
         "external": ["react/jsx-runtime"],
-        "rollupConfig": ["@nx/react/plugins/bundle-rollup", "tools/rollup-skip-typecheck.js"],
+        "rollupConfig": [
+          "@nx/react/plugins/bundle-rollup",
+          "tools/rollup-skip-typecheck.js"
+        ],
         "compiler": "swc",
         "skipTypeCheck": true,
         "assets": [
