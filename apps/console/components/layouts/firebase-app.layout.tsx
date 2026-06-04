@@ -39,8 +39,10 @@ import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
 import {
   connectFirestoreEmulator,
-  enableMultiTabIndexedDbPersistence,
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
 } from 'firebase/firestore'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/router'
@@ -123,21 +125,23 @@ function GetInnerLayout({ children }) {
   const app = useFirebaseApp()
   const auth = getAuth(app)
   const database = getDatabase(app)
-  const store = getFirestore(app)
   let status
 
-  // Set up development emulators
   if (!connectedFirestore) {
     try {
+      initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      })
       if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
-        connectFirestoreEmulator(store, 'localhost', 8082)
+        connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
       }
-      void enableMultiTabIndexedDbPersistence(store)
       connectedFirestore = true
     } catch (error) {
       console.error(error)
     }
   }
+
+  const store = getFirestore(app)
   if (!connectedDatabase) {
     try {
       if (FIREBASE_DATABASE_EMULATOR_ENABLED) {
