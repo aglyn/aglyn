@@ -28,7 +28,7 @@ import {
   Tooltip as MuiTooltip,
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { type MutableRefObject } from 'react'
+import { forwardRef, type MutableRefObject } from 'react'
 
 export interface HistoryControlsProps extends StackProps {}
 
@@ -66,8 +66,7 @@ function HistoryControls(
 HistoryControls.displayName = 'HistoryControlsComponent'
 HistoryControls.aglyn = true
 
-export const HistoryControlsComponent = observer<HistoryControlsProps, any>(
-  HistoryControls,
-  { forwardRef: true },
+export const HistoryControlsComponent = observer(
+  forwardRef<any, HistoryControlsProps>(HistoryControls),
 )
 export default HistoryControlsComponent
