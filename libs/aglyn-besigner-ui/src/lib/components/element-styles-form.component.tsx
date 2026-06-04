@@ -72,6 +72,7 @@ import {
 } from '@mui/material'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
+import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback, useMemo } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
@@ -838,11 +839,11 @@ const ElementStylesForm = observer(
 
     const handleFormCancel = useCallback((e, reason) => {}, [])
     const handleElementSave = useCallback(
-      (values) => {
+      action((values) => {
         if (node) {
           node.sx = { ...values }
         }
-      },
+      }),
       [node],
     )
 
