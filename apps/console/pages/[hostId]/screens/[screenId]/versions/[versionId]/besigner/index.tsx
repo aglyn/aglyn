@@ -104,8 +104,6 @@ function BesignerPage(props) {
   })
   const {data, status, error} = result
   const nodes = data?.nodes
-  const [sss] = useState(() => nodes)
-  console.log('result', result)
   const hasError = Boolean(error) || status === 'error'
   const notFound = status === 'success' && !data
 
@@ -115,16 +113,12 @@ function BesignerPage(props) {
     }
   }, [status])
 
-  if (nodes && !Aglyn.canvas.didSetInitial) {
-    console.log('decoded update', nodes)
-    console.log('decoded update previous nodes', sss)
-    const updated = setLocalNodes(nodes)
-    Aglyn.canvas.updateInitialNodes(updated)
-    console.log(
-      'Aglyn.screen.nestedNodes as any',
-      Aglyn.canvas.nestedNodes as any,
-    )
-  }
+  useEffect(() => {
+    if (nodes && !Aglyn.canvas.didSetInitial) {
+      const updated = setLocalNodes(nodes)
+      Aglyn.canvas.updateInitialNodes(updated)
+    }
+  }, [nodes])
 
   const handleSave = useCallback(async () => {
     if (!saveAvailable) {
@@ -159,20 +153,6 @@ function BesignerPage(props) {
     setLocalNodes(value)
     setJsonOpen(false)
   }, [])
-
-  // useEffect(() => {
-  //   if (nodes && !Aglyn.canvas.didSetInitial) {
-  //     console.log('decoded update', nodes)
-  //     console.log('decoded update previous nodes', sss)
-  //     const updated = setLocalNodes(nodes)
-  //     Aglyn.canvas.updateInitialNodes(updated)
-  //   }
-  //
-  //   console.log(
-  //     'Aglyn.screen.nestedNodes as any',
-  //     Aglyn.canvas.nestedNodes as any,
-  //   )
-  // }, [nodes, sss])
 
   useEffect(() => {
     if (HAS_BROWSER()) {
