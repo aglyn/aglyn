@@ -43,8 +43,17 @@ export function useLeafDrop(
   node: Aglyn.NodeSchema<any>,
   accept: Besigner.DragType[] = acceptAll,
 ): ReturnType<typeof useDroppable> {
+  // Disable the droppable for the node that is currently being dragged.
+  // Without a DragOverlay the draggable element receives the CSS transform
+  // and moves with the cursor, which shifts its droppable rect to the cursor
+  // position. This causes it to win every pointerWithin collision check and
+  // prevents leaf nodes (like an empty Container) from ever being detected as
+  // the drop target.
+  const isBeingDragged = Besigner.dnd.isDraggingNode(node)
+
   return useDroppable({
     id: `drop:${node?.$id}:${accept}`,
+    disabled: isBeingDragged,
     data: {
       accept,
       node,
