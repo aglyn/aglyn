@@ -133,18 +133,20 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
 
   public toJSON = (): NodeSchemaJSON<P> => {
-    return {
+    const json: Record<string, unknown> = {
       $id: this.$id,
-      name: this.name,
       type: this.type,
-      parentId: this.parentId,
-      pluginId: this.pluginId,
-      componentId: this.componentId,
-      className: this.className,
       nodes: this.nodes ? [...this.nodes] : [],
       props: toJS(this.props),
       sx: toJS(this.sx),
-    } as NodeSchemaJSON<P>
+    }
+    // Omit optional fields when undefined — Firestore rejects undefined values
+    if (this.name !== undefined) json['name'] = this.name
+    if (this.parentId !== undefined) json['parentId'] = this.parentId
+    if (this.pluginId !== undefined) json['pluginId'] = this.pluginId
+    if (this.componentId !== undefined) json['componentId'] = this.componentId
+    if (this.className !== undefined) json['className'] = this.className
+    return json as NodeSchemaJSON<P>
   }
 }
 
