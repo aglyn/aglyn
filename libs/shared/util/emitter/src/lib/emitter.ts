@@ -18,7 +18,15 @@ import {EventEmitter2} from 'eventemitter2'
 import mitt, {Emitter as MittEmitterFn} from 'mitt'
 
 
-export * from 'mitt'
+export type {
+  EventType,
+  Handler,
+  WildcardHandler,
+  EventHandlerList,
+  WildCardEventHandlerList,
+  EventHandlerMap,
+  Emitter,
+} from 'mitt'
 export type {
   event,
   eventNS,
