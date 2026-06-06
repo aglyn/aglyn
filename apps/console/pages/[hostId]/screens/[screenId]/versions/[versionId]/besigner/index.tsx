@@ -134,6 +134,10 @@ function BesignerPage(props) {
       .then((...args) => {
         console.log('updaye screen then promise', args)
         Aglyn.canvas.updateInitialNodes(nodes)
+        enqueueSnackbar('Canvas saved successfully', {
+          variant: 'success',
+          persist: false,
+        })
       })
       .catch((e) => {
         enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
