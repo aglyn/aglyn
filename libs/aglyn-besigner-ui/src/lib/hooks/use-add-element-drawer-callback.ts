@@ -73,7 +73,10 @@ export function useAddElementDrawerCallback(): Response {
 
           return node
         })
-        .catch(console.error)
+        .catch((err) => {
+          // String rejections are user-initiated dismissals (canceled, backdropClick, etc.) — ignore them
+          if (typeof err !== 'string') console.error(err)
+        })
     },
     [elementDrawer],
   )

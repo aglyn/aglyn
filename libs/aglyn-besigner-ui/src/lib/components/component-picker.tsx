@@ -120,7 +120,7 @@ export const ComponentPicker = observer(
     )
 
     const handleClose = useCallback(
-      (e, reason = 'unknown') => {
+      (e, reason = 'canceled') => {
         onClose?.(e, reason as any)
       },
       [onClose],
