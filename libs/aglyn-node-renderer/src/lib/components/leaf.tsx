@@ -39,9 +39,10 @@ export const Leaf = observer(
     const Factory = Aglyn.components.getFactory(node?.componentId)
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
+    const textContent = resolvedProps?.['children']
+
     return (
       <Component
-        key={node?.$id}
         ref={ref}
         data-aglyn={`leaf:${node?.$id}`}
         sx={mergeSxProps(sx as any, node?.sx as any, resolvedProps?.sx as any)}
@@ -50,9 +51,9 @@ export const Leaf = observer(
       >
         {children}
 
-        <ShadowDom.AglynText>
-          {resolvedProps?.['children'] as any}
-        </ShadowDom.AglynText>
+        {textContent != null && (
+          <ShadowDom.AglynText>{textContent as any}</ShadowDom.AglynText>
+        )}
       </Component>
     )
   }),

@@ -29,7 +29,7 @@ export const Trunk = observer(
     const { node } = props
 
     return (
-      <RendererComponents.Consumer key={node?.$id}>
+      <RendererComponents.Consumer>
         {({ StemComponent }) => <StemComponent ref={ref} node={node} />}
       </RendererComponents.Consumer>
     )

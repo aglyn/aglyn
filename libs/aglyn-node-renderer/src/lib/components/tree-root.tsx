@@ -51,7 +51,7 @@ export const TreeRoot = observer(
     )
 
     return (
-      <RendererComponents.Provider key={node?.$id} value={Components}>
+      <RendererComponents.Provider value={Components}>
         <Components.TrunkComponent ref={ref} node={node} />
       </RendererComponents.Provider>
     )

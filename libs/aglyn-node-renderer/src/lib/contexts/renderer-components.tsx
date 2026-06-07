@@ -24,7 +24,7 @@ import type { TrunkProps } from '../components/trunk'
 export interface RenderComponentsContext {
   TrunkComponent: JSX.ForwardRefExoticComponent<TrunkProps & RefAttributes<any>>
   StemComponent: JSX.ForwardRefExoticComponent<StemProps & RefAttributes<any>>
-  BranchComponent: JSX.FunctionComponent<BranchProps>
+  BranchComponent: JSX.ForwardRefExoticComponent<BranchProps & RefAttributes<any>>
   LeafComponent: JSX.ForwardRefExoticComponent<LeafProps & RefAttributes<any>>
 }
 export const RendererComponents = createContext<RenderComponentsContext>({

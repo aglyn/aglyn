@@ -17,28 +17,30 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { observer } from 'mobx-react-lite'
-import { Fragment } from 'react'
+import { forwardRef, Fragment } from 'react'
 import RendererComponents from '../contexts/renderer-components'
 
 export interface BranchProps {
   node: Aglyn.NodeSchema<any>
 }
 
-export const Branch = observer((props: BranchProps) => {
-  const { node } = props
-  const nodes = Array.isArray(node?.children) ? node.children : []
-  return (
-    <RendererComponents.Consumer>
-      {({ StemComponent }) => (
-        <Fragment>
-          {nodes.map((node, key) => (
-            <StemComponent key={node?.$id ?? key} node={node} />
-          ))}
-        </Fragment>
-      )}
-    </RendererComponents.Consumer>
-  )
-})
+export const Branch = observer(
+  forwardRef<any, BranchProps>((props, ref) => {
+    const { node } = props
+    const nodes = node?.children ?? []
+    return (
+      <RendererComponents.Consumer>
+        {({ StemComponent }) => (
+          <Fragment>
+            {nodes.map((child, key) => (
+              <StemComponent key={child?.$id ?? key} node={child} />
+            ))}
+          </Fragment>
+        )}
+      </RendererComponents.Consumer>
+    )
+  }),
+)
 Branch.displayName = 'Branch'
 Branch['aglyn'] = true
 

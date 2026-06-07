@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { ErrorBoundaryComponent } from '@aglyn/shared-ui-jsx'
 import { observer } from 'mobx-react-lite'
 import { forwardRef } from 'react'
 import RendererComponents from '../contexts/renderer-components'
@@ -30,17 +31,19 @@ export const Stem = observer(
 
     if (!node) {
       console.error(`Error rendering`, node)
-      return <div></div>
+      return <div data-aglyn="stem:missing" />
     }
 
     return (
-      <RendererComponents.Consumer key={node?.$id}>
-        {({ LeafComponent, BranchComponent }) => (
-          <LeafComponent ref={ref} node={node}>
-            <BranchComponent node={node} />
-          </LeafComponent>
-        )}
-      </RendererComponents.Consumer>
+      <ErrorBoundaryComponent fallback={<div data-aglyn={`stem:error:${node.$id}`} />}>
+        <RendererComponents.Consumer>
+          {({ LeafComponent, BranchComponent }) => (
+            <LeafComponent ref={ref} node={node}>
+              <BranchComponent node={node} />
+            </LeafComponent>
+          )}
+        </RendererComponents.Consumer>
+      </ErrorBoundaryComponent>
     )
   }),
 )
