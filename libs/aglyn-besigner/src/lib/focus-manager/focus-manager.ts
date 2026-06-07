@@ -34,9 +34,14 @@ interface FocusState {
    */
   selected: SelectedNodes
   /**
-   * The current expanded node in tree views
+   * Nodes the user has manually expanded via the tree toggle
    */
   expanded: ExpandedNodes
+  /**
+   * Node IDs that the user has explicitly collapsed, overriding auto-expansion
+   * from selection. Cleared for a node's ancestors whenever a new node is selected.
+   */
+  manuallyCollapsed: Aglyn.NodeId[]
   allExpanded: ExpandedNodes & SelectedNodes
   /**
    * The computed last selected node
@@ -46,22 +51,22 @@ interface FocusState {
   readonly isNodeSelected: (node: Aglyn.NodeSchema) => boolean
   readonly isNodeHovered: (node: Aglyn.NodeSchema) => boolean
   readonly isNodeExpanded: (node: Aglyn.NodeSchema) => boolean
+  /**
+   * Whether a node is currently visually open in the tree — either because the
+   * user manually expanded it, or because it is an auto-expanded ancestor of a
+   * selected node that has not been manually collapsed.
+   */
+  readonly isNodeEffectivelyExpanded: (node: Aglyn.NodeSchema) => boolean
 }
 
 export const state = observable<FocusState>({
   hovered: null,
   selected: [],
   expanded: [],
+  manuallyCollapsed: [],
 
   get allExpanded(): Aglyn.NodeSchema<any>[] {
-    const res = [...this.expanded, ...this.selected]
-    // this.expanded.forEach((i) => {
-    //   res.push(i)
-    // })
-    // this.selected.forEach((i) => {
-    //   res.push(i)
-    // })
-    return res
+    return [...this.expanded, ...this.selected]
   },
   get lastSelected(): Aglyn.NodeSchema<any> | undefined {
     return this.selected[this.selected.length - 1]
@@ -79,6 +84,20 @@ export const state = observable<FocusState>({
     if (!node) return false
     return state.expanded.some((i) => i?.$id === node?.$id)
   }),
+  isNodeEffectivelyExpanded: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
+    if (!node) return false
+    // Manually expanded always wins
+    if (state.expanded.some((i) => i?.$id === node?.$id)) return true
+    // If the user explicitly collapsed this node, treat it as collapsed
+    if (state.manuallyCollapsed.includes(node.$id)) return false
+    // Auto-expanded: this node is an ancestor of a manually expanded node
+    // (mirrors the view's allExpanded breadcrumb-path logic exactly)
+    if (state.expanded.some((n) => n?.breadcrumbPath?.includes(node.$id))) return true
+    // Auto-expanded: this node is an ancestor of a selected node
+    return state.selected.some((selectedNode) =>
+      selectedNode?.breadcrumbPath?.includes(node.$id),
+    )
+  }),
 })
 
 export function isNodeSelected(node: Aglyn.NodeSchema<any>) {
@@ -91,6 +110,10 @@ export function isNodeHovered(node: Aglyn.NodeSchema<any>) {
 
 export function isNodeExpanded(node: Aglyn.NodeSchema<any>) {
   return state.isNodeExpanded(node)
+}
+
+export function isNodeEffectivelyExpanded(node: Aglyn.NodeSchema<any>) {
+  return state.isNodeEffectivelyExpanded(node)
 }
 
 export function clearFocusStatus() {
@@ -115,21 +138,40 @@ export function clearHover() {
 export function expandNode(node: Aglyn.NodeSchema<any>) {
   if (!node) return
   runInAction(() => {
-    state.expanded.push(node)
+    // Clear any manual-collapse override so the node stays open
+    const mcIndex = state.manuallyCollapsed.indexOf(node.$id)
+    if (mcIndex !== -1) state.manuallyCollapsed.splice(mcIndex, 1)
+
+    if (!state.expanded.some((i) => i?.$id === node?.$id)) {
+      state.expanded.push(node)
+    }
   })
 }
 
 export function collapseNode(node: Aglyn.NodeSchema<any>) {
   if (!node) return
   runInAction(() => {
+    // Remove from manually-expanded if present
     const index = state.expanded.findIndex((i) => i?.$id === node?.$id)
-    state.expanded.splice(index, 1)
+    if (index !== -1) state.expanded.splice(index, 1)
+
+    // After removal, check if the node is still visually open because it is an
+    // ancestor of another expanded node or of a selected node. If so, record a
+    // manual-collapse override so those auto-expansion sources are suppressed.
+    const stillEffectivelyExpanded =
+      state.expanded.some((n) => n?.breadcrumbPath?.includes(node.$id)) ||
+      state.selected.some((s) => s?.breadcrumbPath?.includes(node.$id))
+
+    if (stillEffectivelyExpanded && !state.manuallyCollapsed.includes(node.$id)) {
+      state.manuallyCollapsed.push(node.$id)
+    }
   })
 }
 
 export function toggleNodeExpansion(node: Aglyn.NodeSchema<any>) {
   if (!node) return
-  if (isNodeExpanded(node)) return collapseNode(node)
+  // Use effective expansion so auto-expanded nodes can also be toggled closed
+  if (isNodeEffectivelyExpanded(node)) return collapseNode(node)
   return expandNode(node)
 }
 
@@ -167,6 +209,13 @@ export function setSelectedNode(
   runInAction(() => {
     if (multiSelection) state.selected.push(node)
     else state.selected = [node]
+
+    // Clear manual-collapse overrides for ancestors of the newly selected node
+    // so the hierarchy always opens up to reveal it
+    const ancestorIds = new Set<Aglyn.NodeId>(node?.breadcrumbPath ?? [])
+    state.manuallyCollapsed = state.manuallyCollapsed.filter(
+      (id) => !ancestorIds.has(id),
+    )
   })
 }
 

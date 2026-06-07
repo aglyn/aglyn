@@ -417,13 +417,14 @@ export const NodeTreeView = observer(
   forwardRef<any, NodeTreeViewProps>((props, ref) => {
     const { TreeViewProps, ...rest } = props
     const allExpanded = Besigner.focus.state.allExpanded
+    const manuallyCollapsed = Besigner.focus.state.manuallyCollapsed
 
     const expanded = useMemo(() => {
       const paths = allExpanded.reduce((acc, i) => {
         return [...acc, ...(i?.breadcrumbPath || [])]
       }, [])
-      return uniq(paths)
-    }, [allExpanded])
+      return uniq(paths).filter((id) => !manuallyCollapsed.includes(id))
+    }, [allExpanded, manuallyCollapsed])
 
     const handleTreeItemToggle = useCallback((e, $id: Aglyn.NodeId) => {
       e.stopPropagation()
@@ -441,7 +442,6 @@ export const NodeTreeView = observer(
       e.preventDefault()
       const node = Aglyn.canvas.getNode($id)
       if (!node) return
-      Besigner.focus.toggleNodeExpansion(node)
       Besigner.focus.handleNodeSelection(node)
     }, [])
 
