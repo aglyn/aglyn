@@ -123,6 +123,7 @@ let connectedAuth = null
 
 function GetInnerLayout({ children }) {
   const app = useFirebaseApp()
+  console.log('[Firebase] app.options.apiKey present:', !!app?.options?.apiKey, '| projectId:', app?.options?.projectId)
   const auth = getAuth(app)
   const database = getDatabase(app)
   let status
