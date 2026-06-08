@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-import {DEFAULT_ICON} from '../constants'
-import type {Icon, IconId} from '../types/icon'
+import { DEFAULT_ICON } from '@aglyn/shared-data-mdi/constants/default-icon'
+import type { Icon, IconId } from '../types'
 
-
-export function handleIconNotFound(id: IconId, icon: Icon) {
+export function handleIconNotFound(id: IconId, icon: Icon | undefined) {
   if (!icon) {
     console.warn(`Icon not found with id(${id})`)
     return DEFAULT_ICON

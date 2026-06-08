@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-import {MdiIcons} from '../internal'
-import type {Icon, IconResponse, IdParam} from '../types/icon'
-import {handleIconNotFound} from './handle-icon-not-found'
+import { MdiIcons } from '@aglyn/shared-data-mdi/constants/mdi-icons'
+import type { Icon, IconResponse, IdParam } from '../types'
+import { handleIconNotFound } from './handle-icon-not-found'
 
-
-export function getMdiIconFromId<T extends IdParam>(iconId: T): IconResponse<T> {
+export function getMdiIconFromId<T extends IdParam>(
+  iconId: T,
+): IconResponse<T> {
   if (Array.isArray(iconId)) {
     const result: Icon[] = []
     for (const id of iconId) {
-      const icon = id && MdiIcons.get(id)
+      const icon = id ? MdiIcons.get(id) : undefined
       result.push(handleIconNotFound(id, icon))
     }
     return result as IconResponse<T>
   }
-  const icon = iconId && MdiIcons.get(iconId)
+  const icon = iconId ? MdiIcons.get(iconId) : undefined
   return handleIconNotFound(iconId, icon) as IconResponse<T>
 }
 export default getMdiIconFromId

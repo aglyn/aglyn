@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,49 +15,183 @@
  * limitations under the License.
  */
 
-//TODO: FIX ALL TYPINGS AND REFACTOR OPTIONS/PROPS
+import { createEmotionCache } from '@aglyn/shared-ui-theme'
+import { renderStylesToString } from '@emotion/server'
+import { Portal } from '@mui/material'
+import { paramCase } from 'change-case'
+import {
+  createContext,
+  forwardRef,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { renderToString } from 'react-dom/server'
+import { useMergeRefs } from '../hooks/use-merge-refs'
+import EmotionCacheProvider from './emotion-cache-provider'
 
-import { jssPreset, StylesProvider } from '@aglyn/shared-feature-themes'
+export type MuiShadowRendererProps = {
+  container?: Node
+  ssr?: boolean
+  children?: JSX.Children
+}
+export type MuiShadowRenderer = (props: MuiShadowRendererProps) => JSX.Node
+export type CreateShadowRootOptions = {
+  render: MuiShadowRenderer
+}
 
-import { create } from 'jss'
-import rtl from 'jss-rtl'
-import React, { HTMLProps, PropsWithChildren, useState } from 'react'
-import useCombinedRefs from '../hooks/use-combined-refs'
+export interface MuiShadowRootProps {
+  mode?: 'open' | 'closed'
+  delegatesFocus?: boolean
+  styleSheets?: globalThis.CSSStyleSheet[]
+  ssr?: boolean
+  children?: JSX.Children
+}
 
-import { createShadowDomProxy } from './shadow-dom' /* eslint-disable-next-line */
+const tags = new Map()
+const cacheMap = new WeakMap()
+const ShadowDomContext = createContext<Element>(null)
 
-/* eslint-disable-next-line */
-export interface MuiShadowDomProps {}
+export function useMuiShadowDomContext() {
+  return useContext(ShadowDomContext)
+}
 
-const MuiShadowStylesProvider = React.forwardRef<HTMLProps<HTMLDivElement>,
-  PropsWithChildren<MuiShadowDomProps>>(function RefRenderFn(props, ref) {
-  const {children} = props
-  const [styleNode, setStyleNode] = useState(null)
-  const elemRef = useCombinedRefs(setStyleNode, ref)
-  const jss = create({
-    plugins: [...jssPreset().plugins, rtl()],
-    insertionPoint: styleNode,
+function handleError({ error, styleSheets, container }) {
+  switch (error.name) {
+    case 'NotSupportedError':
+      styleSheets.length > 0 && (container.adoptedStyleSheets = styleSheets)
+      break
+    default:
+      throw error
+  }
+}
+
+export function withMuiShadowRoot(
+  Tag: any | keyof JSX.IntrinsicElements,
+  options: CreateShadowRootOptions,
+) {
+  const { render } = options
+
+  const ShadowRoot = forwardRef<Element, MuiShadowRootProps>((props, ref) => {
+    const {
+      mode = 'open',
+      delegatesFocus,
+      styleSheets = [],
+      ssr,
+      children,
+      ...rest
+    } = props
+    const local = useRef<Element | null>(null)
+    const [container, setContainer] = useState(null)
+    const key = `node_${mode}${delegatesFocus}`
+
+    useEffect(() => {
+      const node = local.current
+      if (!node) return void 0
+      try {
+        let shadowRoot: ShadowRoot = null
+
+        if (ssr) shadowRoot = node.shadowRoot
+        else {
+          shadowRoot = local.current.attachShadow({ mode, delegatesFocus })
+          shadowRoot.adoptedStyleSheets = styleSheets
+        }
+
+        setContainer(shadowRoot)
+      } catch (error) {
+        handleError({ error, styleSheets, container })
+      }
+    }, [styleSheets, ssr, mode, delegatesFocus, container])
+
+    return (
+      <Tag key={key} ref={useMergeRefs(ref, local)} {...rest}>
+        {(container || ssr) && (
+          <ShadowDomContext.Provider value={container}>
+            {ssr ? (
+              <template {...({ shadowroot: 'open' } as any)}>
+                {render({
+                  container,
+                  ssr,
+                  children,
+                })}
+              </template>
+            ) : (
+              <Portal container={() => container}>
+                {render({
+                  container,
+                  ssr,
+                  children,
+                })}
+              </Portal>
+            )}
+          </ShadowDomContext.Provider>
+        )}
+      </Tag>
+    )
   })
+  ShadowRoot.displayName = 'ShadowRoot'
+
+  return ShadowRoot
+}
+
+export function createMuiShadowDomProxy(
+  target: Partial<JSX.IntrinsicElementMap> = {},
+  key = 'core',
+  render: MuiShadowRenderer = ({ children }) => children,
+) {
+  return new Proxy(target, {
+    get: function get(_, name) {
+      const tag = paramCase(String(name), { delimiter: '-' })
+      const id = `${key}-${tag}`
+
+      if (!tags.has(id)) {
+        tags.set(id, withMuiShadowRoot(tag, { render }))
+      }
+      return tags.get(id)
+    },
+  })
+}
+
+function getStyles(children) {
+  return renderStylesToString(renderToString(<>{children}</>))
+}
+
+export const MuiShadowDomRenderer = (props: MuiShadowRendererProps) => {
+  const { ssr, container, children } = props
+  const cache = !cacheMap.has(container)
+    ? (() => {
+        if (cacheMap.has(container)) return cacheMap.get(container)
+        const cache = createEmotionCache({
+          container,
+          key: 'msd',
+          prepend: true,
+        })
+        cacheMap.set(container, cache)
+        return cache
+      })()
+    : cacheMap.get(container)
+
+  if (ssr) {
+    return (
+      <>
+        <style type="text/css">{getStyles(children)}</style>
+        {children}
+      </>
+    )
+  }
 
   return (
-    <StylesProvider jss={jss}>
-      {styleNode ? children : null}
-      <div ref={elemRef}/>
-    </StylesProvider>
+    <EmotionCacheProvider emotionCache={cache}>
+      <>{children}</>
+    </EmotionCacheProvider>
   )
-})
-MuiShadowStylesProvider.displayName = 'MuiShadowStylesProvider'
+}
 
-export const MuiShadowDom = createShadowDomProxy(
+export const MuiShadowDom = createMuiShadowDomProxy(
   {},
-  {
-    keyPrefix: 'mui',
-    render: function(props) {
-      const {children} = props
-
-      return <MuiShadowStylesProvider>{children}</MuiShadowStylesProvider>
-    },
-  },
+  'mui',
+  MuiShadowDomRenderer,
 )
 
 export default MuiShadowDom

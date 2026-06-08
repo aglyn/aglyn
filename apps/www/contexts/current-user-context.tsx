@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import { createHocWithContextConsumer } from '@aglyn/shared-ui-jsx'
-import { createContext, PropsWithChildren, useContext, useEffect, useState } from 'react'
-import { FbUser } from '../lib/aglyn-deprecated'
-import { AppContextType, withAppContext } from './app-context'
+import {createHocWithContextConsumer} from '@aglyn/shared-ui-jsx'
+import {createContext, type PropsWithChildren, useContext, useEffect, useState} from 'react'
+import {type  FbUser} from '../lib/aglyn-deprecated'
+import {type AppContextType, withAppContext} from './app-context'
+
 
 export type CurrentUserContextType = {
   currentUser: FbUser
@@ -28,6 +29,7 @@ export type CurrentUserContextType = {
 
 export const CurrentUserContext = createContext<CurrentUserContextType>(null)
 CurrentUserContext.displayName = 'CurrentUserContext'
+CurrentUserContext.aglyn = true
 
 export const {
   displayName,
@@ -42,7 +44,7 @@ export interface CurrentUserProviderComponentProps extends PropsWithChildren<{}>
 }
 
 function CurrentUserProviderComponentRaw(props: CurrentUserProviderComponentProps) {
-  const { children, app } = props
+  const {children, app} = props
   const currentUser = app?.getCurrentUser?.()
   const [ctxState, setCtxState] = useState(() => ({
     currentUser,
@@ -66,7 +68,7 @@ function CurrentUserProviderComponentRaw(props: CurrentUserProviderComponentProp
           loading: false,
           error,
         }))
-      }
+      },
     )
     // Unsubscribe auth listener on unmount
     return () => {
@@ -85,5 +87,5 @@ export const CurrentUserProviderComponent = withAppContext(CurrentUserProviderCo
  */
 export const withCurrentUserContext = createHocWithContextConsumer(
   CurrentUserContextConsumer,
-  'currentUserContext'
+  'currentUserContext',
 )

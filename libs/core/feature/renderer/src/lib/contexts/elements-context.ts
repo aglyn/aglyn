@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +15,48 @@
  * limitations under the License.
  */
 
-import type {ElementsDataStore, ElementsDataStoreApi} from '@aglyn/core-data-framework'
-import {createContext, useContext} from 'react'
-
+import type {
+  CanvasAddElementPayload,
+  CanvasContext,
+  CanvasDeleteElementPayload,
+  CanvasDuplicateElementPayload,
+  CanvasMoveElementPayload,
+  CanvasSetElementPayload,
+  CanvasSetElementsPayload,
+  CanvasUpdateElementPayload,
+  ContextEvent,
+} from '@aglyn/core-data-foundation'
+import { createContext, useContext } from 'react'
 
 export type UseElementsContextType = () => ElementsContextType
 
-export interface ElementsContextType extends ElementsDataStoreApi {
-  elements: ElementsDataStore['present']
+export interface ElementsContextType {
+  elements: CanvasContext['present']
+  redo: ContextEvent<any>
+  undo: ContextEvent<any>
+  addElement: ContextEvent<CanvasAddElementPayload>
+  deleteElement: ContextEvent<CanvasDeleteElementPayload>
+  duplicateElement: ContextEvent<CanvasDuplicateElementPayload>
+  moveElement: ContextEvent<CanvasMoveElementPayload>
+  setElement: ContextEvent<CanvasSetElementPayload>
+  setElements: ContextEvent<CanvasSetElementsPayload>
+  updateElement: ContextEvent<CanvasUpdateElementPayload>
 }
 
 export const ElementsContext = createContext<ElementsContextType>({
-  elements: {},
-  undo: (() => {}) as any,
-  redo: (() => {}) as any,
-  setElements: (() => {}) as any,
   addElement: (() => {}) as any,
-  updateElement: (() => {}) as any,
   deleteElement: (() => {}) as any,
-  moveElement: (() => {}) as any,
   duplicateElement: (() => {}) as any,
+  elements: {},
+  moveElement: (() => {}) as any,
+  redo: (() => {}) as any,
+  setElement: (() => {}) as any,
+  setElements: (() => {}) as any,
+  undo: (() => {}) as any,
+  updateElement: (() => {}) as any,
 })
 ElementsContext.displayName = 'ElementsContext'
+ElementsContext.aglyn = true
 
 // export const {
 //   Provider: ElementsContextProvider,

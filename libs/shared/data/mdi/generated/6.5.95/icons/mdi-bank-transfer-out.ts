@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiBankTransferOut: Icon = {
   "id": "bank-transfer-out",
   "name": "Bank Transfer Out",
   "path": "M15,15V12H18V10L22,13.5L18,17V15H15M14,8.7V10H2V8.7L8,5L14,8.7M2,17H14V19H2V17M7,11H9V16H7V11M3,11H5V16H3V11M11,11H13V16H11V11Z",
@@ -7,3 +8,4 @@ export default {
     "Banking"
   ]
 }
+export default mdiBankTransferOut

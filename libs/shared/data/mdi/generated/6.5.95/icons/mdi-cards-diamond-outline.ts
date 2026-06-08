@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiCardsDiamondOutline: Icon = {
   "id": "cards-diamond-outline",
   "name": "Cards Diamond Outline",
   "path": "M12 2L5 12L12 22L19 12M7.44 12L12 5.5L16.56 12L12 18.5",
@@ -12,3 +13,4 @@ export default {
     "Transportation + Road"
   ]
 }
+export default mdiCardsDiamondOutline

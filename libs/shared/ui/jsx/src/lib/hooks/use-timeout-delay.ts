@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { _isArr, _isFnT, _isNum, _isNumPos, _isObj } from '@aglyn/shared-util-guards'
+import {
+  _isArr,
+  _isFnT,
+  _isNum,
+  _isNumPos,
+  _isObj,
+} from '@aglyn/shared-util-tools'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface Options {
@@ -65,7 +71,10 @@ type HandlerParams = {
  * @param {Options} options
  * @return {TimeoutReturn}
  */
-export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutReturn {
+export function useTimeoutDelay(
+  callback: Handler,
+  options?: Options,
+): TimeoutReturn {
   const [state] = useState<Options>(() => (_isObj(options) ? options : {}))
   const [mounted, setMounted] = useState(false)
   const savedCallback = useRef(null)
@@ -85,7 +94,9 @@ export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutRe
     if (ref.current.timeoutRef) {
       console.log('clear-del', ref)
 
-      state.repeat ? clearInterval(ref.current.timeoutRef) : clearTimeout(ref.current.timeoutRef)
+      state.repeat
+        ? clearInterval(ref.current.timeoutRef)
+        : clearTimeout(ref.current.timeoutRef)
 
       ref.current.timeoutRef = null
     }
@@ -100,7 +111,7 @@ export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutRe
       } else if (ref.current.timeoutRef) {
         console.warn(
           "Can't start timeout or interval when one is already running",
-          ref.current.timeoutRef
+          ref.current.timeoutRef,
         )
       }
 
@@ -119,7 +130,11 @@ export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutRe
       // Args array
       const argArgs = _isArr(optArgs) ? optArgs : []
       // Determine if we're using global delay or parameter delay
-      const ms = _isNum(optDelay) ? (_isNum(state.msDelay) ? state.msDelay : 0) : optDelay || 0
+      const ms = _isNum(optDelay)
+        ? _isNum(state.msDelay)
+          ? state.msDelay
+          : 0
+        : optDelay || 0
 
       const max = _isNumPos(optLimit) ? optLimit : null
 
@@ -142,7 +157,9 @@ export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutRe
           }
         }
 
-        const limitReached = Boolean(optRepeat && max && ref.current.runCount >= max)
+        const limitReached = Boolean(
+          optRepeat && max && ref.current.runCount >= max,
+        )
         const toCancel = Boolean(optRepeat && reqCancel)
 
         // Make sure to clear the interval if on last run
@@ -168,7 +185,7 @@ export function useTimeoutDelay(callback: Handler, options?: Options): TimeoutRe
           : setTimeout(handler, ms, ...argArgs),
       }
     },
-    [state, ref, clear, mounted]
+    [state, ref, clear, mounted],
   )
 
   // When mounted set mounted

@@ -16,13 +16,14 @@
  */
 
 import React from 'react'
-import { render } from '@testing-library/react'
+import {render} from '@testing-library/react'
 
 import ConfirmationProviderComponent from './confirmation-provider.component'
 
+
 describe('ConfirmationProviderComponent', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<ConfirmationProviderComponent />)
+    const {baseElement} = render(<ConfirmationProviderComponent />)
     expect(baseElement).toBeTruthy()
   })
 })

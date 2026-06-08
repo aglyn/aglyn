@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-import type { IAglynComponent, ElementId } from '@aglyn/core-data-framework'
-import { getComponent } from '@aglyn/core-data-framework'
-import { useMemo } from 'react'
-import { useAglynAppContext } from '../contexts/aglyn-app-context'
-import { useAglynElementData } from './use-aglyn-element-data'
+import type { AglynExoticComponent, NodeId } from '@aglyn/core-data-foundation'
+import useAglynComponent from './use-aglyn-component'
+import useAglynElementData from './use-aglyn-element-data'
 
-export function useAglynElementComponent($id: ElementId): IAglynComponent {
-  const { getApp } = useAglynAppContext()
-  const elementData = useAglynElementData($id)
-  const componentId = elementData.componentId
-  const bundleId = elementData.bundleId
-  return useMemo(() => {
-    return getComponent(getApp(), { componentId, bundleId })
-  }, [getApp, componentId, bundleId])
+export function useAglynElementComponent<P, T>(
+  $id: NodeId,
+): OrUndef<AglynExoticComponent<P, T>> {
+  const componentId = useAglynElementData($id, 'componentId')
+  const pluginId = useAglynElementData($id, 'pluginId')
+  return useAglynComponent(componentId, pluginId)
 }
 export default useAglynElementComponent

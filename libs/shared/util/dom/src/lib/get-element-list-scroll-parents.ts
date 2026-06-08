@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
  */
 
 
-import type { VisualViewport } from '../types'
-import { getElementParentNode } from './get-element-parent-node'
-import { getElementScrollParent } from './get-element-scroll-parent'
-import { getNodeWindow } from './get-node-window'
-import { isElementScrollParentElement } from './guards/node-is'
+import type {VisualViewport} from '../dom'
+import {getElementParentNode} from './get-element-parent-node'
+import {getElementScrollParent} from './get-element-scroll-parent'
+import {getNodeWindow} from './get-node-window'
+import {isElementScrollParentElement} from './guards/is-element-scroll-parent-element'
 
 /*
  given a DOM element, return the list of all scroll parents, up the list of ancesors

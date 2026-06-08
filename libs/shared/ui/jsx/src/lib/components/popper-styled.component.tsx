@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,27 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { _isEqualitySameType } from '@aglyn/shared-util-guards'
-import MuiPopper, { PopperProps as MuiPopperProps } from '@mui/material/Popper'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
+import { _isEqualitySameType } from '@aglyn/shared-util-tools'
+import MuiPopper, {
+  type PopperProps as MuiPopperProps,
+} from '@mui/material/Popper'
 import clsx from 'clsx'
 import { forwardRef, HTMLAttributes } from 'react'
 
+const classKeys = generateComponentClassKeys('AglynPopperStyled', ['arrow'])
 
-const classKeys = generateComponentClassKeys('AglynPopperStyled', [
-  'arrow',
-])
-
-export const PopperStyledArrowComponent = styled(forwardRef<any, HTMLAttributes<HTMLDivElement>>(
-  function RefRenderFn(props, ref) {
-    const {className, ...rest} = props
+export const PopperStyledArrowComponent = styled(
+  forwardRef<any, HTMLAttributes<HTMLDivElement>>((props, ref) => {
+    const { className, ...rest } = props
     return (
       <div ref={ref} className={clsx(classKeys.arrow, className)} {...rest} />
     )
+  }),
+  {
+    name: 'AglynPopperArrow',
   },
-), {
-  name: 'AglynPopperArrow',
-})({
+)({
   position: 'absolute',
   fontSize: 7,
   width: '3em',
@@ -55,10 +55,11 @@ export interface PopperStyledComponentProps extends MuiPopperProps {
   arrowGap?: number | string
 }
 
-const PopperStyledComponent = styled(MuiPopper, {
+export const PopperStyledComponent = styled(MuiPopper, {
   name: 'AglynPopperStyled',
-  shouldForwardProp: (prop) => !_isEqualitySameType(prop, 'disableArrow', 'arrowGap'),
-})<PopperStyledComponentProps>(({theme, disableArrow, arrowGap}) => ({
+  shouldForwardProp: (prop) =>
+    !_isEqualitySameType(prop, null, 'disableArrow', 'arrowGap'),
+})<PopperStyledComponentProps>(({ theme, disableArrow, arrowGap = 2 }) => ({
   zIndex: 1,
   '& > div': {
     position: 'relative',
@@ -128,9 +129,6 @@ const PopperStyledComponent = styled(MuiPopper, {
 }))
 
 PopperStyledComponent.displayName = 'PopperStyledComponent'
-PopperStyledComponent.defaultProps = {
-  arrowGap: 2,
-}
+PopperStyledComponent.aglyn = true
 
-export { PopperStyledComponent }
 export default PopperStyledComponent

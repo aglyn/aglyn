@@ -1,7 +1,6 @@
 {
   "extends": [
-    "plugin:@nrwl/nx/react-typescript",
-    "../../.eslintrc.json",
+    "../../.eslintrc.js",
     "next",
     "next/core-web-vitals"
   ],
@@ -16,7 +15,6 @@
     {
       "files": ["*.ts", "*.tsx"],
       "rules": {
-        "react/no-children-prop": "off"
       }
     },
     {

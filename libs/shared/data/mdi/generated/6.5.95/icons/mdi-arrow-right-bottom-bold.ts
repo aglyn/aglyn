@@ -1,7 +1,9 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiArrowRightBottomBold: Icon = {
   "id": "arrow-right-bottom-bold",
   "name": "Arrow Right Bottom Bold",
   "path": "M3 3H7V10.5C7 12.43 8.57 14 10.5 14H13V10L20 16L13 22V18H10.5C6.36 18 3 14.64 3 10.5V3Z",
   "as": [],
   "tags": []
 }
+export default mdiArrowRightBottomBold

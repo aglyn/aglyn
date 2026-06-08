@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiSkipNext: Icon = {
   "id": "skip-next",
   "name": "Skip Next",
   "path": "M16,18H18V6H16M6,18L14.5,12L6,6V18Z",
@@ -7,3 +8,4 @@ export default {
     "Home Automation"
   ]
 }
+export default mdiSkipNext

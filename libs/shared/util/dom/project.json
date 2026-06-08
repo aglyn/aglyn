@@ -1,0 +1,30 @@
+{
+  "name": "shared-util-dom",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/dom/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:util"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/dom",
+        "main": "libs/shared/util/dom/src/index.ts",
+        "tsConfig": "libs/shared/util/dom/tsconfig.lib.json",
+        "assets": ["libs/shared/util/dom/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/dom"],
+      "options": {
+        "jestConfig": "libs/shared/util/dom/jest.config.ts"
+      }
+    }
+  }
+}

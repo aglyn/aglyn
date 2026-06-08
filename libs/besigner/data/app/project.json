@@ -1,0 +1,30 @@
+{
+  "name": "besigner-data-app",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/besigner/data/app/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:besigner"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/besigner/data/app",
+        "main": "libs/besigner/data/app/src/index.ts",
+        "tsConfig": "libs/besigner/data/app/tsconfig.lib.json",
+        "assets": ["libs/besigner/data/app/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/besigner/data/app"],
+      "options": {
+        "jestConfig": "libs/besigner/data/app/jest.config.ts"
+      }
+    }
+  }
+}

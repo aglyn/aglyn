@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,15 @@
  * limitations under the License.
  */
 
-import { _hasProperty } from '@aglyn/shared-util-guards'
-
 
 /**
  * Shortcut for retrieving the length property,
  * defaults to zero (0) if the property does not exist
- *
- * @export
- * @template T
- * @param {(Iterable<T> | ArrayLike<T>)} val
- * @returns {number}
  */
-export function length<T>(val: Iterable<T> | ArrayLike<T>): number {
-  if (val && _hasProperty('length', val)) {
+export function length(val: unknown): number {
+  if (val && (typeof val === 'object' || typeof val === 'string' || Array.isArray(val))) {
     return val['length'] ?? 0
   }
   return 0
 }
+export default length

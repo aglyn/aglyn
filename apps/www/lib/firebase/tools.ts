@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { createUid } from '@aglyn/shared-util-vendor'
+import {createUid} from '@aglyn/shared-util-vendor'
 import fbAdmin from './fb-admin'
+
 
 export function createDocumentId(): string {
   return createUid(10)

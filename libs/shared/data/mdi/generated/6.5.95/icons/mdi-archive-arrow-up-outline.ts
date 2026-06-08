@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiArchiveArrowUpOutline: Icon = {
   "id": "archive-arrow-up-outline",
   "name": "Archive Arrow Up Outline",
   "path": "M20 21H4V10H6V19H18V10H20V21M3 3H21V9H3V3M5 5V7H19V5M10.5 17V14H8L12 10L16 14H13.5V17",
@@ -8,3 +9,4 @@ export default {
   ],
   "tags": []
 }
+export default mdiArchiveArrowUpOutline

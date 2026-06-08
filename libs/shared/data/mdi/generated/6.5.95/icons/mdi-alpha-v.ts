@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiAlphaV: Icon = {
   "id": "alpha-v",
   "name": "Alpha V",
   "path": "M9,7L11,17H13L15,7H13L12,12L11,7H9Z",
@@ -11,3 +12,4 @@ export default {
     "Alpha / Numeric"
   ]
 }
+export default mdiAlphaV

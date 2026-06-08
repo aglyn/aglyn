@@ -10,7 +10,7 @@
   - workspace.*.json
   - migrations.json
   - next.config.js
-  - nextjs-base.config.js
+  - nextjs-base.config.*
   - firebase.json
   - firebase.indexes.json
   - firebase.rules
@@ -33,7 +33,7 @@
   - migrations.json
 'Nextjs':
   - next.config.js
-  - nextjs-base.config.js
+  - nextjs-base.config.*
 'Firebase':
   - firebase.json
   - firebase.indexes.json

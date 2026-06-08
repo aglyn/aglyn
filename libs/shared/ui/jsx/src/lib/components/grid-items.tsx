@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,33 +15,29 @@
  * limitations under the License.
  */
 
-import MuiGrid, {GridProps as MuiGridProps} from '@mui/material/Grid'
-import React, {forwardRef} from 'react'
+import { Grid2, type Grid2Props } from '@mui/material'
+import { forwardRef } from 'react'
 
 /* eslint-disable-next-line */
-export interface GridItemsProps extends MuiGridProps {
-  items: MuiGridProps[]
+export interface GridItemsProps
+  extends Grid2Props,
+    ReplaceKey<JSX.OverrideableComponentProps, 'component', 'itemComponent'> {
+  items: Grid2Props[]
 }
 
-export const GridItems = forwardRef<any, GridItemsProps>(function RefRenderFn(props, ref) {
-  const {items, ...rest} = props
+export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
+  const { items = [], itemComponent: ItemComponent = Grid2, ...rest } = props
 
   return (
-    <MuiGrid ref={ref} container {...rest}>
+    <Grid2 ref={ref} container {...rest}>
       {items.map((item, key) => (
-        <MuiGrid
-          item
-          key={item?.key ?? item?.id ?? key}
-          {...item}
-        />
+        <ItemComponent key={item?.key ?? item?.id ?? key} {...item} />
       ))}
-    </MuiGrid>
+    </Grid2>
   )
 })
 
 GridItems.displayName = 'GridItems'
-GridItems.defaultProps = {
-  items: [],
-}
+GridItems.aglyn = true
 
 export default GridItems

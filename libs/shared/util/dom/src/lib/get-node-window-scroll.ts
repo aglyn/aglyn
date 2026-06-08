@@ -16,7 +16,7 @@
  */
 
 
-import { getNodeWindow } from './get-node-window'
+import {getNodeWindow} from './get-node-window'
 
 
 export function getNodeWindowScroll(node: Node | Window) {

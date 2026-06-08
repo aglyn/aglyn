@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,49 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { PKey } from '@aglyn/shared-data-types'
 
+import cloneDeep from 'lodash-es/cloneDeep'
 
-export type CopyTarget<T, U, K, V, X> = T extends ReadonlyArray<U>
-  ? ReadonlyArray<U>
-  : T extends Map<K, V>
-    ? Map<K, V>
-    : T extends Set<X>
-      ? Set<X>
-      : T extends Record<PKey, unknown>
-        ? T
-        : any
-
-
-const getType: <T>(obj: T) => string = <T>(obj: T): string => (toString.call(obj) as string).slice(8, -1)
-const defaultAssign: <T, S>(target: T, source: S) => (T & S) = <T, S>(target: T, source: S): T & S => {
-  getAllKeys(source).forEach((key: string): void => {
-    if (Object.prototype.hasOwnProperty.call(source, key)) {
-      target[key] = source[key]
-    }
-  })
-  return target as T & S
-}
-const objectAssign: { <T, U>(target: T, source: U): (T & U); <T, U, V>(target: T, source1: U, source2: V): (T & U & V); <T, U, V, W>(target: T, source1: U, source2: V, source3: W): (T & U & V & W); (target: object, ...sources: any[]): any } = Object.assign ?? defaultAssign
-const getAllKeys: (obj) => string[] =
-  typeof Object.getOwnPropertySymbols === 'function'
-    ? (obj): string[] => Object.keys(obj).concat(Object.getOwnPropertySymbols(obj) as any)
-    : (obj): string[] => Object.keys(obj)
-
-/**
- * Immutable copy
- * @see inspiration {@link https://github.com/kolodny/immutability-helper/blob/master/index.ts}
- * @param {CopyTarget<T, U, K, V, X>} value
- * @returns {any}
- */
-export function copy<T, U, K, V, X>(value: CopyTarget<T, U, K, V, X>): CopyTarget<T, U, K, V, X> {
-  return Array.isArray(value)
-    ? objectAssign(value.constructor(value.length), value)
-    : getType(value) === 'Map'
-      ? new Map(value as Map<K, V>)
-      : getType(value) === 'Set'
-        ? new Set(value as Set<X>)
-        : value && typeof value === 'object'
-          ? (objectAssign(Object.create(Object.getPrototypeOf(value)), value) as T)
-          : (value as T)
-}
+export { cloneDeep }
+export default cloneDeep

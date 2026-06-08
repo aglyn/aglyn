@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,13 @@
  */
 
 import { getDisplayName } from '@aglyn/shared-util-tools'
-import { ComponentType, Consumer, forwardRef, ForwardRefExoticComponent } from 'react'
-
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
+import {
+  ComponentType,
+  Consumer,
+  forwardRef,
+  ForwardRefExoticComponent,
+} from 'react'
 
 export const DEFAULT_INJECTED_PROP_NAME = 'ctx'
 export type DEFAULT_INJECTED_PROP_NAME = typeof DEFAULT_INJECTED_PROP_NAME
@@ -25,23 +30,31 @@ export type DEFAULT_INJECTED_PROP_NAME = typeof DEFAULT_INJECTED_PROP_NAME
 /**
  * Infer the context type from the consumer
  */
-export type ConsumerContextType<C extends Consumer<any>> =
-  C extends Consumer<infer T>
-    ? T
-    : never
+export type ConsumerContextType<C extends Consumer<any>> = C extends Consumer<
+  infer T
+>
+  ? T
+  : never
 
 /** The context props to inject into the component */
-export type InjectedContextConsumerProps<C extends Consumer<any>, NM extends string = DEFAULT_INJECTED_PROP_NAME> = {
+export type InjectedContextConsumerProps<
+  C extends Consumer<any>,
+  NM extends string = DEFAULT_INJECTED_PROP_NAME,
+> = {
   [K in NM]: ConsumerContextType<C>
 }
 
 /** A react component awaiting decoration of injected prop */
-export type ComponentWithInjectedProp<P,
+export type ComponentWithInjectedProp<
+  P,
   CTX_C extends Consumer<any>,
-  InjectedProp extends string = DEFAULT_INJECTED_PROP_NAME> = ComponentType<P & InjectedContextConsumerProps<CTX_C, InjectedProp>>
+  InjectedProp extends string = DEFAULT_INJECTED_PROP_NAME,
+> = ComponentType<P & InjectedContextConsumerProps<CTX_C, InjectedProp>>
 
 export interface WithContextConsumer<T, Key extends string = 'ctx'> {
-  <P>(component: ComponentType<P & Partial<Record<Key, T>>>): ForwardRefExoticComponent<Omit<P, Key>>
+  <P>(
+    component: ComponentType<P & Partial<Record<Key, T>>>,
+  ): ForwardRefExoticComponent<Omit<P, Key>>
 }
 
 /**
@@ -56,25 +69,24 @@ export function createHocWithContextConsumer<T, K extends string = 'ctx'>(
   function withContextConsumer<P>(
     Component: ComponentType<P & Record<K, T>>,
   ): ForwardRefExoticComponent<Omit<P, K>> {
-    const displayName = `WithContext(${getDisplayName(Component)})`
+    const displayName = getDisplayName(Component)
 
-    const DecoratedComponent = forwardRef<any, P>(
-      function RefRenderFn(props, ref) {
-        return (
-          <Consumer>
-            {(ctx) => (
-              <Component
-                ref={ref}
-                {...{[injectedPropName]: ctx} as Record<K, T>}
-                {...props as P}
-              />
-            )}
-          </Consumer>
-        )
-      },
-    )
+    const DecoratedComponent = forwardRef<any, P>((props, ref) => {
+      return (
+        <Consumer>
+          {(ctx) => (
+            <Component
+              ref={ref}
+              {...({ [injectedPropName]: ctx } as Record<K, T>)}
+              {...(props as P)}
+            />
+          )}
+        </Consumer>
+      )
+    })
 
-    DecoratedComponent.displayName = displayName
+    DecoratedComponent.displayName = `WithContext(${displayName})`
+    hoistNonReactStatics(DecoratedComponent, Component)
     return DecoratedComponent as ForwardRefExoticComponent<Omit<P, K>>
   }
 

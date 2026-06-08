@@ -1,0 +1,13 @@
+{
+  "name": "@aglyn/shared-ui-snackstack",
+  "version": "0.0.1",
+  "dependencies": {
+    "@swc/helpers": "~0.3.3"
+  },
+  "peerDependencies": {
+    "@aglyn/shared-ui-theme": "*",
+    "@aglyn/shared-util-tools": "*",
+    "@aglyn/shared-util-vendor": "*"
+  },
+  "devDependencies": {}
+}

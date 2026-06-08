@@ -1,0 +1,61 @@
+{
+  "name": "shared-ui-theme",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/ui/theme/src",
+  "projectType": "library",
+  "tags": [
+    "scope:lib",
+    "scope:shared",
+    "scope:ui"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/rollup:rollup",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/shared/ui/theme",
+        "tsConfig": "libs/shared/ui/theme/tsconfig.lib.json",
+        "project": "libs/shared/ui/theme/package.json",
+        "entryFile": "libs/shared/ui/theme/src/index.ts",
+        "external": [
+          "react/jsx-runtime",
+          "@aglyn/shared-util-tools",
+          "@aglyn/shared-util-vendor"
+        ],
+        "rollupConfig": [
+          "@nx/react/plugins/bundle-rollup",
+          "tools/rollup-external-packages.js",
+          "tools/rollup-suppress-use-client.js",
+          "tools/rollup-skip-typecheck.js"
+        ],
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/shared/ui/theme/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ],
+        "updateBuildableProjectDepsInPackageJson": true,
+        "skipTypeCheck": true
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/shared/ui/theme"
+      ],
+      "options": {
+        "jestConfig": "libs/shared/ui/theme/jest.config.ts"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,29 +16,29 @@
  */
 
 import { noop } from '@aglyn/shared-util-tools'
-import { JSXNode } from '@aglyn/shared-data-types'
-import { ButtonProps } from '@mui/material/Button'
-import { DialogProps } from '@mui/material/Dialog'
-import { Context, createContext, useContext } from 'react'
+import type { ButtonProps, DialogProps } from '@mui/material'
+import { type Context, createContext, useContext } from 'react'
 
 export type ConfirmationContextConfig = {
-  cancellationText?: JSXNode
-  confirmationText?: JSXNode
+  cancellationText?: JSX.Children
+  confirmationText?: JSX.Children
   cancellationButtonProps?: Partial<ButtonProps>
   confirmationButtonProps?: Partial<ButtonProps>
   dialogProps?: Partial<DialogProps>
-  title?: JSXNode
-  description?: JSXNode
+  title?: JSX.Children
+  description?: JSX.Children
 }
 export type ConfirmFunctionOptions = ConfirmationContextConfig
-export type ConfirmFunction = <T>(options?: ConfirmFunctionOptions) => Promise<T>
+export type ConfirmFunction = <T>(
+  options?: ConfirmFunctionOptions,
+) => Promise<T>
 export type ConfirmationContextType = {
   confirm: ConfirmFunction
 }
 export type ConfirmationContext = Context<ConfirmationContextType>
 
 export const DEFAULT_CONTEXT_VALUE: ConfirmationContextType = {
-  confirm: noop() as any,
+  confirm: noop,
 }
 export const DEFAULT_CONTEXT_CONFIG: ConfirmationContextConfig = {
   title: 'Are you sure?',
@@ -56,11 +56,13 @@ export const buildConfirmationContextConfig = (defaultConfig, config) => {
     ...(config.dialogProps || {}),
   }
   const confirmationButtonProps = {
-    ...(defaultConfig.confirmationButtonProps || DEFAULT_CONTEXT_CONFIG.confirmationButtonProps),
+    ...(defaultConfig.confirmationButtonProps ||
+      DEFAULT_CONTEXT_CONFIG.confirmationButtonProps),
     ...(config.confirmationButtonProps || {}),
   }
   const cancellationButtonProps = {
-    ...(defaultConfig.cancellationButtonProps || DEFAULT_CONTEXT_CONFIG.cancellationButtonProps),
+    ...(defaultConfig.cancellationButtonProps ||
+      DEFAULT_CONTEXT_CONFIG.cancellationButtonProps),
     ...(config.cancellationButtonProps || {}),
   }
 
@@ -77,6 +79,7 @@ export const buildConfirmationContextConfig = (defaultConfig, config) => {
 export const ConfirmationContext: ConfirmationContext =
   createContext<ConfirmationContextType>(DEFAULT_CONTEXT_VALUE)
 ConfirmationContext.displayName = 'ConfirmationContext'
+ConfirmationContext.aglyn = true
 
 export function useConfirmationContext(): ConfirmationContextType {
   return useContext(ConfirmationContext)

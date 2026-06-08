@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,10 +38,6 @@
  * @module dod
  */
 
-
-import {Dictionary} from './basic'
-
-
 /** Primary key */
 export type PKey = string
 /** Foreign key */
@@ -49,19 +45,19 @@ export type FKey = string
 /** Alternate key */
 export type AKey = string
 
-/** Tuple with exactly two elements */
+/** Tuple with exactly two nodes */
 export interface TupleLn2<T1, T2 = T1> extends Array<T1 | T2> {
   0: T1
   1: T2
   length: 2 // using the numeric literal type '2'
 }
 
-/** Tuple with a minimum of one elements */
+/** Tuple with a minimum of one nodes */
 interface TupleMinLn1<T> extends Array<T> {
   0: T
 }
 
-/** Tuple with a minimum of two elements */
+/** Tuple with a minimum of two nodes */
 interface TupleMinLn2<T1, T2 = T1> extends TupleMinLn1<T1 | T2> {
   0: T1
   1: T2
@@ -82,7 +78,6 @@ export type UniqSym = typeof NominalSymbol
  * outline a RDBMS equivalent
  */
 export namespace Relation {
-
   /**
    * A associative lookup for unnatural/extrinsic
    * Many-to-Many relationship.
@@ -119,12 +114,10 @@ export namespace Relation {
    * AK1 = [invoiceId, productId, userId]
    */
   export type Lookup = TupleMinLn2<FKey>
-
 }
 
 /** Field Type */
 export namespace FT {
-
   export type Bool = boolean
   export type Bytes = Uint8Array | string
   export type Timestamp = number
@@ -140,7 +133,7 @@ export namespace FT {
   export type Nestable = Map | Sorted<any>
 
   export type Any<T = any> =
-    Sorted<T>
+    | Sorted<T>
     | Bool
     | Bytes
     | Timestamp
@@ -180,7 +173,7 @@ export namespace FT {
     ]
 
     export type T =
-      typeof Tag.bool
+      | typeof Tag.bool
       | typeof Tag.bytes
       | typeof Tag.timestamp
       | typeof Tag.float
@@ -194,25 +187,37 @@ export namespace FT {
   }
 
   /** Match Type from Tag symbol */
-  export type TypeFromTag<Kind extends Tag.T> =
-    Kind extends typeof Tag.bool ? Bool
-      : Kind extends typeof Tag.bytes ? Uint8Array
-        : Kind extends typeof Tag.timestamp ? Timestamp
-          : Kind extends typeof Tag.float ? Float
-            : Kind extends typeof Tag.int32 ? Int32
-              : Kind extends typeof Tag.int64 ? Int64
-                : Kind extends typeof Tag.nil ? Null
-                  : Kind extends typeof Tag.text ? Text
-                    : Kind extends typeof Tag.coordinates ? Coordinates
-                      : Kind extends typeof Tag.map ? Map
-                        : Kind extends typeof Tag.sorted ? Sorted<any>
-                          : never
+  export type TypeFromTag<Kind extends Tag.T> = Kind extends typeof Tag.bool
+    ? Bool
+    : Kind extends typeof Tag.bytes
+      ? Uint8Array
+      : Kind extends typeof Tag.timestamp
+        ? Timestamp
+        : Kind extends typeof Tag.float
+          ? Float
+          : Kind extends typeof Tag.int32
+            ? Int32
+            : Kind extends typeof Tag.int64
+              ? Int64
+              : Kind extends typeof Tag.nil
+                ? Null
+                : Kind extends typeof Tag.text
+                  ? Text
+                  : Kind extends typeof Tag.coordinates
+                    ? Coordinates
+                    : Kind extends typeof Tag.map
+                      ? Map
+                      : Kind extends typeof Tag.sorted
+                        ? Sorted<any>
+                        : never
 }
 
 /** Field */
 export type FieldValueType<T = any> = FT.Any<T>
 /** Document */
-export type DocumentType<F extends FieldValueType = any> = {[fieldId: string]: F}
+export type DocumentType<F extends FieldValueType = any> = {
+  [fieldId: string]: F
+}
 /** Collection */
 export type CollectionType = {[documentId: string]: DocumentType}
 /** Database */
@@ -224,7 +229,6 @@ export type ClusterType = {[databaseId: string]: DatabaseType}
  * Outlines schemas for entity types (e.g., field, doc, collection)
  */
 export namespace Schema {
-
   /**
    * Name fields
    */
@@ -268,7 +272,10 @@ export namespace Schema {
    * property describes the fields of any document an
    * instance of the collection.
    */
-  export interface CollectionModel extends DocumentType, StampedLifecycle, NamedField {
+  export interface CollectionModel
+    extends DocumentType,
+      StampedLifecycle,
+      NamedField {
     fields: ModelFields
   }
 
@@ -288,7 +295,9 @@ export namespace Schema {
    * The actual collection instance of a collection meta
    */
   export type CollectionInstance<T extends CollectionModel> = CollectionType & {
-    [documentId: string]: DocumentType<FT.TypeFromTag<T['fields'][string]['type']>>
+    [documentId: string]: DocumentType<
+      FT.TypeFromTag<T['fields'][string]['type']>
+    >
   }
 
   /**
@@ -297,11 +306,9 @@ export namespace Schema {
   export type DatabaseCollections<C extends CollectionModels> = DatabaseType & {
     [CID in keyof C]: CollectionInstance<C[CID]>
   }
-
 }
 
 export namespace Ref {
-
   export interface Base<S = any> {
     id: PKey
     schema: S
@@ -310,7 +317,9 @@ export namespace Ref {
   /**
    * =======================================================
    */
-  export type Field<S extends Schema.FieldDefinition> = FT.TypeFromTag<S['type']>
+  export type Field<S extends Schema.FieldDefinition> = FT.TypeFromTag<
+    S['type']
+  >
 
   /**
    * =======================================================
@@ -326,7 +335,8 @@ export namespace Ref {
   export type CollectionDocuments<S extends Schema.CollectionModel> = {
     [documentId: string]: Document<S['fields']>
   }
-  export type Collection<S extends Schema.CollectionModel> = CollectionDocuments<S>
+  export type Collection<S extends Schema.CollectionModel> =
+    CollectionDocuments<S>
 
   /**
    * =======================================================
@@ -338,9 +348,7 @@ export namespace Ref {
     schemas: Schema.CollectionModels
     instances: Schema.DatabaseCollections<this['schemas']>
   }
-
 }
-
 
 /**
  * Evaluation kinds
@@ -354,7 +362,6 @@ export enum Eval {
  * Property name index signatures
  */
 export const Sig = {
-
   Field: 'field',
   Fields: 'fields',
   Document: 'document',
@@ -380,7 +387,6 @@ export const Sig = {
   Created: 'created',
   Updated: 'updated',
   Deleted: 'deleted',
-
 }
 
 /**
@@ -389,7 +395,6 @@ export const Sig = {
  * TODO: i18n
  */
 export const lbl = {
-
   /** Field Data Types */
   [FT.Tag.bool]: 'True/False',
   [FT.Tag.bytes]: 'Bytes',
@@ -432,11 +437,10 @@ export const lbl = {
   [Sig.Created]: 'Created At',
   [Sig.Updated]: 'Updated At',
   [Sig.Deleted]: 'Deleted At',
-
 }
 
 /** Contextual persistence types */
-export enum Persist {
+export enum Persistance {
   NONE = 'NONE',
   SESSION = 'SESSION',
   LOCAL = 'LOCAL',

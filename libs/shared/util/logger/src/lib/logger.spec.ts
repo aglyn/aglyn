@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { logger } from './logger'
+import {logger} from './logger'
+
 
 describe('logger', () => {
   it('should work', () => {

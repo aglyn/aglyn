@@ -1,0 +1,23 @@
+{
+  "name": "shared-data-regex",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/data/regex/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/data/regex",
+        "main": "libs/shared/data/regex/src/index.ts",
+        "tsConfig": "libs/shared/data/regex/tsconfig.lib.json",
+        "assets": ["libs/shared/data/regex/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared"]
+}

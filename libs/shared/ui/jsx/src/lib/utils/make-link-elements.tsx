@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,20 +17,19 @@
 
 // export type LinkElementProps = LinkHTMLAttributes<HTMLLinkElement>
 export type LinkElementProps = JSX.IntrinsicElements['link']
-export type MakeLinkElementsConfig = [
-  rel: LinkElementProps['rel'],
-  href: LinkElementProps['href'],
-  other?: LinkElementProps
-][]
+export type MakeLinkElementsConfig = Array<[
+  rel?: LinkElementProps['rel'],
+  href?: LinkElementProps['href'],
+  other?: Partial<LinkElementProps>
+]>
 
 export function makeLinkElements(items: MakeLinkElementsConfig): JSX.Element[] {
-  return items.map((item, i) => {
+  return items.map((item, key) => {
     const [rel, href, other] = item
-    const {id, key, ...rest} = {...other}
+    const {...rest} = {...other}
     return (
       <link
-        key={key ?? id ?? i}
-        id={id}
+        key={rest.key ?? rest.id ?? key}
         rel={rel}
         href={href}
         {...rest}

@@ -45,8 +45,8 @@ export namespace Res {
 
   const buildResponse = (data?: DataType, error?: ErrorType): ResponseType => {
     return error as ErrorType
-      ? { status: Status.ERROR, error }
-      : { status: Status.SUCCESS, data }
+      ? {status: Status.ERROR, error}
+      : {status: Status.SUCCESS, data}
   }
 
   export namespace Data {

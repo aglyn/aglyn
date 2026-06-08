@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiPowerSocket: Icon = {
   "id": "power-socket",
   "name": "Power Socket",
   "path": "M15,15H17V11H15M7,15H9V11H7M11,13H13V9H11M8.83,7H15.2L19,10.8V17H5V10.8M8,5L3,10V19H21V10L16,5H8Z",
@@ -9,3 +10,4 @@ export default {
     "Home Automation"
   ]
 }
+export default mdiPowerSocket

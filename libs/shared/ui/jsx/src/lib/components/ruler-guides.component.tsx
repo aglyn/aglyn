@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-import { generateComponentClassKeys, styled } from '@aglyn/shared-feature-themes'
-import { _isArr, _isEqualitySameType } from '@aglyn/shared-util-guards'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
+import { _isArr, _isEqualitySameType } from '@aglyn/shared-util-tools'
 import Box, { BoxProps } from '@mui/material/Box'
 import { teal } from '@mui/material/colors'
 
 import clsx from 'clsx'
 import React from 'react'
-
 
 const rulerClassKey = generateComponentClassKeys('AglynRuler', [
   'vertical',
@@ -33,26 +32,36 @@ export interface RulerComponentProps extends BoxProps {
   variant?: 'vertical' | 'horizontal'
 }
 
-export const RulerComponent = styled(({variant, className, ...props}: RulerComponentProps) => (
-  <Box
-    className={clsx({
-      [rulerClassKey.horizontal]: variant === 'horizontal',
-      [rulerClassKey.vertical]: variant === 'vertical' || variant !== 'horizontal',
-    }, className)}
-    {...props}
-  />
-), {
-  name: 'RulerComponent',
-})<RulerComponentProps>(({theme}) => ({
+export const RulerComponent = styled(
+  ({ variant, className, ...props }: RulerComponentProps) => (
+    <Box
+      className={clsx(
+        {
+          [rulerClassKey.horizontal]: variant === 'horizontal',
+          [rulerClassKey.vertical]:
+            variant === 'vertical' || variant !== 'horizontal',
+        },
+        className,
+      )}
+      {...props}
+    />
+  ),
+  {
+    name: 'RulerComponent',
+  },
+)<RulerComponentProps>(({ theme }) => ({
   position: 'absolute',
   boxShadow: theme.shadows[3],
   borderBottom: `1px solid ${theme.palette.divider}`,
   backgroundColor: theme.palette.background.paper,
   backgroundPosition: '0 0, 0px 10px, 0 12px',
   backgroundSize: '50px 50px, 10px 50px, 5px 50px',
-  backgroundImage: [0, 0, 0].map(() =>
-    `linear-gradient(to left, ${theme.palette.divider} 1px, transparent 1px)`,
-  ).join(),
+  backgroundImage: [0, 0, 0]
+    .map(
+      () =>
+        `linear-gradient(to left, ${theme.palette.divider} 1px, transparent 1px)`,
+    )
+    .join(),
   backgroundRepeat: 'repeat-x',
   [`&.${rulerClassKey.horizontal}`]: {
     top: 0,
@@ -70,10 +79,7 @@ export const RulerComponent = styled(({variant, className, ...props}: RulerCompo
   },
 }))
 RulerComponent.displayName = 'RulerComponent'
-RulerComponent.defaultProps = {
-  component: 'div',
-}
-
+RulerComponent.aglyn = true
 
 const guideClassKey = generateComponentClassKeys('AglynGuide', [
   'vertical',
@@ -85,20 +91,26 @@ export interface GuideComponentProps extends BoxProps {
   variant?: 'vertical' | 'horizontal'
 }
 
-const GuideComponent = styled(({variant, className, ...props}: GuideComponentProps) => (
-  <Box
-    className={clsx({
-      [guideClassKey.horizontal]: variant === 'horizontal',
-      [guideClassKey.vertical]: variant !== 'horizontal',
-    }, className)}
-    {...props}
-  />
-), {
-  name: 'GuideContainer',
-  shouldForwardProp(propName) {
-    return !_isEqualitySameType(propName, 'offset')
+const GuideComponent = styled(
+  ({ variant, className, ...props }: GuideComponentProps) => (
+    <Box
+      className={clsx(
+        {
+          [guideClassKey.horizontal]: variant === 'horizontal',
+          [guideClassKey.vertical]: variant !== 'horizontal',
+        },
+        className,
+      )}
+      {...props}
+    />
+  ),
+  {
+    name: 'GuideContainer',
+    shouldForwardProp(propName) {
+      return !_isEqualitySameType(propName, null, 'offset')
+    },
   },
-})<GuideComponentProps>(({offset}) => ({
+)<GuideComponentProps>(({ offset }) => ({
   position: 'absolute',
   '&:after': {
     display: 'block',
@@ -107,12 +119,15 @@ const GuideComponent = styled(({variant, className, ...props}: GuideComponentPro
     backgroundColor: teal['A200'],
   },
   [`&.${guideClassKey.horizontal}`]: {
-    width: 11, height: '100%',
+    width: 11,
+    height: '100%',
     top: offset ?? 0,
     cursor: 'ew-resize',
     '&:after': {
-      height: 1, width: '100%',
-      top: 5, left: 0,
+      height: 1,
+      width: '100%',
+      top: 5,
+      left: 0,
     },
   },
   [`&.${guideClassKey.vertical}`]: {
@@ -121,57 +136,56 @@ const GuideComponent = styled(({variant, className, ...props}: GuideComponentPro
     width: '100%',
     left: offset ?? 0,
     '&:after': {
-      width: 1, height: '100%',
-      left: 5, top: 0,
+      width: 1,
+      height: '100%',
+      left: 5,
+      top: 0,
     },
   },
 }))
 GuideComponent.displayName = 'GuideComponent'
-GuideComponent.defaultProps = {
-  component: 'div',
-}
+GuideComponent.aglyn = true
 
-const RulerGuidesContainer = styled(Box, {name: 'RulerGuidesContainer'})(({theme}) => ({
-  zIndex: theme.zIndex.speedDial,
-  // pointerEvents: 'none',
-  position: 'relative',
-  // left: 0, right: 0, top: 0,
-  // width: '100%', height: '100%',
-}))
+const RulerGuidesContainer = styled(Box, { name: 'RulerGuidesContainer' })(
+  ({ theme }) => ({
+    zIndex: theme.zIndex.speedDial,
+    // pointerEvents: 'none',
+    position: 'relative',
+    // left: 0, right: 0, top: 0,
+    // width: '100%', height: '100%',
+  }),
+)
 
 export interface RulerGuidesProps extends BoxProps {
   guides?: GuideComponentProps[]
   RulerComponentProps?: {
-    vertical?: RulerComponentProps,
-    horizontal?: RulerComponentProps,
+    vertical?: RulerComponentProps
+    horizontal?: RulerComponentProps
   }
 }
 
 export const RulerGuidesComponent = React.forwardRef<any, RulerGuidesProps>(
   function RefRenderFn(props, ref) {
-    const {
-      children,
-      guides,
-      RulerComponentProps,
-      ...rest
-    } = props
+    const { children, guides, RulerComponentProps, ...rest } = props
 
     return (
       <RulerGuidesContainer ref={ref} {...rest}>
         {children}
-        <RulerComponent variant="horizontal" {...RulerComponentProps?.horizontal} />
+        <RulerComponent
+          variant="horizontal"
+          {...RulerComponentProps?.horizontal}
+        />
         <RulerComponent variant="vertical" {...RulerComponentProps?.vertical} />
-        {_isArr(guides) && guides.map(({className, ...guide}, i) => (
-          <GuideComponent key={guide.key ?? guide.id ?? i} {...guide} />
-        ))}
+        {_isArr(guides) &&
+          guides.map(({ ...guide }, i) => (
+            <GuideComponent key={guide.key ?? guide.id ?? i} {...guide} />
+          ))}
       </RulerGuidesContainer>
     )
   },
 )
 
 RulerGuidesComponent.displayName = 'RulerGuidesComponent'
-RulerGuidesComponent.defaultProps = {
-  component: 'div',
-}
+RulerGuidesComponent.aglyn = true
 
 export default RulerGuidesComponent

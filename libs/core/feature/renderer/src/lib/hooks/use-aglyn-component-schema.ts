@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-import type { AglynComponentSchema } from '@aglyn/core-data-framework'
-import { BundleUId, ComponentId, getComponentSchema } from '@aglyn/core-data-framework'
+import { getComponentSchema } from '@aglyn/core-data-app'
+import type {
+  AglynComponentSchema,
+  BundleId,
+  ComponentId,
+} from '@aglyn/core-data-foundation'
 import { useMemo } from 'react'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynComponentSchema(
   componentId: ComponentId,
-  bundleId?: BundleUId
+  pluginId?: BundleId,
 ): AglynComponentSchema {
-  const { getApp } = useAglynAppContext()
+  const app = useAglynAppContext()
   return useMemo(() => {
-    return getComponentSchema(getApp(), { componentId, bundleId })
-  }, [getApp, componentId, bundleId])
+    return getComponentSchema(app, { componentId, pluginId })
+  }, [app, componentId, pluginId])
 }
 export default useAglynComponentSchema

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,33 @@
  * limitations under the License.
  */
 
-import { ErrorPayload } from './types'
+import type {ErrorPayload} from './types'
 
 
-export function replaceTemplate(stringTemplate, data: ErrorPayload, replacePattern?: RegExp): string {
-  const pattern = replacePattern ?? replaceTemplate.DEFAULT_PATTERN
-  return String(stringTemplate).replace(pattern, (_, key) => {
-    const value = data[key]
+export type ReplaceTemplateOptions = {
+  pattern?: RegExp | string
+}
+
+export const DEFAULT_REPLACER_REGEX = /\{\$([^}]+)}/g
+
+/**
+ * Replaces var placeholders in template string with matching keys in payload
+ * @example
+ * replaceTemplate("Illegal app name: '{$appName}'", {appName: "Foo App"})
+ * @param template - template to replace e.g., "Illegal app name: '{$appName}'"
+ * @param payload - dictionary of placeholder keys mapped to dynamic values
+ * @param options - override replacement pattern strategy
+ */
+export function replaceTemplate(
+  template: string,
+  payload?: ErrorPayload,
+  options?: ReplaceTemplateOptions,
+): string {
+  const {pattern = DEFAULT_REPLACER_REGEX} = options || {}
+  return String(template).replace(pattern, (_, key) => {
+    const value = payload?.[key]
     return value !== null ? String(value) : `<${key}?>`
   })
 }
-export namespace replaceTemplate {
-  export const DEFAULT_PATTERN = /\{\$([^}]+)}/g
-}
+
+export default replaceTemplate

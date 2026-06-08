@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+'use client'
 
 import {
-  ElementType,
+  type ElementType,
   Fragment,
-  MouseEventHandler,
-  ReactNode,
+  type MouseEventHandler,
   useCallback,
   useMemo,
   useState,
 } from 'react'
-import {
+import ConfirmationContext, {
   buildConfirmationContextConfig,
-  ConfirmationContext,
-  ConfirmationContextConfig,
-  ConfirmFunction,
+  type ConfirmationContextConfig,
+  type ConfirmFunction,
   DEFAULT_CONTEXT_CONFIG,
 } from '../contexts/confirmation.context'
 import DialogConfirm from './dialog-confirm'
 
-
 export interface ConfirmationProviderComponentProps {
   defaultOptions?: ConfirmationContextConfig
-  children?: ReactNode
-  component: ElementType<{
+  children?: JSX.Children
+  component?: ElementType<{
     open: boolean
     options: ConfirmationContextConfig
     onClose: MouseEventHandler<unknown>
@@ -46,9 +44,18 @@ export interface ConfirmationProviderComponentProps {
   }>
 }
 
-export function ConfirmationProviderComponent(props: ConfirmationProviderComponentProps) {
-  const {children, defaultOptions = {}, component: Component} = props
-  const [options, setOptions] = useState({...DEFAULT_CONTEXT_CONFIG, ...defaultOptions})
+export function ConfirmationProviderComponent(
+  props: ConfirmationProviderComponentProps,
+) {
+  const {
+    children,
+    defaultOptions = {},
+    component: Component = DialogConfirm,
+  } = props
+  const [options, setOptions] = useState({
+    ...DEFAULT_CONTEXT_CONFIG,
+    ...defaultOptions,
+  })
   const [resolveReject, setResolveReject] = useState([])
   const [resolve, reject] = resolveReject
 
@@ -78,7 +85,7 @@ export function ConfirmationProviderComponent(props: ConfirmationProviderCompone
 
   const child = useMemo(() => {
     return (
-      <ConfirmationContext.Provider value={{confirm}}>
+      <ConfirmationContext.Provider value={{ confirm }}>
         {children}
       </ConfirmationContext.Provider>
     )
@@ -98,7 +105,6 @@ export function ConfirmationProviderComponent(props: ConfirmationProviderCompone
   )
 }
 ConfirmationProviderComponent.displayName = 'ConfirmationProviderComponent'
-ConfirmationProviderComponent.defaultProps = {
-  component: DialogConfirm,
-}
+ConfirmationProviderComponent.aglyn = true
+
 export default ConfirmationProviderComponent

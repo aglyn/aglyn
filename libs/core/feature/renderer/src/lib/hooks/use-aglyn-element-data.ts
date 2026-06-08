@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,47 +15,44 @@
  * limitations under the License.
  */
 
-import type { AglynComponentElementDataNormalized, ElementId } from '@aglyn/core-data-framework'
-import { getCanvasNormalizedElementsStore } from '@aglyn/core-data-framework'
-import type { AnyProps, Conditional, EmptyObj } from '@aglyn/shared-data-types'
-import { useStoreMap } from 'effector-react'
+import { getCanvasNormalizedNodesStore } from '@aglyn/core-data-app'
+import type {
+  AglynNodeItemNormalized,
+  NodeId,
+} from '@aglyn/core-data-foundation'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export type UseAglynElementData<
   P = AnyProps,
-  K extends keyof AglynComponentElementDataNormalized<P> = null
+  K extends keyof AglynNodeItemNormalized<P> = null,
 > = Conditional<
   K,
-  keyof AglynComponentElementDataNormalized<P>,
-  AglynComponentElementDataNormalized<P>[K],
-  AglynComponentElementDataNormalized<P>
+  keyof AglynNodeItemNormalized<P>,
+  AglynNodeItemNormalized<P>[K],
+  AglynNodeItemNormalized<P>
 >
 
-export function useAglynElementData<P = EmptyObj>(
-  $id: ElementId
-): AglynComponentElementDataNormalized<P>
-
+export function useAglynElementData<P = JSX.AnyProps>(
+  $id: NodeId,
+): AglynNodeItemNormalized<P>
 export function useAglynElementData<
-  P = EmptyObj,
-  K extends keyof AglynComponentElementDataNormalized<P> = null,
->($id: ElementId, key: K): AglynComponentElementDataNormalized<P>[K]
-
+  P = JSX.AnyProps,
+  K extends keyof AglynNodeItemNormalized<P> = null,
+>($id: NodeId, property: K, defaultValue?: any): AglynNodeItemNormalized<P>[K]
 export function useAglynElementData<
-  P = EmptyObj,
-  K extends keyof AglynComponentElementDataNormalized<P> = null
->($id: ElementId, key?: K)/*: UseAglynElementData<P, K>*/ {
-  const { getApp } = useAglynAppContext()
-  const store = getCanvasNormalizedElementsStore(getApp())
-
-  return useStoreMap({
-    store,
-    keys: [$id, key],
-    fn: (store, [$id, key]) => {
-      if (!key) {
-        return store[$id]
-      }
-      return store[$id]?.[key]
+  P = JSX.AnyProps,
+  K extends keyof AglynNodeItemNormalized<P> = null,
+>($id: NodeId, property?: K, defaultValue?: any): UseAglynElementData<P, K> {
+  const app = useAglynAppContext()
+  return useSubscribable(
+    getCanvasNormalizedNodesStore(app),
+    defaultValue,
+    (store) => {
+      const element = store?.[$id]
+      return property ? element?.[property] : element
     },
-  }) //as UseAglynElementData<P, K>
+    [$id, property, app],
+  ) as UseAglynElementData<P, K>
 }
 export default useAglynElementData

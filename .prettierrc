@@ -1,21 +1,40 @@
 {
-  "printWidth": 100,
-  "singleQuote": true,
-  "tabWith": 2,
-  "useTabs": false,
-  "semi": false,
-  "trailingComma": "es5",
   "importOrder": [
-    "^@aglyn/(.*)$",
-    "^[./]",
     "^react$",
     "^react-dom$",
     "^next/(.*)$",
     "^@mui/(.*)$",
     "^mdi-icons",
     "^clsx$",
+    "^@aglyn/(.*)$",
+    "^[./]",
     "^[^./]",
     ".*"
   ],
-  "importOrderSeparation": true
+  "importOrderSeparation": true,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "embeddedLanguageFormatting": "auto",
+  "htmlWhitespaceSensitivity": "ignore",
+  "insertPragma": false,
+  "jsxSingleQuote": false,
+  "printWidth": 80,
+  "proseWrap": "preserve",
+  "quoteProps": "as-needed",
+  "requirePragma": false,
+  "semi": false,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "trailingComma": "all",
+  "useTabs": false,
+  "vueIndentScriptAndStyle": false,
+  "overrides": [
+    {
+      "files": ["tsconfig.*.json", "tsconfig.json", "tsdoc.*.json", "tsdoc.json"],
+      "options": {
+        "printWidth": 140
+      }
+    }
+  ]
 }

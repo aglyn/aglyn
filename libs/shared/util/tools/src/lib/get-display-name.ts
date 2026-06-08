@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,75 @@
  * limitations under the License.
  */
 
+
+// https://github.com/JamesMGreene/Function.name/blob/58b314d4a983110c3682f1228f845d39ccca1817/Function.name.js#L3
+export const fnNameMatchRegex = /^\s*function(?:\s|\s*\/\*.*\*\/\s*)+([^(\s/]*)\s*/
+export const getPureFunctionName = (fn) => {
+  const match = `${fn}`.match(fnNameMatchRegex)
+  const name = match && match[1]
+  return name || ''
+}
+
 /**
- * Get the display name of a function, react component
- * @export
- * @param {*} fn
- * @param {string} fallback
- * @returns {string}
+ *
+ */
+export const getFunctionComponentName = (Component, fallback = 'fn') => (
+  Component.displayName
+  || Component.name
+  || getPureFunctionName(Component)
+  || fallback
+)
+
+export const getWrappedComponentName = (outerType, innerType, wrapperName) => {
+  const functionName = getFunctionComponentName(innerType)
+  return (
+    outerType.displayName
+    || (
+      functionName !== ''
+        ? `${wrapperName}(${functionName})`
+        : wrapperName
+    )
+  )
+}
+
+/**
+ * Get the display name of a function, react component, object, or string
+ * @example getDisplayName('hello') => 'hello'
+ * @example getDisplayName(null, 'N/A') => 'N/A'
+ * @example getDisplayName(getCount) => 'getCount'
+ * @example getDisplayName(class MyComp {displayName = 'My'}) => 'My'
+ * @example
+ * MyComp = () => {...};
+ * MyComp.displayName = 'MyComp'
+MyComp.aglyn = true;
+ * MyComp = forwardRef(MyComp)
+ * getDisplayName(MyComp) => 'My'
  */
 export function getDisplayName(fn, fallback = 'Component'): string {
-  return fn?.displayName || fn?.name || fallback
+  if (fn == null) {
+    return fallback
+  }
+
+  if (typeof fn === 'string') {
+    return fn
+  }
+
+  if (typeof fn === 'function') {
+    return getFunctionComponentName(fn, fallback)
+  }
+
+  if (typeof fn === 'object') {
+    switch (fn.$$typeof) {
+
+      case Symbol.for('react.forward_ref') || 0xead0:
+        return getWrappedComponentName(fn, fn.render, 'ForwardRef')
+
+      default:
+        return fallback
+    }
+  }
+
+  return fallback
 }
+
+export default getDisplayName

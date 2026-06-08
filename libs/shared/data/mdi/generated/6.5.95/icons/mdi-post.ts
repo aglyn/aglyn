@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiPost: Icon = {
   "id": "post",
   "name": "Post",
   "path": "M3 3V21H21V3H3M18 18H6V17H18V18M18 16H6V15H18V16M18 12H6V6H18V12Z",
@@ -7,3 +8,4 @@ export default {
   ],
   "tags": []
 }
+export default mdiPost

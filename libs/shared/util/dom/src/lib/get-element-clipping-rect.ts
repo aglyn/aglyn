@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,20 @@
  * limitations under the License.
  */
 
-import { Boundary, RootBoundary, viewport } from '../enums'
-import { ClientRectObject } from '../types'
-import { elementRectToClientRect } from './element-rect-to-client-rect'
-import { getElementClientRectBoundingInner } from './get-element-client-rect-bounding-inner'
-import { getElementDocumentElement } from './get-element-document-element'
-import { getElementDocumentElementRect } from './get-element-document-element-rect'
-import { getElementListScrollParents } from './get-element-list-scroll-parents'
-import { getElementNodeName } from './get-element-node-name'
-import { getElementOffsetParent } from './get-element-offset-parent'
-import { getElementParentNode } from './get-element-parent-node'
-import { getElementViewportRect } from './get-element-viewport-rect'
-import { parentElementContainsChildElement } from './guards/event-is'
-import { isElementHTMLElement, isNodeElement } from './guards/node-is'
+import {viewport} from '../constants/enums'
+import type {Boundary, ClientRectObject, RootBoundary} from '../dom'
+import {getElementClientRectBoundingInner} from './get-element-client-rect-bounding-inner'
+import {getElementDocumentElement} from './get-element-document-element'
+import {getElementDocumentElementRect} from './get-element-document-element-rect'
+import {getElementListScrollParents} from './get-element-list-scroll-parents'
+import {getElementNodeName} from './get-element-node-name'
+import {getElementOffsetParent} from './get-element-offset-parent'
+import {getElementParentNode} from './get-element-parent-node'
+import {getElementRectAsClientRect} from './get-element-rect-as-client-rect'
+import {getElementViewportRect} from './get-element-viewport-rect'
+import {elementContainsChildElement} from './guards/element-contains-child-element'
+import {isElementHTMLElement} from './guards/is-element-html-element'
+import {isNodeElement} from './guards/is-node-element'
 
 
 function getClientRectFromMixedType(
@@ -35,10 +36,10 @@ function getClientRectFromMixedType(
   clippingParent: Element | RootBoundary,
 ): ClientRectObject {
   return clippingParent === viewport
-    ? elementRectToClientRect(getElementViewportRect(element))
+    ? getElementRectAsClientRect(getElementViewportRect(element))
     : isElementHTMLElement(clippingParent as Element)
       ? getElementClientRectBoundingInner(clippingParent as Element)
-      : elementRectToClientRect(getElementDocumentElementRect(getElementDocumentElement(element)))
+      : getElementRectAsClientRect(getElementDocumentElementRect(getElementDocumentElement(element)))
 }
 // A "clipping parent" is an overflowable container with the characteristic of
 // clipping (or hiding) overflowing elements with a position different from
@@ -60,7 +61,7 @@ function getElementClippingParents(element: Element): Array<Element> {
   return clippingParents.filter(
     (clippingParent) =>
       isNodeElement(clippingParent) &&
-      parentElementContainsChildElement(clippingParent as Element, clipperElement as Element) &&
+      elementContainsChildElement(clippingParent as Element, clipperElement as Element) &&
       getElementNodeName(clippingParent as Element) !== 'body',
   ) as Element[]
 }

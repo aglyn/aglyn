@@ -1,0 +1,23 @@
+{
+  "name": "shared-util-fbclient",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/fbclient/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/fbclient",
+        "main": "libs/shared/util/fbclient/src/index.ts",
+        "tsConfig": "libs/shared/util/fbclient/tsconfig.lib.json",
+        "assets": ["libs/shared/util/fbclient/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:util"]
+}

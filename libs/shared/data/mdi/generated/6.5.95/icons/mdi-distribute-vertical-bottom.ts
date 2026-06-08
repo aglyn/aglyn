@@ -1,7 +1,9 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiDistributeVerticalBottom: Icon = {
   "id": "distribute-vertical-bottom",
   "name": "Distribute Vertical Bottom",
   "path": "M7 3H17V8H22V10H2V8H7V3M2 19V21H22V19H19V14H5V19H2Z",
   "as": [],
   "tags": []
 }
+export default mdiDistributeVerticalBottom

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,9 @@
 
 /**
  * Create a no operation function with no return
- * @returns {<T>(..._: T[]) => void}
  */
-export function noop(): <T>(..._: T[]) => void {
-  return function noop<T>(..._: T[]): void {
-    // Do nothing.
-  }
+export function noop(..._: any[]): any {
+  /*Do nothing.*/
 }
 
 export default noop

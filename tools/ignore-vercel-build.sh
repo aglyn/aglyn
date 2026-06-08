@@ -1,7 +1,7 @@
 
 #*
 # @license
-# Copyright 2021 Aglyn LLC
+# Copyright 2022 Aglyn LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,18 +17,18 @@
 #*
 
 # Name of the app to check. Change this to your application name!
-APP=tuskdesk
+APP=$CURRENT_APP
 
 # Determine version of Nx installed
-NX_VERSION=$(node -e "console.log(require('./package.json').devDependencies['@nrwl/workspace'])")
+NX_VERSION=$(node -e "console.log(require('./package.json').devDependencies['@nx/workspace'])")
 TS_VERSION=$(node -e "console.log(require('./package.json').devDependencies['typescript'])")
 
-# Install @nrwl/workspace in order to run the affected command
-npm install -D @nrwl/workspace@$NX_VERSION --prefer-offline
+# Install @nx/workspace in order to run the affected command
+npm install -D @nx/workspace@$NX_VERSION --prefer-offline
 npm install -D typescript@$TS_VERSION --prefer-offline
 
 # Run the affected command, comparing latest commit to the one before that
-npx nx affected:apps --plain --base HEAD~1 --head HEAD | grep $APP -q
+npx nx affected:apps --plain --base=$NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA --head HEAD | grep $APP -q
 
 # Store result of the previous command (grep)
 IS_AFFECTED=$?

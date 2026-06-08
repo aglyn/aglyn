@@ -1,0 +1,23 @@
+{
+  "name": "shared-util-http",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/http/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/http",
+        "main": "libs/shared/util/http/src/index.ts",
+        "tsConfig": "libs/shared/util/http/tsconfig.lib.json",
+        "assets": ["libs/shared/util/http/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:util"]
+}

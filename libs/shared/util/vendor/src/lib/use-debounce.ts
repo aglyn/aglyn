@@ -15,4 +15,5 @@
  * limitations under the License.
  */
 
-export * from 'use-debounce'
+export { useDebounce, useDebouncedCallback, useThrottledCallback } from 'use-debounce'
+export type { CallOptions, ControlFunctions, DebouncedState, Options } from 'use-debounce'

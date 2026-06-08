@@ -16,13 +16,14 @@
  */
 
 import React from 'react'
-import { render } from '@testing-library/react'
+import {render} from '@testing-library/react'
 
 import DialogConfirm from './dialog-confirm'
 
+
 describe('NavbarDrawer', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<DialogConfirm open />)
+    const {baseElement} = render(<DialogConfirm open />)
     expect(baseElement).toBeTruthy()
   })
 })

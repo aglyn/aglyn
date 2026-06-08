@@ -1,44 +1,136 @@
 {
-  "implicitDependencies": {
-    "workspace.json": "*",
-    "package.json": {
-      "dependencies": "*",
-      "devDependencies": "*"
-    },
-    "tsconfig.base.json": "*",
-    "tslint.json": "*",
-    ".eslintrc.json": "*",
-    "nx.json": "*"
-  },
-  "affected": {
-    "defaultBase": "main"
-  },
-  "npmScope": "aglyn",
-  "tasksRunnerOptions": {
-    "default": {
-      "runner": "@nrwl/workspace/tasks-runners/default",
-      "options": {
-        "cacheableOperations": ["build", "lint", "test", "e2e"],
-        "parallel": 1,
-        "useDaemonProcess": true
-      }
-    }
-  },
-  "cli": {
-    "defaultCollection": "@nrwl/next"
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultProject": "console",
+  "workspaceLayout": {
+    "appsDir": "apps",
+    "libsDir": "libs"
   },
   "generators": {
-    "@nrwl/react": {
+    "@nx/js": {
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
+        "linter": "eslint"
+      }
+    },
+    "@nx/react": {
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
+        "linter": "eslint"
+      },
       "application": {
+        "swc": true,
         "babel": true
       }
     },
-    "@nrwl/next": {
+    "@nx/node": {
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
+        "linter": "eslint"
+      }
+    },
+    "@nx/next": {
       "application": {
-        "style": "@emotion/styled",
+        "swc": true,
+        "standaloneConfig": true,
+        "linter": "eslint",
+        "unitTestRunner": "jest",
+        "e2eTestRunner": "cypress",
+        "style": "none"
+      },
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "includeBabelRc": true,
+        "standaloneConfig": true,
+        "compiler": "swc",
+        "config": "project",
+        "testEnvironment": "node",
+        "unitTestRunner": "jest",
         "linter": "eslint"
       }
     }
   },
-  "defaultProject": "console"
+  "targetDefaults": {
+    "e2e": {
+      "inputs": ["default", "^default"],
+      "cache": true
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"],
+      "cache": true
+    },
+    "@nx/jest:jest": {
+      "inputs": ["default", "^default", "{workspaceRoot}/jest.preset.js"],
+      "cache": true,
+      "options": {
+        "passWithNoTests": true
+      },
+      "configurations": {
+        "ci": {
+          "ci": true,
+          "codeCoverage": true
+        }
+      }
+    },
+    "@nx/eslint:lint": {
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/.eslintrc.js",
+        "{workspaceRoot}/tools/eslint-rules/**/*"
+      ],
+      "cache": true
+    },
+    "@nx/next:build": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    }
+  },
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "sharedGlobals": [
+      "{workspaceRoot}/workspace.json",
+      "{workspaceRoot}/tsconfig.base.json",
+      "{workspaceRoot}/tslint.json",
+      "{workspaceRoot}/nx.json"
+    ],
+    "production": [
+      "default",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/src/test-setup.[jt]s",
+      "!{projectRoot}/**/*.stories.@(js|jsx|ts|tsx|mdx)",
+      "!{projectRoot}/.storybook/**/*",
+      "!{projectRoot}/tsconfig.storybook.json"
+    ]
+  },
+  "useDaemonProcess": true,
+  "nxCloudAccessToken": "MmI2Y2NlN2MtNjM4NC00NTQ0LTgxODItNGI3YzMwZTQyZTM1fHJlYWQtd3JpdGU=",
+  "parallel": 1,
+  "defaultBase": "main",
+  "analytics": true,
+  "pluginsConfig": {}
 }

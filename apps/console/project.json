@@ -1,0 +1,67 @@
+{
+  "name": "console",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/console",
+  "projectType": "application",
+  "tags": ["scope:app", "scope:private"],
+  "targets": {
+    "build": {
+      "executor": "@nx/next:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/console"
+      },
+      "configurations": {
+        "production": {
+          "webpack": true
+        },
+        "development": {
+          "outputPath": "apps/console"
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "serve": {
+      "executor": "@nx/next:server",
+      "options": {
+        "buildTarget": "console:build",
+        "dev": true,
+        "port": 4200
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "console:build:production",
+          "dev": false
+        },
+        "development": {
+          "buildTarget": "console:build:development",
+          "dev": true
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "export": {
+      "executor": "@nx/next:export",
+      "options": {
+        "buildTarget": "console:build:production"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/console"],
+      "options": {
+        "jestConfig": "apps/console/jest.config.ts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "version": {
+      "executor": "@jscutlery/semver:version",
+      "options": {
+        "syncVersions": false
+      }
+    }
+  }
+}

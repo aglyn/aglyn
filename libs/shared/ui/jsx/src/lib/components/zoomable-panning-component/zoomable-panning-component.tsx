@@ -57,7 +57,7 @@ export interface ZoomablePanningComponentProps extends PropsWithRef<HTMLAttribut
   disableDoubleClickZoom?: boolean,
   disableScrollZoom?: boolean,
   realPinch?: boolean,
-  keyMapping?: Record<string, { x: number, y: number, z: number }>,
+  keyMapping?: Record<string, {x: number, y: number, z: number}>,
   minZoom: number,
   maxZoom: number,
   preventPan: (event: PointerEvent<HTMLDivElement> | MouseEvent, x: number, y: number) => boolean,
@@ -719,7 +719,12 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     return {x: offsetX, y: offsetY}
   }
 
-  getTransformMatrix = (x: number, y: number, scale: number, angle: number): TransformationMatrix => {
+  getTransformMatrix = (
+    x: number,
+    y: number,
+    scale: number,
+    angle: number
+  ): TransformationMatrix => {
     if (!this.dragContainer.current) {
       return {a: scale, b: 0, c: 0, d: scale, x, y}
     }
@@ -743,7 +748,10 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     this.intermediateFrameAnimation = 0
   }
 
-  getBoundCoordinates = (coordinates: Coordinates, transformationParameters: TransformationParameters): BoundCoordinates => {
+  getBoundCoordinates = (
+    coordinates: Coordinates,
+    transformationParameters: TransformationParameters
+  ): BoundCoordinates => {
     const {x, y} = coordinates
     const {enableBoundingBox, boundaryRatioVertical, boundaryRatioHorizontal} = this.props
     const {offsetX = 0, offsetY = 0} = transformationParameters

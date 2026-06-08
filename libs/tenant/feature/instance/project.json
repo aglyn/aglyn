@@ -1,0 +1,23 @@
+{
+  "name": "tenant-feature-instance",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/tenant/feature/instance/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/tenant/feature/instance",
+        "main": "libs/tenant/feature/instance/src/index.ts",
+        "tsConfig": "libs/tenant/feature/instance/tsconfig.lib.json",
+        "assets": ["libs/tenant/feature/instance/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "scope:tenant"]
+}

@@ -1,0 +1,448 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import {
+  APP_CONSOLE,
+  ICON_VARIANT_LEFT,
+  ICON_VARIANT_MENU_DOWN,
+  ICON_VARIANT_SIGN_OUT,
+  ICON_VARIANT_THEME_DARK,
+  ICON_VARIANT_THEME_LIGHT,
+  ICON_VARIANT_THEME_SYSTEM,
+  ICON_VARIANT_USER_SETTINGS,
+} from '@aglyn/shared-data-enums'
+import {
+  AglynConsoleLogoFull,
+  AppLink,
+  type AppLinkProps,
+  MdiIcon,
+  type MdiIconProps,
+  Menu,
+  type MenuItemProps,
+  type MenuProps,
+  ScrollReaction,
+  SrOnly,
+} from '@aglyn/shared-ui-jsx'
+import { NextPageTitle } from '@aglyn/shared-ui-next'
+import { getThemeModeDisplayName, mergeSxProps } from '@aglyn/shared-ui-theme'
+import { _isArr, _isArrEmpty } from '@aglyn/shared-util-tools'
+import { useUserPhoto } from '@aglyn/tenant-feature-instance'
+import {
+  AppBar,
+  Avatar,
+  type AvatarProps,
+  Button,
+  type ButtonProps,
+  Divider,
+  IconButton,
+  type IconButtonProps,
+  Stack,
+  type StackProps,
+  Toolbar,
+  Typography,
+} from '@mui/material'
+import { useColorScheme } from '@mui/material/styles'
+import { Fragment, useMemo } from 'react'
+import { buildRoute, Route } from '../../constants/route-links'
+import { TOP_BAR_HEIGHT } from '../../constants/shared'
+
+// eslint-disable-next-line react/display-name
+const buildNav = (type?: 'icon' | 'text') => (item, i) => {
+  const { avatar, icon, children, id, key, items, MenuProps, ...rest } = item
+  const isMenu = !_isArrEmpty(items)
+  const itemKey = key || id || i
+
+  const rendered =
+    type === 'text' ? (
+      <Button
+        key={key}
+        id={id}
+        color="inherit"
+        startIcon={!icon?.path ? icon : <MdiIcon {...icon} />}
+        endIcon={
+          !isMenu ? undefined : <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />
+        }
+        {...(!rest.href
+          ? {}
+          : { component: AppLink, componentVariant: 'button' })}
+        {...rest}
+        sx={mergeSxProps(
+          {
+            '& .MuiButton-endIcon': { marginLeft: 0 },
+            '& .MuiButton-endIcon>*:nth-of-type(1)': { fontSize: `1.7em` },
+          },
+          rest?.sx,
+        )}
+      >
+        {children}
+      </Button>
+    ) : (
+      <IconButton key={itemKey} color="inherit" {...rest}>
+        {!avatar ? (
+          !icon?.path ? (
+            icon
+          ) : (
+            <MdiIcon {...icon} />
+          )
+        ) : (
+          <Avatar {...avatar} />
+        )}
+        {children}
+      </IconButton>
+    )
+
+  return isMenu ? (
+    <Menu
+      dense
+      key={itemKey}
+      items={items}
+      {...MenuProps}
+      sx={mergeSxProps(
+        {
+          p: { padding: 0.5, xs: 0.25 },
+        },
+        MenuProps?.sx,
+      )}
+    >
+      {rendered}
+    </Menu>
+  ) : (
+    <Fragment key={itemKey}>{rendered}</Fragment>
+  )
+}
+
+export interface TopAppBarProps {
+  appBarSuffix?: JSX.Node
+  centerNavigationItems?: CenterNavMenuItem[]
+  customCenter?: JSX.Node
+  enableAppBarElevation?: boolean
+  quickActions?: QuickActionsMenuItem[]
+  besigner?: boolean
+  backButton?: Partial<ButtonProps>
+}
+
+const TopAppBar = (props: TopAppBarProps) => {
+  const {
+    appBarSuffix,
+    centerNavigationItems,
+    customCenter,
+    enableAppBarElevation,
+    quickActions,
+    besigner,
+    backButton,
+  } = props
+
+  return (
+    <ScrollReaction>
+      {({ activeWithoutHysteresis }) => (
+        <AppBar
+          component="header"
+          color="surface"
+          variant="elevation"
+          elevation={enableAppBarElevation && activeWithoutHysteresis ? 4 : 0}
+          position={!enableAppBarElevation ? 'relative' : 'sticky'}
+          sx={{
+            height: `${TOP_BAR_HEIGHT - 1}px`,
+            borderBottomWidth: `1px`,
+            borderBottomStyle: 'solid',
+            borderBottomColor: 'divider',
+            zIndex: (theme) => theme.zIndex.appBar + 5,
+          }}
+        >
+          <Toolbar
+            component={Stack}
+            variant="dense"
+            alignItems="center"
+            justifyContent="flex-start"
+            direction="row"
+            sx={{
+              paddingLeft: { sx: 1, sm: 2 },
+            }}
+            divider={
+              <Divider orientation="vertical" variant="middle" flexItem light />
+            }
+          >
+            {backButton && (
+              <Button
+                {...backButton}
+                sx={{
+                  minWidth: 'unset',
+                  // position: 'absolute',
+                  marginLeft: { xs: -2, sm: -2 },
+                  paddingRight: { xs: 1, sm: 0.75 },
+                  paddingLeft: { xs: 0.5, sm: 0.25 },
+                  py: { xs: 0, sm: 0 },
+                  left: 0,
+                  height: 1,
+                  borderRadius: 0,
+                  // borderRight: ({ palette }) => `1px solid ${palette.divider}`,
+                }}
+              >
+                <MdiIcon
+                  sx={{ fontSize: '1.2em' }}
+                  path={ICON_VARIANT_LEFT.path}
+                />
+                <SrOnly>{'back'}</SrOnly>
+              </Button>
+            )}
+
+            <Stack
+              alignItems="center"
+              direction="row"
+              justifyContent="flex-start"
+              color="inherit"
+              maxWidth={{ xs: '100%' }}
+              sx={{
+                paddingLeft: backButton ? 0.5 : undefined,
+                paddingRight: 3,
+                // width: DRAWER_WIDTH - 26,
+              }}
+            >
+              <AppLink
+                href="/"
+                componentVariant="button-base"
+                color="inherit"
+                disableRipple
+              >
+                <Stack
+                  component="span"
+                  alignItems="center"
+                  direction="row"
+                  justifyContent="flex-start"
+                  spacing={0.25}
+                  sx={{
+                    fontWeight: 'fontWeightRegular',
+                    fontFamily: 'h6.fontFamily',
+                    fontSize: (theme) => ({
+                      fontSize: theme.typography.pxToRem(18),
+                      md: theme.typography.pxToRem(20),
+                    }),
+                  }}
+                >
+                  <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                  {appBarSuffix && (
+                    <Typography
+                      component="span"
+                      fontWeight="inherit"
+                      fontSize="inherit"
+                      lineHeight="inherit"
+                      color="textPrimary"
+                      display="flex"
+                      alignItems="center"
+                    >
+                      {appBarSuffix}
+                    </Typography>
+                  )}
+                </Stack>
+              </AppLink>
+            </Stack>
+
+            <Stack
+              alignItems="center"
+              justifyContent="flex-start"
+              direction="row"
+              flexGrow={1}
+              sx={{ paddingLeft: 1.5 }}
+            >
+              {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
+                <Stack
+                  component="nav"
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="flex-start"
+                  // flexBasis="72%"
+                >
+                  {customCenter || centerNavigationItems.map(buildNav('text'))}
+                </Stack>
+              )}
+            </Stack>
+            {_isArrEmpty(quickActions) ? null : (
+              <Stack
+                component="nav"
+                direction="row"
+                alignItems="center"
+                justifyContent="flex-start"
+                spacing={0.5}
+              >
+                {(quickActions ?? []).map(buildNav('icon'))}
+              </Stack>
+            )}
+          </Toolbar>
+        </AppBar>
+      )}
+    </ScrollReaction>
+  )
+}
+TopAppBar.displayName = 'TopAppBar'
+
+export interface QuickActionsMenuItem extends IconButtonProps {
+  icon?: MdiIconProps
+  avatar?: AvatarProps
+  dense?: boolean
+  href?: any
+  items?: MenuItemProps[]
+  MenuProps?: Partial<MenuProps>
+}
+
+export interface CenterNavMenuItem
+  extends Omit<AppLinkProps<'button'>, 'componentVariant'> {
+  icon?: MdiIconProps
+  avatar?: any
+  dense?: boolean
+  href?: any
+  MenuProps?: Partial<MenuProps>
+  items?: MenuItemProps[]
+}
+
+export interface MainLayoutProps
+  extends Omit<StackProps, 'title'>,
+    TopAppBarProps {
+  children?: JSX.Children
+  title?: string[] | string
+}
+
+export function MainLayout(props: MainLayoutProps) {
+  const {
+    children,
+    title,
+    appBarSuffix,
+    centerNavigationItems,
+    customCenter,
+    enableAppBarElevation,
+    quickActions,
+    besigner,
+    backButton,
+    ...rest
+  } = props
+  const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
+  const { mode, setMode } = useColorScheme()
+  const themeModeDisplayName = getThemeModeDisplayName(mode)
+  const layoutTitle = useMemo(() => {
+    return title ? [...(_isArr(title) ? title : [title]), 'Secure'] : 'Secure'
+  }, [title])
+
+  return (
+    <Fragment>
+      <NextPageTitle
+        screen={layoutTitle || APP_CONSOLE.TITLE}
+        suffix={APP_CONSOLE.AFFIX}
+        separator={` ${APP_CONSOLE.SEP} `}
+      />
+      <Stack
+        alignItems="stretch"
+        flexDirection="column"
+        height="100vh"
+        {...rest}
+      >
+        <TopAppBar
+          enableAppBarElevation={enableAppBarElevation}
+          backButton={backButton}
+          centerNavigationItems={
+            centerNavigationItems || [
+              // {
+              //   id: 'center-nav-site-picker',
+              //   children: ,
+              // },
+              {
+                id: 'center-nav-hosts',
+                children: 'Hosts',
+                href: buildRoute(Route.HOST_LIST),
+              },
+              // {
+              //   id: 'center-nav-app',
+              //   children: 'Website',
+              //   // href: '/besigner',
+              //   items: [
+              //     {
+              //       id: 'center-nav-screens',
+              //       children: 'View Screens',
+              //       href: Route.SCREEN_LIST,
+              //     },
+              //   ],
+              // },
+            ]
+          }
+          customCenter={customCenter}
+          appBarSuffix={appBarSuffix}
+          quickActions={[
+            ...(quickActions || []),
+            {
+              title: 'Manage account',
+              MenuProps: { dense: true, horizontalOrigin: 'right' },
+              sx: { p: 0.5 },
+              edge: 'end',
+              avatar: {
+                src: userPhotoUrl,
+                imgProps: {
+                  // user.photoURL https://stackoverflow.com/a/61042200/16134372
+                  referrerPolicy: 'no-referrer',
+                },
+              },
+              items: [
+                {
+                  onClick: () => {
+                    setMode(
+                      mode === 'dark'
+                        ? 'system'
+                        : mode === 'light'
+                          ? 'dark'
+                          : mode === 'system' || mode === undefined
+                            ? 'light'
+                            : 'system',
+                    )
+                  },
+                  // component: 'button',
+                  children: `Theme mode: ${themeModeDisplayName}`,
+                  icon: {
+                    path:
+                      mode === 'dark'
+                        ? ICON_VARIANT_THEME_DARK.path
+                        : mode === 'light'
+                          ? ICON_VARIANT_THEME_LIGHT.path
+                          : ICON_VARIANT_THEME_SYSTEM.path,
+                  },
+                  'aria-label': 'switch theme mode',
+                },
+                {
+                  children: 'Settings',
+                  component: AppLink,
+                  href: Route.MANAGE_USER_SETTINGS,
+                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
+                },
+                {
+                  type: 'divider',
+                },
+                {
+                  children: 'Sign out',
+                  component: AppLink,
+                  href: Route.AUTH_SIGN_OUT,
+                  icon: { path: ICON_VARIANT_SIGN_OUT.path },
+                },
+              ],
+            },
+          ]}
+        />
+        {children}
+      </Stack>
+    </Fragment>
+  )
+}
+
+MainLayout.displayName = 'MainLayout'
+MainLayout.aglyn = true
+
+export default MainLayout

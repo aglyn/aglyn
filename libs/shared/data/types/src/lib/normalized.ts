@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,12 @@
  * limitations under the License.
  */
 
-import { Serializable } from './serializable'
 
-
-type ID = string
+type ID = string | symbol
 
 /** Normalized local state design for interfacing with 3NF rules  */
 export type NormalizedData<T = any, K extends ID = ID> = {
-  allIds: K[],
+  ids: K[]
   byId: { [P in K]?: T }
 }
 
@@ -37,7 +35,9 @@ export type NormalizedData<T = any, K extends ID = ID> = {
  * @template T
  * @template K
  */
-export interface NormalizedModel<T = any, K extends ID = ID> extends NormalizedData<T, K>, Serializable<NormalizedData<T, K>> {
+export interface NormalizedModel<T = any, K extends ID = ID>
+  extends NormalizedData<T, K>,
+    Serializable<NormalizedData<T, K>> {
   readonly length: number
   /**
    * The properties to keep when object is passed to JSON.stringify(...)
@@ -47,7 +47,7 @@ export interface NormalizedModel<T = any, K extends ID = ID> extends NormalizedD
   toJSON(): NormalizedData<T, K>
   /**
    * Converts the current values into an array ordered by the
-   * appearance of the key in allIds array
+   * appearance of the key in ids array
    * @returns {Array<T>}
    * @memberof NormalizedModel
    */

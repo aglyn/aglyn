@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,59 @@
  * limitations under the License.
  */
 
-import { _isArr } from '@aglyn/shared-util-guards'
+import { _isArr } from '@aglyn/shared-util-tools'
 import { NsError } from './ns-error'
 import { replaceTemplate } from './tools'
-import { ErrorPayload, ErrorTagMessages, ErrorTagPayloads, EventFlag } from './types'
+import type {
+  ErrorPayload,
+  ErrorTagMessages,
+  ErrorTagPayloads,
+  EventFlag,
+} from './types'
 
+const DEFAULT_TEMPLATE = `{$scope} {$code} {$message}`
+type DEFAULT_TEMPLATE = string & typeof DEFAULT_TEMPLATE
+interface NamespaceOptions {
+  scope: string
+  namespace: string
+  nsDelimiter: string
+  scopeDelimiter: string
+  template?: string | DEFAULT_TEMPLATE
+  defaultMessage?: string
+}
+
+function namespaceFactory(options?: NamespaceOptions) {
+  const {
+    scope,
+    namespace,
+    nsDelimiter,
+    scopeDelimiter,
+    template,
+    defaultMessage,
+  } = options
+  function makeShortCode<K extends string>(flag: K): string {
+    return [namespace, flag].join(nsDelimiter)
+  }
+  function makeFullCode<K extends string>(flag: K): string {
+    return [scope, makeShortCode(flag)].join(scopeDelimiter)
+  }
+  function buildNamespace(message: string, code: string) {
+    const tmp = template || DEFAULT_TEMPLATE
+    return replaceTemplate(tmp, {
+      scope,
+      code,
+    })
+  }
+  const builders = new Map<string, string>()
+
+  return <T extends string>(flag: T, msg: string = defaultMessage) => {
+    if (!builders.has(flag)) {
+      const code = makeFullCode(flag)
+      builders.set(flag, code)
+    }
+    return buildNamespace(msg, builders.get(flag))
+  }
+}
 
 /**
  * Standardized App Errors
@@ -45,7 +93,7 @@ import { ErrorPayload, ErrorTagMessages, ErrorTagPayloads, EventFlag } from './t
  *   };
  *
  *   // Type-safe function - must pass a valid error code as param.
- *   let error = new ErrorFactory<Err>('scope', 'Service', templates);
+ *   let error = new ErrorFactory<Err>('scope', 'Service', presets);
  *
  *   ...
  *   throw error.create(Err.GENERIC);
@@ -64,17 +112,28 @@ import { ErrorPayload, ErrorTagMessages, ErrorTagPayloads, EventFlag } from './t
  * @see inspired by:
  *   https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error#Custom_Error_Types
  */
-export class NsErrorFactory<T extends string = EventFlag, U extends ErrorTagPayloads = ErrorTagPayloads> {
+export class NsErrorFactory<
+  T extends string = EventFlag,
+  U extends ErrorTagPayloads = ErrorTagPayloads,
+> {
+  private buildNamespace: <T extends string>(flag: T, msg?: string) => string
 
   constructor(
     private readonly scope: string,
     private readonly namespace: string,
     private readonly templates: ErrorTagMessages<T>,
-    private readonly nsDelimiter: string = '/',
-    private readonly scopeDelimiter: string = ':',
-    private readonly defaultMessage: string = 'Error',
+    private readonly nsDelimiter = '/',
+    private readonly scopeDelimiter = ':',
+    private readonly defaultMessage = 'Error',
   ) {
     this.create = this.create.bind(this)
+    this.buildNamespace = namespaceFactory({
+      scope,
+      namespace,
+      nsDelimiter,
+      scopeDelimiter,
+      defaultMessage,
+    })
   }
 
   protected makeShortCode<K extends T>(flag: K): string {
@@ -83,13 +142,17 @@ export class NsErrorFactory<T extends string = EventFlag, U extends ErrorTagPayl
   protected makeFullCode(shortCode: string): string {
     return [this.scope, shortCode].join(this.scopeDelimiter)
   }
-  protected makeShortMessage<K extends T>(flag: K, payload?: ErrorPayload): string {
+  protected makeShortMessage<K extends T>(
+    flag: K,
+    payload?: ErrorPayload,
+  ): string {
     const template = this.templates[flag]
     return template ? replaceTemplate(template, payload) : this.defaultMessage
   }
   protected makeFullMessage(shortCode: string, shortMessage: string): string {
     // Scope - Error message (namespace/flag).
-    return `[${this.scope}] - ${shortMessage} (${shortCode}).`
+    // return `[${this.scope}] - ${shortMessage} (${shortCode}).`
+    return this.buildNamespace(shortCode, shortMessage)
   }
 
   /**
@@ -111,17 +174,20 @@ export class NsErrorFactory<T extends string = EventFlag, U extends ErrorTagPayl
    * @param payload - payload data to set template variable values
    * @returns NsError
    */
-  create<K extends T>(flag: K, ...payload: K extends keyof U ? [U[K]] : []): NsError {
+  public create<K extends T>(
+    flag: K,
+    ...payload: K extends keyof U ? [U[K]] : []
+  ): NsError {
     const data: ErrorPayload = (_isArr(payload) && payload[0]) || {},
       shortCode = this.makeShortCode(flag),
       fullCode = this.makeFullCode(shortCode),
       shortMessage = this.makeShortMessage(flag, data),
       fullMessage = this.makeFullMessage(fullCode, shortMessage)
 
-    return new NsError(fullCode, fullMessage, data)
+    return new NsError(shortCode, fullMessage, data)
   }
 
-  childFactory<T extends string, U extends ErrorTagPayloads<T>>(
+  public childFactory<T extends string, U extends ErrorTagPayloads<T>>(
     childNamespace: string,
     templates?: ErrorTagMessages<T>,
   ) {

@@ -20,7 +20,7 @@
  * @param derivedCtor
  * @param {any[]} baseCtor
  */
-export function applyMixins(derivedCtor: any, ...baseCtor: { prototype: any }[]) {
+export function applyMixins(derivedCtor: any, ...baseCtor: {prototype: any}[]) {
   baseCtor.forEach((baseCtor) => {
     const proto = baseCtor.prototype
     Object.getOwnPropertyNames(proto).forEach((name) => {

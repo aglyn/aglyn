@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "aglyn-app",
+    "aglyn-main": "aglyn-main"
+  }
+}

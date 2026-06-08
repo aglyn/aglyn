@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import { Conditional } from '../lib/basic'
-
 
 export namespace Version {
   // Example:
@@ -36,16 +33,22 @@ export namespace Version {
   export type Minor<N extends NiD = 0> = `.${N}`
   export type Patch<N extends NiD = 0> = `.${N}`
 
-  export type Pre<PRN extends PreName = null, PRV extends NiD = 0> =
-    Conditional<PRN, PreName, Conditional<PRV, NiD, `-${PRN}.${PRV}`, `-${PRN}`>>
-  export type Build<N extends NiD = null> = Conditional<N, NiD, `+${N}`>
+  export type Pre<
+    PRN extends OrUndef<PreName> = undefined,
+    PRV extends OrUndef<NiD> = 0,
+  > = Conditional<
+    PRN,
+    PreName,
+    Conditional<PRV, NiD, `-${PRN}.${PRV}`, `-${PRN}`>
+  >
+  export type Build<N extends OrUndef<NiD> = undefined> = Conditional<N, NiD, `+${N}`>
 
-  export type Semantic<MAJ extends NiD = 0,
+  export type Semantic<
+    MAJ extends NiD = 0,
     MIN extends NiD = 0,
     PAT extends NiD = 0,
-    PRN extends PreName = null,
-    PRV extends NiD = null,
-    BLD extends NiD = null,
-    > = `${Major<MAJ>}${Minor<MIN>}${Patch<PAT>}${Pre<PRN, PRV>}${Build<BLD>}`
-
+    PRN extends OrUndef<PreName> = undefined,
+    PRV extends OrUndef<NiD> = undefined,
+    BLD extends OrUndef<NiD> = undefined,
+  > = `${Major<MAJ>}${Minor<MIN>}${Patch<PAT>}${Pre<PRN, PRV>}${Build<BLD>}`
 }

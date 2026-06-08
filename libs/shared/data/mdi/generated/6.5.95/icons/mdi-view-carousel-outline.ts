@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiViewCarouselOutline: Icon = {
   "id": "view-carousel-outline",
   "name": "View Carousel Outline",
   "path": "M2 6H6V17H2V6M7 19H17V4H7V19M9 6H15V17H9V6M18 6H22V17H18V6Z",
@@ -7,3 +8,4 @@ export default {
     "View"
   ]
 }
+export default mdiViewCarouselOutline

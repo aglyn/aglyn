@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
  */
 
 
-import type { Rect } from '../types'
-import { getElementComputedStyle } from './get-element-computed-style'
-import { getElementDocumentElement } from './get-element-document-element'
-import { getElementWindowScrollBarX } from './get-element-window-scroll-bar-x'
-import { getNodeWindowScroll } from './get-node-window-scroll'
+import type {Rect} from '../dom'
+import {getElementComputedStyle} from './get-element-computed-style'
+import {getElementDocumentElement} from './get-element-document-element'
+import {getElementWindowScrollBarX} from './get-element-window-scroll-bar-x'
+import {getNodeWindowScroll} from './get-node-window-scroll'
 
 // Gets the entire size of the scrollable document area, even extending outside
 // of the `<html>` and `<body>` rect bounds if horizontally scrollable

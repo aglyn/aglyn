@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiBorderAllVariant: Icon = {
   "id": "border-all-variant",
   "name": "Border All Variant",
   "path": "M3,21V3H21V21H3M5,5V19H19V5H5Z",
@@ -7,3 +8,4 @@ export default {
     "Text / Content / Format"
   ]
 }
+export default mdiBorderAllVariant

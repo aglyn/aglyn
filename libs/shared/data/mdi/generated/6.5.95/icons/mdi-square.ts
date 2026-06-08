@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiSquare: Icon = {
   "id": "square",
   "name": "Square",
   "path": "M3,3V21H21V3",
@@ -7,3 +8,4 @@ export default {
     "Shape"
   ]
 }
+export default mdiSquare

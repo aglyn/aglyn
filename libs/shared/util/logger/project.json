@@ -1,0 +1,30 @@
+{
+  "name": "shared-util-logger",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/logger/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:util"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/logger",
+        "main": "libs/shared/util/logger/src/index.ts",
+        "tsConfig": "libs/shared/util/logger/tsconfig.lib.json",
+        "assets": ["libs/shared/util/logger/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/logger"],
+      "options": {
+        "jestConfig": "libs/shared/util/logger/jest.config.ts"
+      }
+    }
+  }
+}

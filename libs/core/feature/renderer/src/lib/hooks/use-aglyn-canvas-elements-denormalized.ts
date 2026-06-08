@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,25 @@
  * limitations under the License.
  */
 
-import {
-  AglynComponentElementDataNormalizedArray,
-  getCanvasDenormalizedElementsStore,
-} from '@aglyn/core-data-framework'
-import { useStoreMap } from 'effector-react'
+import { getCanvasNormalizedNodesStore } from '@aglyn/core-data-app'
+import type { AglynNodesById } from '@aglyn/core-data-foundation'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
+import { _isFnT } from '@aglyn/shared-util-tools'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-export function useAglynCanvasElementsDenormalized(): AglynComponentElementDataNormalizedArray {
-  const { getApp } = useAglynAppContext()
-  const app = getApp()
-  const store = getCanvasDenormalizedElementsStore(app)
-  return useStoreMap(store, (store) => store)
+export function useAglynCanvasElementsDenormalized(): AglynNodesById
+export function useAglynCanvasElementsDenormalized<Result>(
+  callbackFn: (state: AglynNodesById) => Result,
+): Result
+export function useAglynCanvasElementsDenormalized<Result>(
+  callbackFn?: (state: AglynNodesById) => Result,
+): Result | AglynNodesById {
+  const app = useAglynAppContext()
+  return useSubscribable(
+    getCanvasNormalizedNodesStore(app),
+    undefined,
+    (state) => (_isFnT(callbackFn) ? (callbackFn(state) as Result) : state),
+    [callbackFn, app],
+  ) as Result | AglynNodesById
 }
 export default useAglynCanvasElementsDenormalized

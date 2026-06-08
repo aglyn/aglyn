@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,27 +15,21 @@
  * limitations under the License.
  */
 
-import {
-  AglynComponentElementHierarchy,
-  ElementId,
-  getCanvasNormalizedElementsStore,
-  getComponentElementHierarchy,
-} from '@aglyn/core-data-framework'
-import { useStoreMap } from 'effector-react'
+import { getCanvasNormalizedNodesStore } from '@aglyn/core-data-app'
+import type { AglynNodeHierarchy, NodeId } from '@aglyn/core-data-foundation'
+import { getComponentElementHierarchy } from '@aglyn/core-util-app'
+import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
-export const useAglynCanvasElementHierarchy = (
-  $id: ElementId | null
-): AglynComponentElementHierarchy<typeof $id> => {
-  const { getApp } = useAglynAppContext()
-  const app = getApp()
-  const store = getCanvasNormalizedElementsStore(app)
-
-  return useStoreMap({
-    store,
-    keys: [$id],
-    fn: (state, [$id]) => {
-      return getComponentElementHierarchy($id, state)
-    },
-  })
+export function useAglynCanvasElementHierarchy<T extends NodeId>(
+  $id: T,
+): AglynNodeHierarchy<T> {
+  const app = useAglynAppContext()
+  return useSubscribable(
+    getCanvasNormalizedNodesStore(app),
+    [] as any,
+    (state) => getComponentElementHierarchy($id, state),
+    [$id, app],
+  ) as AglynNodeHierarchy<T>
 }
+export default useAglynCanvasElementHierarchy

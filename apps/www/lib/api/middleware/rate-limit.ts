@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,14 @@
  */
 
 import LRUCache from 'lru-cache'
-import { Logger, Req, Res } from '../helpers'
-import { ApiMiddleware, NextFn } from '../tools/middleware'
-import { ApiRequest, ApiResponse } from '../types'
+import type {NextApiRequest, NextApiResponse} from 'next'
+import {type Middleware} from 'next-api-middleware'
+import {Res} from '../helpers'
 
 
 export interface RateLimiter<K = string, V = any> {
   getTokenCache: () => LRUCache<K, V>
-  checkLimit: (res: ApiResponse, token?: string, limit?: number) => Promise<void>
+  checkLimit: (res: NextApiResponse, token?: string, limit?: number) => Promise<void>
 }
 
 export interface RateLimiterOptions<K, V> extends LRUCache.Options<K, V> {
@@ -32,16 +32,20 @@ export interface RateLimiterOptions<K, V> extends LRUCache.Options<K, V> {
 }
 
 export function createRateLimiter<K, V>(options?: RateLimiterOptions<K, V>): RateLimiter<K, V> {
-  const { limit: _limit, max: _max, maxAge: _maxAge, token: _token, ...opts } = options
+  const {limit: _limit, max: _max, maxAge: _maxAge, token: _token, ...opts} = options
   const max = _max ?? 100 /* 100 users per second */
   const maxAge = _maxAge ?? 60000 /* 60 seconds */
   const limit = _limit ?? 10 /* 10 requests per minute */
   const token = _token ?? 'CACHE_TOKEN' /* Key inside LRUCache */
-  const tokenCache = new LRUCache<K, V>({ max, maxAge, ...opts })
+  const tokenCache = new LRUCache<K, V>({max, maxAge, ...opts})
   const getTokenCache = (): LRUCache<K, V> => {
     return tokenCache
   }
-  const checkLimit = (res: ApiResponse, cacheToken: string = token, maxLimit: number = limit): Promise<void> => {
+  const checkLimit = (
+    res: NextApiResponse,
+    cacheToken: string = token,
+    maxLimit: number = limit,
+  ): Promise<void> => {
     return new Promise<void>((resolve, reject) => {
       const tokenCount = tokenCache.get(cacheToken as unknown as K) ?? [0] as unknown as V
       if (tokenCount[0] === 0) {
@@ -62,19 +66,20 @@ export function createRateLimiter<K, V>(options?: RateLimiterOptions<K, V>): Rat
   }
 }
 
-export function rateLimiterFactory<K, V>(options?: RateLimiterOptions<K, V>): ApiMiddleware {
+export function rateLimiterFactory<K, V>(options?: RateLimiterOptions<K, V>): Middleware {
   const rateLimiter = createRateLimiter<K, V>(options)
 
-  return async (req: ApiRequest, res: ApiResponse, next: NextFn) => {
+  return async (req: NextApiRequest, res: NextApiResponse, next) => {
     let fail
     try {
       await rateLimiter.checkLimit(res)
-    } catch (error) {
+    }
+    catch (error) {
       fail = true
       const json = Res.Error.rateLimitCheck
-      Logger.traceError(json, error)
       res.status(json.error.statusCode).json(json)
-    } finally {
+    }
+    finally {
       if (!fail) {
         await next()
       }

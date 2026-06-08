@@ -1,0 +1,41 @@
+{
+  "name": "aglyn",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/aglyn/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "scope:framework"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/aglyn",
+        "main": "libs/aglyn/src/index.ts",
+        "tsConfig": "libs/aglyn/tsconfig.lib.json",
+        "assets": ["libs/aglyn/*.md"]
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/scripts/publish.mjs aglyn {args.ver} {args.tag}"
+      },
+      "dependsOn": [
+        {
+          "target": "build"
+        }
+      ]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/aglyn"],
+      "options": {
+        "jestConfig": "libs/aglyn/jest.config.ts"
+      }
+    }
+  }
+}

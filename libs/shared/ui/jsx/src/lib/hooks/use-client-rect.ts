@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { Ref, RefObject, useRef, useState, useCallback } from 'react'
+import {Ref, RefObject, useRef, useState, useCallback} from 'react'
+
 
 export type UseDynamicClientRect = [() => DOMRect, RefObject<any>]
 
@@ -31,15 +32,15 @@ export function useDynamicClientRect(): UseDynamicClientRect {
   return [getClientRect, ref]
 }
 
-export type UseClientRectCallback = (args: { clientRect: DOMRect; node: Node }) => void
-export type UseClientRect<T> = [DOMRect, Ref<T>, RefObject<T>]
+export type UseClientRectCallback = (args: {clientRect: DOMRect; node: Node}) => void
+export type UseClientRect<T> = [DOMRect, Ref<T>, RefObject<T | null>]
 
 export function useClientRect<T>(
   callback?: UseClientRectCallback,
-  initialRect: DOMRect = null
+  initialRect: DOMRect = null,
 ): UseClientRect<T> {
   const [clientRect, setRect] = useState(initialRect)
-  const nodeRef = useRef()
+  const nodeRef = useRef<T | null>(null)
 
   const ref = useCallback(
     (node) => {
@@ -48,10 +49,10 @@ export function useClientRect<T>(
         const clientRect = node.getBoundingClientRect && node.getBoundingClientRect()
         const newRect = clientRect?.toJSON ? clientRect.toJSON() : clientRect
         setRect(newRect)
-        callback && callback({ clientRect: newRect, node })
+        callback && callback({clientRect: newRect, node})
       }
     },
-    [callback]
+    [callback],
   )
 
   return [clientRect, ref, nodeRef]

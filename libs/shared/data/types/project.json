@@ -1,0 +1,30 @@
+{
+  "name": "shared-data-types",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/data/types/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:data"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/data/types",
+        "main": "libs/shared/data/types/src/index.ts",
+        "tsConfig": "libs/shared/data/types/tsconfig.lib.json",
+        "assets": ["libs/shared/data/types/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/data/types"],
+      "options": {
+        "jestConfig": "libs/shared/data/types/jest.config.ts"
+      }
+    }
+  }
+}

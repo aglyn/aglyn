@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,82 +15,46 @@
  * limitations under the License.
  */
 
-import { _isUndT } from '@aglyn/shared-util-guards'
-import { verifyIdToken } from '../../fetch-data/profile-data'
-import { Logger, Res } from '../helpers'
-import { ApiHandler, ApiRequest, ApiResponse } from '../types'
+import {HttpStatusCode} from '@aglyn/shared-data-enums'
+import {
+  createNewJsonResponse,
+  withCsrfTokenHeader,
+  withIdTokenHeader,
+} from '@aglyn/shared-util-rest-api'
+import type {NextApiHandler} from 'next'
+import {verifyIdToken} from '../../fetch-data/profile-data'
 
 
-export const requireHeader = (
-  name: string,
-  key: keyof ApiRequest['headers'],
-  handler: ApiHandler,
-) => {
-  return async (req: ApiRequest, res: ApiResponse) => {
-    const newReq = req
-    let error
-    try {
-      const header = req.headers[key]
-      if (_isUndT(header)) {
-        throw new Error(`Missing required header - (key: ${key})!`)
-      }
-      newReq[name] = header
-      return
-    }
-    catch (err) {
-      error = err
-    }
-    finally {
-      if (error) {
-        await handler(newReq, res)
-      }
-      else {
-        const json = Res.Error.missingHeader
-        Logger.traceError(json, error)
-        return res.status(json.error.statusCode).json(json)
-      }
-    }
-  }
-}
-
-export const withIdTokenHeader = (handler) => {
-  return requireHeader('idToken', 'id-token', handler)
-}
-
-export const withCsrfTokenHeader = (handler) => {
-  return requireHeader('csrfToken', 'csrf-token', handler)
-}
-
-export const requireIdToken = (handler: ApiHandler) => {
-  return withIdTokenHeader(async (req, res) => {
+export const requireIdToken = <T = any>(handler: NextApiHandler<T>): NextApiHandler<T> => {
+  return withIdTokenHeader((async (req, res) => {
     try {
       await verifyIdToken(req.idToken)
-      return await handler(req, res)
     }
     catch (error) {
-      const json = Res.Error.idTokenCheck
-      Logger.traceError(json)
-      return res.status(json.error.statusCode).json(json)
+      return createNewJsonResponse(HttpStatusCode.UNAUTHORIZED, {
+        status: 'error',
+        error: error,
+        statusMessage: 'Unauthorized request sent',
+      })
     }
-  })
+
+    await handler(req, res)
+  }) as any)
 }
 
-export const requireCsrfToken = (handler: ApiHandler) => {
-  return withCsrfTokenHeader(async (req, res) => {
-    try {
-      if (req.csrfToken !== req.cookies.csrfToken) {
-        throw new Error('CSRF mismatch. Possible break-in attempt!')
-      }
-      return await handler(req, res)
+export const requireCsrfToken = <T = any>(handler: NextApiHandler<T>): NextApiHandler<T> => {
+  return withCsrfTokenHeader((async (req, res) => {
+    if (req['csrfToken'] !== req.cookies.csrfToken) {
+      return createNewJsonResponse(HttpStatusCode.UNAUTHORIZED, {
+        status: 'error',
+        error: Error('CSRF mismatch. Possible break-in attempt!'),
+        statusMessage: 'Invalid request',
+      })
     }
-    catch (error) {
-      const json = Res.Error.csrfTokenCheck
-      Logger.traceError(json, error)
-      return res.status(json.error.statusCode).json(json)
-    }
-  })
+    await handler(req, res)
+  }) as any)
 }
 
-export const secureRequest = (handler: ApiHandler, withCsrf?: boolean) => {
+export const secureRequest = <T = any>(handler: NextApiHandler<T>, withCsrf?: boolean) => {
   return withCsrf ? requireIdToken(requireCsrfToken(handler)) : requireIdToken(handler)
 }

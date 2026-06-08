@@ -15,4 +15,4 @@
  * limitations under the License.
  */
 
-export * from './lib/next-page-with-layout'
+export * from './lib/next'

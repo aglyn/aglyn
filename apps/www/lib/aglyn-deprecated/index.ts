@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,11 +20,11 @@ export * from './lib/types'
 export * from './lib/overrides'
 
 // Interfaces
-export * from '../../../../libs/shared/data/types/src/lib/crud'
-export * from '../../../../libs/shared/data/types/src/lib/dod'
-export * from '../../../../libs/shared/data/types/src/lib/initializable'
-export * from '../../../../libs/shared/data/types/src/lib/serializable'
-export * from '../../../../libs/shared/data/types/src/lib/normalized'
+export * from '../../../../libs/shared/data/types/src/lib/groups/crud'
+export * from '../../../../libs/shared/data/types/src/lib/groups/dod'
+export * from '../../../../libs/shared/data/types/src/lib/groups/initializable'
+export * from '../../../../libs/shared/data/types/src/lib/groups/serializable'
+export * from '../../../../libs/shared/data/types/src/lib/groups/normalized'
 export * from './lib/interfaces/ref-controller'
 
 // Models

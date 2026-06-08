@@ -1,0 +1,26 @@
+{
+  "name": "console-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/console-e2e/src",
+  "projectType": "application",
+  "tags": ["scope:app", "scope:private", "scope:e2e"],
+  "implicitDependencies": ["console"],
+  "targets": {
+    "e2e": {
+      "executor": "@nx/cypress:cypress",
+      "options": {
+        "cypressConfig": "apps/console-e2e/cypress.json",
+        "devServerTarget": "console:serve"
+      },
+      "configurations": {
+        "production": {
+          "devServerTarget": "console:serve:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  }
+}

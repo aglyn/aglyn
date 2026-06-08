@@ -1,0 +1,30 @@
+{
+  "name": "shared-util-timestamp",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/timestamp/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:util"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/timestamp",
+        "main": "libs/shared/util/timestamp/src/index.ts",
+        "tsConfig": "libs/shared/util/timestamp/tsconfig.lib.json",
+        "assets": ["libs/shared/util/timestamp/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/timestamp"],
+      "options": {
+        "jestConfig": "libs/shared/util/timestamp/jest.config.ts"
+      }
+    }
+  }
+}

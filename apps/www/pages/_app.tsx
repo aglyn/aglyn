@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,80 +15,68 @@
  * limitations under the License.
  */
 
-import {IS_PRODUCTION} from '@aglyn/shared-data-brand'
-import {CacheProvider, createEmotionCache, EmotionCache} from '@aglyn/shared-feature-themes'
-import {NextAppWithLayout} from '@aglyn/shared-ui-next'
-import {AppProps as NextAppProps} from 'next/app'
-import AppWrapper from '../components/app-wrapper'
-import {withAppController} from '../lib/aglyn-deprecated/lib/controllers/app-controller'
-
+import { APP_WWW, IS_PRODUCTION } from '@aglyn/shared-data-enums'
+import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
+import {
+  consoleThemeDark,
+  consoleThemeLight,
+  createWithThemeProvider,
+} from '@aglyn/shared-ui-theme'
+import { Fragment } from 'react'
+import HsEmbedScript from '../components/hs-embed-script'
+import VisitorQueueScript from '../components/visitor-queue-script'
+import { withAppController } from '../lib/aglyn-deprecated/lib/controllers/app-controller'
 
 let app
 if (!app) {
   const previewProduction = true
-  app = withAppController(IS_PRODUCTION || previewProduction ? {} : {
-    authEmulator: 'http://localhost:9099/',
-    firestoreEmulator: {host: 'localhost', port: 8080},
-  })
-}
-// console.log('app', app)
-
-// Client-side cache, shared for the whole session of the user in the browser.
-const clientSideEmotionCache = createEmotionCache()
-
-export interface _AppProps extends NextAppProps {
-  emotionCache?: EmotionCache
-}
-
-/**
- *
- * App component manages mounting and hydration for the client app
- * at the Next.JS app entry point, removes server styles and is
- * responsible for rendering every page Component
- *
- * @example
- * > ## Resolution order
- * >
- * > ### Server-side
- * > 1. [_App]{@link _App}.getInitialProps (if-exists)
- * > 2. <PageComponent>.getInitialProps
- * > 3. [_Document]{@link _Document}.getInitialProps
- * > 4. [_App]{@link _App}.render
- * > 5. <PageComponent>.render
- * > 6. [_Document]{@link _Document}.render
- * >
- * > ### Server-side (w/ error)
- * > 1. [_Document]{@link _Document}.getInitialProps
- * > 2. [_App]{@link _App}.render
- * > 3. <PageComponent>.render
- * > 4. [_Document]{@link _Document}.render
- * >
- * > ### Client-side
- * > 1. [_App]{@link _App}.getInitialProps (if-exists)
- * > 2. <PageComponent>.getInitialProps
- * > 3. [_App]{@link _App}.render
- * > 4. <PageComponent>.render
- *
- * @param {AppProps} props
- * @returns {JSX.Element}
- */
-export default function _App(props: _AppProps) {
-  const {
-    Component,
-    emotionCache = clientSideEmotionCache,
-    pageProps,
-    ...rest
-  } = props
-
-  return (
-    <CacheProvider value={emotionCache}>
-      <AppWrapper>
-        <NextAppWithLayout
-          Component={Component}
-          pageProps={pageProps}
-          {...rest}
-        />
-      </AppWrapper>
-    </CacheProvider>
+  app = withAppController(
+    IS_PRODUCTION || previewProduction
+      ? {}
+      : {
+          authEmulator: 'http://localhost:9099/',
+          firestoreEmulator: { host: 'localhost', port: 8082 },
+        },
   )
 }
+const withThemeProvider = createWithThemeProvider({
+  theme: [consoleThemeLight, consoleThemeDark],
+})
+
+const MainComponent = withThemeProvider((props: any) => {
+  const { children } = props
+
+  return <>{children}</>
+})
+
+function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
+  const { headChildren, ...rest } = props
+
+  return (
+    <_AppComponent
+      MainComponent={MainComponent}
+      meta={[
+        {
+          key: 'viewport',
+          name: 'viewport',
+          content: 'width=device-width, initial-scale=1',
+        },
+        { key: 'desc', name: 'description', content: APP_WWW.DESCRIPTION },
+      ]}
+      headChildren={
+        <Fragment>
+          {!IS_PRODUCTION ? null : (
+            <Fragment>
+              <HsEmbedScript />
+              <VisitorQueueScript />
+            </Fragment>
+          )}
+          {headChildren}
+        </Fragment>
+      }
+      {...rest}
+    />
+  )
+}
+_App.displayName = '_App'
+export default _App

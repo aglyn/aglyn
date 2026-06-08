@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,32 +15,30 @@
  * limitations under the License.
  */
 
-import {
-  alpha,
-  createStyles,
-  ExtendPropsOfWithStyles,
-  withStyles,
-} from '@aglyn/shared-feature-themes'
-import {NavigationDrawer, NavigationDrawerProps} from '@aglyn/shared-ui-jsx'
-import {mdiClose} from '@aglyn/shared-ui-mdi-jsx'
-import {_isStrT} from '@aglyn/shared-util-guards'
-import {objectRemap} from '@aglyn/shared-util-tools'
-import {Box, Button} from '@mui/material'
+import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx'
+import { mdiClose, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { alpha, createStyles, withStyles } from '@aglyn/shared-ui-theme'
+import { _isStrT } from '@aglyn/shared-util-tools'
+import { objectRemap } from '@aglyn/shared-util-tools'
+import { Box, Button } from '@mui/material'
 import Container from '@mui/material/Container'
 import IconButton from '@mui/material/IconButton'
 import LinearProgress from '@mui/material/LinearProgress'
 import Typography from '@mui/material/Typography'
-import React, {forwardRef} from 'react'
-import MdiIcon from '../../../libs/shared/ui/mdi-jsx/src/lib/components/mdi-icon'
+import {
+  ChangeEventHandler,
+  forwardRef,
+  Fragment,
+  MouseEventHandler,
+} from 'react'
 import FieldSet from '../components/FieldSet'
-import {Fields} from '../forms'
-
+import { Fields } from '../forms'
 
 export const drawerFormViewStyles = (theme) =>
   createStyles({
-    closeButton: {marginRight: theme.spacing(2)},
-    pt2: {paddingTop: theme.spacing(2)},
-    wrapper: {position: 'relative'},
+    closeButton: { marginRight: theme.spacing(2) },
+    pt2: { paddingTop: theme.spacing(2) },
+    wrapper: { position: 'relative' },
     loadingBar: {
       position: 'absolute',
       backgroundColor: alpha(theme.palette.primary.main, 0.86),
@@ -52,8 +50,8 @@ export const drawerFormViewStyles = (theme) =>
 
 export type FormVariant = 'creating' | 'updating'
 
-export interface DrawerFormViewProps
-  extends ExtendPropsOfWithStyles<Partial<NavigationDrawerProps>, typeof drawerFormViewStyles> {
+export interface DrawerFormViewProps {
+  // extends ExtendPropsOfWithStyles<Partial<NavigationDrawerProps>, typeof drawerFormViewStyles> {
   id: string
   fields: Fields.FieldGroup
   label: string
@@ -62,96 +60,114 @@ export interface DrawerFormViewProps
 
   loading?: boolean
   error?: string | boolean
-  onClose: React.MouseEventHandler
-  onSave: React.MouseEventHandler<HTMLButtonElement>
-  onUpdate: (fieldId: string) => React.ChangeEventHandler<HTMLTextAreaElement | HTMLInputElement>
+  onClose: MouseEventHandler
+  onSave: MouseEventHandler<HTMLButtonElement>
+  onUpdate: (
+    fieldId: string,
+  ) => ChangeEventHandler<HTMLTextAreaElement | HTMLInputElement>
 }
 
-const DrawerFormView = forwardRef<any, DrawerFormViewProps>(function RefRenderFn(props, ref) {
-  const {
-    id,
-    fields,
-    open,
-    loading,
-    error,
-    formVariant = 'creating',
-    label,
-    onClose,
-    onSave,
-    onUpdate,
-    classes,
-    ...rest
-  } = props
+const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
+  function RefRenderFn(props, ref) {
+    const {
+      id,
+      fields,
+      open,
+      loading,
+      error,
+      formVariant = 'creating',
+      label,
+      onClose,
+      onSave,
+      onUpdate,
+      classes,
+      ...rest
+    } = props
 
-  const isCreating = formVariant === 'creating'
-  const actionLabel = isCreating ? 'Create' : 'Update'
+    const isCreating = formVariant === 'creating'
+    const actionLabel = isCreating ? 'Create' : 'Update'
 
-  return (
-    <NavigationDrawer
-      ref={ref}
-      appBarLeft={
-        <React.Fragment>
-          <IconButton
-            children={<MdiIcon path={mdiClose.path} />}
-            className={classes.closeButton}
-            color="default"
-            edge="start"
-            onClick={onClose}
+    return (
+      <NavigationDrawerComponent
+        ref={ref}
+        appBarLeft={
+          <Fragment>
+            <IconButton
+              children={<MdiIcon path={mdiClose.path} />}
+              className={classes.closeButton}
+              color="default"
+              edge="start"
+              onClick={onClose}
+            />
+            <Typography
+              children={`${actionLabel} ${label}`}
+              color="inherit"
+              component="div"
+              variant="h6"
+            />
+          </Fragment>
+        }
+        appBarRight={
+          <Button
+            children={actionLabel}
+            color="secondary"
+            disabled={loading}
+            variant="contained"
+            onClick={onSave}
           />
-          <Typography
-            children={`${actionLabel} ${label}`}
-            color="inherit"
-            component="div"
-            variant="h6"
-          />
-        </React.Fragment>
-      }
-      appBarRight={
-        <Button
-          children={actionLabel}
-          color="secondary"
-          disabled={loading}
-          variant="contained"
-          onClick={onSave}
-        />
-      }
-      open={open}
-      onClose={onClose}
-      {...rest}
-    >
-      <div className={classes.wrapper}>
-        {loading && (
-          <React.Fragment>
-            <LinearProgress classes={{root: classes.loadingBar}} color="secondary" />
-          </React.Fragment>
-        )}
-
-        <Container>
-          <br />
-          {error && (_isStrT(error) ? error : 'Error loading...')}
-          {!error && (
-            <React.Fragment>
-              <Typography children={'Unique ID'} variant="subtitle2" />
-              <Typography children={id ?? '(none)'} variant="subtitle1" />
-              <FieldSet fields={fields} loading={loading} onUpdate={onUpdate} />
-              <Box mt={2}>
-                <Typography children={'JSON Output'} variant="subtitle2" />
-                <Box bgcolor="background.default" mt={1} overflow="scroll" px={1}>
-                  <pre>
-                    {JSON.stringify(
-                      objectRemap(fields, (f) => f.value ?? ''),
-                      null,
-                      2,
-                    )}
-                  </pre>
-                </Box>
-              </Box>
-            </React.Fragment>
+        }
+        open={open}
+        onClose={onClose}
+        {...rest}
+      >
+        <div className={classes.wrapper}>
+          {loading && (
+            <Fragment>
+              <LinearProgress
+                classes={{ root: classes.loadingBar }}
+                color="secondary"
+              />
+            </Fragment>
           )}
-        </Container>
-      </div>
-    </NavigationDrawer>
-  )
-})
 
-export default withStyles(drawerFormViewStyles, {name: 'DrawerFormView'})(DrawerFormView)
+          <Container>
+            <br />
+            {error && (_isStrT(error) ? error : 'Error loading...')}
+            {!error && (
+              <Fragment>
+                <Typography children={'Unique ID'} variant="subtitle2" />
+                <Typography children={id ?? '(none)'} variant="subtitle1" />
+                <FieldSet
+                  fields={fields}
+                  loading={loading}
+                  onUpdate={onUpdate}
+                />
+                <Box mt={2}>
+                  <Typography children={'JSON Output'} variant="subtitle2" />
+                  <Box
+                    bgcolor="background.default"
+                    mt={1}
+                    overflow="scroll"
+                    px={1}
+                  >
+                    <pre>
+                      {JSON.stringify(
+                        objectRemap(fields, (f) => f.value ?? ''),
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </Box>
+                </Box>
+              </Fragment>
+            )}
+          </Container>
+        </div>
+      </NavigationDrawerComponent>
+    )
+  },
+)
+
+export default withStyles(drawerFormViewStyles, { name: 'DrawerFormView' })(
+  DrawerFormView,
+)

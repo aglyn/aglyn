@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,25 +15,23 @@
  * limitations under the License.
  */
 
-import {styled} from '@aglyn/shared-feature-themes'
-import {AglynSvgLogo} from '@aglyn/shared-ui-jsx'
-import Box from '@mui/material/Box'
-import Container from '@mui/material/Container'
-import Slide from '@mui/material/Slide'
-import Typography from '@mui/material/Typography'
-import {forwardRef, useEffect, useState} from 'react'
-import BackgroundImage, {BackgroundImageProps} from '../components/BackgroundImage'
+import { AglynSvgLogo, Container } from '@aglyn/shared-ui-jsx'
+import { styled } from '@aglyn/shared-ui-theme'
+import { Box, Slide, Typography } from '@mui/material'
+import { forwardRef, useEffect, useState } from 'react'
+import BackgroundImage, {
+  type BackgroundImageProps,
+} from '../components/BackgroundImage'
 import Copyright from '../components/Copyright'
-
 
 const AuthLayoutBackground = styled(BackgroundImage, {
   name: 'AglynAuthLayoutBackground',
-})(({theme}) => ({
+})(({ theme }) => ({
   color: theme.palette.text.primary,
 }))
 const AuthLayoutLogo = styled(AglynSvgLogo, {
   name: 'AglynAuthLayoutLogo',
-})(({theme}) => ({
+})(({ theme }) => ({
   height: 'auto',
   width: 320,
   maxWidth: '100%',
@@ -41,69 +39,75 @@ const AuthLayoutLogo = styled(AglynSvgLogo, {
 }))
 const AuthLayoutCopyright = styled(Copyright, {
   name: 'AglynAuthLayoutCopyright',
-})(({theme}) => ({
+})(({ theme }) => ({
   position: 'absolute',
   bottom: theme.spacing(1),
   left: theme.spacing(2),
 }))
 
-
 export interface AuthLayoutProps extends BackgroundImageProps {
   text: string
 }
 
-const AuthLayout = forwardRef<any, AuthLayoutProps>(
-  function RefRenderFn(props, ref) {
-    const {text, children, classes, ...rest} = props
-    const [animated, setAnimated] = useState({left: false, right: false})
+const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(
+  props,
+  ref,
+) {
+  const { text, children, classes, ...rest } = props
+  const [animated, setAnimated] = useState({ left: false, right: false })
 
-    useEffect(() => {
-      let leftAnimationTimeout = null
-      let rightAnimationTimeout = null
+  useEffect(() => {
+    let leftAnimationTimeout = null
+    let rightAnimationTimeout = null
 
-      function animate(which: string) {
-        setAnimated((prev) => ({...prev, [which]: true}))
-      }
-      leftAnimationTimeout = setTimeout(animate, 700, 'left')
-      rightAnimationTimeout = setTimeout(animate, 500, 'right')
+    function animate(which: string) {
+      setAnimated((prev) => ({ ...prev, [which]: true }))
+    }
+    leftAnimationTimeout = setTimeout(animate, 700, 'left')
+    rightAnimationTimeout = setTimeout(animate, 500, 'right')
 
-      return () => {
-        leftAnimationTimeout && clearTimeout(leftAnimationTimeout)
-        rightAnimationTimeout && clearTimeout(rightAnimationTimeout)
-      }
-    }, [])
+    return () => {
+      leftAnimationTimeout && clearTimeout(leftAnimationTimeout)
+      rightAnimationTimeout && clearTimeout(rightAnimationTimeout)
+    }
+  }, [])
 
-    return (
-      <AuthLayoutBackground
-        ref={ref}
-        alignItems="stretch"
-        display="flex"
-        height="100vh"
-        url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
-        fixed
-        {...rest}
-      >
-        <Box alignItems="center" display="flex" flexGrow={1}>
-          <Container maxWidth="lg">
-            <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
-              <div>
-                <AuthLayoutLogo />
-                <Typography children={text} variant="h2" />
-              </div>
-            </Slide>
-            <AuthLayoutCopyright />
-          </Container>
+  return (
+    <AuthLayoutBackground
+      ref={ref}
+      alignItems="stretch"
+      display="flex"
+      height="100vh"
+      url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
+      fixed
+      {...rest}
+    >
+      <Box alignItems="center" display="flex" flexGrow={1}>
+        <Container maxWidth="lg">
+          <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
+            <div>
+              <AuthLayoutLogo />
+              <Typography children={text} variant="h2" />
+            </div>
+          </Slide>
+          <AuthLayoutCopyright />
+        </Container>
+      </Box>
+      <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
+        <Box
+          alignItems="center"
+          bgcolor="common.white"
+          display="flex"
+          width={450}
+        >
+          <Container>{children}</Container>
         </Box>
-        <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
-          <Box alignItems="center" bgcolor="common.white" display="flex" width={450}>
-            <Container>{children}</Container>
-          </Box>
-        </Slide>
-      </AuthLayoutBackground>
-    )
-  },
-)
+      </Slide>
+    </AuthLayoutBackground>
+  )
+})
 
 AuthLayout.displayName = 'AuthLayout'
+AuthLayout.aglyn = true
 
 export default AuthLayout

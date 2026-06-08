@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
-import { styled, withStyles } from '@aglyn/shared-feature-themes'
-import MuiDialog, { DialogProps as MuiDialogProps } from '@mui/material/Dialog'
+import { styled } from '@aglyn/shared-ui-theme'
+import MuiDialog, { type DialogProps as MuiDialogProps } from '@mui/material/Dialog'
 import MuiDialogActions, {
-  DialogActionsProps as MuiDialogActionsProps,
+  type DialogActionsProps as MuiDialogActionsProps,
 } from '@mui/material/DialogActions'
 import MuiDialogContent from '@mui/material/DialogContent'
-import MuiDialogTitle, { DialogTitleProps as MuiDialogTitleProps } from '@mui/material/DialogTitle'
+import MuiDialogTitle, {
+  type DialogTitleProps as MuiDialogTitleProps,
+} from '@mui/material/DialogTitle'
 import { forwardRef } from 'react'
 
 const Dialog = styled(MuiDialog, {
-  name: 'PopupDialog'
-})(({theme}) => ({
+  name: 'PopupDialog',
+})(({ theme }) => ({
   width: '100%',
   maxWidth: 360,
   backgroundColor: theme.palette.background.paper,
   ['& > .MuiPaper']: {
     width: '80%',
     maxHeight: 435,
-  }
+  },
 }))
 
 export interface PopupDialogProps extends MuiDialogProps {
@@ -43,31 +45,23 @@ export interface PopupDialogProps extends MuiDialogProps {
   disableDialogContent?: boolean
 }
 
-const PopupDialog = forwardRef<any, PopupDialogProps>(
-  function RefRenderFn(props, ref) {
-    const {
-      children,
-      header,
-      actions,
-      dividers,
-      disableDialogContent,
-      ...rest
-    } = props
+const PopupDialog = forwardRef<any, PopupDialogProps>(function RefRenderFn(props, ref) {
+  const { children, header, actions, dividers, disableDialogContent, ...rest } = props
 
-    return (
-      <Dialog ref={ref} aria-labelledby="popup-dialog-title" maxWidth="xs" {...rest}>
-        {header && <MuiDialogTitle id="popup-dialog-title" {...header} />}
-        {disableDialogContent ? children : (
-          <MuiDialogContent dividers={dividers}>
-            {children}
-          </MuiDialogContent>
-        )}
-        {actions && <MuiDialogActions {...actions} />}
-      </Dialog>
-    )
-  }
-)
+  return (
+    <Dialog ref={ref} aria-labelledby="popup-dialog-title" maxWidth="xs" {...rest}>
+      {header && <MuiDialogTitle id="popup-dialog-title" {...header} />}
+      {disableDialogContent ? (
+        children
+      ) : (
+        <MuiDialogContent dividers={dividers}>{children}</MuiDialogContent>
+      )}
+      {actions && <MuiDialogActions {...actions} />}
+    </Dialog>
+  )
+})
 
 PopupDialog.displayName = 'PopupDialog'
+PopupDialog.aglyn = true
 
 export default PopupDialog

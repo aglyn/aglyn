@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@
  */
 export const instances: Logger[] = []
 
-export type LogLevelString = 'debug' | 'verbose' | 'info' | 'warn' | 'error' | 'silent'
-
 /**
  * The JS SDK supports 5 log levels and also allows a user the ability to
  * silence the logs altogether.
@@ -34,205 +32,39 @@ export type LogLevelString = 'debug' | 'verbose' | 'info' | 'warn' | 'error' | '
  * `VERBOSE` logs will not)
  */
 export enum LogLevel {
-  DEBUG,
-  VERBOSE,
-  INFO,
-  WARN,
-  ERROR,
-  SILENT,
+  DEBUG = 'debug',
+  ERROR = 'error',
+  INFO = 'info',
+  SILENT = 'silent',
+  VERBOSE = 'verbose',
+  WARN = 'warn',
 }
 
-export namespace LogLevel {
-  export function fromStr(str: LogLevelString): LogLevel {
-    switch (str) {
-      case 'debug':
-        return LogLevel.DEBUG
-      case 'verbose':
-        return LogLevel.VERBOSE
-      case 'info':
-        return LogLevel.INFO
-      case 'warn':
-        return LogLevel.WARN
-      case 'error':
-        return LogLevel.ERROR
-      case 'silent':
-        return LogLevel.SILENT
-      default:
-        return LogLevel.VERBOSE
-    }
-  }
-  export function toStr(str: LogLevel): LogLevelString {
-    switch (str) {
-      case LogLevel.DEBUG:
-        return 'debug'
-      case LogLevel.VERBOSE:
-        return 'verbose'
-      case LogLevel.INFO:
-        return 'info'
-      case LogLevel.WARN:
-        return 'warn'
-      case LogLevel.ERROR:
-        return 'error'
-      case LogLevel.SILENT:
-        return 'silent'
-      default:
-        return 'verbose'
-    }
-  }
-}
+export type LogLevelString = LogLevel | keyof Console
 
 /**
- * TODO: INTEGRATE PACKAGE`debug`
+ * We allow users the ability to pass their own log handler. We will pass the
+ * type of log, the current log level, and any other arguments passed (i.e. the
+ * messages that the user wants to log) to this function.
  */
-export class Logger {
-  /**
-   * The default log level
-   */
-  static defaultLogLevel: LogLevel = LogLevel.INFO
+export type LogHandler = (
+  loggerInstance: Logger,
+  level: LogLevelString,
+  ...args: unknown[]
+) => void
 
-  /**
-   * Gives you an instance of a Logger to capture messages according to
-   * Firebase's logging scheme.
-   *
-   * @param name The name that the logs will be associated with
-   */
-  constructor(public name: string) {
-    /**
-     * Capture the current instance for later use
-     */
-    instances.push(this)
-  }
-
-  /**
-   * The log level of the given Logger instance.
-   */
-  private _logLevel = Logger.defaultLogLevel
-
-  get logLevel(): LogLevel {
-    return this._logLevel
-  }
-
-  set logLevel(val: LogLevel) {
-    if (!(val in LogLevel)) {
-      throw new TypeError(`Invalid value "${val}" assigned to \`logLevel\``)
-    }
-    this._logLevel = val
-  }
-
-  // Workaround for setter/getter having to be the same type.
-  setLogLevel(val: LogLevel | LogLevelString): this {
-    this._logLevel = typeof val === 'string' ? LogLevel.fromStr(val) : val
-    return this
-  }
-
-  /**
-   * The main (internal) log handler for the Logger instance.
-   * Can be set to a new function in internal package code but not by user.
-   */
-  private _logHandler: LogHandler = defaultLogHandler
-  get logHandler(): LogHandler {
-    return this._logHandler
-  }
-  set logHandler(val: LogHandler) {
-    if (typeof val !== 'function') {
-      throw new TypeError('Value assigned to `logHandler` must be a function')
-    }
-    this._logHandler = val
-  }
-
-  /**
-   * The optional, additional, user-defined log handler for the Logger instance.
-   */
-  private _userLogHandler: LogHandler | null = null
-  get userLogHandler(): LogHandler | null {
-    return this._userLogHandler
-  }
-  set userLogHandler(val: LogHandler | null) {
-    this._userLogHandler = val
-  }
-
-  /**
-   * The functions below are all based on the `console` interface
-   */
-
-  debug(...args: unknown[]): void {
-    this._userLogHandler && this._userLogHandler(this, LogLevel.DEBUG, ...args)
-    this._logHandler(this, LogLevel.DEBUG, ...args)
-  }
-  log(...args: unknown[]): void {
-    this._userLogHandler && this._userLogHandler(this, LogLevel.VERBOSE, ...args)
-    this._logHandler(this, LogLevel.VERBOSE, ...args)
-  }
-  info(...args: unknown[]): void {
-    this._userLogHandler && this._userLogHandler(this, LogLevel.INFO, ...args)
-    this._logHandler(this, LogLevel.INFO, ...args)
-  }
-  warn(...args: unknown[]): void {
-    this._userLogHandler && this._userLogHandler(this, LogLevel.WARN, ...args)
-    this._logHandler(this, LogLevel.WARN, ...args)
-  }
-  error(...args: unknown[]): void {
-    this._userLogHandler && this._userLogHandler(this, LogLevel.ERROR, ...args)
-    this._logHandler(this, LogLevel.ERROR, ...args)
-  }
+export interface LogOptions {
+  level: LogLevel | keyof Console
 }
 
-export namespace Logger {
-  export function setLogLevel(level: LogLevelString | LogLevel): void {
-    instances.forEach((inst) => {
-      inst.setLogLevel(level)
-    })
-  }
-
-  export function setUserLogHandler(logCallback: LogCallback | null, options?: LogOptions): void {
-    for (const instance of instances) {
-      let customLogLevel: LogLevel | null = null
-      if (options && options.level) {
-        customLogLevel = LogLevel.fromStr(options.level)
-      }
-      if (logCallback === null) {
-        instance.userLogHandler = null
-      }
-      else {
-        instance.userLogHandler = (instance: Logger, level: LogLevel, ...args: unknown[]) => {
-          const message = args
-          .map((arg) => {
-            if (arg == null) {
-              return null
-            }
-            else if (typeof arg === 'string') {
-              return arg
-            }
-            else if (typeof arg === 'number' || typeof arg === 'boolean') {
-              return arg.toString()
-            }
-            else if (arg instanceof Error) {
-              return arg.message
-            }
-            else {
-              try {
-                return JSON.stringify(arg)
-              }
-              catch (ignored) {
-                return null
-              }
-            }
-          })
-          .filter((arg) => arg)
-          .join(' ')
-          if (level >= (customLogLevel ?? instance.logLevel)) {
-            logCallback({
-              level: LogLevel.toStr(level),
-              message,
-              args,
-              type: instance.name,
-            })
-          }
-        }
-      }
-    }
-  }
+export interface LogCallbackParams {
+  level: LogLevel | keyof Console
+  message: string
+  args: unknown[]
+  type: string
 }
+
+export type LogCallback = (callbackParams: LogCallbackParams) => void
 
 /**
  * By default, `console.debug` is not displayed in the developer console (in
@@ -240,7 +72,7 @@ export namespace Logger {
  * (i.e. once for firebase, and once in the console), we are sending `DEBUG`
  * logs to the `console.log` function.
  */
-export const ConsoleMethodKey = {
+export const ConsoleMethodKey: Partial<Record<string, string>> = {
   [LogLevel.DEBUG]: 'log',
   [LogLevel.VERBOSE]: 'log',
   [LogLevel.INFO]: 'info',
@@ -253,36 +85,214 @@ export const ConsoleMethodKey = {
  * messages on to their corresponding console counterparts (if the log method
  * is supported by the current log level)
  */
-export const defaultLogHandler: LogHandler = (instance, logType, ...args): void => {
-  if (logType < instance.logLevel) {
-    return
-  }
+export const defaultLogHandler: LogHandler = (
+  instance: Logger,
+  level: LogLevelString,
+  ...args: any[]
+): void => {
+  if (!level || level === 'silent') return
+
   const now = new Date().toISOString()
-  const method = ConsoleMethodKey[logType as keyof typeof ConsoleMethodKey]
+  const method = ConsoleMethodKey[level]
+
   if (method) {
-    console[method](`[${now}]  ${instance.name}`, ...args)
+    return (console as unknown as Record<string, (...a: any[]) => void>)[method](`[${now}]  ${instance.name}`, ...args)
   }
-  else {
-    throw new Error(`Attempted to log a message with an invalid logType (value: ${logType})`)
-  }
+
+  throw new Error(
+    `Attempted to log a message with an invalid logType (value: ${level})`,
+  )
 }
+
+export const FALLBACK_LOG_LEVEL = LogLevel.INFO
 
 /**
- * We allow users the ability to pass their own log handler. We will pass the
- * type of log, the current log level, and any other arguments passed (i.e. the
- * messages that the user wants to log) to this function.
+ * TODO: INTEGRATE PACKAGE`debug`
  */
-export type LogHandler = (loggerInstance: Logger, logType: LogLevel, ...args: unknown[]) => void
+export class Logger {
+  /**
+   * The default log level
+   */
+  public static defaultLogLevel: LogLevel = LogLevel.INFO
 
-export interface LogOptions {
-  level: LogLevelString
+  #logLevel: LogLevelString = Logger.defaultLogLevel
+  #logHandler: LogHandler = defaultLogHandler
+  #userLogHandler: LogHandler | null = null
+
+  /**
+   * The log level of the given Logger instance.
+   */
+  public get logLevel(): LogLevelString {
+    return this.#logLevel
+  }
+  /**
+   * The log level of the given Logger instance.
+   */
+  public set logLevel(val: LogLevelString) {
+    if (!(val in LogLevel)) {
+      throw new TypeError(`Invalid value "${val}" assigned to \`logLevel\``)
+    }
+    this.#logLevel = val
+  }
+  /**
+   * The main (internal) log handler for the Logger instance.
+   * Can be set to a new function in internal package code but not by user.
+   */
+  public get logHandler(): LogHandler {
+    return this.#logHandler
+  }
+  /**
+   * The main (internal) log handler for the Logger instance.
+   * Can be set to a new function in internal package code but not by user.
+   */
+  public set logHandler(val: LogHandler) {
+    if (typeof val !== 'function') {
+      throw new TypeError('Value assigned to `logHandler` must be a function')
+    }
+    this.#logHandler = val
+  }
+  /**
+   * The optional, additional, user-defined log handler for the Logger instance.
+   */
+  public get userLogHandler(): LogHandler | null {
+    return this.#userLogHandler
+  }
+  /**
+   * The optional, additional, user-defined log handler for the Logger instance.
+   */
+  public set userLogHandler(val: LogHandler | null) {
+    this.#userLogHandler = val
+  }
+
+  /**
+   * Gives you an instance of a Logger to capture messages according to
+   * Firebase's logging scheme.
+   *
+   * @param name The name that the logs will be associated with
+   */
+  constructor(public name?: string) {
+    /**
+     * Capture the current instance for later use
+     */
+    instances.push(this)
+  }
+
+  /**
+   * Workaround for setter/getter having to be the same type
+   */
+  public setLogLevel(val?: LogLevelString): this {
+    if ((val && (LogLevel as Record<string, unknown>)[(LogLevel as Record<string, unknown>)[val as string] as string]) || (console as unknown as Record<string, unknown>)[val as string])
+      this.#logLevel = val as LogLevel
+    else this.#logLevel = FALLBACK_LOG_LEVEL
+    return this
+  }
+  /**
+   * Set the log level for all logger instances
+   */
+  public static setLogLevel(val?: LogLevelString): typeof Logger {
+    instances.forEach((inst) => inst.setLogLevel(val))
+    return this
+  }
+
+  /**
+   * The optional, additional, user-defined log handler for the Logger instance.
+   */
+  public setUserLogHandler(
+    logCallback: LogCallback | null,
+    options?: LogOptions,
+  ): void {
+    let customLogLevel: LogLevelString | null = null
+    if (
+      options?.level &&
+      ((LogLevel as Record<string, unknown>)[(LogLevel as Record<string, unknown>)[options.level as string] as string] || (console as unknown as Record<string, unknown>)[options.level as string])
+    ) {
+      customLogLevel = options.level
+    }
+    if (logCallback === null) {
+      this.userLogHandler = null
+    } else {
+      this.userLogHandler = (
+        instance: Logger,
+        level: LogLevelString,
+        ...args: unknown[]
+      ) => {
+        const message = args
+          .map((arg) => {
+            if (arg == null) {
+              return null
+            } else if (typeof arg === 'string') {
+              return arg
+            } else if (typeof arg === 'number' || typeof arg === 'boolean') {
+              return arg.toString()
+            } else if (arg instanceof Error) {
+              return arg.message
+            } else {
+              try {
+                return JSON.stringify(arg)
+              } catch (ignored) {
+                return null
+              }
+            }
+          })
+          .filter((arg) => arg)
+          .join(' ')
+        if (level >= (customLogLevel ?? instance.logLevel)) {
+          logCallback({
+            args,
+            message,
+            type: instance.name,
+            level:
+              (options?.level &&
+                ((LogLevel as Record<string, unknown>)[(LogLevel as Record<string, unknown>)[options.level as string] as string] ||
+                  (console as unknown as Record<string, unknown>)[options.level as string])) as LogLevel ||
+              FALLBACK_LOG_LEVEL,
+          })
+        }
+      }
+    }
+  }
+  /**
+   * The optional, additional, user-defined log handler for the Logger instance.
+   */
+  public static setUserLogHandler(
+    logCallback: LogCallback | null,
+    options?: LogOptions,
+  ): void {
+    for (const instance of instances) {
+      instance.setUserLogHandler(logCallback, options)
+    }
+  }
+
+  /**
+   * The functions below are all based on the `console` interface
+   */
+
+  /** {@inheritDoc Console.debug} */
+  public debug(...args: unknown[]): void {
+    this.#logHandler(this, LogLevel.DEBUG, ...args)
+    this.#userLogHandler && this.#userLogHandler(this, LogLevel.DEBUG, ...args)
+  }
+  /** {@inheritDoc Console.log} */
+  public log(...args: unknown[]): void {
+    this.#logHandler(this, LogLevel.VERBOSE, ...args)
+    this.#userLogHandler &&
+      this.#userLogHandler(this, LogLevel.VERBOSE, ...args)
+  }
+  /** {@inheritDoc Console.info} */
+  public info(...args: unknown[]): void {
+    this.#logHandler(this, LogLevel.INFO, ...args)
+    this.#userLogHandler && this.#userLogHandler(this, LogLevel.INFO, ...args)
+  }
+  /** {@inheritDoc Console.warn} */
+  public warn(...args: unknown[]): void {
+    this.#logHandler(this, LogLevel.WARN, ...args)
+    this.#userLogHandler && this.#userLogHandler(this, LogLevel.WARN, ...args)
+  }
+  /** {@inheritDoc Console.error} */
+  public error(...args: unknown[]): void {
+    this.#logHandler(this, LogLevel.ERROR, ...args)
+    this.#userLogHandler && this.#userLogHandler(this, LogLevel.ERROR, ...args)
+  }
 }
 
-export type LogCallback = (callbackParams: LogCallbackParams) => void
-
-export interface LogCallbackParams {
-  level: LogLevelString
-  message: string
-  args: unknown[]
-  type: string
-}
+export default Logger

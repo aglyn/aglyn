@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,11 @@
 
 export * from './lib/change-case'
 export * from './lib/deep-equal'
-export * from './lib/objectDeepMerge'
-export * from './lib/object-flatten'
-export * from './lib/mitt-emitter'
-export * from './lib/platform-identification'
 export * from './lib/fuse'
+export * from './lib/hoist-non-react-statics'
+export * from './lib/mitt-emitter'
+export * from './lib/object-deep-merge'
+export * from './lib/object-flatten'
+export * from './lib/platform-identification'
 export * from './lib/unique-identification'
 export * from './lib/use-debounce'

@@ -1,0 +1,23 @@
+{
+  "name": "shared-data-forms",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/data/forms/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/data/forms",
+        "main": "libs/shared/data/forms/src/index.ts",
+        "tsConfig": "libs/shared/data/forms/tsconfig.lib.json",
+        "assets": ["libs/shared/data/forms/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:data"]
+}

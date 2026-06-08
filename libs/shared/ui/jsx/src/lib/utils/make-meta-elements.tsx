@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,20 +17,19 @@
 
 // export type MetaElemElementProps = MetaHTMLAttributes<HTMLMetaElement>
 export type MetaElemElementProps = JSX.IntrinsicElements['meta']
-export type MakeMetaElementsConfig = [
-  name: MetaElemElementProps['name'],
-  content: MetaElemElementProps['content'],
-  other?: MetaElemElementProps
-][]
+export type MakeMetaElementsConfig = Array<[
+  name?: MetaElemElementProps['name'],
+  content?: MetaElemElementProps['content'],
+  other?: Partial<MetaElemElementProps>
+]>
 
 export function makeMetaElements(items: MakeMetaElementsConfig): JSX.Element[] {
-  return items.map((item, i) => {
+  return items.map((item, key) => {
     const [name, content, other] = item
-    const {id, key, ...rest} = {...other}
+    const {...rest} = {...other}
     return (
       <meta
-        key={key ?? id ?? i}
-        id={id}
+        key={rest.key ?? rest.id ?? key}
         name={name}
         content={content}
         {...rest}

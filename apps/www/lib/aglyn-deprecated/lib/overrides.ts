@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export { }
+export {}
 
 declare global {
   interface Array<T> {
@@ -23,8 +23,8 @@ declare global {
   }
 }
 
-if (!Array.prototype.remove) {
-  Array.prototype.remove = function <T>(this: T[], elem: T): T[] {
+if (!Array.prototype.$_removeItem) {
+  Array.prototype.$_removeItem = function <T>(this: T[], elem: T): T[] {
     return this.filter(e => e !== elem)
   }
 }

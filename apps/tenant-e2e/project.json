@@ -1,0 +1,26 @@
+{
+  "name": "tenant-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/tenant-e2e/src",
+  "projectType": "application",
+  "targets": {
+    "e2e": {
+      "executor": "@nx/cypress:cypress",
+      "options": {
+        "cypressConfig": "apps/tenant-e2e/cypress.json",
+        "devServerTarget": "tenant:serve"
+      },
+      "configurations": {
+        "production": {
+          "devServerTarget": "tenant:serve:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:app", "scope:public", "scope:e2e"],
+  "implicitDependencies": ["tenant"]
+}

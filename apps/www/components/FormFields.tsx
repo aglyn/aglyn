@@ -15,25 +15,26 @@
  * limitations under the License.
  */
 
-import { GridItems, GridItemsProps } from '@aglyn/shared-ui-jsx'
-import React from 'react'
-import { GridField } from '../lib/input-fields'
+import {GridItems, type GridItemsProps} from '@aglyn/shared-ui-jsx'
+import {type GridField} from '../lib/input-fields'
+
 
 export type Props = GridItemsProps & {
   items: GridField[]
 }
 
 function FormFields(props: Props) {
-  const { items = [], ...rest } = props
+  const {items = [], ...rest} = props
 
   const itemMapper = (item: GridField) => {
-    const { GridItemProps, component: Component, props } = item
-    return { children: <Component {...props} />, ...GridItemProps }
+    const {GridItemProps, component: Component, props} = item
+    return {children: <Component {...props} />, ...GridItemProps}
   }
 
   return <GridItems items={items.map(itemMapper)} spacing={2} {...rest} />
 }
 
 FormFields.displayName = 'FormFields'
+FormFields.aglyn = true
 
 export default FormFields

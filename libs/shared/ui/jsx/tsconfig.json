@@ -1,6 +1,9 @@
 {
   "extends": "../../../../tsconfig.base.json",
-  "compilerOptions": {},
+  "compilerOptions": {
+    "typeRoots": ["types", "node_modules/@types"],
+    "types": ["@tshelpers", "@jsx"]
+  },
   "files": [],
   "include": [],
   "references": [

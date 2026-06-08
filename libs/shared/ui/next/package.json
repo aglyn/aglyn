@@ -1,0 +1,10 @@
+{
+  "name": "@aglyn/shared-ui-next",
+  "version": "0.0.1",
+  "type": "module",
+  "types": "./libs/shared/ui/next/src/index.d.ts",
+  "dependencies": {
+    "@swc/helpers": "~0.3.3"
+  },
+  "devDependencies": {}
+}

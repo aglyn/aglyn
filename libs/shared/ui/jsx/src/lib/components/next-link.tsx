@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,54 +15,60 @@
  * limitations under the License.
  */
 
-import { PartialPick } from '@aglyn/shared-data-types'
-import Link, { LinkProps } from 'next/link'
-import { AnchorHTMLAttributes, forwardRef } from 'react'
+import { styled } from '@mui/material/styles'
+import Link, { type LinkProps } from 'next/link'
+import { type AnchorHTMLAttributes, forwardRef } from 'react'
 
-type AnchorProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'>
+export interface NextAnchorProps
+  extends AnchorHTMLAttributes<HTMLAnchorElement> {}
 
-export interface NextLinkProps extends AnchorProps, PartialPick<LinkProps, 'as'> {
-  hrefAs?: LinkProps['as']
-  className?: string
+// Add support for the sx prop
+export const NextAnchor = styled('a', {
+  name: 'AglynNextLink',
+})<NextAnchorProps>({})
+NextAnchor.displayName = 'NextAnchor'
+NextAnchor.aglyn = true
+
+export type NextLinkBaseProps = Omit<NextAnchorProps, 'href'> &
+  Omit<LinkProps, 'href'> &
+  JSX.OverrideableComponentProps
+
+export interface NextLinkProps extends NextLinkBaseProps, NextLinkBaseProps {
+  hrefTo?: LinkProps['href']
 }
 
-export const NextLink = forwardRef<HTMLAnchorElement, NextLinkProps>(function RefRenderFn(
-  props,
-  ref
-) {
+export const NextLink = forwardRef<any, NextLinkProps>((props, ref) => {
   const {
-    hrefAs,
-    children,
-    href,
+    href: _2,
+    hrefTo,
     replace,
     scroll,
-    passHref,
+    passHref = true,
     shallow,
     prefetch,
     locale,
-    as,
-    component: _,
+    children,
     ...rest
-  }: NextLinkProps & { component?: any } = props
+  } = props as LinkProps & NextLinkProps
 
   return (
     <Link
-      as={as ?? hrefAs}
-      href={href}
+      ref={ref}
+      href={hrefTo}
       locale={locale}
       passHref={passHref}
       prefetch={prefetch}
       replace={replace}
       scroll={scroll}
       shallow={shallow}
+      {...rest}
     >
-      <a ref={ref} {...rest}>
-        {children}
-      </a>
+      {children}
     </Link>
   )
 })
 
 NextLink.displayName = 'NextLink'
+NextLink.aglyn = true
 
 export default NextLink

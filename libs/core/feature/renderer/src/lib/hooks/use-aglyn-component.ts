@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-import type { BundleUId, CommandUId, IAglynComponent } from '@aglyn/core-data-framework'
-import { getComponent } from '@aglyn/core-data-framework'
+import { getComponent } from '@aglyn/core-data-app'
+import type {
+  AglynExoticComponent,
+  BundleId,
+  CommandUId,
+} from '@aglyn/core-data-foundation'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
-import { useMemo } from 'react'
 
-export function useAglynComponent(
+export function useAglynComponent<P, T>(
   componentId: CommandUId,
-  bundleId?: BundleUId
-): IAglynComponent {
-  const { getApp } = useAglynAppContext()
-  return useMemo(() => {
-    return getComponent(getApp(), { componentId, bundleId })
-  }, [getApp, componentId, bundleId])
+  pluginId?: BundleId,
+): OrUndef<AglynExoticComponent<P, T>> {
+  const app = useAglynAppContext()
+  return getComponent(app, { componentId, pluginId }) as AglynExoticComponent<
+    P,
+    T
+  >
 }
 export default useAglynComponent

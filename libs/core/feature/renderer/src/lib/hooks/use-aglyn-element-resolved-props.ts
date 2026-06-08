@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,24 @@
  * limitations under the License.
  */
 
-import type { ElementId } from '@aglyn/core-data-framework'
-import type { AnyProps } from '@aglyn/shared-data-types'
-import { _isFnT } from '@aglyn/shared-util-guards'
+import * as Aglyn from '@aglyn/aglyn'
+import type { NodeId } from '@aglyn/core-data-foundation'
+import { _isFnT } from '@aglyn/shared-util-tools'
 import { useMemo } from 'react'
-import useAglynComponentSchema from './use-aglyn-component-schema'
-import { useAglynElementData } from './use-aglyn-element-data'
 
-export function useAglynElementResolvedProps<P extends AnyProps>($id: ElementId): P {
-  const elementData = useAglynElementData($id)
-  const schema = useAglynComponentSchema(elementData.componentId, elementData.bundleId)
-  const resolveProps = schema?.renderFlags?.resolveProps
+function defaultPropsResolver(node: Aglyn.NodeSchema) {
+  return node
+}
+
+export function useAglynElementResolvedProps($id: NodeId) {
+  const node = Aglyn.canvas.getNode($id)
+  const schema = Aglyn.components.getSchema(node?.componentId)
+  const resolveProps = schema?.resolveProps
 
   return useMemo(() => {
-    return (
-      (_isFnT(resolveProps) ? resolveProps.call(undefined, elementData) : elementData.props) || {}
-    )
-  }, [resolveProps, elementData]) as P
+    return _isFnT(resolveProps)
+      ? resolveProps(node)
+      : defaultPropsResolver(node)
+  }, [node, resolveProps])
 }
 export default useAglynElementResolvedProps

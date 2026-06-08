@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-
-import { CrudModel } from '@aglyn/shared-data-types'
-
+// eslint-disable-next-line @nx/enforce-module-boundaries
+import type { CrudModel } from '@aglyn/shared-data-types'
 
 /**
  * Methods (set, get, has, del) to c.r.u.d. an index of the data property
@@ -34,27 +33,36 @@ export abstract class Crud<T = any> implements CrudModel<T> {
    * @param {T} [model={} as any]
    * @memberof Crud
    */
-  constructor(public model: T = {} as any) { }
+  constructor(public model: T = {} as any) {}
 
   /** @inheritdoc */
-  toJSON(): T { return this.model }
+  public toJSON(): T {
+    return this.model
+  }
 
   /** @inheritdoc */
-  set<K extends keyof T>(id: K, value: any): this {
+  public set<K extends keyof T>(id: K, value: any): this {
     this.model[id] = value
     return this
   }
 
   /** @inheritdoc */
-  get<K extends keyof T>(id: K): T[K] | null { return this.model[id] }
+  public get<K extends keyof T>(id: K): T[K] | null {
+    return this.model[id]
+  }
 
   /** @inheritdoc */
-  has<K extends keyof T>(id: K): boolean { return Object.prototype.hasOwnProperty.call(this.model, id) }
+  public has<K extends keyof T>(id: K): boolean {
+    return this.hasOwnProperty.call(this.model, id)
+  }
 
   /** @inheritdoc */
-  del<K extends keyof T>(id: K): this {
+  public delete<K extends keyof T>(id: K): this {
     delete this.model[id]
     return this
   }
 
+  private get hasOwnProperty() {
+    return Object.prototype.hasOwnProperty
+  }
 }

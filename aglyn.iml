@@ -11,8 +11,10 @@
       <sourceFolder url="file://$MODULE_DIR$/apps/www-e2e/src" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/apps/console-e2e" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/apps/www-e2e" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/libs" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/static" type="java-resource" />
+      <sourceFolder url="file://$MODULE_DIR$" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/tenant-e2e" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/apps/tenant/specs" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/.firebase" />
       <excludeFolder url="file://$MODULE_DIR$/dist" />
       <excludeFolder url="file://$MODULE_DIR$/.husky/_" />

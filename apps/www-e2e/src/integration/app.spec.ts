@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { getGreeting } from '../support/app.po'
+import {getGreeting} from '../support/app.po'
+
 
 describe('www', () => {
   beforeEach(() => cy.visit('/'))

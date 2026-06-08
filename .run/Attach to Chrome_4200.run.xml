@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Attach to Chrome:4200" type="ChromiumRemoteDebugType" factoryName="Chromium Remote" port="4200" restartOnDisconnect="true">
+    <method v="2" />
+  </configuration>
+</component>

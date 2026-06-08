@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-import { _hasProperty, _isStrT } from '@aglyn/shared-util-guards'
-import { length } from '@aglyn/shared-util-tools'
-import { Schema as DdfSchema } from '@data-driven-forms/react-form-renderer'
-import validation from '@data-driven-forms/react-form-renderer/validation'
-import { ValidationOptions } from '@data-driven-forms/react-form-renderer/validation/validation'
-import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types'
+import {
+  type FormSchema,
+  validation,
+  type ValidationOptions,
+  validatorTypes,
+} from '@aglyn/shared-ui-jsx-forms'
+import { _hasOwnProperty, _isStrT, length } from '@aglyn/shared-util-tools'
 import md5 from 'md5'
 
-
 export namespace Fields {
-
   export enum FieldStatus {
     NONE,
     TOUCHED = 1,
@@ -34,7 +33,7 @@ export namespace Fields {
   }
 
   export type Option = {
-    value: string,
+    value: string
     label: string
   }
   export type GetOptions = (...args: any[]) => Option[] | Promise<Option[]>
@@ -75,7 +74,8 @@ export namespace Fields {
     validators: [
       {
         // eslint-disable-next-line no-control-regex
-        regex: /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/,
+        regex:
+          /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/,
         errorMessage: 'Enter a valid email',
       },
     ],
@@ -138,13 +138,12 @@ export namespace Fields {
     errorMessage: null,
     required: true,
   }
-  export const commentsField: FieldT = {
-    id: 'comments',
-    label: 'Comments',
+  export const messageField: FieldT = {
+    id: 'message',
+    label: 'Additional Details',
     type: 'text',
     status: FieldStatus.NONE,
   }
-
 
   /*******************************
    * Form field groups
@@ -162,18 +161,16 @@ export namespace Fields {
   }
   export const permissionForm: FieldGroup = {
     [Fields.nameField.id]: Fields.nameField,
-    [Fields.commentsField.id]: Fields.commentsField,
+    [Fields.messageField.id]: Fields.messageField,
   }
   export const roleForm: FieldGroup = {
     [Fields.nameField.id]: Fields.nameField,
-    [Fields.commentsField.id]: Fields.commentsField,
+    [Fields.messageField.id]: Fields.messageField,
   }
-
 }
 
-
 export namespace DdfForms {
-  export type Schema = DdfSchema
+  export type Schema = FormSchema
   export const ValidatorType = validatorTypes
 
   export const ContactFormSchema: Schema = {
@@ -181,24 +178,32 @@ export namespace DdfForms {
       {
         component: 'text-field',
         name: 'first-name',
-        label: 'First Name',
+        label: 'First name',
         placeholder: 'Type your first name',
         variant: 'outlined',
         validate: [
-          {type: 'required', message: 'Please enter a first name'},
-          {type: 'min-length', threshold: 2, message: 'Please enter a longer first name'},
+          { type: 'required', message: 'Please enter a first name' },
+          {
+            type: 'min-length',
+            threshold: 2,
+            message: 'Please enter a longer first name',
+          },
         ],
         isRequired: true,
       },
       {
         component: 'text-field',
         name: 'last-name',
-        label: 'Last Name',
+        label: 'Last name',
         placeholder: 'Type your first name',
         variant: 'outlined',
         validate: [
-          {type: 'min-length', threshold: 1, message: 'Please enter a longer last name'},
-          {type: 'required', message: 'Please enter a last name'},
+          {
+            type: 'min-length',
+            threshold: 1,
+            message: 'Please enter a longer last name',
+          },
+          { type: 'required', message: 'Please enter a last name' },
         ],
         isRequired: true,
       },
@@ -207,7 +212,9 @@ export namespace DdfForms {
         name: 'company',
         label: 'Company',
         isRequired: true,
-        validate: [{type: 'required', message: 'Please enter a company name'}],
+        validate: [
+          { type: 'required', message: 'Please enter a company name' },
+        ],
         placeholder: 'Type your company name',
         variant: 'outlined',
       },
@@ -221,23 +228,24 @@ export namespace DdfForms {
       {
         component: 'text-field',
         name: 'email',
-        label: 'Email',
+        label: 'Work e-mail',
         placeholder: 'Type your business email',
         variant: 'outlined',
         isRequired: true,
         validate: [
-          {type: 'required', message: 'Please enter an email address'},
+          { type: 'required', message: 'Please enter an email address' },
           {
             type: 'pattern',
-            pattern: '(?:[a-z0-9!#$%&\'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])',
+            pattern:
+              '(?:[a-z0-9!#$%&\'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&\'*+/=?^_`{|}~-]+)*|"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])',
             message: 'Please enter a valid email address',
           },
         ],
       },
       {
         component: 'textarea',
-        name: 'comments',
-        label: 'Comments',
+        name: 'message',
+        label: 'Additional details',
         helperText: 'Type a short description of your inquiry',
         variant: 'outlined',
         rows: 4,
@@ -256,32 +264,38 @@ export namespace DdfForms {
   }
 
   export function isValidFormId(id: unknown): id is string {
-    return _isStrT(id) && _hasProperty(id, rawFormIdFromId)
+    return _isStrT(id) && _hasOwnProperty(id, rawFormIdFromId)
   }
   export function getFormSchemaFromId(id: string): Schema {
     return formSchemaFromId[id]
   }
-  export function checkRequiredValues(schema: Schema, options: ValidationOptions) {
+  export function checkRequiredValues(
+    schema: Schema,
+    options: ValidationOptions,
+  ) {
     return validation(schema, options)
   }
-
-
 }
 
-export const validateRegex = (value: string, regex) => (new RegExp(regex)).test(value)
-export const fieldHasError = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.ERROR)
-export const fieldHasValid = (field: Fields.FieldT) => Boolean(field.status & Fields.FieldStatus.VALID)
-export const formIsValid = (fields: Fields.FieldGroup) => Object.values(fields).some(field => fieldHasValid(field))
-export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT => {
-  const current = {...field, value, errorMessage: null}
+export const validateRegex = (value: string, regex) =>
+  new RegExp(regex).test(value)
+export const fieldHasError = (field: Fields.FieldT) =>
+  Boolean(field.status & Fields.FieldStatus.ERROR)
+export const fieldHasValid = (field: Fields.FieldT) =>
+  Boolean(field.status & Fields.FieldStatus.VALID)
+export const formIsValid = (fields: Fields.FieldGroup) =>
+  Object.values(fields).some((field) => fieldHasValid(field))
+export const validateField = (
+  field: Fields.FieldT,
+  value: any,
+): Fields.FieldT => {
+  const current = { ...field, value, errorMessage: null }
 
   if (current.status === Fields.FieldStatus.NONE) {
     current.status |= Fields.FieldStatus.TOUCHED
-  }
-  else if (current.status & Fields.FieldStatus.VALID) {
+  } else if (current.status & Fields.FieldStatus.VALID) {
     current.status ^= Fields.FieldStatus.VALID
-  }
-  else if (current.status & Fields.FieldStatus.ERROR) {
+  } else if (current.status & Fields.FieldStatus.ERROR) {
     current.status ^= Fields.FieldStatus.ERROR
   }
 
@@ -291,19 +305,20 @@ export const validateField = (field: Fields.FieldT, value: any): Fields.FieldT =
   if (length(validators)) {
     let i = 0
     while (i < length(validators)) {
-      const {regex, errorMessage} = validators[i++]
+      const { regex, errorMessage } = validators[i++]
       if (regex && !validateRegex(value, regex)) {
         current.errorMessage = errorMessage
         isValid = false
         break
       }
     }
-  }
-  else if (current.required) {
+  } else if (current.required) {
     isValid = Boolean(value)
     current.errorMessage = 'Field is required'
   }
-  current.status |= isValid ? Fields.FieldStatus.VALID : Fields.FieldStatus.ERROR
+  current.status |= isValid
+    ? Fields.FieldStatus.VALID
+    : Fields.FieldStatus.ERROR
 
   return current
 }

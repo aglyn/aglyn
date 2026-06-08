@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,44 +16,63 @@
  */
 
 import {
-  IAglynComponent,
-  AglynComponentElementDataNormalized,
-  ElementId,
-} from '@aglyn/core-data-framework'
-import { InnerRefProp } from '@aglyn/shared-data-types'
+  AglynExoticComponent,
+  AglynNodeItemDenormalized,
+  NodeId,
+} from '@aglyn/core-data-foundation'
 import { getDisplayName } from '@aglyn/shared-util-tools'
+import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import clsx from 'clsx'
-import { ComponentType, forwardRef, PropsWithoutRef, RefAttributes } from 'react'
+import {
+  type ComponentType,
+  forwardRef,
+  type PropsWithoutRef,
+  type RefAttributes,
+} from 'react'
 import useAglynComponent from './use-aglyn-component'
-import useAglynElementConditionalInnerRefProps from './use-aglyn-element-conditional-inner-ref-props'
 import { useAglynElementData } from './use-aglyn-element-data'
 import useAglynElementResolvedProps from './use-aglyn-element-resolved-props'
 
 export interface RequiredElementDataProps {
-  $id: ElementId
+  $id: NodeId
   className?: string
 }
 
-export interface OptionalElementDataProps extends InnerRefProp {
-  elementData: AglynComponentElementDataNormalized<any>
-  component: IAglynComponent<any>
+export interface OptionalElementDataProps
+  extends JSX.PropsWithForwardedRef<any> {
+  elementData: AglynNodeItemDenormalized<any>
+  component: AglynExoticComponent<any>
   elemProps: any
 }
 
-export interface ElementDataProps extends RequiredElementDataProps, OptionalElementDataProps {}
+export interface ElementDataProps
+  extends RequiredElementDataProps,
+    OptionalElementDataProps {}
+
+type WrappedComponent<U, T> = ComponentType<
+  PropsWithoutRef<ElementDataProps & U> & RefAttributes<T>
+>
+type DecoratedComponent<U, T> = ComponentType<
+  RequiredElementDataProps & U & RefAttributes<T>
+>
 
 export function withAglynElementData<U = any, T = any>(
-  WrappedComponent: ComponentType<PropsWithoutRef<ElementDataProps & U> & RefAttributes<T>>
-): ComponentType<RequiredElementDataProps & U & RefAttributes<T>> {
-
+  WrappedComponent: WrappedComponent<U, T>,
+): DecoratedComponent<U, T> {
   const displayName = getDisplayName(WrappedComponent)
   const WithAglynElementData = forwardRef<T, RequiredElementDataProps & U>(
-    function RefRenderFn(props, ref) {
-      const { $id, children: childrenProp, className: classNameProp, ...rest } = props
+    (props, ref) => {
+      const { $id, className: classNameProp, ...rest } = props
       const elementData = useAglynElementData($id)
-      const component = useAglynComponent(elementData.componentId, elementData.bundleId)
-      const { children, className: classNameElem, ...elemProps } = useAglynElementResolvedProps($id)
-      const innerRefProps = useAglynElementConditionalInnerRefProps($id, ref)
+      const component = useAglynComponent(
+        elementData.componentId,
+        elementData.pluginId,
+      )
+      const {
+        children,
+        className: classNameElem,
+        ...elemProps
+      } = useAglynElementResolvedProps($id)
       const className = clsx(classNameProp, classNameElem)
 
       return (
@@ -64,17 +83,16 @@ export function withAglynElementData<U = any, T = any>(
           component={component}
           elemProps={elemProps}
           className={className}
-          {...innerRefProps}
           {...(rest as any)}
         >
           {children}
-          {childrenProp}
         </WrappedComponent>
       )
-    }
+    },
   )
   WithAglynElementData.displayName = `WithAglynElementData(${displayName})`
-  return WithAglynElementData as ComponentType<RequiredElementDataProps & U & RefAttributes<T>>
+  hoistNonReactStatics(WithAglynElementData, WrappedComponent)
+  return WithAglynElementData as DecoratedComponent<U, T>
 }
 
 export default withAglynElementData

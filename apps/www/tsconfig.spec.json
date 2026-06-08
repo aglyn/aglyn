@@ -2,8 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "module": "commonjs",
-    "types": ["jest", "node"],
+    "types": ["@tshelpers", "jest", "node", "@jsx"],
     "jsx": "react"
   },
   "include": [

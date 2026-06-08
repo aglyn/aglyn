@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,16 @@
 /**
  * Convince closure compiler that the wrapped function has no side-effects.
  *
- * Closure compiler always assumes that `toString` has no side-effects. We use this quirk to
- * allow us to execute a function but have closure compiler mark the call as no-side-effects.
- * It is important that the return value for the `noSideEffects` function be assigned
- * to something which is retained otherwise the call to `noSideEffects` will be removed by closure
- * compiler.
+ * Closure compiler always assumes that `toString` has no side-effects. We use
+ * this quirk to allow us to execute a function but have closure compiler mark
+ * the call as no-side-effects. It is important that the return value for the
+ * `noSideEffects` function be assigned to something which is retained otherwise
+ * the call to `noSideEffects` will be removed by closure compiler.
  *
  * @see https://github.com/angular/angular/blob/master/packages/core/src/util/closure.ts
  */
 export function noSideEffects<T>(fn: () => T): T {
-  return ({toString: fn}.toString() as unknown) as T
+  return {toString: fn}.toString()
 }
+
+export default noSideEffects

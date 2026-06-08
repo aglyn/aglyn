@@ -1,0 +1,67 @@
+{
+  "name": "www",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/www",
+  "projectType": "application",
+  "tags": ["scope:app", "scope:public"],
+  "targets": {
+    "build": {
+      "executor": "@nx/next:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/apps/www"
+      },
+      "configurations": {
+        "production": {
+          "webpack": true
+        },
+        "development": {
+          "outputPath": "apps/www"
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "serve": {
+      "executor": "@nx/next:server",
+      "options": {
+        "buildTarget": "www:build",
+        "dev": true,
+        "port": 4100
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "www:build:production",
+          "dev": false
+        },
+        "development": {
+          "buildTarget": "www:build:development",
+          "dev": true
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "export": {
+      "executor": "@nx/next:export",
+      "options": {
+        "buildTarget": "www:build:production"
+      }
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/apps/www"],
+      "options": {
+        "jestConfig": "apps/www/jest.config.ts"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "version": {
+      "executor": "@jscutlery/semver:version",
+      "options": {
+        "syncVersions": false
+      }
+    }
+  }
+}

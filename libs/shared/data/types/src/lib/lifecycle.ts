@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ export interface LifecycleObserver {
   onDestroy?(...args: unknown[]): unknown
 }
 
-export interface LoadableObserver extends LifecycleObserver {
+export interface LoadableObserver {
   /**
    * Should be invoked each time the object is loaded
    */
@@ -36,4 +36,8 @@ export interface LoadableObserver extends LifecycleObserver {
    * Should be invoked each time the object is unloaded
    */
   onUnload?(...args: unknown[]): unknown
+}
+
+export interface LoadableLifecycleObserver extends LoadableObserver, LifecycleObserver {
+
 }

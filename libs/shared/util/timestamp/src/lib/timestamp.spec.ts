@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { Timestamp } from './timestamp'
+import {Timestamp} from './timestamp'
+
 
 describe('Timestamp', () => {
   it('should work', () => {

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { DoD } from '@aglyn/shared-data-types'
-import { Crud } from '@aglyn/shared-util-tools'
-import { RefController } from '../interfaces/ref-controller'
+import {DoD} from '@aglyn/shared-data-types'
+import {Crud} from '@aglyn/shared-util-tools'
+import {RefController} from '../interfaces/ref-controller'
 
 
 /**

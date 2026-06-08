@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,32 +15,41 @@
  * limitations under the License.
  */
 
-import {ProductNames} from '@aglyn/shared-data-brand'
-import {componentMapper, GridItems} from '@aglyn/shared-ui-jsx'
-import FormTemplateRenderProps
-  from '@data-driven-forms/react-form-renderer/common-types/form-template-render-props'
-import FormRenderer from '@data-driven-forms/react-form-renderer/form-renderer'
-import FormSpy from '@data-driven-forms/react-form-renderer/form-spy'
-import useFormApi from '@data-driven-forms/react-form-renderer/use-form-api'
-import Alert from '@mui/material/Alert'
-import AlertTitle from '@mui/material/AlertTitle'
-import Box from '@mui/material/Box'
-import Button from '@mui/material/Button'
-import Container from '@mui/material/Container'
-import Grid from '@mui/material/Grid'
-import LinearProgress from '@mui/material/LinearProgress'
-import Typography from '@mui/material/Typography'
-import React, {useCallback} from 'react'
-import {mainNavigation} from '../const'
-import {DdfForms} from '../forms'
+import { BRAND_NAMES } from '@aglyn/shared-data-enums'
+import { Container, GridItems } from '@aglyn/shared-ui-jsx'
+import {
+  FormRenderer,
+  FormSpy,
+  type FormTemplateRenderProps,
+  simpleComponentMapper,
+  useFormApi,
+} from '@aglyn/shared-ui-jsx-forms'
+import {
+  Alert,
+  AlertTitle,
+  Box,
+  Button,
+  Grid,
+  LinearProgress,
+  Typography,
+} from '@mui/material'
+import { useCallback } from 'react'
+import { mainNavigation } from '../const'
+import { DdfForms } from '../forms'
 import MainLayout from '../layouts/MainLayout'
 import SiteFooterView from '../views/SiteFooterView'
 
-
 const FormTemplate = (props: FormTemplateRenderProps) => {
-  const {formFields, schema} = props
-  const {handleSubmit, getState} = useFormApi()
-  const {submitting, submitSucceeded, submitFailed, submitErrors, valid, pristine} = getState()
+  const { formFields, schema } = props
+  const { handleSubmit, getState } = useFormApi()
+  const {
+    submitting,
+    submitSucceeded,
+    submitFailed,
+    submitErrors,
+    valid,
+    pristine,
+  } = getState()
 
   if (submitFailed) {
     return (
@@ -48,8 +57,8 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         <Box mt={2}>
           <Alert severity="error">
             <AlertTitle>Error — Form Submission Failed</AlertTitle>
-            Sorry, please try again later. If the issue persists please send a direct email to{' '}
-            <em>info@aglyn.com</em>
+            Sorry, please try again later. If the issue persists please send a
+            direct email to <em>info@aglyn.com</em>
             <br />
             <br />
             <small>Error details:</small>
@@ -66,8 +75,8 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         <Box mt={2}>
           <Alert severity="success">
             <AlertTitle>Success</AlertTitle>
-            We have received your submission. If you have any immediate questions, send them to{' '}
-            <em>info@aglyn.com</em>
+            We have received your submission. If you have any immediate
+            questions, send them to <em>info@aglyn.com</em>
           </Alert>
         </Box>
       </>
@@ -78,7 +87,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
     <Grid
       container
       component={'form'}
-      style={{width: '100%'}}
+      style={{ width: '100%' }}
       onSubmit={handleSubmit}
       spacing={3}
     >
@@ -90,7 +99,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
       {/*})}*/}
       <FormSpy>
         {() => (
-          <Grid item xs={12} sx={{textAlign: 'center'}}>
+          <Grid item xs={12} sx={{ textAlign: 'center' }}>
             {submitting && (
               <Box mb={1}>
                 <LinearProgress color="secondary" />
@@ -112,7 +121,6 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
 }
 
 function Contact(props) {
-
   const handleSubmit = useCallback(async (values) => {
     return await fetch(`/api/h/f/${DdfForms.formIds.contact}`, {
       method: 'POST',
@@ -130,19 +138,21 @@ function Contact(props) {
     <MainLayout
       title={'Contact Us | Aglyn'}
       centerNavigationItems={mainNavigation}
-      productName={ProductNames.WWW}
+      productName={BRAND_NAMES.WWW}
     >
       <main>
         <Box py={12} bgcolor={'background.paper'}>
-          <Container maxWidth={'lg'} sx={{py: 4}}>
+          <Container maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
               direction="column"
               spacing={2}
               items={[
                 {
-                  xs: 12,
-                  md: 8,
+                  size: {
+                    xs: 12,
+                    md: 8,
+                  },
                   children: (
                     <>
                       <Typography
@@ -164,19 +174,22 @@ function Contact(props) {
                           mb: 4,
                         }}
                       >
-                        Looking for more information or need support? Complete the form below.
+                        Looking for more information or need support? Complete
+                        the form below.
                       </Typography>
                     </>
                   ),
                 },
                 {
-                  xs: 12,
-                  md: 9,
+                  size: {
+                    xs: 12,
+                    md: 9,
+                  },
                   children: (
                     <Container maxWidth="sm">
                       <FormRenderer
                         FormTemplate={FormTemplate}
-                        componentMapper={componentMapper}
+                        componentMapper={simpleComponentMapper}
                         schema={DdfForms.ContactFormSchema}
                         onSubmit={handleSubmit}
                       />

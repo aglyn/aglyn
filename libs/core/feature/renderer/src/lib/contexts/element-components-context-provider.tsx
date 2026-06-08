@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,28 +15,27 @@
  * limitations under the License.
  */
 
-import { ReactNode, useMemo } from 'react'
-import { useAglynComponentTemplateBlocks } from '../hooks/use-aglyn-component-templates'
+import { useAglynNodePresetBlocks } from '../hooks/use-aglyn-node-presets'
 import { AglynComponentsContext } from './aglyn-components-context'
 
 export interface ElementComponentsContextProviderProps {
-  children?: ReactNode
+  children?: JSX.Children
 }
 
-export function ElementComponentsContextProvider(props: ElementComponentsContextProviderProps) {
+export function ElementComponentsContextProvider(
+  props: ElementComponentsContextProviderProps,
+) {
   const { children } = props
-  const templateBlocks = useAglynComponentTemplateBlocks()
-  const ctx = useMemo(
-    () => ({
-      templateBlocks: templateBlocks,
-    }),
-    [templateBlocks]
-  )
+  const nodePresets = useAglynNodePresetBlocks()
 
-  return <AglynComponentsContext.Provider value={ctx}>{children}</AglynComponentsContext.Provider>
+  return (
+    <AglynComponentsContext.Provider value={{ nodePresets: nodePresets }}>
+      {children}
+    </AglynComponentsContext.Provider>
+  )
 }
-ElementComponentsContextProvider.displayName = 'ElementComponentsContextProvider'
-ElementComponentsContextProvider.defaultProps = {
-  elementComponents: [],
-}
+ElementComponentsContextProvider.displayName =
+  'ElementComponentsContextProvider'
+ElementComponentsContextProvider.aglyn = true
+
 export default ElementComponentsContextProvider

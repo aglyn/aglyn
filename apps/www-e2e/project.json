@@ -1,0 +1,26 @@
+{
+  "name": "www-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/www-e2e/src",
+  "projectType": "application",
+  "tags": ["scope:app", "scope:public", "scope:e2e"],
+  "implicitDependencies": ["www"],
+  "targets": {
+    "e2e": {
+      "executor": "@nx/cypress:cypress",
+      "options": {
+        "cypressConfig": "apps/www-e2e/cypress.json",
+        "devServerTarget": "www:serve"
+      },
+      "configurations": {
+        "production": {
+          "devServerTarget": "www:serve:production"
+        }
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  }
+}

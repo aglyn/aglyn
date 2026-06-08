@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,10 @@
  */
 
 
-import { getElementNodeName } from './get-element-node-name'
-import { getElementParentNode } from './get-element-parent-node'
-import { isElementHTMLElement, isElementScrollParentElement } from './guards/node-is'
+import {getElementNodeName} from './get-element-node-name'
+import {getElementParentNode} from './get-element-parent-node'
+import {isElementHTMLElement} from './guards/is-element-html-element'
+import {isElementScrollParentElement} from './guards/is-element-scroll-parent-element'
 
 
 export function getElementScrollParent(node: Node): HTMLElement {

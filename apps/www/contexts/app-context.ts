@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-import { createHocWithContextConsumer } from '@aglyn/shared-ui-jsx'
-import { createContext, useContext } from 'react'
-import { AppController } from '../lib/aglyn-deprecated'
+import {createHocWithContextConsumer} from '@aglyn/shared-ui-jsx'
+import {createContext, useContext} from 'react'
+import {type AppController} from '../lib/aglyn-deprecated'
 
 
 export type AppContextType = AppController
 
 export const AppContext = createContext<AppContextType>(null)
 AppContext.displayName = 'AppContext'
+AppContext.aglyn = true
 
 export const {
   displayName,

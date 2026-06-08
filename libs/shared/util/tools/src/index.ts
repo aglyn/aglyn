@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,57 +15,83 @@
  * limitations under the License.
  */
 
-export * from './lib/_s'
+export * from './lib/str'
 export * from './lib/apply-mixins'
-export * from './lib/array-add-at-index'
-export * from './lib/array-copy'
-export * from './lib/array-copy-all'
-export * from './lib/array-from'
-export * from './lib/array-mutate'
-export * from './lib/array-remove-at-index'
-export * from './lib/array-remove-item'
-export * from './lib/array-reorder'
-export * from './lib/array-safe'
-export * from './lib/array-sort-by'
-export * from './lib/array-sort-by-deep-property'
-export * from './lib/array-tuples-to-object'
-export * from './lib/array-update'
-export * from './lib/array-update-at-index'
-export * from './lib/bitwise-has-all-attributes'
-export * from './lib/bitwise-has-attribute'
-export * from './lib/bitwise-has-only-attributes'
-export * from './lib/capitalize'
-export * from './lib/capitalize-title'
 export * from './lib/copy'
+export * from './lib/copy-shallow'
+export * from './lib/create-chained-function'
 export * from './lib/crud'
 export * from './lib/css'
-export * from './lib/expression-equality'
-export * from './lib/fail'
+export * from './lib/falsy'
 export * from './lib/get-display-name'
 export * from './lib/get-property'
 export * from './lib/get-static-field'
 export * from './lib/gravatar-url-from-email'
-export * from './lib/hexadecimal-from-number'
-export * from './lib/hexadecimal-to-number'
 export * from './lib/interop-default'
 export * from './lib/length'
 export * from './lib/no-side-effects'
 export * from './lib/noop'
 export * from './lib/normalized'
 export * from './lib/numeronym'
-export * from './lib/object-copy'
-export * from './lib/object-copy-all'
-export * from './lib/object-delete-property'
-export * from './lib/object-get-deep-property'
-export * from './lib/object-get-keys-and-symbol-properties'
-export * from './lib/object-remap'
-export * from './lib/object-safe'
-export * from './lib/object-set-deep-property'
-export * from './lib/object-update'
-export * from './lib/serialize-to-byte-stream'
-export * from './lib/serialize-to-json'
-export * from './lib/to-num'
 export * from './lib/trim'
-export * from './lib/unserialize-from-byte-stream'
-export * from './lib/unserialize-from-json'
-export * from './lib/yes'
+export * from './lib/truthy'
+
+// ARRAY
+
+export * from './lib/array/array-copy-deep'
+export * from './lib/array/array-copy-shallow'
+export * from './lib/array/array-from'
+export * from './lib/array/array-from-length'
+export * from './lib/array/array-move-at-index'
+export * from './lib/array/array-of-entries-to-object'
+export * from './lib/array/array-overrides'
+export * from './lib/array/array-push-at-index'
+export * from './lib/array/array-remove-at-index'
+export * from './lib/array/array-remove-item'
+export * from './lib/array/array-safe'
+export * from './lib/array/array-sort-by'
+export * from './lib/array/array-sort-by-deep-property'
+export * from './lib/array/array-update'
+export * from './lib/array/array-update-at-index'
+
+// BITWISE
+
+export * from './lib/bitwise/bitwise-has-all-attributes'
+export * from './lib/bitwise/bitwise-has-attribute'
+export * from './lib/bitwise/bitwise-has-only-attributes'
+
+// GUARDS
+
+export * from './lib/guards'
+
+// NUMBER
+
+export * from './lib/number/to-num'
+export * from './lib/number/number-to-hexadecimal'
+export * from './lib/number/number-from-hexadecimal'
+
+// OBJECT
+
+export * from './lib/object/object-clone'
+export * from './lib/object/object-clone-deep'
+export * from './lib/object/object-delete-property'
+export * from './lib/object/object-get-deep-property'
+export * from './lib/object/object-get-keys-and-symbol-properties'
+export * from './lib/object/object-remap'
+export * from './lib/object/object-safe'
+export * from './lib/object/object-set-deep-property'
+export * from './lib/object/object-update'
+
+// OPERATOR
+
+export * from './lib/operator'
+
+// SERIALIZE
+
+export * from './lib/serialize/base64-isomorphic-decode'
+export * from './lib/serialize/base64-isomorphic-encode'
+export * from './lib/serialize/php-serial-deserialize-from-byte-stream'
+export * from './lib/serialize/php-serial-is-serialized-byte-stream'
+export * from './lib/serialize/php-serial-serialize-to-byte-stream'
+export * from './lib/serialize/json-deserialize'
+export * from './lib/serialize/json-serialize'

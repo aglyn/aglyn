@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-import { _isFnT } from '@aglyn/shared-util-guards'
+import { _isFnT } from '@aglyn/shared-util-tools'
 import { DependencyList, EffectCallback, useEffect, useRef } from 'react'
 
-export function useEffectPostMount(callback: EffectCallback, deps?: DependencyList): void {
+export function useEffectPostMount(
+  callback: EffectCallback,
+  deps?: DependencyList,
+): void {
   const isOnInitialMount = useRef(true)
 
   useEffect(() => {

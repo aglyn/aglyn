@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { DoD } from '@aglyn/shared-data-types'
+import {DoD} from '@aglyn/shared-data-types'
 
-import { BaseRefController } from './BaseRefController'
+import {BaseRefController} from './BaseRefController'
 
 
 export class CollectionRefController<S extends DoD.Schema.CollectionModel> extends BaseRefController<S, DoD.Ref.Collection<S>> {
@@ -26,7 +26,11 @@ export class CollectionRefController<S extends DoD.Schema.CollectionModel> exten
     super({id, schema}, {...documents})
   }
 
-  public static from<S extends DoD.Schema.CollectionModel>(id: DoD.PKey, schema: S, documents?: DoD.Ref.Collection<S>) {
+  public static from<S extends DoD.Schema.CollectionModel>(
+    id: DoD.PKey,
+    schema: S,
+    documents?: DoD.Ref.Collection<S>,
+  ) {
     return new this(id, schema, documents)
   }
 

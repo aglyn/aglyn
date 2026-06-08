@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,16 +15,20 @@
  * limitations under the License.
  */
 
-import {generateComponentClassKeys, styled} from '@aglyn/shared-feature-themes'
-import {AppLink, AppLinkProps} from '@aglyn/shared-ui-jsx'
-import {MdiIcon, MdiIconProps} from '@aglyn/shared-ui-mdi-jsx'
-import {_isLength} from '@aglyn/shared-util-guards'
-import {yes} from '@aglyn/shared-util-tools'
-import MuiBreadcrumbs, {BreadcrumbsProps as MuiBreadcrumbsProps} from '@mui/material/Breadcrumbs'
+import {
+  AppLink,
+  type AppLinkProps,
+  MdiIcon,
+  type MdiIconProps,
+} from '@aglyn/shared-ui-jsx'
+import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
+import { _isLength, truthy } from '@aglyn/shared-util-tools'
+import MuiBreadcrumbs, {
+  type BreadcrumbsProps as MuiBreadcrumbsProps,
+} from '@mui/material/Breadcrumbs'
 import Typography from '@mui/material/Typography'
 import clsx from 'clsx'
-import React, {forwardRef, useMemo} from 'react'
-
+import { forwardRef, useMemo } from 'react'
 
 const classKeys = generateComponentClassKeys('AglynBreadcrumbs', [
   'item',
@@ -36,7 +40,7 @@ const classKeys = generateComponentClassKeys('AglynBreadcrumbs', [
 
 const StyledBreadcrumbs = styled(MuiBreadcrumbs, {
   name: 'AglynBreadcrumbs',
-})(({theme}) => ({
+})(({ theme }) => ({
   display: 'flex',
   alignItems: 'center',
   minHeight: theme.spacing(4),
@@ -61,27 +65,27 @@ const StyledBreadcrumbs = styled(MuiBreadcrumbs, {
   },
 }))
 
-export interface ItemProps extends AppLinkProps<'text'> {
+export interface BreadcrumbItemProps extends AppLinkProps<'text'> {
   icon?: MdiIconProps
   disabled?: boolean
 }
 
 export interface BreadcrumbsProps extends MuiBreadcrumbsProps {
-  items: ItemProps[]
+  items: BreadcrumbItemProps[]
   centerIcons?: boolean
 }
 
 export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
   function RefRenderFn(props, ref) {
-    const {centerIcons, children, items, ...rest} = props
+    const { centerIcons, children, items, ...rest } = props
 
     const MemoedItem = useMemo(() => {
-      const Component = forwardRef<any, ItemProps & {isLast: boolean}>(function RefRenderFn(
-        itemProps,
-        ref,
-      ) {
-        const {icon, className, isLast, disabled, ...item} = itemProps
-        const isDisabled = yes(disabled || isLast)
+      const Component = forwardRef<
+        any,
+        BreadcrumbItemProps & { isLast: boolean }
+      >(function RefRenderFn(itemProps, ref) {
+        const { icon, className, isLast, disabled, ...item } = itemProps
+        const isDisabled = truthy(disabled || isLast)
         const itemClass = clsx(
           classKeys.item,
           {
@@ -91,35 +95,38 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
           },
           className,
         )
+        const iconClass = clsx(classKeys.icon, icon?.className)
 
         const ItemComponent = isLast ? Typography : AppLink
 
         return (
           <ItemComponent ref={ref as any} className={itemClass} {...item}>
-            {icon ? <MdiIcon className={classKeys.icon} {...icon} /> : null}
+            {icon ? <MdiIcon {...icon} className={iconClass} /> : null}
             {item.children}
           </ItemComponent>
         )
       })
-      Component.displayName = 'BreadcrumbItem'
+      Component.displayName = 'Component'
+      Component.aglyn = true
       return Component
     }, [centerIcons])
 
     return (
       <StyledBreadcrumbs ref={ref} aria-label="breadcrumb" {...rest}>
-        {items.map(({...item}, key) => (
+        {items.map(({ ...item }, key, arr) => (
           <MemoedItem
-            key={item.id || item['key'] || key}
-            isLast={_isLength(key, items.length - 1)}
+            key={item.key ?? item.id ?? key}
+            isLast={_isLength(key, arr.length - 1)}
             {...item}
           />
         ))}
         {children}
       </StyledBreadcrumbs>
     )
-  }
+  },
 )
 
 Breadcrumbs.displayName = 'Breadcrumbs'
+Breadcrumbs.aglyn = true
 
 export default Breadcrumbs

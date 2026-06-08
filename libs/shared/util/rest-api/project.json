@@ -1,0 +1,23 @@
+{
+  "name": "shared-util-rest-api",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/rest-api/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/rest-api",
+        "main": "libs/shared/util/rest-api/src/index.ts",
+        "tsConfig": "libs/shared/util/rest-api/tsconfig.lib.json",
+        "assets": ["libs/shared/util/rest-api/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:util"]
+}

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,24 +15,28 @@
  * limitations under the License.
  */
 
-import {alpha, makeStyles, Theme} from '@aglyn/shared-feature-themes'
-import {GridButtons} from '@aglyn/shared-ui-jsx'
+import { GridButtons } from '@aglyn/shared-ui-jsx'
 import {
   mdiChartSankeyVariant,
   mdiCheckNetwork,
   mdiEye,
   mdiFileDocumentMultiple,
   mdiHome,
+  MdiIcon,
   mdiVariable,
-} from '@aglyn/shared-ui-mdi-jsx'
+} from '@aglyn/shared-ui-jsx'
+import { alpha, styled } from '@aglyn/shared-ui-theme'
 import AppBar from '@mui/material/AppBar'
 import Box from '@mui/material/Box'
 import MuiTab from '@mui/material/Tab'
 import MuiTabs from '@mui/material/Tabs'
 import Typography from '@mui/material/Typography'
-import {ReactNode, SyntheticEvent, useCallback, useState} from 'react'
-import MdiIcon from '../../../libs/shared/ui/mdi-jsx/src/lib/components/mdi-icon'
-
+import {
+  type ReactNode,
+  type SyntheticEvent,
+  useCallback,
+  useState,
+} from 'react'
 
 interface TabPanelProps {
   children?: ReactNode
@@ -41,7 +45,7 @@ interface TabPanelProps {
 }
 
 function TabPanel(props: TabPanelProps) {
-  const {children, value, index, ...other} = props
+  const { children, value, index, ...other } = props
 
   return (
     <div
@@ -67,17 +71,16 @@ function a11yProps(index: any) {
   }
 }
 
-const useStyles = makeStyles((theme: Theme) => ({
-  root: {
-    flexGrow: 1,
-    // backgroundColor: theme.palette.background.paper,
-    backgroundColor: alpha(theme.palette.primary.light, 0.12),
-    borderBottom: `1px solid ${theme.palette.divider}`,
-  },
+const TabsContainer = styled('div', {
+  name: 'AglynTabsContainer',
+})(({ theme }) => ({
+  flexGrow: 1,
+  // backgroundColor: theme.palette.background.paper,
+  backgroundColor: alpha(theme.palette.primary.light, 0.12),
+  borderBottom: `1px solid ${theme.palette.divider}`,
 }))
 
 export default function Tabs() {
-  const classes = useStyles()
   const [value, setValue] = useState(0)
 
   const handleChange = useCallback((event: SyntheticEvent, newValue: any) => {
@@ -85,7 +88,7 @@ export default function Tabs() {
   }, [])
 
   return (
-    <div className={classes.root}>
+    <TabsContainer>
       <AppBar color="primary" elevation={1} position="static">
         <MuiTabs
           aria-label="simple tabs example"
@@ -96,8 +99,16 @@ export default function Tabs() {
           variant="scrollable"
           onChange={handleChange}
         >
-          <MuiTab label="Home" {...a11yProps(0)} icon={<MdiIcon path={mdiHome.path} />} />
-          <MuiTab label="View" {...a11yProps(1)} icon={<MdiIcon path={mdiEye.path} />} />
+          <MuiTab
+            label="Home"
+            {...a11yProps(0)}
+            icon={<MdiIcon path={mdiHome.path} />}
+          />
+          <MuiTab
+            label="View"
+            {...a11yProps(1)}
+            icon={<MdiIcon path={mdiEye.path} />}
+          />
           {/* <MuiTab label="Item Two" {...a11yProps(2)} />
            <MuiTab label="Item Three" {...a11yProps(3)} /> */}
         </MuiTabs>
@@ -106,13 +117,16 @@ export default function Tabs() {
         <GridButtons
           items={[
             {
-              sx: {height: 1, width: 1},
+              sx: { height: 1, width: 1 },
               variant: 'contained',
               color: 'secondary',
               children: (
-                <Box sx={{textAlign: 'center'}}>
+                <Box sx={{ textAlign: 'center' }}>
                   <div>
-                    <MdiIcon fontSize="large" path={mdiFileDocumentMultiple.path} />
+                    <MdiIcon
+                      fontSize="large"
+                      path={mdiFileDocumentMultiple.path}
+                    />
                   </div>
                   <div>Entries</div>
                 </Box>
@@ -126,11 +140,11 @@ export default function Tabs() {
         <GridButtons
           items={[
             {
-              sx: {height: 1, width: 1},
+              sx: { height: 1, width: 1 },
               variant: 'contained',
               color: 'secondary',
               children: (
-                <Box sx={{textAlign: 'center'}}>
+                <Box sx={{ textAlign: 'center' }}>
                   <div>
                     <MdiIcon fontSize="large" path={mdiVariable.path} />
                   </div>
@@ -139,11 +153,11 @@ export default function Tabs() {
               ),
             },
             {
-              sx: {height: 1, width: 1},
+              sx: { height: 1, width: 1 },
               variant: 'contained',
               color: 'secondary',
               children: (
-                <Box sx={{textAlign: 'center'}}>
+                <Box sx={{ textAlign: 'center' }}>
                   <div>
                     <MdiIcon fontSize="large" path={mdiCheckNetwork.path} />
                   </div>
@@ -152,13 +166,16 @@ export default function Tabs() {
               ),
             },
             {
-              sx: {height: 1, width: 1},
+              sx: { height: 1, width: 1 },
               variant: 'contained',
               color: 'secondary',
               children: (
-                <Box sx={{textAlign: 'center'}}>
+                <Box sx={{ textAlign: 'center' }}>
                   <div>
-                    <MdiIcon fontSize="large" path={mdiChartSankeyVariant.path} />
+                    <MdiIcon
+                      fontSize="large"
+                      path={mdiChartSankeyVariant.path}
+                    />
                   </div>
                   <div>Workflows</div>
                 </Box>
@@ -174,6 +191,6 @@ export default function Tabs() {
       <TabPanel index={3} value={value}>
         Item Three
       </TabPanel>
-    </div>
+    </TabsContainer>
   )
 }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-// import {  } from '@aglyn/core-data-framework'
-import { ReactNode } from 'react'
 import { ElementsContext } from './elements-context'
 
 export interface ElementsContextProviderProps {
-  children?: ReactNode
+  children?: JSX.Children
   // addElement?: (payload: AddElementPayload) => void
 }
 
 export function ElementsContextProvider(props: ElementsContextProviderProps) {
   const { children } = props
 
-  return <ElementsContext.Provider value={undefined}>{children}</ElementsContext.Provider>
+  return (
+    <ElementsContext.Provider value={undefined}>
+      {children}
+    </ElementsContext.Provider>
+  )
 }
 ElementsContextProvider.displayName = 'ElementsContextProvider'
-ElementsContextProvider.defaultProps = {}
+ElementsContextProvider.aglyn = true
+
 export default ElementsContextProvider

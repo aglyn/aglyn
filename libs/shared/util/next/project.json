@@ -1,0 +1,23 @@
+{
+  "name": "shared-util-next",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/next/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/next",
+        "main": "libs/shared/util/next/src/index.ts",
+        "tsConfig": "libs/shared/util/next/tsconfig.lib.json",
+        "assets": ["libs/shared/util/next/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:util"]
+}

@@ -1,0 +1,52 @@
+{
+  "name": "silo",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/silo",
+  "projectType": "application",
+  "targets": {
+    "build": {
+      "executor": "@nx/next:build",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "outputPath": "dist/apps/silo"
+      },
+      "configurations": {
+        "production": {},
+        "development": {
+          "outputPath": "apps/silo"
+        }
+      }
+    },
+    "serve": {
+      "executor": "@nx/next:server",
+      "options": {
+        "buildTarget": "silo:build",
+        "dev": true,
+        "port": 4210
+      },
+      "configurations": {
+        "production": {
+          "buildTarget": "silo:build:production",
+          "dev": false
+        },
+        "development": {
+          "buildTarget": "silo:build:development",
+          "dev": true
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "export": {
+      "executor": "@nx/next:export",
+      "options": {
+        "buildTarget": "silo:build:production"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:app", "scope:private"]
+}

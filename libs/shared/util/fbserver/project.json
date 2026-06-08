@@ -1,0 +1,23 @@
+{
+  "name": "shared-util-fbserver",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/fbserver/src",
+  "projectType": "library",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/fbserver",
+        "main": "libs/shared/util/fbserver/src/index.ts",
+        "tsConfig": "libs/shared/util/fbserver/tsconfig.lib.json",
+        "assets": ["libs/shared/util/fbserver/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    }
+  },
+  "tags": ["scope:lib", "scope:shared", "scope:util"]
+}

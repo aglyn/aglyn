@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2022 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _s } from './_s'
+import {str} from './str'
 
 
 /**
@@ -27,5 +27,5 @@ import { _s } from './_s'
  * @returns {string}
  */
 export function trim<T>(val: T): string {
-  return _s(val).trim()
+  return str(val).trim()
 }

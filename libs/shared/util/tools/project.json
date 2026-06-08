@@ -1,0 +1,30 @@
+{
+  "name": "shared-util-tools",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/tools/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:util"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/tools",
+        "main": "libs/shared/util/tools/src/index.ts",
+        "tsConfig": "libs/shared/util/tools/tsconfig.lib.json",
+        "assets": ["libs/shared/util/tools/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/tools"],
+      "options": {
+        "jestConfig": "libs/shared/util/tools/jest.config.ts"
+      }
+    }
+  }
+}

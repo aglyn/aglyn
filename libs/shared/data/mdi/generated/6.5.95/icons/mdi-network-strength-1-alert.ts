@@ -1,4 +1,5 @@
-export default {
+import type { Icon } from '../../../src/lib/types'
+export const mdiNetworkStrength1Alert: Icon = {
   "id": "network-strength-1-alert",
   "name": "Network Strength 1 Alert",
   "path": "M21 1L1 21H17V19H11V13.8L19 5.8V9H21M19 11V17H21V11M19 19V21H21V19",
@@ -10,3 +11,4 @@ export default {
     "Alert / Error"
   ]
 }
+export default mdiNetworkStrength1Alert

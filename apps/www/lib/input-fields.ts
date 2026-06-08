@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Aglyn LLC
+ * Copyright 2024 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-import {DoD, NormalizedData} from '@aglyn/shared-data-types'
-import {GridListItemData as GridItemProps} from '@aglyn/shared-ui-jsx'
+import { DoD, NormalizedData } from '@aglyn/shared-data-types'
+import { GridListItemData as GridItemProps } from '@aglyn/shared-ui-jsx'
 import MuiButton from '@mui/material/Button'
 import MuiTextField from '@mui/material/TextField'
 import FieldArrayComponent from '../components/FieldArray'
 import FieldObjectComponent from '../components/FieldObject'
 import FieldSelect from '../components/FieldSelect'
-
 
 export namespace Components {
   export const Elements = {
@@ -36,10 +35,11 @@ export namespace Components {
     },
   }
 
-  type TypeOfElementsByKey = typeof Elements['byKey']
+  type TypeOfElementsByKey = (typeof Elements)['byKey']
   type KeyOfElementsByKey = keyof TypeOfElementsByKey
   type ValueOfKeyOfElementsByKey = TypeOfElementsByKey[KeyOfElementsByKey]
-  export type ComponentProps<T extends ValueOfKeyOfElementsByKey> = Parameters<T>
+  export type ComponentProps<T extends ValueOfKeyOfElementsByKey> =
+    Parameters<T>
   export type ElementType = ValueOfKeyOfElementsByKey
 }
 
@@ -56,7 +56,7 @@ export namespace FieldPreset {
     keys: ['id', 'displayName', 'dataType'],
     byKey: {
       id: {
-        GridItemProps: {xs: 12 as any},
+        GridItemProps: { xs: 12 },
         component: Components.Elements.byKey.TextField,
         props: {
           name: 'id',
@@ -67,12 +67,12 @@ export namespace FieldPreset {
           fullWidth: true,
           disabled: true,
           required: true,
-          FormHelperTextProps: {component: 'div'},
-          InputLabelProps: {shrink: true},
+          FormHelperTextProps: { component: 'div' },
+          InputLabelProps: { shrink: true },
         },
       },
       name: {
-        GridItemProps: {xs: 12 as any},
+        GridItemProps: { xs: 12 },
         component: Components.Elements.byKey.TextField,
         props: {
           name: 'name',
@@ -83,11 +83,11 @@ export namespace FieldPreset {
           color: 'primary',
           fullWidth: true,
           required: true,
-          InputLabelProps: {shrink: true},
+          InputLabelProps: { shrink: true },
         },
       },
       kind: {
-        GridItemProps: {xs: 12 as any},
+        GridItemProps: { xs: 12 },
         component: Components.Elements.byKey.SelectField,
         props: {
           name: 'kind',
@@ -98,13 +98,13 @@ export namespace FieldPreset {
           fullWidth: true,
           defaultValue: '',
           required: true,
-          items: [{value: '', children: 'Select one', disabled: true}].concat(
+          items: [{ value: '', children: 'Select one', disabled: true }].concat(
             DoD.FT.Tag.all.map(
               (sym: any) =>
                 ({
                   value: sym,
                   children: DoD.lbl[sym],
-                } as any),
+                }) as any,
             ),
           ),
         },

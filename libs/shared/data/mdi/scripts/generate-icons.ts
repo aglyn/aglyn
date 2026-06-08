@@ -34,16 +34,16 @@ function writeModuleFiles() {
     generateFile({data: icon, file: `mdi-${icon.id}`, dir: dir('icons'), type: 'module'})
   })
 
-  // Generate json files
-  // generateFile({data: icons, file: 'mdi-icons', dir: dir('json'), type: 'json'})
-  generateFile({data: icons, file: 'mdi-icons', dir: dir(), type: 'json', minify: true})
-
   // Generate default exported module array files
   // generateFile({data: icons, file: `mdi-icons-array`, dir: dir(), importDir: './modules/mdi-',
   // type: 'module-array'})
 
   // Generate named module file
   generateFile({data: icons, file: 'mdi-icons', dir: dir(), type: 'named', importDir: './icons/mdi-'})
+
+  // Generate json files
+  // generateFile({data: icons, file: 'mdi-icons', dir: dir('json'), type: 'json'})
+  generateFile({data: icons, file: 'mdi-icons', dir: dir(), type: 'json', minify: true})
 }
 
 ;(function() {
