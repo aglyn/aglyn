@@ -217,14 +217,16 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
               onChange={handleTextChange}
               onFocus={handleFocus}
               value={value}
-              inputProps={{
-                ...inputProps,
-                readOnly: isReadOnly,
-              }}
-              InputProps={{
-                startAdornment,
-                ref: setFieldRef,
-                ...InputProps,
+              slotProps={{
+                htmlInput: {
+                  ...inputProps,
+                  readOnly: isReadOnly,
+                },
+                input: {
+                  startAdornment,
+                  ref: setFieldRef,
+                  ...InputProps,
+                },
               }}
               {...rest}
             />
