@@ -194,6 +194,10 @@ export class _EmotionDocumentComponent<
         <body>
           {getInitColorSchemeScript({
             defaultMode: 'system',
+            // Must match colorSchemeSelector: 'class' in extendTheme so the
+            // init script adds a CSS class (e.g. "dark") to <html> instead of
+            // a data-attribute, ensuring dark-mode CSS vars apply on first paint.
+            attribute: '.%s',
           })}
           <Main />
           <NextScript />

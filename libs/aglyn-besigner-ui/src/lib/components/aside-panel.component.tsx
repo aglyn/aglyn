@@ -411,14 +411,16 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
                 sx={{
                   '& .MuiTab-root': {
                     '&.Mui-selected': {
-                      color: ({ palette }) => palette.text.primary,
-                      backgroundColor: ({ palette }) =>
-                        palette.background.paper,
+                      // Use sx string shorthands instead of palette callbacks so the
+                      // sx system resolves them via theme.vars (CSS custom-property refs)
+                      // rather than the static light-mode palette values.
+                      color: 'text.primary',
+                      backgroundColor: 'background.paper',
                     },
                   },
                   '& .MuiTabs-indicator': {
                     top: 0,
-                    backgroundColor: ({ palette }) => palette.tertiary.main,
+                    backgroundColor: 'tertiary.main',
                   },
                 }}
               >

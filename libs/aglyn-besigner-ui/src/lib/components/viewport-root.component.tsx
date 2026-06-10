@@ -23,7 +23,10 @@ const AglynViewport = styled('main', {
   name: 'AglynViewport',
 })(({ theme }) => {
   // const o = 'transparent'
-  const bg = theme.palette.background.default
+  const t = theme as any
+  // In CSS vars mode `theme.palette.*` is always the static light value; resolve
+  // through `theme.vars.palette.*` so this becomes a live CSS custom-property ref.
+  const bg = (t.vars || theme).palette.background.default
   // const base = theme.palette.divider
   // const sq = alpha(base, 0.02)
   // const outline = alpha(base, 0.0312)
@@ -38,7 +41,6 @@ const AglynViewport = styled('main', {
 
   // theme.vars is available from MuiCssVarsProvider; use channel variables so the
   // colours update when the mode switches without calling alpha() on a CSS-variable string.
-  const t = theme as any
   const divider = `rgba(${t.vars.palette.dividerChannel} / 0.0312)`
   const dot = `rgba(${t.vars.palette.dividerChannel} / 0.0486)`
   const minor = theme.spacing(1)
