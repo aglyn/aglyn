@@ -111,18 +111,20 @@ function Hosts() {
                           path={ICON_VARIANT_HOST.path}
                         />
                       ),
-                      titleTypographyProps: {
-                        textOverflow: 'ellipsis',
-                        // variant: 'h6',
-                        noWrap: true,
-                        fontSize: ({ typography }) =>
-                          typography.subtitle1.fontSize,
-                        fontWeight: ({ typography }) =>
-                          typography.h6.fontWeight,
-                      },
-                      subheaderTypographyProps: {
-                        fontSize: ({ typography }) =>
-                          typography.caption.fontSize,
+                      slotProps: {
+                        title: {
+                          textOverflow: 'ellipsis',
+                          // variant: 'h6',
+                          noWrap: true,
+                          fontSize: ({ typography }) =>
+                            typography.subtitle1.fontSize,
+                          fontWeight: ({ typography }) =>
+                            typography.h6.fontWeight,
+                        },
+                        subheader: {
+                          fontSize: ({ typography }) =>
+                            typography.caption.fontSize,
+                        },
                       },
                     }}
                     subheader={host?.$id}

@@ -141,7 +141,7 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
           <MuiCardHeader
             title={header}
             subheader={subheader}
-            titleTypographyProps={{ variant: 'h6', component: 'div' }}
+            slotProps={{ title: { variant: 'h6', component: 'div' } }}
             {...HeaderProps}
           />
         ) : null}
