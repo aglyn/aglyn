@@ -54,7 +54,9 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
   if (submitFailed) {
     return (
       <>
-        <Box mt={2}>
+        <Box sx={{
+          mt: 2
+        }}>
           <Alert severity="error">
             <AlertTitle>Error — Form Submission Failed</AlertTitle>
             Sorry, please try again later. If the issue persists please send a
@@ -66,13 +68,15 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
           </Alert>
         </Box>
       </>
-    )
+    );
   }
 
   if (submitSucceeded) {
     return (
       <>
-        <Box mt={2}>
+        <Box sx={{
+          mt: 2
+        }}>
           <Alert severity="success">
             <AlertTitle>Success</AlertTitle>
             We have received your submission. If you have any immediate
@@ -80,7 +84,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
           </Alert>
         </Box>
       </>
-    )
+    );
   }
 
   return (
@@ -99,9 +103,11 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
       {/*})}*/}
       <FormSpy>
         {() => (
-          <Grid item xs={12} sx={{ textAlign: 'center' }}>
+          <Grid sx={{ textAlign: 'center' }} size={12}>
             {submitting && (
-              <Box mb={1}>
+              <Box sx={{
+                mb: 1
+              }}>
                 <LinearProgress color="secondary" />
               </Box>
             )}
@@ -117,7 +123,7 @@ const FormTemplate = (props: FormTemplateRenderProps) => {
         )}
       </FormSpy>
     </Grid>
-  )
+  );
 }
 
 function Contact(props) {
@@ -141,7 +147,11 @@ function Contact(props) {
       productName={BRAND_NAMES.WWW}
     >
       <main>
-        <Box py={12} bgcolor={'background.paper'}>
+        <Box
+          sx={{
+            py: 12,
+            bgcolor: 'background.paper'
+          }}>
           <Container maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
@@ -203,7 +213,7 @@ function Contact(props) {
       </main>
       <SiteFooterView />
     </MainLayout>
-  )
+  );
 }
 
 export default Contact

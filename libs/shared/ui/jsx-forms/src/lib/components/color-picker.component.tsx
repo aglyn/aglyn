@@ -74,16 +74,17 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
       <InputAdornment ref={ref} position={'start'} {...rest}>
         <IconButton ref={ref} edge="start" {...IconButtonProps}>
           <Box
-            padding={0.35}
-            border={1}
-            borderColor={'divider'}
-            borderRadius="50%"
-          >
+            sx={{
+              padding: 0.35,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: "50%"
+            }}>
             <Swatch color={color} />
           </Box>
         </IconButton>
       </InputAdornment>
-    )
+    );
   },
 )
 TextFieldColorSwatch.displayName = 'AglynTextFieldColorSwatch'

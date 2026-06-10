@@ -342,11 +342,11 @@ const NodeTreeItem = observer(
             </MuiListItemIcon>
             <MuiListItemText
               primary={nodeLabel}
-              primaryTypographyProps={{
-                noWrap: true,
-                maxWidth: '180px',
-                width: 'fit-content',
-                textOverflow: 'ellipsis',
+              slotProps={{
+                primary: {
+                  noWrap: true,
+                  sx: { maxWidth: '180px', width: 'fit-content', textOverflow: 'ellipsis' },
+                },
               }}
             />
           </MuiListItemButton>

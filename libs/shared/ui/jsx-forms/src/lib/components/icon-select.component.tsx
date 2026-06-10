@@ -190,8 +190,10 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
 
   return (
     <Grid ref={ref} container>
-      <Grid spacing={2} alignItems={'center'} container item>
-        <Grid item>
+      <Grid spacing={2} container sx={{
+        alignItems: 'center'
+      }}>
+        <Grid>
           <ButtonBase
             onClick={handleButtonClick}
             disableRipple
@@ -201,7 +203,10 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
             <MdiIcon fontSize="inherit" path={currentIcon.path} />
           </ButtonBase>
         </Grid>
-        <Grid item sm>
+        <Grid
+          size={{
+            sm: "grow"
+          }}>
           <Typography component="div" variant="caption">
             {label}
           </Typography>
@@ -226,10 +231,12 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
           </MuiLink>
         </Grid>
       </Grid>
-      <Grid xs={12} item>
+      <Grid size={12}>
         <StyledCollapse in={open}>
-          <Grid alignItems="center" spacing={2} container>
-            <Grid xs={12} item>
+          <Grid spacing={2} container sx={{
+            alignItems: "center"
+          }}>
+            <Grid size={12}>
               <MuiTextField
                 onChange={handleFilterChange}
                 placeholder="Search icons..."
@@ -238,12 +245,12 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
                 fullWidth
               />
             </Grid>
-            <Grid item xs>
+            <Grid size="grow">
               <Typography component="div" variant="body2">
                 Selected icon: <b>{selectedIcon.name}</b>
               </Typography>
             </Grid>
-            <Grid item>
+            <Grid>
               <Button
                 color="secondary"
                 onClick={handleChooseButtonClick}
@@ -267,7 +274,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
         </StyledCollapse>
       </Grid>
     </Grid>
-  )
+  );
 })
 
 IconSelectComponent.displayName = 'IconSelectComponent'

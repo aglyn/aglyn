@@ -81,16 +81,17 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     >
       <Stack
         direction="column"
-        justifyContent="center"
-        alignItems="center"
         spacing={2}
-        maxWidth={1}
-        width={440}
-      >
+        sx={{
+          justifyContent: "center",
+          alignItems: "center",
+          maxWidth: 1,
+          width: 440
+        }}>
         {children}
       </Stack>
     </BackgroundImageComponent>
-  )
+  );
 }
 AuthenticatingLayout.displayName = 'AuthenticatingLayout'
 AuthenticatingLayout.aglyn = true

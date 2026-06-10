@@ -101,9 +101,11 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
             />
             <Typography
               children={`${actionLabel} ${label}`}
-              color="inherit"
               component="div"
               variant="h6"
+              sx={{
+                color: "inherit"
+              }}
             />
           </Fragment>
         }
@@ -142,14 +144,17 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
                   loading={loading}
                   onUpdate={onUpdate}
                 />
-                <Box mt={2}>
+                <Box sx={{
+                  mt: 2
+                }}>
                   <Typography children={'JSON Output'} variant="subtitle2" />
                   <Box
-                    bgcolor="background.default"
-                    mt={1}
-                    overflow="scroll"
-                    px={1}
-                  >
+                    sx={{
+                      bgcolor: "background.default",
+                      mt: 1,
+                      overflow: "scroll",
+                      px: 1
+                    }}>
                     <pre>
                       {JSON.stringify(
                         objectRemap(fields, (f) => f.value ?? ''),
@@ -164,7 +169,7 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
           </Container>
         </div>
       </NavigationDrawerComponent>
-    )
+    );
   },
 )
 

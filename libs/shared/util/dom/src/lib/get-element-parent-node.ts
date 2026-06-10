@@ -27,13 +27,13 @@ export function getElementParentNode(element: Node | ShadowRoot): Node {
 
   return (
     // this is a quicker (but less type safe) way to save quite some bytes from the bundle
-    element['assignedSlot'] || // step into the shadow DOM of the parent of a slotted node
+    // ShadowDom
+    (element['assignedSlot'] || // step into the shadow DOM of the parent of a slotted node
     element.parentNode || // DOM Element
     (
-      isNodeShadowRoot(element) ? element.host : null) // ShadowDom
-    || getElementDocumentElement(element as Element, // fallback
-    )
-  )
+      isNodeShadowRoot(element) ? element.host : null) || getElementDocumentElement(element as Element, // fallback
+    ))
+  );
 }
 
 export default getElementParentNode

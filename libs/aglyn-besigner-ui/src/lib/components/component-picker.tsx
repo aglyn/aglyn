@@ -156,12 +156,14 @@ export const ComponentPicker = observer(
               <MdiIcon path={ICON_VARIANT_CLOSE.path} />
             </IconButton>
             <Typography
-              sx={{ ml: 2, flex: 1 }}
               variant="h6"
               component="div"
-              textOverflow="ellipsis"
               noWrap
-            >
+              sx={{
+                textOverflow: "ellipsis",
+                ml: 2,
+                flex: 1
+              }}>
               {'Choose element'}
             </Typography>
             <IconButton
@@ -222,7 +224,6 @@ export const ComponentPicker = observer(
             </Toolbar>
           </Collapse>
         </AppBar>
-
         <DialogContent dividers sx={{ p: 0 }}>
           {!items?.length ? (
             <EmptyResults sx={{ minHeight: '40vh', height: 1 }} />
@@ -245,7 +246,11 @@ export const ComponentPicker = observer(
                         {item?.items?.map((node: any, index) => (
                           <Observer key={node?.$id ?? index}>
                             {() => (
-                              <Grid xs={4} sm={3} item>
+                              <Grid
+                                size={{
+                                  xs: 4,
+                                  sm: 3
+                                }}>
                                 <NodeCard
                                   sx={[
                                     { cursor: 'pointer' },
@@ -271,15 +276,18 @@ export const ComponentPicker = observer(
         <Box sx={{ flex: '0 0 auto', display: 'flex' }}>
           <Collapse in={Boolean(selected)} sx={{ p: 1, pl: 2, width: 1 }}>
             <Stack
-              flexDirection="row"
-              alignItems="center"
-              justifyContent="space-between"
-            >
+              sx={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}>
               <Typography
                 variant="subtitle1"
-                textOverflow="ellipsis"
                 color="textSecondary"
                 noWrap
+                sx={{
+                  textOverflow: "ellipsis"
+                }}
               >
                 {selected?.['displayName'] || selected?.$id}
               </Typography>
@@ -288,7 +296,7 @@ export const ComponentPicker = observer(
           </Collapse>
         </Box>
       </Dialog>
-    )
+    );
   }),
 )
 ComponentPicker.displayName = 'ComponentPicker'

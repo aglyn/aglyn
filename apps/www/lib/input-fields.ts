@@ -101,10 +101,10 @@ export namespace FieldPreset {
           items: [{ value: '', children: 'Select one', disabled: true }].concat(
             DoD.FT.Tag.all.map(
               (sym: any) =>
-                ({
+                (({
                   value: sym,
-                  children: DoD.lbl[sym],
-                }) as any,
+                  children: DoD.lbl[sym]
+                }) as any),
             ),
           ),
         },

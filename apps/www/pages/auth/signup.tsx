@@ -109,15 +109,16 @@ export default withAppContext<Props>(function SignUp(props) {
           />
           {formError && (
             <Box
-              bgcolor={'error.light'}
-              border={2}
-              borderColor={'error.main'}
-              borderRadius={3}
-              color={'error.contrastText'}
-              my={2}
-              px={2}
-              py={2}
-            >
+              sx={{
+                bgcolor: 'error.light',
+                border: 2,
+                borderColor: 'error.main',
+                borderRadius: 3,
+                color: 'error.contrastText',
+                my: 2,
+                px: 2,
+                py: 2
+              }}>
               <Typography>
                 <b>{'Error: '}</b>
                 {formError}
@@ -152,5 +153,5 @@ export default withAppContext<Props>(function SignUp(props) {
         />
       </Typography>
     </AuthLayout>
-  )
+  );
 })

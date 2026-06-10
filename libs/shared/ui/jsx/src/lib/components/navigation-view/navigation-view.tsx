@@ -130,16 +130,16 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
       <Stack
         ref={forwardRef}
         direction="column"
-        alignItems="stretch"
-        justifyContent="flex-start"
         spacing={0}
-        flexGrow={1}
-        height={1}
-        width={1}
-        overflow="hidden"
-        sx={mergeSxProps({}, sx)}
         {...rest}
-      >
+        sx={[{
+          alignItems: "stretch",
+          justifyContent: "flex-start",
+          flexGrow: 1,
+          height: 1,
+          width: 1,
+          overflow: "hidden"
+        }, mergeSxProps({}, sx), rest.sx]}>
         <NavigationAppBar
           scrollView={scrollView}
           className={classKeys.appBar}
@@ -147,51 +147,53 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
         >
           <Toolbar className={classKeys.toolbar}>
             <Stack
-              alignItems="center"
-              justifyContent="space-between"
               direction="row"
               spacing={2}
-              width={1}
-            >
+              sx={{
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: 1
+              }}>
               <Stack
                 direction="row"
-                alignItems="center"
-                justifyContent="flex-start"
                 className={classKeys.appBarLeft}
                 {...AppBarLeftProps}
-              >
+                sx={[{
+                  alignItems: "center",
+                  justifyContent: "flex-start"
+                }, ...(Array.isArray(AppBarLeftProps?.sx) ? AppBarLeftProps.sx : [AppBarLeftProps?.sx])]}>
                 {appBarLeft}
               </Stack>
               <Stack
                 direction="row"
-                alignItems="center"
-                justifyContent="flex-start"
                 className={classKeys.appBarRight}
                 {...AppBarRightProps}
-              >
+                sx={[{
+                  alignItems: "center",
+                  justifyContent: "flex-start"
+                }, ...(Array.isArray(AppBarRightProps?.sx) ? AppBarRightProps.sx : [AppBarRightProps?.sx])]}>
                 {appBarRight}
               </Stack>
             </Stack>
           </Toolbar>
           {childrenAfterToolbar}
         </NavigationAppBar>
-
         <Stack
           ref={setScrollView}
           component="main"
           direction="column"
-          overflow="auto"
-          flexGrow={1}
-          height={1}
-          width={1}
-          bgcolor="background.default"
-          zIndex={1}
           className={classKeys.content}
           {...ContentProps}
-        >
+          sx={[{
+            overflow: "auto",
+            flexGrow: 1,
+            height: 1,
+            width: 1,
+            bgcolor: "background.default",
+            zIndex: 1
+          }, ...(Array.isArray(ContentProps?.sx) ? ContentProps.sx : [ContentProps?.sx])]}>
           {children}
         </Stack>
-
         <Stack
           component="footer"
           direction="column"
@@ -200,7 +202,7 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
           {bottomAppBar}
         </Stack>
       </Stack>
-    )
+    );
   },
 )
 NavigationView.displayName = 'NavigationView'

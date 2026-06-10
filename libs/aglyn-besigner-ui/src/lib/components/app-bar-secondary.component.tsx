@@ -61,11 +61,12 @@ export const AppBarSecondaryComponent = forwardRef<
       <MuiToolbar variant="dense" sx={{ pr: { xs: 2, sm: 2 } }}>
         <Stack
           direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          width={1}
           spacing={1}
-        >
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: 1
+          }}>
           <AddControlsComponent />
           <HistoryControlsComponent sx={{ flexGrow: 1 }} />
           <DevicePreviewControlsComponent />
@@ -75,7 +76,7 @@ export const AppBarSecondaryComponent = forwardRef<
         </Stack>
       </MuiToolbar>
     </MuiAppBar>
-  )
+  );
 })
 
 AppBarSecondaryComponent.displayName = 'AppBarSecondaryComponent'

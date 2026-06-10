@@ -110,12 +110,11 @@ export const CloseableDrawerComponent = forwardRef<any, CloseableDrawerProps>(
         )}
 
         <Typography
-          color="inherit"
           variant="h6"
           sx={{
-            fontSize: (theme) => theme.typography.pxToRem(20),
-          }}
-        >
+            color: "inherit",
+            fontSize: (theme) => theme.typography.pxToRem(20)
+          }}>
           {drawerTitle}
         </Typography>
       </>

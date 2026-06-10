@@ -111,15 +111,16 @@ export default withAppContext<Props>(function SignIn(props) {
           />
           {formError && (
             <Box
-              bgcolor={'error.light'}
-              border={2}
-              borderColor={'error.main'}
-              borderRadius={3}
-              color={'error.contrastText'}
-              my={2}
-              px={2}
-              py={2}
-            >
+              sx={{
+                bgcolor: 'error.light',
+                border: 2,
+                borderColor: 'error.main',
+                borderRadius: 3,
+                color: 'error.contrastText',
+                my: 2,
+                px: 2,
+                py: 2
+              }}>
               <Typography>
                 <b>{'Error: '}</b>
                 {formError}
@@ -154,5 +155,5 @@ export default withAppContext<Props>(function SignIn(props) {
         />
       </Typography>
     </AuthLayout>
-  )
+  );
 })

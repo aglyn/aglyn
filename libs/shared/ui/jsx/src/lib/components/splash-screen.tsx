@@ -61,10 +61,11 @@ const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
       >
         <Stack
           direction="column"
-          justifyContent="center"
-          alignItems="center"
           spacing={2}
-        >
+          sx={{
+            justifyContent: "center",
+            alignItems: "center"
+          }}>
           <AglynLogoFull sx={{ fontSize: 175 }} />
           <CircularProgress color="secondary" />
           <LoadingTextComponent
@@ -76,7 +77,7 @@ const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
         </Stack>
       </Box>
     </Modal>
-  )
+  );
 })
 SplashScreen.displayName = 'SplashScreen'
 SplashScreen.aglyn = true

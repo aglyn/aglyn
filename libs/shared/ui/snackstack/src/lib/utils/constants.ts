@@ -87,10 +87,10 @@ export const originKeyExtractor = (anchor: Snack['anchorOrigin']): string => (
 export const omitContainerKeys = (classes: SnackbarProviderProps['classes']): SnackbarItemProps['classes'] => (
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  Object.keys(classes).filter(key => !allClasses.container[key]).reduce((
+  (Object.keys(classes).filter(key => !allClasses.container[key]).reduce((
     obj,
     key,
-  ) => ({...obj, [key]: classes[key]}), {})
+  ) => ({...obj, [key]: classes[key]}), {}))
 )
 
 export const REASONS: {[key: string]: CloseReason} = {

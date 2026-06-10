@@ -70,7 +70,7 @@ const StyledGridOverlay = styled(GridOverlay, {
 }))
 
 const noRowsOverlay = (label: string) =>
-  function NoRowsOverlay(props: GridOverlayProps) {
+  (function NoRowsOverlay(props: GridOverlayProps) {
     return (
       <StyledGridOverlay>
         <svg
@@ -118,13 +118,13 @@ const noRowsOverlay = (label: string) =>
         <div className={classKeys.label}>{label ?? 'No Items'}</div>
       </StyledGridOverlay>
     )
-  }
+  })
 
 type LoadingOverlayViewProps = {
   LinearProgressProps?: MuiLinearProgressProps
 }
 const AppLoaderOverlayView = (props: LoadingOverlayViewProps = {}) =>
-  function AppLoaderOverlayView() {
+  (function AppLoaderOverlayView() {
     return (
       <GridOverlay>
         <div style={{ position: 'absolute', top: 0, width: '100%' }}>
@@ -132,7 +132,7 @@ const AppLoaderOverlayView = (props: LoadingOverlayViewProps = {}) =>
         </div>
       </GridOverlay>
     )
-  }
+  })
 
 export interface DataTableProps extends Partial<MuiDataGridProps> {
   rows?: MuiDataGridProps['rows']

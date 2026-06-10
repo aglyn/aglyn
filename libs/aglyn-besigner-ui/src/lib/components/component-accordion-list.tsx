@@ -57,7 +57,7 @@ export const ComponentAccordionList = observer(
               <Box>
                 <Grid spacing={2} container sx={{ overflowX: 'hidden' }}>
                   {item?.items?.map((node, index) => (
-                    <Grid key={node?.$id ?? index} xs={6} item>
+                    <Grid key={node?.$id ?? index} size={6}>
                       <Draggable
                         node={node}
                         type={DragType.PRESET}
@@ -93,7 +93,7 @@ export const ComponentAccordionList = observer(
         )}
         {...rest}
       />
-    )
+    );
   },
 )
 ComponentAccordionList.displayName = 'ComponentAccordionList'

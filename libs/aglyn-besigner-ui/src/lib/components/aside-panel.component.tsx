@@ -87,11 +87,12 @@ const TabPanelInner = styled('div', {
 const emptyView = (
   <Stack
     direction="column"
-    justifyContent="center"
-    height={1}
     component={TabPanelInner}
-    sx={{ p: 2 }}
-  >
+    sx={{
+      justifyContent: "center",
+      height: 1,
+      p: 2
+    }}>
     <Typography
       color="textSecondary"
       variant="overline"
@@ -198,16 +199,18 @@ const ElementInfo = function ElementInfo({
                 <Typography key={item.key} component="div" {...TypographyProps}>
                   <Typography
                     variant="caption"
-                    display="inline"
-                    sx={{ textTransform: 'uppercase' }}
-                  >
+                    sx={{
+                      display: "inline",
+                      textTransform: 'uppercase'
+                    }}>
                     <b>{label}:</b>
                   </Typography>{' '}
                   <Typography
                     variant="body1"
-                    display="inline"
                     {...ValueTypographyProps}
-                    sx={mergeSxProps(
+                    sx={[{
+                      display: "inline"
+                    }, mergeSxProps(
                       (theme) => ({
                         bgcolor: alpha(theme.palette.secondary.light, 0.18),
                         border: `1px solid ${alpha(
@@ -221,8 +224,7 @@ const ElementInfo = function ElementInfo({
                         fontSize: '0.8rem',
                       }),
                       ValueTypographyProps?.sx,
-                    )}
-                  >
+                    )]}>
                     {value || <i>{failoverText}</i>}
                   </Typography>
                 </Typography>
@@ -232,7 +234,7 @@ const ElementInfo = function ElementInfo({
         )}
       />
     </TabPanelInner>
-  )
+  );
 }
 
 function withLastSelectedNode<P>(

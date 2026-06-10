@@ -165,15 +165,7 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
         function RefRenderFn(itemProps, ref) {
           const { className: gridClassName, ...restGridProps } = GridItemProps
           const { className, ...rest } = itemProps
-          return (
-            <Grid
-              ref={ref}
-              className={clsx(classKey.gridItem, gridClassName, className)}
-              item
-              {...restGridProps}
-              {...rest}
-            />
-          )
+          return (<Grid ref={ref} className={clsx(classKey.gridItem, gridClassName, className)} />);
         },
       )
       Component.displayName = 'Component'

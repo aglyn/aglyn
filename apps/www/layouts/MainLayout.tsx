@@ -440,12 +440,13 @@ export function MainLayout(props: MainLayoutProps) {
             </StyledRight>
 
             <Box
-              alignItems="space-around"
-              display="flex"
-              flex="1 1 auto"
-              flexBasis="100%"
-              justifyContent="center"
-            >
+              sx={{
+                alignItems: "space-around",
+                display: "flex",
+                flex: "1 1 auto",
+                flexBasis: "100%",
+                justifyContent: "center"
+              }}>
               <Typography
                 align="center"
                 color="textSecondary"
@@ -459,7 +460,7 @@ export function MainLayout(props: MainLayoutProps) {
         </Container>
       </footer>
     </Fragment>
-  )
+  );
 }
 
 MainLayout.displayName = 'MainLayout'

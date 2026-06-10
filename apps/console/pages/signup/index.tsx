@@ -116,7 +116,9 @@ function SignUp() {
   return (
     <AuthFormComponent
       paperTop={
-        <Typography component="div" variant="body2" alignSelf="flex-end">
+        <Typography component="div" variant="body2" sx={{
+          alignSelf: "flex-end"
+        }}>
           <AppLink href="/signin">{'Sign in'}</AppLink>
         </Typography>
       }
@@ -138,18 +140,17 @@ function SignUp() {
         clearOnUnmount
       />
       <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
-
       <Divider flexItem variant="middle" sx={{ my: 3 }}>
         {'Or sign up with'}
       </Divider>
-
       <Stack
         direction="column"
-        justifyContent="center"
-        alignItems="stretch"
         spacing={1}
-        paddingBottom={2}
-      >
+        sx={{
+          justifyContent: "center",
+          alignItems: "stretch",
+          paddingBottom: 2
+        }}>
         <Button
           variant="outlined"
           startIcon={<MdiIcon path={mdiGoogle.path} />}
@@ -159,7 +160,7 @@ function SignUp() {
         </Button>
       </Stack>
     </AuthFormComponent>
-  )
+  );
 }
 SignUp.displayName = 'Page:SignUp'
 SignUp.layouts = [

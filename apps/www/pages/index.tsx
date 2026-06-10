@@ -43,7 +43,9 @@ function Index(props) {
         component={'header'}
         url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
       >
-        <Box py={6}>
+        <Box sx={{
+          py: 6
+        }}>
           <Container maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
@@ -91,15 +93,18 @@ function Index(props) {
                         component={'h2'}
                         // variantMapping={{'h4': 'h3'}}
                         children={'The essentials to keep your workflow simple'}
-                        color="quaternary.main"
-                        sx={{ mb: 2 }}
-                      />
+                        sx={{
+                          color: "quaternary.main",
+                          mb: 2
+                        }} />
                       <Typography
                         variant={'h6'}
                         component={'div'}
-                        color="text.secondary"
-                        sx={{ mb: 4, '& > b': { color: 'text.secondary' } }}
-                      >
+                        sx={{
+                          color: "text.secondary",
+                          mb: 4,
+                          '& > b': { color: 'text.secondary' }
+                        }}>
                         <b>A</b>pps <b>G</b>iving <b>L</b>ove for <b>Y</b>our{' '}
                         <b>N</b>etwork
                       </Typography>
@@ -112,8 +117,15 @@ function Index(props) {
         </Box>
       </BackgroundImage>
       <main>
-        <Box component={'section'} bgcolor={'background.paper'}>
-          <Box component={Container} maxWidth={'lg'} py={12}>
+        <Box component={'section'} sx={{
+          bgcolor: 'background.paper'
+        }}>
+          <Box
+            component={Container}
+            sx={{
+              maxWidth: 'lg',
+              py: 12
+            }}>
             <GridItems
               alignItems="center"
               direction="row"
@@ -154,7 +166,9 @@ function Index(props) {
                         children={
                           'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'
                         }
-                        color="text.secondary"
+                        sx={{
+                          color: "text.secondary"
+                        }}
                       />
                     </>
                   ),
@@ -164,7 +178,12 @@ function Index(props) {
           </Box>
         </Box>
         <Box component={'section'}>
-          <Box component={Container} maxWidth={'lg'} py={12}>
+          <Box
+            component={Container}
+            sx={{
+              maxWidth: 'lg',
+              py: 12
+            }}>
             <GridItems
               alignItems="center"
               direction="row-reverse"
@@ -205,7 +224,9 @@ function Index(props) {
                         children={
                           'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'
                         }
-                        color="text.secondary"
+                        sx={{
+                          color: "text.secondary"
+                        }}
                       />
                     </>
                   ),
@@ -214,8 +235,15 @@ function Index(props) {
             />
           </Box>
         </Box>
-        <Box component={'section'} bgcolor={'background.paper'}>
-          <Box component={Container} maxWidth={'lg'} py={12}>
+        <Box component={'section'} sx={{
+          bgcolor: 'background.paper'
+        }}>
+          <Box
+            component={Container}
+            sx={{
+              maxWidth: 'lg',
+              py: 12
+            }}>
             <GridItems
               alignItems="center"
               direction="row"
@@ -256,7 +284,9 @@ function Index(props) {
                         children={
                           'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'
                         }
-                        color="text.secondary"
+                        sx={{
+                          color: "text.secondary"
+                        }}
                       />
                     </>
                   ),
@@ -279,7 +309,7 @@ function Index(props) {
         />
       </SiteFooterView>
     </MainLayout>
-  )
+  );
 }
 
 Index.displayName = 'Index'

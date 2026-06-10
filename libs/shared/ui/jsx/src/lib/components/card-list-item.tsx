@@ -136,14 +136,15 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
               {label && (
                 <Typography
                   component="span"
-                  display="block"
                   variant="subtitle2"
                   {...LabelTypographyProps}
                   className={clsx(
                     cardClasses.label,
                     LabelTypographyProps?.className,
                   )}
-                >
+                  sx={[{
+                    display: "block"
+                  }, ...(Array.isArray(LabelTypographyProps?.sx) ? LabelTypographyProps.sx : [LabelTypographyProps?.sx])]}>
                   {label}
                 </Typography>
               )}
@@ -151,7 +152,7 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
           </Box>
         </Box>
       </Card>
-    )
+    );
   },
 )
 

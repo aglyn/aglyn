@@ -264,17 +264,16 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                         )}
                       </ListItemIcon>
                     )}
-
                     <ListItemText {...ListItemTextProps}>
                       {children}
                     </ListItemText>
-
                     {!endIcon?.path || !endIcon ? null : (
                       <Typography
                         variant="body2"
-                        color="text.secondary"
                         {...EndIconTypographyProps}
-                      >
+                        sx={[{
+                          color: "text.secondary"
+                        }, ...(Array.isArray(EndIconTypographyProps?.sx) ? EndIconTypographyProps.sx : [EndIconTypographyProps?.sx])]}>
                         {!endIcon?.path ? (
                           endIcon
                         ) : (
@@ -283,13 +282,13 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                       </Typography>
                     )}
                   </MuiMenuItem>
-                )
+                );
             }
           },
         )}
       </MuiMenu>
     </Box>
-  )
+  );
 })
 
 Menu.displayName = 'Menu'

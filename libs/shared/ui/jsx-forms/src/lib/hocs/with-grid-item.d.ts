@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { type GridProps as MuiGridProps } from '@mui/material/Grid';
+import { type GridProps as MuiGridProps } from '@mui/material';
 import { type ComponentType, type ElementType, type ForwardRefExoticComponent, type PropsWithoutRef, type RefAttributes } from 'react';
 export interface GridWrappedMergeProps {
     FieldGridProps?: Partial<MuiGridProps>;

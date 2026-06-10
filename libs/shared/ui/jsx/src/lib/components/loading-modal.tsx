@@ -90,11 +90,12 @@ export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
                 />
                 <Stack
                   direction="column"
-                  justifyContent="center"
-                  alignItems="center"
                   spacing={2}
-                  flexGrow={1}
-                >
+                  sx={{
+                    justifyContent: "center",
+                    alignItems: "center",
+                    flexGrow: 1
+                  }}>
                   <div>
                     <CircularProgress color="secondary" />
                     <LoadingTextComponent
@@ -117,10 +118,10 @@ export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
               </div>
             </LoadingOverlayModal>
           </Fragment>
-        )
+        );
       }}
     </LoadingContext.Consumer>
-  )
+  );
 })
 LoadingModal.displayName = 'LoadingModal'
 

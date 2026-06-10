@@ -82,7 +82,12 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(
       fixed
       {...rest}
     >
-      <Box alignItems="center" display="flex" flexGrow={1}>
+      <Box
+        sx={{
+          alignItems: "center",
+          display: "flex",
+          flexGrow: 1
+        }}>
         <Container maxWidth="lg">
           <Slide direction="up" in={animated.left} mountOnEnter unmountOnExit>
             <div>
@@ -95,16 +100,17 @@ const AuthLayout = forwardRef<any, AuthLayoutProps>(function RefRenderFn(
       </Box>
       <Slide direction="left" in={animated.right} mountOnEnter unmountOnExit>
         <Box
-          alignItems="center"
-          bgcolor="common.white"
-          display="flex"
-          width={450}
-        >
+          sx={{
+            alignItems: "center",
+            bgcolor: "common.white",
+            display: "flex",
+            width: 450
+          }}>
           <Container>{children}</Container>
         </Box>
       </Slide>
     </AuthLayoutBackground>
-  )
+  );
 })
 
 AuthLayout.displayName = 'AuthLayout'

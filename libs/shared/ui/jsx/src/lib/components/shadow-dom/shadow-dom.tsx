@@ -97,9 +97,9 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
             <ShadowDomContext.Provider value={root}>
               {ssr ? (
                 // @ts-ignore
-                <template shadowroot="open">
+                (<template shadowroot="open">
                   {options.render?.({ root, ssr, children })}
-                </template>
+                </template>)
               ) : (
                 <ShadowDomContentPortal root={root}>
                   {options.render?.({ root, ssr, children })}
@@ -109,7 +109,7 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
           )}
         </Tag>
       </>
-    )
+    );
   })
   ShadowDomRoot.displayName = 'ShadowDomRoot'
 

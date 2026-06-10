@@ -40,15 +40,17 @@ function HostInfoItem({ label, value }) {
       <Typography component="div">
         <Typography
           variant="caption"
-          display="inline"
-          sx={{ textTransform: 'uppercase' }}
-        >
+          sx={{
+            display: "inline",
+            textTransform: 'uppercase'
+          }}>
           <b>{label}:</b>
         </Typography>{' '}
         <Typography
           variant="body1"
-          display="inline"
-          sx={(theme) => ({
+          sx={[{
+            display: "inline"
+          }, (theme) => ({
             bgcolor: alpha(theme.palette.tertiary.light, 0.18),
             border: `1px solid ${alpha(theme.palette.tertiary.light, 0.72)}`,
             borderRadius: '0.3em',
@@ -56,13 +58,12 @@ function HostInfoItem({ label, value }) {
             py: 0.15,
             wordBreak: 'break-word',
             fontSize: '0.8rem',
-          })}
-        >
+          })]}>
           {value || <i>{'None'}</i>}
         </Typography>
       </Typography>
     </>
-  )
+  );
 }
 
 function Hosts() {

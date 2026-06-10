@@ -133,8 +133,8 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
             <If condition={warnOpen}>
               <Then>
                 <Box
-                  height="50vh"
                   sx={{
+                    height: "50vh",
                     position: 'relative',
                     left: 0,
                     right: 0,
@@ -145,9 +145,8 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
                     alignItems: 'center',
                     justifyContent: 'center',
                     backdropFilter: 'blur(2px)',
-                    p: { xs: 2, sm: 3 },
-                  }}
-                >
+                    p: { xs: 2, sm: 3 }
+                  }}>
                   <Alert
                     severity="warning"
                     sx={{
@@ -190,7 +189,7 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
           </Button>
         </DialogActions>
       </Dialog>
-    )
+    );
   },
 )
 BesignerJsonEditorRaw.displayName = 'BesignerJsonEditor'

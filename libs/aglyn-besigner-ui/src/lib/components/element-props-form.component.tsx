@@ -29,7 +29,7 @@ import { NoSsr } from '@mui/material'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
-import Grid from '@mui/material/Grid'
+import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, useCallback } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
@@ -68,7 +68,9 @@ export const ElementPropsFormTemplate = forwardRef<
       </Grid>
       <FormSpy>
         {({ submitting, pristine, valid }) => (
-          <Box mt={2}>
+          <Box sx={{
+            mt: 2
+          }}>
             <FormControl margin="normal" fullWidth>
               <Button
                 color="secondary"
@@ -86,7 +88,7 @@ export const ElementPropsFormTemplate = forwardRef<
         )}
       </FormSpy>
     </form>
-  )
+  );
 })
 ElementPropsFormTemplate.displayName = 'ElementPropsFormTemplate'
 ElementPropsFormTemplate.aglyn = true

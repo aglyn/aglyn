@@ -93,35 +93,37 @@ export const NodeQuickActions = observer(
         data-aglyn-node={node?.$id}
         data-aglyn-kind="overlay-label"
         direction="row"
-        justifyContent="flex-start"
-        alignItems="center"
         spacing={0.35}
-        sx={{
+        divider={
+          <Divider orientation="vertical" variant="fullWidth" flexItem sx={{ opacity: 0.5 }} />
+        }
+        {...rest}
+        sx={[{
+          justifyContent: "flex-start",
+          alignItems: "center",
           fontSize: 12,
           lineHeight: 1,
           fontWeight: 600,
           letterSpacing: 0.25,
+
           // pointerEvents: 'none',
           marginLeft: '-2px',
+
           marginBottom: '1px',
           backgroundColor: 'primary.light',
           color: 'primary.contrastText',
           px: 0.5,
           pl: 0.5,
           pr: 0.25,
-          py: 0.35,
-        }}
-        divider={
-          <Divider orientation="vertical" variant="fullWidth" light flexItem />
-        }
-        {...rest}
-      >
+          py: 0.35
+        }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
         <Stack
           direction="column"
-          alignItems="center"
-          justifyContent="center"
-          sx={{ fontSize: 12 }}
-        >
+          sx={{
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 12
+          }}>
           <ComponentIconComponent
             component={node?.componentSchema}
             fontSize="inherit"
@@ -131,24 +133,26 @@ export const NodeQuickActions = observer(
           <Then>
             <Typography
               component="div"
-              textOverflow="ellipsis"
-              overflow="hidden"
-              whiteSpace="nowrap"
-              fontSize="inherit"
-              color="inherit"
-              maxWidth={100}
               title={node?.labelShort}
-            >
+              sx={{
+                textOverflow: "ellipsis",
+                overflow: "hidden",
+                whiteSpace: "nowrap",
+                fontSize: "inherit",
+                color: "inherit",
+                maxWidth: 100
+              }}>
               {node?.labelShort}
             </Typography>
           </Then>
           <Else>
             <Stack
               direction="row"
-              justifyContent="flex-start"
-              alignItems="center"
               spacing={0.25}
-            >
+              sx={{
+                justifyContent: "flex-start",
+                alignItems: "center"
+              }}>
               <LabelAction
                 title="move"
                 disableInteractive
@@ -219,7 +223,7 @@ export const NodeQuickActions = observer(
           </Else>
         </If>
       </Stack>
-    )
+    );
   }),
 )
 NodeQuickActions.displayName = 'NodeQuickActions'

@@ -18,14 +18,14 @@
 import {
   Button,
   type ButtonProps as MuiButtonProps,
-  type Grid2Props,
+  type GridProps,
 } from '@mui/material'
 import { type ElementType, forwardRef } from 'react'
 import GridItems from './grid-items'
 
 /* eslint-disable-next-line */
-export interface GridButtonsProps<P = MuiButtonProps> extends Grid2Props {
-  items: (P & { GridItemProps?: Grid2Props })[]
+export interface GridButtonsProps<P = MuiButtonProps> extends GridProps {
+  items: (P & { GridItemProps?: GridProps })[]
   ItemComponent?: ElementType<P>
 }
 

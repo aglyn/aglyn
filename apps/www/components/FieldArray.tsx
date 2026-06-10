@@ -51,10 +51,10 @@ function FieldArrayItem(props: ArrayItemProps) {
       value: property.type,
       items: DoD.FT.Tag.all.map(
         (sym: any) =>
-          ({
+          (({
             value: sym,
-            children: DoD.lbl[sym],
-          }) as any,
+            children: DoD.lbl[sym]
+          }) as any),
       ),
     },
   ]

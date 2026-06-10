@@ -65,11 +65,12 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       >
         <Stack
           direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          flexGrow={1}
           spacing={1}
-        >
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexGrow: 1
+          }}>
           <AddControlsComponent />
           <HistoryControlsComponent sx={{ flexGrow: 1 }} />
           <DevicePreviewControlsComponent />
@@ -79,9 +80,9 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             orientation="vertical"
             sx={(theme) => ({
               ml: `${theme.spacing(2)} !important`,
+              opacity: 0.5,
             })}
             flexItem
-            light
           />
           <Button
             onClick={onSave}
@@ -102,7 +103,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           </Button>
         </Stack>
       </SecondaryAppBarComponent>
-    )
+    );
   },
 )
 BesignerAppBarComponent.displayName = 'BesignerAppBarComponent'

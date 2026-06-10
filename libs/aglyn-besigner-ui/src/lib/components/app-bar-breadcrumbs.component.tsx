@@ -302,17 +302,18 @@ export const AppBarBreadcrumbsComponent = forwardRef<
       <MuiToolbar variant="dense" sx={{ px: { xs: 0, sm: 0 } }}>
         <Stack
           direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          width={1}
           spacing={1}
-        >
+          sx={{
+            alignItems: "center",
+            justifyContent: "space-between",
+            width: 1
+          }}>
           <Breadcrumbs />
           {children}
         </Stack>
       </MuiToolbar>
     </MuiAppBar>
-  )
+  );
 })
 
 AppBarBreadcrumbsComponent.displayName = 'AppBarBreadcrumbsComponent'

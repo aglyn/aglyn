@@ -55,14 +55,15 @@ export const NodeCard = observer(
     return (
       <StyledCard ref={ref} variant="outlined" {...rest}>
         <Stack
-          height={1}
-          minHeight={100}
-          alignItems="center"
-          justifyContent="space-evenly"
-          textAlign="center"
-          p={0.25}
           spacing={0.5}
-        >
+          sx={{
+            height: 1,
+            minHeight: 100,
+            alignItems: "center",
+            justifyContent: "space-evenly",
+            textAlign: "center",
+            p: 0.25
+          }}>
           <ListItemAvatar
             sx={{
               display: 'flex',
@@ -79,10 +80,14 @@ export const NodeCard = observer(
           </ListItemAvatar>
           <div>
             <ListItemText
-              primaryTypographyProps={{
-                fontWeight: 'fontWeightMedium',
-                lineHeight: 'normal',
-                fontSize: 'subtitle2.fontSize',
+              slotProps={{
+                primary: {
+                  sx: {
+                    fontWeight: 'fontWeightMedium',
+                    lineHeight: 'normal',
+                    fontSize: 'subtitle2.fontSize',
+                  },
+                },
               }}
             >
               {label}
@@ -90,7 +95,7 @@ export const NodeCard = observer(
           </div>
         </Stack>
       </StyledCard>
-    )
+    );
   }),
 )
 NodeCard.displayName = 'NodeCard'

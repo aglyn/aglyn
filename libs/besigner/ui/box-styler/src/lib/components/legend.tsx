@@ -30,8 +30,6 @@ export const LegendItem = (props: LegendItemProps) => {
   return (
     <Stack
       direction="row"
-      alignItems="center"
-      justifyContent="start"
       className={clsx(
         classKeys.legendItem,
         { [classKeys[item]]: Boolean(classKeys[item]) },
@@ -39,11 +37,14 @@ export const LegendItem = (props: LegendItemProps) => {
       )}
       spacing={1}
       {...rest}
-    >
+      sx={[{
+        alignItems: "center",
+        justifyContent: "start"
+      }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
       <div className={classKeys.legendSwatch} />
       <div className={classKeys.legendLabel}>{item}</div>
     </Stack>
-  )
+  );
 }
 
 export const Legend = styled(Stack)(({ theme }) => {

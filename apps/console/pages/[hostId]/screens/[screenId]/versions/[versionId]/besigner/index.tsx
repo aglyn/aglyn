@@ -308,7 +308,11 @@ function BesignerPage(props) {
         <NextPageTitle screen={'Besigner'} />
 
         {error || notFound ? (
-          <Stack alignItems="center" justifyContent="center">
+          <Stack
+            sx={{
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
             <Typography>{'Not found'}</Typography>
           </Stack>
         ) : status === 'loading' ? (
@@ -348,7 +352,7 @@ function BesignerPage(props) {
         />
       )}
     </>
-  )
+  );
 }
 
 BesignerPage.displayName = 'Page:Besigner'

@@ -146,25 +146,29 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       >
         <Stack
           direction="row"
-          alignItems="stretch"
-          justifyContent="space-between"
           id="aglyn:besigner-main"
           component="main"
-          flexGrow={1}
           spacing={0}
-          sx={{ overflow: 'hidden', zIndex: 0 }}
-        >
+          sx={{
+            alignItems: "stretch",
+            justifyContent: "space-between",
+            flexGrow: 1,
+            overflow: 'hidden',
+            zIndex: 0
+          }}>
           <PanelLeftComponent panel={'panelLeft'} />
           <Stack
             direction="column"
-            alignItems="stretch"
-            justifyContent="space-between"
             id="aglyn:besigner-viewport"
             component="main"
-            flexGrow={1}
             spacing={0}
-            sx={{ overflow: 'hidden', zIndex: 0 }}
-          >
+            sx={{
+              alignItems: "stretch",
+              justifyContent: "space-between",
+              flexGrow: 1,
+              overflow: 'hidden',
+              zIndex: 0
+            }}>
             {children}
             <ViewportZoomControls
               onZoomReset={handleZoomReset}
@@ -176,7 +180,7 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
           <PanelLeftComponent panel={'panelRight'} />
         </Stack>
       </WorkspaceEditor>
-    )
+    );
   },
 )
 

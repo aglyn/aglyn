@@ -19,7 +19,7 @@
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
-import MuiGrid, { type GridProps as MuiGridProps } from '@mui/material/Grid'
+import { Grid as MuiGrid, type GridProps as MuiGridProps } from '@mui/material'
 import {
   type ComponentType,
   type ElementType,
@@ -56,7 +56,6 @@ export function withGridItem<P>(
       return (
         <MuiGrid
           ref={ref}
-          item
           sx={mergeSxProps({ position: 'relative' }, sx)}
           {...gridProps}
         >

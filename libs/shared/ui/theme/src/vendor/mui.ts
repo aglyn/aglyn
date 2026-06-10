@@ -16,11 +16,8 @@
  */
 
 import type { Theme as MuiTheme } from '@mui/material/styles'
-// eslint-disable-next-line no-restricted-imports
-import type { CSSProperties } from '@mui/material/styles/createMixins'
+import type { CSSProperties, Shadows } from '@mui/material/styles'
 // import type { ExtraColorOptions } from '@mui/material/styles/createPalette'
-// eslint-disable-next-line no-restricted-imports
-import type { Shadows } from '@mui/material/styles/shadows'
 // import type { WithStyles } from '@mui/styles'
 // import type { ClassKeyInferable } from '@mui/styles/withStyles'
 import type { ColorPropOverrides, IActionStates } from '../lib/theme.types'
@@ -63,12 +60,12 @@ declare module '@mui/material/IconButton' {
 declare module '@mui/material/Tabs' {
   interface TabsPropsIndicatorColorOverrides extends ColorPropOverrides {}
 }
-declare module '@mui/system/createTheme/shape' {
+declare module '@mui/system' {
   interface Shape {
     appIconBorderRadius: number | string
   }
 }
-declare module '@mui/material/styles/createPalette' {
+declare module '@mui/material/styles' {
   type ExtraColor = PaletteColor
   type ExtraColorOptions = PaletteColorOptions
 
@@ -83,14 +80,12 @@ declare module '@mui/material/styles/createPalette' {
     tertiary: ExtraColor
     surface: ExtraColor
   }
-}
-declare module '@mui/material/styles/zIndex' {
+
   interface ZIndex {
     max: number
     min: number
   }
-}
-declare module '@mui/material/styles/createMixins' {
+
   interface Mixins {
     menuArrow: CSSProperties
   }
@@ -270,24 +265,18 @@ export {
   getInitColorSchemeScript,
 } from '@mui/material/styles'
 
-// eslint-disable-next-line no-restricted-imports
 export {
   type ColorPartial,
   type CommonColors,
   type TypeBackground,
   type TypeText,
-} from '@mui/material/styles/createPalette'
-
-// eslint-disable-next-line no-restricted-imports
-export { type TypographyOptions } from '@mui/material/styles/createTypography'
-
-// eslint-disable-next-line no-restricted-imports
-export { type Shadows } from '@mui/material/styles/shadows'
+  type TypographyOptions,
+  type Shadows,
+} from '@mui/material/styles'
 
 // export { type ClassKeyInferable, type CreateCSSProperties } from '@mui/styles/withStyles'
 
-// eslint-disable-next-line no-restricted-imports
-export { type Shape } from '@mui/system/createTheme/shape'
+export { type Shape } from '@mui/system'
 
 export {
   type BaseCreateCSSProperties,

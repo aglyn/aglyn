@@ -29,37 +29,40 @@ export const ColorGrid = forwardRef<any, ColorGridProps>((props, ref) => {
     <Stack
       ref={ref}
       direction="row"
-      alignItems="stretch"
-      justifyContent="flex-start"
       spacing={0}
       {...rest}
-    >
+      sx={[{
+        alignItems: "stretch",
+        justifyContent: "flex-start"
+      }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
       {materialPalettes.map(({ id, shades }) => (
         <Stack
           key={id}
           direction="column"
-          alignItems="center"
-          justifyContent="flex-start"
           spacing={0}
           {...rest}
-        >
+          sx={[{
+            alignItems: "center",
+            justifyContent: "flex-start"
+          }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
           {shades.map(([shade, color]) => (
             <Stack
               key={shade}
               title={`${id}/${shade}/${color}`}
               direction="column"
-              alignItems="center"
-              justifyContent="flex-start"
               spacing={0}
               {...rest}
-            >
+              sx={[{
+                alignItems: "center",
+                justifyContent: "flex-start"
+              }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
               <ColorSwatch color={color} />
             </Stack>
           ))}
         </Stack>
       ))}
     </Stack>
-  )
+  );
 })
 ColorGrid.displayName = 'ColorGrid'
 ColorGrid.aglyn = true

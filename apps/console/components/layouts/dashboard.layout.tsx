@@ -37,11 +37,12 @@ const defaultTabBarTitle = (
   <Stack
     direction="row"
     spacing={{ sm: 0.15, md: 0.5 }}
-    alignItems="center"
-    typography={'subtitle2'}
-    lineHeight={'normal'}
-    sx={{ color: 'tertiary.main' }}
-  >
+    sx={{
+      alignItems: "center",
+      typography: 'subtitle2',
+      lineHeight: 'normal',
+      color: 'tertiary.main'
+    }}>
     <span>{'Secure'}</span>
     <MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} fontSize={'small'} />
   </Stack>

@@ -82,11 +82,12 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
         <Grid
           container
           direction="row"
-          justifyContent="space-between"
-          alignItems="center"
           spacing={2}
-        >
-          <Grid item>
+          sx={{
+            justifyContent: "space-between",
+            alignItems: "center"
+          }}>
+          <Grid>
             <Stack>
               <Typography
                 component="h1"
@@ -146,12 +147,12 @@ export function DashboardHeaderComponent(props: DashboardHeaderProps) {
             </Stack>
           </Grid>
 
-          {headerRight && <Grid item>{headerRight}</Grid>}
+          {headerRight && <Grid>{headerRight}</Grid>}
         </Grid>
         {children}
       </Container>
     </BackgroundImageComponent>
-  )
+  );
 }
 DashboardHeaderComponent.displayName = 'DashboardHeaderComponent'
 DashboardHeaderComponent.aglyn = true

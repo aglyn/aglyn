@@ -145,7 +145,7 @@ function applyMixins<T extends MixableClass<any>, Ts extends MixableClass<any>>(
 }
 
 const dependencyManager = (BaseClass) =>
-  class extends BaseClass implements IAglynDependencyManager {
+  (class extends BaseClass implements IAglynDependencyManager {
     readonly #dependencies: AglynDependencyMap = {
       statusByDependencyId: {},
       dependentsByDependencyId: {},
@@ -438,7 +438,7 @@ const dependencyManager = (BaseClass) =>
     public removeDependency(id: AglynDependencyUid): this {
       return this.#handleRemovingDependencyAndDependents(id)
     }
-  }
+  })
 
 function AglynDependencyManager<Instance>(
   Constructor: MixableClass<Instance>,
