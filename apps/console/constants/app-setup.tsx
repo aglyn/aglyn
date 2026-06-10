@@ -116,7 +116,7 @@ try {
         },
       },
     })
-    console.log('set global Aglyn', _Aglyn, globalThis)
+    console.log('set global Aglyn', _Aglyn)
     if (!IS_PRODUCTION) {
       // @ts-ignore
       window.Aglyn = Aglyn
