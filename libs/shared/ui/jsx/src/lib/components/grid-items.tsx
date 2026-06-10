@@ -30,8 +30,8 @@ export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
 
   return (
     <Grid ref={ref} container {...rest}>
-      {items.map((item, key) => (
-        <ItemComponent key={item?.key ?? item?.id ?? key} {...item} />
+      {items.map(({ key: itemKey, id, ...item }, index) => (
+        <ItemComponent key={itemKey ?? id ?? index} {...item} />
       ))}
     </Grid>
   )

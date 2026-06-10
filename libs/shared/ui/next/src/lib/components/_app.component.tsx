@@ -100,11 +100,11 @@ export function _AppComponent<Props, InitialProps>(
     <EmotionCacheProvider emotionCache={emotionCache}>
       <NextPageTitleProvider>
         <Head>
-          {meta?.map((props, i) => (
-            <meta {...props} key={props.id ?? props.key ?? i} />
+          {meta?.map(({ key: metaKey, id: metaId, ...metaProps }, i) => (
+            <meta key={metaKey ?? metaId ?? i} {...metaProps} />
           ))}
-          {link?.map((props, i) => (
-            <link {...props} key={props.id ?? props.key ?? i} />
+          {link?.map(({ key: linkKey, id: linkId, ...linkProps }, i) => (
+            <link key={linkKey ?? linkId ?? i} {...linkProps} />
           ))}
           {headChildren}
         </Head>

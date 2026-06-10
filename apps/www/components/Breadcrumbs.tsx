@@ -113,10 +113,10 @@ export const Breadcrumbs = forwardRef<any, BreadcrumbsProps>(
 
     return (
       <StyledBreadcrumbs ref={ref} aria-label="breadcrumb" {...rest}>
-        {items.map(({ ...item }, key, arr) => (
+        {items.map(({ key: itemKey, id, ...item }, index, arr) => (
           <MemoedItem
-            key={item.key ?? item.id ?? key}
-            isLast={_isLength(key, arr.length - 1)}
+            key={itemKey ?? id ?? index}
+            isLast={_isLength(index, arr.length - 1)}
             {...item}
           />
         ))}

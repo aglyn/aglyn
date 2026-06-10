@@ -200,9 +200,9 @@ function ScreenDetails(props) {
                   >
                     <List dense disablePadding>
                       {details.map(
-                        ({ primary, secondary, icon, ...item }, key) => (
+                        ({ primary, secondary, icon, key: itemKey, id, ...item }, index) => (
                           <ListItem
-                            key={item['key'] ?? item['id'] ?? key}
+                            key={itemKey ?? id ?? index}
                             alignItems="flex-start"
                             dense
                           >
