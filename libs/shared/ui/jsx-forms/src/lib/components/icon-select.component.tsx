@@ -77,16 +77,18 @@ const StyledCollapse = styled(Collapse, {
 
 const GridListWrapper = styled('div', {
   name: 'AglynIconSelectListWrapper',
-})(({ theme }) => ({
-  height: '100%',
-  marginTop: theme.spacing(1),
-  border: `1px solid ${theme.palette.divider}`,
-  borderRadius: theme.shape.borderRadius,
-  [`& .${classKeys.gridList}`]: {
-    padding: theme.spacing(1),
-    // overflowX: 'hidden',
-  },
-}))
+})(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    height: '100%',
+    marginTop: theme.spacing(1),
+    border: `1px solid ${tv.palette.divider}`,
+    borderRadius: theme.shape.borderRadius,
+    [`& .${classKeys.gridList}`]: {
+      padding: theme.spacing(1),
+    },
+  }
+})
 
 export interface IconSelectProps extends HTMLAttributes<HTMLDivElement> {
   initialValue?: string

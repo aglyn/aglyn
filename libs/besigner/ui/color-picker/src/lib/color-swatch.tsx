@@ -28,15 +28,18 @@ const Swatch = styled('div', {
   shouldForwardProp(propName) {
     return propName !== 'color'
   },
-})<SwatchProps>(({ theme, color }) => ({
-  backgroundColor: color || '#FFF',
-  height: 20,
-  width: 20,
-  overflow: 'hidden',
-  border: `1px inset`,
-  borderStyle: 'solid',
-  borderColor: theme.palette.divider,
-}))
+})<SwatchProps>(({ theme, color }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    backgroundColor: color || '#FFF',
+    height: 20,
+    width: 20,
+    overflow: 'hidden',
+    border: `1px inset`,
+    borderStyle: 'solid',
+    borderColor: tv.palette.divider,
+  }
+})
 
 export interface ColorSwatchProps extends ComponentProps<typeof Swatch> {}
 

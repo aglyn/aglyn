@@ -48,6 +48,7 @@ export const LegendItem = (props: LegendItemProps) => {
 }
 
 export const Legend = styled(Stack)(({ theme }) => {
+  const tv = (theme as any).vars || theme
   return {
     [`.${classKeys.legendSwatch}`]: {
       borderStyle: 'solid',
@@ -59,23 +60,23 @@ export const Legend = styled(Stack)(({ theme }) => {
     [`.${classKeys.margin}`]: {
       [`.${classKeys.legendSwatch}`]: {
         borderStyle: 'dashed',
-        borderColor: theme.palette.warning.dark,
+        borderColor: tv.palette.warning.dark,
       },
     },
     [`.${classKeys.padding}`]: {
       [`.${classKeys.legendSwatch}`]: {
         borderStyle: 'dashed',
-        borderColor: theme.palette.success.dark,
+        borderColor: tv.palette.success.dark,
       },
     },
     [`.${classKeys.contents}`]: {
       [`.${classKeys.legendSwatch}`]: {
         borderStyle: 'solid',
-        borderColor: theme.palette.info.dark,
+        borderColor: tv.palette.info.dark,
       },
     },
     [`.${classKeys.legendLabel}`]: {
-      color: theme.palette.text.secondary,
+      color: tv.palette.text.secondary,
       textTransform: 'capitalize',
     },
   }
