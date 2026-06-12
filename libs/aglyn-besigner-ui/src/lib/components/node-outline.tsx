@@ -36,51 +36,44 @@ const classKeys = generateComponentClassKeys('NodeOutline', [
 const NodeOutlineRoot = styled('div', {
   name: 'NodeOutline',
   slot: 'Root',
-})(({ theme }) => ({
-  pointerEvents: 'none',
-  position: 'absolute',
-  left: 0,
-  top: 0,
-  right: 0,
-  bottom: 0,
-  outlineColor: 'transparent',
-  outlineOffset: 1,
-  outlineWidth: 1,
-  outlineStyle: 'dashed',
-  content: '""',
-  // transition: theme.transitions.create([
-  //   'outline-width',
-  //   'outline-offset',
-  //   'outline-style',
-  //   'outline-color',
-  //   'background-color',
-  // ], {
-  //   duration: theme.transitions.duration.standard,
-  //   easing: theme.transitions.easing.easeInOut,
-  // }),
-
-  [`&.${classKeys.selectedSelf}`]: {
-    outlineWidth: 2,
-    outlineStyle: 'solid',
-    outlineColor: theme.palette.tertiary.main,
-  },
-  [`&.${classKeys.hoveringSelf}`]: {
-    outlineColor: theme.palette.secondary.main,
-    backgroundColor: `rgba(${(theme as any).vars.palette.secondary.mainChannel} / 0.12)`,
-  },
-  [`&.${classKeys.draggingSelf}`]: {
+})(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    pointerEvents: 'none',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
     outlineColor: 'transparent',
-    backgroundColor: `rgba(${(theme as any).vars.palette.secondary.lightChannel} / 0.12)`,
-  },
-  [`&.${classKeys.draggingOver}`]: {
-    outlineColor: theme.palette.tertiary.main,
-    backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.darkChannel} / 0.12)`,
-  },
-  [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
-    outlineColor: theme.palette.grey['500'],
-    backgroundColor: 'rgba(158 158 158 / 0.64)',
-  },
-}))
+    outlineOffset: 1,
+    outlineWidth: 1,
+    outlineStyle: 'dashed',
+    content: '""',
+
+    [`&.${classKeys.selectedSelf}`]: {
+      outlineWidth: 2,
+      outlineStyle: 'solid',
+      outlineColor: tv.palette.tertiary.main,
+    },
+    [`&.${classKeys.hoveringSelf}`]: {
+      outlineColor: tv.palette.secondary.main,
+      backgroundColor: `rgba(${tv.palette.secondary.mainChannel} / 0.12)`,
+    },
+    [`&.${classKeys.draggingSelf}`]: {
+      outlineColor: 'transparent',
+      backgroundColor: `rgba(${tv.palette.secondary.lightChannel} / 0.12)`,
+    },
+    [`&.${classKeys.draggingOver}`]: {
+      outlineColor: tv.palette.tertiary.main,
+      backgroundColor: `rgba(${tv.palette.tertiary.darkChannel} / 0.12)`,
+    },
+    [`&.${classKeys.draggingOver}.${classKeys.draggingSelf}`]: {
+      outlineColor: tv.palette.grey['500'],
+      backgroundColor: 'rgba(158 158 158 / 0.64)',
+    },
+  }
+})
 
 export interface NodeOutlineProps
   extends ComponentProps<typeof NodeOutlineRoot> {

@@ -45,119 +45,90 @@ const breadcrumbItemClassKey = generateComponentClassKeys('BreadcrumbItem', [
   'hovered',
 ])
 
-const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => ({
-  lineHeight: 1,
-  fontSize: 11,
-  overflowX: 'auto',
+const StyledBreadcrumbs = styled(MuiBreadcrumbs)(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    lineHeight: 1,
+    fontSize: 11,
+    overflowX: 'auto',
 
-  [`.${breadcrumbsClasses.ol}`]: {
-    flexWrap: 'nowrap',
-    whiteSpace: 'nowrap',
-  },
-  [`.${breadcrumbsClasses.separator}`]: {
-    margin: 0,
-    padding: 0,
-    // width: '0px',
-    // height: '100%',
-    // background: 'transparent',
-    // borderLeft: `0.45em solid ${theme.palette.divider}`,
-    // borderBottom: '1em solid transparent',
-    // borderTop: '1em solid transparent',
-  },
-  [`.${breadcrumbsClasses.li}`]: {
-    marginLeft: theme.spacing(-0.5),
-    [`.${breadcrumbItemClassKey.root}`]: {
-      fontSize: 'inherit',
-      padding: theme.spacing(0.75),
-      paddingLeft: theme.spacing(1.75),
-      paddingRight: theme.spacing(1.75),
+    [`.${breadcrumbsClasses.ol}`]: {
+      flexWrap: 'nowrap',
+      whiteSpace: 'nowrap',
+    },
+    [`.${breadcrumbsClasses.separator}`]: {
+      margin: 0,
+      padding: 0,
+    },
+    [`.${breadcrumbsClasses.li}`]: {
       marginLeft: theme.spacing(-0.5),
-      clipPath: `polygon(calc(100% - ${theme.spacing(
-        1,
-      )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
-        1,
-      )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
+      [`.${breadcrumbItemClassKey.root}`]: {
+        fontSize: 'inherit',
+        padding: theme.spacing(0.75),
+        paddingLeft: theme.spacing(1.75),
+        paddingRight: theme.spacing(1.75),
+        marginLeft: theme.spacing(-0.5),
+        clipPath: `polygon(calc(100% - ${theme.spacing(
+          1,
+        )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
+          1,
+        )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
 
-      color: theme.palette.text.primary,
-      background: alpha(
-        theme.palette.primary.light,
-        theme.palette.action.hoverOpacity,
-      ),
-      [`:hover, .${breadcrumbItemClassKey.hovered}`]: {
-        background: alpha(
-          theme.palette.secondary.light,
-          theme.palette.action.activatedOpacity,
-        ),
+        color: tv.palette.text.primary,
+        background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.hoverOpacity})`,
+        [`:hover, .${breadcrumbItemClassKey.hovered}`]: {
+          background: `rgba(${tv.palette.secondary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
+        },
+        [`:focus`]: {
+          background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.focusOpacity})`,
+        },
+        [`:active`]: {
+          background: `rgba(${tv.palette.primary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
+        },
       },
-      [`:focus`]: {
-        background: alpha(
-          theme.palette.primary.light,
-          theme.palette.action.focusOpacity,
-        ),
+
+      [':before']: {
+        content: '""',
+        position: 'absolute',
+        top: 0,
+        height: '100%',
+        width: `calc(${theme.spacing(1)} + 1px)`,
+        backgroundColor: tv.palette.divider,
+        marginLeft: theme.spacing(-0.5),
+        clipPath: `polygon(calc(100% - ${theme.spacing(
+          1,
+        )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
+          1,
+        )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
       },
-      [`:active`]: {
-        background: alpha(
-          theme.palette.primary.light,
-          theme.palette.action.activatedOpacity,
-        ),
+
+      [`:first-of-type .${breadcrumbItemClassKey.root}`]: {
+        clipPath: `polygon(calc(100% - ${theme.spacing(
+          1,
+        )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
+          1,
+        )}) 100%, 0% 100%, 0% 0%, 0% 0%)`,
+      },
+
+      [[
+        `:last-of-type .${breadcrumbItemClassKey.root}`,
+        `.${breadcrumbItemClassKey.root} .${breadcrumbItemClassKey.lastItem}`,
+      ].join()]: {
+        color: tv.palette.text.primary,
+        background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.selectedOpacity})`,
+        [`:hover, ${breadcrumbItemClassKey.hovered}`]: {
+          background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.activatedOpacity})`,
+        },
+        [`:focus, .Mui-focusVisible`]: {
+          background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.focusOpacity})`,
+        },
+        [`:active`]: {
+          background: `rgba(${tv.palette.tertiary.lightChannel} / ${theme.palette.action.hoverOpacity})`,
+        },
       },
     },
-
-    [':before']: {
-      content: '""',
-      position: 'absolute',
-      top: 0,
-      height: '100%',
-      width: `calc(${theme.spacing(1)} + 1px)`,
-      backgroundColor: theme.palette.divider,
-      marginLeft: theme.spacing(-0.5),
-      clipPath: `polygon(calc(100% - ${theme.spacing(
-        1,
-      )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
-        1,
-      )}) 100%, 0% 100%, ${theme.spacing(1)} 50%, 0% 0%)`,
-    },
-
-    [`:first-of-type .${breadcrumbItemClassKey.root}`]: {
-      // paddingLeft: theme.spacing(1),
-      clipPath: `polygon(calc(100% - ${theme.spacing(
-        1,
-      )}) 0px, 100% 50%, calc(100% - ${theme.spacing(
-        1,
-      )}) 100%, 0% 100%, 0% 0%, 0% 0%)`,
-    },
-
-    [[
-      `:last-of-type .${breadcrumbItemClassKey.root}`,
-      `.${breadcrumbItemClassKey.root} .${breadcrumbItemClassKey.lastItem}`,
-    ].join()]: {
-      // cursor: 'initial',
-      color: theme.palette.text.primary,
-      background: alpha(
-        theme.palette.tertiary.light,
-        theme.palette.action.selectedOpacity,
-      ),
-      [`:hover, ${breadcrumbItemClassKey.hovered}`]: {
-        background: alpha(
-          theme.palette.tertiary.light,
-          theme.palette.action.activatedOpacity,
-        ),
-      },
-      [`:focus, .Mui-focusVisible`]: {
-        background: alpha(
-          theme.palette.tertiary.light,
-          theme.palette.action.focusOpacity,
-        ),
-      },
-      [`:active`]: {
-        background: alpha(
-          theme.palette.tertiary.light,
-          theme.palette.action.hoverOpacity,
-        ),
-      },
-    },
-  },
-}))
+  }
+})
 
 export interface BreadcrumbItemProps
   extends Partial<

@@ -75,15 +75,18 @@ const SiteShadowDom = styled(MuiShadowDom.div, {
 SiteShadowDom.displayName = 'SiteShadowDom'
 const FramePaper = styled('div', {
   name: 'AglynFramePaper',
-})<SiteShadowDomProps>(({ theme }) => ({
-  backgroundColor: theme.palette.background.default,
-  height: '100%',
-  width: '100%',
-  [`> [data-aglyn="leaf\\:_@_"]`]: {
-    minHeight: '100%',
+})<SiteShadowDomProps>(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    backgroundColor: tv.palette.background.default,
+    height: '100%',
     width: '100%',
-  },
-}))
+    [`> [data-aglyn="leaf\\:_@_"]`]: {
+      minHeight: '100%',
+      width: '100%',
+    },
+  }
+})
 FramePaper.displayName = 'FramePaper'
 
 const ViewportGlobalStyles = (
