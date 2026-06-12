@@ -111,11 +111,8 @@ const colorScheme = {
   },
   dark: {
     primary: {
-      // Lighter steel-blue for dark mode — the light-mode value (#404C5C) is
-      // near-black on dark surfaces and cannot serve as a visible UI accent.
-      // This value has ~4.5:1 contrast on background.paper (#2a3440).
-      main: `#7EB5D1`,
-      contrastText: '#000000',
+      main: `#2C3540`,
+      contrastText: '#FFFFFF',
     },
     secondary: {
       main: '#00b0ff',
