@@ -39,16 +39,19 @@ const classKeys = generateComponentClassKeys('AglynNavigationDrawer', [
   'bottomAppBar',
 ])
 
-const StyledAppBar = styled<any>(AppBar)<AppBarProps>(({ theme }) => ({
-  borderBottomWidth: 1,
-  borderBottomStyle: 'solid',
-  borderBottomColor: theme.palette.divider,
-  zIndex: theme.zIndex.appBar,
-  transition: theme.transitions.create(['background-image', 'box-shadow'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.standard,
-  }),
-}))
+const StyledAppBar = styled<any>(AppBar)<AppBarProps>(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: tv.palette.divider,
+    zIndex: theme.zIndex.appBar,
+    transition: theme.transitions.create(['background-image', 'box-shadow'], {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.standard,
+    }),
+  }
+})
 
 export interface NavigationAppBarProps extends AppBarProps {
   scrollView?: Node | Window

@@ -38,7 +38,7 @@ const SplashScreen = forwardRef<any, SplashScreenProps>((props, ref) => {
       color: 'text.primary',
 
       '& .MuiBackdrop-root': {
-        backgroundColor: (theme) => theme.palette.background.paper,
+        backgroundColor: (theme) => (theme as any).vars?.palette.background.paper ?? theme.palette.background.paper,
       },
     },
     sx,

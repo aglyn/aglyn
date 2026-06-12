@@ -24,45 +24,46 @@ import {
   Stack,
   styled,
 } from '@mui/material'
-// eslint-disable-next-line @nx/enforce-module-boundaries
-import { alpha } from '@mui/material/styles'
 import { forwardRef, Fragment } from 'react'
 import { AglynLogoFull } from '../const/svg-icons'
 import { LoadingContext } from '../contexts/loading.context'
 import LoadingTextComponent from './loading-text.component'
 
-const LoadingOverlayModal = styled(Modal)(({ theme }) => ({
-  zIndex: theme.zIndex.max,
-  color: theme.palette.text.primary,
+const LoadingOverlayModal = styled(Modal)(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    zIndex: theme.zIndex.max,
+    color: tv.palette.text.primary,
 
-  ['& .MuiBackdrop-root']: {
-    backdropFilter: 'blur(5px)',
-    backgroundColor: alpha(theme.palette.background.paper, 0.48),
-  },
-  ['& .wrapper']: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    height: '100%',
-    width: '100%',
-    flexDirection: 'column',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ['& .progress-bar-top']: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    backgroundColor: alpha(theme.palette.primary.main, 0.86),
-    width: '100%',
-  },
-  ['& .status-text']: {
-    fontWeight: theme.typography.fontWeightBold,
-  },
-}))
+    ['& .MuiBackdrop-root']: {
+      backdropFilter: 'blur(5px)',
+      backgroundColor: `rgba(${tv.palette.background.paperChannel} / 0.48)`,
+    },
+    ['& .wrapper']: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      height: '100%',
+      width: '100%',
+      flexDirection: 'column',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    ['& .progress-bar-top']: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      backgroundColor: `rgba(${tv.palette.primary.mainChannel} / 0.86)`,
+      width: '100%',
+    },
+    ['& .status-text']: {
+      fontWeight: theme.typography.fontWeightBold,
+    },
+  }
+})
 
 export interface LoadingModalProps extends Partial<ModalProps> {}
 
