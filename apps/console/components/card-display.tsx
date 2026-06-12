@@ -38,53 +38,55 @@ const classKeys = generateComponentClassKeys('CardDisplay', [
   'actionsBordered',
 ])
 
-const Card = styled(MuiCard )(({ theme }) => ({
-  '.MuiCardContent-root': {
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: 'solid',
-    borderColor: theme.palette.divider,
-    ':last-of-type': {
-      paddingBottom: 'initial',
-    },
-  },
-  '.MuiCardHeader-root': {
-    fontWeight: theme.typography.fontWeightBold,
-  },
-  [`&.${classKeys.contentGutterX}`]: {
+const Card = styled(MuiCard)(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
     '.MuiCardContent-root': {
-      paddingLeft: theme.spacing(2),
-      paddingRight: theme.spacing(2),
-      [theme.breakpoints.up('md')]: {
-        paddingLeft: theme.spacing(2),
-        paddingRight: theme.spacing(2),
+      padding: 0,
+      borderWidth: 0,
+      borderStyle: 'solid',
+      borderColor: tv.palette.divider,
+      ':last-of-type': {
+        paddingBottom: 'initial',
       },
     },
-  },
-  [`&.${classKeys.contentGutterY}`]: {
-    '.MuiCardContent-root': {
-      paddingTop: theme.spacing(2),
-      paddingBottom: theme.spacing(2),
-      // '&:last-child': {paddingBottom: theme.spacing(3)},
-    },
-  },
-  [`&.${classKeys.headerCentered}`]: {
     '.MuiCardHeader-root': {
-      marginBottom: theme.spacing(-1),
-      alignSelf: 'center',
+      fontWeight: theme.typography.fontWeightBold,
     },
-  },
-  [`&.${classKeys.headerBordered}`]: {
-    '.MuiCardContent-root': {
-      borderTopWidth: 1,
+    [`&.${classKeys.contentGutterX}`]: {
+      '.MuiCardContent-root': {
+        paddingLeft: theme.spacing(2),
+        paddingRight: theme.spacing(2),
+        [theme.breakpoints.up('md')]: {
+          paddingLeft: theme.spacing(2),
+          paddingRight: theme.spacing(2),
+        },
+      },
     },
-  },
-  [`&.${classKeys.actionsBordered}`]: {
-    '.MuiCardContent-root': {
-      borderBottomWidth: 1,
+    [`&.${classKeys.contentGutterY}`]: {
+      '.MuiCardContent-root': {
+        paddingTop: theme.spacing(2),
+        paddingBottom: theme.spacing(2),
+      },
     },
-  },
-}))
+    [`&.${classKeys.headerCentered}`]: {
+      '.MuiCardHeader-root': {
+        marginBottom: theme.spacing(-1),
+        alignSelf: 'center',
+      },
+    },
+    [`&.${classKeys.headerBordered}`]: {
+      '.MuiCardContent-root': {
+        borderTopWidth: 1,
+      },
+    },
+    [`&.${classKeys.actionsBordered}`]: {
+      '.MuiCardContent-root': {
+        borderBottomWidth: 1,
+      },
+    },
+  }
+})
 
 export interface CardDisplayProps extends CardProps {
   contentGutterX?: boolean
