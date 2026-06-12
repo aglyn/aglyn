@@ -33,11 +33,14 @@ import { forwardRef } from 'react'
 
 const AppBarPrimary = styled(AppBar, {
   name: 'AglynAppBarPrimary',
-})(({ theme }) => ({
-  top: 0,
-  // backgroundColor: theme.palette.background.paper,
-  borderBottom: `1px solid ${theme.palette.divider}`,
-}))
+})(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    top: 0,
+    // backgroundColor: theme.palette.background.paper,
+    borderBottom: `1px solid ${tv.palette.divider}`,
+  }
+})
 
 export interface AppBarPrimaryComponentProps extends Partial<AppBarProps> {}
 

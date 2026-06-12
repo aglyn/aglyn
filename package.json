@@ -52,7 +52,8 @@
     "prepare": "husky install",
     "readme:table-of-contents": "markdown-toc -i ./README.md",
     "vercel:env-pull": "vercel env pull",
-    "profile:nx-run-console:serve:development": "cargo instruments -t time --bin nx run console:serve:development profile"
+    "profile:nx-run-console:serve:development": "cargo instruments -t time --bin nx run console:serve:development profile",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
@@ -243,6 +244,7 @@
     "jsdom": "22.1.0",
     "markdown-toc": "^1.2.0",
     "nx": "22.7.5",
+    "patch-package": "^8.0.1",
     "prettier": "3.1.0",
     "react-refresh": "^0.14.0",
     "style-loader": "^3.3.3",

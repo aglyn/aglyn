@@ -1,0 +1,24 @@
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js b/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js
+index 590c657..7691712 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js
+@@ -22,7 +22,6 @@ var FormFieldGrid = function FormFieldGrid(_ref) {
+ 
+   return /*#__PURE__*/React.createElement(StyledGrid, _extends({
+     xs: 12,
+-    item: true,
+     className: clsx(classes.grid, className)
+   }, props), children);
+ };
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js b/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js
+index 13f0e9c..bf72322 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js
+@@ -38,7 +38,6 @@ var FormFieldGrid = function FormFieldGrid(_ref) {
+       props = (0, _objectWithoutProperties2["default"])(_ref, _excluded);
+   return /*#__PURE__*/_react["default"].createElement(StyledGrid, (0, _extends2["default"])({
+     xs: 12,
+-    item: true,
+     className: (0, _clsx["default"])(classes.grid, className)
+   }, props), children);
+ };

@@ -255,6 +255,9 @@ export const AglynConsoleLogoFull = styled(
     shouldForwardProp: (prop) => prop !== 'variant',
   },
 )<AglynLogoProps>(({ theme, variant }) => {
+  // In CSS vars mode theme.palette.* always returns static light values;
+  // use (theme.vars || theme) so colors resolve to live CSS custom-property refs.
+  const tv = (theme as any).vars || theme
   let boundingBox: string
   let compass: string
   let textAglyn: string
@@ -286,13 +289,12 @@ export const AglynConsoleLogoFull = styled(
       textConsole = theme.palette.common.black
       break
     default:
-      boundingBox = theme.palette.secondary.main
-      compass = theme.palette.tertiary.main
-      textAglyn = theme.palette.secondary.main
-      textConsole =
-        theme.palette.mode === 'light'
-          ? theme.palette.common.black
-          : theme.palette.common.white
+      // CSS var refs — update when .dark class toggles on <html>
+      boundingBox = tv.palette.secondary.main
+      compass = tv.palette.tertiary.main
+      textAglyn = tv.palette.secondary.main
+      // text.primary: rgba(0,0,0,0.87) in light, rgba(255,255,255,0.87) in dark
+      textConsole = tv.palette.text.primary
       break
   }
 
@@ -461,30 +463,32 @@ export const AglynSvgIcon = styled(
       ),
   },
 )<AglynSvgIconProps>(
-  ({ theme, rectBgColor, a1Color, a2Color, a3Color, rounded, bordered }) => ({
-    borderRadius: !rounded ? undefined : theme.shape.appIconBorderRadius,
-    border: !bordered ? undefined : `1px solid ${theme.palette.divider}`,
-    [`& .${aglynSvgIconClassKey.rectBg}`]: {
-      fill: 'currentColor',
-      color:
-        rectBgColor ||
-        (theme.palette.mode === 'dark'
-          ? theme.palette.primary.light
-          : theme.palette.primary.main),
-    },
-    [`& .${aglynSvgIconClassKey.a1}`]: {
-      fill: 'currentColor',
-      color: a1Color || theme.palette.secondary.main,
-    },
-    [`& .${aglynSvgIconClassKey.a2}`]: {
-      fill: 'currentColor',
-      color: a2Color || theme.palette.tertiary.main,
-    },
-    [`& .${aglynSvgIconClassKey.a3}`]: {
-      fill: 'currentColor',
-      color: a3Color || theme.palette.primary.contrastText,
-    },
-  }),
+  ({ theme, rectBgColor, a1Color, a2Color, a3Color, rounded, bordered }) => {
+    // Use (theme.vars || theme) so all palette refs become CSS custom-property
+    // references that switch correctly when the color scheme changes.
+    const tv = (theme as any).vars || theme
+    return {
+      borderRadius: !rounded ? undefined : theme.shape.appIconBorderRadius,
+      border: !bordered ? undefined : `1px solid ${tv.palette.divider}`,
+      [`& .${aglynSvgIconClassKey.rectBg}`]: {
+        fill: 'currentColor',
+        // primary.main CSS var: #404C5C (light) / #2C3540 (dark) — both respond to mode
+        color: rectBgColor || tv.palette.primary.main,
+      },
+      [`& .${aglynSvgIconClassKey.a1}`]: {
+        fill: 'currentColor',
+        color: a1Color || tv.palette.secondary.main,
+      },
+      [`& .${aglynSvgIconClassKey.a2}`]: {
+        fill: 'currentColor',
+        color: a2Color || tv.palette.tertiary.main,
+      },
+      [`& .${aglynSvgIconClassKey.a3}`]: {
+        fill: 'currentColor',
+        color: a3Color || tv.palette.primary.contrastText,
+      },
+    }
+  },
 )
 AglynSvgIcon.displayName = 'AglynSvgIcon'
 AglynSvgIcon.aglyn = true

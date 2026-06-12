@@ -21,12 +21,16 @@ import type { ComponentProps } from 'react'
 import { classKeys } from '../constants'
 
 export const Box = styled('div')(({ theme }) => {
+  // In CSS vars mode theme.palette.* always returns the static light values;
+  // use (theme.vars || theme) so all palette refs become live CSS custom-property
+  // references that switch when the .dark class toggles on <html>.
+  const tv = (theme as any).vars || theme
   return {
     display: 'flex',
     flexDirection: 'column',
     borderRadius: 1,
     fontSize: '0.72rem',
-    color: theme.palette.surface.contrastText,
+    color: tv.palette.surface.contrastText,
 
     [`&.${classKeys.margin}, &.${classKeys.padding}`]: {
       flexShrink: 0.36,
@@ -50,11 +54,11 @@ export const Box = styled('div')(({ theme }) => {
       maxWidth: 168,
       borderStyle: 'solid',
       borderWidth: 1,
-      borderColor: theme.palette.info.dark,
+      borderColor: tv.palette.info.dark,
       color: theme.palette.getContrastText(
         alpha(darken(theme.palette.surface.main, 0.26), 0.12),
       ),
-      backgroundColor: alpha(darken(theme.palette.surface.main, 0.26), 0.12),
+      backgroundColor: `rgba(${tv.palette.surface.darkChannel} / 0.12)`,
 
       ':before': {
         content: '""',
@@ -64,7 +68,7 @@ export const Box = styled('div')(({ theme }) => {
         width: '0',
         height: '0.5em',
         background: 'transparent',
-        borderRight: `0.5em solid ${alpha(theme.palette.info.dark, 0.36)}`,
+        borderRight: `0.5em solid rgba(${tv.palette.info.darkChannel} / 0.36)`,
         borderBottom: '0.5em solid transparent',
         borderTop: '0.5em solid transparent',
         transform: 'rotate(45deg)',
@@ -76,21 +80,18 @@ export const Box = styled('div')(({ theme }) => {
       minWidth: 258,
       borderStyle: 'dashed',
       borderWidth: 1,
-      borderColor: theme.palette.warning.dark,
-      backgroundColor: alpha(theme.palette.surface.main, 0.96),
+      borderColor: tv.palette.warning.dark,
+      backgroundColor: `rgba(${tv.palette.surface.mainChannel} / 0.96)`,
       color: theme.palette.getContrastText(
         alpha(theme.palette.surface.main, 0.96),
       ),
 
       [`> .${classKeys.label}`]: {
-        borderColor: theme.palette.warning.dark,
-        backgroundColor: alpha(
-          emphasize(theme.palette.warning.dark, 0.36),
-          0.12,
-        ),
+        borderColor: tv.palette.warning.dark,
+        backgroundColor: `rgba(${tv.palette.warning.darkChannel} / 0.12)`,
 
         ':before': {
-          borderRightColor: alpha(theme.palette.warning.dark, 0.36),
+          borderRightColor: `rgba(${tv.palette.warning.darkChannel} / 0.36)`,
         },
       },
     },
@@ -101,28 +102,25 @@ export const Box = styled('div')(({ theme }) => {
       padding: 2,
       borderStyle: 'dashed',
       borderWidth: 1,
-      borderColor: theme.palette.success.dark,
-      backgroundColor: alpha(darken(theme.palette.surface.main, 0.12), 0.96),
+      borderColor: tv.palette.success.dark,
+      backgroundColor: `rgba(${tv.palette.surface.darkChannel} / 0.96)`,
       color: theme.palette.getContrastText(
         alpha(darken(theme.palette.surface.main, 0.12), 0.96),
       ),
       background: [
         'linear-gradient(',
         '65deg, ',
-        `${alpha(theme.palette.tertiary.main, 0.12)}, `,
-        `${alpha(theme.palette.secondary.main, 0.12)}`,
+        `rgba(${tv.palette.tertiary.mainChannel} / 0.12), `,
+        `rgba(${tv.palette.secondary.mainChannel} / 0.12)`,
         ') content-box',
       ].join(''),
 
       [`> .${classKeys.label}`]: {
-        borderColor: theme.palette.success.dark,
-        backgroundColor: alpha(
-          emphasize(theme.palette.success.dark, 0.36),
-          0.12,
-        ),
+        borderColor: tv.palette.success.dark,
+        backgroundColor: `rgba(${tv.palette.success.darkChannel} / 0.12)`,
 
         ':before': {
-          borderRightColor: alpha(theme.palette.success.dark, 0.36),
+          borderRightColor: `rgba(${tv.palette.success.darkChannel} / 0.36)`,
         },
       },
     },
@@ -136,12 +134,12 @@ export const Box = styled('div')(({ theme }) => {
       paddingRight: theme.spacing(0.5),
       paddingTop: theme.spacing(0.25),
       paddingBottom: theme.spacing(0.25),
-      borderBottom: `1px solid ${theme.palette.text.secondary}`,
-      borderRight: `1px solid ${theme.palette.text.secondary}`,
+      borderBottom: `1px solid ${tv.palette.text.secondary}`,
+      borderRight: `1px solid ${tv.palette.text.secondary}`,
       color: theme.palette.getContrastText(
         alpha(theme.palette.surface.main, 0.76),
       ),
-      backgroundColor: alpha(emphasize(theme.palette.surface.main, 0.36), 0.12),
+      backgroundColor: `rgba(${tv.palette.surface.darkChannel} / 0.12)`,
 
       ':before': {
         content: '""',
@@ -151,7 +149,7 @@ export const Box = styled('div')(({ theme }) => {
         width: '0',
         height: '0.5em',
         background: 'transparent',
-        borderRight: `0.5em solid ${alpha(theme.palette.surface.main, 0.36)}`,
+        borderRight: `0.5em solid rgba(${tv.palette.surface.mainChannel} / 0.36)`,
         borderBottom: '0.5em solid transparent',
         borderTop: '0.5em solid transparent',
         transform: 'rotate(45deg)',

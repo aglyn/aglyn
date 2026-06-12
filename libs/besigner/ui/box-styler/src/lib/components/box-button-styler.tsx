@@ -52,7 +52,12 @@ const polygon = (options: PolyType) => {
   return `polygon(${topL}, ${topR}, ${btmR}, ${btmL})`
 }
 
-const StyledWrapper = styled('div')(({ theme }) => ({
+const StyledWrapper = styled('div')(({ theme }) => {
+  // In CSS vars mode theme.palette.* always returns static light values;
+  // use (theme.vars || theme) so palette refs become live CSS custom-property
+  // references that switch when the .dark class toggles on <html>.
+  const tv = (theme as any).vars || theme
+  return {
   width: '100%',
   height: HEIGHT,
   backgroundColor: theme.palette.common.black,
@@ -63,7 +68,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
   overflow: 'hidden',
   borderStyle: 'dashed',
   borderWidth: 1,
-  borderColor: theme.palette.warning.dark,
+  borderColor: tv.palette.warning.dark,
   padding: 1,
 
   '.marginButton': {
@@ -72,7 +77,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     bgcolor: 'secondary.light',
     cursor: 'pointer',
     backfaceVisibility: 'hidden',
-    backgroundColor: alpha(theme.palette.surface.main, 0.96),
+    backgroundColor: `rgba(${tv.palette.surface.mainChannel} / 0.96)`,
     color: theme.palette.getContrastText(
       alpha(theme.palette.surface.main, 0.96),
     ),
@@ -169,14 +174,14 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     overflow: 'hidden',
     borderStyle: 'dashed',
     borderWidth: 1,
-    borderColor: theme.palette.success.dark,
+    borderColor: tv.palette.success.dark,
     boxSizing: 'border-box',
   },
 
   '.paddingButton': {
     overflow: 'hidden',
     backfaceVisibility: 'hidden',
-    backgroundColor: darken(theme.palette.surface.main, 0.12),
+    backgroundColor: `rgba(${tv.palette.surface.darkChannel} / 0.96)`,
     background: [
       'linear-gradient(',
       '65deg, ',
@@ -274,9 +279,9 @@ const StyledWrapper = styled('div')(({ theme }) => ({
   '.contents': {
     borderStyle: 'solid',
     borderWidth: 1,
-    borderColor: theme.palette.info.dark,
-    color: theme.palette.text.primary,
-    backgroundColor: theme.palette.surface.light,
+    borderColor: tv.palette.info.dark,
+    color: tv.palette.text.primary,
+    backgroundColor: tv.palette.surface.light,
     width: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334) - ${GAP * 2}px)`,
     height: `calc(${BTN_SIZE}% + (${BTN_SIZE * 2}% * 0.3333334) - ${
       GAP * 2
@@ -298,7 +303,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
       width: '0',
       height: '0.5em',
       background: 'transparent',
-      borderRight: `0.5em solid ${alpha(theme.palette.info.dark, 0.36)}`,
+      borderRight: `0.5em solid rgba(${tv.palette.info.darkChannel} / 0.36)`,
       borderBottom: '0.5em solid transparent',
       borderTop: '0.5em solid transparent',
       transform: 'rotate(45deg)',
@@ -316,12 +321,12 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     paddingRight: theme.spacing(0.5),
     paddingTop: theme.spacing(0.25),
     paddingBottom: theme.spacing(0.25),
-    borderBottom: `1px solid ${theme.palette.text.secondary}`,
-    borderRight: `1px solid ${theme.palette.text.secondary}`,
+    borderBottom: `1px solid ${tv.palette.text.secondary}`,
+    borderRight: `1px solid ${tv.palette.text.secondary}`,
     color: theme.palette.getContrastText(
       alpha(theme.palette.surface.main, 0.76),
     ),
-    backgroundColor: alpha(emphasize(theme.palette.surface.main, 0.36), 0.12),
+    backgroundColor: `rgba(${tv.palette.surface.darkChannel} / 0.12)`,
     fontSize: theme.typography.pxToRem(12),
 
     '& > .arrow:before': {
@@ -337,7 +342,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     },
 
     '&.margin': {
-      borderColor: theme.palette.warning.dark,
+      borderColor: tv.palette.warning.dark,
       backgroundColor: lighten(theme.palette.warning.dark, 0.48),
       color: theme.palette.getContrastText(
         emphasize(theme.palette.warning.dark, 0.48),
@@ -349,7 +354,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
     },
 
     '&.padding': {
-      borderColor: theme.palette.success.dark,
+      borderColor: tv.palette.success.dark,
       backgroundColor: lighten(theme.palette.success.dark, 0.48),
       color: theme.palette.getContrastText(
         emphasize(theme.palette.success.dark, 0.48),
@@ -360,7 +365,7 @@ const StyledWrapper = styled('div')(({ theme }) => ({
       },
     },
   },
-}))
+}})
 
 export interface BoxButtonStylerProps
   extends Omit<ComponentProps<typeof StyledWrapper>, 'onChange'> {
