@@ -20,8 +20,7 @@ import {
   type FormTemplateRenderProps,
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
-import LoadingButton from '@mui/lab/LoadingButton'
-import { FormControl, Grid } from '@mui/material'
+import { Button, FormControl, Grid } from '@mui/material'
 import { forwardRef } from 'react'
 import { Case, Default, Switch } from 'react-if'
 import CardDisplay, { type CardDisplayProps } from './card-display'
@@ -41,7 +40,7 @@ export const FormCardWrapper = forwardRef<any, CardDisplayProps>(
           <FormSpy>
             {({ submitting, pristine, valid, validating }) => (
               <FormControl margin="normal">
-                <LoadingButton
+                <Button
                   loading={validating || submitting}
                   color="secondary"
                   disabled={submitting || pristine || !valid || validating}
@@ -61,7 +60,7 @@ export const FormCardWrapper = forwardRef<any, CardDisplayProps>(
                     </Case>
                     <Default>{'Update'}</Default>
                   </Switch>
-                </LoadingButton>
+                </Button>
               </FormControl>
             )}
           </FormSpy>
