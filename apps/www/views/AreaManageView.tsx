@@ -232,13 +232,11 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
       <ConsoleLayout
         items={[
           {
-            xs: 12,
-            md: 3,
+            size: { xs: 12, md: 3 },
             children: <AreaManageNavigationListWidgetView />,
           },
           {
-            xs: 12,
-            md: 9,
+            size: { xs: 12, md: 9 },
             children: (
               <CardDisplay
                 header={{

@@ -56,7 +56,7 @@ export namespace FieldPreset {
     keys: ['id', 'displayName', 'dataType'],
     byKey: {
       id: {
-        GridItemProps: { xs: 12 },
+        GridItemProps: { size: { xs: 12 } },
         component: Components.Elements.byKey.TextField,
         props: {
           name: 'id',
@@ -72,7 +72,7 @@ export namespace FieldPreset {
         },
       },
       name: {
-        GridItemProps: { xs: 12 },
+        GridItemProps: { size: { xs: 12 } },
         component: Components.Elements.byKey.TextField,
         props: {
           name: 'name',
@@ -87,7 +87,7 @@ export namespace FieldPreset {
         },
       },
       kind: {
-        GridItemProps: { xs: 12 },
+        GridItemProps: { size: { xs: 12 } },
         component: Components.Elements.byKey.SelectField,
         props: {
           name: 'kind',

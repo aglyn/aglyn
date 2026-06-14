@@ -52,6 +52,12 @@ const basicSchema: FormSchema = {
       name: 'displayName',
       label: 'Display name',
       type: 'text',
+      FormFieldGridProps: {
+        size: {
+          xs: 12,
+          sm: 6,
+        },
+      },
       isRequired: true,
       validate: [
         {
