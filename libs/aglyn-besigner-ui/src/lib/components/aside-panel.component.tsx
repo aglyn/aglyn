@@ -31,7 +31,7 @@ import {
   ICON_VARIANT_MODIFY_ADD,
 } from '@aglyn/shared-data-enums'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { styled } from '@aglyn/shared-ui-theme'
+import { mergeSxProps, styled } from '@aglyn/shared-ui-theme'
 import {
   getDisplayName,
   numberFromHexadecimal,
@@ -89,10 +89,11 @@ const emptyView = (
     direction="column"
     component={TabPanelInner}
     sx={{
-      justifyContent: "center",
+      justifyContent: 'center',
       height: 1,
-      p: 2
-    }}>
+      p: 2,
+    }}
+  >
     <Typography
       color="textSecondary"
       variant="overline"
@@ -200,16 +201,16 @@ const ElementInfo = function ElementInfo({
                   <Typography
                     variant="caption"
                     sx={{
-                      display: "inline",
-                      textTransform: 'uppercase'
-                    }}>
+                      display: 'inline',
+                      textTransform: 'uppercase',
+                    }}
+                  >
                     <b>{label}:</b>
                   </Typography>{' '}
                   <Typography
                     variant="body1"
                     {...ValueTypographyProps}
-                    sx={[
-                      { display: 'inline' },
+                    sx={mergeSxProps(
                       (theme) => {
                         const tv = (theme as any).vars || theme
                         return {
@@ -222,10 +223,10 @@ const ElementInfo = function ElementInfo({
                           fontSize: '0.8rem',
                         }
                       },
-                      ...(Array.isArray(ValueTypographyProps?.sx)
-                        ? ValueTypographyProps.sx
-                        : [ValueTypographyProps?.sx]),
-                    ]}>
+                      { display: 'inline' },
+                      ValueTypographyProps?.sx,
+                    )}
+                  >
                     {value || <i>{failoverText}</i>}
                   </Typography>
                 </Typography>
@@ -235,7 +236,7 @@ const ElementInfo = function ElementInfo({
         )}
       />
     </TabPanelInner>
-  );
+  )
 }
 
 function withLastSelectedNode<P>(
