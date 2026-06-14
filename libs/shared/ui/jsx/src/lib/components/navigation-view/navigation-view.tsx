@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,14 +135,19 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
         direction="column"
         spacing={0}
         {...rest}
-        sx={[{
-          alignItems: "stretch",
-          justifyContent: "flex-start",
-          flexGrow: 1,
-          height: 1,
-          width: 1,
-          overflow: "hidden"
-        }, mergeSxProps({}, sx), rest.sx]}>
+        sx={mergeSxProps(
+          {
+            alignItems: 'stretch',
+            justifyContent: 'flex-start',
+            flexGrow: 1,
+            height: 1,
+            width: 1,
+            overflow: 'hidden',
+          },
+          sx,
+          rest.sx,
+        )}
+      >
         <NavigationAppBar
           scrollView={scrollView}
           className={classKeys.appBar}
@@ -153,28 +158,41 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
               direction="row"
               spacing={2}
               sx={{
-                alignItems: "center",
-                justifyContent: "space-between",
-                width: 1
-              }}>
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: 1,
+              }}
+            >
               <Stack
                 direction="row"
                 className={classKeys.appBarLeft}
                 {...AppBarLeftProps}
-                sx={[{
-                  alignItems: "center",
-                  justifyContent: "flex-start"
-                }, ...(Array.isArray(AppBarLeftProps?.sx) ? AppBarLeftProps.sx : [AppBarLeftProps?.sx])]}>
+                sx={[
+                  {
+                    alignItems: 'center',
+                    justifyContent: 'flex-start',
+                  },
+                  ...(Array.isArray(AppBarLeftProps?.sx)
+                    ? AppBarLeftProps.sx
+                    : [AppBarLeftProps?.sx]),
+                ]}
+              >
                 {appBarLeft}
               </Stack>
               <Stack
                 direction="row"
                 className={classKeys.appBarRight}
                 {...AppBarRightProps}
-                sx={[{
-                  alignItems: "center",
-                  justifyContent: "flex-start"
-                }, ...(Array.isArray(AppBarRightProps?.sx) ? AppBarRightProps.sx : [AppBarRightProps?.sx])]}>
+                sx={[
+                  {
+                    alignItems: 'center',
+                    justifyContent: 'flex-start',
+                  },
+                  ...(Array.isArray(AppBarRightProps?.sx)
+                    ? AppBarRightProps.sx
+                    : [AppBarRightProps?.sx]),
+                ]}
+              >
                 {appBarRight}
               </Stack>
             </Stack>
@@ -187,14 +205,20 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
           direction="column"
           className={classKeys.content}
           {...ContentProps}
-          sx={[{
-            overflow: "auto",
-            flexGrow: 1,
-            height: 1,
-            width: 1,
-            bgcolor: "background.default",
-            zIndex: 1
-          }, ...(Array.isArray(ContentProps?.sx) ? ContentProps.sx : [ContentProps?.sx])]}>
+          sx={[
+            {
+              overflow: 'auto',
+              flexGrow: 1,
+              height: 1,
+              width: 1,
+              bgcolor: 'background.default',
+              zIndex: 1,
+            },
+            ...(Array.isArray(ContentProps?.sx)
+              ? ContentProps.sx
+              : [ContentProps?.sx]),
+          ]}
+        >
           {children}
         </Stack>
         <Stack
@@ -205,7 +229,7 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
           {bottomAppBar}
         </Stack>
       </Stack>
-    );
+    )
   },
 )
 NavigationView.displayName = 'NavigationView'
