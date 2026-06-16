@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { Stack } from '@mui/material'
+import { Stack, type StackProps } from '@mui/material'
 import { forwardRef } from 'react'
 import ColorSwatch from './color-swatch'
 import materialPalettes from './constants/material-palettes'
 
-export interface ColorGridProps {}
+export interface ColorGridProps extends StackProps {}
 
 export const ColorGrid = forwardRef<any, ColorGridProps>((props, ref) => {
   const { ...rest } = props
