@@ -238,6 +238,31 @@ const AGLYN_CONFIG = {
 
     // optimizeCss: true,
   },
+
+  /**
+   * Bundle @mui/* packages through webpack instead of treating them as Node.js
+   * externals. This resolves a systemic ESM/CJS interop mismatch: with
+   * esmExternals:false, MUI's *.mjs files are compiled by webpack without the
+   * c.n() harmony interop wrapper (because webpack sees their imports as ESM at
+   * build time), but at runtime require() returns { __esModule:true, default:fn }
+   * instead of a callable function — causing TypeError: m is not a function
+   * during Next.js "Collecting page data". Transpiling keeps all interop inside
+   * webpack's own module graph, where it is handled correctly.
+   */
+  transpilePackages: [
+    '@emotion/cache',
+    '@emotion/react',
+    '@emotion/serialize',
+    '@emotion/styled',
+    '@mui/base',
+    '@mui/material',
+    '@mui/private-theming',
+    '@mui/styled-engine',
+    '@mui/styles',
+    '@mui/system',
+    '@mui/utils',
+    '@popperjs/core',
+  ],
   turbopack: {
     rules: {
       '*.svg': {
