@@ -24,7 +24,7 @@
 <p align="center">
   <a href="https://aglyn.com" title="Go to aglyn.com">
     <img 
-      src="static/icons/aglyn-1/icon.svg" 
+      src="https://app.aglyn.io/_static/images/brand/aglyn-logo-mark-multi-144x144.png" 
       alt="aglyn-logo"
       width="120px" 
       height="120px"
