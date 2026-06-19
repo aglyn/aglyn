@@ -31,8 +31,35 @@ import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useCallback } from 'react'
+import { forwardRef, memo, useCallback, useEffect, useRef } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
+
+// Subscribes to form value changes via FormSpy and auto-submits when dirty.
+// This is needed because MUI Select uses a Portal, so its onChange never
+// bubbles through the <form> element as a DOM event.
+const AutoSaveOnChange = memo(function AutoSaveOnChange({
+  values,
+  pristine,
+  valid,
+  onSubmit,
+}: {
+  values: unknown
+  pristine: boolean
+  valid: boolean
+  onSubmit: () => void
+}) {
+  const isFirstRender = useRef(true)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    if (!pristine && valid) {
+      onSubmit()
+    }
+  }, [values]) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
+})
 
 /**
  * @TODO ⚠️ remove and reimplement following PR merge
@@ -48,29 +75,26 @@ export const ElementPropsFormTemplate = forwardRef<
     <form
       ref={ref}
       onSubmit={handleSubmit}
-      onChange={handleSubmit}
-      onBlur={handleSubmit}
       noValidate
       {...rest}
     >
       {schema.title}
       <Grid spacing={2} container>
-        {/*{Children.map(formFields as any, (child) => {*/}
-        {/*  console.log('child', child, child?.props)*/}
-        {/*  const originalOnChange = child.props.onChange?.bind(undefined)*/}
-        {/*  child.props.onChange = (...args) => {*/}
-        {/*    handleSubmit()*/}
-        {/*    originalOnChange(...args)*/}
-        {/*  }*/}
-        {/*  return child*/}
-        {/*})}*/}
         {formFields as unknown as JSX.Node}
       </Grid>
+      <FormSpy subscription={{ values: true, pristine: true, valid: true }}>
+        {({ values, pristine, valid }) => (
+          <AutoSaveOnChange
+            values={values}
+            pristine={pristine}
+            valid={valid}
+            onSubmit={handleSubmit}
+          />
+        )}
+      </FormSpy>
       <FormSpy>
         {({ submitting, pristine, valid }) => (
-          <Box sx={{
-            mt: 2
-          }}>
+          <Box sx={{ mt: 2 }}>
             <FormControl margin="normal" fullWidth>
               <Button
                 color="secondary"
