@@ -117,14 +117,14 @@ export const middleware: NextMiddleware = (req, event) => {
       tenantHost = reqHost.replace(`.aglyn.app`, '')
       break
     // Vercel preview deployment
-    case IS_VERCEL && reqHost.match(previewRegex).length > 0:
+    case IS_VERCEL && previewRegex.test(reqHost):
     case reqHost === 'console.aglyn.io':
     case reqHost === 'localhost:4500':
       console.log(
         'Tenant Host Switch=',
         'assign',
         'previewRegex=',
-        IS_VERCEL && reqHost.match(previewRegex).length > 0,
+        IS_VERCEL && previewRegex.test(reqHost),
         "reqHost === 'console.aglyn.io'=",
         reqHost === 'console.aglyn.io',
         "reqHost === 'localhost:4500'=",
