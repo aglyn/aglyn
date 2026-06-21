@@ -80,20 +80,13 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
       })
     }, [defaultValue])
 
-    const value = useMemo(() => {
-      let str = ''
-      let parsed: iJSON = {}
+    const parsedValue = useMemo<iJSON>(() => {
       try {
-        str = JSON.stringify(data, null, 2)
-      } catch (e) {
-        console.warn('Error occurred in JsonEditor during stringify', e)
-      }
-      try {
-        parsed = JSON.parse(data)
+        return JSON.parse(data)
       } catch (e) {
         console.warn('Error occurred in JsonEditor during parse', e)
+        return {}
       }
-      return { str, parsed }
     }, [data])
 
     const handleChange = useCallback((value: any) => {
@@ -107,10 +100,10 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
     )
     const handleSave = useCallback(
       (event: any) => {
-        onSave && onSave(event, data)
+        onSave && onSave(event, parsedValue)
         handleClose(event, 'saveClick')
       },
-      [onSave, handleClose, data],
+      [onSave, handleClose, parsedValue],
     )
 
     console.log(
@@ -172,7 +165,7 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
                 <Editor
                   height="50vh"
                   defaultValue={defaultValue}
-                  value={JSON.stringify(value.parsed, null, 2)}
+                  value={JSON.stringify(parsedValue, null, 2)}
                   onChange={handleChange}
                 />
               </Else>
