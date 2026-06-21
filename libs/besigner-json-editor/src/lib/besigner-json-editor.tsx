@@ -74,9 +74,11 @@ const BesignerJsonEditorRaw = forwardRef<any, BesignerJsonEditorProps>(
     const closeWarn = useCallback(() => setWarnOpen(false), [])
 
     useEffect(() => {
-      const parsed = JSON.stringify(defaultValue || {}, null, 2)
-      if (parsed !== data) setData(parsed)
-    }, [defaultValue, data])
+      setData(prev => {
+        const parsed = JSON.stringify(defaultValue || {}, null, 2)
+        return prev === parsed ? prev : parsed
+      })
+    }, [defaultValue])
 
     const value = useMemo(() => {
       let str = ''
