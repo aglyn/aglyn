@@ -129,12 +129,12 @@ export function useTimeoutDelay(
 
       // Args array
       const argArgs = _isArr(optArgs) ? optArgs : []
-      // Determine if we're using global delay or parameter delay
+      // Parameter delay takes priority over global delay
       const ms = _isNum(optDelay)
-        ? _isNum(state.msDelay)
+        ? optDelay
+        : _isNum(state.msDelay)
           ? state.msDelay
           : 0
-        : optDelay || 0
 
       const max = _isNumPos(optLimit) ? optLimit : null
 
