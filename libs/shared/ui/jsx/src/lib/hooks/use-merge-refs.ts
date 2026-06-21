@@ -63,7 +63,8 @@ export function mergeRefs<T>(...refs: ForwardedRef<T>[]): RefCallback<T> {
  * Merges multiple refs into one, by returning a new memoized ref callback
  */
 export function useMergeRefs<T>(...refs: ForwardedRef<T>[]): RefCallback<T> {
-  return useMemo(() => mergeRefs(...refs), [refs])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => mergeRefs(...refs), refs)
 }
 
 export default useMergeRefs
