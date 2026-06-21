@@ -42,7 +42,7 @@ export function useTimeout(
       timeout = setTimeout(handler, delay, ...args)
       return () => clearTimeout(timeout)
     }
-  }, [args, delay])
+  }, [delay]) // args is a rest param (new array each render) — omit from deps
 }
 
 export default useTimeout
