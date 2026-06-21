@@ -82,7 +82,7 @@ export function useLocalStorageItemState<T>(
      * storage event
      */
     if (
-      !isUpdateFromCrossDocumentListener.current ||
+      !isUpdateFromCrossDocumentListener.current &&
       !isUpdateFromWithinDocumentListener.current
     ) {
       saveValueToLocalStorage<T>(key, value)
