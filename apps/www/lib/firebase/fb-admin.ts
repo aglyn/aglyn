@@ -34,9 +34,7 @@ export let fbAdminApp: fbAdmin.app.App
       }),
       databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
     })
-    return
-  }
-  if (!fbAdmin) {
+  } else {
     fbAdminApp = fbAdmin.app()
   }
 })()
