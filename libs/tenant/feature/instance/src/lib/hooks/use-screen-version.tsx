@@ -36,11 +36,10 @@ export const useScreenVersionRef = ({ hostId, screenId, versionId }) => {
   )
   return ref.withConverter({
     toFirestore(data) {
-      if (!(data?.nodes instanceof Bytes)) {
-        data.nodes = compress(data.nodes || {})
-      }
-      data.updatedAt = Timestamp.now()
-      return data
+      const nodes = data?.nodes instanceof Bytes
+        ? data.nodes
+        : compress(data?.nodes || {})
+      return { ...data, nodes, updatedAt: Timestamp.now() }
     },
     fromFirestore(snapshot, options) {
       if (!snapshot.exists()) return undefined
