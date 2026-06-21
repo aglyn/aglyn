@@ -47,10 +47,15 @@ async function formHandler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   let saveRes
+  let saveError
 
   await saveFormSubmit({formId: id, fields: values})
-    .then(response => saveRes = response)
-    .catch(error => saveRes = error)
+    .then(response => { saveRes = response })
+    .catch(error => { saveError = error })
+
+  if (saveError) {
+    return Res.Error.handleJsonError(res, Res.Error.badRequest('Form submission failed'))
+  }
 
   return res.status(200).json(Res.Data.success({response: saveRes}))
 }
