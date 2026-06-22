@@ -19,7 +19,7 @@ import MdiIcon, {
   type MdiIconProps,
 } from '@aglyn/shared-ui-jsx/components/mdi-icon/mdi-icon'
 import { ToggleButton, ToggleButtonGroup, Tooltip } from '@mui/material'
-import { forwardRef, type MouseEvent, useCallback, useState } from 'react'
+import { forwardRef, type MouseEvent, useCallback, useEffect, useState } from 'react'
 import InlineFormControl, {
   type InlineFormControlProps,
 } from './inline-form-control'
@@ -42,10 +42,15 @@ export interface ToggleButtonFormControlProps extends InlineFormControlProps {
 export const ToggleButtonFormControl = forwardRef<
   any,
   ToggleButtonFormControlProps
->((props, forwardRef) => {
+>((props, ref) => {
   const { schema, value, onChange, ...rest } = props
 
   const [localValue, setLocalValue] = useState<string>(value || '')
+
+  useEffect(() => {
+    setLocalValue(value || '')
+  }, [value])
+
   const handleChange = useCallback(
     (e: MouseEvent<HTMLElement>, value: string) => {
       setLocalValue(value)
@@ -56,7 +61,7 @@ export const ToggleButtonFormControl = forwardRef<
 
   return (
     <InlineFormControl
-      ref={forwardRef}
+      ref={ref}
       label={schema.label}
       helperText={
         <>
