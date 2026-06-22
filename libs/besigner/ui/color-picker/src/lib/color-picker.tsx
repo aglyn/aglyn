@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { forwardRef, useCallback, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useState } from 'react'
 import {
   type Color,
   type ColorChangeHandler,
@@ -27,6 +27,11 @@ export interface ColorPickerProps extends SketchPickerProps {}
 const ColorPicker = forwardRef<any, ColorPickerProps>((props, ref) => {
   const { onChange, color: colorProp, ...rest } = props
   const [color, setColor] = useState<Color>(colorProp)
+
+  useEffect(() => {
+    setColor(colorProp)
+  }, [colorProp])
+
   const handleChange: ColorChangeHandler = useCallback(
     (color, event) => {
       setColor(color.rgb)
