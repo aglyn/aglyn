@@ -67,10 +67,7 @@ function validateLinealOrder(
   }
 
   // Throw is disallowed
-  if (
-    Aglyn.LinealDirectiveFlag[directiveType] ===
-    Aglyn.LinealDirectiveFlag.DISALLOW
-  ) {
+  if (directiveType === Aglyn.LinealDirectiveFlag.DISALLOW) {
     if (definition?.components?.some((cid) => cid === componentId)) {
       throw InvalidLinealRelationFlag.DISALLOW_COMPONENT | governor
     }
@@ -80,10 +77,7 @@ function validateLinealOrder(
   }
 
   // Throw if limited to range and missing
-  if (
-    Aglyn.LinealDirectiveFlag[directiveType] ===
-    Aglyn.LinealDirectiveFlag.LIMIT_TO
-  ) {
+  if (directiveType === Aglyn.LinealDirectiveFlag.LIMIT_TO) {
     if (
       _isArr(definition?.components) &&
       (_isArrEmpty(definition?.components) ||
@@ -131,7 +125,7 @@ export function confirmValidLinealRelationship(
     }
   } catch (e) {
     console.error(e)
-    if (e in InvalidLinealRelationFlag) {
+    if (typeof e === 'number') {
       return [false, e]
     }
     throw e
