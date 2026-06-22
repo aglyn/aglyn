@@ -166,9 +166,9 @@ export const handleCanvasMoveElement = (
     // Update element parentId property
     state[payload.$id].parentId = parentId
     // Remove from current parent
-    arrayRemoveItem(state[currentParentId]?.nodes || [], payload.$id)
+    arrayRemoveItem((state[currentParentId].nodes ||= []), payload.$id)
     // Add to new parent
-    arrayPushAtIndex(state[parentId]?.nodes || [], payload.index, payload.$id)
+    arrayPushAtIndex((state[parentId].nodes ||= []), payload.index, payload.$id)
   }
 
   return state
