@@ -201,7 +201,7 @@ export const handleCanvasDeleteElement = (
     throw new Error('Failed deleting. Non-existent or forbidden deletion.')
   }
   // Remove all child nodes first
-  for (const childId in (element.nodes ||= [])) {
+  for (const childId of (element.nodes ||= [])) {
     handleCanvasDeleteElement(state, { $id: childId })
   }
   // Secondly remove the element from the parent
