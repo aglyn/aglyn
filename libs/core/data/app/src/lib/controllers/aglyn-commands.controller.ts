@@ -104,7 +104,7 @@ export class AglynCommandsController
       )
     } else {
       // TODO: throw errorFactory error
-      if (_isFnT(resolver)) throw new Error('Invalid resolver fn')
+      if (!_isFnT(resolver)) throw new Error('Invalid resolver fn')
       throw new Error('Invalid commandId provided')
     }
     return this
@@ -125,7 +125,7 @@ export class AglynCommandsController
       )
     } else {
       // TODO: throw errorFactory error
-      if (_isFnT(listener)) throw new Error('Invalid listener fn')
+      if (!_isFnT(listener)) throw new Error('Invalid listener fn')
       throw new Error('Invalid commandId provided')
     }
     return this
@@ -195,7 +195,7 @@ export class AglynCommandsController
       )
     } else {
       // TODO: throw errorFactory error
-      if (_isFnT(resolver)) throw new Error('Invalid resolver fn')
+      if (!_isFnT(resolver)) throw new Error('Invalid resolver fn')
       throw new Error('Invalid commandId provided')
     }
     return this
