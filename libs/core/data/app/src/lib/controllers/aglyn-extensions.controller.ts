@@ -83,7 +83,7 @@ export class AglynExtensionsController
     this.#setupInitialExtensions()
   }
   #setupInitialExtensions(): this {
-    this.options.defaults?.extensions?.forEach(this.handleLoader)
+    this.options.defaults?.extensions?.forEach((p) => this.handleLoader(p))
     return this
   }
 
