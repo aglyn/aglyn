@@ -114,7 +114,7 @@ declare module '@aglyn/core-data-foundation' {
   interface AglynModuleEffectPayload {
     [BesignerAppEffectFlag.BESIGNER_GET_STORE]: BesignerGetStorePayload
     [BesignerAppEffectFlag.BESIGNER_SET_FLAG]: BesignerSetFlagPayload
-    [BesignerAppEffectFlag.BESIGNER_SET_PANEL]: BesignerSetPanelsPayload
+    [BesignerAppEffectFlag.BESIGNER_SET_PANEL]: BesignerSetPanelPayload
     [BesignerAppEffectFlag.BESIGNER_OPEN_PANEL]: BesignerOpenPanelPayload
     [BesignerAppEffectFlag.BESIGNER_CLOSE_PANEL]: BesignerClosePanelPayload
   }
