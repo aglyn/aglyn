@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { getCanvasDenormalizedNodesStore } from '@aglyn/core-data-app'
+import { getCanvasNormalizedNodesStore } from '@aglyn/core-data-app'
 import type { AglynNodesList } from '@aglyn/core-data-foundation'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynCanvasElementsNormalized(): AglynNodesList {
   const app = useAglynAppContext()
-  return useSubscribable(getCanvasDenormalizedNodesStore(app))
+  return useSubscribable(getCanvasNormalizedNodesStore(app))
 }
 export default useAglynCanvasElementsNormalized

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { getCanvasNormalizedNodesStore } from '@aglyn/core-data-app'
+import { getCanvasDenormalizedNodesStore } from '@aglyn/core-data-app'
 import type { AglynNodesById } from '@aglyn/core-data-foundation'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-tools'
@@ -30,7 +30,7 @@ export function useAglynCanvasElementsDenormalized<Result>(
 ): Result | AglynNodesById {
   const app = useAglynAppContext()
   return useSubscribable(
-    getCanvasNormalizedNodesStore(app),
+    getCanvasDenormalizedNodesStore(app),
     undefined,
     (state) => (_isFnT(callbackFn) ? (callbackFn(state) as Result) : state),
     [callbackFn, app],
