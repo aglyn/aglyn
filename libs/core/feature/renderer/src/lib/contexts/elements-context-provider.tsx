@@ -26,7 +26,7 @@ export function ElementsContextProvider(props: ElementsContextProviderProps) {
   const { children } = props
 
   return (
-    <ElementsContext.Provider value={undefined}>
+    <ElementsContext.Provider>
       {children}
     </ElementsContext.Provider>
   )
