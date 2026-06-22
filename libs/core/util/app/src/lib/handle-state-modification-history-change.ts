@@ -29,7 +29,7 @@ export const handleStateModificationHistoryChange = <
   maxHistory = MAX_HISTORY,
 ): ModificationHistoryState<S> => {
   const len = state.past.unshift(cloneDeep(state.present))
-  if (len > maxHistory) state.past.splice(maxHistory - 1, len - maxHistory)
+  if (len > maxHistory) state.past.splice(maxHistory, len - maxHistory)
   state.present = newState
   state.future = []
   return state
