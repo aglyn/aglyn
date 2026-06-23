@@ -29,7 +29,8 @@ export const useHostRef = ({ hostId }) => {
   const ref = doc(firestore, 'hosts', hostId)
   return ref.withConverter({
     toFirestore(data: Aglyn.AglynHost) {
-      return data
+      const { $id, ...rest } = data
+      return rest
     },
     fromFirestore(
       snapshot: DocumentSnapshot<Aglyn.AglynHost>,
