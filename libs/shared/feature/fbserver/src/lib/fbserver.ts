@@ -37,9 +37,7 @@ export let fbAdminApp: fbAdmin.app.App
     })
     return
   }
-  if (!fbAdmin) {
-    fbAdminApp = fbAdmin.app()
-  }
+  fbAdminApp = fbAdmin.app()
 })()
 
 export {fbAdmin}
