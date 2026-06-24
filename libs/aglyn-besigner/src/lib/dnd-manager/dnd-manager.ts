@@ -90,7 +90,7 @@ export class DndManager {
     if (!this.hasDropTarget) return false
     const parent = {
       pluginId: this.computedDrop?.pluginId,
-      componentId: this.computedDrop?.$id,
+      componentId: this.computedDrop?.componentId,
       restrictChildren: this.computedDrop?.componentSchema?.restrictChildren,
       restrictParent: this.computedDrop?.componentSchema?.restrictParent,
     }
@@ -98,11 +98,11 @@ export class DndManager {
     if (this.drag?.type === Aglyn.NodeType.PRESET) {
       const preset = this.drag as Aglyn.PresetSchema<any>
       const itemNode = preset.data
-      const itemSchema = Aglyn.components.getSchema(itemNode?.$id)
+      const itemSchema = Aglyn.components.getSchema(itemNode?.componentId)
       return confirmValidLinealRelationship(
         {
           pluginId: preset.data?.pluginId,
-          componentId: itemNode?.$id,
+          componentId: itemNode?.componentId,
           restrictChildren: itemSchema?.restrictChildren,
           restrictParent: itemSchema?.restrictParent,
         },
@@ -112,7 +112,7 @@ export class DndManager {
     return confirmValidLinealRelationship(
       {
         pluginId: this.drag?.pluginId,
-        componentId: this.drag?.$id,
+        componentId: this.drag?.componentId,
         restrictChildren: this.drag?.componentSchema?.restrictChildren,
         restrictParent: this.drag?.componentSchema?.restrictParent,
       },
