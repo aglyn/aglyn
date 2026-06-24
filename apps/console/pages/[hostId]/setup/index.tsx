@@ -260,7 +260,7 @@ const HostSetup: NextPageWithLayout = (props) => {
   const forms = [
     {
       schema: basicSchema,
-      initialValues: doc,
+      initialValues: data,
       onSubmit: handleBasicSave,
     },
     {
