@@ -153,11 +153,11 @@ export namespace Fields {
     [Fields.firstNameField.id]: Fields.firstNameField,
     [Fields.lastNameField.id]: Fields.lastNameField,
     [Fields.emailField.id]: Fields.emailField,
-    [Fields.passwordField.id]: Fields.emailField,
+    [Fields.passwordField.id]: Fields.passwordField,
   }
   export const signInForm: FieldGroup = {
     [Fields.emailField.id]: Fields.emailField,
-    [Fields.passwordField.id]: Fields.emailField,
+    [Fields.passwordField.id]: Fields.passwordField,
   }
   export const permissionForm: FieldGroup = {
     [Fields.nameField.id]: Fields.nameField,
