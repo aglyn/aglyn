@@ -258,10 +258,8 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
                 }}
               >
                 <DataTableComponent
-                  DataGridProps={{
-                    loading: loadingDocuments,
-                    onRowClick: handleRowClick,
-                  }}
+                  loading={loadingDocuments}
+                  onRowClick={handleRowClick}
                   columns={columns}
                   noRowsLabel={documentName.plural}
                   rows={rows}
