@@ -70,31 +70,3 @@ const CanvasModel = types.model('NodeStoreModel', {
 // @ts-ignore
 export const TreeNodeModel = types.union(LeafModel, NodeModel)
 
-// Create the root tree node
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rootNode = NodeModel.create({
-  $id: 'Root',
-  nodes: ['Child1', 'Child2', 'Child3', 'Child4'],
-  // children: [
-  //   {
-  //     $id: 'Child1',
-  //     children: [{ $id: 'Child1.1', hh: '' }, { $id: 'Child1.2' }],
-  //   },
-  //   {
-  //     $id: 'Child2',
-  //     children: [{ $id: 'Child2.1' }, { $id: 'Child2.2' }],
-  //   },
-  //   {
-  //     $id: 'Child3',
-  //   },
-  //   {
-  //     $id: 'Child4',
-  //     aa: 'Child2',
-  //   },
-  // ],
-} as any)
-
-// Accessing data
-console.log('node.store.ts rootNode.name', rootNode.name) // Output: Root
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-console.log('node.store.ts rootNode', (rootNode as any).toJSON())
