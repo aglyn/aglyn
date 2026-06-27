@@ -44,6 +44,5 @@ export function setAdminTenant(tenant: Aglyn.AglynTenant): Promise<void> {
 export function getAdminTenant(
   tenantId: Aglyn.TenantUid,
 ): Promise<firebaseAdmin.database.DataSnapshot> {
-  console.log('getAdminTenant', tenantId)
   return ref.child(tenantId).get()
 }
