@@ -25,7 +25,6 @@ function getOffset(el) {
   if (!el) {
     return { top: 0, left: 0 }
   }
-  console.log('el', el, el.ownerDocument, el)
   const rect = el.getBoundingClientRect?.()
   const doc = el.ownerDocument
   if (!doc) throw new Error('Unexpectedly missing <document>.')

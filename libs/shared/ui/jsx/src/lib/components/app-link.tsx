@@ -39,7 +39,6 @@ import NextLink, { type NextLinkProps } from './next-link'
 
 const Placeholder = (props: DynamicOptionsLoadingProps) => {
   const { error } = props
-  console.log('props', props)
   if (error) console.error(error)
   return <a href={'#'}>{error ? 'error!' : 'loading'}</a>
 }

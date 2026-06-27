@@ -92,8 +92,6 @@ export function useTimeoutDelay(
   // Clear the interval or timeout
   const clear = useCallback(() => {
     if (ref.current.timeoutRef) {
-      console.log('clear-del', ref)
-
       state.repeat
         ? clearInterval(ref.current.timeoutRef)
         : clearTimeout(ref.current.timeoutRef)
