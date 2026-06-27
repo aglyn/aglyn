@@ -69,10 +69,8 @@ export const handleCanvasSetElements = (
       elements as unknown as AglynNodesList,
       CANVAS_ROOT_ELEMENT_ID,
     )
-    console.log('newState normal', payload, newState)
     return newState
   }
-  console.log('newState denormal', payload, elements)
 
   return (elements || {
     [DEFAULT_ROOT_ELEMENT.$id]: { ...DEFAULT_ROOT_ELEMENT },
@@ -90,8 +88,6 @@ export const handleCanvasAddElement = (
     console.error('Element must have a valid parent, falling back to root')
     parentId = CANVAS_ROOT_ELEMENT_ID
   }
-  console.log('handleCanvasAddElement', payload, state)
-
   const { [parentId]: _, ...newElements } = nodeDataNormalize(
     element,
     parentId,
@@ -153,7 +149,6 @@ export const handleCanvasMoveElement = (
   const currentParentId = copyShallow(state[payload.$id].parentId)
 
   if (parentId === currentParentId && state[parentId]) {
-    console.log('reordering')
     const parentElements = (state[parentId].nodes ||= [])
     // Move current index
     arrayMoveAtIndex(
@@ -162,7 +157,6 @@ export const handleCanvasMoveElement = (
       payload.index,
     )
   } else {
-    console.log('moving')
     // Update element parentId property
     state[payload.$id].parentId = parentId
     // Remove from current parent
