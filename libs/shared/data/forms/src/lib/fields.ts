@@ -35,7 +35,7 @@ const VALIDATE_LENGTH_RANGE: (min: number, max: number) => Validator = (
   max: number,
 ) => ({
   type: validatorTypes.PATTERN,
-  pattern: new RegExp(`/^.{${min},${max}}$/gmi`),
+  pattern: new RegExp(`^.{${min},${max}}$`, 'mi'),
   message: `Length must between ${min}–${max} characters`,
 })
 
