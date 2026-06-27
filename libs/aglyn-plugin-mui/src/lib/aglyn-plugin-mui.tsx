@@ -35,7 +35,6 @@ Aglyn.plugins.addDependency({
   dependencies: {},
   // components: [],
   load(...args): void {
-    console.log('mui load', ...args)
     Aglyn.components.registerComponent(AppBar.default, AppBar.schema)
     Aglyn.components.registerComponent(Toolbar.default, Toolbar.schema)
     Aglyn.components.registerComponent(Typography.default, Typography.schema)
@@ -60,7 +59,6 @@ Aglyn.plugins.addDependency({
     Aglyn.components.registerPreset(Stack.presets)
   },
   destroy(...args): void {
-    console.log('mui destroy', ...args)
     Aglyn.components.unregisterPreset(AppBar.presets.map((i) => i.$id))
     Aglyn.components.unregisterPreset(Toolbar.presets.map((i) => i.$id))
     Aglyn.components.unregisterPreset(Typography.presets.map((i) => i.$id))
