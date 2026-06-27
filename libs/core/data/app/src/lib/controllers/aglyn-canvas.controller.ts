@@ -168,7 +168,6 @@ export class AglynCanvasController
     const updated = handleStateModificationHistoryChange(state, now)
     if (this.isDeepEqual(prev, now)) return this
     if (clear) {
-      console.log('clear', updated)
       this.nextState({ past: [], present: updated.present, future: [] })
     } else this.nextState(updated)
     return this

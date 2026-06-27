@@ -207,9 +207,7 @@ export class AglynAppController<
     this.handleEvent(
       [AglynEventStateFlag.APP_ACTIVATING, AglynEventStateFlag.APP_ACTIVATED],
       { appName: this.#appName },
-      () => {
-        console.log('app onActivate')
-      },
+      () => {},
     )
     return this
   }
@@ -220,9 +218,7 @@ export class AglynAppController<
         AglynEventStateFlag.APP_DEACTIVATED,
       ],
       { appName: this.#appName },
-      () => {
-        console.log('app onDeactivate')
-      },
+      () => {},
     )
     return this
   }
