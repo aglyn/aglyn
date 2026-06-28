@@ -99,7 +99,7 @@ export function useLocalStorageItemState<T>(
             setValue(newValue)
           }
         } catch (error) {
-          console.log(error)
+          console.warn(error)
         }
       }
     },
