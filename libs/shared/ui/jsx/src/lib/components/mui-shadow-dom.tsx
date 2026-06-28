@@ -57,7 +57,7 @@ export function useMuiShadowDomContext() {
   return useContext(ShadowDomContext)
 }
 
-function handleError({ error, styleSheets, container }) {
+function handleError({ error, styleSheets, container }: { error: any; styleSheets: CSSStyleSheet[]; container: any }) {
   switch (error.name) {
     case 'NotSupportedError':
       styleSheets.length > 0 && (container.adoptedStyleSheets = styleSheets)
