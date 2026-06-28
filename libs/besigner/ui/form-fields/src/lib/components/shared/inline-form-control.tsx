@@ -38,7 +38,7 @@ export const InlineFormControl = forwardRef<any, InlineFormControlProps>(
     const { helperText, label, onChange, children, ...rest } = props
 
     return (
-      <FormControl ref={forwardRef} margin="normal" fullWidth color="secondary" {...rest}>
+      <FormControl ref={forwardRef} margin="normal" fullWidth {...rest}>
         <Box
           sx={{
             display: 'inline-flex',

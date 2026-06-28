@@ -148,36 +148,6 @@ export function createResponsiveCssVarTheme(
     // makes setMode() a no-op because media queries can't be overridden in JS).
     colorSchemeSelector: 'class',
     ...options,
-    components: {
-      ...(lightTheme as any).components,
-      ...options?.components,
-      // Explicit override ensures MUI v9's CSS vars theme picks it up directly
-      // rather than relying on the createTheme→spread→extendTheme chain.
-      MuiToggleButton: {
-        styleOverrides: {
-          root: ({ theme }: any) => {
-            const tv = (theme as any).vars || theme
-            return {
-              '&.Mui-focusVisible': {
-                outline: `2px solid ${tv.palette.secondary.main}`,
-                outlineOffset: -2,
-              },
-              // MUI v9: alpha(text.primary, selectedOpacity) resolves
-              // text.primaryChannel to the light-mode value (0 0 0) in dark
-              // mode, producing a dark overlay on a dark background.
-              // Use secondary channel which resolves correctly.
-              '&.Mui-selected': {
-                color: tv.palette.secondary.main,
-                backgroundColor: `rgba(${tv.palette.secondary.lightChannel} / 0.18)`,
-                '&:hover': {
-                  backgroundColor: `rgba(${tv.palette.secondary.lightChannel} / 0.28)`,
-                },
-              },
-            }
-          },
-        },
-      },
-    },
     colorSchemes: {
       ...options?.colorSchemes,
       light: { palette: lightPalette, ...((options?.colorSchemes?.light ?? {}) as object) },
