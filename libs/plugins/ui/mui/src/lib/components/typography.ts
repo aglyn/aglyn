@@ -26,7 +26,7 @@ import {
   mdiFormatHeader6,
   mdiFormatParagraph,
   mdiFormatText,
-} from '@aglyn/shared-ui-jsx'
+} from '@aglyn/shared-data-mdi'
 import Typography from '@mui/material/Typography'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'

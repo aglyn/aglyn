@@ -16,7 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiViewColumn, mdiViewSequential } from '@aglyn/shared-ui-jsx'
+import {
+  mdiViewColumn,
+  mdiViewSequential,
+} from '@aglyn/shared-data-mdi'
 import Stack from '@mui/material/Stack'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'

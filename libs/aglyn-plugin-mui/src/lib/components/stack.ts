@@ -16,7 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiViewColumn, mdiViewSequential } from '@aglyn/shared-ui-jsx'
+import {
+  mdiViewColumn,
+  mdiViewSequential,
+} from '@aglyn/shared-data-mdi'
 import MuiStack, { type StackProps } from '@mui/material/Stack'
 import type { CSSProperties } from 'react'
 import { createElement, forwardRef } from 'react'

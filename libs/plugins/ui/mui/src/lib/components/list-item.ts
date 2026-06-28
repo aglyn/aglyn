@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiFormatListText } from '@aglyn/shared-ui-jsx'
+import {
+  mdiFormatListText,
+} from '@aglyn/shared-data-mdi'
 
 import ListItem, { type ListItemProps } from '@mui/material/ListItem'
 import { BUNDLE_ID } from '../constants/bundle-common'

@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiFormatListBulletedSquare } from '@aglyn/shared-ui-jsx'
+import {
+  mdiFormatListBulletedSquare,
+} from '@aglyn/shared-data-mdi'
 import List, { type ListProps } from '@mui/material/List'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'

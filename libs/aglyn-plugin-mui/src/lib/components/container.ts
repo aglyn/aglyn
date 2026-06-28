@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiViewArrayOutline } from '@aglyn/shared-ui-jsx'
+import {
+  mdiViewArrayOutline,
+} from '@aglyn/shared-data-mdi'
 import Container from '@mui/material/Container'
 import { PLUGIN_ID } from '../constants/common'
 import generatePresetId from '../utils/generate-preset-id'

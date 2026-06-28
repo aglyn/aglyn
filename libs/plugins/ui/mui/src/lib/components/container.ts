@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiViewArrayOutline } from '@aglyn/shared-ui-jsx'
+import {
+  mdiViewArrayOutline,
+} from '@aglyn/shared-data-mdi'
 import Container, { type ContainerProps } from '@mui/material/Container'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'

@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiFormatListText } from '@aglyn/shared-ui-jsx'
+import {
+  mdiFormatListText,
+} from '@aglyn/shared-data-mdi'
 import ListItem from '@mui/material/ListItem'
 import { PLUGIN_ID } from '../constants/common'
 import generatePresetId from '../utils/generate-preset-id'

@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiGestureTapButton } from '@aglyn/shared-ui-jsx'
+import {
+  mdiGestureTapButton,
+} from '@aglyn/shared-data-mdi'
 import Button from '@mui/material/Button'
 import { PLUGIN_ID } from '../constants/common'
 import {

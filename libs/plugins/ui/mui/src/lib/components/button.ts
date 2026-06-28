@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiGestureTapButton } from '@aglyn/shared-ui-jsx'
+import {
+  mdiGestureTapButton,
+} from '@aglyn/shared-data-mdi'
 import Button, { type ButtonProps } from '@mui/material/Button'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {

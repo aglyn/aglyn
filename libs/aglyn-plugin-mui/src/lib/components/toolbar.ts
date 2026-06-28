@@ -16,7 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiBorderInside } from '@aglyn/shared-ui-jsx'
+import {
+  mdiBorderInside,
+} from '@aglyn/shared-data-mdi'
 import ToolbarInner from '@mui/material/Toolbar'
 import { PLUGIN_ID } from '../constants/common'
 import { FIELD_DISABLE_GUTTERS } from '../constants/field-presets'
