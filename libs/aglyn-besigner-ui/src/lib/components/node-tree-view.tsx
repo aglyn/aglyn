@@ -121,7 +121,7 @@ const TreeView = styled(MuiList)<MuiListProps>(({ theme }) => ({
         backgroundColor: `rgba(${(theme as any).vars.palette.secondary.darkChannel} / calc(${(theme as any).vars.palette.action.focusOpacity} + 0.2))`,
       },
     },
-    [`&.${listItemClasses.selected}, &.${classKey.itemSelected}`]: {
+    [`&.${classKey.itemSelected}`]: {
       [`> .${classKey.treeListItem}`]: {
         backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.mainChannel} / ${(theme as any).vars.palette.action.selectedOpacity})`,
 
@@ -149,7 +149,7 @@ const TreeItem = styled(MuiListItem, {
   const { theme, depth = 1 } = styles
   const depthOpacity = 0.2 - 1 / (1 << depth)
   return {
-    [`&:has(.${classKey.subTreeView}):has(.${listItemClasses.selected})`]: {
+    [`&:has(.${classKey.subTreeView}):has(.${classKey.itemSelected})`]: {
       backgroundColor: `rgba(0 0 0 / ${depthOpacity < 0 ? 0 : depthOpacity})`,
     },
   }

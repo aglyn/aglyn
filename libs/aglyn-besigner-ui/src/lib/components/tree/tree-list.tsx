@@ -86,7 +86,7 @@ const List = styled(MuiList)<ListProps>(({ theme }) => ({
         backgroundColor: `rgba(${(theme as any).vars.palette.secondary.darkChannel} / calc(${(theme as any).vars.palette.action.focusOpacity} + 0.2))`,
       },
     },
-    [`&.${listItemClasses.selected}, &.${classKey.itemSelected}`]: {
+    [`&.${classKey.itemSelected}`]: {
       [`> .${classKey.treeListItem}`]: {
         backgroundColor: `rgba(${(theme as any).vars.palette.tertiary.mainChannel} / ${(theme as any).vars.palette.action.selectedOpacity})`,
 
