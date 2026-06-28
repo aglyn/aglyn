@@ -21,7 +21,7 @@ import type {
 } from '@aglyn/core-data-foundation'
 import { createAglynComponent } from '@aglyn/core-feature-renderer'
 import { createComponentsBundle } from '@aglyn/core-util-app'
-import { mdiViewArray } from '@aglyn/shared-ui-jsx'
+import { mdiViewArray } from '@aglyn/shared-data-mdi'
 
 import appBar, { schema as appBarSchema } from './lib/components/app-bar'
 import button, { schema as buttonSchema } from './lib/components/button'
