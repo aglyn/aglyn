@@ -18,12 +18,6 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useDraggable } from '@dnd-kit/core'
-import { useDrag } from 'react-dnd'
-import type { NodeDropArea } from './use-leaf-drop'
-
-export type DragCollected = {
-  isDragging: boolean
-}
 
 export type NodeDragItem = {
   node?: Aglyn.AbstractNodeSchema
@@ -40,34 +34,5 @@ export function useLeafDrag(
       node,
     },
   })
-
-  return useDrag<NodeDragItem, NodeDropArea, DragCollected>(
-    {
-      type: type,
-      item: () => {
-        Besigner.dnd.setDragNode(node)
-        return { node: node }
-      },
-      canDrag: () => {
-        return Besigner.dnd.canDragNode(node)
-      },
-      options: {
-        dropEffect: 'move',
-      },
-      previewOptions: {
-        offsetY: -1,
-      },
-      isDragging: (monitor) => {
-        const dragNode = monitor.getItem().node
-        return Boolean(node?.$id && node?.$id === dragNode?.$id)
-      },
-      collect: (monitor) => {
-        return {
-          isDragging: monitor.isDragging(),
-        }
-      },
-    },
-    [type],
-  )
 }
 export default useLeafDrag
