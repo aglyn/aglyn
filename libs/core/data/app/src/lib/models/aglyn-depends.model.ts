@@ -144,7 +144,7 @@ function applyMixins<T extends MixableClass<any>, Ts extends MixableClass<any>>(
   return Constructor as unknown as T & Ts
 }
 
-const dependencyManager = (BaseClass) =>
+const dependencyManager = (BaseClass: new (...args: any[]) => any) =>
   (class extends BaseClass implements IAglynDependencyManager {
     readonly #dependencies: AglynDependencyMap = {
       statusByDependencyId: {},

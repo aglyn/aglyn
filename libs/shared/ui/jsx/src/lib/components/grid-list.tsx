@@ -174,7 +174,7 @@ export const GridList = forwardRef<VirtuosoGridHandle, GridListProps>(
     }, [GridItemProps])
 
     const handleItemContent = useCallback(
-      (index) => {
+      (index: number) => {
         return (
           <ItemWrapper>
             {renderItemContent(items[index], index, items)}
