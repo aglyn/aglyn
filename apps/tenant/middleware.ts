@@ -72,7 +72,7 @@ export const middleware: NextMiddleware = (req, event) => {
   const PROD_VERCEL_ENV = VERCEL_ENV === 'production'
   const PREV_VERCEL_ENV = VERCEL_ENV === 'preview'
 
-  console.log(
+  console.debug(
     'process.env.VERCEL_ENV=',
     VERCEL_ENV,
     'process.env.AGLYN_TENANT_DEMO=',
@@ -94,7 +94,7 @@ export const middleware: NextMiddleware = (req, event) => {
     // Deployment
     case IS_VERCEL && reqHost === AGLYN_TENANT_HOST_CNAME:
     case IS_VERCEL && reqHost.endsWith(`.${AGLYN_TENANT_HOST_CNAME}`):
-      console.log(
+      console.debug(
         'Tenant Host Switch',
         'assign',
         'reqHost == AGLYN_TENANT_HOST_CNAME=',
@@ -106,7 +106,7 @@ export const middleware: NextMiddleware = (req, event) => {
       break
     // Subdomain deployment
     case IS_VERCEL && reqHost.endsWith(`.aglyn.app`):
-      console.log(
+      console.debug(
         'Tenant Host Switch=',
         'replace',
         'request.endsWith=',
@@ -120,7 +120,7 @@ export const middleware: NextMiddleware = (req, event) => {
     case IS_VERCEL && previewRegex.test(reqHost):
     case reqHost === 'console.aglyn.io':
     case reqHost === 'localhost:4500':
-      console.log(
+      console.debug(
         'Tenant Host Switch=',
         'assign',
         'previewRegex=',
@@ -136,7 +136,7 @@ export const middleware: NextMiddleware = (req, event) => {
       break
     // Local preview dev/test
     case reqHost.endsWith(`.localhost:4500`):
-      console.log(
+      console.debug(
         'Tenant Host Switch=',
         'replace',
         'request.endsWith=',
@@ -147,7 +147,7 @@ export const middleware: NextMiddleware = (req, event) => {
       tenantHost = reqHost.replace(`.localhost:4500`, '') || 'demo'
       break
     default:
-      console.log(
+      console.debug(
         'Tenant Host Switch=',
         'Redirecting',
         'req.nextUrl.pathname=',
@@ -163,7 +163,7 @@ export const middleware: NextMiddleware = (req, event) => {
     (req.cookies.get('next-auth.session-token') ||
       req.cookies.get('__Secure-next-auth.session-token'))
   ) {
-    console.log(
+    console.debug(
       'Tenant Host Switch=',
       'Redirecting',
       '/login=',
@@ -177,7 +177,7 @@ export const middleware: NextMiddleware = (req, event) => {
   // rewrite to the current hostname under the pages/_sites folder
   // the main logic component will happen in pages/_sites/[host]/[...path].tsx
   const rewrite = `/_sites/${tenantHost}${req.nextUrl.pathname}`
-  console.log(
+  console.debug(
     'Tenant Host Switch=',
     'Rewriting',
     'rewrite=',

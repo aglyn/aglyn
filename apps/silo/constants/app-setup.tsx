@@ -95,7 +95,7 @@ try {
         },
       },
     })
-    console.log('initialize app', app)
+    if (!IS_PRODUCTION) console.info('initialize app', app)
 
     if (typeof window !== 'undefined' && !IS_PRODUCTION) {
       window['__AGLYN_APP__'] = app
