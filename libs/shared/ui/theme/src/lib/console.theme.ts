@@ -274,6 +274,19 @@ const baseOptions: ThemeOptions = {
         }),
       },
     },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: ({ theme }) => {
+          const tv = (theme as any).vars || theme
+          return {
+            '&.Mui-focusVisible': {
+              outline: `2px solid ${tv.palette.secondary.main}`,
+              outlineOffset: -2,
+            },
+          }
+        },
+      },
+    },
     MuiTooltip: {
       defaultProps: {
         arrow: true,
