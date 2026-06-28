@@ -165,7 +165,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
   )
 
   const renderItemContent = useCallback(
-    function RenderItemContent(item, key) {
+    function RenderItemContent(item: Icon, key: number) {
       return (
         <Tooltip
           key={item.key ?? item.id ?? key}
