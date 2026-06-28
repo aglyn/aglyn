@@ -17,11 +17,11 @@
 
 import { type MutableRefObject, useLayoutEffect, useState } from 'react'
 
-function getStyle(el, styleName) {
+function getStyle(el: Element, styleName: string) {
   return getComputedStyle(el)[styleName]
 }
 
-function getOffset(el) {
+function getOffset(el: any) {
   if (!el) {
     return { top: 0, left: 0 }
   }
@@ -45,7 +45,7 @@ function getOffset(el) {
   }
 }
 
-function getPosition(el) {
+function getPosition(el: any) {
   if (!el) {
     return { top: 0, left: 0 }
   }

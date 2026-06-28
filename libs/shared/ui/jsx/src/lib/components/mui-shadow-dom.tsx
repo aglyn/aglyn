@@ -153,7 +153,7 @@ export function createMuiShadowDomProxy(
   })
 }
 
-function getStyles(children) {
+function getStyles(children: JSX.Children) {
   return renderStylesToString(renderToString(<>{children}</>))
 }
 
