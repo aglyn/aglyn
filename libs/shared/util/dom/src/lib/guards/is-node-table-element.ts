@@ -17,7 +17,7 @@
 import getElementNodeName from '../get-element-node-name'
 
 
-export function isNodeTableElement(node): node is HTMLTableElement | HTMLTableCellElement {
+export function isNodeTableElement(node: any): node is HTMLTableElement | HTMLTableCellElement {
   return ['table', 'td', 'th'].indexOf(getElementNodeName(node)) >= 0
 }
 export default isNodeTableElement

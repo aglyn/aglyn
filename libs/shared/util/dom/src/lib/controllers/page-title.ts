@@ -108,13 +108,13 @@ function buildValues(values?: PageTitleObject): PageTitleObject {
   })
 }
 
-export function setScreenName(screen, number?): void {
+export function setScreenName(screen: string, number?: number): void {
   $_screenObj.next(buildValues({ screen, number }))
 }
-export function setScreenSeparator(separator): void {
+export function setScreenSeparator(separator: string): void {
   $_screenObj.next(buildValues({ separator }))
 }
-export function setScreenSuffix(suffix): void {
+export function setScreenSuffix(suffix: string): void {
   $_screenObj.next(buildValues({ suffix }))
 }
 export function setScreenNumber(number?): void {
