@@ -20,10 +20,10 @@
  * an error happens in a middleware
  * @param middleware
  */
-export function initializeMiddleware(middleware) {
-  return (req, res) =>
+export function initializeMiddleware(middleware: any) {
+  return (req: any, res: any) =>
     new Promise((resolve, reject) => {
-      middleware(req, res, (result) => {
+      middleware(req, res, (result: any) => {
         if (result instanceof Error) {
           return reject(result)
         }
