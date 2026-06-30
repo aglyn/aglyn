@@ -43,6 +43,7 @@ import {
   type TextFieldProps,
 } from '@mui/material'
 import {
+  type FocusEvent,
   forwardRef,
   useCallback,
   useId,
@@ -175,9 +176,9 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     const [fieldRef, setFieldRef] = useState<HTMLDivElement | null>(null)
     const [open, setOpen] = useState(false)
 
-    const handleClickAway = useCallback((e) => setOpen(false), [])
+    const handleClickAway = useCallback((e: MouseEvent | TouchEvent) => setOpen(false), [])
     const handleFocus = useCallback(
-      (e) => {
+      (e: FocusEvent<HTMLInputElement>) => {
         setOpen(true)
         onFocus && onFocus(e)
       },
