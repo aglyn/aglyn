@@ -16,11 +16,11 @@
  */
 
 import {
-  type AglynElementsNormalized,
+  type AglynNodesList,
   CANVAS_ROOT_ELEMENT_ID,
-} from '@aglyn/core-data-app'
+} from '@aglyn/core-data-foundation'
 
-export const samplePageData: AglynElementsNormalized = [
+export const samplePageData: AglynNodesList = [
   {
     $id: 'root1',
     componentId: 'root',

@@ -19,7 +19,7 @@ import { bundle as muiBundle } from '@aglyn/plugins-ui-mui'
 import {
   doesBesignerAppExist,
   initializeBesignerApp,
-} from '@aglyn/besigner-data'
+} from '@aglyn/besigner-data-app'
 import { registerBundle, registerComponent } from '@aglyn/core-data-app'
 import { createAglynComponent } from '@aglyn/core-feature-renderer'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
@@ -66,18 +66,6 @@ const c5 = createAglynComponent(
     $id: 'root4',
     displayName: 'Root Element',
     title: 'Root element',
-    templates: [
-      {
-        id: 'root4:1',
-        label: 'Root 4',
-        data: {
-          componentId: 'root4',
-          props: {
-            children: 'First Root4',
-          },
-        },
-      },
-    ],
   },
   'span',
 )
