@@ -378,7 +378,7 @@ export const BoxButtonStyler = forwardRef<any, BoxButtonStylerProps>(
   (props, ref) => {
     const { measurements, size, onChange, ...rest } = props
     const { width, height } = { ...size }
-    const [editing, setEditing] = useState(null)
+    const [editing, setEditing] = useState(false)
 
     const handleChange = useCallback(
       (key: keyof Measurements) => (dimension: Measurement) => {
