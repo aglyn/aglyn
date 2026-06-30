@@ -51,7 +51,7 @@ export interface MuiShadowRootProps {
 
 const tags = new Map()
 const cacheMap = new WeakMap()
-const ShadowDomContext = createContext<Element>(null)
+const ShadowDomContext = createContext<Node>(null)
 
 export function useMuiShadowDomContext() {
   return useContext(ShadowDomContext)
@@ -117,7 +117,7 @@ export function withMuiShadowRoot(
                 })}
               </template>
             ) : (
-              <Portal container={() => container}>
+              <Portal container={() => container as unknown as Element}>
                 {render({
                   container,
                   ssr,
