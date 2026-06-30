@@ -73,7 +73,7 @@ import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, useCallback, useMemo } from 'react'
+import { forwardRef, type SyntheticEvent, useCallback, useMemo } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 import { Accordion } from './accordion-list.component'
 import { ElementPropsFormTemplate } from './element-props-form.component'
@@ -783,7 +783,7 @@ const justifySelf: ButtonGroupFormControl = {
   ],
 }
 
-const TextAlignToggleButtonGroup = (props) => {
+const TextAlignToggleButtonGroup = (props: { onChange: (e: SyntheticEvent, value: string) => void; value: string; field: { name: string; label: string; options: { value: string; icon: string; label: string }[]; description?: string } }) => {
   const { onChange, value, field } = props
 
   return (
@@ -834,7 +834,7 @@ const ElementStylesForm = observer(
       return stylesSchema(values)
     }, [siteTheme])
 
-    const handleFormCancel = useCallback((e, reason) => {}, [])
+    const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       action((values) => {
         if (node) {

@@ -36,7 +36,7 @@ import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, memo, useCallback, useEffect, useRef } from 'react'
+import { forwardRef, memo, type SyntheticEvent, useCallback, useEffect, useRef } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
 // Subscribes to form value changes via FormSpy and auto-submits when dirty.
@@ -134,9 +134,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const deleteElementCallback = useDeleteElementCallback()
     const attributes = schema?.attributes || []
 
-    const handleFormCancel = useCallback((e, reason) => {}, [])
+    const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
-      (values) => {
+      (values: Record<string, unknown>) => {
         Aglyn.canvas.updateNodeProps(node, values)
       },
       [node],
