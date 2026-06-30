@@ -47,7 +47,7 @@ const buildLocalValue = (dimension: string) => ({
 
 export const DimensionControl = observer((props: DimensionControlProps) => {
   const { dimension, onChange } = props
-  const [parsed, setParsed] = useState(buildLocalValue(dimension))
+  const [parsed, setParsed] = useState<{ raw?: string; value?: number; unit?: CssUnit }>(buildLocalValue(dimension))
   useEffect(() => setParsed(buildLocalValue(dimension)), [dimension])
   const [menuOpen, setMenuOpen] = useState(false)
   const [iconRef, setIconRef] = useState<HTMLButtonElement | null>(null)
@@ -61,7 +61,7 @@ export const DimensionControl = observer((props: DimensionControlProps) => {
         unit: undefined,
       }
       switch (true) {
-        case type === 'unit' && isGlobalUnit(newValue):
+        case type === 'unit' && isGlobalUnit(newValue as CssUnit):
           res.raw = `${newValue}`
           res.value = undefined
           res.unit = newValue as CssUnit
@@ -89,7 +89,7 @@ export const DimensionControl = observer((props: DimensionControlProps) => {
           break
       }
       setParsed(res)
-      onChange && onChange(res.raw)
+      onChange && onChange({ value: res.value, unit: res.unit })
       setMenuOpen(false)
     },
     [onChange, parsed],
