@@ -45,7 +45,7 @@ export function useNodeProperty<U extends string | number | symbol, T>(
 
   const ref = useCallback((node: T | null) => setNode(node), [])
 
-  return [value, ref, node, setNewKey]
+  return [value, ref, node as unknown as JSX.Node, setNewKey]
 }
 
 export default useNodeProperty
