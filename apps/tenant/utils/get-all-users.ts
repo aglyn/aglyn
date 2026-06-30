@@ -18,7 +18,7 @@
 import { firebaseAdmin } from '@aglyn/core-data-admin'
 
 export async function getAllUsers(nextPageToken?: string) {
-  const data: { users: Record<string, unknown>[]; nextPageToken: string | null; error: Error | null } = { users: [], nextPageToken: null, error: null }
+  const data: { users: object[]; nextPageToken: string | null; error: Error | null } = { users: [], nextPageToken: null, error: null }
 
   // List batch of users, 1000 at a time.
   await firebaseAdmin
