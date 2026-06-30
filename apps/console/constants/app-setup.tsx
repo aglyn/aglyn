@@ -118,8 +118,7 @@ try {
     })
     if (!IS_PRODUCTION) console.info('set global Aglyn', _Aglyn)
     if (!IS_PRODUCTION) {
-      // @ts-ignore
-      window.Aglyn = Aglyn
+      ;(window as Window & { Aglyn: typeof Aglyn }).Aglyn = Aglyn
     }
 
     components.forEach((i) => registerComponent(_Aglyn, i))
