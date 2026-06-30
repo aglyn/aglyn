@@ -66,7 +66,7 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
       ...rest
     } = props
     const node = useEnsuredForwardedRef<HTMLElement>(ref as any)
-    const [root, setRoot] = useState(null)
+    const [root, setRoot] = useState<ShadowRoot | null>(null)
     const key = `node_${mode}${delegatesFocus}`
     const Tag = options.tag
 

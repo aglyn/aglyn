@@ -83,7 +83,7 @@ export function withMuiShadowRoot(
       ...rest
     } = props
     const local = useRef<Element | null>(null)
-    const [container, setContainer] = useState(null)
+    const [container, setContainer] = useState<ShadowRoot | null>(null)
     const key = `node_${mode}${delegatesFocus}`
 
     useEffect(() => {
