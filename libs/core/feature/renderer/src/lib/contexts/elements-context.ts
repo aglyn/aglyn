@@ -43,18 +43,7 @@ export interface ElementsContextType {
   updateElement: ContextEvent<CanvasUpdateElementPayload>
 }
 
-export const ElementsContext = createContext<ElementsContextType>({
-  addElement: (() => {}) as any,
-  deleteElement: (() => {}) as any,
-  duplicateElement: (() => {}) as any,
-  elements: {},
-  moveElement: (() => {}) as any,
-  redo: (() => {}) as any,
-  setElement: (() => {}) as any,
-  setElements: (() => {}) as any,
-  undo: (() => {}) as any,
-  updateElement: (() => {}) as any,
-})
+export const ElementsContext = createContext<ElementsContextType>(null as unknown as ElementsContextType)
 ElementsContext.displayName = 'ElementsContext'
 ElementsContext.aglyn = true
 

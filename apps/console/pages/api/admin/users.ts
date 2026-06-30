@@ -34,7 +34,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { use } from 'next-api-middleware'
 
 const getAllUsers = async (nextPageToken?: string) => {
-  const data = { users: [] as any, nextPageToken: '', error: null }
+  const data: { users: Record<string, unknown>[]; nextPageToken: string; error: Error | null } = { users: [], nextPageToken: '', error: null }
 
   // List batch of users, 1000 at a time.
   await firebaseAdmin
