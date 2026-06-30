@@ -311,8 +311,8 @@ export interface AglynAttributeSchema extends Dictionary<any> {
   validate?: Validator[]
   condition?: ConditionDefinition | ConditionDefinition[]
   initializeOnMount?: boolean
-  initialValue?: any
-  clearedValue?: any
+  initialValue?: unknown
+  clearedValue?: unknown
   clearOnUnmount?: boolean
   actions?: FieldActions
   resolveProps?: ResolvePropsFunction

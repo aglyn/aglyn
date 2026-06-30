@@ -39,11 +39,11 @@ export function useAglynElementData<P = JSX.AnyProps>(
 export function useAglynElementData<
   P = JSX.AnyProps,
   K extends keyof AglynNodeItemNormalized<P> = null,
->($id: NodeId, property: K, defaultValue?: any): AglynNodeItemNormalized<P>[K]
+>($id: NodeId, property: K, defaultValue?: AglynNodeItemNormalized<P>[K]): AglynNodeItemNormalized<P>[K]
 export function useAglynElementData<
   P = JSX.AnyProps,
   K extends keyof AglynNodeItemNormalized<P> = null,
->($id: NodeId, property?: K, defaultValue?: any): UseAglynElementData<P, K> {
+>($id: NodeId, property?: K, defaultValue?: AglynNodeItemNormalized<P>[K]): UseAglynElementData<P, K> {
   const app = useAglynAppContext()
   return useSubscribable(
     getCanvasNormalizedNodesStore(app),

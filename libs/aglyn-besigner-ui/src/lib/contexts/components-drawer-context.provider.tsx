@@ -38,7 +38,7 @@ export interface ComponentsDrawerContextProviderProps
 }
 
 export type ComponentPickerResolve<T> = (value: T | PromiseLike<T>) => void
-export type ComponentPickerReject = (reason?: any) => void
+export type ComponentPickerReject = (reason?: unknown) => void
 
 export function ComponentsDrawerContextProvider(
   props: ComponentsDrawerContextProviderProps,
