@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import type {NextMiddleware} from 'next-api-middleware'
+import type {Middleware} from 'next-api-middleware'
 import {Logger, type Req, Res} from '../helpers'
 import type {NextFn} from '../tools/middleware'
 import type {ApiRequest, ApiResponse} from '../types'
 
 
-export function httpRequestMethod(allowed: Req.Method[]): NextMiddleware {
+export function httpRequestMethod(allowed: Req.Method[]): Middleware {
   return async (req: ApiRequest, res: ApiResponse, next: NextFn) => {
     const {method} = req
     if (allowed.includes(method as Req.Method)) {
