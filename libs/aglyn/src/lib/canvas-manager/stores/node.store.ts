@@ -67,6 +67,5 @@ const CanvasModel = types.model('NodeStoreModel', {
 })
 
 // Define the root-level model with a reference to child nodes
-// @ts-expect-error — MST union type inference limitation
 export const TreeNodeModel = types.union(LeafModel, NodeModel)
 
