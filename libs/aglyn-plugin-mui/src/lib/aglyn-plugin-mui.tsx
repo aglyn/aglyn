@@ -34,7 +34,7 @@ Aglyn.plugins.addDependency({
   title: 'Material UI',
   dependencies: {},
   // components: [],
-  load(...args): void {
+  load(...args: unknown[]): void {
     Aglyn.components.registerComponent(AppBar.default, AppBar.schema)
     Aglyn.components.registerComponent(Toolbar.default, Toolbar.schema)
     Aglyn.components.registerComponent(Typography.default, Typography.schema)
@@ -58,7 +58,7 @@ Aglyn.plugins.addDependency({
     Aglyn.components.registerPreset(ListItemText.presets)
     Aglyn.components.registerPreset(Stack.presets)
   },
-  destroy(...args): void {
+  destroy(...args: unknown[]): void {
     Aglyn.components.unregisterPreset(AppBar.presets.map((i) => i.$id))
     Aglyn.components.unregisterPreset(Toolbar.presets.map((i) => i.$id))
     Aglyn.components.unregisterPreset(Typography.presets.map((i) => i.$id))
