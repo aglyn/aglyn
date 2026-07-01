@@ -51,14 +51,14 @@ export class AglynCommandsController
     return NS
   }
 
-  #commander: AglynCommander = EmitterFn()
-  #resolvers: Map<CommandUId, AglynCommandResolver> = new Map()
+  _commander: AglynCommander = EmitterFn()
+  _resolvers: Map<CommandUId, AglynCommandResolver> = new Map()
 
   public get commander(): AglynCommander {
-    return this.#commander
+    return this._commander
   }
   public get resolvers(): Map<CommandUId, AglynCommandResolver> {
-    return this.#resolvers
+    return this._resolvers
   }
 
   protected get listeners(): AglynModuleEffectListener<any>[] {
@@ -84,7 +84,7 @@ export class AglynCommandsController
   public toJSON() {
     return {
       ...super.toJSON(),
-      commands: this.#commander.all.entries() as any,
+      commands: this._commander.all.entries() as any,
     }
   }
 
@@ -99,7 +99,7 @@ export class AglynCommandsController
         ],
         { commandId },
         () => {
-          this.#resolvers.set(commandId, resolver)
+          this._resolvers.set(commandId, resolver)
         },
       )
     } else {
@@ -120,7 +120,7 @@ export class AglynCommandsController
         ],
         { commandId },
         () => {
-          this.#commander.on(commandId, listener)
+          this._commander.on(commandId, listener)
         },
       )
     } else {
@@ -141,7 +141,7 @@ export class AglynCommandsController
         ],
         { commandId },
         () => {
-          this.#commander.off(commandId, listener)
+          this._commander.off(commandId, listener)
         },
       )
     } else {
@@ -160,7 +160,7 @@ export class AglynCommandsController
         ],
         { commandId },
         () => {
-          this.#resolvers.delete(commandId)
+          this._resolvers.delete(commandId)
         },
       )
     } else {
@@ -171,7 +171,7 @@ export class AglynCommandsController
   }
   public trigger(payload: CommandsTriggerPayload): this {
     const { commandId } = payload
-    const resolver = this.#resolvers.get(commandId)
+    const resolver = this._resolvers.get(commandId)
     if (_isFnT(resolver)) {
       this.handleEvent(
         [
@@ -188,7 +188,7 @@ export class AglynCommandsController
             ],
             { commandId },
             () => {
-              this.#commander.emit(commandId, { payload, response })
+              this._commander.emit(commandId, { payload, response })
             },
           )
         },
