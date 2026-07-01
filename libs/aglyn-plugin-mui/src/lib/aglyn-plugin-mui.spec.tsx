@@ -1,10 +1,9 @@
-import { render } from '@testing-library/react'
-
-import AglynPluginMui from './aglyn-plugin-mui'
+import * as Aglyn from '@aglyn/aglyn'
+import { PLUGIN_ID } from './constants/common'
+import './aglyn-plugin-mui'
 
 describe('AglynPluginMui', () => {
-  it('should render successfully', () => {
-    const { baseElement } = render(<AglynPluginMui />)
-    expect(baseElement).toBeTruthy()
+  it('registers the mui plugin dependency on import', () => {
+    expect(Aglyn.plugins.getDependency(PLUGIN_ID)).toBeTruthy()
   })
 })
