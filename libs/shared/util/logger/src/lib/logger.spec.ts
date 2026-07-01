@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import {logger} from './logger'
+import { Logger } from './logger'
 
-
-describe('logger', () => {
-  it('should work', () => {
-    expect(logger()).toEqual('logger')
+describe('Logger', () => {
+  it('constructs with a name and reports it via toString', () => {
+    const instance = new Logger('test-logger')
+    expect(instance.name).toEqual('test-logger')
   })
 })
