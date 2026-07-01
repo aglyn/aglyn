@@ -15,14 +15,29 @@
  * limitations under the License.
  */
 
+import { deleteBesignerApp, initializeBesignerApp } from '@aglyn/besigner-data-app'
 import { render } from '@testing-library/react'
 import React from 'react'
 
 import { AppBarSecondaryComponent } from './app-bar-secondary.component'
+import { BesignerRootProviderComponent } from './besigner-root-provider.component'
 
 describe('BesignerToolbarComponent', () => {
+  const appName = 'app-bar-secondary-test'
+
+  beforeEach(() => {
+    initializeBesignerApp({ appName })
+  })
+  afterEach(() => {
+    deleteBesignerApp(appName)
+  })
+
   it('should render successfully', () => {
-    const { baseElement } = render(<AppBarSecondaryComponent />)
+    const { baseElement } = render(
+      <BesignerRootProviderComponent appName={appName}>
+        <AppBarSecondaryComponent />
+      </BesignerRootProviderComponent>,
+    )
     expect(baseElement).toBeTruthy()
   })
 })

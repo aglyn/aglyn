@@ -15,13 +15,34 @@
  * limitations under the License.
  */
 
+import { deleteBesignerApp, initializeBesignerApp } from '@aglyn/besigner-data-app'
+import { consoleOptions, createResponsiveTheme } from '@aglyn/shared-ui-theme'
+import { ThemeProvider } from '@mui/material/styles'
 import { render } from '@testing-library/react'
 
+import { BesignerRootProviderComponent } from './besigner-root-provider.component'
 import ViewportCanvasComponent from './viewport-canvas.component'
 
+const theme = createResponsiveTheme({ themeOptions: consoleOptions })
+
 describe('ViewportCanvasComponent', () => {
+  const appName = 'viewport-canvas-test'
+
+  beforeEach(() => {
+    initializeBesignerApp({ appName })
+  })
+  afterEach(() => {
+    deleteBesignerApp(appName)
+  })
+
   it('should render successfully', () => {
-    const { baseElement } = render(<ViewportCanvasComponent />)
+    const { baseElement } = render(
+      <ThemeProvider theme={theme}>
+        <BesignerRootProviderComponent appName={appName}>
+          <ViewportCanvasComponent />
+        </BesignerRootProviderComponent>
+      </ThemeProvider>,
+    )
     expect(baseElement).toBeTruthy()
   })
 })
