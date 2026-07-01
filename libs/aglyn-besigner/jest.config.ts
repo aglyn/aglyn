@@ -13,6 +13,15 @@ if (swcJestConfig.swcrc === undefined) {
   swcJestConfig.swcrc = false
 }
 
+// Jest runs under CommonJS and needs interop enabled for default-importing
+// CJS packages (e.g. eventemitter2). The library's own .swcrc targets ESM
+// output for production and disables interop, which breaks under jest.
+swcJestConfig.module = {
+  ...swcJestConfig.module,
+  type: 'commonjs',
+  noInterop: false,
+}
+
 export default {
   displayName: 'aglyn-besigner',
   preset: '../../jest.preset.js',
