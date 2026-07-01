@@ -55,11 +55,11 @@ export class AglynContextsController
     return NS
   }
 
-  #domain: ContextDomain = null
-  #stores: Map<ContextStoreUid, ContextStore<any>> = new Map()
+  _domain: ContextDomain = null
+  stores: Map<ContextStoreUid, ContextStore<any>> = new Map()
 
   public get domain(): ContextDomain {
-    return this.#domain
+    return this._domain
   }
 
   protected get listeners(): AglynModuleEffectListener<any>[] {
@@ -78,13 +78,13 @@ export class AglynContextsController
     options: AglynContextsControllerOptions,
   ) {
     super(app, options)
-    this.#setup()
+    this.setupInternal()
   }
-  #setup() {
-    this.#domain = createEffectorDomain(this.app.getName())
-    this.#setupDefaultStores()
+  private setupInternal() {
+    this._domain = createEffectorDomain(this.app.getName())
+    this.setupDefaultStores()
   }
-  #setupDefaultStores(): void {
+  private setupDefaultStores(): void {
     const defaultStores = this.options.defaultStores
     if (defaultStores && _isObj(defaultStores)) {
       for (const storeId in defaultStores) {
@@ -101,38 +101,38 @@ export class AglynContextsController
   public toJSON() {
     return {
       ...super.toJSON(),
-      contexts: this.#stores.entries() as any,
+      contexts: this.stores.entries() as any,
     }
   }
 
   public createEvent(payload?: ContextsCreateEventPayload): ContextEvent {
     const { options } = { ...payload }
-    return this.#domain.createEvent(...(options ?? ([] as any)))
+    return this._domain.createEvent(...(options ?? ([] as any)))
   }
   public createEffect(payload?: ContextsCreateEffectPayload): ContextEffect {
     const { options } = { ...payload }
-    return this.#domain.createEffect(...(options ?? ([] as any)))
+    return this._domain.createEffect(...(options ?? ([] as any)))
   }
   public createStore<T>(
     payload: ContextsCreateStorePayload<T>,
   ): ContextStore<T> {
     const { options, defaultState } = { ...payload }
-    return this.#domain.createStore(defaultState, options)
+    return this._domain.createStore(defaultState, options)
   }
   public getStore<T>(payload: ContextsGetStorePayload): ContextStore<T> {
     const { storeId } = { ...payload }
-    return this.#stores.get(storeId)
+    return this.stores.get(storeId)
   }
   public getStoreApi<T, K extends keyof T = keyof T>(
     payload: ContextsGetStoreApiPayload,
   ): T {
     const { storeId } = { ...payload }
-    return this.#stores.get(storeId) as unknown as T
+    return this.stores.get(storeId) as unknown as T
   }
   public setStore<T>(payload: ContextsSetStorePayload<T>): this {
     const { storeId, store } = { ...payload }
     if (storeId && store) {
-      this.#stores.set(storeId, store)
+      this.stores.set(storeId, store)
     } else {
       // TODO: throw errorFactory error
       throw new Error(`Invalid storeId: ${storeId}`)
@@ -141,7 +141,7 @@ export class AglynContextsController
   }
   public deleteStore(payload: ContextsDeleteStorePayload): this {
     const { storeId } = { ...payload }
-    this.#stores.delete(storeId)
+    this.stores.delete(storeId)
     return this
   }
 }
