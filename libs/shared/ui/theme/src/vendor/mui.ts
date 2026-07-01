@@ -16,7 +16,7 @@
  */
 
 import type { Theme as MuiTheme } from '@mui/material/styles'
-import type { CSSProperties, Shadows } from '@mui/material/styles'
+import type { Color as MuiColor, CSSProperties, Shadows } from '@mui/material/styles'
 // import type { ExtraColorOptions } from '@mui/material/styles/createPalette'
 // import type { WithStyles } from '@mui/styles'
 // import type { ClassKeyInferable } from '@mui/styles/withStyles'
@@ -250,7 +250,7 @@ export {
   getInitColorSchemeScript,
 } from '@mui/material/styles'
 
-export { type ColorPartial } from '@mui/material/styles/createPalette'
+export type ColorPartial = Partial<MuiColor>
 export {
   type CommonColors,
   type TypeBackground,

@@ -17,9 +17,9 @@
 
 import { _isFnT } from '@aglyn/shared-util-tools'
 import { useScrollTrigger } from '@mui/material'
-// eslint-disable-next-line no-restricted-imports
-import type { UseScrollTriggerOptions } from '@mui/material/useScrollTrigger/useScrollTrigger'
 import { cloneElement, type ReactElement } from 'react'
+
+type UseScrollTriggerOptions = Parameters<typeof useScrollTrigger>[0]
 
 export type ElevatedRenderProps = {
   activeWithHysteresis: boolean
@@ -62,7 +62,9 @@ export interface ScrollReactionProps<P = any> extends ScrollTriggerOptions {
   withoutHysteresis?: ScrollTriggerOptions
 }
 
-export function ScrollReaction<P>(props: ScrollReactionProps<P>) {
+export function ScrollReaction<P>(
+  props: ScrollReactionProps<P>,
+): ReactElement<P> {
   const {
     children,
     renderProps,
@@ -86,11 +88,14 @@ export function ScrollReaction<P>(props: ScrollReactionProps<P>) {
   })
   const activity = { activeWithHysteresis, activeWithoutHysteresis }
 
-  if (_isFnT(children)) return children(activity)
+  if (_isFnT(children))
+    return (children as (state: ElevatedRenderProps) => ReactElement<P>)(
+      activity,
+    )
 
   return cloneElement(
-    children,
-    _isFnT(renderProps) ? renderProps(activity) : renderProps,
+    children as ReactElement<P>,
+    (_isFnT(renderProps) ? renderProps(activity) : renderProps) as Partial<P>,
   )
 }
 
