@@ -15,13 +15,28 @@
  * limitations under the License.
  */
 
+import { deleteApp, initializeApp } from '@aglyn/core-data-app'
 import React from 'react'
 import { render } from '@testing-library/react'
+import { AglynAppProvider } from './aglyn-app-context'
 import { ElementComponentsContextProvider } from './element-components-context-provider'
 
 describe('ElementComponentsContextProvider', () => {
+  const appName = 'element-components-context-provider-test'
+
+  beforeEach(() => {
+    initializeApp({ appName })
+  })
+  afterEach(() => {
+    deleteApp(appName)
+  })
+
   it('should render successfully', () => {
-    const { baseElement } = render(<ElementComponentsContextProvider />)
+    const { baseElement } = render(
+      <AglynAppProvider appName={appName}>
+        <ElementComponentsContextProvider />
+      </AglynAppProvider>,
+    )
     expect(baseElement).toBeTruthy()
   })
 })
