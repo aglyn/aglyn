@@ -49,7 +49,7 @@ function initialize<T>(key: string, initialState: T): T {
 
 type LocalStorageItemState<T> = [
   value: T,
-  setState: Dispatch<SetStateAction<T>>,
+  setState: (newValue: T) => void,
   removeState: () => void,
 ]
 type BroadcastCustomEvent<T> = CustomEvent<{ newValue: T }>
@@ -146,13 +146,13 @@ export function useLocalStorageItemState<T>(
     if (typeof document !== 'undefined') {
       document.addEventListener(
         customEventTypeName,
-        listenToCustomEventWithinDocument,
+        listenToCustomEventWithinDocument as EventListener,
       )
 
       return () => {
         document.removeEventListener(
           customEventTypeName,
-          listenToCustomEventWithinDocument,
+          listenToCustomEventWithinDocument as EventListener,
         )
       }
     } else {

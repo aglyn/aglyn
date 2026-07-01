@@ -32,9 +32,9 @@ export function useInterval(
   }, [callback])
 
   useEffect(() => {
-    let interval = undefined
+    let interval: ReturnType<typeof setInterval> = undefined
 
-    const handler = (...handlerArgs) => {
+    const handler = (...handlerArgs: unknown[]) => {
       if (_isFnT(savedCallback.current)) {
         if (runCount.current < count || !count) {
           runCount.current = runCount.current + 1

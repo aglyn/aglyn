@@ -18,7 +18,9 @@
 import { type MutableRefObject, useLayoutEffect, useState } from 'react'
 
 function getStyle(el: Element, styleName: string) {
-  return getComputedStyle(el)[styleName]
+  return (getComputedStyle(el) as unknown as Record<string, string>)[
+    styleName
+  ]
 }
 
 function getOffset(el: any) {

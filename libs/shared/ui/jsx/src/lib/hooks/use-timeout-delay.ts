@@ -134,7 +134,7 @@ export function useTimeoutDelay(
           ? state.msDelay
           : 0
 
-      const max = _isNumPos(optLimit) ? optLimit : null
+      const max: number = _isNumPos(optLimit) ? optLimit : null
 
       // If run limit was provide ensure we don't run more than specified
       const handler = (arg: HandlerParams['args']) => {

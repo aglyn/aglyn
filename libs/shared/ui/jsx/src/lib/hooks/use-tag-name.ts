@@ -18,7 +18,9 @@
 import { Ref } from 'react'
 import useNodeProperty from './use-node-property'
 
-export function useTagName(initialState = null): [string, Ref<any>, JSX.Node] {
+export function useTagName(
+  initialState: string = null,
+): [string, Ref<any>, JSX.Node] {
   const [tagName, ref, node] = useNodeProperty('tagName', initialState)
   return [tagName, ref, node]
 }

@@ -26,7 +26,7 @@ export function useMousePosition(
 ): [MousePosition, MouseEventHandler<any>] {
   const [position, setPosition] = useState(initialValue)
   const handleMouseMove = useCallback(
-    (event) =>
+    (event: Parameters<MouseEventHandler<any>>[0]) =>
       setPosition({
         x: (event || {}).clientX,
         y: (event || {}).clientY,

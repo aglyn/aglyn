@@ -30,7 +30,7 @@ export function useTimeout(
   }, [callback])
 
   useEffect(() => {
-    let timeout = undefined
+    let timeout: ReturnType<typeof setTimeout> = undefined
 
     const handler = (...args: unknown[]) => {
       if (_isFnT(savedCallback.current)) {

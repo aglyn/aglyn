@@ -23,11 +23,11 @@ export type EffectCallback<T = unknown> = (
 ) => T | Promise<T>
 
 export type EffectParam<T = unknown> =
-  | EffectCallback
+  | EffectCallback<T>
   | { onMount?: EffectCallback<T>; onUnmount?: (result?: T) => void }
 
 export function useAsyncEffect<T = unknown>(
-  effect: EffectParam,
+  effect: EffectParam<T>,
   deps?: DependencyList,
 ) {
   const isFunc = typeof effect === 'function'
@@ -41,7 +41,7 @@ export function useAsyncEffect<T = unknown>(
     function () {
       const doMount = handleMount.current
       const doUnmount = handleUnmount.current
-      let result
+      let result: T
       let mounted = true
 
       if (typeof doMount === 'function') {
