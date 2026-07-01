@@ -128,7 +128,7 @@ const AppLink = forwardRef(
     const { className, componentVariant, href, ...rest } = props
 
     const variant = componentVariant
-    const pathname = usePathname()
+    const pathname = usePathname() ?? ''
     const [active, activeAsAncestor] = useMemo(() => {
       const hrefPath = _isObj(href) ? href['pathname'] : href,
         samePath = hrefPath === pathname,
