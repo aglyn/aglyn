@@ -27,6 +27,7 @@ module.exports = {
         'micromark.*', 'parse-entities', 'property-information',
         'remark-.*', 'space-separated-tokens', 'stringify-entities',
         'trim-lines', 'trough', 'unified', 'unist-util-.*', 'vfile.*', 'zwitch',
+        '@react-dnd/.*', 'dnd-core', 'react-dnd', 'react-dnd-html5-backend',
       ].join('|') +
       ')/)',
   ],
