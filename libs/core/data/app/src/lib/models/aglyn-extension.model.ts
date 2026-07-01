@@ -52,21 +52,21 @@ export abstract class AglynExtension<
     return 'unknown'
   }
 
-  #context?: T = null
-  #lifecycle?: AglynLifecycleFlag[] = [AglynLifecycleFlag.UNREGISTERED]
+  _context?: T = null
+  _lifecycle?: AglynLifecycleFlag[] = [AglynLifecycleFlag.UNREGISTERED]
 
   public get extensionName(): string {
     return getStaticField('extensionName', this)
   }
   public get context(): T {
-    return this.#context
+    return this._context
   }
   public get lifecycleHistory(): AglynLifecycleFlag[] {
-    return [...this.#lifecycle]
+    return [...this._lifecycle]
   }
 
   public get lifecycle(): AglynLifecycleFlag {
-    return this.#lifecycle.at(-1)
+    return this._lifecycle.at(-1)
   }
   public set lifecycle(lifecycleFlag: AglynLifecycleFlag) {
     if (!nextLifecycleIsValid(this.lifecycle, lifecycleFlag)) {
@@ -78,7 +78,7 @@ export abstract class AglynExtension<
         },
       )
     }
-    this.#lifecycle.push(lifecycleFlag)
+    this._lifecycle.push(lifecycleFlag)
   }
 
   protected constructor(app: IAglynAppController, options: O) {
@@ -119,10 +119,10 @@ export abstract class AglynExtension<
     return getStaticField('extensionName', this)
   }
   public getContext(): T {
-    return this.#context
+    return this._context
   }
   public setContext(value: T): this {
-    this.#context = value
+    this._context = value
     return this
   }
 }
