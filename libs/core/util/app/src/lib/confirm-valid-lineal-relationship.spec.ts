@@ -79,7 +79,7 @@ describe('confirm-valid-lineal-relationship', () => {
       pluginId: 'xyz',
       restrictChildren: [
         Aglyn.LinealDirectiveFlag.LIMIT_TO,
-        { bundles: ['xyz'], components: ['abc'] },
+        { plugins: ['xyz'], components: ['abc'] },
       ] as Aglyn.ComponentsLinealOrder,
     }
     expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(false)
@@ -96,7 +96,7 @@ describe('confirm-valid-lineal-relationship', () => {
       pluginId: 'xyz',
       restrictChildren: [
         Aglyn.LinealDirectiveFlag.LIMIT_TO,
-        { bundles: ['xyz'], components: ['abc'] },
+        { plugins: ['xyz'], components: ['abc'] },
       ] as Aglyn.ComponentsLinealOrder,
     }
     expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(true)
@@ -113,7 +113,7 @@ describe('confirm-valid-lineal-relationship', () => {
       pluginId: 'xyz',
       restrictChildren: [
         Aglyn.LinealDirectiveFlag.LIMIT_TO,
-        { bundles: ['xyz'], components: ['abc'] },
+        { plugins: ['xyz'], components: ['abc'] },
       ] as Aglyn.ComponentsLinealOrder,
     }
     expect(confirmValidLinealRelationship(item, parent)[0]).toEqual(false)
