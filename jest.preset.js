@@ -32,4 +32,10 @@ module.exports = {
       ')/)',
   ],
   setupFiles: [require.resolve('./jest.setup.js')],
+  // Static asset imports (e.g. `import img from './foo.png'`) are normally
+  // transformed by Next.js's webpack loader into a StaticImageData object.
+  // Jest has no such loader, so map them to a stub with the same shape.
+  moduleNameMapper: {
+    '\\.(png|jpe?g|gif|svg|webp|avif|ico|bmp)$': require.resolve('./jest.file-mock.js'),
+  },
 }
