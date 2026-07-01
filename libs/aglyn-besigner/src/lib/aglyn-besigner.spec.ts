@@ -1,7 +1,7 @@
-import { aglynBesigner } from './aglyn-besigner'
+import { dnd } from './aglyn-besigner'
 
 describe('aglynBesigner', () => {
-  it('should work', () => {
-    expect(aglynBesigner()).toEqual('aglyn-besigner')
+  it('exposes a dnd manager singleton', () => {
+    expect(dnd).toBeTruthy()
   })
 })
