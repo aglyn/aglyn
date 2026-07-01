@@ -15,15 +15,22 @@
  * limitations under the License.
  */
 
+import { createTheme } from '@mui/material/styles'
+import { ThemeProvider } from '@mui/styles'
 import React from 'react'
 import {render} from '@testing-library/react'
 
 import SandboxFrame from './sandbox-frame'
 
+const theme = createTheme()
 
 describe('SandboxFrame', () => {
   it('should render successfully', () => {
-    const {baseElement} = render(<SandboxFrame />)
+    const {baseElement} = render(
+      <ThemeProvider theme={theme}>
+        <SandboxFrame><div>content</div></SandboxFrame>
+      </ThemeProvider>,
+    )
     expect(baseElement).toBeTruthy()
   })
 })
