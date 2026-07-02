@@ -29,8 +29,8 @@ import {
 
 
 export const allClasses: {
-  mui: Record<SnackbarClassKey, {}>;
-  container: Record<ContainerClassKey, {}>;
+  mui: Record<SnackbarClassKey, object>;
+  container: Record<ContainerClassKey, object>;
 } = {
   mui: {
     root: {},
