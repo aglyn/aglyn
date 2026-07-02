@@ -117,8 +117,8 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     y: 0,
   }
 
-  frameAnimation: number = 0
-  intermediateFrameAnimation: number = 0
+  frameAnimation = 0
+  intermediateFrameAnimation = 0
 
   transformMatrixString = `matrix(1, 0, 0, 1, 0, 0)`
   intermediateTransformMatrixString = `matrix(1, 0, 0, 1, 0, 0)`
