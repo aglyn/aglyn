@@ -41,7 +41,7 @@ export function useNodeProperty<U extends string | number | symbol, T>(
     if (current && current[keyName] && current[keyName] !== value) {
       setPropertyValue(current[keyName])
     }
-  }, [node, keyName])
+  }, [node, keyName, value])
 
   const ref = useCallback((node: T | null) => setNode(node), [])
 
