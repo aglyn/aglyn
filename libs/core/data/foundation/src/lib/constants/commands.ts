@@ -15,10 +15,8 @@
  * limitations under the License.
  */
 
-import type {
-  AppUUN,
-  IAglynCommandsController,
-} from '@aglyn/core-data-foundation'
+import type { AppUUN } from '../definitions/app.types'
+import type { IAglynCommandsController } from '../definitions/commands.types'
 
 export const _INTERNAL_COMMANDS_: Map<AppUUN, IAglynCommandsController> =
   new Map()

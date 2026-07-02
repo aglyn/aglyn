@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import type {
-  AglynComponentPropsFormSchema,
-  AppUUN,
-  IAglynComponentsController,
-} from '@aglyn/core-data-foundation'
-import { FieldComponentType } from '../definitions/components.types'
+import type { AppUUN } from '../definitions/app.types'
+import {
+  type AglynComponentPropsFormSchema,
+  FieldComponentType,
+  type IAglynComponentsController,
+} from '../definitions/components.types'
 
 // export { FieldComponentType }
 

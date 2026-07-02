@@ -15,10 +15,8 @@
  * limitations under the License.
  */
 
-import type {
-  AppUUN,
-  IAglynContextsController,
-} from '@aglyn/core-data-foundation'
+import type { AppUUN } from '../definitions/app.types'
+import type { IAglynContextsController } from '../definitions/contexts.types'
 
 export const _INTERNAL_CONTEXTS_: Map<AppUUN, IAglynContextsController> =
   new Map()
