@@ -42,7 +42,9 @@ export function useTimeout(
       timeout = setTimeout(handler, delay, ...args)
       return () => clearTimeout(timeout)
     }
-  }, [delay]) // args is a rest param (new array each render) — omit from deps
+    // args is a rest param (new array each render) — omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [delay])
 }
 
 export default useTimeout
