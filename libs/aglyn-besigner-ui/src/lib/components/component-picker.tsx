@@ -124,7 +124,7 @@ export const ComponentPicker = observer(
     )
 
     const handleClose = useCallback(
-      (e: object, reason: string = 'canceled') => {
+      (e: object, reason = 'canceled') => {
         onClose?.(e, reason as Parameters<NonNullable<DrawerProps['onClose']>>[1])
       },
       [onClose],

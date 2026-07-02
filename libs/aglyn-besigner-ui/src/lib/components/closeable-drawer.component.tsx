@@ -52,7 +52,7 @@ export interface CloseableDrawerProps extends Partial<NavigationDrawerProps> {
   disableCloseButton?: boolean
   onClose?: {
     bivarianceHack(
-      event: {},
+      event: object,
       reason: 'backdropClick' | 'escapeKeyDown' | 'cancelClick',
     ): void
   }['bivarianceHack']
