@@ -836,11 +836,13 @@ const ElementStylesForm = observer(
 
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
-      action((values) => {
-        if (node) {
-          node.sx = { ...values }
-        }
-      }),
+      (values) => {
+        action(() => {
+          if (node) {
+            node.sx = { ...values }
+          }
+        })()
+      },
       [node],
     )
 
