@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/besigner/ui/form-fields/src",
   "projectType": "library",
-  "tags": [],
+  "tags": ["scope:lib", "scope:aglyn", "scope:ui", "aglyn:besigner"],
   "targets": {
     "lint": {
       "executor": "@nx/eslint:lint",

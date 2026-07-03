@@ -3,7 +3,7 @@
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/shared/svg-icons/svg-icons/src",
   "projectType": "library",
-  "tags": [],
+  "tags": ["scope:lib", "scope:shared", "scope:ui"],
   "targets": {
     "lint": {
       "executor": "@nx/eslint:lint",
