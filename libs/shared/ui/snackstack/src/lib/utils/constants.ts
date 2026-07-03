@@ -113,8 +113,6 @@ const numberOrNull = (numberish?: number | null) => (
   typeof numberish === 'number' || numberish === null
 )
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 export const merge = (options, props, defaults) => (name: keyof Snack): any => {
   if (name === 'autoHideDuration') {
     if (numberOrNull(options.autoHideDuration)) return options.autoHideDuration
