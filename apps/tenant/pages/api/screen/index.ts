@@ -22,7 +22,7 @@ import {
   nextHandleJsonSuccess,
 } from '@aglyn/shared-util-rest-api'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { use } from 'next-api-middleware'
+import { use as withMiddleware } from 'next-api-middleware'
 import getAllScreens from '../../../utils/get-all-screens'
 
 async function handler(request: NextApiRequest, response: NextApiResponse) {
@@ -49,4 +49,4 @@ async function handler(request: NextApiRequest, response: NextApiResponse) {
   return nextHandleJsonSuccess(response, data)
 }
 
-export default use(httpRequestMethodMiddleware(HttpRequestMethod.GET))(handler)
+export default withMiddleware(httpRequestMethodMiddleware(HttpRequestMethod.GET))(handler)

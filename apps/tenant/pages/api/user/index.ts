@@ -30,7 +30,7 @@ import {
   nextHandleJsonResponse,
 } from '@aglyn/shared-util-rest-api'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { use } from 'next-api-middleware'
+import { use as withMiddleware } from 'next-api-middleware'
 import getAllUsers from '../../../utils/get-all-users'
 
 async function handler(request: NextApiRequest, response: NextApiResponse) {
@@ -80,7 +80,7 @@ async function handler(request: NextApiRequest, response: NextApiResponse) {
   })
 }
 
-export default use(
+export default withMiddleware(
   csrfApiMiddleware,
   httpRequestMethodMiddleware(HttpRequestMethod.GET),
 )(handler)

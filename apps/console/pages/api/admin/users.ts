@@ -31,7 +31,7 @@ import {
   nextHandleJsonResponse,
 } from '@aglyn/shared-util-rest-api'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { use } from 'next-api-middleware'
+import { use as withMiddleware } from 'next-api-middleware'
 
 const getAllUsers = async (nextPageToken?: string) => {
   const data: { users: object[]; nextPageToken: string; error: Error | null } = { users: [], nextPageToken: '', error: null }
@@ -104,7 +104,7 @@ async function users(request: NextApiRequest, response: NextApiResponse) {
   })
 }
 
-export default use(
+export default withMiddleware(
   csrfApiMiddleware,
   httpRequestMethodMiddleware(HttpRequestMethod.GET),
 )(users)
