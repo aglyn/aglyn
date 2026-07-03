@@ -15,6 +15,4 @@
  * limitations under the License.
  */
 
-export interface AglynDocument {
-  [field: string]: any
-}
+export type { AglynDocument } from '@aglyn/core-data-foundation'

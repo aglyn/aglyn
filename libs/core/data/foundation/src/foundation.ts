@@ -33,6 +33,7 @@ export * from './lib/definitions/extensions.types'
 export * from './lib/definitions/module.types'
 export * from './lib/definitions/module.types'
 export * from './lib/definitions/shared'
+export * from './lib/definitions/workspace.types'
 
 //    __________  _   ________________    _   _____________
 //   / ____/ __ \/ | / / ___/_  __/   |  / | / /_  __/ ___/

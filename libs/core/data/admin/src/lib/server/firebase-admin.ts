@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/core-data-foundation'
 import { decode, encode } from '@msgpack/msgpack'
 import * as firebaseAdmin from 'firebase-admin'
 
