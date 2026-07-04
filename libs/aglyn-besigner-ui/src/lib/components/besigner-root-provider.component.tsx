@@ -23,7 +23,7 @@ import {
   AglynAppProvider,
   ElementComponentsContextProvider,
   ElementsContextProvider,
-} from '@aglyn/core-feature-renderer'
+} from '@aglyn/aglyn-node-renderer'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { NoSsr } from '@mui/material'

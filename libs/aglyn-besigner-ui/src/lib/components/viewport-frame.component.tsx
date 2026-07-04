@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { useAglynSiteTheme } from '@aglyn/core-feature-renderer'
+import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   MuiShadowDom,
   type MuiShadowRootProps,

@@ -21,7 +21,7 @@ import type {
   BundleId,
   ComponentId,
 } from '@aglyn/aglyn'
-import { useAglynAppContext } from '@aglyn/core-feature-renderer'
+import { useAglynAppContext } from '@aglyn/aglyn-node-renderer'
 import { buildComponentPropsFormSchema } from '@aglyn/aglyn'
 
 import { useMemo } from 'react'

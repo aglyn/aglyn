@@ -22,7 +22,7 @@ import {
   ToggleButtonFormControl,
 } from '@aglyn/besigner-ui-form-fields'
 import { FieldComponentType } from '@aglyn/aglyn'
-import { useAglynSiteTheme } from '@aglyn/core-feature-renderer'
+import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
   ICON_VARIANT_ALIGN_CENTER,
   ICON_VARIANT_ALIGN_JUSTIFY,

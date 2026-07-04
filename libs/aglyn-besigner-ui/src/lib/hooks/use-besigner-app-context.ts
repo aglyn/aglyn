@@ -16,7 +16,7 @@
  */
 
 import type { IBesignerAppController } from '@aglyn/besigner-data-app'
-import { useAglynAppContext } from '@aglyn/core-feature-renderer'
+import { useAglynAppContext } from '@aglyn/aglyn-node-renderer'
 
 export function useBesignerAppContext(
   ...args: Parameters<typeof useAglynAppContext>

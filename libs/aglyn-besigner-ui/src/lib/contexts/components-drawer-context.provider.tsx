@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AglynComponentsContext } from '@aglyn/core-feature-renderer'
+import { AglynComponentsContext } from '@aglyn/aglyn-node-renderer'
 import { type ElementType, Fragment, useCallback, useState } from 'react'
 import {
   CloseableDrawerComponent,

@@ -21,7 +21,7 @@ import {
   initializeBesignerApp,
 } from '@aglyn/besigner-data-app'
 import { registerBundle, registerComponent } from '@aglyn/aglyn'
-import { createAglynComponent } from '@aglyn/core-feature-renderer'
+import { createAglynComponent } from '@aglyn/aglyn-node-renderer'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 import { samplePageData } from './sample-data'
 

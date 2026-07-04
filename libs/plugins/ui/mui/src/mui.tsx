@@ -19,7 +19,7 @@ import type {
   AglynBundleSchema,
   ComponentRegisterPayload,
 } from '@aglyn/aglyn'
-import { createAglynComponent } from '@aglyn/core-feature-renderer'
+import { createAglynComponent } from '@aglyn/aglyn-node-renderer'
 import { createComponentsBundle } from '@aglyn/aglyn'
 import { mdiViewArray } from '@aglyn/shared-data-mdi'
 
