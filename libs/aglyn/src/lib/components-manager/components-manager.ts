@@ -20,7 +20,7 @@ import { makeAutoObservable, toJS } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
 import { lifecycleEvent } from '../lifecycle'
-import { createIdUrlSafe } from '../constants'
+import { createIdUrlSafe } from '../foundation'
 import { AglynEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 import {

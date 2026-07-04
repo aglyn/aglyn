@@ -40,7 +40,7 @@ import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'
 import type { NODE_ROOT_ID } from '../canvas-manager'
 
-import type { FEATURE_FLAG, FieldComponentType } from '../constants'
+import type { FEATURE_FLAG, FieldComponentType } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import type { ElementContentMap, Node, Props, Taxonomic } from './ast'
 import type { AglynDocument } from '../foundation'

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { FEATURE_FLAG } from './constants'
+import { FEATURE_FLAG } from './foundation'
 
 export function _isFeatureExplicitlyDisabled(val: FEATURE_FLAG) {
   return Boolean(val === FEATURE_FLAG.DISABLED)

@@ -19,11 +19,10 @@ import { Logger } from '@aglyn/shared-util-logger'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import CanvasManager from './canvas-manager'
 import ComponentManager from './components-manager'
-import { namespace } from './constants'
 import EmitManager, { AglynEvent } from './emit-manager'
+import { namespace } from './foundation'
 import PluginManager from './plugin-manager'
 
-export * from './constants'
 export * from './types'
 export * from './utils'
 

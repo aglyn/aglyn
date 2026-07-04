@@ -25,7 +25,7 @@ import {
   SnapshotOut,
   types as t,
 } from 'mobx-state-tree'
-import { createIdUrlSafe } from '../constants'
+import { createIdUrlSafe } from '../foundation'
 import {
   AnyJsonObject,
   Identifier,

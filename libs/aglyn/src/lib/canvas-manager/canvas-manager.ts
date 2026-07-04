@@ -32,7 +32,7 @@ import {
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
-import { createIdUrlSafe } from '../constants'
+import { createIdUrlSafe } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import {
   type ComponentId,

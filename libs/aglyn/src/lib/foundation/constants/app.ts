@@ -15,7 +15,19 @@
  * limitations under the License.
  */
 
+import { customAlphabet, urlAlphabet } from 'nanoid'
+
 export const DEFAULT_APP_UUN = '[DEFAULT]'
 export type DEFAULT_APP_UUN = typeof DEFAULT_APP_UUN
 
 export const RESOURCE_ID_LENGTH = 10
+
+const pkg = require('../../../../package.json') as {
+  version: string
+  name: string
+}
+export const version = pkg.version
+export const namespace = pkg.name
+
+export const ID_CHAR_LENGTH = 10
+export const createIdUrlSafe = customAlphabet(urlAlphabet, ID_CHAR_LENGTH)
