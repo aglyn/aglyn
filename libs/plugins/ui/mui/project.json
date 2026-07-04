@@ -6,13 +6,30 @@
   "tags": ["scope:lib", "scope:aglyn", "aglyn:addons"],
   "targets": {
     "build": {
-      "executor": "@nx/js:swc",
+      "executor": "@nx/rollup:rollup",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/plugins/ui/mui",
-        "main": "libs/plugins/ui/mui/src/index.ts",
         "tsConfig": "libs/plugins/ui/mui/tsconfig.lib.json",
-        "assets": ["libs/plugins/ui/mui/*.md"]
+        "project": "libs/plugins/ui/mui/package.json",
+        "entryFile": "libs/plugins/ui/mui/src/index.ts",
+        "external": ["react/jsx-runtime"],
+        "rollupConfig": [
+          "@nx/react/plugins/bundle-rollup",
+          "tools/rollup-external-packages.js",
+          "tools/rollup-suppress-use-client.js",
+          "tools/rollup-skip-typecheck.js"
+        ],
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/plugins/ui/mui/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ],
+        "updateBuildableProjectDepsInPackageJson": true,
+        "skipTypeCheck": true
       }
     },
     "lint": {
