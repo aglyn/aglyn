@@ -95,8 +95,8 @@ const NodeOverlay = observer(
 
     const state =
       variant === 'selected'
-        ? Besigner.focus.state.lastSelected
-        : Besigner.focus.state.hovered
+        ? Besigner.focus.getLastSelected()
+        : Besigner.focus.getHovered()
     const $id = state?.$id
     const node = Aglyn.canvas.getNode($id)
 

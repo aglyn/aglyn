@@ -230,7 +230,7 @@ function BesignerPage(props) {
                   </Typography>
                 ),
                 onClick: () =>
-                  handleAddElementClick(Besigner.focus.state.lastSelected),
+                  handleAddElementClick(Besigner.focus.getLastSelected()),
                 disabled: true,
                 ListItemTextProps: {inset: true},
               },

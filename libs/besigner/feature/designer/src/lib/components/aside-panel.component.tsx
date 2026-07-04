@@ -247,7 +247,7 @@ function withLastSelectedNode<P>(
 
   const WithLastSelectedNode = observer((props: P) => {
     const { ...rest } = props
-    const lastSelected = Besigner.focus.state.lastSelected
+    const lastSelected = Besigner.focus.getLastSelected()
 
     return (
       <>
@@ -284,7 +284,7 @@ const ElementsTree = forwardRef<any, NodeTreeViewProps>((props, ref) => {
             <MdiIcon fontSize="inherit" path={ICON_VARIANT_MODIFY_ADD.path} />
           }
           onClick={() =>
-            handleAddElementClick(Besigner.focus.state.lastSelected)
+            handleAddElementClick(Besigner.focus.getLastSelected())
           }
         >
           {'Add Element'}

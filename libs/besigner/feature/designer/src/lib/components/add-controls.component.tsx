@@ -39,7 +39,7 @@ const AddControlsComponent = forwardRef<any, AddControlsProps>((props, ref) => {
           aria-haspopup="menu"
           aria-label="add-element"
           onClick={() =>
-            handleAddElementClick(Besigner.focus.state.lastSelected)
+            handleAddElementClick(Besigner.focus.getLastSelected())
           }
         >
           <MdiIcon fontSize="small" path={ICON_VARIANT_MODIFY_ADD.path} />

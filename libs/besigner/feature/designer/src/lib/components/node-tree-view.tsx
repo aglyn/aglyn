@@ -391,8 +391,8 @@ const ExpandIcon = (
 export const NodeTreeView = observer(
   forwardRef<any, NodeTreeViewProps>((props, ref) => {
     const { TreeViewProps, ...rest } = props
-    const allExpanded = Besigner.focus.state.allExpanded
-    const manuallyCollapsed = Besigner.focus.state.manuallyCollapsed
+    const allExpanded = Besigner.focus.getAllExpanded()
+    const manuallyCollapsed = Besigner.focus.getManuallyCollapsed()
 
     const expanded = useMemo(() => {
       const paths = allExpanded.reduce((acc, i) => {

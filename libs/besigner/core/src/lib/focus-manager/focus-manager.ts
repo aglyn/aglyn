@@ -59,7 +59,7 @@ interface FocusState {
   readonly isNodeEffectivelyExpanded: (node: Aglyn.NodeSchema) => boolean
 }
 
-export const state = observable<FocusState>({
+const state = observable<FocusState>({
   hovered: null,
   selected: [],
   expanded: [],
@@ -99,6 +99,26 @@ export const state = observable<FocusState>({
     )
   }),
 })
+
+export function getLastSelected(): LastSelectedNode {
+  return state.lastSelected
+}
+
+export function getHovered(): HoveredNode | undefined {
+  return state.hovered
+}
+
+export function getSelected(): SelectedNodes {
+  return state.selected
+}
+
+export function getAllExpanded(): ExpandedNodes & SelectedNodes {
+  return state.allExpanded
+}
+
+export function getManuallyCollapsed(): Aglyn.NodeId[] {
+  return state.manuallyCollapsed
+}
 
 export function isNodeSelected(node: Aglyn.NodeSchema<any>) {
   return state.isNodeSelected(node)

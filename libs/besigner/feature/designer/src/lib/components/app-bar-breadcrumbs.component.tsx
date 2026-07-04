@@ -203,7 +203,7 @@ interface BreadcrumbsProps extends Partial<MuiBreadcrumbsProps> {}
 
 const Breadcrumbs = observer((props: BreadcrumbsProps) => {
   const { children, sx, ...rest } = props
-  const lastSelected = Besigner.focus.state.lastSelected
+  const lastSelected = Besigner.focus.getLastSelected()
 
   const handleClick = useCallback((e, node: Aglyn.NodeSchema<any>) => {
     Besigner.focus.setSelectedNode(node)
