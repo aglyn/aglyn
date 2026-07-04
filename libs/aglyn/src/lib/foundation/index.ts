@@ -22,14 +22,7 @@
 // /_____/_____/_/   /___/_/ |_/___/ /_/ /___/\____/_/ |_//____/
 // 👇
 
-export * from './definitions/app.types'
-export * from './definitions/canvas.types'
-export * from './definitions/commands.types'
 export * from './definitions/components.types'
-export * from './definitions/contexts.types'
-export * from './definitions/extension.types'
-export * from './definitions/extensions.types'
-export * from './definitions/module.types'
 export * from './definitions/shared'
 export {
   ActivityAccess,
@@ -79,15 +72,6 @@ export type {
 export * from './constants/_internal'
 export * from './constants/app'
 export * from './constants/canvas'
-export * from './constants/commands'
 export * from './constants/components'
-export * from './constants/contexts'
-export * from './constants/emitter'
-export * from './constants/error'
-export * from './constants/extensions'
-export * from './constants/lifecycle'
-export * from './constants/logger'
-export * from './constants/platform'
 export * from './constants/shared'
 export * from './constants/symbol'
-export * from './constants/version'

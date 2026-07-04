@@ -15,9 +15,6 @@
  * limitations under the License.
  */
 
-import type { AppUUN, IAglynAppController } from '../definitions/app.types'
-
-export const _INTERNAL_APPS_: Map<AppUUN, IAglynAppController> = new Map()
 export const DEFAULT_APP_UUN = '[DEFAULT]'
 export type DEFAULT_APP_UUN = typeof DEFAULT_APP_UUN
 

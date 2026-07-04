@@ -24,27 +24,10 @@ import type {
 } from '@data-driven-forms/react-form-renderer'
 import type { SvgIconProps } from '@mui/material'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
-// eslint-disable-next-line @nx/enforce-module-boundaries
-import type { ComponentClass, ComponentProps } from 'react'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'
 import type { ComponentCategory } from '../constants/components'
-import type {
-  ComponentGetPayload,
-  ComponentRegisterPayload,
-  ComponentsBundleGetPayload,
-  ComponentsBundleRegisterPayload,
-  ComponentsBundleUnregisterPayload,
-  ComponentSchemaGetPayload,
-  ComponentUnregisterPayload,
-} from '../constants/emitter'
 import type { FEATURE_FLAG } from '../constants/shared'
 import type { AGLYN_OF, SYMBOL_TYPE } from '../constants/symbol'
-import type { IAglynAppController } from './app.types'
-import type {
-  AglynModuleModelOptions,
-  AglynModuleModelT,
-  IAglynModuleModel,
-} from './module.types'
 
 export enum LinealDirectiveFlag {
   LIMIT_TO = 'limitedTo',
@@ -56,24 +39,6 @@ export type PluginId = string
 export type ComponentId = string
 export type PresetId = string
 export type NodeId = string
-export type ComponentIdOrBundleTuple = ComponentId | [ComponentId, BundleId]
-
-export type ComponentsRegistryKeys = ComponentIdOrBundleTuple[]
-export type ComponentsRegistryValues = AglynExoticComponent[]
-export type ComponentsRegistryEntry = [
-  id: ComponentIdOrBundleTuple,
-  component: AglynExoticComponent,
-]
-export type InstanceBundles = Map<BundleId, AglynBundleSchema>
-export type InstanceComponents = Map<
-  ComponentIdOrBundleTuple,
-  AglynExoticComponent
->
-export type InstanceSchemas = Map<
-  ComponentIdOrBundleTuple,
-  AglynComponentSchema
->
-export type InstanceNodePresets = Map<PresetId, AglynNodePresetSchema>
 
 export type ComponentsLinealOrder = [
   directiveType: LinealDirectiveFlag,
@@ -83,82 +48,16 @@ export type ComponentsLinealOrder = [
     | { plugins: Array<PluginId>; components?: Array<ComponentId> },
 ]
 
-export type AglynComponentPropsFormSchema<P = any> =
-  AglynComponentSchema<P>['attributes']
-export type AglynComponentHierarchy<P = any> = Pick<
-  AglynComponentSchema<P>,
-  'restrictParent' | 'restrictChildren'
->
-export type AglynComponentFlags<P = any> = AglynComponentSchema<P>['flags']
-export type AglynComponentsBundleMetadata = AglynBundleSchema
-export type AglynComponentsBundleSchema = Omit<
-  AglynBundleSchema,
-  'componentIds'
->
-
-export type AglynNodeItemNormalized<P = JSX.AnyProps> = AglynNodeSchema<P> & {
-  nodes?: NodeId[]
-}
 export type AglynNodeItemDenormalized<P = JSX.AnyProps> = AglynNodeSchema<P> & {
   nodes?: AglynNodeItemDenormalized[]
 }
 
-export type AglynNodesById = {
-  [P in NodeId | CANVAS_ROOT_ELEMENT_ID]: AglynNodeItemNormalized & { $id: P }
-}
 export type AglynNodesList = Array<AglynNodeItemDenormalized>
 
 export type AglynNodeHierarchy<$ID extends NodeId = NodeId> = [
   root: CANVAS_ROOT_ELEMENT_ID,
   ...nodes: [...ancestors: NodeId[], element: $ID],
 ]
-
-export interface AglynComponentsControllerOptions
-  extends AglynModuleModelOptions {}
-
-export interface IAglynComponentsController
-  extends IAglynModuleModel<AglynComponentsControllerOptions> {
-  readonly bundles: InstanceBundles
-  readonly components: InstanceComponents
-  readonly schemas: InstanceSchemas
-  readonly presets: InstanceNodePresets
-
-  getAllComponents(): ComponentsRegistryEntry[]
-  getAllComponentsKeys(): ComponentsRegistryKeys
-  getAllComponentsValues(): ComponentsRegistryValues
-  getAllNodePresetsValues(): AglynNodePresetSchema[]
-
-  getComponent<P, T>(
-    payload: ComponentGetPayload,
-  ): OrUndef<AglynExoticComponent<P, T>>
-  getComponentSchema(
-    payload: ComponentSchemaGetPayload,
-  ): OrUndef<AglynComponentSchema>
-  getBundle(payload: ComponentsBundleGetPayload): OrUndef<AglynBundleSchema>
-  buildMapKey(data: { componentId: ComponentId; pluginId: BundleId }): string
-
-  registerComponent(payload: ComponentRegisterPayload): this
-  registerBundle(payload: ComponentsBundleRegisterPayload): this
-
-  unregisterComponent(payload: ComponentUnregisterPayload): this
-  unregisterBundle(payload: ComponentsBundleUnregisterPayload): this
-}
-
-export interface AglynComponentsControllerT
-  extends AglynModuleModelT<AglynComponentsControllerOptions> {
-  new (
-    app: IAglynAppController,
-    options: AglynComponentsControllerOptions,
-  ): IAglynComponentsController
-}
-
-export type AglynComponentType<
-  P extends ComponentProps<C> | any = any,
-  C extends keyof JSX.IntrinsicElements | JSX.ElementConstructor<any> = any,
-> =
-  | ComponentClass<P>
-  | JSX.ElementConstructor<P>
-  | keyof JSX.IntrinsicElements[keyof JSX.IntrinsicElements]
 
 export interface AglynExoticComponent<PROPS = any, REF = any>
   extends JSX.ForwardRefExoticComponent<
@@ -322,24 +221,6 @@ export interface AglynAttributeSchema extends Dictionary<any> {
   actions?: FieldActions
   resolveProps?: ResolvePropsFunction
   description?: string
-}
-
-export interface AglynBundleSchema {
-  pluginId: BundleId
-  componentIds?: ComponentId[]
-  // Metadata
-  displayName?: string
-  title?: string
-  subtitle?: string
-  description?: string
-  icon?: SvgIconProps
-}
-
-export interface ComponentsRegistryContext {
-  bundles: InstanceBundles
-  components: InstanceComponents
-  schemas: InstanceSchemas
-  presets: InstanceNodePresets
 }
 
 export interface AglynNodeSchema<P = JSX.AnyProps> {

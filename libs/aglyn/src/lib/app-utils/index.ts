@@ -15,21 +15,8 @@
  * limitations under the License.
  */
 
-export * from './aglyn-is'
-export * from './build-component-props-form-schema'
 export * from './compress'
 export * from './confirm-valid-lineal-relationship'
-export * from './create-component-element-data'
-export * from './create-component-element-data-copy'
-export * from './create-component-element-id'
-export * from './create-components-bundle'
 export * from './create-resource-uid'
 export * from './decompress'
-export * from './get-component-element-hierarchy'
-export * from './handle-state-modification-history-change'
-export * from './handle-state-modification-history-redo'
-export * from './handle-state-modification-history-undo'
 export * from './is-root-element-id'
-export * from './node-data-denormalize'
-export * from './node-data-normalize'
-export * from './utils.canvas'

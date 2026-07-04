@@ -79,7 +79,6 @@ declare global {
   // eslint-disable-next-line no-var
   var Aglyn: IBesignerAppController
   // eslint-disable-next-line no-var
-  // var Aglyn: AglynAppControllerT
 
   interface Window {
     Aglyn?: IBesignerAppController

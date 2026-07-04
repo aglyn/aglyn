@@ -15,17 +15,5 @@
  * limitations under the License.
  */
 
-import type { AppUUN } from '../definitions/app.types'
-import type { IAglynCanvasController } from '../definitions/canvas.types'
-import type { AglynNodeSchema } from '../definitions/components.types'
-
-export const _INTERNAL_CANVAS_: Map<AppUUN, IAglynCanvasController> = new Map()
 export const CANVAS_ROOT_ELEMENT_ID = '_@_'
 export type CANVAS_ROOT_ELEMENT_ID = string & typeof CANVAS_ROOT_ELEMENT_ID
-
-export const DEFAULT_ROOT_ELEMENT: AglynNodeSchema = {
-  $id: CANVAS_ROOT_ELEMENT_ID,
-  nodes: [],
-  parentId: null,
-  componentId: undefined,
-}
