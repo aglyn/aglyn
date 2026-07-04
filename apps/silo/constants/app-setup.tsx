@@ -18,7 +18,7 @@
 import {
   doesBesignerAppExist,
   initializeBesignerApp,
-} from '@aglyn/besigner-data-app'
+} from '@aglyn/besigner'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 
 try {

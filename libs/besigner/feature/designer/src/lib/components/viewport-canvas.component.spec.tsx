@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { deleteBesignerApp, initializeBesignerApp } from '@aglyn/besigner-data-app'
+import { deleteBesignerApp, initializeBesignerApp } from '@aglyn/besigner'
 import { consoleOptions, createResponsiveTheme } from '@aglyn/shared-ui-theme'
 import { ThemeProvider } from '@mui/material/styles'
 import { render } from '@testing-library/react'

@@ -1,4 +1,4 @@
-import { dnd } from './aglyn-besigner'
+import { dnd } from './managers'
 
 describe('aglynBesigner', () => {
   it('exposes a dnd manager singleton', () => {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { BesignerDeviceFlag } from '@aglyn/besigner-data-app'
+import { BesignerDeviceFlag } from '@aglyn/besigner'
 import {
   ICON_VARIANT_FLUID_RESPONSIVE,
   ICON_VARIANT_LAPTOP,

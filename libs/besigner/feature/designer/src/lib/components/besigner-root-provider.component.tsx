@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AppUUN } from '@aglyn/besigner-data-app'
+import type { AppUUN } from '@aglyn/besigner'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { NoSsr } from '@mui/material'

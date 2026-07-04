@@ -20,7 +20,7 @@ import * as Besigner from '@aglyn/besigner'
 import {
   BesignerPanelTabFlag,
   setBesignerPanels,
-} from '@aglyn/besigner-data-app'
+} from '@aglyn/besigner'
 import {
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_DUPLICATE,

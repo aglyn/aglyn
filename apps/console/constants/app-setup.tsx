@@ -21,7 +21,7 @@ import {
   getBesignerApp,
   IBesignerAppController,
   initializeBesignerApp,
-} from '@aglyn/besigner-data-app'
+} from '@aglyn/besigner'
 import { createAglynComponent } from '@aglyn/aglyn-node-renderer'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 

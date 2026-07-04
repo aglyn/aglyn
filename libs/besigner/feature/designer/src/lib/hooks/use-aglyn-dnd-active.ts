@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import type {
-  BesignerDndState,
-  BesignerDraggableItem,
-} from '@aglyn/besigner-data-app'
-import { setBesignerDndItem } from '@aglyn/besigner-data-app'
+import {
+  type BesignerDndState,
+  type BesignerDraggableItem,
+  setBesignerDndItem,
+} from '@aglyn/besigner'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-tools'
 import { useCallback } from 'react'

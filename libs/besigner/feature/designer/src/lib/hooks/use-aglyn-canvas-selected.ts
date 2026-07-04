@@ -19,7 +19,7 @@ import {
   type BesignerCanvasSelectedElement,
   type BesignerCanvasState,
   setBesignerCanvasSelected,
-} from '@aglyn/besigner-data-app'
+} from '@aglyn/besigner'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { _isFnT } from '@aglyn/shared-util-tools'
 import { useCallback } from 'react'

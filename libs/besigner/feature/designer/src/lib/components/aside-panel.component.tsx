@@ -20,7 +20,7 @@ import * as Besigner from '@aglyn/besigner'
 import {
   type BesignerPanelKey,
   BesignerPanelTabFlag,
-} from '@aglyn/besigner-data-app'
+} from '@aglyn/besigner'
 import {
   ICON_VARIANT_ELEMENT,
   ICON_VARIANT_ELEMENT_BROWSE,

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { InteractionModeFlag } from '@aglyn/besigner-data-app'
+import { InteractionModeFlag } from '@aglyn/besigner'
 import {
   ICON_VARIANT_MODIFY_MODE_REARRANGE,
   ICON_VARIANT_MODIFY_MODE_SELECT,

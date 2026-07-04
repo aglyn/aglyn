@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { BesignerDeviceFlag } from '@aglyn/besigner-data-app'
+import { BesignerDeviceFlag } from '@aglyn/besigner'
 import { LOADING_OVERLAY_ELEMENT } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import clsx from 'clsx'

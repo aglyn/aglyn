@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { deleteBesignerApp, initializeBesignerApp } from '@aglyn/besigner-data-app'
+import { deleteBesignerApp, initializeBesignerApp } from '@aglyn/besigner'
 import { render } from '@testing-library/react'
 import React from 'react'
 

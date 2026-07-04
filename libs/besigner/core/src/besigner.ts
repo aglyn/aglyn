@@ -55,3 +55,12 @@ export * from './lib/controllers/besigner-app.controller'
 
 export * from './lib/definitions/besigner-app.types'
 export * from './lib/definitions/besigner-interface.types'
+
+//     __  ______    _   _____   ______________  _____
+//    /  |/  /   |  / | / /   | / ____/ ____/ __ \/ ___/
+//   / /|_/ / /| | /  |/ / /| |/ / __/ __/ / /_/ /\__ \
+//  / /  / / ___ |/ /|  / ___ / /_/ / /___/ _, _/___/ /
+// /_/  /_/_/  |_/_/ |_/_/  |_\____/_____/_/ |_|/____/
+// 👇
+
+export * from './lib/managers'

@@ -20,7 +20,7 @@ import {
   doesBesignerAppExist,
   getBesignerApp,
   type IBesignerAppController,
-} from '@aglyn/besigner-data-app'
+} from '@aglyn/besigner'
 import { createContext, useContext, useMemo } from 'react'
 
 export type IBesignerAppContext = IBesignerAppController | undefined
