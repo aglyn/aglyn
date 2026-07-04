@@ -1,7 +1,6 @@
-/* eslint-disable */
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2023 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +15,13 @@
  * limitations under the License.
  */
 
-/* eslint-disable */
-export default {
-  displayName: 'aglyn-besigner-ui',
-  preset: '../../jest.preset.js',
-  transform: {
-    '^.+\\.[tj]sx?$': ['babel-jest', { presets: ['@nx/react/babel'] }],
-  },
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx'],
-  coverageDirectory: '../../coverage/libs/aglyn-besigner-ui',
-}
+import { render } from '@testing-library/react'
+
+import { InlineFormControl } from './form-fields'
+
+describe('AlignItemsField', () => {
+  it('should render successfully', () => {
+    const { baseElement } = render(<InlineFormControl />)
+    expect(baseElement).toBeTruthy()
+  })
+})

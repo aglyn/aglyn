@@ -16,11 +16,11 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { BoxStyler, Measurements } from '@aglyn/besigner-ui-box-styler'
+import { BoxStyler, Measurements } from '../box-styler'
 import {
   ButtonGroupFormControl,
   ToggleButtonFormControl,
-} from '@aglyn/besigner-ui-form-fields'
+} from '../form-fields'
 import { FieldComponentType } from '@aglyn/aglyn'
 import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
