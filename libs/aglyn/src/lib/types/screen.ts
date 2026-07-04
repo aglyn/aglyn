@@ -18,7 +18,7 @@
 import type {
   AglynLayoutVersion as AglynLayoutVersionBase,
   AglynScreenVersion as AglynScreenVersionBase,
-} from '@aglyn/core-data-foundation'
+} from '../foundation/definitions/workspace.types'
 import type { NodeSchema } from './nodes'
 
 export type {
@@ -28,7 +28,7 @@ export type {
   ScreenSlug,
   ScreenUid,
   VersionUid,
-} from '@aglyn/core-data-foundation'
+} from '../foundation'
 
 /** Hosted in tenants' host project */
 export type AglynScreenVersion = AglynScreenVersionBase<NodeSchema>

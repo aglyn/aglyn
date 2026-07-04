@@ -15,4 +15,4 @@
  * limitations under the License.
  */
 
-export type { AglynDocument } from '@aglyn/core-data-foundation'
+export type { AglynDocument } from '../foundation'

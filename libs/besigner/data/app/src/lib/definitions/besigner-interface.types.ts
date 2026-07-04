@@ -25,7 +25,7 @@ import type {
   IAglynAppController,
   IAglynModuleModel,
   NodeId,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 // eslint-disable-next-line @nx/enforce-module-boundaries
 import type { LogLevelString } from '@aglyn/shared-util-logger'
 import type { BehaviorSubject } from 'rxjs'

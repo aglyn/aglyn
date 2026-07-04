@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynExoticComponent, NodeId } from '@aglyn/core-data-foundation'
+import type { AglynExoticComponent, NodeId } from '@aglyn/aglyn'
 import useAglynComponent from './use-aglyn-component'
 import useAglynElementData from './use-aglyn-element-data'
 

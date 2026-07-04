@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
-import { type NodeId } from '@aglyn/core-data-foundation'
+import { type NodeId } from '@aglyn/aglyn'
 import { useCallback } from 'react'
 import {
   type ElementDrawerOptions,

@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { AglynNodePresetSchema } from '@aglyn/core-data-foundation'
+import type { AglynNodePresetSchema } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_SYMBOL_CONFIRMED,

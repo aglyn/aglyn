@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynComponentSchema, NodeId } from '@aglyn/core-data-foundation'
+import type { AglynComponentSchema, NodeId } from '@aglyn/aglyn'
 import useAglynComponentSchema from './use-aglyn-component-schema'
 import useAglynElementData from './use-aglyn-element-data'
 

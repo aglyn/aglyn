@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { NodeId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/aglyn'
 import {
   createContext,
   type RefObject,

@@ -16,8 +16,8 @@
  */
 'use client'
 
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/core-data-foundation'
-import { createResourceUid } from '@aglyn/core-util-app'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
+import { createResourceUid } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,

@@ -16,7 +16,7 @@
  */
 
 import type { BesignerCanvasSelectedElement } from '@aglyn/besigner-data-app'
-import type { NodeId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/aglyn'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import useBesignerAppContext from './use-besigner-app-context'
 

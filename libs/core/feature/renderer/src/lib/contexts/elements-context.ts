@@ -25,7 +25,7 @@ import type {
   CanvasSetElementsPayload,
   CanvasUpdateElementPayload,
   ContextEvent,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import { createContext, useContext } from 'react'
 
 export type UseElementsContextType = () => ElementsContextType

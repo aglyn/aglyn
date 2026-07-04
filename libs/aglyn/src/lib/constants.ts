@@ -19,7 +19,7 @@ import {
   FEATURE_FLAG,
   FieldComponentType,
   LinealDirectiveFlag,
-} from '@aglyn/core-data-foundation'
+} from './foundation'
 import { customAlphabet, urlAlphabet } from 'nanoid'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports

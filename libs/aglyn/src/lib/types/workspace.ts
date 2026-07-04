@@ -23,7 +23,7 @@ export {
   HostScreenVisibility,
   HostViewFormat,
   HostViewType,
-} from '@aglyn/core-data-foundation'
+} from '../foundation'
 export type {
   AglynAccessRule,
   AglynAuthRole,
@@ -40,4 +40,4 @@ export type {
   RoleUid,
   TenantUid,
   UserUid,
-} from '@aglyn/core-data-foundation'
+} from '../foundation'

@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { getCanvasNormalizedNodesStore } from '@aglyn/core-data-app'
-import type { AglynNodesById } from '@aglyn/core-data-foundation'
+import { getCanvasNormalizedNodesStore } from '@aglyn/aglyn'
+import type { AglynNodesById } from '@aglyn/aglyn'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 

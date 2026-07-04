@@ -18,7 +18,7 @@
 import {
   type AglynNodesList,
   CANVAS_ROOT_ELEMENT_ID,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 
 export const samplePageData: AglynNodesList = [
   {

@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/aglyn/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:framework"],
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "scope:feature", "aglyn:framework"],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",

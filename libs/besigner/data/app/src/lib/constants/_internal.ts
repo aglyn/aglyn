@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AppUUN } from '@aglyn/core-data-foundation'
+import type { AppUUN } from '@aglyn/aglyn'
 import type { IBesignerInterfaceController } from '../definitions/besigner-interface.types'
 
 export const _INTERNAL_BESIGNERS_: Map<AppUUN, IBesignerInterfaceController> =

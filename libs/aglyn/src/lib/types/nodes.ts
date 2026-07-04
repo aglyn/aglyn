@@ -33,8 +33,8 @@ import type {
   ComponentsLinealOrder,
   NodeId,
   PresetId,
-} from '@aglyn/core-data-foundation'
-import { ComponentCategory } from '@aglyn/core-data-foundation'
+} from '../foundation'
+import { ComponentCategory } from '../foundation'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'

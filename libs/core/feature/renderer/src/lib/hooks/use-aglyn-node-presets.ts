@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { getAllNodesPresetsValues } from '@aglyn/core-data-app'
-import type { AglynNodePresetSchema } from '@aglyn/core-data-foundation'
+import { getAllNodesPresetsValues } from '@aglyn/aglyn'
+import type { AglynNodePresetSchema } from '@aglyn/aglyn'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynNodePresetBlocks(): AglynNodePresetSchema[] {

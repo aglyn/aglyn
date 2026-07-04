@@ -18,7 +18,7 @@
 import {
   AglynAttributeSchema,
   FieldComponentType,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 
 export const FIELD_COLOR: AglynAttributeSchema = {
   name: 'color',

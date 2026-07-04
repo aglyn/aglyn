@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynNodePresetSchema } from '@aglyn/core-data-foundation'
+import type { AglynNodePresetSchema } from '@aglyn/aglyn'
 import { createContext, useContext } from 'react'
 
 export type UseElementComponentsContextType = () => AglynComponentsContextType

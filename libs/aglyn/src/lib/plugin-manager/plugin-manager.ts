@@ -27,7 +27,7 @@ export enum PluginStatus {
   UNLOADING = 'unloading',
 }
 
-import type { PluginId } from '@aglyn/core-data-foundation'
+import type { PluginId } from '../foundation'
 export type { PluginId }
 export type PluginStatusById = Record<PluginId, PluginStatus>
 export type PluginsById = Record<PluginId, Plugin>

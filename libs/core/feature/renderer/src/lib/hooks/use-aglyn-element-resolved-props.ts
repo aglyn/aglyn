@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { NodeId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/aglyn'
 import { _isFnT } from '@aglyn/shared-util-tools'
 import { useMemo } from 'react'
 

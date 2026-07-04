@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { getComponent } from '@aglyn/core-data-app'
+import { getComponent } from '@aglyn/aglyn'
 import type {
   AglynExoticComponent,
   BundleId,
   CommandUId,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import { useAglynAppContext } from '../contexts/aglyn-app-context'
 
 export function useAglynComponent<P, T>(

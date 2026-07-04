@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { deleteApp, initializeApp } from '@aglyn/core-data-app'
+import { deleteApp, initializeApp } from '@aglyn/aglyn'
 import React from 'react'
 import { render } from '@testing-library/react'
 import { AglynAppProvider } from './aglyn-app-context'

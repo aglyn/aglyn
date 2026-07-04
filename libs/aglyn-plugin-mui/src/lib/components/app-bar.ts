@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { ComponentCategory } from '@aglyn/core-data-foundation'
+import { ComponentCategory } from '@aglyn/aglyn'
 import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
 import AppBar from '@mui/material/AppBar'
 import { PLUGIN_ID } from '../constants/common'

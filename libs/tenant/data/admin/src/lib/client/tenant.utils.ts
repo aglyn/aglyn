@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/core-data-foundation'
+import * as Aglyn from '@aglyn/aglyn'
 import {
   child,
   type DataSnapshot,

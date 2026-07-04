@@ -19,7 +19,7 @@ import {
   AglynExoticComponent,
   AglynNodeItemDenormalized,
   NodeId,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import clsx from 'clsx'

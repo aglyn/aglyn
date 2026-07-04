@@ -21,7 +21,7 @@ import {
   type AglynExoticComponent,
   COMPONENT_ELEMENT_TYPE,
   type ComponentRegisterPayload,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import {
   type ErrorBoundaryProps,
   withErrorBoundary,

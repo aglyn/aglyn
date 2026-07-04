@@ -18,7 +18,7 @@
 import type {
   AppUUN,
   CanvasSetElementsPayload,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import {
   AglynAppProvider,
   ElementComponentsContextProvider,

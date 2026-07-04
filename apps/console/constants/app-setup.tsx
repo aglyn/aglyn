@@ -23,7 +23,7 @@ import {
   initializeBesignerApp,
 } from '@aglyn/besigner-data-app'
 import { samplePageData } from '@aglyn/besigner-ui'
-import { registerBundle, registerComponent } from '@aglyn/core-data-app'
+import { registerBundle, registerComponent } from '@aglyn/aglyn'
 import { createAglynComponent } from '@aglyn/core-feature-renderer'
 import { bundle as muiBundle } from '@aglyn/plugins-ui-mui'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'

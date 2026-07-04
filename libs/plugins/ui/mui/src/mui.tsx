@@ -18,9 +18,9 @@
 import type {
   AglynBundleSchema,
   ComponentRegisterPayload,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import { createAglynComponent } from '@aglyn/core-feature-renderer'
-import { createComponentsBundle } from '@aglyn/core-util-app'
+import { createComponentsBundle } from '@aglyn/aglyn'
 import { mdiViewArray } from '@aglyn/shared-data-mdi'
 
 import appBar, { schema as appBarSchema } from './lib/components/app-bar'

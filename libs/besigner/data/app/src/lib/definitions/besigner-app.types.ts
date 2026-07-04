@@ -19,7 +19,7 @@ import type {
   AglynAppControllerT,
   AglynAppOptions,
   IAglynAppController,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import type {
   BesignerInterfaceControllerOptions,
   IBesignerInterfaceController,

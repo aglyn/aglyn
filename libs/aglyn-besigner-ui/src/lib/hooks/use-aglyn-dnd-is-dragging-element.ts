@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { NodeId } from '@aglyn/core-data-foundation'
+import type { NodeId } from '@aglyn/aglyn'
 import { useSubscribable } from '@aglyn/shared-ui-jsx'
 import useBesignerAppContext from './use-besigner-app-context'
 

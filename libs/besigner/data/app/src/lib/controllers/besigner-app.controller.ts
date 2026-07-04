@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { AglynAppController } from '@aglyn/core-data-app'
-import type { IAglynModuleModel } from '@aglyn/core-data-foundation'
+import { AglynAppController } from '@aglyn/aglyn'
+import type { IAglynModuleModel } from '@aglyn/aglyn'
 import { _INTERNAL_BESIGNERS_ } from '../constants/_internal'
 import type {
   BesignerAppOptions,

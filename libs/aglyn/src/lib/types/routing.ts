@@ -15,4 +15,4 @@
  * limitations under the License.
  */
 
-export type { AglynRedirect, RedirectUid } from '@aglyn/core-data-foundation'
+export type { AglynRedirect, RedirectUid } from '../foundation'

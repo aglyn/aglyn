@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { AglynNodesList } from '@aglyn/core-data-foundation'
+import type { AglynNodesList } from '@aglyn/aglyn'
 
 export const samplePageData: AglynNodesList = [
   {

@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import { getApp } from '@aglyn/core-data-app'
+import { getApp } from '@aglyn/aglyn'
 import {
   type AppUUN,
   type CanvasSetElementsPayload,
   DEFAULT_APP_UUN,
   type IAglynAppController,
-} from '@aglyn/core-data-foundation'
+} from '@aglyn/aglyn'
 import { createContext, useContext, useMemo } from 'react'
 
 export type IAglynAppContext = IAglynAppController | undefined
