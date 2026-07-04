@@ -17,7 +17,6 @@
 
 import type { PayloadData } from '@aglyn/aglyn'
 import type {
-  BesignerContext,
   BesignerFlagsState,
   BesignerPanelKey,
   BesignerPanelsState,
@@ -27,18 +26,6 @@ import {
   BesignerPanelValue,
 } from '../definitions/besigner-interface.types'
 
-export enum BesignerAppEffectFlag {
-  BESIGNER_GET_STORE = 'effect:besigner:get-store',
-  BESIGNER_SET_FLAG = 'effect:besigner:set-flag',
-  BESIGNER_SET_PANEL = 'effect:besigner:set-panel',
-  BESIGNER_OPEN_PANEL = 'effect:besigner:open-panel',
-  BESIGNER_CLOSE_PANEL = 'effect:besigner:close-panel',
-}
-
-export type BesignerGetStorePayload<K extends keyof BesignerContext = any> =
-  PayloadData<{
-    store: K
-  }>
 export type BesignerSetFlagPayload<K extends keyof BesignerFlagsState = any> =
   PayloadData<{
     flag: K
@@ -61,18 +48,3 @@ export type BesignerSetPanelPayload<K extends BesignerPanelKey = any> =
 export type BesignerSetPanelsPayload = PayloadData<{
   panels: (prev: BesignerPanelsState) => BesignerPanelsState
 }>
-export type BesignerTogglePanelPayload = PayloadData<{
-  panel: BesignerPanelKey
-}>
-export type BesignerOpenPanelPayload = PayloadData<{ panel: BesignerPanelKey }>
-export type BesignerClosePanelPayload = PayloadData<{ panel: BesignerPanelKey }>
-
-declare module '@aglyn/aglyn' {
-  interface AglynModuleEffectPayload {
-    [BesignerAppEffectFlag.BESIGNER_GET_STORE]: BesignerGetStorePayload
-    [BesignerAppEffectFlag.BESIGNER_SET_FLAG]: BesignerSetFlagPayload
-    [BesignerAppEffectFlag.BESIGNER_SET_PANEL]: BesignerSetPanelPayload
-    [BesignerAppEffectFlag.BESIGNER_OPEN_PANEL]: BesignerOpenPanelPayload
-    [BesignerAppEffectFlag.BESIGNER_CLOSE_PANEL]: BesignerClosePanelPayload
-  }
-}

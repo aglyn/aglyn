@@ -17,8 +17,6 @@
 
 import { _INTERNAL_BESIGNERS_ } from '../constants/_internal'
 import type {
-  BesignerClosePanelPayload,
-  BesignerOpenPanelPayload,
   BesignerSetFlagPayload,
   BesignerSetFlagsPayload,
   BesignerSetPanelPayload,
@@ -75,22 +73,4 @@ export function setBesignerPanels(
   return besignerController.setPanels(payload)
 }
 
-export function openBesignerPanel(
-  app: IBesignerAppController,
-  payload: BesignerOpenPanelPayload,
-) {
-  const besignerController = _getBesignerController(
-    app as IBesignerAppController,
-  )
-  return besignerController.openPanel(payload)
-}
 
-export function closeBesignerPanel(
-  app: IBesignerAppController,
-  payload: BesignerClosePanelPayload,
-) {
-  const besignerController = _getBesignerController(
-    app as IBesignerAppController,
-  )
-  return besignerController.closePanel(payload)
-}

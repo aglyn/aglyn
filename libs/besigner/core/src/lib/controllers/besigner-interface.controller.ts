@@ -26,14 +26,10 @@ import {
   InteractionModeFlag,
 } from '../constants/besigner'
 import type {
-  BesignerClosePanelPayload,
-  BesignerGetStorePayload,
-  BesignerOpenPanelPayload,
   BesignerSetFlagPayload,
   BesignerSetFlagsPayload,
   BesignerSetPanelPayload,
   BesignerSetPanelsPayload,
-  BesignerTogglePanelPayload,
 } from '../definitions/emitter.types'
 import type { IBesignerAppController } from '../definitions/besigner-app.types'
 import type {
@@ -110,12 +106,6 @@ export class BesignerInterfaceController
     return isEqual(prev, now)
   }
 
-  public getStore<K extends keyof BesignerContext>(
-    payload: BesignerGetStorePayload<K>,
-  ): BehaviorSubject<BesignerContext[K]> {
-    const { store } = payload
-    return this.__store__?.[store]
-  }
 
   public setFlag(payload: BesignerSetFlagPayload): this {
     const { flag, value } = payload || {}
@@ -147,33 +137,6 @@ export class BesignerInterfaceController
     const prev = this.__store__?.panels?.getValue()
     const now = panels(prev)
     !this.isDeepEqual(prev, now) && this.__store__?.panels?.next(now)
-    return this
-  }
-  public togglePanel(payload: BesignerTogglePanelPayload): this {
-    const { panel } = payload || {}
-    const prev = this.__store__?.panels?.getValue()
-    const prevPanel = prev?.[panel]
-    const now = {
-      ...prev,
-      [panel]: { ...prevPanel, toggled: !prevPanel?.toggled },
-    }
-    !this.isDeepEqual(prev, now) && this.__store__?.panels?.next(now)
-    return this
-  }
-  public openPanel(payload: BesignerOpenPanelPayload): this {
-    const { panel } = payload || {}
-    const prev = this.__store__?.panels?.getValue()
-    const prevPanel = prev?.[panel]
-    const now = { ...prev, [panel]: { ...prevPanel, toggled: true } }
-    !prevPanel?.toggled && this.__store__?.panels?.next(now)
-    return this
-  }
-  public closePanel(payload: BesignerClosePanelPayload): this {
-    const { panel } = payload || {}
-    const prev = this.__store__?.panels?.getValue()
-    const prevPanel = prev?.[panel]
-    const now = { ...prev, [panel]: { ...prevPanel, toggled: false } }
-    prevPanel?.toggled && this.__store__?.panels?.next(now)
     return this
   }
 }

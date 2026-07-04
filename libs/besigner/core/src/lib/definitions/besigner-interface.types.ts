@@ -26,14 +26,10 @@ import type {
   InteractionModeFlag,
 } from '../constants/besigner'
 import type {
-  BesignerClosePanelPayload,
-  BesignerGetStorePayload,
-  BesignerOpenPanelPayload,
   BesignerSetFlagPayload,
   BesignerSetFlagsPayload,
   BesignerSetPanelPayload,
   BesignerSetPanelsPayload,
-  BesignerTogglePanelPayload,
 } from './emitter.types'
 
 export type BesignerContext = {
@@ -77,17 +73,10 @@ export interface IBesignerInterfaceController {
   readonly flags: this['__store__']['flags']
   readonly panels: this['__store__']['panels']
 
-  getStore<K extends keyof BesignerContext>(
-    payload: BesignerGetStorePayload<K>,
-  ): BehaviorSubject<BesignerContext[K]>
-
-  closePanel(payload: BesignerClosePanelPayload): this
-  openPanel(payload: BesignerOpenPanelPayload): this
   setFlag(payload: BesignerSetFlagPayload): this
   setFlags(payload: BesignerSetFlagsPayload): this
   setPanel(payload: BesignerSetPanelPayload): this
   setPanels(payload: BesignerSetPanelsPayload): this
-  togglePanel(payload: BesignerTogglePanelPayload): this
 }
 
 export interface BesignerInterfaceControllerT {
