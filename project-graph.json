@@ -1,101 +1,6 @@
 {
   "graph": {
     "nodes": {
-      "besigner-feature-canvas-designer": {
-        "name": "besigner-feature-canvas-designer",
-        "type": "lib",
-        "data": {
-          "root": "libs/besigner/feature/canvas-designer",
-          "name": "besigner-feature-canvas-designer",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:feature",
-            "aglyn:canvas-designer"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/besigner-feature-canvas-designer",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/rollup:rollup",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/besigner/feature/canvas-designer",
-                "tsConfig": "libs/besigner/feature/canvas-designer/tsconfig.lib.json",
-                "project": "libs/besigner/feature/canvas-designer/package.json",
-                "entryFile": "libs/besigner/feature/canvas-designer/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "compiler": "swc",
-                "assets": [
-                  {
-                    "glob": "libs/besigner/feature/canvas-designer/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true,
-                "skipTypeCheck": true
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/besigner/feature/canvas-designer/src",
-          "implicitDependencies": []
-        }
-      },
       "shared-svg-icons-svg-icons": {
         "name": "shared-svg-icons-svg-icons",
         "type": "lib",
@@ -104,7 +9,10 @@
           "name": "shared-svg-icons-svg-icons",
           "projectType": "library",
           "tags": [
-            "npm:public"
+            "npm:public",
+            "scope:lib",
+            "scope:shared",
+            "scope:ui"
           ],
           "metadata": {
             "targetGroups": {},
@@ -203,24 +111,24 @@
           "implicitDependencies": []
         }
       },
-      "besigner-ui-color-picker": {
-        "name": "besigner-ui-color-picker",
+      "besigner-feature-designer": {
+        "name": "besigner-feature-designer",
         "type": "lib",
         "data": {
-          "root": "libs/besigner/ui/color-picker",
-          "name": "besigner-ui-color-picker",
+          "root": "libs/besigner/feature/designer",
+          "name": "besigner-feature-designer",
           "projectType": "library",
           "tags": [
             "npm:public",
             "scope:lib",
             "scope:aglyn",
-            "scope:besigner",
-            "scope:ui"
+            "scope:feature",
+            "aglyn:besigner"
           ],
           "metadata": {
             "targetGroups": {},
             "js": {
-              "packageName": "@aglyn/besigner-ui-color-picker",
+              "packageName": "@aglyn/besigner-ui",
               "packageVersion": "0.0.1",
               "isInPackageManagerWorkspaces": false
             }
@@ -241,13 +149,12 @@
                 "{options.outputPath}"
               ],
               "options": {
-                "outputPath": "dist/libs/besigner/ui/color-picker",
-                "tsConfig": "libs/besigner/ui/color-picker/tsconfig.lib.json",
-                "project": "libs/besigner/ui/color-picker/package.json",
-                "entryFile": "libs/besigner/ui/color-picker/src/index.ts",
+                "outputPath": "dist/libs/besigner/feature/designer",
+                "tsConfig": "libs/besigner/feature/designer/tsconfig.lib.json",
+                "project": "libs/besigner/feature/designer/package.json",
+                "entryFile": "libs/besigner/feature/designer/src/index.ts",
                 "external": [
-                  "@emotion/react/jsx-runtime",
-                  "@aglyn/shared-util-tools"
+                  "react/jsx-runtime"
                 ],
                 "rollupConfig": [
                   "@nx/react/plugins/bundle-rollup",
@@ -255,16 +162,16 @@
                   "tools/rollup-suppress-use-client.js",
                   "tools/rollup-skip-typecheck.js"
                 ],
+                "skipTypeCheck": true,
                 "compiler": "swc",
                 "assets": [
                   {
-                    "glob": "libs/besigner/ui/color-picker/README.md",
+                    "glob": "libs/besigner/feature/designer/README.md",
                     "input": ".",
                     "output": "."
                   }
                 ],
-                "updateBuildableProjectDepsInPackageJson": true,
-                "skipTypeCheck": true
+                "updateBuildableProjectDepsInPackageJson": true
               },
               "configurations": {},
               "parallelism": true,
@@ -296,10 +203,10 @@
             "test": {
               "executor": "@nx/jest:jest",
               "outputs": [
-                "{workspaceRoot}/coverage/libs/besigner/ui/color-picker"
+                "{workspaceRoot}/coverage/libs/besigner/feature/designer"
               ],
               "options": {
-                "jestConfig": "libs/besigner/ui/color-picker/jest.config.ts",
+                "jestConfig": "libs/besigner/feature/designer/jest.config.ts",
                 "passWithNoTests": true
               },
               "configurations": {
@@ -318,191 +225,7 @@
             }
           },
           "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/besigner/ui/color-picker/src",
-          "implicitDependencies": []
-        }
-      },
-      "besigner-ui-form-fields": {
-        "name": "besigner-ui-form-fields",
-        "type": "lib",
-        "data": {
-          "root": "libs/besigner/ui/form-fields",
-          "name": "besigner-ui-form-fields",
-          "projectType": "library",
-          "tags": [
-            "npm:public"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/besigner-ui-form-fields",
-              "packageVersion": "0.0.1",
-              "packageExports": {
-                ".": {
-                  "import": "./index.mjs",
-                  "require": "./index.js"
-                }
-              },
-              "packageMain": "./index.js",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "build": {
-              "executor": "@nx/vite:build",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "defaultConfiguration": "production",
-              "options": {
-                "outputPath": "dist/libs/besigner/ui/form-fields"
-              },
-              "configurations": {
-                "development": {
-                  "mode": "development"
-                },
-                "production": {
-                  "mode": "production"
-                }
-              },
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/{projectRoot}"
-              ],
-              "options": {
-                "jestConfig": "libs/besigner/ui/form-fields/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/besigner/ui/form-fields/src",
-          "implicitDependencies": []
-        }
-      },
-      "shared-feature-fbserver": {
-        "name": "shared-feature-fbserver",
-        "type": "lib",
-        "data": {
-          "root": "libs/shared/feature/fbserver",
-          "name": "shared-feature-fbserver",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:shared",
-            "scope:feature"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/shared-feature-fbserver",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/shared/feature/fbserver",
-                "main": "libs/shared/feature/fbserver/src/index.ts",
-                "tsConfig": "libs/shared/feature/fbserver/tsconfig.lib.json",
-                "assets": [
-                  "libs/shared/feature/fbserver/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/shared/feature/fbserver/src",
+          "sourceRoot": "libs/besigner/feature/designer/src",
           "implicitDependencies": []
         }
       },
@@ -584,24 +307,23 @@
           "implicitDependencies": []
         }
       },
-      "besigner-ui-box-styler": {
-        "name": "besigner-ui-box-styler",
+      "shared-ui-color-picker": {
+        "name": "shared-ui-color-picker",
         "type": "lib",
         "data": {
-          "root": "libs/besigner/ui/box-styler",
-          "name": "besigner-ui-box-styler",
+          "root": "libs/shared/ui/color-picker",
+          "name": "shared-ui-color-picker",
           "projectType": "library",
           "tags": [
             "npm:public",
             "scope:lib",
-            "scope:aglyn",
-            "scope:ui",
-            "aglyn:besigner"
+            "scope:shared",
+            "scope:ui"
           ],
           "metadata": {
             "targetGroups": {},
             "js": {
-              "packageName": "@aglyn/besigner-ui-box-styler",
+              "packageName": "@aglyn/shared-ui-color-picker",
               "packageVersion": "0.0.1",
               "isInPackageManagerWorkspaces": false
             }
@@ -622,10 +344,128 @@
                 "{options.outputPath}"
               ],
               "options": {
-                "outputPath": "dist/libs/besigner/ui/box-styler",
-                "tsConfig": "libs/besigner/ui/box-styler/tsconfig.lib.json",
-                "project": "libs/besigner/ui/box-styler/package.json",
-                "entryFile": "libs/besigner/ui/box-styler/src/index.ts",
+                "outputPath": "dist/libs/shared/ui/color-picker",
+                "tsConfig": "libs/shared/ui/color-picker/tsconfig.lib.json",
+                "project": "libs/shared/ui/color-picker/package.json",
+                "entryFile": "libs/shared/ui/color-picker/src/index.ts",
+                "external": [
+                  "@emotion/react/jsx-runtime",
+                  "@aglyn/shared-util-tools"
+                ],
+                "rollupConfig": [
+                  "@nx/react/plugins/bundle-rollup",
+                  "tools/rollup-external-packages.js",
+                  "tools/rollup-suppress-use-client.js",
+                  "tools/rollup-skip-typecheck.js"
+                ],
+                "compiler": "swc",
+                "assets": [
+                  {
+                    "glob": "libs/shared/ui/color-picker/README.md",
+                    "input": ".",
+                    "output": "."
+                  }
+                ],
+                "updateBuildableProjectDepsInPackageJson": true,
+                "skipTypeCheck": true
+              },
+              "configurations": {},
+              "parallelism": true,
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true
+            },
+            "lint": {
+              "executor": "@nx/eslint:lint",
+              "outputs": [
+                "{options.outputFile}"
+              ],
+              "configurations": {},
+              "options": {},
+              "parallelism": true,
+              "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/.eslintrc.js",
+                "{workspaceRoot}/tools/eslint-rules/**/*"
+              ],
+              "cache": true
+            },
+            "test": {
+              "executor": "@nx/jest:jest",
+              "outputs": [
+                "{workspaceRoot}/coverage/libs/shared/ui/color-picker"
+              ],
+              "options": {
+                "jestConfig": "libs/shared/ui/color-picker/jest.config.ts",
+                "passWithNoTests": true
+              },
+              "configurations": {
+                "ci": {
+                  "ci": true,
+                  "codeCoverage": true
+                }
+              },
+              "parallelism": true,
+              "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/jest.preset.js"
+              ],
+              "cache": true
+            }
+          },
+          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+          "sourceRoot": "libs/shared/ui/color-picker/src",
+          "implicitDependencies": []
+        }
+      },
+      "shared-ui-json-editor": {
+        "name": "shared-ui-json-editor",
+        "type": "lib",
+        "data": {
+          "root": "libs/shared/ui/json-editor",
+          "name": "shared-ui-json-editor",
+          "projectType": "library",
+          "tags": [
+            "npm:public",
+            "scope:lib",
+            "scope:shared",
+            "scope:ui"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "@aglyn/shared-ui-json-editor",
+              "packageVersion": "0.0.1",
+              "isInPackageManagerWorkspaces": false
+            }
+          },
+          "targets": {
+            "nx-release-publish": {
+              "executor": "@nx/js:release-publish",
+              "dependsOn": [
+                "^nx-release-publish"
+              ],
+              "options": {},
+              "configurations": {},
+              "parallelism": true
+            },
+            "build": {
+              "executor": "@nx/rollup:rollup",
+              "outputs": [
+                "{options.outputPath}"
+              ],
+              "options": {
+                "outputPath": "dist/libs/shared/ui/json-editor",
+                "tsConfig": "libs/shared/ui/json-editor/tsconfig.lib.json",
+                "project": "libs/shared/ui/json-editor/package.json",
+                "entryFile": "libs/shared/ui/json-editor/src/index.ts",
                 "external": [
                   "react/jsx-runtime"
                 ],
@@ -639,7 +479,7 @@
                 "skipTypeCheck": true,
                 "assets": [
                   {
-                    "glob": "libs/besigner/ui/box-styler/README.md",
+                    "glob": "libs/shared/ui/json-editor/README.md",
                     "input": ".",
                     "output": "."
                   }
@@ -676,10 +516,10 @@
             "test": {
               "executor": "@nx/jest:jest",
               "outputs": [
-                "{workspaceRoot}/coverage/libs/besigner/ui/box-styler"
+                "{workspaceRoot}/coverage/{projectRoot}"
               ],
               "options": {
-                "jestConfig": "libs/besigner/ui/box-styler/jest.config.ts",
+                "jestConfig": "libs/shared/ui/json-editor/jest.config.ts",
                 "passWithNoTests": true
               },
               "configurations": {
@@ -698,220 +538,7 @@
             }
           },
           "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/besigner/ui/box-styler/src",
-          "implicitDependencies": []
-        }
-      },
-      "core-feature-singleton": {
-        "name": "core-feature-singleton",
-        "type": "lib",
-        "data": {
-          "root": "libs/core/feature/singleton",
-          "name": "core-feature-singleton",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:feature",
-            "aglyn:framework"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/core-feature-singleton",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/rollup:rollup",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/core/feature/singleton",
-                "tsConfig": "libs/core/feature/singleton/tsconfig.lib.json",
-                "project": "libs/core/feature/singleton/package.json",
-                "entryFile": "libs/core/feature/singleton/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "compiler": "swc",
-                "assets": [
-                  {
-                    "glob": "libs/core/feature/singleton/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true,
-                "skipTypeCheck": true
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/feature/singleton/src",
-          "implicitDependencies": []
-        }
-      },
-      "core-feature-renderer": {
-        "name": "core-feature-renderer",
-        "type": "lib",
-        "data": {
-          "root": "libs/core/feature/renderer",
-          "name": "core-feature-renderer",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:feature",
-            "aglyn:renderer"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/core-feature-renderer",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/rollup:rollup",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/core/feature/renderer",
-                "tsConfig": "libs/core/feature/renderer/tsconfig.lib.json",
-                "project": "libs/core/feature/renderer/package.json",
-                "entryFile": "libs/core/feature/renderer/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "compiler": "swc",
-                "assets": [
-                  {
-                    "glob": "libs/core/feature/renderer/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true,
-                "skipTypeCheck": true
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/core/feature/renderer"
-              ],
-              "options": {
-                "jestConfig": "libs/core/feature/renderer/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/feature/renderer/src",
+          "sourceRoot": "libs/shared/ui/json-editor/src",
           "implicitDependencies": []
         }
       },
@@ -1012,198 +639,6 @@
           },
           "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
           "sourceRoot": "libs/shared/util/timestamp/src",
-          "implicitDependencies": []
-        }
-      },
-      "besigner-json-editor": {
-        "name": "besigner-json-editor",
-        "type": "lib",
-        "data": {
-          "root": "libs/besigner-json-editor",
-          "name": "besigner-json-editor",
-          "projectType": "library",
-          "tags": [
-            "npm:public"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/besigner-json-editor",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/rollup:rollup",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/besigner-json-editor",
-                "tsConfig": "libs/besigner-json-editor/tsconfig.lib.json",
-                "project": "libs/besigner-json-editor/package.json",
-                "entryFile": "libs/besigner-json-editor/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "compiler": "swc",
-                "skipTypeCheck": true,
-                "assets": [
-                  {
-                    "glob": "libs/besigner-json-editor/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/{projectRoot}"
-              ],
-              "options": {
-                "jestConfig": "libs/besigner-json-editor/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/besigner-json-editor/src",
-          "implicitDependencies": []
-        }
-      },
-      "core-data-foundation": {
-        "name": "core-data-foundation",
-        "type": "lib",
-        "data": {
-          "root": "libs/core/data/foundation",
-          "name": "core-data-foundation",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:data",
-            "aglyn:framework"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/core-data-foundation",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/core/data/foundation",
-                "main": "libs/core/data/foundation/src/index.ts",
-                "tsConfig": "libs/core/data/foundation/tsconfig.lib.json",
-                "assets": [
-                  "libs/core/data/foundation/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/data/foundation/src",
           "implicitDependencies": []
         }
       },
@@ -1669,7 +1104,7 @@
                 "entryFile": "libs/shared/ui/jsx-forms/src/index.ts",
                 "external": [
                   "react/jsx-runtime",
-                  "@aglyn/besigner-ui-color-picker/color-picker",
+                  "@aglyn/shared-ui-color-picker",
                   "@aglyn/shared-data-mdi",
                   "@aglyn/shared-ui-jsx",
                   "@aglyn/shared-ui-theme",
@@ -1746,106 +1181,6 @@
           },
           "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
           "sourceRoot": "libs/shared/ui/jsx-forms/src",
-          "implicitDependencies": []
-        }
-      },
-      "shared-util-emitter": {
-        "name": "shared-util-emitter",
-        "type": "lib",
-        "data": {
-          "root": "libs/shared/util/emitter",
-          "name": "shared-util-emitter",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:shared",
-            "scope:util"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/shared-util-emitter",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/shared/util/emitter",
-                "main": "libs/shared/util/emitter/src/index.ts",
-                "tsConfig": "libs/shared/util/emitter/tsconfig.lib.json",
-                "assets": [
-                  "libs/shared/util/emitter/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/shared/util/emitter"
-              ],
-              "options": {
-                "jestConfig": "libs/shared/util/emitter/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/shared/util/emitter/src",
           "implicitDependencies": []
         }
       },
@@ -2149,225 +1484,6 @@
           "implicitDependencies": []
         }
       },
-      "aglyn-besigner-ui": {
-        "name": "aglyn-besigner-ui",
-        "type": "lib",
-        "data": {
-          "root": "libs/aglyn-besigner-ui",
-          "name": "aglyn-besigner-ui",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:feature",
-            "aglyn:besigner"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/besigner-ui",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/rollup:rollup",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/aglyn-besigner-ui",
-                "tsConfig": "libs/aglyn-besigner-ui/tsconfig.lib.json",
-                "project": "libs/aglyn-besigner-ui/package.json",
-                "entryFile": "libs/aglyn-besigner-ui/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "skipTypeCheck": true,
-                "compiler": "swc",
-                "assets": [
-                  {
-                    "glob": "libs/aglyn-besigner-ui/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/aglyn-besigner-ui"
-              ],
-              "options": {
-                "jestConfig": "libs/aglyn-besigner-ui/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/aglyn-besigner-ui/src",
-          "implicitDependencies": []
-        }
-      },
-      "besigner-data-app": {
-        "name": "besigner-data-app",
-        "type": "lib",
-        "data": {
-          "root": "libs/besigner/data/app",
-          "name": "besigner-data-app",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:data",
-            "aglyn:besigner"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/besigner-data-app",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/besigner/data/app",
-                "main": "libs/besigner/data/app/src/index.ts",
-                "tsConfig": "libs/besigner/data/app/tsconfig.lib.json",
-                "assets": [
-                  "libs/besigner/data/app/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/besigner/data/app"
-              ],
-              "options": {
-                "jestConfig": "libs/besigner/data/app/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/besigner/data/app/src",
-          "implicitDependencies": []
-        }
-      },
       "shared-data-enums": {
         "name": "shared-data-enums",
         "type": "lib",
@@ -2532,7 +1648,8 @@
           "tags": [
             "npm:public",
             "scope:lib",
-            "scope:shared"
+            "scope:shared",
+            "scope:data"
           ],
           "metadata": {
             "targetGroups": {},
@@ -2798,20 +1915,24 @@
           "implicitDependencies": []
         }
       },
-      "aglyn-plugin-mui": {
-        "name": "aglyn-plugin-mui",
+      "tenant-data-admin": {
+        "name": "tenant-data-admin",
         "type": "lib",
         "data": {
-          "root": "libs/aglyn-plugin-mui",
-          "name": "aglyn-plugin-mui",
+          "root": "libs/tenant/data/admin",
+          "name": "tenant-data-admin",
           "projectType": "library",
           "tags": [
-            "npm:public"
+            "npm:public",
+            "scope:lib",
+            "scope:aglyn",
+            "scope:data",
+            "aglyn:tenancy"
           ],
           "metadata": {
             "targetGroups": {},
             "js": {
-              "packageName": "@aglyn/aglyn-plugin-mui",
+              "packageName": "@aglyn/tenant-data-admin",
               "packageVersion": "0.0.1",
               "isInPackageManagerWorkspaces": false
             }
@@ -2827,34 +1948,17 @@
               "parallelism": true
             },
             "build": {
-              "executor": "@nx/rollup:rollup",
+              "executor": "@nx/js:swc",
               "outputs": [
                 "{options.outputPath}"
               ],
               "options": {
-                "outputPath": "dist/libs/aglyn-plugin-mui",
-                "tsConfig": "libs/aglyn-plugin-mui/tsconfig.lib.json",
-                "project": "libs/aglyn-plugin-mui/package.json",
-                "entryFile": "libs/aglyn-plugin-mui/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "compiler": "swc",
+                "outputPath": "dist/libs/tenant/data/admin",
+                "main": "libs/tenant/data/admin/src/index.ts",
+                "tsConfig": "libs/tenant/data/admin/tsconfig.lib.json",
                 "assets": [
-                  {
-                    "glob": "libs/aglyn-plugin-mui/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true,
-                "skipTypeCheck": true
+                  "libs/tenant/data/admin/*.md"
+                ]
               },
               "configurations": {},
               "parallelism": true,
@@ -2886,10 +1990,10 @@
             "test": {
               "executor": "@nx/jest:jest",
               "outputs": [
-                "{workspaceRoot}/coverage/libs/aglyn-plugin-mui"
+                "{workspaceRoot}/coverage/libs/tenant/data/admin"
               ],
               "options": {
-                "jestConfig": "libs/aglyn-plugin-mui/jest.config.ts",
+                "jestConfig": "libs/tenant/data/admin/jest.config.ts",
                 "passWithNoTests": true
               },
               "configurations": {
@@ -2907,103 +2011,8 @@
               "cache": true
             }
           },
-          "$schema": "../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/aglyn-plugin-mui/src",
-          "implicitDependencies": []
-        }
-      },
-      "core-ui-renderer": {
-        "name": "core-ui-renderer",
-        "type": "lib",
-        "data": {
-          "root": "libs/core/ui/renderer",
-          "name": "core-ui-renderer",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:ui",
-            "aglyn:renderer"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/core-ui-renderer",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/rollup:rollup",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/core/ui/renderer",
-                "tsConfig": "libs/core/ui/renderer/tsconfig.lib.json",
-                "project": "libs/core/ui/renderer/package.json",
-                "entryFile": "libs/core/ui/renderer/src/index.ts",
-                "external": [
-                  "react/jsx-runtime"
-                ],
-                "rollupConfig": [
-                  "@nx/react/plugins/bundle-rollup",
-                  "tools/rollup-external-packages.js",
-                  "tools/rollup-suppress-use-client.js",
-                  "tools/rollup-skip-typecheck.js"
-                ],
-                "compiler": "swc",
-                "assets": [
-                  {
-                    "glob": "libs/core/ui/renderer/README.md",
-                    "input": ".",
-                    "output": "."
-                  }
-                ],
-                "updateBuildableProjectDepsInPackageJson": true,
-                "skipTypeCheck": true
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            }
-          },
           "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/ui/renderer/src",
+          "sourceRoot": "libs/tenant/data/admin/src",
           "implicitDependencies": []
         }
       },
@@ -3158,107 +2167,6 @@
           },
           "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
           "sourceRoot": "libs/shared/util/next/src",
-          "implicitDependencies": []
-        }
-      },
-      "core-data-admin": {
-        "name": "core-data-admin",
-        "type": "lib",
-        "data": {
-          "root": "libs/core/data/admin",
-          "name": "core-data-admin",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:data",
-            "aglyn:tenancy"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/core-data-admin",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/core/data/admin",
-                "main": "libs/core/data/admin/src/index.ts",
-                "tsConfig": "libs/core/data/admin/tsconfig.lib.json",
-                "assets": [
-                  "libs/core/data/admin/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/core/data/admin"
-              ],
-              "options": {
-                "jestConfig": "libs/core/data/admin/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/data/admin/src",
           "implicitDependencies": []
         }
       },
@@ -3581,107 +2489,6 @@
           "implicitDependencies": []
         }
       },
-      "aglyn-besigner": {
-        "name": "aglyn-besigner",
-        "type": "lib",
-        "data": {
-          "root": "libs/aglyn-besigner",
-          "name": "aglyn-besigner",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:feature",
-            "aglyn:besigner"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/besigner",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/aglyn-besigner",
-                "main": "libs/aglyn-besigner/src/index.ts",
-                "tsConfig": "libs/aglyn-besigner/tsconfig.lib.json",
-                "assets": [
-                  "libs/aglyn-besigner/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/aglyn-besigner"
-              ],
-              "options": {
-                "jestConfig": "libs/aglyn-besigner/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            }
-          },
-          "$schema": "../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/aglyn-besigner/src",
-          "implicitDependencies": []
-        }
-      },
       "plugins-ui-mui": {
         "name": "plugins-ui-mui",
         "type": "lib",
@@ -3714,17 +2521,34 @@
               "parallelism": true
             },
             "build": {
-              "executor": "@nx/js:swc",
+              "executor": "@nx/rollup:rollup",
               "outputs": [
                 "{options.outputPath}"
               ],
               "options": {
                 "outputPath": "dist/libs/plugins/ui/mui",
-                "main": "libs/plugins/ui/mui/src/index.ts",
                 "tsConfig": "libs/plugins/ui/mui/tsconfig.lib.json",
+                "project": "libs/plugins/ui/mui/package.json",
+                "entryFile": "libs/plugins/ui/mui/src/index.ts",
+                "external": [
+                  "react/jsx-runtime"
+                ],
+                "rollupConfig": [
+                  "@nx/react/plugins/bundle-rollup",
+                  "tools/rollup-external-packages.js",
+                  "tools/rollup-suppress-use-client.js",
+                  "tools/rollup-skip-typecheck.js"
+                ],
+                "compiler": "swc",
                 "assets": [
-                  "libs/plugins/ui/mui/*.md"
-                ]
+                  {
+                    "glob": "libs/plugins/ui/mui/README.md",
+                    "input": ".",
+                    "output": "."
+                  }
+                ],
+                "updateBuildableProjectDepsInPackageJson": true,
+                "skipTypeCheck": true
               },
               "configurations": {},
               "parallelism": true,
@@ -3899,24 +2723,25 @@
           "implicitDependencies": []
         }
       },
-      "core-data-app": {
-        "name": "core-data-app",
+      "besigner-core": {
+        "name": "besigner-core",
         "type": "lib",
         "data": {
-          "root": "libs/core/data/app",
-          "name": "core-data-app",
+          "root": "libs/besigner/core",
+          "name": "besigner-core",
           "projectType": "library",
           "tags": [
             "npm:public",
             "scope:lib",
             "scope:aglyn",
             "scope:data",
-            "aglyn:framework"
+            "scope:feature",
+            "aglyn:besigner"
           ],
           "metadata": {
             "targetGroups": {},
             "js": {
-              "packageName": "@aglyn/core-data-app",
+              "packageName": "@aglyn/besigner",
               "packageVersion": "0.0.1",
               "isInPackageManagerWorkspaces": false
             }
@@ -3937,11 +2762,11 @@
                 "{options.outputPath}"
               ],
               "options": {
-                "outputPath": "dist/libs/core/data/app",
-                "main": "libs/core/data/app/src/index.ts",
-                "tsConfig": "libs/core/data/app/tsconfig.lib.json",
+                "outputPath": "dist/libs/besigner/core",
+                "main": "libs/besigner/core/src/index.ts",
+                "tsConfig": "libs/besigner/core/tsconfig.lib.json",
                 "assets": [
-                  "libs/core/data/app/*.md"
+                  "libs/besigner/core/*.md"
                 ]
               },
               "configurations": {},
@@ -3974,119 +2799,10 @@
             "test": {
               "executor": "@nx/jest:jest",
               "outputs": [
-                "{workspaceRoot}/coverage/libs/core/data/app"
+                "{workspaceRoot}/coverage/libs/besigner/core"
               ],
               "options": {
-                "jestConfig": "libs/core/data/app/jest.config.ts",
-                "passWithNoTests": true
-              },
-              "configurations": {
-                "ci": {
-                  "ci": true,
-                  "codeCoverage": true
-                }
-              },
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/jest.preset.js"
-              ],
-              "cache": true
-            },
-            "version": {
-              "executor": "@jscutlery/semver:version",
-              "options": {
-                "syncVersions": false
-              },
-              "configurations": {},
-              "parallelism": true
-            }
-          },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/data/app/src",
-          "implicitDependencies": []
-        }
-      },
-      "core-util-app": {
-        "name": "core-util-app",
-        "type": "lib",
-        "data": {
-          "root": "libs/core/util/app",
-          "name": "core-util-app",
-          "projectType": "library",
-          "tags": [
-            "npm:public",
-            "scope:lib",
-            "scope:aglyn",
-            "scope:data",
-            "aglyn:framework"
-          ],
-          "metadata": {
-            "targetGroups": {},
-            "js": {
-              "packageName": "@aglyn/core-util-app",
-              "packageVersion": "0.0.1",
-              "isInPackageManagerWorkspaces": false
-            }
-          },
-          "targets": {
-            "nx-release-publish": {
-              "executor": "@nx/js:release-publish",
-              "dependsOn": [
-                "^nx-release-publish"
-              ],
-              "options": {},
-              "configurations": {},
-              "parallelism": true
-            },
-            "build": {
-              "executor": "@nx/js:swc",
-              "outputs": [
-                "{options.outputPath}"
-              ],
-              "options": {
-                "outputPath": "dist/libs/core/util/app",
-                "main": "libs/core/util/app/src/index.ts",
-                "tsConfig": "libs/core/util/app/tsconfig.lib.json",
-                "assets": [
-                  "libs/core/util/app/*.md"
-                ]
-              },
-              "configurations": {},
-              "parallelism": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "inputs": [
-                "production",
-                "^production"
-              ],
-              "cache": true
-            },
-            "lint": {
-              "executor": "@nx/eslint:lint",
-              "outputs": [
-                "{options.outputFile}"
-              ],
-              "configurations": {},
-              "options": {},
-              "parallelism": true,
-              "inputs": [
-                "default",
-                "^default",
-                "{workspaceRoot}/.eslintrc.js",
-                "{workspaceRoot}/tools/eslint-rules/**/*"
-              ],
-              "cache": true
-            },
-            "test": {
-              "executor": "@nx/jest:jest",
-              "outputs": [
-                "{workspaceRoot}/coverage/libs/core/util/app"
-              ],
-              "options": {
-                "jestConfig": "libs/core/util/app/jest.config.ts",
+                "jestConfig": "libs/besigner/core/jest.config.ts",
                 "passWithNoTests": true
               },
               "configurations": {
@@ -4104,8 +2820,8 @@
               "cache": true
             }
           },
-          "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-          "sourceRoot": "libs/core/util/app/src",
+          "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+          "sourceRoot": "libs/besigner/core/src",
           "implicitDependencies": []
         }
       },
@@ -4862,8 +3578,9 @@
             "npm:public",
             "scope:lib",
             "scope:aglyn",
+            "scope:data",
             "scope:feature",
-            "scope:framework"
+            "aglyn:framework"
           ],
           "metadata": {
             "targetGroups": {},
@@ -5286,23 +4003,69 @@
       }
     },
     "dependencies": {
-      "besigner-feature-canvas-designer": [],
       "shared-svg-icons-svg-icons": [],
-      "besigner-ui-color-picker": [
+      "besigner-feature-designer": [
         {
-          "source": "besigner-ui-color-picker",
-          "target": "shared-util-tools",
+          "source": "besigner-feature-designer",
+          "target": "shared-data-enums",
           "type": "static"
-        }
-      ],
-      "besigner-ui-form-fields": [
+        },
         {
-          "source": "besigner-ui-form-fields",
+          "source": "besigner-feature-designer",
+          "target": "shared-ui-theme",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
           "target": "shared-ui-jsx",
           "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "besigner-core",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "aglyn",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "shared-util-tools",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "shared-util-vendor",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "shared-ui-jsx-forms",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "shared-data-mdi",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "aglyn-node-renderer",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "shared-svg-icons-svg-icons",
+          "type": "static"
+        },
+        {
+          "source": "besigner-feature-designer",
+          "target": "shared-util-dom",
+          "type": "static"
         }
       ],
-      "shared-feature-fbserver": [],
       "tenant-feature-instance": [
         {
           "source": "tenant-feature-instance",
@@ -5311,11 +4074,6 @@
         },
         {
           "source": "tenant-feature-instance",
-          "target": "core-util-app",
-          "type": "static"
-        },
-        {
-          "source": "tenant-feature-instance",
           "target": "shared-util-timestamp",
           "type": "static"
         },
@@ -5325,122 +4083,26 @@
           "type": "static"
         }
       ],
-      "besigner-ui-box-styler": [
+      "shared-ui-color-picker": [
         {
-          "source": "besigner-ui-box-styler",
+          "source": "shared-ui-color-picker",
+          "target": "shared-util-tools",
+          "type": "static"
+        }
+      ],
+      "shared-ui-json-editor": [
+        {
+          "source": "shared-ui-json-editor",
           "target": "shared-data-enums",
           "type": "static"
         },
         {
-          "source": "besigner-ui-box-styler",
-          "target": "shared-ui-theme",
-          "type": "static"
-        }
-      ],
-      "core-feature-singleton": [
-        {
-          "source": "core-feature-singleton",
-          "target": "core-data-app",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-singleton",
-          "target": "core-data-foundation",
-          "type": "static"
-        }
-      ],
-      "core-feature-renderer": [
-        {
-          "source": "core-feature-renderer",
-          "target": "aglyn",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
-          "target": "shared-ui-theme",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
-          "target": "shared-util-tools",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
-          "target": "core-data-app",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
-          "target": "core-util-app",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
+          "source": "shared-ui-json-editor",
           "target": "shared-ui-jsx",
-          "type": "static"
-        },
-        {
-          "source": "core-feature-renderer",
-          "target": "shared-util-vendor",
           "type": "static"
         }
       ],
       "shared-util-timestamp": [],
-      "besigner-json-editor": [
-        {
-          "source": "besigner-json-editor",
-          "target": "shared-data-enums",
-          "type": "static"
-        },
-        {
-          "source": "besigner-json-editor",
-          "target": "shared-ui-jsx",
-          "type": "static"
-        }
-      ],
-      "core-data-foundation": [
-        {
-          "source": "core-data-foundation",
-          "target": "shared-util-emitter",
-          "type": "static"
-        },
-        {
-          "source": "core-data-foundation",
-          "target": "shared-util-errors",
-          "type": "static"
-        },
-        {
-          "source": "core-data-foundation",
-          "target": "shared-util-tools",
-          "type": "static"
-        },
-        {
-          "source": "core-data-foundation",
-          "target": "shared-util-logger",
-          "type": "static"
-        },
-        {
-          "source": "core-data-foundation",
-          "target": "shared-util-vendor",
-          "type": "static"
-        },
-        {
-          "source": "core-data-foundation",
-          "target": "aglyn",
-          "type": "static"
-        },
-        {
-          "source": "core-data-foundation",
-          "target": "shared-util-timestamp",
-          "type": "static"
-        }
-      ],
       "shared-ui-snackstack": [
         {
           "source": "shared-ui-snackstack",
@@ -5458,7 +4120,18 @@
           "type": "static"
         }
       ],
-      "shared-util-fbclient": [],
+      "shared-util-fbclient": [
+        {
+          "source": "shared-util-fbclient",
+          "target": "shared-data-types",
+          "type": "static"
+        },
+        {
+          "source": "shared-util-fbclient",
+          "target": "shared-util-tools",
+          "type": "static"
+        }
+      ],
       "shared-util-fbserver": [],
       "shared-util-rest-api": [
         {
@@ -5492,12 +4165,22 @@
           "source": "aglyn-node-renderer",
           "target": "shared-ui-theme",
           "type": "static"
+        },
+        {
+          "source": "aglyn-node-renderer",
+          "target": "shared-util-tools",
+          "type": "static"
+        },
+        {
+          "source": "aglyn-node-renderer",
+          "target": "shared-util-vendor",
+          "type": "static"
         }
       ],
       "shared-ui-jsx-forms": [
         {
           "source": "shared-ui-jsx-forms",
-          "target": "besigner-ui-color-picker",
+          "target": "shared-ui-color-picker",
           "type": "static"
         },
         {
@@ -5526,7 +4209,6 @@
           "type": "static"
         }
       ],
-      "shared-util-emitter": [],
       "shared-util-errors": [
         {
           "source": "shared-util-errors",
@@ -5541,130 +4223,6 @@
       ],
       "shared-util-logger": [],
       "shared-util-vendor": [],
-      "aglyn-besigner-ui": [
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-data-enums",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-ui-jsx",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-ui-theme",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "aglyn-besigner",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "aglyn",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "besigner-data-app",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-util-tools",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-util-vendor",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "core-feature-renderer",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-ui-jsx-forms",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "besigner-ui-box-styler",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "besigner-ui-form-fields",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-svg-icons-svg-icons",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "plugins-ui-mui",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "aglyn-node-renderer",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "shared-util-dom",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "core-util-app",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner-ui",
-          "target": "core-data-app",
-          "type": "static"
-        }
-      ],
-      "besigner-data-app": [
-        {
-          "source": "besigner-data-app",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "besigner-data-app",
-          "target": "shared-util-tools",
-          "type": "static"
-        },
-        {
-          "source": "besigner-data-app",
-          "target": "core-data-app",
-          "type": "static"
-        },
-        {
-          "source": "besigner-data-app",
-          "target": "aglyn",
-          "type": "static"
-        },
-        {
-          "source": "besigner-data-app",
-          "target": "shared-util-logger",
-          "type": "static"
-        }
-      ],
       "shared-data-enums": [
         {
           "source": "shared-data-enums",
@@ -5693,29 +4251,23 @@
           "type": "static"
         }
       ],
-      "aglyn-plugin-mui": [
+      "tenant-data-admin": [
         {
-          "source": "aglyn-plugin-mui",
+          "source": "tenant-data-admin",
           "target": "aglyn",
           "type": "static"
         },
         {
-          "source": "aglyn-plugin-mui",
-          "target": "core-data-foundation",
+          "source": "tenant-data-admin",
+          "target": "shared-util-fbclient",
           "type": "static"
         },
         {
-          "source": "aglyn-plugin-mui",
-          "target": "shared-data-mdi",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-plugin-mui",
-          "target": "shared-ui-jsx",
+          "source": "tenant-data-admin",
+          "target": "shared-util-fbserver",
           "type": "static"
         }
       ],
-      "core-ui-renderer": [],
       "shared-util-http": [
         {
           "source": "shared-util-http",
@@ -5727,13 +4279,6 @@
         {
           "source": "shared-util-next",
           "target": "shared-util-tools",
-          "type": "static"
-        }
-      ],
-      "core-data-admin": [
-        {
-          "source": "core-data-admin",
-          "target": "aglyn",
           "type": "static"
         }
       ],
@@ -5763,18 +4308,6 @@
           "type": "static"
         }
       ],
-      "aglyn-besigner": [
-        {
-          "source": "aglyn-besigner",
-          "target": "aglyn",
-          "type": "static"
-        },
-        {
-          "source": "aglyn-besigner",
-          "target": "core-util-app",
-          "type": "static"
-        }
-      ],
       "plugins-ui-mui": [
         {
           "source": "plugins-ui-mui",
@@ -5783,22 +4316,7 @@
         },
         {
           "source": "plugins-ui-mui",
-          "target": "shared-ui-jsx",
-          "type": "static"
-        },
-        {
-          "source": "plugins-ui-mui",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "plugins-ui-mui",
-          "target": "core-feature-renderer",
-          "type": "static"
-        },
-        {
-          "source": "plugins-ui-mui",
-          "target": "core-util-app",
+          "target": "shared-data-mdi",
           "type": "static"
         }
       ],
@@ -5834,57 +4352,20 @@
           "type": "static"
         }
       ],
-      "core-data-app": [
+      "besigner-core": [
         {
-          "source": "core-data-app",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "core-data-app",
+          "source": "besigner-core",
           "target": "shared-util-tools",
           "type": "static"
         },
         {
-          "source": "core-data-app",
-          "target": "shared-util-logger",
-          "type": "static"
-        },
-        {
-          "source": "core-data-app",
-          "target": "core-util-app",
-          "type": "static"
-        },
-        {
-          "source": "core-data-app",
-          "target": "shared-util-emitter",
-          "type": "static"
-        },
-        {
-          "source": "core-data-app",
-          "target": "shared-util-timestamp",
-          "type": "static"
-        }
-      ],
-      "core-util-app": [
-        {
-          "source": "core-util-app",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "core-util-app",
-          "target": "shared-util-tools",
-          "type": "static"
-        },
-        {
-          "source": "core-util-app",
+          "source": "besigner-core",
           "target": "aglyn",
           "type": "static"
         },
         {
-          "source": "core-util-app",
-          "target": "shared-util-vendor",
+          "source": "besigner-core",
+          "target": "shared-util-logger",
           "type": "static"
         }
       ],
@@ -5961,12 +4442,12 @@
         },
         {
           "source": "console",
-          "target": "aglyn-besigner-ui",
+          "target": "besigner-feature-designer",
           "type": "static"
         },
         {
           "source": "console",
-          "target": "aglyn-besigner-ui",
+          "target": "besigner-feature-designer",
           "type": "dynamic"
         },
         {
@@ -5996,42 +4477,22 @@
         },
         {
           "source": "console",
-          "target": "besigner-data-app",
+          "target": "besigner-core",
           "type": "static"
         },
         {
           "source": "console",
-          "target": "core-data-app",
+          "target": "aglyn-node-renderer",
           "type": "static"
         },
         {
           "source": "console",
-          "target": "core-feature-renderer",
+          "target": "shared-ui-json-editor",
           "type": "static"
         },
         {
           "source": "console",
-          "target": "plugins-ui-mui",
-          "type": "static"
-        },
-        {
-          "source": "console",
-          "target": "aglyn-plugin-mui",
-          "type": "static"
-        },
-        {
-          "source": "console",
-          "target": "aglyn-besigner",
-          "type": "static"
-        },
-        {
-          "source": "console",
-          "target": "besigner-json-editor",
-          "type": "static"
-        },
-        {
-          "source": "console",
-          "target": "besigner-json-editor",
+          "target": "shared-ui-json-editor",
           "type": "dynamic"
         },
         {
@@ -6041,12 +4502,7 @@
         },
         {
           "source": "console",
-          "target": "core-data-foundation",
-          "type": "static"
-        },
-        {
-          "source": "console",
-          "target": "core-util-app",
+          "target": "plugins-ui-mui",
           "type": "static"
         },
         {
@@ -6056,7 +4512,7 @@
         },
         {
           "source": "console",
-          "target": "core-data-admin",
+          "target": "tenant-data-admin",
           "type": "static"
         },
         {
@@ -6067,6 +4523,11 @@
         {
           "source": "console",
           "target": "shared-data-forms",
+          "type": "static"
+        },
+        {
+          "source": "console",
+          "target": "shared-data-mdi",
           "type": "static"
         }
       ],
@@ -6105,7 +4566,7 @@
         },
         {
           "source": "tenant",
-          "target": "aglyn-plugin-mui",
+          "target": "plugins-ui-mui",
           "type": "static"
         },
         {
@@ -6115,7 +4576,7 @@
         },
         {
           "source": "tenant",
-          "target": "core-data-admin",
+          "target": "tenant-data-admin",
           "type": "static"
         },
         {
@@ -6144,6 +4605,11 @@
           "source": "admin",
           "target": "shared-ui-jsx",
           "type": "static"
+        },
+        {
+          "source": "admin",
+          "target": "shared-data-mdi",
+          "type": "static"
         }
       ],
       "aglyn": [
@@ -6159,29 +4625,24 @@
         },
         {
           "source": "aglyn",
-          "target": "shared-util-logger",
+          "target": "shared-util-vendor",
           "type": "static"
         },
         {
           "source": "aglyn",
           "target": "shared-data-enums",
           "type": "static"
+        },
+        {
+          "source": "aglyn",
+          "target": "shared-util-logger",
+          "type": "static"
         }
       ],
       "silo": [
         {
           "source": "silo",
-          "target": "plugins-ui-mui",
-          "type": "static"
-        },
-        {
-          "source": "silo",
-          "target": "core-data-app",
-          "type": "static"
-        },
-        {
-          "source": "silo",
-          "target": "core-feature-renderer",
+          "target": "besigner-core",
           "type": "static"
         },
         {
@@ -6239,6 +4700,16 @@
         },
         {
           "source": "www",
+          "target": "shared-data-mdi",
+          "type": "static"
+        },
+        {
+          "source": "www",
+          "target": "shared-util-fbclient",
+          "type": "static"
+        },
+        {
+          "source": "www",
           "target": "shared-ui-jsx-forms",
           "type": "static"
         },
@@ -6259,7 +4730,7 @@
         },
         {
           "source": "www",
-          "target": "console",
+          "target": "shared-util-fbserver",
           "type": "static"
         }
       ]
