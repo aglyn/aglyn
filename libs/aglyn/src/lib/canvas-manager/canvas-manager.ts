@@ -238,8 +238,11 @@ export class CanvasManager {
   private _history: HistoryManager<NodeId, NodeSchema<any>>
 
   constructor(public aglyn: Aglyn) {
-    makeObservable(this, {
+    makeObservable<CanvasManager, '_initial'>(this, {
+      _initial: observable.ref,
       nodes: computed,
+      isInitialSame: computed,
+      didSetInitial: computed,
       undo: action,
       redo: action,
       saveHistory: action,
@@ -268,7 +271,8 @@ export class CanvasManager {
     return this._history.canUndo
   }
   public get isInitialSame() {
-    return isEqual(toJS(this._initial), toJS(this.nodes))
+    if (!this._initial) return true
+    return isEqual(this._initial, this.serializeNodes())
   }
   public get didSetInitial() {
     return Boolean(this._initial)
@@ -354,12 +358,16 @@ export class CanvasManager {
     return newNode
   })
 
-  public toJSON() {
+  private serializeNodes(): NodesMap {
     const nodes: NodesMap = {}
     this.nodes.forEach((node, id) => {
       nodes[id] = node.toJSON()
     })
-    return { nodes }
+    return nodes
+  }
+
+  public toJSON() {
+    return { nodes: this.serializeNodes() }
   }
 
   public redo(): this {
@@ -400,7 +408,7 @@ export class CanvasManager {
     return this
   }
   public updateInitialNodes(nodes?: NodesMap) {
-    this._initial = toJS(nodes || this.nodes) as NodesMap
+    this._initial = nodes ? (toJS(nodes) as NodesMap) : this.serializeNodes()
     return this
   }
   public setNode(node: NodeSchema<any>, create = false) {
