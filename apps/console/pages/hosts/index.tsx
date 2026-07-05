@@ -20,14 +20,13 @@ import {
   ICON_VARIANT_HOST_GROUP,
 } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
-import AppLink from '@aglyn/shared-ui-jsx/components/app-link'
-import MdiIcon from '@aglyn/shared-ui-jsx/components/mdi-icon'
+import { AppLink } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
-import { alpha } from '@aglyn/shared-ui-theme'
 import { Typography } from '@mui/material'
 import { collection, query, where } from 'firebase/firestore'
 import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
-import CardDisplay from '../../components/card-display'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
@@ -40,29 +39,33 @@ function HostInfoItem({ label, value }) {
       <Typography component="div">
         <Typography
           variant="caption"
-          display="inline"
-          sx={{ textTransform: 'uppercase' }}
-        >
+          sx={{
+            display: "inline",
+            textTransform: 'uppercase'
+          }}>
           <b>{label}:</b>
         </Typography>{' '}
         <Typography
           variant="body1"
-          display="inline"
-          sx={(theme) => ({
-            bgcolor: alpha(theme.palette.tertiary.light, 0.18),
-            border: `1px solid ${alpha(theme.palette.tertiary.light, 0.72)}`,
-            borderRadius: '0.3em',
-            px: 0.5,
-            py: 0.15,
-            wordBreak: 'break-word',
-            fontSize: '0.8rem',
-          })}
-        >
+          sx={[{
+            display: "inline"
+          }, (theme) => {
+            const tv = (theme as any).vars || theme
+            return {
+              bgcolor: `rgba(${tv.palette.tertiary.lightChannel} / 0.18)`,
+              border: `1px solid rgba(${tv.palette.tertiary.lightChannel} / 0.72)`,
+              borderRadius: '0.3em',
+              px: 0.5,
+              py: 0.15,
+              wordBreak: 'break-word',
+              fontSize: '0.8rem',
+            }
+          }]}>
           {value || <i>{'None'}</i>}
         </Typography>
       </Typography>
     </>
-  )
+  );
 }
 
 function Hosts() {
@@ -92,7 +95,7 @@ function Hosts() {
           <GridItems
             spacing={3}
             items={[
-              ...(data || [])?.map((host) => ({
+              ...(data || []).map((host) => ({
                 size: {
                   xs: 12,
                   md: 4,
@@ -110,18 +113,28 @@ function Hosts() {
                           path={ICON_VARIANT_HOST.path}
                         />
                       ),
-                      titleTypographyProps: {
-                        textOverflow: 'ellipsis',
-                        // variant: 'h6',
-                        noWrap: true,
-                        fontSize: ({ typography }) =>
-                          typography.subtitle1.fontSize,
-                        fontWeight: ({ typography }) =>
-                          typography.h6.fontWeight,
-                      },
-                      subheaderTypographyProps: {
-                        fontSize: ({ typography }) =>
-                          typography.caption.fontSize,
+                      slotProps: {
+                        title: {
+                          // variant: 'h6',
+                          noWrap: true,
+                          sx: {
+                            // Function callbacks and textOverflow must live
+                            // inside sx — passing them as direct Typography
+                            // props causes React DOM attribute warnings in v9.
+                            textOverflow: 'ellipsis',
+                            overflow: 'hidden',
+                            fontSize: ({ typography }) =>
+                              typography.subtitle1.fontSize,
+                            fontWeight: ({ typography }) =>
+                              typography.h6.fontWeight,
+                          },
+                        },
+                        subheader: {
+                          sx: {
+                            fontSize: ({ typography }) =>
+                              typography.caption.fontSize,
+                          },
+                        },
                       },
                     }}
                     subheader={host?.$id}

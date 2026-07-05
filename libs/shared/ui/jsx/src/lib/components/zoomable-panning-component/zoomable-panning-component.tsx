@@ -66,9 +66,9 @@ export interface ZoomablePanningComponentProps extends PropsWithRef<HTMLAttribut
   boundaryRatioHorizontal: number,
   enableBoundingBox?: boolean,
 
-  onPanStart?: (any) => void,
-  onPan?: (any) => void,
-  onPanEnd?: (any) => void,
+  onPanStart?: (event: MouseEvent<any> | TouchEvent<any>) => void,
+  onPan?: (event: MouseEvent<any> | TouchEvent<any>) => void,
+  onPanEnd?: (event: MouseEvent<any> | TouchEvent<any>) => void,
   onStateChange?: (data: OnStateChangeData) => void,
 }
 
@@ -117,20 +117,20 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     y: 0,
   }
 
-  frameAnimation = null
-  intermediateFrameAnimation = null
+  frameAnimation = 0
+  intermediateFrameAnimation = 0
 
   transformMatrixString = `matrix(1, 0, 0, 1, 0, 0)`
   intermediateTransformMatrixString = `matrix(1, 0, 0, 1, 0, 0)`
 
-  state: State = {
+  override state: State = {
     x: 0,
     y: 0,
     scale: 1,
     angle: 0,
   }
 
-  componentDidMount(): void {
+  override componentDidMount(): void {
     const {autoCenter, autoCenterZoomLevel, minZoom, maxZoom} = this.props
 
     if (this.container.current) {
@@ -145,7 +145,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     }
   }
 
-  componentDidUpdate(prevProps: ZoomablePanningComponentProps, prevState: State): void {
+  override componentDidUpdate(prevProps: ZoomablePanningComponentProps, prevState: State): void {
     if (prevProps.autoCenter !== this.props.autoCenter
       && this.props.autoCenter) {
       this.autoCenter(this.props.autoCenterZoomLevel)
@@ -166,7 +166,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     }
   }
 
-  componentWillUnmount(): void {
+  override componentWillUnmount(): void {
     this.cleanMouseListeners()
     this.cleanTouchListeners()
     releaseTextSelection()
@@ -205,7 +205,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     // be considered as we will handle touch event separately
     if (this.touchInProgress) {
       e.stopPropagation()
-      return false
+      return
     }
 
     const isLeftButton = ((e.button === 1 && window.event !== null) || e.button === 0)
@@ -266,7 +266,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
 
     // if using noStateUpdate we still need to set the new values in the state
     if (noStateUpdate) {
-      this.setState(({x: this.prevPanPosition.x, y: this.prevPanPosition.y}))
+      this.setState({x: this.prevPanPosition.x, y: this.prevPanPosition.y})
     }
 
     this.triggerOnPanEnd(e)
@@ -298,7 +298,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
       return
     }
 
-    const keys = {
+    const keys: Record<string, { x: number; y: number; z: number }> = {
       '38': {x: 0, y: -1, z: 0}, // up
       '40': {x: 0, y: 1, z: 0}, // down
       '37': {x: -1, y: 0, z: 0}, // left
@@ -310,7 +310,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
       ...keyMapping,
     }
 
-    const mappedCoords = keys[e.keyCode]
+    const mappedCoords = keys[String(e.keyCode)]
     if (mappedCoords) {
       const {x, y, z} = mappedCoords
       e.preventDefault()
@@ -333,10 +333,10 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
   }
 
   onKeyUp = (e: KeyboardEvent<any>) => {
-    const {disableKeyInteraction, onKeyDown} = this.props
+    const {disableKeyInteraction, onKeyUp} = this.props
 
-    if (typeof onKeyDown === 'function') {
-      onKeyDown(e)
+    if (typeof onKeyUp === 'function') {
+      onKeyUp(e)
     }
 
     if (disableKeyInteraction) {
@@ -460,7 +460,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     else {
       const {noStateUpdate} = this.props
       if (noStateUpdate) {
-        this.setState(({x: this.prevPanPosition.x, y: this.prevPanPosition.y}))
+        this.setState({x: this.prevPanPosition.x, y: this.prevPanPosition.y})
       }
 
       this.touchInProgress = false
@@ -638,10 +638,10 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
       const {x: transformX, y: transformY} = this.getTransformMatrix(x + dx, y + dy, scale, angle)
       const {boundX, boundY} = this.getBoundCoordinates({x: transformX, y: transformY}, {angle, scale, offsetX: x + dx, offsetY: y + dy})
 
-      this.setState(({
+      this.setState({
         x: x + dx - (transformX - boundX),
         y: y + dy - (transformY - boundY),
-      }))
+      })
     }
   }
 
@@ -777,7 +777,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     )
   }
 
-  render() {
+  override render() {
     const {
       children,
       autoCenter,
@@ -812,7 +812,7 @@ export class ZoomablePanningComponent extends Component<ZoomablePanningComponent
     const {x, y, scale, angle} = this.state
     const transform = getTransformMatrixString(this.getTransformMatrix(x, y, scale, angle))
 
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env['NODE_ENV'] !== 'production') {
       warning(
         onDoubleClick === undefined || typeof onDoubleClick === 'function',
         'Expected `onDoubleClick` listener to be a function, instead got a value of `%s` type.',

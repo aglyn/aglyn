@@ -49,7 +49,7 @@ const TextareaComponent = forwardRef<any, TextareaProps>((props, ref) => {
     meta,
     inputProps,
     ...rest
-  } = useFieldApi(props)
+  } = useFieldApi(props as UseFieldApiConfig)
   const invalidMessage = validationMessage(meta, validateOnMount)
   const helpText =
     invalidMessage ||
@@ -64,7 +64,7 @@ const TextareaComponent = forwardRef<any, TextareaProps>((props, ref) => {
       disabled={isDisabled}
       error={Boolean(invalidMessage)}
       helperText={helpText}
-      inputProps={{ readOnly: isReadOnly, ...inputProps }}
+      slotProps={{ htmlInput: { readOnly: isReadOnly, ...inputProps } }}
       label={label}
       placeholder={placeholder}
       required={isRequired}

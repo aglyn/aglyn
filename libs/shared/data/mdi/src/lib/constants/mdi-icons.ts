@@ -16,7 +16,7 @@
  */
 
 import { _hasOwnProperty, _isArr, _isObj } from '@aglyn/shared-util-tools'
-import type { Icon, IconId } from 'libs/shared/data/mdi/src/lib/types'
+import type { Icon, IconId } from '../types'
 
 export const MdiIcons = new Map<IconId, Icon>()
 
@@ -32,7 +32,7 @@ if (typeof window !== 'undefined') {
             _hasOwnProperty('path', value) &&
             _hasOwnProperty('id', value)
           ) {
-            MdiIcons.set(value.id as IconId, value as Icon)
+            MdiIcons.set(value['id'] as IconId, value as Icon)
           }
         })
       }

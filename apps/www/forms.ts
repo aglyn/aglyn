@@ -73,8 +73,8 @@ export namespace Fields {
     required: true,
     validators: [
       {
-        // eslint-disable-next-line no-control-regex
         regex:
+          // eslint-disable-next-line no-control-regex
           /(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])/,
         errorMessage: 'Enter a valid email',
       },
@@ -153,11 +153,11 @@ export namespace Fields {
     [Fields.firstNameField.id]: Fields.firstNameField,
     [Fields.lastNameField.id]: Fields.lastNameField,
     [Fields.emailField.id]: Fields.emailField,
-    [Fields.passwordField.id]: Fields.emailField,
+    [Fields.passwordField.id]: Fields.passwordField,
   }
   export const signInForm: FieldGroup = {
     [Fields.emailField.id]: Fields.emailField,
-    [Fields.passwordField.id]: Fields.emailField,
+    [Fields.passwordField.id]: Fields.passwordField,
   }
   export const permissionForm: FieldGroup = {
     [Fields.nameField.id]: Fields.nameField,
@@ -277,14 +277,14 @@ export namespace DdfForms {
   }
 }
 
-export const validateRegex = (value: string, regex) =>
+export const validateRegex = (value: string, regex: string | RegExp) =>
   new RegExp(regex).test(value)
 export const fieldHasError = (field: Fields.FieldT) =>
   Boolean(field.status & Fields.FieldStatus.ERROR)
 export const fieldHasValid = (field: Fields.FieldT) =>
   Boolean(field.status & Fields.FieldStatus.VALID)
 export const formIsValid = (fields: Fields.FieldGroup) =>
-  Object.values(fields).some((field) => fieldHasValid(field))
+  Object.values(fields).every((field) => fieldHasValid(field))
 export const validateField = (
   field: Fields.FieldT,
   value: any,

@@ -51,7 +51,7 @@ type FileOptions = FileUnionOptions & {
   dir?: string
 }
 
-function writeFile(dir, fileName, contents) {
+function writeFile(dir: string, fileName: string, contents: string) {
   const outFile = `${dir}${fileName}`
   fs.mkdir(dirname(outFile), { recursive: true }, function (err) {
     if (err) {

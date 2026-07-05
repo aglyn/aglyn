@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin, screenVersionConverter } from '@aglyn/core-data-admin'
+import { firebaseAdmin, screenVersionConverter } from '@aglyn/tenant-data-admin'
 
 export async function getScreenVersion(options: {
   hostId: Aglyn.HostUid

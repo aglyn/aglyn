@@ -15,29 +15,29 @@
  * limitations under the License.
  */
 
-import LRUCache from 'lru-cache'
+import {LRUCache} from 'lru-cache'
 import type {NextApiRequest, NextApiResponse} from 'next'
 import {type Middleware} from 'next-api-middleware'
 import {Res} from '../helpers'
 
 
-export interface RateLimiter<K = string, V = any> {
+export interface RateLimiter<K extends NonNullable<unknown>, V extends NonNullable<unknown>> {
   getTokenCache: () => LRUCache<K, V>
   checkLimit: (res: NextApiResponse, token?: string, limit?: number) => Promise<void>
 }
 
-export interface RateLimiterOptions<K, V> extends LRUCache.Options<K, V> {
+export interface RateLimiterOptions<K extends NonNullable<unknown>, V extends NonNullable<unknown>> extends Partial<LRUCache.OptionsMaxLimit<K, V, unknown>> {
   limit?: number
   token?: string
 }
 
-export function createRateLimiter<K, V>(options?: RateLimiterOptions<K, V>): RateLimiter<K, V> {
-  const {limit: _limit, max: _max, maxAge: _maxAge, token: _token, ...opts} = options
+export function createRateLimiter<K extends NonNullable<unknown>, V extends NonNullable<unknown>>(options?: RateLimiterOptions<K, V>): RateLimiter<K, V> {
+  const {limit: _limit, max: _max, ttl: _ttl, token: _token, ...opts} = options
   const max = _max ?? 100 /* 100 users per second */
-  const maxAge = _maxAge ?? 60000 /* 60 seconds */
+  const ttl = _ttl ?? 60000 /* 60 seconds */
   const limit = _limit ?? 10 /* 10 requests per minute */
   const token = _token ?? 'CACHE_TOKEN' /* Key inside LRUCache */
-  const tokenCache = new LRUCache<K, V>({max, maxAge, ...opts})
+  const tokenCache = new LRUCache<K, V>({...opts, max, ttl})
   const getTokenCache = (): LRUCache<K, V> => {
     return tokenCache
   }
@@ -66,7 +66,7 @@ export function createRateLimiter<K, V>(options?: RateLimiterOptions<K, V>): Rat
   }
 }
 
-export function rateLimiterFactory<K, V>(options?: RateLimiterOptions<K, V>): Middleware {
+export function rateLimiterFactory<K extends NonNullable<unknown>, V extends NonNullable<unknown>>(options?: RateLimiterOptions<K, V>): Middleware {
   const rateLimiter = createRateLimiter<K, V>(options)
 
   return async (req: NextApiRequest, res: NextApiResponse, next) => {

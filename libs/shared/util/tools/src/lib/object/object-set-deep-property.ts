@@ -40,7 +40,7 @@ export function objectSetDeepProperty<T>(
 ): T {
   const keys = path.split(separator)
   const lastKey = keys.pop()
-  const lastObj = keys.reduce((acc, item) => (acc[item] ??= {}), obj)
+  const lastObj = keys.reduce((acc: any, item) => (acc[item] ??= {}), obj as any)
   lastObj[lastKey] = val
   return obj
 }

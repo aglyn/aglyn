@@ -17,7 +17,7 @@
 
 import {createHocWithContextConsumer} from '@aglyn/shared-ui-jsx'
 import {createContext, useContext} from 'react'
-import {type AppController} from '../lib/aglyn-deprecated'
+import {type AppController} from '@aglyn/shared-util-fbclient'
 
 
 export type AppContextType = AppController

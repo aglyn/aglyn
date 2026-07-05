@@ -23,7 +23,7 @@ describe('Aglyn: Screen Manager', () => {
     [NODE_ROOT_ID]: {
       $id: NODE_ROOT_ID,
       type: NodeType.NODE,
-      parentId: null,
+      parentId: NODE_ROOT_ID,
       componentId: 'div',
       props: {},
       sx: {},
@@ -70,13 +70,15 @@ describe('Aglyn: Screen Manager', () => {
   const denormalized: NodeSchemaNested[] = [
     {
       $id: NODE_ROOT_ID,
-      parentId: null,
+      type: NodeType.NODE,
+      parentId: NODE_ROOT_ID,
       componentId: 'div',
       props: {},
       sx: {},
       nodes: [
         {
           $id: 'child1',
+          type: NodeType.NODE,
           parentId: NODE_ROOT_ID,
           componentId: 'div',
           props: {},
@@ -84,6 +86,7 @@ describe('Aglyn: Screen Manager', () => {
           nodes: [
             {
               $id: 'child1-1',
+              type: NodeType.NODE,
               parentId: 'child1',
               componentId: 'div',
               props: {},
@@ -92,6 +95,7 @@ describe('Aglyn: Screen Manager', () => {
             },
             {
               $id: 'child1-2',
+              type: NodeType.NODE,
               parentId: 'child1',
               componentId: 'div',
               props: {},
@@ -102,6 +106,7 @@ describe('Aglyn: Screen Manager', () => {
         },
         {
           $id: 'child2',
+          type: NodeType.NODE,
           parentId: NODE_ROOT_ID,
           componentId: 'div',
           props: {},
@@ -146,5 +151,117 @@ describe('Aglyn: Screen Manager', () => {
     const denormal = CanvasManager.nestDenormalizedNodes(normal, NODE_ROOT_ID)
     const normal2 = CanvasManager.denormalizeNodes([denormal], NODE_ROOT_ID)
     expect(normal2).toEqual(nodes)
+  })
+
+  describe('initial-state tracking', () => {
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+
+    it('reports the state as current before any remote snapshot is recorded', () => {
+      const canvas = new CanvasManager(undefined as any)
+      expect(canvas.isInitialSame).toBe(true)
+      canvas.setNodes(nodes)
+      expect(canvas.isInitialSame).toBe(true)
+      expect(canvas.didSetInitial).toBe(false)
+    })
+
+    it('detects divergence from the recorded snapshot and recovery on undo', () => {
+      const canvas = makeCanvas()
+      canvas.updateInitialNodes()
+      expect(canvas.isInitialSame).toBe(true)
+
+      const child = canvas.nodes.get('child1')
+      canvas.updateNodeProps(child, { title: 'changed' })
+      expect(canvas.isInitialSame).toBe(false)
+
+      canvas.undo()
+      expect(canvas.isInitialSame).toBe(true)
+    })
+
+    it('treats the state as current after recording the serialized form used for saving', () => {
+      const canvas = makeCanvas()
+      canvas.updateInitialNodes()
+      const child = canvas.nodes.get('child2')
+      canvas.updateNodeProps(child, { title: 'saved' })
+      expect(canvas.isInitialSame).toBe(false)
+
+      canvas.updateInitialNodes(canvas.toJSON().nodes)
+      expect(canvas.isInitialSame).toBe(true)
+    })
+  })
+
+  describe('nestedNodes raw json', () => {
+    it('embeds full children through JSON.stringify instead of id refs', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+
+      const raw = JSON.parse(JSON.stringify(canvas.nestedNodes))
+
+      expect(raw.$id).toBe(NODE_ROOT_ID)
+      expect(raw.nodes).toHaveLength(2)
+      expect(raw.nodes[0].$id).toBe('child1')
+      expect(raw.nodes[1].$id).toBe('child2')
+      expect(raw.nodes[0].nodes[0].$id).toBe('child1-1')
+      expect(raw.nodes[0].nodes[1].$id).toBe('child1-2')
+    })
+
+    it('round-trips the nested raw json back into the flat node map', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+
+      const raw = JSON.parse(JSON.stringify(canvas.nestedNodes))
+      const denormalized = canvas.processNodesToDenormalized(raw)
+
+      expect(Object.keys(denormalized).sort()).toEqual(
+        Object.keys(nodes).sort(),
+      )
+      expect(denormalized['child1'].nodes).toEqual(['child1-1', 'child1-2'])
+    })
+  })
+
+  describe('applyNodes history', () => {
+    it('makes a raw-json replacement undoable and redoable', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      expect(canvas.canUndo).toBe(false)
+
+      const edited = JSON.parse(JSON.stringify(canvas.nestedNodes))
+      edited.nodes[0].props = { title: 'edited via raw json' }
+      canvas.applyNodes(edited)
+
+      expect(canvas.canUndo).toBe(true)
+      expect(canvas.nodes.get('child1').props).toEqual({
+        title: 'edited via raw json',
+      })
+
+      canvas.undo()
+      expect(canvas.nodes.get('child1').props).toEqual({})
+      expect(canvas.canRedo).toBe(true)
+
+      canvas.redo()
+      expect(canvas.nodes.get('child1').props).toEqual({
+        title: 'edited via raw json',
+      })
+    })
+
+    it('clears the redo stack when a new raw-json edit is applied', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+
+      const first = JSON.parse(JSON.stringify(canvas.nestedNodes))
+      first.nodes[0].props = { title: 'first' }
+      canvas.applyNodes(first)
+      canvas.undo()
+      expect(canvas.canRedo).toBe(true)
+
+      const second = JSON.parse(JSON.stringify(canvas.nestedNodes))
+      second.nodes[1].props = { title: 'second' }
+      canvas.applyNodes(second)
+      expect(canvas.canRedo).toBe(false)
+      expect(canvas.canUndo).toBe(true)
+    })
   })
 })

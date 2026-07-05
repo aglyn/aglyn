@@ -17,11 +17,11 @@
 
 import {getDisplayName} from '@aglyn/shared-util-tools'
 import {hoistNonReactStatics} from '@aglyn/shared-util-vendor'
-import {forwardRef} from 'react'
+import { type ComponentType, forwardRef } from 'react'
 import SnackbarContext from './SnackbarContext'
 
 
-export const withSnackbar = (Component) => {
+export const withSnackbar = (Component: ComponentType<any>) => {
   const displayName = getDisplayName(Component)
   const WrappedComponent = forwardRef((props, ref) => (
     <SnackbarContext.Consumer>

@@ -17,7 +17,8 @@
 
 import type { MdiIconProps } from '../types/nodes'
 import { makeAutoObservable } from 'mobx'
-import { type Aglyn, lifecycleEvent } from '../aglyn'
+import type { Aglyn } from '../aglyn'
+import { lifecycleEvent } from '../lifecycle'
 import { AglynEvent } from '../emit-manager'
 
 export enum PluginStatus {
@@ -27,7 +28,8 @@ export enum PluginStatus {
   UNLOADING = 'unloading',
 }
 
-export type PluginId = string
+import type { PluginId } from '../foundation'
+export type { PluginId }
 export type PluginStatusById = Record<PluginId, PluginStatus>
 export type PluginsById = Record<PluginId, Plugin>
 export type PluginDependencies = Record<PluginId, true>
@@ -297,8 +299,8 @@ export class PluginManager {
   }
 
   private handleAddingDependencyAndDependents(dependency: Plugin) {
-    const dependencyId: PluginId = dependency.$id
     if (!dependency) throw new Error('Invalid dependency')
+    const dependencyId: PluginId = dependency.$id
     if (!dependencyId) throw new Error('Invalid dependencyId')
     /**
      * Set properties on local dependencies object

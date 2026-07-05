@@ -30,9 +30,9 @@ export interface Transition {
 
 export const CSS = Object.freeze({
   Translate: {
-    toString(transform: Transform | null) {
+    toString(transform: Transform | null): string | undefined {
       if (!transform) {
-        return;
+        return undefined;
       }
 
       const x = transform.x ? Math.round(transform.x) : 0
@@ -42,9 +42,9 @@ export const CSS = Object.freeze({
     },
   },
   Scale: {
-    toString(transform: Transform | null) {
+    toString(transform: Transform | null): string | undefined {
       if (!transform) {
-        return;
+        return undefined;
       }
 
       const {scaleX, scaleY} = transform;
@@ -53,9 +53,9 @@ export const CSS = Object.freeze({
     },
   },
   Transform: {
-    toString(transform: Transform | null) {
+    toString(transform: Transform | null): string | undefined {
       if (!transform) {
-        return;
+        return undefined;
       }
 
       return [

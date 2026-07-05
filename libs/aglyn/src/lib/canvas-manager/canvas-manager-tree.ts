@@ -25,7 +25,7 @@ import {
   SnapshotOut,
   types as t,
 } from 'mobx-state-tree'
-import { createIdUrlSafe } from '../constants'
+import { createIdUrlSafe } from '../foundation'
 import {
   AnyJsonObject,
   Identifier,
@@ -76,14 +76,6 @@ export const AglynNodeModel = t
       return self.parent.nodes?.indexOf(self.id)
     },
   }))
-  .preProcessSnapshot((snapshot) => {
-    console.log('node aaa preProcessSnapshot', snapshot)
-    return snapshot
-  })
-  .postProcessSnapshot((snapshot) => {
-    console.log('node aaa postProcessSnapshot', snapshot)
-    return snapshot
-  })
 
 export const RootNode = t
   .model('AglynRootNode', {
@@ -162,9 +154,6 @@ export const RootNode = t
         const [childClone] = __cloneNode(child, clone.id, accumulator)
         if (childClone) {
           ;(clone.nodes as string[]).push(childClone.id)
-          console.log('node aaa childClone', clone, childClone)
-        } else {
-          console.error('node aaa childClone', childClone)
         }
       }
 
@@ -177,7 +166,6 @@ export const RootNode = t
         resolved,
         resolved.parent as unknown as string | undefined,
       )
-      console.log('node aaa itemClone', itemClone)
 
       for (const clone of allClones) {
         store.nodesById.set(clone.id, AglynNodeModel.create(clone))
@@ -192,38 +180,3 @@ export const RootNode = t
     }
   })
 
-const rootNode = RootNode.create({
-  nodes: ['foo'],
-  nodesById: {
-    foo: {
-      id: 'foo',
-      type: NodeType.NODE,
-      sx: {
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'background',
-        color: 'text',
-        fontFamily: 'body',
-        fontSize: 2,
-        fontWeight: 'body',
-        lineHeight: 'body',
-      },
-      nodes: ['bar'],
-    },
-    bar: {
-      id: 'bar',
-      type: NodeType.NODE,
-      parent: 'foo',
-      nodes: ['me'],
-    },
-    me: {
-      id: 'me',
-      type: NodeType.NODE,
-      parent: 'bar',
-    },
-  },
-})

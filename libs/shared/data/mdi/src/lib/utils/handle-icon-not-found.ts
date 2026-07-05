@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { DEFAULT_ICON } from '@aglyn/shared-data-mdi/constants/default-icon'
+import { DEFAULT_ICON } from '../constants/default-icon'
 import type { Icon, IconId } from '../types'
 
 export function handleIconNotFound(id: IconId, icon: Icon | undefined) {

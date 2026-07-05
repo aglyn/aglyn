@@ -78,7 +78,7 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
         }
         {...(!rest.href
           ? {}
-          : { component: AppLink, componentVariant: 'button' })}
+          : { component: AppLink, componentVariant: 'button', nativeButton: false })}
         {...rest}
         sx={mergeSxProps(
           {
@@ -166,14 +166,14 @@ const TopAppBar = (props: TopAppBarProps) => {
           <Toolbar
             component={Stack}
             variant="dense"
-            alignItems="center"
-            justifyContent="flex-start"
             direction="row"
             sx={{
+              alignItems: "center",
+              justifyContent: "flex-start",
               paddingLeft: { sx: 1, sm: 2 },
             }}
             divider={
-              <Divider orientation="vertical" variant="middle" flexItem light />
+              <Divider orientation="vertical" variant="middle" flexItem sx={{ opacity: 0.5 }} />
             }
           >
             {backButton && (
@@ -201,17 +201,17 @@ const TopAppBar = (props: TopAppBarProps) => {
             )}
 
             <Stack
-              alignItems="center"
               direction="row"
-              justifyContent="flex-start"
-              color="inherit"
-              maxWidth={{ xs: '100%' }}
               sx={{
+                alignItems: "center",
+                justifyContent: "flex-start",
+                color: "inherit",
+                maxWidth: { xs: '100%' },
                 paddingLeft: backButton ? 0.5 : undefined,
-                paddingRight: 3,
+
                 // width: DRAWER_WIDTH - 26,
-              }}
-            >
+                paddingRight: 3
+              }}>
               <AppLink
                 href="/"
                 componentVariant="button-base"
@@ -220,30 +220,31 @@ const TopAppBar = (props: TopAppBarProps) => {
               >
                 <Stack
                   component="span"
-                  alignItems="center"
                   direction="row"
-                  justifyContent="flex-start"
                   spacing={0.25}
                   sx={{
+                    alignItems: "center",
+                    justifyContent: "flex-start",
                     fontWeight: 'fontWeightRegular',
                     fontFamily: 'h6.fontFamily',
+
                     fontSize: (theme) => ({
                       fontSize: theme.typography.pxToRem(18),
                       md: theme.typography.pxToRem(20),
-                    }),
-                  }}
-                >
+                    })
+                  }}>
                   <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
                   {appBarSuffix && (
                     <Typography
                       component="span"
-                      fontWeight="inherit"
-                      fontSize="inherit"
-                      lineHeight="inherit"
                       color="textPrimary"
-                      display="flex"
-                      alignItems="center"
-                    >
+                      sx={{
+                        fontWeight: "inherit",
+                        fontSize: "inherit",
+                        lineHeight: "inherit",
+                        display: "flex",
+                        alignItems: "center"
+                      }}>
                       {appBarSuffix}
                     </Typography>
                   )}
@@ -252,20 +253,21 @@ const TopAppBar = (props: TopAppBarProps) => {
             </Stack>
 
             <Stack
-              alignItems="center"
-              justifyContent="flex-start"
               direction="row"
-              flexGrow={1}
-              sx={{ paddingLeft: 1.5 }}
-            >
+              sx={{
+                alignItems: "center",
+                justifyContent: "flex-start",
+                flexGrow: 1,
+                paddingLeft: 1.5
+              }}>
               {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
                 <Stack
                   component="nav"
                   direction="row"
-                  alignItems="center"
-                  justifyContent="flex-start"
-                  // flexBasis="72%"
-                >
+                  sx={{
+                    alignItems: "center",
+                    justifyContent: "flex-start"
+                  }}>
                   {customCenter || centerNavigationItems.map(buildNav('text'))}
                 </Stack>
               )}
@@ -274,10 +276,11 @@ const TopAppBar = (props: TopAppBarProps) => {
               <Stack
                 component="nav"
                 direction="row"
-                alignItems="center"
-                justifyContent="flex-start"
                 spacing={0.5}
-              >
+                sx={{
+                  alignItems: "center",
+                  justifyContent: "flex-start"
+                }}>
                 {(quickActions ?? []).map(buildNav('icon'))}
               </Stack>
             )}
@@ -285,7 +288,7 @@ const TopAppBar = (props: TopAppBarProps) => {
         </AppBar>
       )}
     </ScrollReaction>
-  )
+  );
 }
 TopAppBar.displayName = 'TopAppBar'
 
@@ -343,11 +346,12 @@ export function MainLayout(props: MainLayoutProps) {
         separator={` ${APP_CONSOLE.SEP} `}
       />
       <Stack
-        alignItems="stretch"
-        flexDirection="column"
-        height="100vh"
         {...rest}
-      >
+        sx={[{
+          alignItems: "stretch",
+          flexDirection: "column",
+          height: "100vh"
+        }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
         <TopAppBar
           enableAppBarElevation={enableAppBarElevation}
           backButton={backButton}
@@ -387,22 +391,23 @@ export function MainLayout(props: MainLayoutProps) {
               edge: 'end',
               avatar: {
                 src: userPhotoUrl,
-                imgProps: {
-                  // user.photoURL https://stackoverflow.com/a/61042200/16134372
-                  referrerPolicy: 'no-referrer',
+                slotProps: {
+                  img: {
+                    // user.photoURL https://stackoverflow.com/a/61042200/16134372
+                    referrerPolicy: 'no-referrer',
+                  },
                 },
               },
               items: [
                 {
                   onClick: () => {
+                    // cycle: system/undefined → light → dark → system
                     setMode(
                       mode === 'dark'
                         ? 'system'
                         : mode === 'light'
                           ? 'dark'
-                          : mode === 'system' || mode === undefined
-                            ? 'light'
-                            : 'system',
+                          : 'light',
                     )
                   },
                   // component: 'button',
@@ -439,7 +444,7 @@ export function MainLayout(props: MainLayoutProps) {
         {children}
       </Stack>
     </Fragment>
-  )
+  );
 }
 
 MainLayout.displayName = 'MainLayout'

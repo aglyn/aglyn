@@ -20,7 +20,7 @@ import getElementComputedStyle from '../get-element-computed-style'
 export function isElementScrollParentElement(element: Element): boolean {
   // Firefox wants us to check `-x` and `-y` variations as well
   const {overflow, overflowX, overflowY} = getElementComputedStyle(element)
-  return /auto|scroll|overlay|hidden/.test(overflow + overflowY + overflowX)
+  return /auto|scroll|overlay|hidden/.test(overflow + overflowY + overflowX);
 }
 
 export default isElementScrollParentElement

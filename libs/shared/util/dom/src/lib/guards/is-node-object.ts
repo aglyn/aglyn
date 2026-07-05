@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export function isNodeObject(node): node is Node {
+export function isNodeObject(node: any): node is Node {
   return 'nodeType' in node
 }
 

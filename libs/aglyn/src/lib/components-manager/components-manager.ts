@@ -18,8 +18,9 @@
 import type { MdiIconProps } from '../types/nodes'
 import { makeAutoObservable, toJS } from 'mobx'
 import { computedFn } from 'mobx-utils'
-import { type Aglyn, lifecycleEvent } from '../aglyn'
-import { createIdUrlSafe } from '../constants'
+import type { Aglyn } from '../aglyn'
+import { lifecycleEvent } from '../lifecycle'
+import { createIdUrlSafe } from '../foundation'
 import { AglynEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 import {
@@ -110,7 +111,7 @@ export class ComponentManager {
     return this.schemas[id]
   })
   public getPreset = computedFn((id: PresetId) => {
-    return this.schemas[id]
+    return this.presets[id]
   })
   public getLabel = computedFn((id: ComponentId) => {
     const schema = this.schemas[id]

@@ -15,31 +15,4 @@
  * limitations under the License.
  */
 
-import { HttpStatusCode } from '@aglyn/shared-data-enums'
-import { ITimestamp } from '@aglyn/shared-util-timestamp'
-
-import { ScreenUid } from './screen'
-import { AglynDocument } from './shared'
-import { HostPath, HostRedirectParams, HostUid } from './workspace'
-
-export type RedirectUid = string
-
-/** CONCEPT: Host redirects. Hosted in tenants' host project */
-export interface AglynRedirect extends AglynDocument {
-  $id: RedirectUid
-  hostId?: HostUid
-  sourcePath?: HostPath
-  sourceScreen?: ScreenUid
-  destinationPath?: HostPath
-  destinationScreen?: ScreenUid
-  statusCode?: HttpStatusCode
-  params?: HostRedirectParams
-  flags?: {
-    regex?: true
-    ignoreSlash?: true
-    ignoreCase?: true
-  }
-  hits?: number
-  lastAccess?: ITimestamp
-  description?: string
-}
+export type { AglynRedirect, RedirectUid } from '../foundation'

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isNumT } from '@aglyn/shared-util-tools'
+import { _isNumT } from '../guards/lib/_is-num-t'
 
 type ToNumType = 'int' | 'float' | 'eval'
 type ToNumResult<T extends ToNumType = never> = ConditionalNonDist<

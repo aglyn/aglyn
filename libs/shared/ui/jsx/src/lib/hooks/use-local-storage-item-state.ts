@@ -49,7 +49,7 @@ function initialize<T>(key: string, initialState: T): T {
 
 type LocalStorageItemState<T> = [
   value: T,
-  setState: Dispatch<SetStateAction<T>>,
+  setState: (newValue: T) => void,
   removeState: () => void,
 ]
 type BroadcastCustomEvent<T> = CustomEvent<{ newValue: T }>
@@ -82,7 +82,7 @@ export function useLocalStorageItemState<T>(
      * storage event
      */
     if (
-      !isUpdateFromCrossDocumentListener.current ||
+      !isUpdateFromCrossDocumentListener.current &&
       !isUpdateFromWithinDocumentListener.current
     ) {
       saveValueToLocalStorage<T>(key, value)
@@ -99,7 +99,7 @@ export function useLocalStorageItemState<T>(
             setValue(newValue)
           }
         } catch (error) {
-          console.log(error)
+          console.warn(error)
         }
       }
     },
@@ -134,7 +134,7 @@ export function useLocalStorageItemState<T>(
           setValue(newValue)
         }
       } catch (error) {
-        console.log(error)
+        console.warn(error)
       }
     },
     [value],
@@ -146,13 +146,13 @@ export function useLocalStorageItemState<T>(
     if (typeof document !== 'undefined') {
       document.addEventListener(
         customEventTypeName,
-        listenToCustomEventWithinDocument,
+        listenToCustomEventWithinDocument as EventListener,
       )
 
       return () => {
         document.removeEventListener(
           customEventTypeName,
-          listenToCustomEventWithinDocument,
+          listenToCustomEventWithinDocument as EventListener,
         )
       }
     } else {
@@ -189,7 +189,11 @@ export function useLocalStorageItemState<T>(
   )
 
   const removeState = useCallback(() => {
-    localStorage.removeItem(key)
+    try {
+      localStorage.removeItem(key)
+    } catch (error) {
+      console.warn(error)
+    }
   }, [key])
 
   return [value, setState, removeState]

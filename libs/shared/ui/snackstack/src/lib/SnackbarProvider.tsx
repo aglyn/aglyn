@@ -70,7 +70,7 @@ class SnackbarProvider extends Component<SnackbarProviderProps, State> {
     super(props)
     this.state = {
       snacks: [],
-      queue: [], // eslint-disable-line react/no-unused-state
+      queue: [],
       contextValue: {
         enqueueSnackbar: this.enqueueSnackbar.bind(this),
         closeSnackbar: this.closeSnackbar.bind(this),
@@ -325,7 +325,7 @@ class SnackbarProvider extends Component<SnackbarProviderProps, State> {
           ? {...item, open: false}
           : {...item, requestClose: true}
       }),
-      queue: queue.filter(item => item.snackbarId !== snackbarId), // eslint-disable-line react/no-unused-state
+      queue: queue.filter(item => item.snackbarId !== snackbarId),
     }))
   }
 
@@ -336,8 +336,7 @@ class SnackbarProvider extends Component<SnackbarProviderProps, State> {
    * waiting in the queue (if any). If after this process the queue is not empty, the
    * oldest message is dismissed.
    */
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
+  // @ts-expect-error — handler accepts extra snackbarId params beyond the typed signature
   private handleExitedSnack: TransitionHandlerProps['onExited'] = (event, snackbarId1, snackbarId2) => {
     const snackbarId = snackbarId1 || snackbarId2
     if (!isDefined(snackbarId)) {

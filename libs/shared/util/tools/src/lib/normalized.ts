@@ -52,7 +52,7 @@ export class Normalized<T = any, K extends ID = ID>
 
   constructor(public readonly props?: NormalizedData<T, K>) {
     const { ids, byId } = { ...props }
-    this.ids = [...ids]
+    this.ids = [...(ids ?? [])]
     this.byId = { ...byId }
   }
 

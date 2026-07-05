@@ -35,7 +35,7 @@ const VALIDATE_LENGTH_RANGE: (min: number, max: number) => Validator = (
   max: number,
 ) => ({
   type: validatorTypes.PATTERN,
-  pattern: new RegExp(`/^.{${min},${max}}$/gmi`),
+  pattern: new RegExp(`^.{${min},${max}}$`, 'mi'),
   message: `Length must between ${min}–${max} characters`,
 })
 
@@ -149,8 +149,7 @@ export const FIELD_SCHEMA_FIRST_NAME: FieldSchema = {
   label: 'First name',
   type: 'text',
   FormFieldGridProps: {
-    xs: 12,
-    sm: 6,
+    size: { xs: 12, sm: 6 },
   },
   isRequired: true,
   validate: [
@@ -169,8 +168,7 @@ export const FIELD_SCHEMA_LAST_NAME: FieldSchema = {
   label: 'Last name',
   type: 'text',
   FormFieldGridProps: {
-    xs: 12,
-    sm: 6,
+    size: { xs: 12, sm: 6 },
   },
   isRequired: true,
   validate: [

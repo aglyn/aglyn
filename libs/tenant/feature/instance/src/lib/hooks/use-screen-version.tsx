@@ -16,14 +16,14 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { compress, decompress } from '@aglyn/core-util-app'
+import { compress, decompress } from '@aglyn/aglyn'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { DocumentReference } from '@firebase/firestore'
 import { Bytes, doc } from 'firebase/firestore'
 import { ReactFireOptions, useFirestore } from 'reactfire'
 import useDoc from './helpers/use-doc'
 
-export const useScreenVersionRef = ({ hostId, screenId, versionId }) => {
+export const useScreenVersionRef = ({ hostId, screenId, versionId }: { hostId: string; screenId: string; versionId: string }) => {
   const firestore = useFirestore()
   const ref = doc(
     firestore,
@@ -36,17 +36,17 @@ export const useScreenVersionRef = ({ hostId, screenId, versionId }) => {
   )
   return ref.withConverter({
     toFirestore(data) {
-      if (!(data?.nodes instanceof Bytes)) {
-        data.nodes = compress(data.nodes || {})
-      }
-      data.updatedAt = Timestamp.now()
-      return data
+      const { $id, ...rest } = data
+      const nodes = rest?.nodes instanceof Bytes
+        ? rest.nodes
+        : compress(rest?.nodes || {})
+      return { ...rest, nodes, updatedAt: Timestamp.now() }
     },
     fromFirestore(snapshot, options) {
       if (!snapshot.exists()) return undefined
       const data = snapshot.data(options)
       if (data?.nodes instanceof Bytes) {
-        data.nodes = decompress(data.nodes)
+        return { ...data, nodes: decompress(data.nodes) } as Aglyn.AglynScreenVersion
       }
       return data as Aglyn.AglynScreenVersion
     },

@@ -16,7 +16,7 @@
  */
 
 import { types as t } from 'mobx-state-tree'
-import { createIdUrlSafe } from '../constants'
+import { createIdUrlSafe } from '../foundation'
 
 export const SafeId = t.optional(t.identifier, () => createIdUrlSafe(), [
   null,

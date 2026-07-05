@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { IndexOf } from './operator/inference'
+
 export type ChainableFunction<T, A extends any[], R> = {
   (this: T, ...args: A): R
 }
@@ -39,7 +41,7 @@ export function createChainedFunction<T, A extends any[], R>(
   functions: ChainableFunction<T, A, R>[],
   thisArg: T = null,
   ...args: IndexOf<A>[]
-): ChainableFunction<T, Partial<A>, void> {
+): ChainableFunction<T, A, R> {
   return functions.reduce(
     (accumulator, fn) => {
       return fn == null

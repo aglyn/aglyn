@@ -21,11 +21,8 @@ import {
   getBesignerApp,
   IBesignerAppController,
   initializeBesignerApp,
-} from '@aglyn/besigner-data-app'
-import { samplePageData } from '@aglyn/besigner-ui'
-import { registerBundle, registerComponent } from '@aglyn/core-data-app'
-import { createAglynComponent } from '@aglyn/core-feature-renderer'
-import { bundle as muiBundle } from '@aglyn/plugins-ui-mui'
+} from '@aglyn/besigner'
+import { createAglynComponent } from '@aglyn/aglyn-node-renderer'
 import { IS_PRODUCTION } from '@aglyn/shared-data-enums'
 
 const c1 = createAglynComponent(
@@ -69,18 +66,6 @@ const c5 = createAglynComponent(
     $id: 'sample-element-4',
     displayName: 'Sample Element 4',
     title: 'Sample Element 4',
-    presets: [
-      {
-        $id: 'sample-element-4',
-        label: 'Sample Element 4',
-        data: {
-          componentId: 'sample-element-4',
-          props: {
-            children: 'Sample Element 4',
-          },
-        },
-      },
-    ],
   },
   'div',
 )
@@ -94,7 +79,6 @@ declare global {
   // eslint-disable-next-line no-var
   var Aglyn: IBesignerAppController
   // eslint-disable-next-line no-var
-  // var Aglyn: AglynAppControllerT
 
   interface Window {
     Aglyn?: IBesignerAppController
@@ -108,22 +92,12 @@ try {
   if (!_Aglyn && !doesBesignerAppExist() && hasWindow) {
     _Aglyn = globalThis.Aglyn = initializeBesignerApp({
       logLevel: 'debug',
-      modulesOptions: {
-        canvas: {
-          defaults: {
-            present: samplePageData,
-          },
-        },
-      },
     })
-    console.log('set global Aglyn', _Aglyn, globalThis)
+    if (!IS_PRODUCTION) console.info('set global Aglyn', _Aglyn)
     if (!IS_PRODUCTION) {
-      // @ts-ignore
-      window.Aglyn = Aglyn
+      ;(window as unknown as { AglynModule: typeof Aglyn }).AglynModule = Aglyn
     }
 
-    components.forEach((i) => registerComponent(_Aglyn, i))
-    registerBundle(_Aglyn, muiBundle)
   } else if (!_Aglyn && doesBesignerAppExist() && hasWindow) {
     _Aglyn = getBesignerApp()
   }

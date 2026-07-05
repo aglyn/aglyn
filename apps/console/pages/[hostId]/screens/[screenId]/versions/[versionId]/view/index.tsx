@@ -36,7 +36,7 @@ import { useScreen } from '@aglyn/tenant-feature-instance'
 import { List, ListItem, ListItemIcon, ListItemText } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo } from 'react'
-import CardDisplay from '../../../../../../../components/card-display'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
@@ -200,9 +200,9 @@ function ScreenDetails(props) {
                   >
                     <List dense disablePadding>
                       {details.map(
-                        ({ primary, secondary, icon, ...item }, key) => (
+                        ({ primary, secondary, icon, key: itemKey, ...item }, index) => (
                           <ListItem
-                            key={item['key'] ?? item['id'] ?? key}
+                            key={itemKey ?? index}
                             alignItems="flex-start"
                             dense
                           >

@@ -51,13 +51,13 @@ export interface MuiShadowRootProps {
 
 const tags = new Map()
 const cacheMap = new WeakMap()
-const ShadowDomContext = createContext<Element>(null)
+const ShadowDomContext = createContext<Node>(null)
 
 export function useMuiShadowDomContext() {
   return useContext(ShadowDomContext)
 }
 
-function handleError({ error, styleSheets, container }) {
+function handleError({ error, styleSheets, container }: { error: any; styleSheets: CSSStyleSheet[]; container: any }) {
   switch (error.name) {
     case 'NotSupportedError':
       styleSheets.length > 0 && (container.adoptedStyleSheets = styleSheets)
@@ -83,7 +83,7 @@ export function withMuiShadowRoot(
       ...rest
     } = props
     const local = useRef<Element | null>(null)
-    const [container, setContainer] = useState(null)
+    const [container, setContainer] = useState<ShadowRoot | null>(null)
     const key = `node_${mode}${delegatesFocus}`
 
     useEffect(() => {
@@ -117,7 +117,7 @@ export function withMuiShadowRoot(
                 })}
               </template>
             ) : (
-              <Portal container={() => container}>
+              <Portal container={() => container as unknown as Element}>
                 {render({
                   container,
                   ssr,
@@ -153,7 +153,7 @@ export function createMuiShadowDomProxy(
   })
 }
 
-function getStyles(children) {
+function getStyles(children: JSX.Children) {
   return renderStylesToString(renderToString(<>{children}</>))
 }
 

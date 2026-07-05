@@ -19,7 +19,6 @@
 import { HttpResponseStatus, HttpStatusCode } from '@aglyn/shared-data-enums'
 import { getRequestHeader } from '@aglyn/shared-util-http'
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
-import createNewJsonResponse from './create-new-json-response'
 
 export function requireHeader<T = any>(
   name: string,
@@ -30,11 +29,11 @@ export function requireHeader<T = any>(
     const header = getRequestHeader(req, key)
 
     if (!header) {
-      return createNewJsonResponse(HttpStatusCode.BAD_REQUEST, {
+      return res.status(HttpStatusCode.BAD_REQUEST).json({
         status: HttpResponseStatus.ERROR,
-        error: Error(`Missing required header - (key: ${key})!`),
+        error: `Missing required header - (key: ${key})!`,
         statusMessage: 'Bad request. Failed to satisfy headers.',
-      })
+      } as T)
     }
     req[key] = header
     await handler(req, res)

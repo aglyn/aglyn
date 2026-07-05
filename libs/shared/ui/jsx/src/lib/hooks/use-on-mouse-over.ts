@@ -29,7 +29,7 @@ export function useOnMouseOver(
   const actionRef = useRef(action)
   const ref = useRef(null)
 
-  const callback = useCallback((e) => {
+  const callback = useCallback((e: Parameters<MouseEventHandler>[0]) => {
     const fn = actionRef.current
     return fn && fn(e)
   }, [])
@@ -42,6 +42,7 @@ export function useOnMouseOver(
         node.removeEventListener('mouseover', callback)
       }
     }
+    return undefined
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

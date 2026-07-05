@@ -16,17 +16,18 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/core-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 export async function getAllScreens(
   host: Aglyn.HostUid,
   nextPageToken?: string,
 ) {
-  const data = { screens: [] as any, nextPageToken: '', error: null }
+  const data: { screens: Record<string, unknown>[]; nextPageToken: string; error: Error | null } = { screens: [], nextPageToken: '', error: null }
   const firestore = firebaseAdmin.app().firestore()
 
-  // List batch of users, 1000 at a time.
   await firestore
+    .collection('hosts')
+    .doc(host)
     .collection('screens')
     .where('status', '==', Aglyn.HostScreenStatus.PUBLISHED)
     .limit(5)

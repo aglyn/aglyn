@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { _isArr } from '@aglyn/shared-util-tools'
+import { _isArr } from '../guards/lib/_is-arr'
 
 
 /**

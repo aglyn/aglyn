@@ -74,7 +74,7 @@ export const TransformMatrix = (transformationParameters: TransformationParamete
 const applyTransformMatrix = (
   transformationParameters: TransformationParameters,
   centerCoordinates: Coordinates,
-) => (x, y): [number, number] => {
+) => (x: number, y: number): [number, number] => {
   const {a, b, c, d, x: transformX, y: transformY} = TransformMatrix(transformationParameters, centerCoordinates)
   return [
     x * a + y * c + transformX,
@@ -164,7 +164,7 @@ export const boundCoordinates = (
 }
 
 
-export const preventDefault = (e) => {
+export const preventDefault = (e: Event) => {
   e.preventDefault()
 }
 

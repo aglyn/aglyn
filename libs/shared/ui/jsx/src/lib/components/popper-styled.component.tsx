@@ -59,74 +59,77 @@ export const PopperStyledComponent = styled(MuiPopper, {
   name: 'AglynPopperStyled',
   shouldForwardProp: (prop) =>
     !_isEqualitySameType(prop, null, 'disableArrow', 'arrowGap'),
-})<PopperStyledComponentProps>(({ theme, disableArrow, arrowGap = 2 }) => ({
-  zIndex: 1,
-  '& > div': {
-    position: 'relative',
-  },
-  '&[data-popper-placement*="bottom"]': {
+})<PopperStyledComponentProps>(({ theme, disableArrow, arrowGap = 2 }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    zIndex: 1,
     '& > div': {
-      marginTop: !disableArrow ? arrowGap ?? 2 : 0,
+      position: 'relative',
     },
-    [`& .${classKeys.arrow}`]: {
-      top: 0,
-      left: 0,
-      marginTop: '-0.9em',
-      width: '3em',
-      height: '1em',
-      '&::before': {
-        borderWidth: '0 1em 1em 1em',
-        borderColor: `transparent transparent ${theme.palette.primary.main} transparent`,
+    '&[data-popper-placement*="bottom"]': {
+      '& > div': {
+        marginTop: !disableArrow ? arrowGap ?? 2 : 0,
+      },
+      [`& .${classKeys.arrow}`]: {
+        top: 0,
+        left: 0,
+        marginTop: '-0.9em',
+        width: '3em',
+        height: '1em',
+        '&::before': {
+          borderWidth: '0 1em 1em 1em',
+          borderColor: `transparent transparent ${tv.palette.primary.main} transparent`,
+        },
       },
     },
-  },
-  '&[data-popper-placement*="top"]': {
-    '& > div': {
-      marginBottom: !disableArrow ? arrowGap ?? 2 : 0,
-    },
-    [`& .${classKeys.arrow}`]: {
-      bottom: 0,
-      left: 0,
-      marginBottom: '-0.9em',
-      width: '3em',
-      height: '1em',
-      '&::before': {
-        borderWidth: '1em 1em 0 1em',
-        borderColor: `${theme.palette.primary.main} transparent transparent transparent`,
+    '&[data-popper-placement*="top"]': {
+      '& > div': {
+        marginBottom: !disableArrow ? arrowGap ?? 2 : 0,
+      },
+      [`& .${classKeys.arrow}`]: {
+        bottom: 0,
+        left: 0,
+        marginBottom: '-0.9em',
+        width: '3em',
+        height: '1em',
+        '&::before': {
+          borderWidth: '1em 1em 0 1em',
+          borderColor: `${tv.palette.primary.main} transparent transparent transparent`,
+        },
       },
     },
-  },
-  '&[data-popper-placement*="right"]': {
-    '& > div': {
-      marginLeft: !disableArrow ? arrowGap ?? 2 : 0,
-    },
-    [`& .${classKeys.arrow}`]: {
-      left: 0,
-      marginLeft: '-0.9em',
-      height: '3em',
-      width: '1em',
-      '&::before': {
-        borderWidth: '1em 1em 1em 0',
-        borderColor: `transparent ${theme.palette.primary.main} transparent transparent`,
+    '&[data-popper-placement*="right"]': {
+      '& > div': {
+        marginLeft: !disableArrow ? arrowGap ?? 2 : 0,
+      },
+      [`& .${classKeys.arrow}`]: {
+        left: 0,
+        marginLeft: '-0.9em',
+        height: '3em',
+        width: '1em',
+        '&::before': {
+          borderWidth: '1em 1em 1em 0',
+          borderColor: `transparent ${tv.palette.primary.main} transparent transparent`,
+        },
       },
     },
-  },
-  '&[data-popper-placement*="left"]': {
-    '& > div': {
-      marginRight: !disableArrow ? arrowGap ?? 2 : 0,
-    },
-    [`& .${classKeys.arrow}`]: {
-      right: 0,
-      marginRight: '-0.9em',
-      height: '3em',
-      width: '1em',
-      '&::before': {
-        borderWidth: '1em 0 1em 1em',
-        borderColor: `transparent transparent transparent ${theme.palette.primary.main}`,
+    '&[data-popper-placement*="left"]': {
+      '& > div': {
+        marginRight: !disableArrow ? arrowGap ?? 2 : 0,
+      },
+      [`& .${classKeys.arrow}`]: {
+        right: 0,
+        marginRight: '-0.9em',
+        height: '3em',
+        width: '1em',
+        '&::before': {
+          borderWidth: '1em 0 1em 1em',
+          borderColor: `transparent transparent transparent ${tv.palette.primary.main}`,
+        },
       },
     },
-  },
-}))
+  }
+})
 
 PopperStyledComponent.displayName = 'PopperStyledComponent'
 PopperStyledComponent.aglyn = true

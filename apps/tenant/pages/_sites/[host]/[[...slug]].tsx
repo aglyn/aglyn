@@ -17,15 +17,17 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
-import '@aglyn/aglyn-plugin-mui'
+import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
 import { doc } from 'firebase/firestore'
 import type { GetStaticPaths, GetStaticProps } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
-import { useMemo } from 'react'
+import { useEffect } from 'react'
 import { useFirestore, useFirestoreDocData } from 'reactfire'
 import getHost from '../../../utils/get-host'
 import getScreen from '../../../utils/get-screen'
 import getScreenVersion from '../../../utils/get-screen-version'
+
+registerLegacyMuiPlugin()
 
 interface StaticPathsCtx extends ParsedUrlQuery {}
 
@@ -41,7 +43,6 @@ interface Props {
 }
 
 export const getStaticPaths: GetStaticPaths<StaticPathsCtx> = async (ctx) => {
-  console.log('!!!!!getStaticPaths ctx', ctx)
   return {
     paths: [],
     fallback: 'blocking', // ISR server-render if static cache is not available
@@ -78,7 +79,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (hostRes.error || !hostRes.host) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -98,7 +99,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (!Array.isArray(screenEntry)) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -115,7 +116,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (screenRes.error || !screenRes.screen) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -135,7 +136,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (versionRes.error || !versionRes.version) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -147,7 +148,6 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
 
     const nodes = versionRes.version.nodes
     const denormalized = Aglyn.canvas.processNodesToDenormalized(nodes)
-    Aglyn.canvas.setNodes(denormalized)
 
     const props = {
       data: JSON.parse(
@@ -171,7 +171,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     return {
       // props: {},
       notFound: true,
-      revalidate: 3600,
+      revalidate: 60,
     }
   }
 }
@@ -180,10 +180,8 @@ export default function CatchAllPage(props: Props) {
   // const props = { data: exampleData }
   const nodes = props.nodes
 
-  console.log('!!!!!CatchAllPage', props)
-
-  const rendered = useMemo(() => {
-    return Aglyn.emitter.emit(Aglyn.AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
+  useEffect(() => {
+    Aglyn.emitter.emit(Aglyn.AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
   }, [nodes])
 
   return (

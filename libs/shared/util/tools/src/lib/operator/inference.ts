@@ -55,7 +55,7 @@ export type DataTypeFlag = {
 
 /* private */
 type KeyOf<T> = keyof T
-type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
+export type IndexOf<T, K extends KeyOf<T> = KeyOf<T>> = T[K]
 
 /* Value data types, support same as Firestore */
 export type Bool = boolean

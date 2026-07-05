@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import {mdiCogOutline, mdiHome, mdiVectorPolylineEdit} from '@aglyn/shared-ui-jsx'
+import { mdiCogOutline, mdiHome, mdiVectorPolylineEdit } from '@aglyn/shared-data-mdi'
 
 
 export const navigationItems = [

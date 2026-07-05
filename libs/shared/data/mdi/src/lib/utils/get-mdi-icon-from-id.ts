@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { MdiIcons } from '@aglyn/shared-data-mdi/constants/mdi-icons'
+import { MdiIcons } from '../constants/mdi-icons'
 import type { Icon, IconResponse, IdParam } from '../types'
 import { handleIconNotFound } from './handle-icon-not-found'
 

@@ -22,6 +22,7 @@ export * from './constants/firebase-config'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
 
+export * from './hooks/use-host'
 export * from './hooks/use-screen'
 export * from './hooks/use-screen-version'
 export * from './hooks/use-user-photo'

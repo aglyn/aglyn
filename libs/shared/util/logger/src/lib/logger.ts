@@ -115,15 +115,15 @@ export class Logger {
    */
   public static defaultLogLevel: LogLevel = LogLevel.INFO
 
-  #logLevel: LogLevelString = Logger.defaultLogLevel
-  #logHandler: LogHandler = defaultLogHandler
-  #userLogHandler: LogHandler | null = null
+  _logLevel: LogLevelString = Logger.defaultLogLevel
+  _logHandler: LogHandler = defaultLogHandler
+  _userLogHandler: LogHandler | null = null
 
   /**
    * The log level of the given Logger instance.
    */
   public get logLevel(): LogLevelString {
-    return this.#logLevel
+    return this._logLevel
   }
   /**
    * The log level of the given Logger instance.
@@ -132,14 +132,14 @@ export class Logger {
     if (!(val in LogLevel)) {
       throw new TypeError(`Invalid value "${val}" assigned to \`logLevel\``)
     }
-    this.#logLevel = val
+    this._logLevel = val
   }
   /**
    * The main (internal) log handler for the Logger instance.
    * Can be set to a new function in internal package code but not by user.
    */
   public get logHandler(): LogHandler {
-    return this.#logHandler
+    return this._logHandler
   }
   /**
    * The main (internal) log handler for the Logger instance.
@@ -149,19 +149,19 @@ export class Logger {
     if (typeof val !== 'function') {
       throw new TypeError('Value assigned to `logHandler` must be a function')
     }
-    this.#logHandler = val
+    this._logHandler = val
   }
   /**
    * The optional, additional, user-defined log handler for the Logger instance.
    */
   public get userLogHandler(): LogHandler | null {
-    return this.#userLogHandler
+    return this._userLogHandler
   }
   /**
    * The optional, additional, user-defined log handler for the Logger instance.
    */
   public set userLogHandler(val: LogHandler | null) {
-    this.#userLogHandler = val
+    this._userLogHandler = val
   }
 
   /**
@@ -182,8 +182,8 @@ export class Logger {
    */
   public setLogLevel(val?: LogLevelString): this {
     if ((val && (LogLevel as Record<string, unknown>)[(LogLevel as Record<string, unknown>)[val as string] as string]) || (console as unknown as Record<string, unknown>)[val as string])
-      this.#logLevel = val as LogLevel
-    else this.#logLevel = FALLBACK_LOG_LEVEL
+      this._logLevel = val as LogLevel
+    else this._logLevel = FALLBACK_LOG_LEVEL
     return this
   }
   /**
@@ -269,29 +269,29 @@ export class Logger {
 
   /** {@inheritDoc Console.debug} */
   public debug(...args: unknown[]): void {
-    this.#logHandler(this, LogLevel.DEBUG, ...args)
-    this.#userLogHandler && this.#userLogHandler(this, LogLevel.DEBUG, ...args)
+    this._logHandler(this, LogLevel.DEBUG, ...args)
+    this._userLogHandler && this._userLogHandler(this, LogLevel.DEBUG, ...args)
   }
   /** {@inheritDoc Console.log} */
   public log(...args: unknown[]): void {
-    this.#logHandler(this, LogLevel.VERBOSE, ...args)
-    this.#userLogHandler &&
-      this.#userLogHandler(this, LogLevel.VERBOSE, ...args)
+    this._logHandler(this, LogLevel.VERBOSE, ...args)
+    this._userLogHandler &&
+      this._userLogHandler(this, LogLevel.VERBOSE, ...args)
   }
   /** {@inheritDoc Console.info} */
   public info(...args: unknown[]): void {
-    this.#logHandler(this, LogLevel.INFO, ...args)
-    this.#userLogHandler && this.#userLogHandler(this, LogLevel.INFO, ...args)
+    this._logHandler(this, LogLevel.INFO, ...args)
+    this._userLogHandler && this._userLogHandler(this, LogLevel.INFO, ...args)
   }
   /** {@inheritDoc Console.warn} */
   public warn(...args: unknown[]): void {
-    this.#logHandler(this, LogLevel.WARN, ...args)
-    this.#userLogHandler && this.#userLogHandler(this, LogLevel.WARN, ...args)
+    this._logHandler(this, LogLevel.WARN, ...args)
+    this._userLogHandler && this._userLogHandler(this, LogLevel.WARN, ...args)
   }
   /** {@inheritDoc Console.error} */
   public error(...args: unknown[]): void {
-    this.#logHandler(this, LogLevel.ERROR, ...args)
-    this.#userLogHandler && this.#userLogHandler(this, LogLevel.ERROR, ...args)
+    this._logHandler(this, LogLevel.ERROR, ...args)
+    this._userLogHandler && this._userLogHandler(this, LogLevel.ERROR, ...args)
   }
 }
 

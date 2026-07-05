@@ -16,7 +16,6 @@
  */
 
 export {
-  isAsyncMode,
   isContextConsumer,
   isContextProvider,
   isElement as isReactElement,

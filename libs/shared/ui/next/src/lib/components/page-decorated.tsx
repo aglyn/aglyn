@@ -45,7 +45,7 @@ export interface NextAppWithLayoutProps<Props = AnyProps, InitialProps = Props>
   Component: NextPageWithLayout<Props, InitialProps>
 }
 
-function GetLayout(page: JSX.Element, initialProps?: any) {
+function GetLayout(page: JSX.Element, initialProps?: NextAppWithLayoutProps) {
   return page
 }
 

@@ -24,12 +24,17 @@ export function useEffectPostMount(
 ): void {
   const isOnInitialMount = useRef(true)
 
+  // `deps` is caller-provided and forwarded as-is by design, and `callback`
+  // is intentionally excluded so a new callback identity alone doesn't
+  // retrigger the effect (that would defeat post-mount-only semantics).
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!isOnInitialMount.current) {
       return _isFnT(callback) && callback()
     }
     isOnInitialMount.current = false
   }, deps)
+  /* eslint-enable react-hooks/exhaustive-deps */
 }
 
 export default useEffectPostMount

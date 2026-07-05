@@ -17,7 +17,7 @@
 
 import { styled } from '@aglyn/shared-ui-theme'
 import { _isEqualitySameType } from '@aglyn/shared-util-tools'
-import { type BoxProps as MuiBoxProps } from '@mui/material'
+import { Box as MuiBox, type BoxProps as MuiBoxProps } from '@mui/material'
 import type { CSSProperties } from 'react'
 
 interface OverrideProps {
@@ -30,7 +30,13 @@ interface OverrideProps {
 
 export type BackgroundImageComponentProps = MuiBoxProps<any, OverrideProps>
 
-export const BackgroundImageComponent = styled('div', {
+// Base on MuiBox (not 'div') so that the polymorphic `component` prop is
+// handled natively by Box. styled('div') passes `component` straight to the
+// DOM as an unknown attribute and never changes the rendered element type;
+// styled(Box) converts `component` into an element-type change before
+// rendering. MuiBox also owns sx/ownerState filtering, so we only need to
+// block the background-image-specific custom props here.
+export const BackgroundImageComponent = styled(MuiBox, {
   name: 'BackgroundImage',
   shouldForwardProp(propName) {
     return !_isEqualitySameType(

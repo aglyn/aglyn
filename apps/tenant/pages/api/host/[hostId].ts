@@ -22,7 +22,7 @@ import {
   nextHandleJsonSuccess,
 } from '@aglyn/shared-util-rest-api'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { use } from 'next-api-middleware'
+import { use as withMiddleware } from 'next-api-middleware'
 import getHost from '../../../utils/get-host'
 
 async function handler(request: NextApiRequest, response: NextApiResponse) {
@@ -36,7 +36,7 @@ async function handler(request: NextApiRequest, response: NextApiResponse) {
   let error = null
   // Start listing users from the beginning, 1000 at a time.
   try {
-    data = await getHost(host as string)
+    data = await getHost({ host: host as string })
     if (data?.error) error = data?.error
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -49,4 +49,4 @@ async function handler(request: NextApiRequest, response: NextApiResponse) {
   return nextHandleJsonSuccess(response, data)
 }
 
-export default use(httpRequestMethodMiddleware(HttpRequestMethod.GET))(handler)
+export default withMiddleware(httpRequestMethodMiddleware(HttpRequestMethod.GET))(handler)

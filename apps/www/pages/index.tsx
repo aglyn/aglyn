@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import img3 from '/public/_static/images/designer/website-designer-custom-element-attributes.png'
-import img2 from '/public/_static/images/designer/website-designer-element-categories.png'
-import img4 from '/public/_static/images/designer/website-designer-functional-operations.png'
-import img1 from '/public/_static/images/designer/website-designer-preview-collage.png'
+import img3 from '../public/_static/images/designer/website-designer-custom-element-attributes.png'
+import img2 from '../public/_static/images/designer/website-designer-element-categories.png'
+import img4 from '../public/_static/images/designer/website-designer-functional-operations.png'
+import img1 from '../public/_static/images/designer/website-designer-preview-collage.png'
 import { APP_WWW, BRAND_NAMES } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { Image } from '@aglyn/shared-ui-next'
@@ -32,7 +32,7 @@ import SiteFooterView from '../views/SiteFooterView'
 
 const TITLE = 'Build websites for your business goals'
 
-function Index(props) {
+function Index(props: Record<string, unknown>) {
   return (
     <MainLayout
       title={APP_WWW.TITLE}
@@ -43,7 +43,11 @@ function Index(props) {
         component={'header'}
         url={'/_static/images/backgrounds/patterns/abstract-wave-lines.svg'}
       >
-        <Box py={6}>
+        <Box
+          sx={{
+            py: 6,
+          }}
+        >
           <Container maxWidth={'lg'} gutterY>
             <GridItems
               alignItems="center"
@@ -57,9 +61,10 @@ function Index(props) {
                       <Typography
                         variant={'h2'}
                         component={'h1'}
-                        children={TITLE}
                         sx={{ mb: 4 }}
-                      />
+                      >
+                        {TITLE}
+                      </Typography>
                     </>
                   ),
                 },
@@ -90,15 +95,22 @@ function Index(props) {
                         variant={'h4'}
                         component={'h2'}
                         // variantMapping={{'h4': 'h3'}}
-                        children={'The essentials to keep your workflow simple'}
-                        color="quaternary.main"
-                        sx={{ mb: 2 }}
-                      />
+
+                        sx={{
+                          color: 'quaternary.main',
+                          mb: 2,
+                        }}
+                      >
+                        {'The essentials to keep your workflow simple'}
+                      </Typography>
                       <Typography
                         variant={'h6'}
                         component={'div'}
-                        color="text.secondary"
-                        sx={{ mb: 4, '& > b': { color: 'text.secondary' } }}
+                        sx={{
+                          color: 'text.secondary',
+                          mb: 4,
+                          '& > b': { color: 'text.secondary' },
+                        }}
                       >
                         <b>A</b>pps <b>G</b>iving <b>L</b>ove for <b>Y</b>our{' '}
                         <b>N</b>etwork
@@ -112,8 +124,19 @@ function Index(props) {
         </Box>
       </BackgroundImage>
       <main>
-        <Box component={'section'} bgcolor={'background.paper'}>
-          <Box component={Container} maxWidth={'lg'} py={12}>
+        <Box
+          component={'section'}
+          sx={{
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box
+            component={Container}
+            sx={{
+              maxWidth: 'lg',
+              py: 12,
+            }}
+          >
             <GridItems
               alignItems="center"
               direction="row"
@@ -145,17 +168,21 @@ function Index(props) {
                       <Typography
                         variant={'h4'}
                         component={'h2'}
-                        children={'Build Your Pages How You Like'}
                         sx={{ mb: 4 }}
-                      />
+                      >
+                        {'Build Your Pages How You Like'}
+                      </Typography>
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
-                        children={
+                        sx={{
+                          color: 'text.secondary',
+                        }}
+                      >
+                        {
                           'Browse through categories you understand and find the elements that fit the layout you have in mind. Place them on your web page or choose from a template.'
                         }
-                        color="text.secondary"
-                      />
+                      </Typography>
                     </>
                   ),
                 },
@@ -164,7 +191,13 @@ function Index(props) {
           </Box>
         </Box>
         <Box component={'section'}>
-          <Box component={Container} maxWidth={'lg'} py={12}>
+          <Box
+            component={Container}
+            sx={{
+              maxWidth: 'lg',
+              py: 12,
+            }}
+          >
             <GridItems
               alignItems="center"
               direction="row-reverse"
@@ -196,17 +229,21 @@ function Index(props) {
                       <Typography
                         variant={'h4'}
                         component={'h2'}
-                        children={'Custom Elements & Attributes'}
                         sx={{ mb: 4 }}
-                      />
+                      >
+                        {'Custom Elements & Attributes'}
+                      </Typography>
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
-                        children={
+                        sx={{
+                          color: 'text.secondary',
+                        }}
+                      >
+                        {
                           'Use a combination of elements frequently? Save custom elements and define its attributes to save and reuse later from your element categories.'
                         }
-                        color="text.secondary"
-                      />
+                      </Typography>
                     </>
                   ),
                 },
@@ -214,8 +251,19 @@ function Index(props) {
             />
           </Box>
         </Box>
-        <Box component={'section'} bgcolor={'background.paper'}>
-          <Box component={Container} maxWidth={'lg'} py={12}>
+        <Box
+          component={'section'}
+          sx={{
+            bgcolor: 'background.paper',
+          }}
+        >
+          <Box
+            component={Container}
+            sx={{
+              maxWidth: 'lg',
+              py: 12,
+            }}
+          >
             <GridItems
               alignItems="center"
               direction="row"
@@ -247,17 +295,21 @@ function Index(props) {
                       <Typography
                         variant={'h4'}
                         component={'h2'}
-                        children={'Perform Operations & Calculate Output'}
                         sx={{ mb: 4 }}
-                      />
+                      >
+                        {'Perform Operations & Calculate Output'}
+                      </Typography>
                       <Typography
                         variant={'subtitle1'}
                         component={'p'}
-                        children={
+                        sx={{
+                          color: 'text.secondary',
+                        }}
+                      >
+                        {
                           'When you need a more advanced element, use functional operations. Functions can use optional or required parameters to perform simple operations like math or text joining.'
                         }
-                        color="text.secondary"
-                      />
+                      </Typography>
                     </>
                   ),
                 },

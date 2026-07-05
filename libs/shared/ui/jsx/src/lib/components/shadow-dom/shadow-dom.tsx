@@ -66,7 +66,7 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
       ...rest
     } = props
     const node = useEnsuredForwardedRef<HTMLElement>(ref as any)
-    const [root, setRoot] = useState(null)
+    const [root, setRoot] = useState<ShadowRoot | null>(null)
     const key = `node_${mode}${delegatesFocus}`
     const Tag = options.tag
 
@@ -85,7 +85,7 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
         styleSheets.length > 0 && (root.adoptedStyleSheets = styleSheets)
         setRoot(root)
       } catch (error) {
-        if (error?.name !== 'NotSupportedError') throw error
+        if ((error as Error)?.name !== 'NotSupportedError') throw error
         styleSheets.length > 0 && (root.adoptedStyleSheets = styleSheets)
       }
     }, [styleSheets, delegatesFocus, mode, ssr])
@@ -96,10 +96,10 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
           {(root || ssr) && (
             <ShadowDomContext.Provider value={root}>
               {ssr ? (
-                // @ts-ignore
-                <template shadowroot="open">
+                // @ts-expect-error — declarative shadowroot attr is not in React types
+                (<template shadowroot="open">
                   {options.render?.({ root, ssr, children })}
-                </template>
+                </template>)
               ) : (
                 <ShadowDomContentPortal root={root}>
                   {options.render?.({ root, ssr, children })}
@@ -109,7 +109,7 @@ export function shadowDomRootFactory<P = any>(options: FactoryOptions<P>) {
           )}
         </Tag>
       </>
-    )
+    );
   })
   ShadowDomRoot.displayName = 'ShadowDomRoot'
 

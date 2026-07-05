@@ -24,6 +24,7 @@ import {
   darken,
   getContrastRatio,
   lighten,
+  type PaletteColor,
   responsiveFontSizes,
   type Theme,
   type ThemeOptions,
@@ -39,14 +40,17 @@ function getContrastTextColor(background: string, contrastThreshold: number) {
     ? ContrastText.DARK
     : ContrastText.LIGHT
 }
-function addShade(paletteColor: any, shade: string, variant: string | undefined, tonalOffset: any) {
-  const tonalOffsetLight = tonalOffset['light'] || (tonalOffset ?? 0.2)
-  const tonalOffsetDark = tonalOffset['dark'] || (tonalOffset ?? 0.2) * 1.5
+function addShade(paletteColor: PaletteColor, shade: string, variant: string | undefined, tonalOffset: number | { light?: number; dark?: number }) {
+  const offsetObj = typeof tonalOffset === 'number' ? undefined : tonalOffset
+  const offsetNum = typeof tonalOffset === 'number' ? tonalOffset : undefined
+  const tonalOffsetLight = offsetObj?.light ?? offsetNum ?? 0.2
+  const tonalOffsetDark = offsetObj?.dark ?? (offsetNum ?? 0.2) * 1.5
+  const indexed = paletteColor as unknown as Record<string, string>
 
-  if (!paletteColor[shade]) {
+  if (!indexed[shade]) {
     // eslint-disable-next-line no-prototype-builtins
     if (paletteColor.hasOwnProperty(variant)) {
-      paletteColor[shade] = paletteColor[variant]
+      indexed[shade] = indexed[variant]
     } else if (shade === 'light') {
       paletteColor.light = lighten(paletteColor.main, tonalOffsetLight)
     } else if (shade === 'dark') {
@@ -59,7 +63,7 @@ function addShade(paletteColor: any, shade: string, variant: string | undefined,
     }
   }
 }
-function addShadeVariants(paletteColor: any, tonalOffset?: any) {
+function addShadeVariants(paletteColor: PaletteColor, tonalOffset?: number | { light?: number; dark?: number }) {
   addShade(paletteColor, 'dark', undefined, tonalOffset)
   addShade(paletteColor, 'light', undefined, tonalOffset)
   addShade(paletteColor, 'contrastText', undefined, tonalOffset)
@@ -67,7 +71,7 @@ function addShadeVariants(paletteColor: any, tonalOffset?: any) {
 
 export type CreateResponsiveThemeOptions = {
   themeOptions?: ThemeOptions
-  responsiveFontSizesOptions?: any
+  responsiveFontSizesOptions?: Parameters<typeof responsiveFontSizes>[1]
 }
 
 /**
@@ -143,6 +147,10 @@ export function createResponsiveCssVarTheme(
 
   return muiExtendTheme({
     ...lightTheme,
+    // Allow setMode() to work by driving the color scheme via a CSS class on
+    // <html> instead of the OS-level @media query (the default 'media' selector
+    // makes setMode() a no-op because media queries can't be overridden in JS).
+    colorSchemeSelector: 'class',
     ...options,
     colorSchemes: {
       ...options?.colorSchemes,

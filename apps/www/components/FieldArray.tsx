@@ -16,7 +16,12 @@
  */
 
 import { DoD } from '@aglyn/shared-data-types'
-import { MdiIcon, mdiPlus } from '@aglyn/shared-ui-jsx'
+import {
+  mdiPlus,
+} from '@aglyn/shared-data-mdi'
+import {
+  MdiIcon,
+} from '@aglyn/shared-ui-jsx'
 import { useCallback, useState } from 'react'
 import { Components } from '../lib/input-fields'
 import FormFields, { type Props as FormFieldsProps } from './FormFields'
@@ -51,10 +56,10 @@ function FieldArrayItem(props: ArrayItemProps) {
       value: property.type,
       items: DoD.FT.Tag.all.map(
         (sym: any) =>
-          ({
+          (({
             value: sym,
-            children: DoD.lbl[sym],
-          }) as any,
+            children: DoD.lbl[sym]
+          }) as any),
       ),
     },
   ]
@@ -86,7 +91,6 @@ function FieldArray(props: Props) {
     setFields((prev) => [...prev, emptyArrayItem(prev.length)])
   }, [])
 
-  console.log(fields)
   return (
     <FormFields
       items={fields.concat([
@@ -97,8 +101,6 @@ function FieldArray(props: Props) {
           startIcon: <MdiIcon path={mdiPlus.path} />,
           children: 'Add',
           onClick: (e) => {
-            console.log('click')
-
             handleAddItem(e)
           },
         },

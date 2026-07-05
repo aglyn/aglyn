@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin, hostConverter } from '@aglyn/core-data-admin'
+import { firebaseAdmin, hostConverter } from '@aglyn/tenant-data-admin'
 
 export async function getHost(options: { host: Aglyn.HostUid }) {
   const { host } = options

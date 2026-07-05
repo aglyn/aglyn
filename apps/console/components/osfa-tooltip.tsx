@@ -33,8 +33,6 @@ export const OsfaTooltip = (props: OsfaTooltipProps) => {
       // content: 'Global content',
       trigger: 'mouseenter',
       onTrigger(instance, event) {
-        console.log('ontrigger instance', instance)
-        console.log('ontrigger event', event)
         const reference = instance.reference
         const content = reference.getAttribute('data-aglyn-tooltip')
         // instance.setContent(content)

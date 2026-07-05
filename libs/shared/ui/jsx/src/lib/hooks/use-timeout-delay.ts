@@ -92,8 +92,6 @@ export function useTimeoutDelay(
   // Clear the interval or timeout
   const clear = useCallback(() => {
     if (ref.current.timeoutRef) {
-      console.log('clear-del', ref)
-
       state.repeat
         ? clearInterval(ref.current.timeoutRef)
         : clearTimeout(ref.current.timeoutRef)
@@ -105,7 +103,7 @@ export function useTimeoutDelay(
   // Start the interval or timeout
   const start = useCallback(
     (opt?: Options) => {
-      if (mounted) {
+      if (!mounted) {
         console.error("Can't start timeout or interval when unmounted")
         return
       } else if (ref.current.timeoutRef) {
@@ -129,14 +127,14 @@ export function useTimeoutDelay(
 
       // Args array
       const argArgs = _isArr(optArgs) ? optArgs : []
-      // Determine if we're using global delay or parameter delay
+      // Parameter delay takes priority over global delay
       const ms = _isNum(optDelay)
-        ? _isNum(state.msDelay)
+        ? optDelay
+        : _isNum(state.msDelay)
           ? state.msDelay
           : 0
-        : optDelay || 0
 
-      const max = _isNumPos(optLimit) ? optLimit : null
+      const max: number = _isNumPos(optLimit) ? optLimit : null
 
       // If run limit was provide ensure we don't run more than specified
       const handler = (arg: HandlerParams['args']) => {
@@ -190,6 +188,12 @@ export function useTimeoutDelay(
 
   // When mounted set mounted
   // Otherwise clear the timeout/interval when we unmount
+  //
+  // `start` is intentionally excluded: it's memoized with `mounted` as one
+  // of its own deps, and this effect is what flips `mounted` to true, so
+  // including `start` here would retrigger the effect right after mount and
+  // double-fire `start()` when `state.immediate` is set.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     setMounted(true)
 
@@ -202,6 +206,7 @@ export function useTimeoutDelay(
       setMounted(false)
     }
   }, [state.immediate, clear])
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return [start, clear]
 }

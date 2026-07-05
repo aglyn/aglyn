@@ -18,7 +18,7 @@
 
 // https://github.com/JamesMGreene/Function.name/blob/58b314d4a983110c3682f1228f845d39ccca1817/Function.name.js#L3
 export const fnNameMatchRegex = /^\s*function(?:\s|\s*\/\*.*\*\/\s*)+([^(\s/]*)\s*/
-export const getPureFunctionName = (fn) => {
+export const getPureFunctionName = (fn: any) => {
   const match = `${fn}`.match(fnNameMatchRegex)
   const name = match && match[1]
   return name || ''
@@ -27,14 +27,14 @@ export const getPureFunctionName = (fn) => {
 /**
  *
  */
-export const getFunctionComponentName = (Component, fallback = 'fn') => (
+export const getFunctionComponentName = (Component: { displayName?: string; name?: string }, fallback = 'fn') => (
   Component.displayName
   || Component.name
   || getPureFunctionName(Component)
   || fallback
 )
 
-export const getWrappedComponentName = (outerType, innerType, wrapperName) => {
+export const getWrappedComponentName = (outerType: { displayName?: string }, innerType: { displayName?: string; name?: string }, wrapperName: string) => {
   const functionName = getFunctionComponentName(innerType)
   return (
     outerType.displayName
@@ -59,7 +59,7 @@ MyComp.aglyn = true;
  * MyComp = forwardRef(MyComp)
  * getDisplayName(MyComp) => 'My'
  */
-export function getDisplayName(fn, fallback = 'Component'): string {
+export function getDisplayName(fn: any, fallback = 'Component'): string {
   if (fn == null) {
     return fallback
   }

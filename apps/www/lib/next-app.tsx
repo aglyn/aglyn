@@ -130,7 +130,7 @@ const nextAppBuilder: NextAppMiddlewareBuilder = ({middleware = []}) => {
         extendPageProps(await Component.getInitialProps(ctx))
       }
 
-      let middlewareProps
+      let middlewareProps = {}
 
       const InternalAppTree = props => {
         const enhancedPageProps = {...pageProps, middlewareProps, ...props}

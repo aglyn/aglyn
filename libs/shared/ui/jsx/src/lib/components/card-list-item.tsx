@@ -41,11 +41,13 @@ const cardClasses = generateComponentClassKeys('CardListItem', [
 
 const CardBox = styled('div')({})
 
-const Card = styled(MuiCard)(({ theme }) => ({
+const Card = styled(MuiCard)(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
   [`&.${cardClasses.selected}`]: {
     [`.${cardClasses.actionArea}`]: {
-      backgroundColor: theme.palette.secondary.main,
-      color: theme.palette.secondary.contrastText,
+      backgroundColor: tv.palette.secondary.main,
+      color: tv.palette.secondary.contrastText,
     },
   },
   [`.${cardClasses.aspectContainer}`]: {
@@ -75,7 +77,8 @@ const Card = styled(MuiCard)(({ theme }) => ({
     fontSize: theme.typography.pxToRem(10),
     textTransform: 'uppercase',
   },
-}))
+  }
+})
 
 export interface CardListItemProps
   extends Omit<Partial<MuiCardProps>, 'children'> {
@@ -136,14 +139,15 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
               {label && (
                 <Typography
                   component="span"
-                  display="block"
                   variant="subtitle2"
                   {...LabelTypographyProps}
                   className={clsx(
                     cardClasses.label,
                     LabelTypographyProps?.className,
                   )}
-                >
+                  sx={[{
+                    display: "block"
+                  }, ...(Array.isArray(LabelTypographyProps?.sx) ? LabelTypographyProps.sx : [LabelTypographyProps?.sx])]}>
                   {label}
                 </Typography>
               )}
@@ -151,7 +155,7 @@ export const CardListItem = forwardRef<any, CardListItemProps>(
           </Box>
         </Box>
       </Card>
-    )
+    );
   },
 )
 

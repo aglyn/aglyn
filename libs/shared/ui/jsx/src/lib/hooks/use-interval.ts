@@ -32,9 +32,9 @@ export function useInterval(
   }, [callback])
 
   useEffect(() => {
-    let interval = undefined
+    let interval: ReturnType<typeof setInterval> = undefined
 
-    const handler = (...handlerArgs) => {
+    const handler = (...handlerArgs: unknown[]) => {
       if (_isFnT(savedCallback.current)) {
         if (runCount.current < count || !count) {
           runCount.current = runCount.current + 1
@@ -52,7 +52,10 @@ export function useInterval(
       interval = setInterval(handler, delay, ...args)
       return () => clearInterval(interval)
     }
-  }, [delay, count, args])
+    return undefined
+    // args is a rest param (new array each render) — omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [delay, count])
 }
 
 export default useInterval

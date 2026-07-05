@@ -57,9 +57,9 @@ export function httpRequestMethodMiddleware(
         HttpStatusCode.METHOD_NOT_ALLOWED,
         HttpRefCodeSimple.METHOD_NOT_ALLOWED,
       )
-      nextHandleJsonResponse(res, HttpStatusCode.NOT_FOUND, {
+      nextHandleJsonResponse(res, HttpStatusCode.METHOD_NOT_ALLOWED, {
         status: HttpResponseStatus.ERROR,
-        statusMessage: HttpRefCodeSimple.RESOURCE_NOT_FOUND,
+        statusMessage: HttpRefCodeSimple.METHOD_NOT_ALLOWED,
         error: err,
         errorCode: createHttpRefCode(
           HttpRefCodeSimple.METHOD_NOT_ALLOWED,

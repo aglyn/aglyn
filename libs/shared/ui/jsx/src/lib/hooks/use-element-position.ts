@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-import { type MutableRefObject, useLayoutEffect, useState } from 'react'
+import { type MutableRefObject, useCallback, useLayoutEffect, useState } from 'react'
 
-function getStyle(el, styleName) {
-  return getComputedStyle(el)[styleName]
+function getStyle(el: Element, styleName: string) {
+  return (getComputedStyle(el) as unknown as Record<string, string>)[
+    styleName
+  ]
 }
 
-function getOffset(el) {
+function getOffset(el: any) {
   if (!el) {
     return { top: 0, left: 0 }
   }
-  console.log('el', el, el.ownerDocument, el)
   const rect = el.getBoundingClientRect?.()
   const doc = el.ownerDocument
   if (!doc) throw new Error('Unexpectedly missing <document>.')
@@ -41,12 +42,12 @@ function getOffset(el) {
       : (doc.documentElement || doc.body.parentNode || doc.body)?.['scrollTop']
 
   return {
-    top: rect.top + (isNaN(winX) ? 0 : winX),
-    left: rect.left + (isNaN(winY) ? 0 : winY),
+    top: rect.top + (isNaN(winY) ? 0 : winY),
+    left: rect.left + (isNaN(winX) ? 0 : winX),
   }
 }
 
-function getPosition(el) {
+function getPosition(el: any) {
   if (!el) {
     return { top: 0, left: 0 }
   }
@@ -73,9 +74,9 @@ function getPosition(el) {
     if (offsetParent && offsetParent !== el && offsetParent.nodeType === 1) {
       parentOffset = getOffset(offsetParent as HTMLElement)
       parentOffset.top +=
-        parseInt(getStyle(offsetParent, 'borderTopWidth')) || 0
+        parseInt(getStyle(offsetParent as Element, 'borderTopWidth')) || 0
       parentOffset.left +=
-        parseInt(getStyle(offsetParent, 'borderLeftWidth')) || 0
+        parseInt(getStyle(offsetParent as Element, 'borderLeftWidth')) || 0
     }
   }
 
@@ -92,11 +93,11 @@ export function useElementPosition(ref: MutableRefObject<any>) {
     left: left,
   })
 
-  function handleChangePosition() {
+  const handleChangePosition = useCallback(() => {
     if (ref && ref.current) {
       setElementPosition(getPosition(ref.current))
     }
-  }
+  }, [ref])
 
   useLayoutEffect(() => {
     handleChangePosition()
@@ -105,7 +106,7 @@ export function useElementPosition(ref: MutableRefObject<any>) {
     return () => {
       window.removeEventListener('resize', handleChangePosition)
     }
-  }, [])
+  }, [handleChangePosition])
 
   return ElementPosition
 }

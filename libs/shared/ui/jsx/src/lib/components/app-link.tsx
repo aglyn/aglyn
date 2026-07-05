@@ -34,12 +34,11 @@ import {
 import clsx from 'clsx'
 import dynamic, { type DynamicOptionsLoadingProps } from 'next/dynamic'
 import { usePathname } from 'next/navigation'
-import { forwardRef, useMemo } from 'react'
+import { forwardRef, type Ref, useMemo } from 'react'
 import NextLink, { type NextLinkProps } from './next-link'
 
 const Placeholder = (props: DynamicOptionsLoadingProps) => {
   const { error } = props
-  console.log('props', props)
   if (error) console.error(error)
   return <a href={'#'}>{error ? 'error!' : 'loading'}</a>
 }
@@ -125,11 +124,11 @@ export const appLinkClassKey = generateComponentClassKeys('AglynAppLink', [
  * componentVariant === any = MuiLink
  */
 const AppLink = forwardRef(
-  <T extends AppLinkVariant>(props: AppLinkProps<T>, ref) => {
+  <T extends AppLinkVariant>(props: AppLinkProps<T>, ref: Ref<any>) => {
     const { className, componentVariant, href, ...rest } = props
 
     const variant = componentVariant
-    const pathname = usePathname()
+    const pathname = usePathname() ?? ''
     const [active, activeAsAncestor] = useMemo(() => {
       const hrefPath = _isObj(href) ? href['pathname'] : href,
         samePath = hrefPath === pathname,
@@ -177,6 +176,7 @@ const AppLink = forwardRef(
             ref={ref}
             className={elemClassName}
             component={NextLink}
+            nativeButton={false}
             hrefTo={href || ''}
             {...rest}
           />
@@ -188,6 +188,7 @@ const AppLink = forwardRef(
             ref={ref}
             className={elemClassName}
             component={NextLink}
+            nativeButton={false}
             hrefTo={href || ''}
             {...rest}
           />
@@ -199,6 +200,7 @@ const AppLink = forwardRef(
             ref={ref}
             className={elemClassName}
             component={NextLink}
+            nativeButton={false}
             hrefTo={href || ''}
             {...rest}
           />
@@ -210,6 +212,7 @@ const AppLink = forwardRef(
             ref={ref}
             className={elemClassName}
             component={NextLink}
+            nativeButton={false}
             hrefTo={href || ''}
             {...rest}
           />

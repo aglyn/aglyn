@@ -15,4 +15,14 @@
  * limitations under the License.
  */
 
-export * from './lib/fbclient'
+export * from './lib/firebase-app'
+export * from './lib/types'
+
+export * from './lib/interfaces/ref-controller'
+
+export * from './lib/controllers/app-controller'
+export * from './lib/controllers/BaseRefController'
+export * from './lib/controllers/CollectionRefController'
+export * from './lib/controllers/DatabaseRefController'
+export * from './lib/controllers/DocumentRefController'
+export * from './lib/controllers/FieldRefController'

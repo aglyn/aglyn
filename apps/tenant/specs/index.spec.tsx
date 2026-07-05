@@ -20,7 +20,7 @@ import Page from '../pages/_sites/[host]/[[...slug]]'
 
 describe('Index', () => {
   it('should render successfully', () => {
-    const { baseElement } = render(<Page />)
+    const { baseElement } = render(<Page data={{}} nodes={{}} />)
     expect(baseElement).toBeTruthy()
   })
 })

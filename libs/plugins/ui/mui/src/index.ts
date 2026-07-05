@@ -15,4 +15,4 @@
  * limitations under the License.
  */
 
-export * from './mui'
+export * from './lib/legacy-plugin'

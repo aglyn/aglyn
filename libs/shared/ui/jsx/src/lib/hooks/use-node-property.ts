@@ -28,23 +28,24 @@ import { ReactNode, Ref, useCallback, useEffect, useState } from 'react'
  * @return {[string, React.Ref<T>, React.ReactNode, ((newPropertyName: U) =>
  *   void)]}
  */
-export function useNodeProperty<U, T>(
+export function useNodeProperty<U extends string | number | symbol, T>(
   key: U,
-  initialState = null,
+  initialState: unknown = null,
 ): [any, Ref<T>, JSX.Node, (setNewKey: U) => void] {
   const [keyName, setNewKey] = useState(key)
   const [value, setPropertyValue] = useState(initialState)
-  const [node, setNode] = useState(null)
+  const [node, setNode] = useState<T | null>(null)
 
   useEffect(() => {
-    if (node && node[keyName] && node[keyName] !== value) {
-      setPropertyValue(node[keyName])
+    const current = node as (T & Record<U, unknown>) | null
+    if (current && current[keyName] && current[keyName] !== value) {
+      setPropertyValue(current[keyName])
     }
-  }, [node, keyName])
+  }, [node, keyName, value])
 
-  const ref = useCallback((node) => setNode(node), [])
+  const ref = useCallback((node: T | null) => setNode(node), [])
 
-  return [value, ref, node, setNewKey]
+  return [value, ref, node as unknown as JSX.Node, setNewKey]
 }
 
 export default useNodeProperty

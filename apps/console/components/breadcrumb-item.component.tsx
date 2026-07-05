@@ -63,7 +63,7 @@ export const BreadcrumbItemComponent = forwardRef(function RefRenderFn<
 
   return (
     <ItemComponent ref={ref} className={itemClass} {...rest}>
-      {!icon?.path ? icon : <MdiIcon {...icon} className={iconClass} />}
+      {icon?.path ? <MdiIcon {...icon} className={iconClass} /> : null}
       {children}
     </ItemComponent>
   )

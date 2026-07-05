@@ -7,8 +7,6 @@ import {
 } from 'nanoid'
 import {
   alphanumeric,
-  hexadecimalLowercase,
-  hexadecimalUppercase,
   lowercase,
   nolookalikes,
   nolookalikesSafe,
@@ -18,8 +16,6 @@ import {
 
 type UidAlphabetDictionary = {
   alphanumeric: string
-  hexadecimalLowercase: string
-  hexadecimalUppercase: string
   lowercase: string
   nolookalikes: string
   nolookalikesSafe: string
@@ -30,8 +26,6 @@ type UidAlphabetDictionary = {
 
 export const UidAlphabets: UidAlphabetDictionary = {
   alphanumeric,
-  hexadecimalLowercase,
-  hexadecimalUppercase,
   lowercase,
   nolookalikes,
   nolookalikesSafe,

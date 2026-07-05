@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin, screenConverter } from '@aglyn/core-data-admin'
+import { firebaseAdmin, screenConverter } from '@aglyn/tenant-data-admin'
 
 export async function getScreen(options: {
   screenId: Aglyn.ScreenUid

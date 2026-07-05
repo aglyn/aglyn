@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-export const validationMessage = (meta, validateOnMount) => {
+export const validationMessage = (meta: { error?: string; submitError?: string; touched?: boolean }, validateOnMount: boolean) => {
   if (validateOnMount) {
     return meta.error || meta.submitError
   }

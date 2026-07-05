@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
-import { GridButtons } from '@aglyn/shared-ui-jsx'
-import { mdiBug, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  GridButtons,
+} from '@aglyn/shared-ui-jsx'
+import {
+  mdiBug,
+} from '@aglyn/shared-data-mdi'
+import {
+  MdiIcon,
+} from '@aglyn/shared-ui-jsx'
 import styled from '@emotion/styled'
 
 const StyledPage = styled.div`

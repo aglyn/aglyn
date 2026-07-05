@@ -25,7 +25,7 @@ import {
 import { Fragment } from 'react'
 import HsEmbedScript from '../components/hs-embed-script'
 import VisitorQueueScript from '../components/visitor-queue-script'
-import { withAppController } from '../lib/aglyn-deprecated/lib/controllers/app-controller'
+import { withAppController } from '@aglyn/shared-util-fbclient'
 
 let app
 if (!app) {

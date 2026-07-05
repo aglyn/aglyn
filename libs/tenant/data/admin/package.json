@@ -1,0 +1,14 @@
+{
+  "name": "@aglyn/tenant-data-admin",
+  "version": "0.0.1",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/core.git",
+    "directory": "libs/tenant/data/admin"
+  },
+  "dependencies": {
+    "@swc/helpers": "~0.3.3"
+  },
+  "devDependencies": {}
+}

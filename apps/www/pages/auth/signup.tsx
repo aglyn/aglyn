@@ -97,11 +97,12 @@ export default withAppContext<Props>(function SignUp(props) {
       <form autoComplete="on" onSubmit={onSubmit}>
         <div>
           <Typography
-            children="Fill in your details"
             variant="h5"
             gutterBottom
             sx={{ textTransform: 'uppercase' }}
-          />
+          >
+            Fill in your details
+          </Typography>
           <FieldSet
             fields={fields}
             loading={submitting}
@@ -109,14 +110,16 @@ export default withAppContext<Props>(function SignUp(props) {
           />
           {formError && (
             <Box
-              bgcolor={'error.light'}
-              border={2}
-              borderColor={'error.main'}
-              borderRadius={3}
-              color={'error.contrastText'}
-              my={2}
-              px={2}
-              py={2}
+              sx={{
+                bgcolor: 'error.light',
+                border: 2,
+                borderColor: 'error.main',
+                borderRadius: 3,
+                color: 'error.contrastText',
+                my: 2,
+                px: 2,
+                py: 2,
+              }}
             >
               <Typography>
                 <b>{'Error: '}</b>
@@ -125,7 +128,6 @@ export default withAppContext<Props>(function SignUp(props) {
             </Box>
           )}
           <Button
-            children={submitting ? 'Please wait...' : 'Continue'}
             color="secondary"
             disabled={Boolean(submitting)}
             size="large"
@@ -133,7 +135,9 @@ export default withAppContext<Props>(function SignUp(props) {
             variant="contained"
             fullWidth
             sx={{ my: 2 }}
-          />
+          >
+            {submitting ? 'Please wait...' : 'Continue'}
+          </Button>
         </div>
       </form>
       <Typography
@@ -143,13 +147,11 @@ export default withAppContext<Props>(function SignUp(props) {
         variant="overline"
         sx={{ lineHeight: 1.5, marginTop: 4 }}
       >
-        <b children={'Already have an account?'} />
+        <b>{'Already have an account?'}</b>
         <br />
-        <AppLink
-          children="Sign in instead"
-          color="secondary"
-          href="/auth/signin"
-        />
+        <AppLink color="secondary" href="/auth/signin">
+          Sign in instead
+        </AppLink>
       </Typography>
     </AuthLayout>
   )

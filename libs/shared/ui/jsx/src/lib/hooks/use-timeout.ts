@@ -30,9 +30,9 @@ export function useTimeout(
   }, [callback])
 
   useEffect(() => {
-    let timeout = undefined
+    let timeout: ReturnType<typeof setTimeout> = undefined
 
-    const handler = (...args) => {
+    const handler = (...args: unknown[]) => {
       if (_isFnT(savedCallback.current)) {
         savedCallback.current(...args)
       }
@@ -42,7 +42,10 @@ export function useTimeout(
       timeout = setTimeout(handler, delay, ...args)
       return () => clearTimeout(timeout)
     }
-  }, [args, delay])
+    return undefined
+    // args is a rest param (new array each render) — omit from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [delay])
 }
 
 export default useTimeout

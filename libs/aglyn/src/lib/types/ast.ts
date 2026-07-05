@@ -21,7 +21,7 @@ import type {
   Parent as UnistParent,
 } from 'unist'
 
-export { UnistNode as Node }
+export type { UnistNode as Node }
 
 /**
  * This map registers all node types that may be used as top-level content in

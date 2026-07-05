@@ -17,7 +17,7 @@
 import getNodeWindow from '../get-node-window'
 
 
-export function isNodeShadowRoot(node): node is ShadowRoot {
+export function isNodeShadowRoot(node: any): node is ShadowRoot {
   // IE 11 has no ShadowRoot
   if (typeof ShadowRoot === 'undefined') {
     return false

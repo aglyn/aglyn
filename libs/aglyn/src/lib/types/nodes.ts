@@ -28,20 +28,23 @@ import type { SvgIconProps } from '@mui/material/SvgIcon'
 export type MdiIconProps<D extends React.ElementType = 'svg', P = object> = SvgIconProps<D, P> & {
   path?: string
 }
+import type {
+  ComponentId,
+  ComponentsLinealOrder,
+  NodeId,
+  PresetId,
+} from '../foundation'
+import { ComponentCategory } from '../foundation'
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
 import type React from 'react'
 import type { ComponentClass, ComponentProps } from 'react'
 import type { NODE_ROOT_ID } from '../canvas-manager'
 
-import type {
-  FEATURE_FLAG,
-  FieldComponentType,
-  LinealDirectiveFlag,
-} from '../constants'
+import type { FEATURE_FLAG, FieldComponentType } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import type { ElementContentMap, Node, Props, Taxonomic } from './ast'
-import type { AglynDocument } from './shared'
-import type { HostUid } from './workspace'
+import type { AglynDocument } from '../foundation'
+import type { HostUid } from '../foundation'
 
 declare module './ast' {
   /**
@@ -226,7 +229,7 @@ export interface CanvasPreset extends Node, Taxonomic {
   name?: string | undefined
 }
 
-export type NodeId = string
+export type { NodeId }
 
 // @TODO ⚠️ Refactor for better adoption of hast
 type PresetI = AglynDocument &
@@ -330,19 +333,10 @@ export type ProcessableNodes =
   | NodeSchemaNested<any>
   | Record<NodeId, NodeSchema>
 
-export enum ComponentCategory {
-  INPUT = 'Input',
-  SURFACE = 'Surface',
-  NAVIGATION = 'Navigation',
-  LAYOUT = 'Layout',
-  DATA_DISPLAY = 'Data Display',
-  TEXT = 'Text',
-  UNCATEGORIZED = 'Uncategorized',
-  ALL = 'All',
-}
+export { ComponentCategory }
 
-export type ComponentId = string
-export type PresetId = string
+export type { ComponentId }
+export type { PresetId }
 
 export type ComponentFactory<
   P extends ComponentProps<C> | any = any,
@@ -350,13 +344,7 @@ export type ComponentFactory<
 > = ComponentClass<P> | JSX.ElementConstructor<P> | keyof JSX.IntrinsicElements
 // | keyof JSX.IntrinsicElements[keyof JSX.IntrinsicElements]
 
-export type ComponentsLinealOrder = [
-  directiveType: LinealDirectiveFlag,
-  directiveDefinition:
-    | Array<ComponentId>
-    | { plugins?: Array<PluginId>; components: Array<ComponentId> }
-    | { plugins: Array<PluginId>; components?: Array<ComponentId> },
-]
+export type { ComponentsLinealOrder }
 
 // @TODO ⚠️ Refactor for better adoption of hast
 export interface AttributeSchema extends Dictionary<any> {

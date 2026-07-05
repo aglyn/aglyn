@@ -16,7 +16,8 @@
  */
 
 import { NavigationDrawerComponent } from '@aglyn/shared-ui-jsx'
-import { mdiClose, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { mdiClose } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { alpha, createStyles, withStyles } from '@aglyn/shared-ui-theme'
 import { _isStrT } from '@aglyn/shared-util-tools'
 import { objectRemap } from '@aglyn/shared-util-tools'
@@ -93,28 +94,31 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
         appBarLeft={
           <Fragment>
             <IconButton
-              children={<MdiIcon path={mdiClose.path} />}
               className={classes.closeButton}
               color="default"
               edge="start"
               onClick={onClose}
-            />
+            >
+              {<MdiIcon path={mdiClose.path} />}
+            </IconButton>
             <Typography
-              children={`${actionLabel} ${label}`}
-              color="inherit"
               component="div"
               variant="h6"
-            />
+              sx={{
+                color: 'inherit',
+              }}
+            >{`${actionLabel} ${label}`}</Typography>
           </Fragment>
         }
         appBarRight={
           <Button
-            children={actionLabel}
             color="secondary"
             disabled={loading}
             variant="contained"
             onClick={onSave}
-          />
+          >
+            {actionLabel}
+          </Button>
         }
         open={open}
         onClose={onClose}
@@ -135,20 +139,26 @@ const DrawerFormView = forwardRef<any, DrawerFormViewProps>(
             {error && (_isStrT(error) ? error : 'Error loading...')}
             {!error && (
               <Fragment>
-                <Typography children={'Unique ID'} variant="subtitle2" />
-                <Typography children={id ?? '(none)'} variant="subtitle1" />
+                <Typography variant="subtitle2">{'Unique ID'}</Typography>
+                <Typography variant="subtitle1">{id ?? '(none)'}</Typography>
                 <FieldSet
                   fields={fields}
                   loading={loading}
                   onUpdate={onUpdate}
                 />
-                <Box mt={2}>
-                  <Typography children={'JSON Output'} variant="subtitle2" />
+                <Box
+                  sx={{
+                    mt: 2,
+                  }}
+                >
+                  <Typography variant="subtitle2">{'JSON Output'}</Typography>
                   <Box
-                    bgcolor="background.default"
-                    mt={1}
-                    overflow="scroll"
-                    px={1}
+                    sx={{
+                      bgcolor: 'background.default',
+                      mt: 1,
+                      overflow: 'scroll',
+                      px: 1,
+                    }}
                   >
                     <pre>
                       {JSON.stringify(

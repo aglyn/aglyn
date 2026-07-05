@@ -73,7 +73,7 @@ export function generateComponentClassKeys<
   const result = {} as ClassKeyMap<ClassKey, Prefix>
 
   classKeys.forEach((key) => {
-    result[key] = generateComponentClass(key, componentName) as any
+    Object.assign(result, { [key]: generateComponentClass(key, componentName) })
   })
 
   return result

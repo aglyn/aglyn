@@ -15,95 +15,23 @@
  * limitations under the License.
  */
 
-import type { ITimestamp } from '@aglyn/shared-util-timestamp'
-import type { NodeId, NodeSchema } from '../types/nodes'
-import { AglynDocument } from './shared'
-import {
-  type AglynAccessRule,
-  type HostMediaUid,
-  HostScreenStatus,
-  HostScreenVisibility,
-  type HostUid,
-  type TenantUid,
-  type UserUid,
-} from './workspace'
+import type {
+  AglynLayoutVersion as AglynLayoutVersionBase,
+  AglynScreenVersion as AglynScreenVersionBase,
+} from '../foundation/definitions/workspace.types'
+import type { NodeSchema } from './nodes'
 
-export type ScreenUid = string
-export type ScreenSlug = string
-export type VersionUid = string
-export type LayoutUid = string
+export type {
+  AglynLayout,
+  AglynScreen,
+  LayoutUid,
+  ScreenSlug,
+  ScreenUid,
+  VersionUid,
+} from '../foundation'
 
 /** Hosted in tenants' host project */
-export interface AglynScreen extends AglynDocument {
-  $id: ScreenUid
-  tenantId?: TenantUid
-  hostId?: HostUid
-  parentId?: ScreenUid
-  slug?: ScreenSlug
-  versionId?: VersionUid
-  status?: HostScreenStatus
-  createdAt?: ITimestamp
-  updatedAt?: ITimestamp
-  deletedAt?: ITimestamp
-  displayName?: string
-  description?: string
-  seo?: {
-    title?: string
-    description?: string
-    breadcrumb?: string
-    image?: HostMediaUid
-  }
-
-  // CONCEPT: Scheduling
-  schedule?: {
-    startAt?: ITimestamp
-    endAt?: ITimestamp
-    next?: VersionUid
-    previous?: VersionUid
-  }
-
-  // CONCEPT: Contextual visibility
-  visibility?: HostScreenVisibility | AglynAccessRule
-
-  // CONCEPT: Attribute editors
-  owner?: UserUid
-  contributors?: {
-    [P in string & UserUid]: true
-  }
-
-  // CONCEPT: Shared layouts
-  layoutId?: LayoutUid
-}
-
-/** Hosted in tenants' host project */
-export interface AglynScreenVersion extends AglynDocument {
-  $id: VersionUid
-  tenantId?: TenantUid
-  hostId?: HostUid
-  screenId?: ScreenUid
-  createdAt?: ITimestamp
-  updatedAt?: ITimestamp
-  nodes?: Record<NodeId, NodeSchema>
-}
+export type AglynScreenVersion = AglynScreenVersionBase<NodeSchema>
 
 /** CONCEPT: Shared layouts. Hosted in tenants' host project */
-export interface AglynLayout {
-  $id: LayoutUid
-  tenantId?: TenantUid
-  hostId?: HostUid
-  layoutId?: LayoutUid
-  versionId?: VersionUid
-  versions?: Array<VersionUid>
-  displayName?: string
-  description?: string
-  contributors?: Array<UserUid>
-  createdAt?: ITimestamp
-  updatedAt?: ITimestamp
-}
-
-/** CONCEPT: Shared layouts. Hosted in tenants' host project */
-export interface AglynLayoutVersion extends AglynScreenVersion {
-  $id: LayoutUid
-  layoutId?: LayoutUid
-  hostId?: HostUid
-}
+export type AglynLayoutVersion = AglynLayoutVersionBase<NodeSchema>

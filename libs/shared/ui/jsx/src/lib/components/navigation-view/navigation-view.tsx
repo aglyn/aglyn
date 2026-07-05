@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,16 +39,19 @@ const classKeys = generateComponentClassKeys('AglynNavigationDrawer', [
   'bottomAppBar',
 ])
 
-const StyledAppBar = styled<any>(AppBar)<AppBarProps>(({ theme }) => ({
-  borderBottomWidth: 1,
-  borderBottomStyle: 'solid',
-  borderBottomColor: theme.palette.divider,
-  zIndex: theme.zIndex.appBar,
-  transition: theme.transitions.create(['background-image', 'box-shadow'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.standard,
-  }),
-}))
+const StyledAppBar = styled<any>(AppBar)<AppBarProps>(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: tv.palette.divider,
+    zIndex: theme.zIndex.appBar,
+    transition: theme.transitions.create(['background-image', 'box-shadow'], {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.standard,
+    }),
+  }
+})
 
 export interface NavigationAppBarProps extends AppBarProps {
   scrollView?: Node | Window
@@ -130,15 +133,19 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
       <Stack
         ref={forwardRef}
         direction="column"
-        alignItems="stretch"
-        justifyContent="flex-start"
         spacing={0}
-        flexGrow={1}
-        height={1}
-        width={1}
-        overflow="hidden"
-        sx={mergeSxProps({}, sx)}
         {...rest}
+        sx={mergeSxProps(
+          {
+            alignItems: 'stretch',
+            justifyContent: 'flex-start',
+            flexGrow: 1,
+            height: 1,
+            width: 1,
+            overflow: 'hidden',
+          },
+          sx,
+        )}
       >
         <NavigationAppBar
           scrollView={scrollView}
@@ -147,27 +154,33 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
         >
           <Toolbar className={classKeys.toolbar}>
             <Stack
-              alignItems="center"
-              justifyContent="space-between"
               direction="row"
               spacing={2}
-              width={1}
+              sx={{
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: 1,
+              }}
             >
               <Stack
                 direction="row"
-                alignItems="center"
-                justifyContent="flex-start"
                 className={classKeys.appBarLeft}
                 {...AppBarLeftProps}
+                sx={mergeSxProps(
+                  { alignItems: 'center', justifyContent: 'flex-start' },
+                  AppBarLeftProps?.sx,
+                )}
               >
                 {appBarLeft}
               </Stack>
               <Stack
                 direction="row"
-                alignItems="center"
-                justifyContent="flex-start"
                 className={classKeys.appBarRight}
                 {...AppBarRightProps}
+                sx={mergeSxProps(
+                  { alignItems: 'center', justifyContent: 'flex-start' },
+                  AppBarRightProps?.sx,
+                )}
               >
                 {appBarRight}
               </Stack>
@@ -175,23 +188,26 @@ export const NavigationView = forwardRef<any, NavigationViewProps>(
           </Toolbar>
           {childrenAfterToolbar}
         </NavigationAppBar>
-
         <Stack
           ref={setScrollView}
           component="main"
           direction="column"
-          overflow="auto"
-          flexGrow={1}
-          height={1}
-          width={1}
-          bgcolor="background.default"
-          zIndex={1}
           className={classKeys.content}
           {...ContentProps}
+          sx={mergeSxProps(
+            {
+              overflow: 'auto',
+              flexGrow: 1,
+              height: 1,
+              width: 1,
+              bgcolor: 'background.default',
+              zIndex: 1,
+            },
+            ContentProps?.sx,
+          )}
         >
           {children}
         </Stack>
-
         <Stack
           component="footer"
           direction="column"

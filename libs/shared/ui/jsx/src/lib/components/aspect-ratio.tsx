@@ -146,7 +146,7 @@ const AspectRatioRoot = styled('div', {
 const AspectRatioContent = styled('div', {
   name: 'MuiAspectRatio',
   slot: 'Content',
-  overridesResolver: (props, styles) => styles.content,
+  overridesResolver: (props, styles) => styles['content'],
 })<{ ownerState: AspectRatioOwnerState }>(({ theme, ownerState }) => [
   {
     flex: 1,
@@ -176,7 +176,9 @@ const AspectRatioContent = styled('div', {
       },
     },
   },
-  theme.palette[ownerState.variant!]?.[ownerState.color!],
+  (theme.palette as unknown as Record<string, Record<string, unknown>>)[
+    ownerState.variant!
+  ]?.[ownerState.color!],
 ])
 
 export interface AspectRatioProps extends AspectRatioOwnerState {

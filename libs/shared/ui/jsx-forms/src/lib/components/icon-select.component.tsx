@@ -77,16 +77,18 @@ const StyledCollapse = styled(Collapse, {
 
 const GridListWrapper = styled('div', {
   name: 'AglynIconSelectListWrapper',
-})(({ theme }) => ({
-  height: '100%',
-  marginTop: theme.spacing(1),
-  border: `1px solid ${theme.palette.divider}`,
-  borderRadius: theme.shape.borderRadius,
-  [`& .${classKeys.gridList}`]: {
-    padding: theme.spacing(1),
-    // overflowX: 'hidden',
-  },
-}))
+})(({ theme }) => {
+  const tv = (theme as any).vars || theme
+  return {
+    height: '100%',
+    marginTop: theme.spacing(1),
+    border: `1px solid ${tv.palette.divider}`,
+    borderRadius: theme.shape.borderRadius,
+    [`& .${classKeys.gridList}`]: {
+      padding: theme.spacing(1),
+    },
+  }
+})
 
 export interface IconSelectProps extends HTMLAttributes<HTMLDivElement> {
   initialValue?: string
@@ -163,10 +165,10 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
   )
 
   const renderItemContent = useCallback(
-    function RenderItemContent(item, key) {
+    function RenderItemContent(item: Icon, key: number) {
       return (
         <Tooltip
-          key={item.key ?? item.id ?? key}
+          key={item.id ?? key}
           title={item.name}
           disableInteractive
           enterDelay={375}
@@ -174,14 +176,13 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
         >
           <CardListItem
             item={item}
-            onActionClick={handleItemClick}
             selected={selected && selected === item.id}
-            renderItem={
-              <div>
-                <MdiIcon fontSize="medium" path={item.path} />
-              </div>
-            }
-          />
+            onClick={(e) => handleItemClick(e, item)}
+          >
+            <div>
+              <MdiIcon fontSize="medium" path={item.path} />
+            </div>
+          </CardListItem>
         </Tooltip>
       )
     },
@@ -190,8 +191,10 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
 
   return (
     <Grid ref={ref} container>
-      <Grid spacing={2} alignItems={'center'} container item>
-        <Grid item>
+      <Grid spacing={2} container sx={{
+        alignItems: 'center'
+      }}>
+        <Grid>
           <ButtonBase
             onClick={handleButtonClick}
             disableRipple
@@ -201,7 +204,10 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
             <MdiIcon fontSize="inherit" path={currentIcon.path} />
           </ButtonBase>
         </Grid>
-        <Grid item sm>
+        <Grid
+          size={{
+            sm: "grow"
+          }}>
           <Typography component="div" variant="caption">
             {label}
           </Typography>
@@ -226,10 +232,12 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
           </MuiLink>
         </Grid>
       </Grid>
-      <Grid xs={12} item>
+      <Grid size={12}>
         <StyledCollapse in={open}>
-          <Grid alignItems="center" spacing={2} container>
-            <Grid xs={12} item>
+          <Grid spacing={2} container sx={{
+            alignItems: "center"
+          }}>
+            <Grid size={12}>
               <MuiTextField
                 onChange={handleFilterChange}
                 placeholder="Search icons..."
@@ -238,12 +246,12 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
                 fullWidth
               />
             </Grid>
-            <Grid item xs>
+            <Grid size="grow">
               <Typography component="div" variant="body2">
                 Selected icon: <b>{selectedIcon.name}</b>
               </Typography>
             </Grid>
-            <Grid item>
+            <Grid>
               <Button
                 color="secondary"
                 onClick={handleChooseButtonClick}
@@ -267,7 +275,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
         </StyledCollapse>
       </Grid>
     </Grid>
-  )
+  );
 })
 
 IconSelectComponent.displayName = 'IconSelectComponent'

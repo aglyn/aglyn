@@ -35,6 +35,7 @@ export function useMouseEnter(): [
         node.removeEventListener('mouseleave', handleMouseLeave)
       }
     }
+    return undefined
   }, [])
   return [ref, value]
 }

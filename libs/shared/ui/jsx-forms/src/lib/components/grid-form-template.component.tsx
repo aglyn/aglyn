@@ -41,7 +41,9 @@ export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
         </Grid>
         <FormSpy>
           {({ submitting, validating, pristine, valid }) => (
-            <Box mt={2}>
+            <Box sx={{
+              mt: 2
+            }}>
               <FormControl margin="normal" fullWidth>
                 <Button
                   variant="outlined"
@@ -69,7 +71,7 @@ export const GridFormTemplateComponent = forwardRef<any, GridFormTemplateProps>(
           )}
         </FormSpy>
       </form>
-    )
+    );
   },
 )
 GridFormTemplateComponent.displayName = 'GridFormTemplateComponent'

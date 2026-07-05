@@ -41,18 +41,15 @@ const useStyles = makeStyles<Theme, Props>((theme: Theme) =>
 )
 
 const buildOption = (option: Fields.Option, key?: any) => (
-  <MenuItem
-    key={item.key ?? item.id ?? key}
-    value={option.value}
-    children={option.label}
-  />
+  <MenuItem key={key} value={option.value}>
+    {option.label}
+  </MenuItem>
 )
 
 function checkboxListRow(props: ListChildComponentProps) {
   const { index, style, data } = props
   const { items, field, onUpdate } = data
   const item = (items ?? [])[index]
-  console.log('data', data)
   return (
     <ListItem key={data.value} dense button style={style} onClick={() => {}}>
       <ListItemIcon>
@@ -143,13 +140,14 @@ export default function FieldSet(props: Props) {
     return (
       <div className={classes.wrapper}>
         <VariableSizeList
-          children={row}
           height={400}
           width="100%"
           itemCount={items.length}
           itemSize={itemSize}
           itemData={{ items, field, onUpdate }}
-        />
+        >
+          {row}
+        </VariableSizeList>
       </div>
     )
   }

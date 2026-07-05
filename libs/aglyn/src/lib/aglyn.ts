@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-import Timestamp from '@aglyn/shared-util-timestamp/timestamp'
+import { Logger } from '@aglyn/shared-util-logger'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
 import CanvasManager from './canvas-manager'
 import ComponentManager from './components-manager'
-import { namespace } from './constants'
 import EmitManager, { AglynEvent } from './emit-manager'
-import LogManager from './log-manager'
+import { namespace } from './foundation'
 import PluginManager from './plugin-manager'
-import UAManager from './ua-manager'
 
-export * from './constants'
 export * from './types'
 export * from './utils'
 
@@ -32,20 +30,17 @@ export * from './components-manager'
 export * from './emit-manager'
 export * from './plugin-manager'
 export * from './canvas-manager'
-export * from './ua-manager'
 
 export class Aglyn extends EmitManager {
-  logger: LogManager
+  logger: Logger
   emitter: this
-  ua: UAManager
   plugins: PluginManager
   components: ComponentManager
   canvas: CanvasManager
   constructor() {
     super()
-    this.logger = new LogManager(namespace)
+    this.logger = new Logger(namespace)
     this.emitter = this
-    this.ua = new UAManager()
     this.plugins = new PluginManager(this)
     this.components = new ComponentManager(this)
     this.canvas = new CanvasManager(this)
@@ -54,38 +49,11 @@ export class Aglyn extends EmitManager {
 
 export const aglyn = new Aglyn()
 
-export const { logger, components, ua, emitter, canvas, plugins } = aglyn
+export const { logger, components, emitter, canvas, plugins } = aglyn
 
 emitter.prependListener(['error', '**'], (...payload) => {
   logger.error(Timestamp.now().toJSON(), ...payload)
 })
-
-export function lifecycleEvent(
-  callbackFn: () => void,
-  options: {
-    beforeEvent: AglynEvent
-    beforePayload: any[]
-    afterEvent: AglynEvent
-    afterPayload: any[]
-    onCatch?: (e: unknown) => void
-  },
-): void {
-  const { beforeEvent, beforePayload, afterEvent, afterPayload, onCatch } =
-    options
-  try {
-    logger.debug(Timestamp.now().toJSON(), beforeEvent, beforePayload)
-    emitter.emit(beforeEvent, Timestamp.now().toJSON(), ...beforePayload)
-    callbackFn()
-    logger.debug(Timestamp.now().toJSON(), afterEvent, afterPayload)
-    emitter.emit(afterEvent, Timestamp.now().toJSON(), ...afterPayload)
-  } catch (e) {
-    emitter.emit(AglynEvent.ERROR_GENERAL, {
-      message:
-        (e as Error)?.message || `An error has occurred before event ${beforeEvent}`,
-    })
-    onCatch && onCatch(e)
-  }
-}
 
 emitter.on(AglynEvent.PLUGIN_REGISTER, ({ plugin }) => {
   plugins.addDependency(plugin)

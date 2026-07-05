@@ -17,7 +17,7 @@
 
 const toString = Object.prototype.toString
 
-export function isElementWindow(element): element is typeof window {
+export function isElementWindow(element: any): element is typeof window {
   return toString.call(element) === '[object Window]'
 }
 

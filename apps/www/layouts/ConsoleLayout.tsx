@@ -15,8 +15,18 @@
  * limitations under the License.
  */
 
-import { Container, GridItems, type GridItemsProps } from '@aglyn/shared-ui-jsx'
-import { mdiCogOutline, MdiIcon, type MdiIconProps } from '@aglyn/shared-ui-jsx'
+import {
+  Container,
+  GridItems,
+  type GridItemsProps,
+} from '@aglyn/shared-ui-jsx'
+import {
+  mdiCogOutline,
+} from '@aglyn/shared-data-mdi'
+import {
+  MdiIcon,
+  type MdiIconProps,
+} from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
 import { str } from '@aglyn/shared-util-tools'
 import { Typography } from '@mui/material'

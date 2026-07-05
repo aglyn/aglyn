@@ -1,0 +1,30 @@
+{
+  "name": "tenant-data-admin",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/tenant/data/admin/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:aglyn", "scope:data", "aglyn:tenancy"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/tenant/data/admin",
+        "main": "libs/tenant/data/admin/src/index.ts",
+        "tsConfig": "libs/tenant/data/admin/tsconfig.lib.json",
+        "assets": ["libs/tenant/data/admin/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/tenant/data/admin"],
+      "options": {
+        "jestConfig": "libs/tenant/data/admin/jest.config.ts"
+      }
+    }
+  }
+}

@@ -23,7 +23,7 @@ import Menu from './menu'
 
 describe('Menu', () => {
   it('should render successfully', () => {
-    const {baseElement} = render(<Menu />)
+    const {baseElement} = render(<Menu><button>Open</button></Menu>)
     expect(baseElement).toBeTruthy()
   })
 })

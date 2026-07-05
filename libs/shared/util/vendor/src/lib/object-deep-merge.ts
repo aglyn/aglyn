@@ -21,7 +21,8 @@ export {
   type DeepMergeOptions as ObjectDeepMergeOptions,
 } from 'deepmerge-ts'
 
-export * as objectDeepMergeFillIn from 'mout/object/deepFillIn'
+import objectDeepMergeFillIn from 'mout/object/deepFillIn'
+export { objectDeepMergeFillIn }
 
 // export function objectDeepMerge<T>(x: Partial<T>, y: Partial<T>, options?: DeepMergeOptions): T
 // export function objectDeepMerge<T1, T2>(x: Partial<T1>, y: Partial<T2>, options?:

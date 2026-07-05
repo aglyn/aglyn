@@ -1,6 +1,7 @@
 {
   "babelrcRoots": ["*"],
   "plugins": [
-    "const-enum"
+    "const-enum",
+    ["@babel/plugin-transform-private-methods", { "loose": true }]
   ]
 }

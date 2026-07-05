@@ -15,7 +15,7 @@
         "entryFile": "libs/shared/ui/jsx-forms/src/index.ts",
         "external": [
           "react/jsx-runtime",
-          "@aglyn/besigner-ui-color-picker/color-picker",
+          "@aglyn/shared-ui-color-picker",
           "@aglyn/shared-data-mdi",
           "@aglyn/shared-ui-jsx",
           "@aglyn/shared-ui-theme",

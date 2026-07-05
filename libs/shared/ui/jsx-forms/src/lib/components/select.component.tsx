@@ -35,7 +35,7 @@ import {
 
 export type SelectBaseProps = MuiSelectProps & UseFieldApiConfig
 
-export interface SelectProps extends SelectBaseProps {
+export type SelectProps = SelectBaseProps & {
   isReadOnly?: boolean
   isDisabled?: boolean
   isRequired?: boolean
@@ -65,7 +65,7 @@ export const SelectComponent = forwardRef<any, SelectProps>((props, ref) => {
     defaultOption,
     disableDefaultOption,
     ...rest
-  } = useFieldApi(props)
+  } = useFieldApi(props as UseFieldApiConfig)
   const invalidMessage = validationMessage(meta, validateOnMount)
   const helpText =
     invalidMessage ||
@@ -93,7 +93,6 @@ export const SelectComponent = forwardRef<any, SelectProps>((props, ref) => {
         label={label}
         labelId={`field-select-${input.name}`}
         required={isRequired}
-        placeholder={placeholder}
         fullWidth
         {...rest}
       >

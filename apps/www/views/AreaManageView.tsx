@@ -34,10 +34,8 @@ import {
   useEffect,
   useState,
 } from 'react'
-import CardDisplay from '../../console/components/card-display'
-import DataTableComponent, {
-  type DataTableProps,
-} from '../../console/components/data-table.component'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { DataTableComponent, type DataTableProps } from '@aglyn/shared-ui-jsx'
 import { type AppContextType, withAppContext } from '../contexts/app-context'
 import { type Fields } from '../forms'
 import ConsoleLayout from '../layouts/ConsoleLayout'
@@ -232,38 +230,33 @@ function AreaManageViewRaw(props: AreaManageViewProps) {
       <ConsoleLayout
         items={[
           {
-            xs: 12,
-            md: 3,
+            size: { xs: 12, md: 3 },
             children: <AreaManageNavigationListWidgetView />,
           },
           {
-            xs: 12,
-            md: 9,
+            size: { xs: 12, md: 9 },
             children: (
               <CardDisplay
                 header={{
                   title: `All ${documentName.plural}`,
                   action: (
                     <Fragment>
+                      <IconButton title="Filter list" disabled>
+                        {<MdiIcon path={mdiFilterVariant.path} />}
+                      </IconButton>
                       <IconButton
-                        children={<MdiIcon path={mdiFilterVariant.path} />}
-                        title="Filter list"
-                        disabled
-                      />
-                      <IconButton
-                        children={<MdiIcon path={mdiPlus.path} />}
                         title="Add item"
                         onClick={handleCreateDocumentFormOpen}
-                      />
+                      >
+                        {<MdiIcon path={mdiPlus.path} />}
+                      </IconButton>
                     </Fragment>
                   ),
                 }}
               >
                 <DataTableComponent
-                  DataGridProps={{
-                    loading: loadingDocuments,
-                    onRowClick: handleRowClick,
-                  }}
+                  loading={loadingDocuments}
+                  onRowClick={handleRowClick}
                   columns={columns}
                   noRowsLabel={documentName.plural}
                   rows={rows}

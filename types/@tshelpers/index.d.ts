@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+/// <reference path="./vendor-modules.d.ts" />
 export * from './arithmetic.d'
 export * from './basic.d'
 export * from './fallback.d'

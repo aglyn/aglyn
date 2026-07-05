@@ -34,7 +34,7 @@ export function useDebouncedTransition<T extends (...args: any) => any>(
 ): [boolean, DebouncedFunc<(func: T) => void>] {
   const [transitioning, startTransition] = useTransition()
   const debounce = useDebounce((func: T) => {
-    startTransition((...args) => {
+    startTransition((...args: unknown[]) => {
       func(...args)
     })
   }, wait, options, deps)

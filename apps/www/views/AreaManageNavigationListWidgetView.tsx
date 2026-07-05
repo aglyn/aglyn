@@ -17,7 +17,8 @@
 
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { AppLink } from '@aglyn/shared-ui-jsx'
-import { mdiChevronDown, mdiChevronUp, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Collapse,
   IconButton,
@@ -29,19 +30,16 @@ import {
 } from '@mui/material'
 import clsx from 'clsx'
 import { forwardRef, Fragment, useCallback, useState } from 'react'
-import CardDisplay, {
-  type CardDisplayProps,
-} from '../../console/components/card-display'
-import { type AggregatedPageMeta, withAggregatedPageMeta } from '../lib/app-pages'
+import { CardDisplay, type CardDisplayProps } from '@aglyn/shared-ui-jsx'
+import {
+  type AggregatedPageMeta,
+  withAggregatedPageMeta,
+} from '../lib/app-pages'
 
-const classKeys = generateComponentClassKeys('AreaManageNavigationListWidgetView', [
-  'listItem',
-  'active',
-  'open',
-  'childActive',
-  'collapse',
-  'nested',
-])
+const classKeys = generateComponentClassKeys(
+  'AreaManageNavigationListWidgetView',
+  ['listItem', 'active', 'open', 'childActive', 'collapse', 'nested'],
+)
 
 const StyledListItem = styled(ListItemButton, {
   name: 'AglynListItem',
@@ -78,7 +76,8 @@ const StyledListItem = styled(ListItemButton, {
   },
 }))
 
-export interface AreaManageNavigationListWidgetViewProps extends Partial<CardDisplayProps> {
+export interface AreaManageNavigationListWidgetViewProps
+  extends Partial<CardDisplayProps> {
   aggregatedPageMeta: AggregatedPageMeta
 }
 
@@ -95,7 +94,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     denormalizedAreaPages,
   } = aggregatedPageMeta
   const [activeCollapse, setActiveCollapse] = useState(
-    subArea?.id ?? pageMeta?.dynamic ? pageMeta?.parent : pageMeta?.id
+    subArea?.id ?? pageMeta?.dynamic ? pageMeta?.parent : pageMeta?.id,
   )
   const openAreaCollapse = (id) => (e) => {
     e.preventDefault()
@@ -106,7 +105,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     (item) => {
       return Boolean(activeCollapse === item?.id)
     },
-    [activeCollapse]
+    [activeCollapse],
   )
 
   const isActive = useCallback(
@@ -114,7 +113,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
       const path = pageMeta.dynamic ? pageMeta.parent : pathname
       return Boolean(path === item?.id)
     },
-    [pathname, pageMeta]
+    [pathname, pageMeta],
   )
 
   const isChildActive = useCallback(
@@ -122,7 +121,7 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
       const path = pageMeta.dynamic ? pageMeta.parent : pathname
       return Boolean(item.pages?.some((i) => path === i?.id))
     },
-    [pathname, pageMeta]
+    [pathname, pageMeta],
   )
 
   const getClass = (itemClass, item, topLvl = true) =>
@@ -137,7 +136,9 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
     <CardDisplay ref={ref} {...rest}>
       <List
         subheader={
-          <ListSubheader children={'Manage Navigation'} sx={{ fontWeight: 'fontWeightMedium' }} />
+          <ListSubheader sx={{ fontWeight: 'fontWeightMedium' }}>
+            {'Manage Navigation'}
+          </ListSubheader>
         }
         disablePadding
       >
@@ -151,13 +152,15 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
               componentVariant="button"
               dense
             >
-              <ListItemText children={item?.name.long} />
+              <ListItemText>{item?.name.long}</ListItemText>
               {item?.pages?.length ? (
                 <IconButton
                   disabled={isActive(item) || isChildActive(item)}
                   size={'small'}
                   title={
-                    isOpen(item) || isActive(item) || isChildActive(item) ? 'collapse' : 'expand'
+                    isOpen(item) || isActive(item) || isChildActive(item)
+                      ? 'collapse'
+                      : 'expand'
                   }
                   onClick={openAreaCollapse(item?.id)}
                 >
@@ -203,9 +206,10 @@ const AreaManageNavigationListWidgetViewRaw = forwardRef<
   )
 })
 
-AreaManageNavigationListWidgetViewRaw.displayName = 'AreaManageNavigationListWidgetViewRaw'
+AreaManageNavigationListWidgetViewRaw.displayName =
+  'AreaManageNavigationListWidgetViewRaw'
 AreaManageNavigationListWidgetViewRaw.aglyn = true
 export const AreaManageNavigationListWidgetView = withAggregatedPageMeta(
-  AreaManageNavigationListWidgetViewRaw
+  AreaManageNavigationListWidgetViewRaw,
 )
 export default AreaManageNavigationListWidgetView

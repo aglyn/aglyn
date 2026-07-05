@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/core-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   createHttpRefCode,
   HttpRefCodeSimple,
@@ -31,16 +31,16 @@ import {
   nextHandleJsonResponse,
 } from '@aglyn/shared-util-rest-api'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { use } from 'next-api-middleware'
+import { use as withMiddleware } from 'next-api-middleware'
 
 const getAllUsers = async (nextPageToken?: string) => {
-  const data = { users: [] as any, nextPageToken: '', error: null }
+  const data: { users: object[]; nextPageToken: string; error: Error | null } = { users: [], nextPageToken: '', error: null }
 
   // List batch of users, 1000 at a time.
   await firebaseAdmin
     .app()
     .auth()
-    .listUsers(5, nextPageToken)
+    .listUsers(1000, nextPageToken)
     .then((listUsersResult) => {
       listUsersResult.users.forEach((userRecord) => {
         data.users.push(userRecord.toJSON())
@@ -50,7 +50,7 @@ const getAllUsers = async (nextPageToken?: string) => {
       }
     })
     .catch((error) => {
-      console.log('Error listing users:', error)
+      console.error('Error listing users:', error)
       data.error = error
     })
 
@@ -104,7 +104,7 @@ async function users(request: NextApiRequest, response: NextApiResponse) {
   })
 }
 
-export default use(
+export default withMiddleware(
   csrfApiMiddleware,
   httpRequestMethodMiddleware(HttpRequestMethod.GET),
 )(users)

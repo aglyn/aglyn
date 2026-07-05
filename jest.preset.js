@@ -12,4 +12,30 @@ module.exports = {
    * More info: https://jestjs.io/docs/upgrading-to-jest29#snapshot-format
    */
   snapshotFormat: { escapeString: true, printBasicPrototype: true },
+  // ESM-only packages (react-markdown/unified/remark/rehype ecosystem, plus
+  // other ESM-only libs) that jest must transform to CommonJS to require().
+  transformIgnorePatterns: [
+    '/node_modules/(?!(' +
+      [
+        'lodash-es', 'flat', 'nanoid', 'react-color', 'react-markdown',
+        '@ungap/structured-clone', 'bail', 'ccount', 'character-entities.*',
+        'character-reference-invalid', 'comma-separated-tokens',
+        'decode-named-character-reference', 'devlop',
+        'estree-util-is-identifier-name', 'hast-util-.*', 'html-url-attributes',
+        'is-alphabetical', 'is-alphanumerical', 'is-decimal', 'is-hexadecimal',
+        'is-plain-obj', 'longest-streak', 'mdast-util-.*',
+        'micromark.*', 'parse-entities', 'property-information',
+        'remark-.*', 'space-separated-tokens', 'stringify-entities',
+        'trim-lines', 'trough', 'unified', 'unist-util-.*', 'vfile.*', 'zwitch',
+        '@react-dnd/.*', 'dnd-core', 'react-dnd', 'react-dnd-html5-backend',
+      ].join('|') +
+      ')/)',
+  ],
+  setupFiles: [require.resolve('./jest.setup.js')],
+  // Static asset imports (e.g. `import img from './foo.png'`) are normally
+  // transformed by Next.js's webpack loader into a StaticImageData object.
+  // Jest has no such loader, so map them to a stub with the same shape.
+  moduleNameMapper: {
+    '\\.(png|jpe?g|gif|svg|webp|avif|ico|bmp)$': require.resolve('./jest.file-mock.js'),
+  },
 }

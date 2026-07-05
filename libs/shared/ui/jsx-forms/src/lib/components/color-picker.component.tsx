@@ -18,7 +18,7 @@
 import {
   ColorPicker as AglynColorPicker,
   type ColorPickerProps as AglynColorPickerProps,
-} from '@aglyn/besigner-ui-color-picker/color-picker'
+} from '@aglyn/shared-ui-color-picker'
 import { styled } from '@aglyn/shared-ui-theme'
 import {
   FormFieldGrid,
@@ -43,6 +43,7 @@ import {
   type TextFieldProps,
 } from '@mui/material'
 import {
+  type FocusEvent,
   forwardRef,
   useCallback,
   useId,
@@ -74,16 +75,17 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
       <InputAdornment ref={ref} position={'start'} {...rest}>
         <IconButton ref={ref} edge="start" {...IconButtonProps}>
           <Box
-            padding={0.35}
-            border={1}
-            borderColor={'divider'}
-            borderRadius="50%"
-          >
+            sx={{
+              padding: 0.35,
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: "50%"
+            }}>
             <Swatch color={color} />
           </Box>
         </IconButton>
       </InputAdornment>
-    )
+    );
   },
 )
 TextFieldColorSwatch.displayName = 'AglynTextFieldColorSwatch'
@@ -174,9 +176,9 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     const [fieldRef, setFieldRef] = useState<HTMLDivElement | null>(null)
     const [open, setOpen] = useState(false)
 
-    const handleClickAway = useCallback((e) => setOpen(false), [])
+    const handleClickAway = useCallback((e: MouseEvent | TouchEvent) => setOpen(false), [])
     const handleFocus = useCallback(
-      (e) => {
+      (e: FocusEvent<HTMLInputElement>) => {
         setOpen(true)
         onFocus && onFocus(e)
       },
@@ -216,14 +218,16 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
               onChange={handleTextChange}
               onFocus={handleFocus}
               value={value}
-              inputProps={{
-                ...inputProps,
-                readOnly: isReadOnly,
-              }}
-              InputProps={{
-                startAdornment,
-                ref: setFieldRef,
-                ...InputProps,
+              slotProps={{
+                htmlInput: {
+                  ...inputProps,
+                  readOnly: isReadOnly,
+                },
+                input: {
+                  startAdornment,
+                  ref: setFieldRef,
+                  ...InputProps,
+                },
               }}
               {...rest}
             />

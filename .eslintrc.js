@@ -33,6 +33,10 @@ module.exports = {
           {
             allow: [],
             enforceBuildableLibDependency: true,
+            // besigner-ui is dynamic()-imported only for ssr: false; the same
+            // pages also need its hooks/HOCs statically, so code-splitting is
+            // not achievable for this lib.
+            checkDynamicDependenciesExceptions: ['@aglyn/besigner-ui'],
             depConstraints: [
               {
                 sourceTag: 'scope:lib',

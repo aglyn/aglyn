@@ -53,7 +53,7 @@ export type ComponentWithInjectedProp<
 
 export interface WithContextConsumer<T, Key extends string = 'ctx'> {
   <P>(
-    component: ComponentType<P & Partial<Record<Key, T>>>,
+    component: ComponentType<P & Record<Key, T>>,
   ): ForwardRefExoticComponent<Omit<P, Key>>
 }
 

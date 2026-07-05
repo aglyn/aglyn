@@ -16,7 +16,7 @@
  */
 
 import { _isObj, _isStrT } from '@aglyn/shared-util-tools'
-import arraySafe from '@aglyn/shared-util-tools/array/array-safe'
+import { arraySafe } from '@aglyn/shared-util-tools'
 import cloneDeep from 'lodash-es/cloneDeep'
 import isEqual from 'lodash-es/isEqual'
 import {
@@ -32,7 +32,7 @@ import {
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
-import { createIdUrlSafe } from '../constants'
+import { createIdUrlSafe } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import {
   type ComponentId,
@@ -108,11 +108,6 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     schema: NodeSchema<P>,
     public store: CanvasManager,
   ) {
-    makeAutoObservable(this, {
-      store: false,
-      toJSON: false,
-    })
-
     this.$id = schema.$id
     this.name = schema.name
     this.type = schema.type || NodeType.NODE
@@ -124,8 +119,10 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.props = { ...schema.props } as P
     this.sx = Array.isArray(schema.sx) ? [...schema.sx] : { ...schema.sx }
 
-    // this.store = store
-    // console.log('canvas node', this)
+    makeAutoObservable(this, {
+      store: false,
+      toJSON: false,
+    })
   }
 
   public delete() {
@@ -231,22 +228,21 @@ class HistoryManager<K extends string, T> {
 
   public saveHistory(): this {
     this.clearFuture()
-    console.log(
-      'save history',
-      toJS(Object.fromEntries(this.present.entries())),
-    )
     this.past.push(toJS(this.present))
     return this
   }
 }
 
 export class CanvasManager {
-  private _initial: NodesMap | undefined
+  private _initial: NodesMap | undefined = undefined
   private _history: HistoryManager<NodeId, NodeSchema<any>>
 
   constructor(public aglyn: Aglyn) {
-    makeObservable(this, {
+    makeObservable<CanvasManager, '_initial'>(this, {
+      _initial: observable.ref,
       nodes: computed,
+      isInitialSame: computed,
+      didSetInitial: computed,
       undo: action,
       redo: action,
       saveHistory: action,
@@ -255,6 +251,7 @@ export class CanvasManager {
       updateInitialNodes: action,
       setNode: action,
       setNodes: action,
+      applyNodes: action,
       deleteNode: action,
       reparentNode: action,
       reorderNode: action,
@@ -275,7 +272,8 @@ export class CanvasManager {
     return this._history.canUndo
   }
   public get isInitialSame() {
-    return isEqual(toJS(this._initial), toJS(this.nodes))
+    if (!this._initial) return true
+    return isEqual(this._initial, this.serializeNodes())
   }
   public get didSetInitial() {
     return Boolean(this._initial)
@@ -285,7 +283,6 @@ export class CanvasManager {
   }
   public get nestedNodes(): NodeSchemaNested<any> {
     const root = this.rootNode
-    console.log('root', this.rootNode, this.nodes)
     if (!root) throw new Error('Missing root node')
     return this.makeNested(root)
   }
@@ -347,10 +344,15 @@ export class CanvasManager {
   })
 
   public makeNested = computedFn((node: NodeSchema<any>) => {
-    const newNode = toJS(node) as unknown as NodeSchemaNested<any>
+    // Serialize to a plain schema object: a toJS copy would carry the node's
+    // own toJSON arrow (bound to the live instance), which JSON.stringify
+    // would then prefer over the nested structure built here.
+    const newNode = (
+      node instanceof AglynNode ? node.toJSON() : { ...toJS(node) }
+    ) as unknown as NodeSchemaNested<any>
 
     const childNodes: NodeSchemaNested<any>[] = []
-    for (const childId of (newNode.nodes ||= []) as unknown as NodeId[]) {
+    for (const childId of (toJS(node.nodes) || []) as unknown as NodeId[]) {
       const child = this.getNode(childId)
       if (child) {
         const nested = this.makeNested(child)
@@ -362,30 +364,28 @@ export class CanvasManager {
     return newNode
   })
 
-  public toJSON() {
+  private serializeNodes(): NodesMap {
     const nodes: NodesMap = {}
     this.nodes.forEach((node, id) => {
       nodes[id] = node.toJSON()
     })
-    return { nodes }
+    return nodes
+  }
+
+  public toJSON() {
+    return { nodes: this.serializeNodes() }
   }
 
   public redo(): this {
     const state = this._history.redo()
     const json = Object.fromEntries(state!.entries())
-    console.log('redo', json)
-    console.log('redo present state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     this.setNodes(json)
-    console.log('redo new state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     return this
   }
   public undo(): this {
     const state = this._history.undo()
     const json = Object.fromEntries(state!.entries())
-    console.log('undo', json)
-    console.log('undo present state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     this.setNodes(json)
-    console.log('undo new state', this.nodes.get(NODE_ROOT_ID)!.nodes)
     return this
   }
   public saveHistory(): this {
@@ -414,7 +414,7 @@ export class CanvasManager {
     return this
   }
   public updateInitialNodes(nodes?: NodesMap) {
-    this._initial = toJS(nodes || this.nodes) as NodesMap
+    this._initial = nodes ? (toJS(nodes) as NodesMap) : this.serializeNodes()
     return this
   }
   public setNode(node: NodeSchema<any>, create = false) {
@@ -430,7 +430,6 @@ export class CanvasManager {
     const nodes: Record<NodeId, NodeSchema<any>> = {}
     for (const nodeId in cloned) {
       const node = cloned[nodeId]
-      if (node.$id === NODE_ROOT_ID) console.log('root node!!!!!!', node)
       if (node) nodes[nodeId] = this.createNode(node)
     }
     if (merge) {
@@ -439,6 +438,13 @@ export class CanvasManager {
       this.nodes.replace(nodes)
     }
     return this
+  }
+  public applyNodes(value: ProcessableNodes): this {
+    // Wholesale user edit (e.g. the raw-json editor): snapshot first so the
+    // replacement is undoable, unlike setNodes which also serves the
+    // history-restore and initial-load paths.
+    this.saveHistory()
+    return this.setNodes(this.processNodesToDenormalized(value))
   }
   public deleteNode(node: NodeSchema<any>): this {
     const validateNode = (node: NodeSchema<any>) => {
@@ -530,7 +536,7 @@ export class CanvasManager {
     this.saveHistory()
     const nodeIndex = this.getNodeIndex(node)
     const index =
-      nodeIndex === -1 ? (parent.nodes?.length ?? 1) - 1 : nodeIndex + 1
+      nodeIndex === -1 ? parent.nodes?.length ?? 0 : nodeIndex + 1
     const newNode = duplicateNodeAndChildren(node, node.parentId!)
     ;(parent.nodes ||= []).splice(index, 0, newNode.$id)
 

@@ -17,7 +17,7 @@
 import getNodeWindow from '../get-node-window'
 
 
-export function isNodeElement(node): node is Element {
+export function isNodeElement(node: any): node is Element {
   const OwnElement = getNodeWindow(node)['Element']
   return node instanceof OwnElement || node instanceof Element
 }

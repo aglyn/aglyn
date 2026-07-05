@@ -31,15 +31,10 @@ export type SetDocCallback<T> = (
   options?: SetOptions,
 ) => Promise<void>
 export type ModifyDocOptions = SetOptions & { shouldSet?: boolean }
-export type ModifyDocCallback<T> = {
-  (
-    data: typeof options extends { shouldSet: true }
-      ? Partial<T>
-      : UpdateData<T>,
-    options?: ModifyDocOptions,
-  ): Promise<void>
-  (data: UpdateData<T> | Partial<T>, options?: ModifyDocOptions): Promise<void>
-}
+export type ModifyDocCallback<T> = (
+  data: UpdateData<T> | Partial<T>,
+  options?: ModifyDocOptions,
+) => Promise<void>
 
 export function useUpdateDocCallback<T>(
   ref: DocumentReference<T>,
@@ -59,14 +54,21 @@ export function useSetDocCallback<T>(
 export function useModifyDocCallback<T>(
   ref: DocumentReference<T>,
 ): ModifyDocCallback<T> {
-  const updateDoc = useUpdateDocCallback(ref)
-  const setDoc = useSetDocCallback(ref)
+  const updateDocCb = useUpdateDocCallback(ref)
+  const setDocCb = useSetDocCallback(ref)
   return useCallback(
     (data: UpdateData<T> | Partial<T>, options?: ModifyDocOptions) => {
-      if (options?.shouldSet) return setDoc(data as Partial<T>, options)
-      return updateDoc(data as UpdateData<T>)
+      // SetOptions semantics (merge/mergeFields) require setDoc: updateDoc
+      // ignores them and, critically, bypasses the ref's withConverter
+      // serialization (e.g. screen-version node compression).
+      const shouldSet =
+        options?.shouldSet ||
+        (options && 'merge' in options) ||
+        (options && 'mergeFields' in options)
+      if (shouldSet) return setDocCb(data as Partial<T>, options)
+      return updateDocCb(data as UpdateData<T>)
     },
-    [updateDoc, setDoc],
+    [updateDocCb, setDocCb],
   )
 }
 

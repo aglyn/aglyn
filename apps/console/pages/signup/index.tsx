@@ -24,10 +24,18 @@ import {
   FIELD_SCHEMA_PASSWORD,
   FIELD_SCHEMA_PASSWORD_CONFIRM,
 } from '@aglyn/shared-data-forms'
-import { AppLink, useLoading } from '@aglyn/shared-ui-jsx'
+import {
+  AppLink,
+  useLoading,
+} from '@aglyn/shared-ui-jsx'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
-import { mdiGoogle, MdiIcon } from '@aglyn/shared-ui-jsx'
+import {
+  mdiGoogle,
+} from '@aglyn/shared-data-mdi'
+import {
+  MdiIcon,
+} from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next'
 import { Button, Divider, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
@@ -116,7 +124,9 @@ function SignUp() {
   return (
     <AuthFormComponent
       paperTop={
-        <Typography component="div" variant="body2" alignSelf="flex-end">
+        <Typography component="div" variant="body2" sx={{
+          alignSelf: "flex-end"
+        }}>
           <AppLink href="/signin">{'Sign in'}</AppLink>
         </Typography>
       }
@@ -137,19 +147,18 @@ function SignUp() {
         subscription={{ values: true }}
         clearOnUnmount
       />
-      <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
-
+      <AuthErrorAlertComponent error={error} sx={{ mt: 2, mb: 1 }} />
       <Divider flexItem variant="middle" sx={{ my: 3 }}>
         {'Or sign up with'}
       </Divider>
-
       <Stack
         direction="column"
-        justifyContent="center"
-        alignItems="stretch"
         spacing={1}
-        paddingBottom={2}
-      >
+        sx={{
+          justifyContent: "center",
+          alignItems: "stretch",
+          paddingBottom: 2
+        }}>
         <Button
           variant="outlined"
           startIcon={<MdiIcon path={mdiGoogle.path} />}
@@ -159,7 +168,7 @@ function SignUp() {
         </Button>
       </Stack>
     </AuthFormComponent>
-  )
+  );
 }
 SignUp.displayName = 'Page:SignUp'
 SignUp.layouts = [

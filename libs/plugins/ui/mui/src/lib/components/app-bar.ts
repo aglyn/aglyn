@@ -16,19 +16,21 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiPageLayoutHeader } from '@aglyn/shared-ui-jsx'
+import { mdiPageLayoutHeader } from '@aglyn/shared-data-mdi'
 import AppBar, { type AppBarProps } from '@mui/material/AppBar'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_COLOR_ALT1, FIELD_POSITION } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
-import { presets as toolbarPresets } from './toolbar'
+import { ID as toolbarId } from './toolbar'
 
-const ID: Aglyn.ComponentId = 'app-bar'
+// Component ids are persisted in screen documents; keep the legacy ids.
+export const ID: Aglyn.ComponentId = 'muiAppBar'
 
 export const schema: Aglyn.ComponentSchema<AppBarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
-  displayName: 'App Toolbar',
+  displayName: 'App Bar',
+  category: Aglyn.ComponentCategory.SURFACE,
   icon: {
     path: mdiPageLayoutHeader.path,
     sx: { color: '#2196f3' },
@@ -40,22 +42,21 @@ export const presets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(ID),
     type: Aglyn.NodeType.PRESET,
-    displayName: 'App Toolbar',
-    icon: {
-      path: mdiPageLayoutHeader.path,
-      sx: { color: '#2196f3' },
-    },
+    displayName: 'App Bar',
+    pluginId: BUNDLE_ID,
+    description: 'An app bar preset with the app bar and toolbar content nodes',
     category: Aglyn.ComponentCategory.SURFACE,
+    icon: schema.icon,
     data: {
       $id: null,
       componentId: ID,
       pluginId: BUNDLE_ID,
-      props: {
-        position: 'sticky',
-      },
       nodes: [
         {
-          ...toolbarPresets[0].data,
+          $id: null,
+          componentId: toolbarId,
+          pluginId: BUNDLE_ID,
+          props: {},
         },
       ],
     },

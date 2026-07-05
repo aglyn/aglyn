@@ -17,9 +17,8 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import '@aglyn/aglyn-plugin-mui'
 import * as Besigner from '@aglyn/besigner'
-import type { BesignerJsonEditorProps } from '@aglyn/besigner-json-editor'
+import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import {
   PropertiesDialogComponent,
   useAddElementDrawerCallback,
@@ -41,17 +40,24 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useScreenVersion } from '@aglyn/tenant-feature-instance'
+import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
+import { useHost, useScreenVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import { useParams } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import '../../../../../../../constants/app-setup'
+import {
+  previewWindowName,
+  writePreviewState,
+} from '../../../../../../../constants/preview-state'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
+
+registerLegacyMuiPlugin()
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -66,9 +72,9 @@ const ViewportCanvasComponent = dynamic<WorkspaceEditorComponentProps>(
   () => import('@aglyn/besigner-ui').then((mod) => mod.ViewportCanvasComponent),
   {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
-const BesignerJsonEditor = dynamic<BesignerJsonEditorProps>(
+const JsonEditor = dynamic<JsonEditorProps>(
   () =>
-    import('@aglyn/besigner-json-editor').then((mod) => mod.BesignerJsonEditor),
+    import('@aglyn/shared-ui-json-editor').then((mod) => mod.JsonEditor),
   {ssr: false, loading: () => LOADING_OVERLAY_ELEMENT},
 )
 
@@ -97,6 +103,7 @@ function BesignerPage(props) {
     screenId: screenId as string,
     versionId: versionId as string,
   })
+  const {doc: hostResult} = useHost({ hostId: hostId as string })
   const {doc: result, setDoc: updateScreen} = useScreenVersion({
     hostId: hostId as string,
     screenId: screenId as string,
@@ -115,8 +122,8 @@ function BesignerPage(props) {
 
   useEffect(() => {
     if (nodes && !Aglyn.canvas.didSetInitial) {
-      const updated = setLocalNodes(nodes)
-      Aglyn.canvas.updateInitialNodes(updated)
+      setLocalNodes(nodes)
+      Aglyn.canvas.updateInitialNodes()
     }
   }, [nodes])
 
@@ -130,9 +137,15 @@ function BesignerPage(props) {
     const dequeueLoading = queueLoading()
 
     const nodes = Aglyn.canvas.toJSON().nodes
-    await updateScreen({nodes: nodes}, {merge: true})
-      .then((...args) => {
-        console.log('updaye screen then promise', args)
+    const saveScreen = updateScreen as unknown as (
+      data: Partial<Aglyn.AglynScreenVersion>,
+      options?: Parameters<typeof updateScreen>[1],
+    ) => Promise<void>
+    await saveScreen(
+      {nodes: nodes as unknown as Aglyn.AglynScreenVersion['nodes']},
+      {merge: true},
+    )
+      .then(() => {
         Aglyn.canvas.updateInitialNodes(nodes)
         enqueueSnackbar('Canvas saved successfully', {
           variant: 'success',
@@ -153,23 +166,28 @@ function BesignerPage(props) {
   const [jsonOpen, setJsonOpen] = useState(false)
   const openJsonEditor = useCallback(() => setJsonOpen(true), [])
   const closeJsonEditor = useCallback(() => setJsonOpen(false), [])
+  const liveUrl = useMemo(() => {
+    const host = hostResult?.data
+    if (!host) return undefined
+    const domain =
+      host.cname || (host.subdomain ? `${host.subdomain}.aglyn.app` : undefined)
+    if (!domain) return undefined
+    const slug = host.screens?.[screenId]
+    if (slug == null) return undefined
+    return `https://${domain}/${slug === '/' ? '' : slug}`
+  }, [hostResult?.data, screenId])
+
+  const handlePreview = useCallback(() => {
+    const ids = { hostId, screenId, versionId }
+    writePreviewState(ids, Aglyn.canvas.toJSON().nodes)
+    window.open(buildRoute(Route.SCREEN_PREVIEW, ids), previewWindowName(ids))
+  }, [hostId, screenId, versionId])
+
   const handleJsonSave = useCallback((e, value) => {
-    setLocalNodes(value)
+    Aglyn.canvas.applyNodes(value)
     setJsonOpen(false)
   }, [])
 
-  useEffect(() => {
-    if (HAS_BROWSER()) {
-      console.log('page:/besigner app', Aglyn)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (HAS_BROWSER()) {
-      console.log('Besigner props.tenant,', props.tenant, props)
-      console.log('Besigner status screen,', status, data)
-    }
-  }, [props, data, status])
 
   useEffect(() => {
     if (hasError) {
@@ -241,7 +259,7 @@ function BesignerPage(props) {
                   </Typography>
                 ),
                 onClick: () =>
-                  handleAddElementClick(Besigner.focus.state.lastSelected),
+                  handleAddElementClick(Besigner.focus.getLastSelected()),
                 disabled: true,
                 ListItemTextProps: {inset: true},
               },
@@ -308,7 +326,11 @@ function BesignerPage(props) {
         <NextPageTitle screen={'Besigner'} />
 
         {error || notFound ? (
-          <Stack alignItems="center" justifyContent="center">
+          <Stack
+            sx={{
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
             <Typography>{'Not found'}</Typography>
           </Stack>
         ) : status === 'loading' ? (
@@ -318,6 +340,8 @@ function BesignerPage(props) {
             <BesignerAppBarComponent
               detailsUrl={detailUrl}
               onSave={handleSave}
+              onPreview={handlePreview}
+              liveUrl={liveUrl}
               onPropertiesEdit={() => setScreenDialog(true)}
               saveAvailable={saveAvailable}
             />
@@ -340,7 +364,7 @@ function BesignerPage(props) {
         }}
       />
       {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
-        <BesignerJsonEditor
+        <JsonEditor
           open={Boolean(Aglyn.canvas.rootNode && jsonOpen)}
           onClose={closeJsonEditor}
           onSave={handleJsonSave}
@@ -348,7 +372,7 @@ function BesignerPage(props) {
         />
       )}
     </>
-  )
+  );
 }
 
 BesignerPage.displayName = 'Page:Besigner'

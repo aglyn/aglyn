@@ -17,6 +17,7 @@
 
 import { ClickAwayListener, type ClickAwayListenerProps } from '@mui/material'
 import {
+  type MouseEvent as ReactMouseEvent,
   forwardRef,
   type HTMLAttributes,
   useCallback,
@@ -27,12 +28,12 @@ import { REASONS } from '../utils/constants'
 import useEventCallback from '../utils/useEventCallback'
 
 export interface SnackbarProps extends HTMLAttributes<HTMLDivElement> {
-  autoHideDuration?
+  autoHideDuration?: number | null
   ClickAwayListenerProps?: Partial<ClickAwayListenerProps>
   disableWindowBlurListener?: boolean
   resumeHideDuration?: number
   open?: boolean
-  onClose?
+  onClose?: (...args: any[]) => void
 }
 
 const Snackbar = forwardRef<any, SnackbarProps>((props, ref) => {
@@ -51,13 +52,13 @@ const Snackbar = forwardRef<any, SnackbarProps>((props, ref) => {
 
   const timerAutoHide = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  const handleClose = useEventCallback((...args) => {
+  const handleClose = useEventCallback((...args: any[]) => {
     if (onClose) {
       onClose(...args)
     }
   })
 
-  const setAutoHideTimer = useEventCallback((autoHideDurationParam) => {
+  const setAutoHideTimer = useEventCallback((autoHideDurationParam: number) => {
     if (!onClose || autoHideDurationParam == null) {
       return
     }
@@ -100,21 +101,21 @@ const Snackbar = forwardRef<any, SnackbarProps>((props, ref) => {
     }
   }, [autoHideDuration, resumeHideDuration, setAutoHideTimer])
 
-  const handleMouseEnter = (event) => {
+  const handleMouseEnter = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (onMouseEnter) {
       onMouseEnter(event)
     }
     handlePause()
   }
 
-  const handleMouseLeave = (event) => {
+  const handleMouseLeave = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (onMouseLeave) {
       onMouseLeave(event)
     }
     handleResume()
   }
 
-  const handleClickAway = (event) => {
+  const handleClickAway = (event: MouseEvent | TouchEvent) => {
     if (onClose) {
       onClose(event, REASONS.CLICKAWAY)
     }

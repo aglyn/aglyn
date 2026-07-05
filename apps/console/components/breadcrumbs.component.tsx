@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2023 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,44 +27,52 @@ import BreadcrumbItemComponent, {
   classKeys,
 } from './breadcrumb-item.component'
 
+
 const Breadcrumbs = styled(MuiBreadcrumbs, {
   name: 'AglynBreadcrumbs',
-})(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  minHeight: theme.spacing(4),
+})(({ theme }) => {
+  // In CSS vars mode theme.palette.* always returns the static light values;
+  // use (theme.vars || theme) so all palette refs become live CSS custom-property
+  // references that switch when the .dark class toggles on <html>.
+  const tv = (theme as any).vars || theme
 
-  [`& .${classKeys.item}`]: {
-    color: theme.palette.text.primary,
+  return {
     display: 'flex',
-    fontWeight: theme.typography.fontWeightRegular,
-    transition: theme.transitions.create('color', {
-      easing: theme.transitions.easing.easeInOut,
-      duration: theme.transitions.duration.leavingScreen,
-    }),
-    ':hover': {
+    alignItems: 'center',
+    minHeight: theme.spacing(4),
+
+    [`& .${classKeys.item}`]: {
+      color: tv.palette.text.primary,
+      display: 'flex',
+      fontWeight: theme.typography.fontWeightRegular,
       transition: theme.transitions.create('color', {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.shortest,
+        easing: theme.transitions.easing.easeInOut,
+        duration: theme.transitions.duration.leavingScreen,
       }),
+      ':hover': {
+        transition: theme.transitions.create('color', {
+          easing: theme.transitions.easing.sharp,
+          duration: theme.transitions.duration.shortest,
+        }),
+      },
+      [`&.${classKeys.last}, &.${classKeys.disabled}`]: {
+        fontWeight: theme.typography.fontWeightMedium,
+        textDecoration: 'none',
+        cursor: 'default',
+        pointerEvents: 'default',
+        color: tv.palette.text.secondary,
+      },
+      [`&.${classKeys.centered}`]: {
+        alignItems: 'center',
+      },
+      [`& .${classKeys.icon}`]: {
+        marginRight: theme.spacing(0.5),
+        width: 20,
+        height: 20,
+      },
     },
-    [`&.${classKeys.last}, &.${classKeys.disabled}`]: {
-      fontWeight: theme.typography.fontWeightMedium,
-      textDecoration: 'none',
-      cursor: 'default',
-      pointerEvents: 'default',
-      color: theme.palette.text.secondary,
-    },
-    [`&.${classKeys.centered}`]: {
-      alignItems: 'center',
-    },
-    [`& .${classKeys.icon}`]: {
-      marginRight: theme.spacing(0.5),
-      width: 20,
-      height: 20,
-    },
-  },
-}))
+  }
+})
 
 export interface BreadcrumbsProps extends MuiBreadcrumbsProps {
   items: BreadcrumbItemProps[]

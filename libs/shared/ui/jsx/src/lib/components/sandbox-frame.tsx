@@ -104,22 +104,22 @@ export const SandboxFrame = forwardRef<HTMLIFrameElement, SandboxFrameProps>(
       const instance = frameRef.current
       const styleInstance = styleRef.current
       if (instance) {
-        setState((prev) => ({
-          ...prev,
+        const nextState = {
+          ...state,
           ready: true,
           sandboxFrameDocument: instance.contentDocument,
           sandboxFrameWindow: instance.contentWindow,
-          /**
-           * Setup the stylesheets for JSS
-           */
           sheetsManager: new Map(),
           jss: create({
             plugins: [...jssPreset().plugins, rtl(), ...jssPlugins],
             insertionPoint: styleInstance,
           }),
-        }))
+        }
+        setState(nextState)
+        onContentDidMount && onContentDidMount(nextState)
+      } else {
+        onContentDidMount && onContentDidMount(state)
       }
-      onContentDidMount && onContentDidMount(state)
     }, [onContentDidMount, state, jssPlugins])
     const handleContentDidUpdate = useCallback(() => {
       const instance = frameRef.current

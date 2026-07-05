@@ -16,3 +16,4 @@
  */
 
 export * from './lib/fbserver'
+export { default } from './lib/fbserver'

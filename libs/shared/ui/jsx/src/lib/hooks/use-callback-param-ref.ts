@@ -16,7 +16,8 @@
  */
 import { RefObject, useEffect, useRef } from 'react'
 
-export function useCallbackParamRef<T extends (...args: unknown[]) => unknown>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useCallbackParamRef<T extends (...args: any[]) => any>(
   param: T,
 ): RefObject<T> {
   const callback = useRef<T>(param)

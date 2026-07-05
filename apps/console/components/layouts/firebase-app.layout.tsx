@@ -123,10 +123,8 @@ let connectedAuth = null
 
 function GetInnerLayout({ children }) {
   const app = useFirebaseApp()
-  console.log('[Firebase] app.options.apiKey present:', !!app?.options?.apiKey, '| projectId:', app?.options?.projectId)
   const auth = getAuth(app)
   const database = getDatabase(app)
-  let status
 
   if (!connectedFirestore) {
     try {
@@ -168,12 +166,6 @@ function GetInnerLayout({ children }) {
   }
   let appCheck
   try {
-    console.log('RECAPTCHA_API_KEY sitekey', RECAPTCHA_API_KEY)
-    console.log('process.env', process.env)
-    console.log(
-      'process.env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY',
-      process.env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY,
-    )
     appCheck = initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(RECAPTCHA_API_KEY),
       isTokenAutoRefreshEnabled: true,
@@ -186,10 +178,6 @@ function GetInnerLayout({ children }) {
     analytics = getAnalytics(app)
   } catch (error) {
     console.error(error)
-  }
-
-  if (status === 'loading') {
-    return <SplashScreen />
   }
 
   return (

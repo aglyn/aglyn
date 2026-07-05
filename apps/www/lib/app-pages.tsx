@@ -25,7 +25,7 @@ import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { usePathname } from 'next/navigation'
 import { type ComponentType, forwardRef } from 'react'
-import { Normalized } from './aglyn-deprecated'
+import { Normalized } from '@aglyn/shared-util-tools'
 
 type ID = string // The slug of the page excluding parent
 type Paths = ID[] // The paths to be used to join with a `/`

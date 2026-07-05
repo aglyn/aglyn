@@ -47,7 +47,7 @@ import {
 } from 'react'
 
 const ITEM_HEIGHT = 48
-const defaultState = {
+const defaultState: { anchorEl: Element; mouseX: number; mouseY: number } = {
   anchorEl: null,
   mouseX: null,
   mouseY: null,
@@ -128,8 +128,10 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
     'aria-expanded': open ? 'true' : 'false',
   })
 
-  const { PaperProps, ...menuProps } = MenuProps || ({} as any)
-  const { sx: paperSx, ...paperProps } = PaperProps || ({} as any)
+  // MUI v9: PaperProps → slotProps.paper. Accept both for backward compat.
+  const { PaperProps: legacyPaperProps, slotProps: menuSlotProps, ...menuProps } = MenuProps || ({} as any)
+  const resolvedPaperProps = legacyPaperProps ?? menuSlotProps?.paper ?? {}
+  const { sx: paperSx, ...paperProps } = resolvedPaperProps
   const arrowPlacement =
     horizontalOrigin === 'right'
       ? { right: 14 }
@@ -173,8 +175,8 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                 horizontal: horizontalOrigin || 'left',
               }
         }
-        PaperProps={
-          context
+        slotProps={{
+          paper: context
             ? undefined
             : {
                 elevation: 0,
@@ -201,8 +203,8 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                   paperSx,
                 ),
                 ...paperProps,
-              }
-        }
+              },
+        }}
         // getContentAnchorEl={null}
         open={open}
         onClose={handleClose}
@@ -264,17 +266,16 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                         )}
                       </ListItemIcon>
                     )}
-
                     <ListItemText {...ListItemTextProps}>
                       {children}
                     </ListItemText>
-
                     {!endIcon?.path || !endIcon ? null : (
                       <Typography
                         variant="body2"
-                        color="text.secondary"
                         {...EndIconTypographyProps}
-                      >
+                        sx={[{
+                          color: "text.secondary"
+                        }, ...(Array.isArray(EndIconTypographyProps?.sx) ? EndIconTypographyProps.sx : [EndIconTypographyProps?.sx])]}>
                         {!endIcon?.path ? (
                           endIcon
                         ) : (
@@ -283,13 +284,13 @@ export const Menu = forwardRef<any, MenuProps>((props, ref) => {
                       </Typography>
                     )}
                   </MuiMenuItem>
-                )
+                );
             }
           },
         )}
       </MuiMenu>
     </Box>
-  )
+  );
 })
 
 Menu.displayName = 'Menu'

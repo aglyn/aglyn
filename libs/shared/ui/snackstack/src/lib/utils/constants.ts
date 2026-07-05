@@ -29,8 +29,8 @@ import {
 
 
 export const allClasses: {
-  mui: Record<SnackbarClassKey, {}>;
-  container: Record<ContainerClassKey, {}>;
+  mui: Record<SnackbarClassKey, object>;
+  container: Record<ContainerClassKey, object>;
 } = {
   mui: {
     root: {},
@@ -85,12 +85,10 @@ export const originKeyExtractor = (anchor: Snack['anchorOrigin']): string => (
  * Omit SnackbarContainer class keys that are not needed for SnackbarItem
  */
 export const omitContainerKeys = (classes: SnackbarProviderProps['classes']): SnackbarItemProps['classes'] => (
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  Object.keys(classes).filter(key => !allClasses.container[key]).reduce((
-    obj,
+  (Object.keys(classes ?? {}).filter(key => !allClasses.container[key]).reduce((
+    obj: SnackbarItemProps['classes'],
     key,
-  ) => ({...obj, [key]: classes[key]}), {})
+  ) => ({...obj, [key]: (classes as Record<string, unknown>)[key]}), {} as SnackbarItemProps['classes']))
 )
 
 export const REASONS: {[key: string]: CloseReason} = {
@@ -115,8 +113,6 @@ const numberOrNull = (numberish?: number | null) => (
   typeof numberish === 'number' || numberish === null
 )
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
 export const merge = (options, props, defaults) => (name: keyof Snack): any => {
   if (name === 'autoHideDuration') {
     if (numberOrNull(options.autoHideDuration)) return options.autoHideDuration

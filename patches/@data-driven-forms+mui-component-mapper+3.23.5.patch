@@ -1,0 +1,130 @@
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js b/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js
+index 590c657..fa3a62c 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/esm/form-field-grid/form-field-grid.js
+@@ -21,8 +21,7 @@ var FormFieldGrid = function FormFieldGrid(_ref) {
+       props = _objectWithoutProperties(_ref, _excluded);
+ 
+   return /*#__PURE__*/React.createElement(StyledGrid, _extends({
+-    xs: 12,
+-    item: true,
++    size: { xs: 12 },
+     className: clsx(classes.grid, className)
+   }, props), children);
+ };
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/esm/sub-form/sub-form.js b/node_modules/@data-driven-forms/mui-component-mapper/esm/sub-form/sub-form.js
+index fa8e246..712f571 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/esm/sub-form/sub-form.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/esm/sub-form/sub-form.js
+@@ -35,23 +35,19 @@ var SubForm = function SubForm(_ref2) {
+       renderForm = _useFormApi.renderForm;
+ 
+   return /*#__PURE__*/React.createElement(StyledGrid, _extends({
+-    item: true,
+-    xs: 12,
++    size: { xs: 12 },
+     container: true,
+     className: classes.grid
+   }, rest), title && /*#__PURE__*/React.createElement(Grid, _extends({
+-    item: true,
+-    xs: 12
++    size: { xs: 12 }
+   }, TitleGridProps), /*#__PURE__*/React.createElement(Typography, _extends({
+     variant: "h5"
+   }, TitleProps), title)), description && /*#__PURE__*/React.createElement(Grid, _extends({
+-    item: true,
+-    xs: 12
++    size: { xs: 12 }
+   }, DescriptionGridProps), /*#__PURE__*/React.createElement(Typography, _extends({
+     paragraph: true
+   }, DescriptionProps), description)), /*#__PURE__*/React.createElement(Grid, _extends({
+-    item: true,
+-    xs: 12,
++    size: { xs: 12 },
+     container: true,
+     rowSpacing: 2
+   }, ItemsGridProps), renderForm(fields)));
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/esm/text-field/text-field.js b/node_modules/@data-driven-forms/mui-component-mapper/esm/text-field/text-field.js
+index d9c3070..9ba877c 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/esm/text-field/text-field.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/esm/text-field/text-field.js
+@@ -40,9 +40,11 @@ var TextField = function TextField(props) {
+     label: label,
+     placeholder: placeholder,
+     required: isRequired,
+-    inputProps: _objectSpread({
+-      readOnly: isReadOnly
+-    }, inputProps)
++    slotProps: {
++      input: _objectSpread({
++        readOnly: isReadOnly
++      }, inputProps)
++    }
+   }, rest)));
+ };
+ 
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js b/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js
+index 13f0e9c..8115e41 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/form-field-grid/form-field-grid.js
+@@ -37,8 +37,7 @@ var FormFieldGrid = function FormFieldGrid(_ref) {
+       className = _ref.className,
+       props = (0, _objectWithoutProperties2["default"])(_ref, _excluded);
+   return /*#__PURE__*/_react["default"].createElement(StyledGrid, (0, _extends2["default"])({
+-    xs: 12,
+-    item: true,
++    size: { xs: 12 },
+     className: (0, _clsx["default"])(classes.grid, className)
+   }, props), children);
+ };
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/sub-form/sub-form.js b/node_modules/@data-driven-forms/mui-component-mapper/sub-form/sub-form.js
+index 9d64776..1ba554d 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/sub-form/sub-form.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/sub-form/sub-form.js
+@@ -53,23 +53,19 @@ var SubForm = function SubForm(_ref2) {
+       renderForm = _useFormApi.renderForm;
+ 
+   return /*#__PURE__*/_react["default"].createElement(StyledGrid, (0, _extends2["default"])({
+-    item: true,
+-    xs: 12,
++    size: { xs: 12 },
+     container: true,
+     className: classes.grid
+   }, rest), title && /*#__PURE__*/_react["default"].createElement(_Grid["default"], (0, _extends2["default"])({
+-    item: true,
+-    xs: 12
++    size: { xs: 12 }
+   }, TitleGridProps), /*#__PURE__*/_react["default"].createElement(_Typography["default"], (0, _extends2["default"])({
+     variant: "h5"
+   }, TitleProps), title)), description && /*#__PURE__*/_react["default"].createElement(_Grid["default"], (0, _extends2["default"])({
+-    item: true,
+-    xs: 12
++    size: { xs: 12 }
+   }, DescriptionGridProps), /*#__PURE__*/_react["default"].createElement(_Typography["default"], (0, _extends2["default"])({
+     paragraph: true
+   }, DescriptionProps), description)), /*#__PURE__*/_react["default"].createElement(_Grid["default"], (0, _extends2["default"])({
+-    item: true,
+-    xs: 12,
++    size: { xs: 12 },
+     container: true,
+     rowSpacing: 2
+   }, ItemsGridProps), renderForm(fields)));
+diff --git a/node_modules/@data-driven-forms/mui-component-mapper/text-field/text-field.js b/node_modules/@data-driven-forms/mui-component-mapper/text-field/text-field.js
+index ed923e5..a2ba46e 100644
+--- a/node_modules/@data-driven-forms/mui-component-mapper/text-field/text-field.js
++++ b/node_modules/@data-driven-forms/mui-component-mapper/text-field/text-field.js
+@@ -58,9 +58,11 @@ var TextField = function TextField(props) {
+     label: label,
+     placeholder: placeholder,
+     required: isRequired,
+-    inputProps: _objectSpread({
+-      readOnly: isReadOnly
+-    }, inputProps)
++    slotProps: {
++      input: _objectSpread({
++        readOnly: isReadOnly
++      }, inputProps)
++    }
+   }, rest)));
+ };
+ 

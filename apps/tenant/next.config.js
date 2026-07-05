@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-var-requires, @nx/enforce-module-boundaries
 const withAglyn = require('../../with-aglyn.nextjs.config')
 
 // MARK – GLOBALS

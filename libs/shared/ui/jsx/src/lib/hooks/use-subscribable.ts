@@ -30,7 +30,7 @@ export interface Observable<T> {
   subscribe: (listener: (value: T) => void) => {
     unsubscribe: () => void
   }
-  pipe?(...args): any
+  pipe?(...args: any[]): any
 }
 
 export function useSubscribable<T>(
@@ -65,14 +65,14 @@ export function useSubscribable<
   const [value, update] = useState<T | U | undefined>(() => initialValue)
   const _dependencies = [...(dependencies || [])]
 
-  const mapUpdate = useCallback((newValue, prevValue) => {
+  const mapUpdate = useCallback((newValue: U, prevValue: T | U | undefined) => {
     if (_isFnT(mapValue)) return mapValue(newValue, prevValue as T) as T
     return newValue as U
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, _dependencies)
 
   useEffect(() => {
-    function handleChange(newValue) {
+    function handleChange(newValue: U) {
       update((prevValue) => {
         const value = mapUpdate(newValue, prevValue)
         if (isEqual(prevValue, value)) return prevValue

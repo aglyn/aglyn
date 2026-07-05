@@ -16,7 +16,12 @@
  */
 
 import { DoD } from '@aglyn/shared-data-types'
-import { MdiIcon, mdiPlus } from '@aglyn/shared-ui-jsx'
+import {
+  mdiPlus,
+} from '@aglyn/shared-data-mdi'
+import {
+  MdiIcon,
+} from '@aglyn/shared-ui-jsx'
 import { useCallback } from 'react'
 import { Components, FieldPreset } from '../lib/input-fields'
 import FormFields, { Props as FormFieldsProps } from './FormFields'
@@ -50,10 +55,10 @@ function FieldObjectProperty(props: ObjectPropertyProps) {
       value: property.type,
       items: DoD.FT.Tag.all.map(
         (sym: any) =>
-          ({
+          (({
             value: sym,
-            children: DoD.lbl[sym],
-          }) as any,
+            children: DoD.lbl[sym]
+          }) as any),
       ),
     },
   ]
@@ -89,7 +94,6 @@ function FieldObject(props: Props) {
     startIcon: <MdiIcon path={mdiPlus.path} />,
     children: 'Add',
     onClick: (e) => {
-      console.log('click')
       handleAddProperty(e)
     },
   }

@@ -27,6 +27,11 @@ export function arrayMoveAtIndex<K extends number & keyof T, T extends Array<U>,
   index: K | any,
   newIndex: K | any,
 ): T {
+  if (!Array.isArray(array)) {
+    throw new TypeError(
+      `arrayMoveAtIndex: expected an array but received ${array === null ? 'null' : typeof array}`,
+    )
+  }
   const item = array.splice(index, 1)[0]
   if (isNaN(newIndex)) array.push(item)
   else array.splice(newIndex, 0, item)

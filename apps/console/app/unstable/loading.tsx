@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-export default function Loading(props) {
-  // You can add any UI inside Loading, including a Skeleton.
-  console.log('loading props', props)
+export default function Loading() {
   return <div>loading...</div>
 }

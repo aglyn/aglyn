@@ -15,27 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  decode as msgpackDecode,
-  type DecoderOptions,
-  encode as msgpackEncode,
-  type EncoderOptions,
-} from '@msgpack/msgpack'
-import type { SplitUndefined } from '@msgpack/msgpack/src/context'
-import { FEATURE_FLAG } from './constants'
-
-export function encode<ContextType = undefined>(
-  value: unknown,
-  options?: EncoderOptions<SplitUndefined<ContextType>>,
-): Uint8Array {
-  return msgpackEncode(value, options)
-}
-export function decode<ContextType = undefined>(
-  buffer: ArrayLike<number> | BufferSource,
-  options?: DecoderOptions<SplitUndefined<ContextType>>,
-): unknown {
-  return msgpackDecode(buffer, options)
-}
+import { FEATURE_FLAG } from './foundation'
 
 export function _isFeatureExplicitlyDisabled(val: FEATURE_FLAG) {
   return Boolean(val === FEATURE_FLAG.DISABLED)

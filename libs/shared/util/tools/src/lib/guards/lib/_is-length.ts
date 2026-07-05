@@ -31,10 +31,10 @@ export function _isLength<T>(
   operator: ComparisonOperator = '===',
 ): boolean {
   if (typeof leftOperand !== 'undefined') {
-    const left = _isNum(leftOperand) ? leftOperand : leftOperand['length'] ?? 0
+    const left = _isNum(leftOperand) ? leftOperand : (leftOperand as any)['length'] ?? 0
     const right = _isNum(rightOperand)
       ? rightOperand
-      : rightOperand['length'] ?? 0
+      : (rightOperand as any)['length'] ?? 0
     return compare(left, right, operator)
   }
   return false

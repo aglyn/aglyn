@@ -19,7 +19,7 @@
 import { getDisplayName } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { useRouter } from 'next/router'
-import { type ComponentType, forwardRef, useEffect } from 'react'
+import { type ComponentType, forwardRef, type ReactNode, useEffect } from 'react'
 import {
   LoadingProviderComponent,
   useLoading,
@@ -27,12 +27,12 @@ import {
 import { NextRouterEvent } from '../hooks/router-events'
 import { LoadingModal, type LoadingModalProps } from './loading-modal'
 
-function RouterLoading({ children }) {
+function RouterLoading({ children }: { children: ReactNode }) {
   const router = useRouter()
   const { queueLoading } = useLoading()
   useEffect(() => {
-    const dequeue = []
-    const handleStart = (url) => {
+    const dequeue: ReturnType<typeof queueLoading>[] = []
+    const handleStart = (url: string) => {
       dequeue.push(queueLoading())
     }
     const handleStop = () => {

@@ -46,7 +46,7 @@ import {
   useFirestoreDocData,
   useUser,
 } from 'reactfire'
-import CardDisplay from '../../../components/card-display'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../components/card-display-form-template'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'

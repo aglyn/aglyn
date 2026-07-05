@@ -1,0 +1,47 @@
+{
+  "name": "shared-ui-json-editor",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/ui/json-editor/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:ui"],
+  "targets": {
+    "build": {
+      "executor": "@nx/rollup:rollup",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/ui/json-editor",
+        "tsConfig": "libs/shared/ui/json-editor/tsconfig.lib.json",
+        "project": "libs/shared/ui/json-editor/package.json",
+        "entryFile": "libs/shared/ui/json-editor/src/index.ts",
+        "external": ["react/jsx-runtime"],
+        "rollupConfig": [
+          "@nx/react/plugins/bundle-rollup",
+          "tools/rollup-external-packages.js",
+          "tools/rollup-suppress-use-client.js",
+          "tools/rollup-skip-typecheck.js"
+        ],
+        "compiler": "swc",
+        "skipTypeCheck": true,
+        "assets": [
+          {
+            "glob": "libs/shared/ui/json-editor/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ],
+        "updateBuildableProjectDepsInPackageJson": true
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+      "options": {
+        "jestConfig": "libs/shared/ui/json-editor/jest.config.ts"
+      }
+    }
+  }
+}

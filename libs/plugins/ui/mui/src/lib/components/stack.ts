@@ -16,22 +16,82 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiViewColumn, mdiViewSequential } from '@aglyn/shared-ui-jsx'
-import Stack from '@mui/material/Stack'
+import {
+  mdiViewColumn,
+  mdiViewSequential,
+} from '@aglyn/shared-data-mdi'
+import MuiStack, { type StackProps } from '@mui/material/Stack'
+import type { CSSProperties } from 'react'
+import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
-const ID: Aglyn.ComponentId = 'stack'
+// justifyContent/alignItems are no longer direct StackProps in MUI v6+; pass them through sx.
+type StackWithFlexProps = StackProps & {
+  justifyContent?: CSSProperties['justifyContent']
+  alignItems?: CSSProperties['alignItems']
+}
+
+const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
+  ({ justifyContent, alignItems, sx, ...props }, ref) =>
+    createElement(MuiStack, {
+      ref,
+      sx: [{ justifyContent, alignItems }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])],
+      ...props,
+    }),
+)
+
+// Component ids are persisted in screen documents; keep the legacy ids.
+export const ID: Aglyn.ComponentId = 'muiStack'
 
 export const schema: Aglyn.ComponentSchema = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Stack',
+  category: Aglyn.ComponentCategory.LAYOUT,
   icon: {
     path: mdiViewColumn.path,
     sx: { color: '#2196f3' },
   },
-  attributes: [],
+  attributes: [
+    {
+      name: 'direction',
+      label: 'Direction',
+      description:
+        'Defines the directional flow using the `flex-direction` style property. It is applied for all screen sizes.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: '', label: 'Default' },
+        { value: 'column', label: 'Column' },
+        { value: 'column-reverse', label: 'Column Reversed' },
+        { value: 'row', label: 'Row' },
+        { value: 'row-reverse', label: 'Row Reversed' },
+      ],
+    },
+    {
+      name: 'justifyContent',
+      label: 'Justify Content',
+      description:
+        'Defines how the browser distributes space between and around content items along the main-axis of the container.',
+      component: Aglyn.FieldComponentType.SELECT,
+      options: [
+        { value: '', label: 'Default' },
+        { value: 'flex-start', label: 'Flex Start' },
+        { value: 'center', label: 'Center' },
+        { value: 'flex-end', label: 'Flex End' },
+        { value: 'space-between', label: 'Space Between' },
+        { value: 'space-around', label: 'Space Around' },
+        { value: 'space-evenly', label: 'Space Evenly' },
+      ],
+    },
+    {
+      name: 'spacing',
+      label: 'Spacing',
+      description: 'Defines the space/gap between its immediate children.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      type: 'number',
+    },
+  ],
 }
 
 export const presets: Aglyn.PresetSchema[] = [
@@ -48,8 +108,7 @@ export const presets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: ID,
       pluginId: BUNDLE_ID,
-      props: {},
-      sx: { flexDirection: 'row' },
+      props: { direction: 'row' },
     },
   },
   {
@@ -65,8 +124,7 @@ export const presets: Aglyn.PresetSchema[] = [
       $id: null,
       componentId: ID,
       pluginId: BUNDLE_ID,
-      props: {},
-      sx: { flexDirection: 'column' },
+      props: { direction: 'column' },
     },
   },
 ]

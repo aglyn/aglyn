@@ -18,7 +18,7 @@
 import {
   mockDB,
   type TenantSite,
-} from '@aglyn/tenant-feature-instance/constants/mock-data'
+} from '@aglyn/tenant-feature-instance'
 import type { GetStaticPathsContext, GetStaticPathsResult } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
 

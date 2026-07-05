@@ -44,7 +44,7 @@ Index.layouts = [
   },
 ]
 
-export async function getServerSideProps(context) {
+export async function getServerSideProps(context: import('next').GetServerSidePropsContext) {
   return {
     redirect: {
       destination: '/hosts',

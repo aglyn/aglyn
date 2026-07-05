@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import DEFAULT_ICON from '@aglyn/shared-data-mdi/constants/default-icon'
+import { DEFAULT_ICON } from '@aglyn/shared-data-mdi'
 import useAsyncEffect from '../use-async-effect'
 import type * as MdiJs from '@mdi/js'
 import { useState } from 'react'

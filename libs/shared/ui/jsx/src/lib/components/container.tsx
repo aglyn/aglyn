@@ -21,8 +21,7 @@ import {
   Container as MuiContainer,
   type ContainerProps as MuiContainerProps,
 } from '@mui/material'
-// eslint-disable-next-line no-restricted-imports
-import type { Spacing } from '@mui/system/createTheme/createSpacing'
+import type { Spacing } from '@mui/system'
 
 export interface ContainerProps extends MuiContainerProps {
   gutterMode?: 'margin' | 'padding'

@@ -18,9 +18,7 @@
 import {createContext} from 'react'
 import type {ProviderContext} from './types'
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-export const SnackbarContext = createContext<ProviderContext>()
+export const SnackbarContext = createContext<ProviderContext>(null as unknown as ProviderContext)
 SnackbarContext.displayName = 'SnackbarContext'
 SnackbarContext.aglyn = true
 

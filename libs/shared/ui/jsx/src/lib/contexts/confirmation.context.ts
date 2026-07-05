@@ -50,7 +50,7 @@ export const DEFAULT_CONTEXT_CONFIG: ConfirmationContextConfig = {
   cancellationButtonProps: {},
 }
 
-export const buildConfirmationContextConfig = (defaultConfig, config) => {
+export const buildConfirmationContextConfig = (defaultConfig: ConfirmationContextConfig, config: ConfirmationContextConfig) => {
   const dialogProps = {
     ...(defaultConfig.dialogProps || DEFAULT_CONTEXT_CONFIG.dialogProps),
     ...(config.dialogProps || {}),

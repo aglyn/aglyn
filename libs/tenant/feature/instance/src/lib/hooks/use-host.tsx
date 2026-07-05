@@ -24,12 +24,13 @@ import {
 import { ReactFireOptions, useFirestore } from 'reactfire'
 import useDoc from './helpers/use-doc'
 
-export const useHostRef = ({ hostId }) => {
+export const useHostRef = ({ hostId }: { hostId: Aglyn.HostUid }) => {
   const firestore = useFirestore()
   const ref = doc(firestore, 'hosts', hostId)
   return ref.withConverter({
     toFirestore(data: Aglyn.AglynHost) {
-      return data
+      const { $id, ...rest } = data
+      return rest
     },
     fromFirestore(
       snapshot: DocumentSnapshot<Aglyn.AglynHost>,

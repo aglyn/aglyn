@@ -1,0 +1,45 @@
+{
+  "name": "besigner-core",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/besigner/core/src",
+  "projectType": "library",
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:data",
+    "scope:feature",
+    "aglyn:besigner"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/besigner/core",
+        "main": "libs/besigner/core/src/index.ts",
+        "tsConfig": "libs/besigner/core/tsconfig.lib.json",
+        "assets": [
+          "libs/besigner/core/*.md"
+        ]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/besigner/core"
+      ],
+      "options": {
+        "jestConfig": "libs/besigner/core/jest.config.ts",
+        "passWithNoTests": true
+      }
+    }
+  }
+}

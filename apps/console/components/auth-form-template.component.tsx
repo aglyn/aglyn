@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { AuthResultError } from '@aglyn/shared-data-enums'
 import {
   FormSpy,
   type FormTemplateRenderProps,
@@ -40,10 +41,12 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
         <Grid spacing={2} container>
           {formFields}
         </Grid>
-        <AuthErrorAlertComponent error={error as any} sx={{ mt: 2, mb: 1 }} />
+        <AuthErrorAlertComponent error={error as AuthResultError} sx={{ mt: 2, mb: 1 }} />
         <FormSpy>
           {({ submitting, pristine, valid }) => (
-            <Box mt={2}>
+            <Box sx={{
+              mt: 2
+            }}>
               <FormControl margin="normal" fullWidth>
                 <Button
                   color="secondary"
@@ -60,7 +63,7 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
           )}
         </FormSpy>
       </form>
-    )
+    );
   },
 )
 AuthFormTemplateComponent.displayName = 'AuthFormTemplateComponent'

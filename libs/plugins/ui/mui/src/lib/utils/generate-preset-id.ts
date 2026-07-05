@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ComponentId } from '@aglyn/core-data-foundation'
+import type { ComponentId } from '@aglyn/aglyn'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 export const generatePresetId = (

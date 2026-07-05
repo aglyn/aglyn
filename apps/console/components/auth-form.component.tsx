@@ -52,31 +52,34 @@ const AuthFormComponent = forwardRef<any, AuthFormProps>((props, ref) => {
     <Stack
       ref={ref}
       direction="column"
-      justifyContent="center"
-      alignItems="center"
-      textAlign="center"
       spacing={2}
-      maxWidth={1}
-      width={420}
       {...rest}
-    >
+      sx={[{
+        justifyContent: "center",
+        alignItems: "center",
+        textAlign: "center",
+        maxWidth: 1,
+        width: 420
+      }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
       <Paper variant="outlined" sx={{ p: 2, width: 420, maxWidth: 1 }}>
         <Stack
           direction="column"
-          justifyContent="center"
-          alignItems="center"
           spacing={1}
-          marginBottom={4}
-        >
+          sx={{
+            justifyContent: "center",
+            alignItems: "center",
+            marginBottom: 4
+          }}>
           {paperTop}
 
           <Stack
             direction="row"
-            justifyContent="center"
-            alignItems="center"
             spacing={1}
-            sx={{ pb: 3 }}
-          >
+            sx={{
+              justifyContent: "center",
+              alignItems: "center",
+              pb: 3
+            }}>
             <AglynLogoFull sx={{ fontSize: 100 }} />
           </Stack>
 
@@ -100,10 +103,9 @@ const AuthFormComponent = forwardRef<any, AuthFormProps>((props, ref) => {
 
         {children}
       </Paper>
-
       {paperAfter}
     </Stack>
-  )
+  );
 })
 AuthFormComponent.displayName = 'AuthFormComponent'
 AuthFormComponent.aglyn = true

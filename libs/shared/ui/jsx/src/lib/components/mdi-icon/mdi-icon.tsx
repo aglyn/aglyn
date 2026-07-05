@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import DEFAULT_ICON from '@aglyn/shared-data-mdi/constants/default-icon'
+import { DEFAULT_ICON } from '@aglyn/shared-data-mdi'
 import {
   SvgIcon as MuiSvgIcon,
   type SvgIconProps as MuiSvgIconProps,

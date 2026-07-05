@@ -15,25 +15,25 @@
  * limitations under the License.
  */
 
-import { Grid2, type Grid2Props } from '@mui/material'
+import { Grid, type GridProps } from '@mui/material'
 import { forwardRef } from 'react'
 
 /* eslint-disable-next-line */
 export interface GridItemsProps
-  extends Grid2Props,
+  extends GridProps,
     ReplaceKey<JSX.OverrideableComponentProps, 'component', 'itemComponent'> {
-  items: Grid2Props[]
+  items: GridProps[]
 }
 
 export const GridItems = forwardRef<any, GridItemsProps>((props, ref) => {
-  const { items = [], itemComponent: ItemComponent = Grid2, ...rest } = props
+  const { items = [], itemComponent: ItemComponent = Grid, ...rest } = props
 
   return (
-    <Grid2 ref={ref} container {...rest}>
-      {items.map((item, key) => (
-        <ItemComponent key={item?.key ?? item?.id ?? key} {...item} />
+    <Grid ref={ref} container {...rest}>
+      {items.map(({ key: itemKey, id, ...item }: GridProps & { id?: unknown }, index: number) => (
+        <ItemComponent key={itemKey ?? id ?? index} {...item} />
       ))}
-    </Grid2>
+    </Grid>
   )
 })
 

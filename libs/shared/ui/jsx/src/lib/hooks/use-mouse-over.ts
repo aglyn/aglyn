@@ -35,6 +35,7 @@ export function useMouseOver(): [
         node.removeEventListener('mouseout', handleMouseOut)
       }
     }
+    return undefined
   }, [])
   return [ref, value]
 }

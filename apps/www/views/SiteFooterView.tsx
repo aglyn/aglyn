@@ -61,7 +61,9 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
                       />
                       <br />
                       <br />
-                      <Box fontSize={16}>
+                      <Box sx={{
+                        fontSize: 16
+                      }}>
                         <strong>Mailing Address</strong>
                       </Box>
                       125 JOHNSTON LN
@@ -105,7 +107,7 @@ const SiteFooterView = forwardRef<HTMLDivElement, SiteFooterViewProps>(
           </Container>
         </Box>
       </FooterElement>
-    )
+    );
   },
 )
 

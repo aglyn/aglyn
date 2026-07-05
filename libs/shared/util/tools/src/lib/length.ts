@@ -22,7 +22,7 @@
  */
 export function length(val: unknown): number {
   if (val && (typeof val === 'object' || typeof val === 'string' || Array.isArray(val))) {
-    return val['length'] ?? 0
+    return (val as any)['length'] ?? 0
   }
   return 0
 }

@@ -82,9 +82,8 @@ export function SecondaryAppBarComponent(props: SecondaryAppBarProps) {
 
                 <Divider
                   orientation="vertical"
-                  sx={{ ml: 1.25, mr: 1 }}
+                  sx={{ ml: 1.25, mr: 1, opacity: 0.5 }}
                   flexItem
-                  light
                 />
               </Fragment>
             )}

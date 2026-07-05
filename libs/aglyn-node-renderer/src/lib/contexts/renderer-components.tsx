@@ -15,17 +15,27 @@
  * limitations under the License.
  */
 
-import { createContext, type RefAttributes } from 'react'
+import {
+  type ComponentType,
+  createContext,
+  type RefAttributes,
+} from 'react'
 import type { BranchProps } from '../components/branch'
 import type { LeafProps } from '../components/leaf'
 import type { StemProps } from '../components/stem'
 import type { TrunkProps } from '../components/trunk'
 
+// ComponentType unions cover both plain function components and the
+// FunctionComponent that mobx observer() returns when wrapping forwardRef.
+type RenderComponent<P> =
+  | ComponentType<P & RefAttributes<any>>
+  | JSX.ForwardRefExoticComponent<P & RefAttributes<any>>
+
 export interface RenderComponentsContext {
-  TrunkComponent: JSX.ForwardRefExoticComponent<TrunkProps & RefAttributes<any>>
-  StemComponent: JSX.ForwardRefExoticComponent<StemProps & RefAttributes<any>>
+  TrunkComponent: RenderComponent<TrunkProps>
+  StemComponent: RenderComponent<StemProps>
   BranchComponent: JSX.FunctionComponent<BranchProps>
-  LeafComponent: JSX.ForwardRefExoticComponent<LeafProps & RefAttributes<any>>
+  LeafComponent: RenderComponent<LeafProps>
 }
 export const RendererComponents = createContext<RenderComponentsContext>({
   TrunkComponent: null,

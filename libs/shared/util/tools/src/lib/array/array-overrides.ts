@@ -38,61 +38,71 @@ declare global {
 
 export {}
 
-if (!Array.prototype.$_cloneShallow) {
-  Array.prototype.$_cloneShallow = function <T>(this: Array<T>): Array<T> {
-    return arrayCopyShallow(this)
-  }
+/**
+ * Define all custom Array prototype methods with `enumerable: false`.
+ *
+ * WHY: Simple property assignment (`Array.prototype.foo = fn`) creates an ENUMERABLE property.
+ * MUI's `styleFunctionSx` iterates sx array objects with `for...in`, which walks the entire
+ * prototype chain and picks up any enumerable inherited properties — including our custom methods.
+ * It then calls them via `callIfFn(fn, theme)` WITHOUT a receiver, making `this === undefined`
+ * (strict-mode ES modules), which caused "arrayMoveAtIndex: expected an array but received undefined".
+ *
+ * Using `Object.defineProperty` with `enumerable: false` makes the methods invisible to
+ * `for...in`, `Object.keys`, and `JSON.stringify` while still accessible via direct calls
+ * and prototype chain lookups.
+ *
+ * ALSO: No guard (`if (!Array.prototype.$_xxx)`) so that Turbopack HMR re-evaluations always
+ * re-register the methods with fresh module bindings.
+ */
+function defineArrayMethod(name: string, fn: (...args: any[]) => any): void {
+  Object.defineProperty(Array.prototype, name, {
+    value: fn,
+    enumerable: false,   // ← invisible to for...in (fixes the MUI sx iteration bug)
+    writable: true,
+    configurable: true,  // ← allows HMR re-evaluation to overwrite
+  })
 }
-if (!Array.prototype.$_cloneDeep) {
-  Array.prototype.$_cloneDeep = function <T>(this: Array<T>): Array<T> {
-    return arrayCopyDeep(this)
-  }
-}
-if (!Array.prototype.$_moveAtIndex) {
-  Array.prototype.$_moveAtIndex = function <T>(
-    this: Array<T>,
-    index: number,
-    newIndex: number,
-  ): Array<T> {
-    return arrayMoveAtIndex(this, index, newIndex)
-  }
-}
-if (!Array.prototype.$_pushAtIndex) {
-  Array.prototype.$_pushAtIndex = function <T>(
-    this: Array<T>,
-    index: number,
-    ...elems: Array<T>
-  ): Array<T> {
-    return arrayPushAtIndex(this, index, ...elems)
-  }
-}
-if (!Array.prototype.$_removeItem) {
-  Array.prototype.$_removeItem = function <T>(
-    this: Array<T>,
-    elem: T,
-  ): Array<T> {
-    return arrayRemoveItem(this, elem)
-  }
-}
-if (!Array.prototype.$_removeAtIndex) {
-  Array.prototype.$_removeAtIndex = function <T>(
-    this: Array<T>,
-    index: number,
-  ): Array<T> {
-    return arrayRemoveAtIndex(this, index)
-  }
-}
-if (!Array.prototype.$_replaceAtIndex) {
-  Array.prototype.$_replaceAtIndex = function <T>(
-    this: Array<T>,
-    index: number,
-    elem: T,
-  ): Array<T> {
-    return arrayUpdateAtIndex(this, index, elem)
-  }
-}
-if (!Array.prototype.$_truthy) {
-  Array.prototype.$_truthy = function <T>(this: Array<T>): Array<T> {
-    return this.filter(Boolean)
-  }
-}
+
+defineArrayMethod('$_cloneShallow', function <T>(this: Array<T>): Array<T> {
+  return arrayCopyShallow(this)
+})
+
+defineArrayMethod('$_cloneDeep', function <T>(this: Array<T>): Array<T> {
+  return arrayCopyDeep(this)
+})
+
+defineArrayMethod('$_moveAtIndex', function <T>(
+  this: Array<T>,
+  index: number,
+  newIndex: number,
+): Array<T> {
+  return arrayMoveAtIndex(this, index, newIndex)
+})
+
+defineArrayMethod('$_pushAtIndex', function <T>(
+  this: Array<T>,
+  index: number,
+  ...elems: Array<T>
+): Array<T> {
+  return arrayPushAtIndex(this, index, ...elems)
+})
+
+defineArrayMethod('$_removeItem', function <T>(this: Array<T>, elem: T): Array<T> {
+  return arrayRemoveItem(this, elem)
+})
+
+defineArrayMethod('$_removeAtIndex', function <T>(this: Array<T>, index: number): Array<T> {
+  return arrayRemoveAtIndex(this, index)
+})
+
+defineArrayMethod('$_replaceAtIndex', function <T>(
+  this: Array<T>,
+  index: number,
+  elem: T,
+): Array<T> {
+  return arrayUpdateAtIndex(this, index, elem)
+})
+
+defineArrayMethod('$_truthy', function <T>(this: Array<T>): Array<T> {
+  return this.filter(Boolean)
+})
