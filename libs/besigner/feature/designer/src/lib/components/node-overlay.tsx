@@ -131,7 +131,11 @@ const NodeOverlay = observer(
         window.removeEventListener('resize', update)
         scrollContainer?.removeEventListener('scroll', update)
       }
-    }, [elementRef])
+      // node?.index changes when the node is reordered among siblings (e.g.
+      // "shift up"/"shift down"). Reordering moves the same DOM element to a
+      // new position without resizing it, so ResizeObserver won't catch it —
+      // this dependency forces a rect recompute when sibling order changes.
+    }, [elementRef, node?.index])
 
     const virtualElement = useMemo<() => VirtualElement>(() => {
       return () => ({
