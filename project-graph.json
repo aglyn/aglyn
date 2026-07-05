@@ -3199,8 +3199,8 @@
                 }
               },
               "defaultConfiguration": "production",
+              "cache": false,
               "parallelism": true,
-              "cache": true,
               "dependsOn": [
                 "^build"
               ],
@@ -3375,8 +3375,8 @@
                   "outputPath": "apps/tenant"
                 }
               },
+              "cache": false,
               "parallelism": true,
-              "cache": true,
               "dependsOn": [
                 "^build"
               ],
@@ -3486,8 +3486,8 @@
                   "outputPath": "apps/admin"
                 }
               },
+              "cache": false,
               "parallelism": true,
-              "cache": true,
               "dependsOn": [
                 "^build"
               ],
@@ -3711,8 +3711,8 @@
                   "outputPath": "apps/silo"
                 }
               },
+              "cache": false,
               "parallelism": true,
-              "cache": true,
               "dependsOn": [
                 "^build"
               ],
@@ -3799,8 +3799,8 @@
                   "outputPath": "apps/api"
                 }
               },
+              "cache": false,
               "parallelism": true,
-              "cache": true,
               "dependsOn": [
                 "^build"
               ],
@@ -3911,8 +3911,8 @@
                 }
               },
               "defaultConfiguration": "production",
+              "cache": false,
               "parallelism": true,
-              "cache": true,
               "dependsOn": [
                 "^build"
               ],

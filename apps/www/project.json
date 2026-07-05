@@ -3,11 +3,16 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/www",
   "projectType": "application",
-  "tags": ["scope:app", "scope:public"],
+  "tags": [
+    "scope:app",
+    "scope:public"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/apps/www"
       },
@@ -19,7 +24,8 @@
           "outputPath": "apps/www"
         }
       },
-      "defaultConfiguration": "production"
+      "defaultConfiguration": "production",
+      "cache": false
     },
     "serve": {
       "executor": "@nx/next:server",
@@ -48,14 +54,18 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/www"],
+      "outputs": [
+        "{workspaceRoot}/coverage/apps/www"
+      ],
       "options": {
         "jestConfig": "apps/www/jest.config.ts"
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
+      "outputs": [
+        "{options.outputFile}"
+      ]
     },
     "version": {
       "executor": "@jscutlery/semver:version",

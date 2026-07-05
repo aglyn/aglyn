@@ -3,11 +3,16 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/console",
   "projectType": "application",
-  "tags": ["scope:app", "scope:private"],
+  "tags": [
+    "scope:app",
+    "scope:private"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/apps/console"
       },
@@ -19,7 +24,8 @@
           "outputPath": "apps/console"
         }
       },
-      "defaultConfiguration": "production"
+      "defaultConfiguration": "production",
+      "cache": false
     },
     "serve": {
       "executor": "@nx/next:server",
@@ -48,14 +54,18 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": ["{workspaceRoot}/coverage/apps/console"],
+      "outputs": [
+        "{workspaceRoot}/coverage/apps/console"
+      ],
       "options": {
         "jestConfig": "apps/console/jest.config.ts"
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"]
+      "outputs": [
+        "{options.outputFile}"
+      ]
     },
     "version": {
       "executor": "@jscutlery/semver:version",

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "console",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nx", "serve", "console", "--prod"],
+      "port": 4200
+    }
+  ]
+}
