@@ -343,10 +343,15 @@ export class CanvasManager {
   })
 
   public makeNested = computedFn((node: NodeSchema<any>) => {
-    const newNode = toJS(node) as unknown as NodeSchemaNested<any>
+    // Serialize to a plain schema object: a toJS copy would carry the node's
+    // own toJSON arrow (bound to the live instance), which JSON.stringify
+    // would then prefer over the nested structure built here.
+    const newNode = (
+      node instanceof AglynNode ? node.toJSON() : { ...toJS(node) }
+    ) as unknown as NodeSchemaNested<any>
 
     const childNodes: NodeSchemaNested<any>[] = []
-    for (const childId of (newNode.nodes ||= []) as unknown as NodeId[]) {
+    for (const childId of (toJS(node.nodes) || []) as unknown as NodeId[]) {
       const child = this.getNode(childId)
       if (child) {
         const nested = this.makeNested(child)

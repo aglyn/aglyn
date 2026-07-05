@@ -192,4 +192,33 @@ describe('Aglyn: Screen Manager', () => {
       expect(canvas.isInitialSame).toBe(true)
     })
   })
+
+  describe('nestedNodes raw json', () => {
+    it('embeds full children through JSON.stringify instead of id refs', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+
+      const raw = JSON.parse(JSON.stringify(canvas.nestedNodes))
+
+      expect(raw.$id).toBe(NODE_ROOT_ID)
+      expect(raw.nodes).toHaveLength(2)
+      expect(raw.nodes[0].$id).toBe('child1')
+      expect(raw.nodes[1].$id).toBe('child2')
+      expect(raw.nodes[0].nodes[0].$id).toBe('child1-1')
+      expect(raw.nodes[0].nodes[1].$id).toBe('child1-2')
+    })
+
+    it('round-trips the nested raw json back into the flat node map', () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+
+      const raw = JSON.parse(JSON.stringify(canvas.nestedNodes))
+      const denormalized = canvas.processNodesToDenormalized(raw)
+
+      expect(Object.keys(denormalized).sort()).toEqual(
+        Object.keys(nodes).sort(),
+      )
+      expect(denormalized['child1'].nodes).toEqual(['child1-1', 'child1-2'])
+    })
+  })
 })
