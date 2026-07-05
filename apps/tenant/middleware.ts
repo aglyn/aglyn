@@ -54,7 +54,7 @@ export const config = {
     // '/(\\?\\!favicon.ico|robots.txt)',
     // '/(\\?\\!_next|_static|api)/:path*',
     // '/_sites/:path*',
-    '/((?!api|_next|fonts|examples|[\\\\w-]+\\\\.\\\\w+).*)',
+    '/((?!api|_next|_static|fonts|examples|[\\w-]+\\.\\w+).*)',
   ],
 }
 

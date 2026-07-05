@@ -87,7 +87,11 @@ export const screenVersionConverter: firebaseAdmin.firestore.FirestoreDataConver
         delete data['bundleId']
       }
       if (data?.nodes) {
-        data.nodes = decompress(data.nodes)
+        // Nodes saved while updateDoc bypassed the client converter are plain
+        // maps rather than compressed bytes; decode only binary payloads.
+        data.nodes = ArrayBuffer.isView(data.nodes)
+          ? decompress(data.nodes)
+          : data.nodes
       }
       data.$id = snapshot.id
       return data as Aglyn.AglynScreenVersion

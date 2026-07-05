@@ -79,7 +79,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (hostRes.error || !hostRes.host) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -99,7 +99,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (!Array.isArray(screenEntry)) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -116,7 +116,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (screenRes.error || !screenRes.screen) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -136,7 +136,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     if (versionRes.error || !versionRes.version) {
       return {
         notFound: true,
-        revalidate: 3600, // never=false, always=1, since=SECONDS
+        revalidate: 60, // never=false, always=1, since=SECONDS
       }
     }
 
@@ -171,7 +171,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     return {
       // props: {},
       notFound: true,
-      revalidate: 3600,
+      revalidate: 60,
     }
   }
 }

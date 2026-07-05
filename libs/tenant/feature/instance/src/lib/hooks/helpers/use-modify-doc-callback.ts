@@ -58,7 +58,14 @@ export function useModifyDocCallback<T>(
   const setDocCb = useSetDocCallback(ref)
   return useCallback(
     (data: UpdateData<T> | Partial<T>, options?: ModifyDocOptions) => {
-      if (options?.shouldSet) return setDocCb(data as Partial<T>, options)
+      // SetOptions semantics (merge/mergeFields) require setDoc: updateDoc
+      // ignores them and, critically, bypasses the ref's withConverter
+      // serialization (e.g. screen-version node compression).
+      const shouldSet =
+        options?.shouldSet ||
+        (options && 'merge' in options) ||
+        (options && 'mergeFields' in options)
+      if (shouldSet) return setDocCb(data as Partial<T>, options)
       return updateDocCb(data as UpdateData<T>)
     },
     [updateDocCb, setDocCb],
