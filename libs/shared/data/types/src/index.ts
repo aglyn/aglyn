@@ -17,6 +17,7 @@
 
 export * as DoD from './lib/dod'
 export * from './lib/crud'
+export * from './lib/host-theme'
 export * from './lib/initializable'
 export * from './lib/lifecycle'
 export * from './lib/normalized'
