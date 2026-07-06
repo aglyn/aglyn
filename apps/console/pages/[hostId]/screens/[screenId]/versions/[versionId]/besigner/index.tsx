@@ -40,11 +40,16 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import {
+  getGoogleFontsUrl,
+  HostThemeDocumentContext,
+} from '@aglyn/shared-ui-theme'
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
 import { useHost, useScreenVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
+import Head from 'next/head'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
@@ -171,6 +176,11 @@ function BesignerPage(props) {
     () => buildScreenLiveUrl(hostResult?.data, screenId),
     [hostResult?.data, screenId],
   )
+  const hostTheme = hostResult?.data?.theme
+  const hostFontsHref = useMemo(
+    () => getGoogleFontsUrl(hostTheme?.fonts),
+    [hostTheme?.fonts],
+  )
 
   const handlePreview = useCallback(() => {
     const ids = { hostId, screenId, versionId }
@@ -200,7 +210,18 @@ function BesignerPage(props) {
   }, [enqueueSnackbar, hasError, error, notFound])
 
   return (
-    <>
+    <HostThemeDocumentContext.Provider value={hostTheme}>
+      {hostFontsHref ? (
+        <Head>
+          <link
+            key="host-fonts-preconnect"
+            rel="preconnect"
+            href="https://fonts.gstatic.com"
+            crossOrigin="anonymous"
+          />
+          <link key="host-fonts" rel="stylesheet" href={hostFontsHref} />
+        </Head>
+      ) : null}
       <MainLayout
         title={'Besigner'}
         enableAppBarElevation
@@ -366,7 +387,7 @@ function BesignerPage(props) {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
-    </>
+    </HostThemeDocumentContext.Provider>
   );
 }
 
