@@ -147,6 +147,11 @@ function ScreenDetails(props) {
             href: buildRoute(Route.LAYOUT_LIST, { hostId }),
           },
           {
+            id: 'nav-tab-theme',
+            label: 'Theme',
+            href: buildRoute(Route.HOST_THEME, { hostId }),
+          },
+          {
             id: 'nav-tab-setup',
             label: 'Setup',
             href: buildRoute(Route.HOST_SETUP, { hostId }),
