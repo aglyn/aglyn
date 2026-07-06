@@ -48,7 +48,16 @@ export function useLayoutChromeCanvas(
     // global screen canvas — but backed by the real app: node getters reach
     // through store.aglyn.components to resolve component schemas.
     const canvas = new Aglyn.CanvasManager(Aglyn.aglyn)
-    canvas.setNodes(canvas.processNodesToDenormalized(layoutNodes))
+    const nodes = { ...(layoutNodes as Record<string, Aglyn.NodeSchema>) }
+    // Early seeds stored roots without $id, letting the canvas assign a
+    // random one — pin the root to its canonical id before loading.
+    if (nodes[Aglyn.NODE_ROOT_ID]) {
+      nodes[Aglyn.NODE_ROOT_ID] = {
+        ...nodes[Aglyn.NODE_ROOT_ID],
+        $id: Aglyn.NODE_ROOT_ID,
+      }
+    }
+    canvas.setNodes(canvas.processNodesToDenormalized(nodes))
     return canvas
   }, [layoutNodes])
 }
