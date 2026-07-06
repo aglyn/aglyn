@@ -193,12 +193,21 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
   }
 }
 
-// The canvas fills from an effect after the first render — observer makes
-// the page re-render when it does, instead of relying on an incidental
-// parent re-render to pick the root up.
 const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // const props = { data: exampleData }
   const nodes = props.nodes
+
+  // Fill the canvas DURING render, not only in an effect: the server
+  // otherwise emits an empty page (crawlers see nothing) and hydration
+  // mismatches. Safe on the shared server singleton because each render
+  // pass runs synchronously — the server always refills so a previous
+  // request's tree can't leak into this page. On the client only the very
+  // first render fills synchronously (matching the server HTML); later prop
+  // changes (client-side navigations) go through the effect below so
+  // mounted observers aren't invalidated mid-render.
+  if (nodes && (typeof window === 'undefined' || !Aglyn.canvas.rootNode)) {
+    Aglyn.canvas.setNodes(nodes)
+  }
 
   useEffect(() => {
     Aglyn.emitter.emit(Aglyn.AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
