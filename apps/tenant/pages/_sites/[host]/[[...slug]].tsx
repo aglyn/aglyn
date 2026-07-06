@@ -24,6 +24,7 @@ import type { ParsedUrlQuery } from 'querystring'
 import { useEffect } from 'react'
 import { useFirestore, useFirestoreDocData } from 'reactfire'
 import getHost from '../../../utils/get-host'
+import getPublishedLayoutVersion from '../../../utils/get-layout-version'
 import getScreen from '../../../utils/get-screen'
 import getScreenVersion from '../../../utils/get-screen-version'
 
@@ -142,11 +143,26 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
 
     /*==========================================
      *
+     * MARK - COMPOSE LAYOUT (SHARED CHROME)
+     *
+     *=========================================*/
+
+    const layoutId = screenRes.screen.layoutId
+    const layoutRes = layoutId
+      ? await getPublishedLayoutVersion({ hostId, layoutId })
+      : undefined
+    console.debug('layoutRes', layoutRes)
+
+    /*==========================================
+     *
      * MARK - FORMAT NODES
      *
      *=========================================*/
 
-    const nodes = versionRes.version.nodes
+    const nodes = Aglyn.composeLayoutAndScreenNodes(
+      layoutRes?.version?.nodes,
+      versionRes.version.nodes,
+    )
     const denormalized = Aglyn.canvas.processNodesToDenormalized(nodes)
 
     const props = {
