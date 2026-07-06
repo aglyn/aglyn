@@ -15,53 +15,66 @@
  * limitations under the License.
  */
 
+import type * as Aglyn from '@aglyn/aglyn'
 import { APP_CONSOLE, IS_PRODUCTION } from '@aglyn/shared-data-enums'
 import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
 import {
   consoleThemeDark,
   consoleThemeLight,
-  createWithThemeProvider,
+  getGoogleFontsUrl,
+  HostThemeDocumentContext,
+  HostThemeProvider,
 } from '@aglyn/shared-ui-theme'
 import { Fragment } from 'react'
 
 // enableStaticRendering(true)
-const withThemeProvider = createWithThemeProvider({
-  theme: [consoleThemeLight, consoleThemeDark],
-})
-
-const MainComponent = withThemeProvider((props: any) => {
-  const { children } = props
-
+const MainComponent = ({ children }: { children?: JSX.Children }) => {
   return (
-    <>
+    <HostThemeProvider fallback={[consoleThemeLight, consoleThemeDark]}>
       {children}
-      {/*<HostProvider>{children}</HostProvider>*/}
-    </>
+    </HostThemeProvider>
   )
-})
+}
 
 function _App<Props, Initial>(props: _AppProps<Props, Initial>) {
   const { headChildren, ...rest } = props
+  const host = (rest.pageProps as { data?: { host?: Aglyn.AglynHost } })?.data
+    ?.host
+  const hostTheme = host?.theme
+  const fontsHref = getGoogleFontsUrl(hostTheme?.fonts)
 
   return (
-    <_AppComponent
-      MainComponent={MainComponent}
-      meta={[
-        {
-          key: 'viewport',
-          name: 'viewport',
-          content: 'width=device-width, initial-scale=1',
-        },
-        { key: 'desc', name: 'description', content: APP_CONSOLE.DESCRIPTION },
-      ]}
-      headChildren={
-        <Fragment>
-          {!IS_PRODUCTION ? null : <Fragment></Fragment>}
-          {headChildren}
-        </Fragment>
-      }
-      {...rest}
-    />
+    <HostThemeDocumentContext.Provider value={hostTheme}>
+      <_AppComponent
+        MainComponent={MainComponent}
+        meta={[
+          {
+            key: 'viewport',
+            name: 'viewport',
+            content: 'width=device-width, initial-scale=1',
+          },
+          { key: 'desc', name: 'description', content: APP_CONSOLE.DESCRIPTION },
+        ]}
+        headChildren={
+          <Fragment>
+            {!IS_PRODUCTION ? null : <Fragment></Fragment>}
+            {fontsHref ? (
+              <Fragment>
+                <link
+                  key="host-fonts-preconnect"
+                  rel="preconnect"
+                  href="https://fonts.gstatic.com"
+                  crossOrigin="anonymous"
+                />
+                <link key="host-fonts" rel="stylesheet" href={fontsHref} />
+              </Fragment>
+            ) : null}
+            {headChildren}
+          </Fragment>
+        }
+        {...rest}
+      />
+    </HostThemeDocumentContext.Provider>
   )
 }
 _App.displayName = '_App'
