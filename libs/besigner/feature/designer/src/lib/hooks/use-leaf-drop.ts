@@ -28,6 +28,13 @@ const acceptAll = Object.values(Besigner.DragType)
 export function useLeafDrop(
   node: Aglyn.NodeSchema<any>,
   accept: Besigner.DragType[] = acceptAll,
+  /**
+   * Distinct surface rendering this droppable (tree, breadcrumbs, ...).
+   * Multiple surfaces register droppables for the same node simultaneously;
+   * without a discriminator their dnd-kit ids collide and the later mount
+   * evicts the earlier one from the registry, leaving dead drop targets.
+   */
+  area = 'leaf',
 ): ReturnType<typeof useDroppable> {
   // Disable the droppable for the node that is currently being dragged.
   // Without a DragOverlay the draggable element receives the CSS transform
@@ -38,7 +45,7 @@ export function useLeafDrop(
   const isBeingDragged = Besigner.dnd.isDraggingNode(node)
 
   return useDroppable({
-    id: `drop:${node?.$id}:${accept}`,
+    id: `drop:${area}:${node?.$id}:${accept}`,
     disabled: isBeingDragged,
     data: {
       accept,

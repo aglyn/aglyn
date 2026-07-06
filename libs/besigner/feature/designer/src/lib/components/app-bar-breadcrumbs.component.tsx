@@ -156,7 +156,11 @@ const BreadcrumbItem = observer((props: BreadcrumbItemProps) => {
   } = props
   const node = Aglyn.canvas.getNode($id)
   const isHovered = Besigner.focus.isNodeHovered(node)
-  const { setNodeRef: setDroppableNodeRef } = useLeafDrop(node)
+  const { setNodeRef: setDroppableNodeRef } = useLeafDrop(
+    node,
+    undefined,
+    'breadcrumbs',
+  )
 
   const handleClick = useCallback(
     (e) => {

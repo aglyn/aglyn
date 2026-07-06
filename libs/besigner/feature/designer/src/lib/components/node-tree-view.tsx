@@ -220,7 +220,11 @@ const NodeTreeItem = observer(
           opacity: 0.5,
         }
       : undefined
-    const { setNodeRef: setDroppableNodeRef, isOver } = useLeafDrop(node)
+    const { setNodeRef: setDroppableNodeRef, isOver } = useLeafDrop(
+      node,
+      undefined,
+      'tree',
+    )
 
     if (!node) return <>'Invalid node'</>
     return (

@@ -114,10 +114,13 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       onDragMove(event: DragMoveEvent): void {
         let region: Besigner.DropRegion = null
         if (event.over) {
+          // dnd-kit rects are viewport-relative; useMouse coords are
+          // document-relative — subtract the page scroll so region hit
+          // tests keep working when the page is scrolled.
           region = Besigner.determineDropRegion(
             event.over.rect,
-            mouse.docX,
-            mouse.docY,
+            mouse.docX - window.scrollX,
+            mouse.docY - window.scrollY,
           )
           event.over.data.current.region = region
         }
