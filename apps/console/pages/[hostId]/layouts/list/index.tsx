@@ -131,7 +131,11 @@ function Layouts(props) {
         createdAt: timestamp,
         updatedAt: timestamp,
         nodes: {
-          [CANVAS_ROOT_ELEMENT_ID]: { nodes: [slotNodeId] },
+          [CANVAS_ROOT_ELEMENT_ID]: {
+            $id: CANVAS_ROOT_ELEMENT_ID,
+            componentId: 'div',
+            nodes: [slotNodeId],
+          },
           [slotNodeId]: {
             $id: slotNodeId,
             componentId: LAYOUT_SLOT_COMPONENT_ID,
