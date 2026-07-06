@@ -261,6 +261,9 @@ export const AppBarBreadcrumbsComponent = forwardRef<
       sx={mergeSxProps(
         {
           top: 0,
+          // Stack above the canvas selection overlays (portaled, low z).
+          position: 'relative',
+          zIndex: 'appBar',
           borderBottomWidth: '1px',
           borderBottomStyle: 'solid',
           borderBottomColor: 'divider',
