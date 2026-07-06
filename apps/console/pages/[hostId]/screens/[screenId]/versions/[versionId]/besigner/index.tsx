@@ -255,9 +255,15 @@ function BesignerPage(props) {
 
   const handlePreview = useCallback(() => {
     const ids = { hostId, screenId, versionId }
-    writePreviewState(ids, Aglyn.canvas.toJSON().nodes)
+    // Preview what the site will render: the draft screen composed into its
+    // bound layout's published version.
+    const composed = Aglyn.composeLayoutAndScreenNodes(
+      layoutId ? (layoutVersionResult?.data?.nodes as any) : undefined,
+      Aglyn.canvas.toJSON().nodes as any,
+    )
+    writePreviewState(ids, composed)
     window.open(buildRoute(Route.SCREEN_PREVIEW, ids), previewWindowName(ids))
-  }, [hostId, screenId, versionId])
+  }, [hostId, screenId, versionId, layoutId, layoutVersionResult?.data?.nodes])
 
   const handleJsonSave = useCallback((e, value) => {
     Aglyn.canvas.applyNodes(value)
