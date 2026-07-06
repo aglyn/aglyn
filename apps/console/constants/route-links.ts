@@ -25,6 +25,7 @@ export enum Route {
   HOST_LIST = '/hosts',
   HOST_DASHBOARD = '/[hostId]',
   HOST_SETUP = '/[hostId]/setup',
+  HOST_THEME = '/[hostId]/theme',
   SCREEN_BESIGNER = '/[hostId]/screens/[screenId]/versions/[versionId]/besigner',
   SCREEN_DETAILS = '/[hostId]/screens/[screenId]/versions/[versionId]/view',
   SCREEN_PREVIEW = '/[hostId]/screens/[screenId]/versions/[versionId]/preview',
@@ -42,6 +43,7 @@ export interface RoutePayload extends Record<keyof any, any> {
     versionId: string
   }
   [Route.HOST_DASHBOARD]: { hostId: string }
+  [Route.HOST_THEME]: { hostId: string }
   [Route.SCREEN_DETAILS]: {
     hostId: string
     screenId: string
