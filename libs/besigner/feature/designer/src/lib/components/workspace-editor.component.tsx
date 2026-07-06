@@ -16,6 +16,7 @@
  */
 
 import * as Besigner from '@aglyn/besigner'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { LOADING_OVERLAY_ELEMENT, useMergeRefs } from '@aglyn/shared-ui-jsx'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import { _isFnT } from '@aglyn/shared-util-tools'
@@ -109,6 +110,8 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
 
     const localRef = useRef(null)
     const mouse = useMouse(localRef)
+    // Null-safe: surfaces render without a snackbar provider in tests.
+    const { enqueueSnackbar } = useSnackbar() ?? {}
 
     useDndMonitor({
       onDragMove(event: DragMoveEvent): void {
@@ -135,7 +138,12 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
       },
       onDragEnd(e: DragEndEvent) {
         e.activatorEvent.stopPropagation()
-        return Besigner.dnd.onDragEnd()
+        // Compute before completing the drag — onDragEnd clears dnd state.
+        const rejection = Besigner.dnd.describeDropRejection()
+        Besigner.dnd.onDragEnd()
+        if (rejection) {
+          enqueueSnackbar?.(rejection, { variant: 'warning', persist: false })
+        }
       },
     })
 

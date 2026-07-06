@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { type NodeId } from '@aglyn/aglyn'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback } from 'react'
 import {
   type ElementDrawerOptions,
@@ -38,6 +39,8 @@ type Response = (
 
 export function useAddElementDrawerCallback(): Response {
   const { elementDrawer } = useElementDrawerContext()
+  // Null-safe: surfaces render without a snackbar provider in tests.
+  const { enqueueSnackbar } = useSnackbar() ?? {}
 
   return useCallback(
     async (parent?: Aglyn.NodeSchema<any>, options?: ElementDrawerOptions) => {
@@ -49,6 +52,41 @@ export function useAddElementDrawerCallback(): Response {
         })
         .then((preset) => {
           const parentNode = parent || Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!
+
+          // Inserting follows the same lineal placement rules as dnd —
+          // without this, forbidden arrangements get created here that
+          // drag-and-drop then (correctly) refuses to move.
+          const itemSchema = Aglyn.components.getSchema(
+            preset?.data?.componentId,
+          )
+          const item: Besigner.LinealItem = {
+            componentId: preset?.data?.componentId,
+            pluginId: preset?.data?.pluginId,
+            restrictChildren: itemSchema?.restrictChildren,
+            restrictParent: itemSchema?.restrictParent,
+          }
+          const parentActor: Besigner.LinealItem = {
+            componentId: parentNode?.componentId,
+            pluginId: parentNode?.pluginId,
+            restrictChildren: parentNode?.componentSchema?.restrictChildren,
+            restrictParent: parentNode?.componentSchema?.restrictParent,
+          }
+          const [valid, reason] = Besigner.confirmValidLinealRelationship(
+            item,
+            parentActor,
+          )
+          if (!valid) {
+            enqueueSnackbar?.(
+              Besigner.describeInvalidLinealRelationship(
+                item,
+                parentActor,
+                reason,
+              ),
+              { variant: 'warning', persist: false },
+            )
+            return undefined
+          }
+
           const node = Aglyn.canvas.addNodeFromPreset(preset, parentNode, NaN)
 
           // const templateData = {
@@ -69,7 +107,7 @@ export function useAddElementDrawerCallback(): Response {
           if (typeof err !== 'string') console.error(err)
         })
     },
-    [elementDrawer],
+    [elementDrawer, enqueueSnackbar],
   )
 }
 
