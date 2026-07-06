@@ -20,6 +20,7 @@ import {
   DevicePreviewControlsComponent,
   HistoryControlsComponent,
   PanelControlsComponent,
+  SchemePreviewControlsComponent,
 } from '@aglyn/besigner-ui'
 import {
   ICON_VARIANT_APP_SETTINGS,
@@ -77,6 +78,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
           }}>
           <AddControlsComponent />
           <HistoryControlsComponent sx={{ flexGrow: 1 }} />
+          <SchemePreviewControlsComponent />
           <DevicePreviewControlsComponent />
           {/*<InteractControlsComponent />*/}
           <PanelControlsComponent />
