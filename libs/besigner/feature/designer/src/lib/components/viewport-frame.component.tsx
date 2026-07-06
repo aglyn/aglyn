@@ -131,16 +131,26 @@ EditableScreenRenderer.displayName = 'EditableScreenRenderer'
 
 /**
  * Leaf for the read-only layout chrome tree: the LayoutSlot renders the
- * editable screen canvas; everything else renders with the production Leaf,
- * which carries none of the designer's selection/dnd behavior — the chrome
- * is locked by construction.
+ * editable screen canvas after any chrome the designer left inside the slot
+ * (matching composition semantics); everything else renders with the
+ * production Leaf, which carries none of the designer's selection/dnd
+ * behavior — the chrome is locked by construction.
  */
 const LayoutChromeLeaf = forwardRef<any, any>((props, ref) => {
-  const { node, ...rest } = props
+  const { node, children, ...rest } = props
   if (node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID) {
-    return <EditableScreenRenderer />
+    return (
+      <Leaf ref={ref} node={node} {...rest}>
+        {children}
+        <EditableScreenRenderer />
+      </Leaf>
+    )
   }
-  return <Leaf ref={ref} node={node} {...rest} />
+  return (
+    <Leaf ref={ref} node={node} {...rest}>
+      {children}
+    </Leaf>
+  )
 })
 LayoutChromeLeaf.displayName = 'LayoutChromeLeaf'
 
