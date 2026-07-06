@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
+import { AglynNodeRenderer, Leaf } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
@@ -38,6 +38,7 @@ import {
   HTMLAttributes,
   useCallback,
 } from 'react'
+import { useLayoutChromeContext } from '../contexts/layout-chrome-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import NodeLeaf from './node-leaf'
@@ -120,9 +121,34 @@ const ThemedElementContainer = ({ children }) => {
   )
 }
 
+const EditableScreenRenderer = observer(() => (
+  <AglynNodeRenderer
+    node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!}
+    LeafComponent={NodeLeaf}
+  />
+))
+EditableScreenRenderer.displayName = 'EditableScreenRenderer'
+
+/**
+ * Leaf for the read-only layout chrome tree: the LayoutSlot renders the
+ * editable screen canvas; everything else renders with the production Leaf,
+ * which carries none of the designer's selection/dnd behavior — the chrome
+ * is locked by construction.
+ */
+const LayoutChromeLeaf = forwardRef<any, any>((props, ref) => {
+  const { node, ...rest } = props
+  if (node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID) {
+    return <EditableScreenRenderer />
+  }
+  return <Leaf ref={ref} node={node} {...rest} />
+})
+LayoutChromeLeaf.displayName = 'LayoutChromeLeaf'
+
 const SiteContainer = observer(
   forwardRef<any, SiteShadowDomProps>((props, ref) => {
     const { ...rest } = props
+    const { chromeCanvas } = useLayoutChromeContext()
+    const chromeRoot = chromeCanvas?.getNode(Aglyn.NODE_ROOT_ID)
     return (
       <SiteShadowDom
         ref={ref}
@@ -134,10 +160,14 @@ const SiteContainer = observer(
           {ViewportGlobalStyles}
           <ThemedElementContainer>
             <FramePaper>
-              <AglynNodeRenderer
-                node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!}
-                LeafComponent={NodeLeaf}
-              />
+              {chromeRoot ? (
+                <AglynNodeRenderer
+                  node={chromeRoot}
+                  LeafComponent={LayoutChromeLeaf}
+                />
+              ) : (
+                <EditableScreenRenderer />
+              )}
             </FramePaper>
           </ThemedElementContainer>
         </>

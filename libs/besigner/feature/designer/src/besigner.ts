@@ -29,6 +29,7 @@ export * from './lib/hooks/use-leaf-drop'
 
 export * from './lib/contexts/components-drawer-context.provider'
 export * from './lib/contexts/element-drawer-context'
+export * from './lib/contexts/layout-chrome-context'
 export * from './lib/contexts/rendered-canvas-elements'
 
 export * from './lib/components/accordion-list.component'
