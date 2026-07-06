@@ -36,7 +36,7 @@ import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, memo, type SyntheticEvent, useCallback, useEffect, useRef } from 'react'
+import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef } from 'react'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
 // Subscribes to form value changes via FormSpy and auto-submits when dirty.
@@ -132,7 +132,34 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const schema = node?.componentSchema
     const nodeProps = node?.props
     const deleteElementCallback = useDeleteElementCallback()
-    const attributes = schema?.attributes || []
+    const rawAttributes = schema?.attributes
+    // Screen-select fields can't carry static options (the host's screens
+    // are only known at edit time), so resolve them here from the routing
+    // map + labels the console provides via ScreenLinkContext.
+    const { screens, labels } = useContext(Aglyn.ScreenLinkContext)
+    const attributes = useMemo(
+      () =>
+        (rawAttributes ?? []).map((field) =>
+          field.component === Aglyn.FieldComponentType.SCREEN_SELECT
+            ? {
+                ...field,
+                component: Aglyn.FieldComponentType.SELECT,
+                options: [
+                  { value: '', label: 'None (use external URL)' },
+                  ...Object.entries(screens ?? {})
+                    .sort(([, a], [, b]) => a.localeCompare(b))
+                    .map(([screenId, path]) => ({
+                      value: screenId,
+                      label: `${labels?.[screenId] ?? screenId} (${
+                        path === '/' ? '/' : `/${path}`
+                      })`,
+                    })),
+                ],
+              }
+            : field,
+        ),
+      [rawAttributes, screens, labels],
+    )
 
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(

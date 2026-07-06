@@ -37,6 +37,8 @@ import {
 
 registerLegacyMuiPlugin()
 
+const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
+
 function ScreenPreviewPage() {
   const params = useParams<{
     hostId: string
@@ -118,7 +120,13 @@ function ScreenPreviewPage() {
       ) : null}
       <CssBaseline enableColorScheme />
       <NextPageTitle screen={'Screen Preview'} />
-      {root ? <AglynNodeRenderer node={root} /> : null}
+      {root ? (
+        // Preview renders draft state outside the tenant site: screen links
+        // show their content but must not navigate the console origin.
+        <Aglyn.ScreenLinkContext.Provider value={SUPPRESSED_SCREEN_LINKS}>
+          <AglynNodeRenderer node={root} />
+        </Aglyn.ScreenLinkContext.Provider>
+      ) : null}
     </ThemeProvider>
   )
 }

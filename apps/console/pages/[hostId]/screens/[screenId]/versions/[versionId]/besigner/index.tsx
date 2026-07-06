@@ -475,6 +475,23 @@ function BesignerPage(props) {
     setJsonOpen(false)
   }, [])
 
+  // Id-based screen links: the canvas resolves hrefs from the live routing
+  // map (rendered, never navigable in the editor), and the Attributes panel
+  // uses the same context to list screens in the screen-select field.
+  const screenLinks = useMemo(
+    () => ({
+      screens: routingMap,
+      labels: Object.fromEntries(
+        Object.entries(screensById).map(([id, screen]) => [
+          id,
+          screen?.displayName ?? id,
+        ]),
+      ),
+      suppressNavigation: true,
+    }),
+    [routingMap, screensById],
+  )
+
 
   useEffect(() => {
     if (hasError) {
@@ -493,6 +510,7 @@ function BesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
+    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
       {hostFontsHref ? (
         <Head>
           <link
@@ -789,6 +807,7 @@ function BesignerPage(props) {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
+    </Aglyn.ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   );
 }

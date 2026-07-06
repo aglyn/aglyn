@@ -176,6 +176,11 @@ export enum FieldComponentType {
   INPUT_ADDON_GROUP = 'input-addon-group',
   PLAIN_TEXT = 'plain-text',
   RADIO = 'radio',
+  /**
+   * Select listing the host's screens; the editor resolves the options from
+   * the host routing map at render time and writes the chosen screen id.
+   */
+  SCREEN_SELECT = 'screen-select',
   SELECT = 'select',
   SLIDER = 'slider',
   SUB_FORM = 'sub-form',

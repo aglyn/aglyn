@@ -43,6 +43,8 @@ import {
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
 import { useHost, useLayoutVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
+import { collection, limit, query } from 'firebase/firestore'
+import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
@@ -95,6 +97,30 @@ function LayoutBesignerPage(props) {
   const handleAddElementClick = useAddElementDrawerCallback()
   const listUrl = buildRoute(Route.LAYOUT_LIST, { hostId })
   const { doc: hostResult } = useHost({ hostId })
+  // Id-based screen links: a layout's appbar is exactly where by-id links
+  // live, so the canvas needs the routing map to resolve hrefs and the
+  // Attributes panel needs screen names for the screen-select field.
+  const firestore = useFirestore()
+  const screensQuery = query(
+    collection(firestore, 'hosts', hostId, 'screens'),
+    limit(200),
+  )
+  const { data: screenDocs } = useFirestoreCollectionData<any>(screensQuery, {
+    idField: '$id',
+  })
+  const screenLinks = useMemo(
+    () => ({
+      screens: hostResult?.data?.screens as Record<string, string> | undefined,
+      labels: Object.fromEntries(
+        (screenDocs ?? []).map((screen: any) => [
+          screen.$id,
+          screen.displayName ?? screen.$id,
+        ]),
+      ),
+      suppressNavigation: true,
+    }),
+    [hostResult?.data?.screens, screenDocs],
+  )
   const { doc: result, setDoc: updateLayoutVersion } = useLayoutVersion({
     hostId,
     layoutId,
@@ -212,6 +238,7 @@ function LayoutBesignerPage(props) {
 
   return (
     <HostThemeDocumentContext.Provider value={hostTheme}>
+    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
       {hostFontsHref ? (
         <Head>
           <link
@@ -338,6 +365,7 @@ function LayoutBesignerPage(props) {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
+    </Aglyn.ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>
   )
 }

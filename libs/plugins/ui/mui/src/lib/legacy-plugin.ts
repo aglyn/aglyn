@@ -23,6 +23,7 @@ import * as LayoutSlot from './components/layout-slot'
 import * as List from './components/list'
 import * as ListItem from './components/list-item'
 import * as ListItemText from './components/list-item-text'
+import * as ScreenLink from './components/screen-link'
 import * as Stack from './components/stack'
 import * as Toolbar from './components/toolbar'
 import * as Typography from './components/typography'
@@ -56,6 +57,10 @@ export function registerLegacyMuiPlugin(): void {
         ListItemText.default,
         ListItemText.schema,
       )
+      Aglyn.components.registerComponent(
+        ScreenLink.default,
+        ScreenLink.schema,
+      )
       Aglyn.components.registerComponent(Stack.default, Stack.schema)
 
       Aglyn.components.registerPreset(AppBar.presets)
@@ -67,6 +72,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(List.presets)
       Aglyn.components.registerPreset(ListItem.presets)
       Aglyn.components.registerPreset(ListItemText.presets)
+      Aglyn.components.registerPreset(ScreenLink.presets)
       Aglyn.components.registerPreset(Stack.presets)
     },
     destroy(): void {
@@ -79,6 +85,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterPreset(List.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ListItem.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ListItemText.presets.map((i) => i.$id))
+      Aglyn.components.unregisterPreset(ScreenLink.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Stack.presets.map((i) => i.$id))
 
       Aglyn.components.unregisterComponent(AppBar.ID)
@@ -90,6 +97,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterComponent(List.ID)
       Aglyn.components.unregisterComponent(ListItem.ID)
       Aglyn.components.unregisterComponent(ListItemText.ID)
+      Aglyn.components.unregisterComponent(ScreenLink.ID)
       Aglyn.components.unregisterComponent(Stack.ID)
     },
   })

@@ -6,6 +6,7 @@ import { schema as layoutSlot } from './components/layout-slot'
 import { schema as list } from './components/list'
 import { schema as listItem } from './components/list-item'
 import { schema as listItemText } from './components/list-item-text'
+import { schema as screenLink } from './components/screen-link'
 import { schema as stack } from './components/stack'
 import { schema as toolbar } from './components/toolbar'
 import { schema as typography } from './components/typography'
@@ -22,6 +23,7 @@ const PERSISTED_COMPONENT_IDS = [
   'muiList',
   'muiListItem',
   'muiListItemText',
+  'muiScreenLink',
   'muiStack',
   'muiToolbar',
   'muiTypography',
@@ -47,6 +49,7 @@ describe('plugins-ui-mui', () => {
       list,
       listItem,
       listItemText,
+      screenLink,
       stack,
       toolbar,
       typography,

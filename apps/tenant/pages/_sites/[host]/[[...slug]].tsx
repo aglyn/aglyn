@@ -22,7 +22,7 @@ import { doc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import type { GetStaticPaths, GetStaticProps } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useFirestore, useFirestoreDocData } from 'reactfire'
 import getHost from '../../../utils/get-host'
 import getPublishedLayoutVersion from '../../../utils/get-layout-version'
@@ -204,10 +204,15 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     Aglyn.emitter.emit(Aglyn.AglynEvent.NODE_SET_ITEMS, { nodes: nodes })
   }, [nodes])
 
+  // Id-based screen links resolve against this routing map at render time;
+  // ISR keeps it current (slug renames show up on the next revalidate).
+  const screens = props.data?.host?.screens
+  const screenLinks = useMemo(() => ({ screens }), [screens])
+
   return (
-    <>
+    <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
-    </>
+    </Aglyn.ScreenLinkContext.Provider>
   )
 })
 
