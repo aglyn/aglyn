@@ -3,6 +3,10 @@
 
 name: Deploy to Firebase Hosting on PR
 'on': pull_request
+# The Nx Cloud org is disabled (free-plan quota); with an access token
+# present, nx hard-fails CI at authorization before running any task.
+env:
+  NX_NO_CLOUD: 'true'
 jobs:
   build_and_preview:
     if: '${{ github.event.pull_request.head.repo.full_name == github.repository }}'
@@ -10,8 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: npm ci && npm run build
-      - run: npx nx fix-ci
-        if: always()
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'

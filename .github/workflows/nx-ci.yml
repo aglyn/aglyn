@@ -6,6 +6,11 @@ on:
       - main
   pull_request:
 
+# The Nx Cloud org is disabled (free-plan quota); with an access token
+# present, nx hard-fails CI at authorization before running any task.
+env:
+  NX_NO_CLOUD: 'true'
+
 jobs:
   main:
     runs-on: ubuntu-latest
@@ -24,6 +29,3 @@ jobs:
       - uses: nrwl/nx-set-shas@v4
 
       - run: npx nx affected -t lint test build --parallel=3
-
-      - run: npx nx fix-ci
-        if: always()
