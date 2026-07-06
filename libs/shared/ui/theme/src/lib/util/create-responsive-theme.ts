@@ -41,6 +41,8 @@ function getContrastTextColor(background: string, contrastThreshold: number) {
     : ContrastText.LIGHT
 }
 function addShade(paletteColor: PaletteColor, shade: string, variant: string | undefined, tonalOffset: number | { light?: number; dark?: number }) {
+  // Custom palette colors (tertiary, surface) are optional in host themes.
+  if (!paletteColor?.main) return
   const offsetObj = typeof tonalOffset === 'number' ? undefined : tonalOffset
   const offsetNum = typeof tonalOffset === 'number' ? tonalOffset : undefined
   const tonalOffsetLight = offsetObj?.light ?? offsetNum ?? 0.2
