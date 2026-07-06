@@ -44,9 +44,10 @@ export function useLayoutChromeCanvas(
 ): Aglyn.CanvasManager | undefined {
   return useMemo(() => {
     if (!layoutNodes) return undefined
-    // Detached from the app: this store only feeds the renderer; edits,
-    // history, and persistence all stay on the global screen canvas.
-    const canvas = new Aglyn.CanvasManager(undefined as any)
+    // Separate store instance so edits, history, and persistence stay on the
+    // global screen canvas — but backed by the real app: node getters reach
+    // through store.aglyn.components to resolve component schemas.
+    const canvas = new Aglyn.CanvasManager(Aglyn.aglyn)
     canvas.setNodes(canvas.processNodesToDenormalized(layoutNodes))
     return canvas
   }, [layoutNodes])
