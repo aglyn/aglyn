@@ -324,19 +324,8 @@ function BesignerPage(props) {
   // Routing entries for this screen plus all descendants under a candidate
   // screens map; null removes entries whose chain no longer resolves.
   const buildRouteEntries = useCallback(
-    (byId: Record<string, Aglyn.ScreenRouteNode | undefined>) => {
-      const entries: Record<string, string | null> = {}
-      const ids = [
-        screenId,
-        ...Aglyn.collectScreenDescendantIds(screenId, byId),
-      ]
-      for (const id of ids) {
-        const path = Aglyn.composeScreenRoutePath(id, byId)
-        if (path) entries[id] = path
-        else if (routingMap?.[id] !== undefined) entries[id] = null
-      }
-      return entries
-    },
+    (byId: Record<string, Aglyn.ScreenRouteNode | undefined>) =>
+      Aglyn.buildScreenRouteEntries(screenId, byId, routingMap),
     [screenId, routingMap],
   )
 
