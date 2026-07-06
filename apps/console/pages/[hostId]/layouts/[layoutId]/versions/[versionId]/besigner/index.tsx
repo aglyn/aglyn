@@ -123,6 +123,16 @@ function LayoutBesignerPage(props) {
     }
   }, [])
 
+  // The canvas is a singleton shared by every editing session; without a
+  // reset on leave, client-side navigation to a screen or another layout
+  // keeps (and could save) this document's nodes.
+  useEffect(() => {
+    return () => {
+      Aglyn.canvas.reset()
+      Besigner.focus.clearFocusStatus()
+    }
+  }, [hostId, layoutId, versionId])
+
   useEffect(() => {
     if (status === 'loading') {
       return queueLoading()

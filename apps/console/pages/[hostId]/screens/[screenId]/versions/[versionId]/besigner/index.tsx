@@ -155,6 +155,16 @@ function BesignerPage(props) {
   const hasError = Boolean(error) || status === 'error'
   const notFound = status === 'success' && !data
 
+  // The canvas is a singleton shared by every editing session; without a
+  // reset on leave, client-side navigation to another screen or a layout
+  // keeps (and could save) this document's nodes.
+  useEffect(() => {
+    return () => {
+      Aglyn.canvas.reset()
+      Besigner.focus.clearFocusStatus()
+    }
+  }, [hostId, screenId, versionId])
+
   useEffect(() => {
     if (status === 'loading') {
       return queueLoading()
