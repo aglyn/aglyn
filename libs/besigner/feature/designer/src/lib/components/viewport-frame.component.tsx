@@ -84,7 +84,15 @@ const FramePaper = styled('div', {
 })<SiteShadowDomProps>(({ theme }) => {
   const tv = (theme as any).vars || theme
   return {
+    // CssBaseline styles the document body, which a closed shadow root never
+    // sees (and `:host { all: initial }` resets inheritance), so this surface
+    // carries the body-level baseline itself.
+    ...theme.typography.body1,
+    color: tv.palette.text.primary,
     backgroundColor: tv.palette.background.default,
+    colorScheme: theme.palette.mode,
+    WebkitFontSmoothing: 'antialiased',
+    MozOsxFontSmoothing: 'grayscale',
     height: '100%',
     width: '100%',
     [`> [data-aglyn="leaf\\:_@_"]`]: {
