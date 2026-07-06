@@ -17,7 +17,12 @@
 'use client'
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
-import { createResourceUid } from '@aglyn/aglyn'
+import {
+  createResourceUid,
+  findScreenIdByRoutePath,
+  normalizeScreenSlug,
+  screenRoutePathToUrl,
+} from '@aglyn/aglyn'
 import {
   ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,
@@ -43,6 +48,7 @@ import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   doc,
+  getDoc,
   limit,
   query,
   setDoc,
@@ -59,6 +65,10 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../constants/route-links'
+import {
+  publishScreenRoute,
+  unpublishScreenRoute,
+} from '../../../../constants/screen-publishing'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_ROW_HEIGHT,
@@ -112,8 +122,27 @@ function Screens(props) {
       const newId = createResourceUid()
       const newVersionId = createResourceUid()
       const timestamp = Timestamp.now()
+      const { slug: slugInput, ...fields } = values
+
+      // Publishing is what makes the screen reachable: the tenant matches
+      // request paths against the host's `screens` routing map, so the slug
+      // must both live on the screen doc and be registered in that map.
+      const path = normalizeScreenSlug(slugInput)
+      if (path) {
+        const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
+        const owner = findScreenIdByRoutePath(hostSnapshot.get('screens'), path)
+        if (owner) {
+          dequeueLoading()
+          return enqueueSnackbar(
+            `Another screen is already published at ${screenRoutePathToUrl(path)}`,
+            { variant: 'warning', persist: false },
+          )
+        }
+      }
+
       const newValues = {
-        ...values,
+        ...fields,
+        ...(path && { slug: path }),
         versionId: newVersionId,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -145,6 +174,11 @@ function Screens(props) {
           newVersionValue,
         ),
       ])
+        .then(() =>
+          path
+            ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
+            : undefined,
+        )
         .catch((error) => {
           console.error(error)
           setError({ ...error })
@@ -183,16 +217,21 @@ function Screens(props) {
           dequeueLoading = queueLoading()
         })
         .then(() =>
-          updateDoc(doc(firestore, 'hosts', hostId, 'screens', id), {
-            deletedAt: Timestamp.now(),
-          }),
+          Promise.all([
+            updateDoc(doc(firestore, 'hosts', hostId, 'screens', id), {
+              deletedAt: Timestamp.now(),
+            }),
+            // A deleted screen must leave the routing map or its path keeps
+            // resolving (then 404s deep in the tenant render).
+            unpublishScreenRoute(firestore, { hostId, screenId: id }),
+          ]),
         )
         .catch(() => {})
         .finally(() => {
           dequeueLoading && dequeueLoading()
         })
     },
-    [confirm, firestore, queueLoading],
+    [confirm, firestore, hostId, queueLoading],
   )
 
   const columns: GridColDef[] = [
@@ -232,6 +271,14 @@ function Screens(props) {
       headerName: 'Display name',
       minWidth: 220,
       type: 'string',
+    },
+    {
+      field: 'slug',
+      headerName: 'Path',
+      minWidth: 140,
+      type: 'string',
+      valueFormatter: ({ value }: any) =>
+        value ? screenRoutePathToUrl(value) : '--',
     },
     {
       field: 'description',
@@ -419,6 +466,21 @@ const formSchema = {
           type: 'max-length',
           threshold: 80,
           message: 'Must not exceed 80 characters',
+        },
+      ],
+    },
+    {
+      component: 'text-field',
+      name: 'slug',
+      type: 'text',
+      label: 'Slug',
+      helperText:
+        'Path the screen is served at on your site ("/" for the home page). Leave empty to keep it unpublished.',
+      validate: [
+        {
+          type: 'max-length',
+          threshold: 60,
+          message: 'Must not exceed 60 characters',
         },
       ],
     },

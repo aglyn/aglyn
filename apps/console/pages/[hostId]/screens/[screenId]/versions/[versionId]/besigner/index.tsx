@@ -78,6 +78,10 @@ import {
   writePreviewState,
 } from '../../../../../../../constants/preview-state'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
+import {
+  publishScreenRoute,
+  unpublishScreenRoute,
+} from '../../../../../../../constants/screen-publishing'
 import { buildScreenLiveUrl } from '../../../../../../../constants/tenant-links'
 
 registerLegacyMuiPlugin()
@@ -262,6 +266,55 @@ function BesignerPage(props) {
     },
     [updateScreenDoc, enqueueSnackbar],
   )
+
+  // Publishing: the tenant site only serves paths present in the host's
+  // `screens` routing map, so the slug save must register the entry there
+  // too — the screen doc's `slug` alone routes nothing.
+  const publishedPath = hostResult?.data?.screens?.[screenId]
+  const [slugInput, setSlugInput] = useState<string | null>(null)
+  const slugValue =
+    slugInput ?? screenResult?.data?.slug ?? publishedPath ?? ''
+  const normalizedSlug = Aglyn.normalizeScreenSlug(slugValue)
+  const slugOwner = normalizedSlug
+    ? Aglyn.findScreenIdByRoutePath(
+        hostResult?.data?.screens as Record<string, string> | undefined,
+        normalizedSlug,
+      )
+    : undefined
+  const slugConflict = Boolean(slugOwner && slugOwner !== screenId)
+
+  const handlePublish = useCallback(async () => {
+    if (slugConflict) return
+    const ids = { hostId, screenId }
+    const action = normalizedSlug
+      ? publishScreenRoute(firestore, ids, normalizedSlug).then(() => {
+          setSlugInput(null)
+          enqueueSnackbar(
+            `Published at ${Aglyn.screenRoutePathToUrl(normalizedSlug)}`,
+            { variant: 'success', persist: false },
+          )
+        })
+      : unpublishScreenRoute(firestore, ids, { clearSlug: true }).then(() => {
+          setSlugInput(null)
+          enqueueSnackbar('Screen unpublished', {
+            variant: 'success',
+            persist: false,
+          })
+        })
+    await action.catch((e) => {
+      enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    })
+  }, [
+    slugConflict,
+    normalizedSlug,
+    firestore,
+    hostId,
+    screenId,
+    enqueueSnackbar,
+  ])
 
   const handlePreview = useCallback(() => {
     const ids = { hostId, screenId, versionId }
@@ -511,6 +564,38 @@ function BesignerPage(props) {
         }}
       >
         <Stack spacing={1} sx={{ px: 3, pb: 3 }}>
+          <Typography variant="subtitle2">{'Publishing'}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {'The slug is the path this screen is served at on your site. Use "/" for the home page. Clearing it and pressing Unpublish removes the screen from the site.'}
+          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              size="small"
+              label="Slug"
+              fullWidth
+              value={slugValue}
+              onChange={(e) => setSlugInput(e.target.value)}
+              error={slugConflict}
+              helperText={
+                slugConflict
+                  ? 'Another screen already uses this path'
+                  : normalizedSlug
+                    ? `Served at ${Aglyn.screenRoutePathToUrl(normalizedSlug)}`
+                    : publishedPath
+                      ? `Currently published at ${Aglyn.screenRoutePathToUrl(publishedPath)}`
+                      : 'Not published'
+              }
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handlePublish}
+              disabled={slugConflict || (!normalizedSlug && !publishedPath)}
+              sx={{ mt: 0.5, flexShrink: 0 }}
+            >
+              {normalizedSlug ? 'Publish' : 'Unpublish'}
+            </Button>
+          </Stack>
           <Typography variant="subtitle2">{'Shared layout'}</Typography>
           <Typography variant="caption" color="text.secondary">
             {'Wraps this screen in chrome (appbar, footer, …) maintained once for every bound screen. Saved immediately.'}
