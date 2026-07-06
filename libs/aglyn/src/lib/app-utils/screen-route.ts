@@ -145,6 +145,27 @@ export function wouldCreateScreenCycle(
 }
 
 /**
+ * Routing-map entries for a screen plus all its descendants under a
+ * candidate screens map: a composed path sets the entry, `null` marks an
+ * existing entry whose chain no longer resolves for removal. Callers apply
+ * the result in one write so slug/parent changes cascade atomically.
+ */
+export function buildScreenRouteEntries(
+  screenId: ScreenUid,
+  screensById: Record<ScreenUid, ScreenRouteNode | undefined>,
+  routingMap: Record<ScreenUid, string> | null | undefined,
+): Record<ScreenUid, string | null> {
+  const entries: Record<ScreenUid, string | null> = {}
+  const ids = [screenId, ...collectScreenDescendantIds(screenId, screensById)]
+  for (const id of ids) {
+    const path = composeScreenRoutePath(id, screensById)
+    if (path) entries[id] = path
+    else if (routingMap?.[id] !== undefined) entries[id] = null
+  }
+  return entries
+}
+
+/**
  * Looks up which screen currently owns a routing path, for sibling-slug
  * uniqueness checks before publishing.
  */

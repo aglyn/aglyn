@@ -16,6 +16,7 @@
  */
 
 import {
+  buildScreenRouteEntries,
   collectScreenDescendantIds,
   composeScreenRoutePath,
   findScreenIdByRoutePath,
@@ -127,6 +128,36 @@ describe('collectScreenDescendantIds', () => {
     ])
     expect(collectScreenDescendantIds('about', screens)).toEqual(['team'])
     expect(collectScreenDescendantIds('blog', screens)).toEqual([])
+  })
+})
+
+describe('buildScreenRouteEntries', () => {
+  const screens = {
+    company: { slug: 'company' },
+    about: { slug: 'about', parentId: 'company' },
+    team: { slug: 'team', parentId: 'about' },
+    draft: { parentId: 'company' },
+  }
+
+  it('returns composed paths for the screen and its descendants', () => {
+    expect(buildScreenRouteEntries('company', screens, {})).toEqual({
+      company: 'company',
+      about: 'company/about',
+      team: 'company/about/team',
+    })
+  })
+
+  it('nulls previously published entries whose chain broke', () => {
+    const unslugged = { ...screens, about: { parentId: 'company' } }
+    const routingMap = { about: 'company/about', team: 'company/about/team' }
+    expect(buildScreenRouteEntries('about', unslugged, routingMap)).toEqual({
+      about: null,
+      team: null,
+    })
+  })
+
+  it('omits unresolvable screens that were never published', () => {
+    expect(buildScreenRouteEntries('draft', screens, {})).toEqual({})
   })
 })
 

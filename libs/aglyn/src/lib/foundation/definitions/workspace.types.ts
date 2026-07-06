@@ -175,6 +175,8 @@ export interface AglynScreen extends AglynDocument {
   hostId?: HostUid
   parentId?: ScreenUid
   slug?: ScreenSlug
+  /** Position among siblings (screens sharing `parentId`) in the screens list. */
+  order?: number
   versionId?: VersionUid
   status?: HostScreenStatus
   createdAt?: ITimestamp

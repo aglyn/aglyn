@@ -18,10 +18,15 @@
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import {
+  buildScreenRouteEntries,
+  composeScreenRoutePath,
   createResourceUid,
   findScreenIdByRoutePath,
   normalizeScreenSlug,
   screenRoutePathToUrl,
+  wouldCreateScreenCycle,
+  type ScreenRouteNode,
+  type ScreenUid,
 } from '@aglyn/aglyn'
 import {
   ICON_VARIANT_CLOSE,
@@ -44,35 +49,43 @@ import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, IconButton, Typography } from '@mui/material'
-import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   limit,
   query,
   setDoc,
   updateDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
-import { forwardRef, useCallback, useEffect, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useFirestore,
+  useFirestoreCollectionData,
+  useFirestoreDocData,
+} from 'reactfire'
 import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent } from '@aglyn/shared-ui-jsx'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
+import {
+  compareScreenSiblings,
+  ScreensHierarchyTableComponent,
+  type ScreenHierarchyRow,
+  type ScreenMoveRequest,
+} from '../../../../components/screens-hierarchy-table.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import {
   publishScreenRoute,
+  syncScreenRouteEntries,
   unpublishScreenRoute,
 } from '../../../../constants/screen-publishing'
-import {
-  CONTENT_MAX_WIDTH,
-  TABLE_ROW_HEIGHT,
-} from '../../../../constants/shared'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -93,14 +106,30 @@ function Screens(props) {
   const handleFormClose = useCallback(() => {
     setQuickDrawerOpen(false)
   }, [])
-  const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
   const screensCollection = collection(firestore, 'hosts', hostId, 'screens')
-  const screensQuery = query(screensCollection, limit(pageSize))
+  // The hierarchy table renders the whole tree, so no page-sized query: a
+  // paginated slice could orphan children whose parent fell off the page.
+  const screensQuery = query(screensCollection, limit(200))
   const { status, data } = useFirestoreCollectionData<any>(screensQuery, {
     idField: '$id',
   })
-  const screens = data || []
+  const screens: ScreenHierarchyRow[] = useMemo(
+    () => (data ?? []).filter((screen: any) => !screen.deletedAt),
+    [data],
+  )
+  const { data: hostData } = useFirestoreDocData<any>(
+    doc(firestore, 'hosts', hostId),
+    { idField: '$id' },
+  )
+  const routingMap = hostData?.screens as Record<ScreenUid, string> | undefined
+  const screensById = useMemo(() => {
+    const map: Record<ScreenUid, ScreenRouteNode> = {}
+    for (const screen of screens) {
+      map[screen.$id] = { slug: screen.slug, parentId: screen.parentId }
+    }
+    return map
+  }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
 
   const [error, setError] = useState(null)
@@ -234,77 +263,138 @@ function Screens(props) {
     [confirm, firestore, hostId, queueLoading],
   )
 
-  const columns: GridColDef[] = [
-    {
-      field: 'actions',
-      type: 'actions',
-      width: 100,
-      getActions: ({ id, row }) => {
-        const screenId = id as string
-        const versionId = row.versionId as string
-        return [
-          <GridActionsCellItem
-            key="action-detail"
-            icon={<MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} />}
-            label="detail"
-            LinkComponent={CellItemLinkComponent}
-            {...({
-              href: buildRoute(Route.SCREEN_DETAILS, {
-                hostId,
-                screenId,
-                versionId,
-              }),
-            } as any)}
-          />,
-          <GridActionsCellItem
-            key="action-delete"
-            icon={<MdiIcon path={ICON_VARIANT_MODIFY_DELETE.path} color="error" />}
-            label="Delete"
-            onClick={handleDeleteScreen(screenId, versionId)}
-          />,
-        ]
-      },
+  // Drop handler for the hierarchy table: re-parents/reorders the screen,
+  // rewrites sibling `order` values, then cascades routing-map paths for the
+  // moved screen and its descendants (parent `company` + own `about` →
+  // /company/about, same rules as the besigner Publishing section).
+  const handleMoveScreen = useCallback(
+    async ({ screenId, nextParentId, beforeId }: ScreenMoveRequest) => {
+      if (loading) return
+      if (wouldCreateScreenCycle(screenId, nextParentId, screensById)) {
+        enqueueSnackbar(
+          "A screen can't be nested inside itself or its own children",
+          { variant: 'warning', persist: false },
+        )
+        return
+      }
+      const nextById = {
+        ...screensById,
+        [screenId]: { ...screensById[screenId], parentId: nextParentId },
+      }
+      const nextSelfPath = composeScreenRoutePath(screenId, nextById)
+      const owner = nextSelfPath
+        ? findScreenIdByRoutePath(routingMap, nextSelfPath)
+        : undefined
+      if (owner && owner !== screenId) {
+        enqueueSnackbar(
+          `Another screen is already published at ${screenRoutePathToUrl(nextSelfPath as string)}`,
+          { variant: 'warning', persist: false },
+        )
+        return
+      }
+      const dequeueLoading = queueLoading()
+      try {
+        const rowById = new Map(screens.map((screen) => [screen.$id, screen]))
+        const orderedIds = screens
+          .filter(
+            (screen) =>
+              screen.$id !== screenId &&
+              (screen.parentId && screensById[screen.parentId]
+                ? screen.parentId
+                : undefined) === nextParentId,
+          )
+          .sort(compareScreenSiblings)
+          .map((screen) => screen.$id)
+        const insertAt = beforeId ? orderedIds.indexOf(beforeId) : -1
+        orderedIds.splice(
+          insertAt === -1 ? orderedIds.length : insertAt,
+          0,
+          screenId,
+        )
+        const batch = writeBatch(firestore)
+        orderedIds.forEach((id, index) => {
+          const screenRef = doc(firestore, 'hosts', hostId, 'screens', id)
+          if (id === screenId) {
+            batch.update(screenRef, {
+              parentId: nextParentId ?? deleteField(),
+              order: index,
+              updatedAt: Timestamp.now(),
+            })
+          } else if (rowById.get(id)?.order !== index) {
+            batch.update(screenRef, { order: index })
+          }
+        })
+        await batch.commit()
+        const parentChanged =
+          (screensById[screenId]?.parentId ?? undefined) !==
+          (nextParentId ?? undefined)
+        if (parentChanged) {
+          await syncScreenRouteEntries(
+            firestore,
+            hostId,
+            buildScreenRouteEntries(screenId, nextById, routingMap),
+          )
+        }
+        enqueueSnackbar(
+          parentChanged && nextSelfPath
+            ? `Screen moved — now served at ${screenRoutePathToUrl(nextSelfPath)}`
+            : 'Screen moved',
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeueLoading()
+      }
     },
-    { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
-    {
-      field: 'displayName',
-      headerName: 'Display name',
-      minWidth: 220,
-      type: 'string',
-    },
-    {
-      field: 'slug',
-      headerName: 'Path',
-      minWidth: 140,
-      type: 'string',
-      // x-data-grid v9 passes the raw value (not a `{ value }` params object)
-      valueFormatter: (value: any) =>
-        value ? screenRoutePathToUrl(value) : '--',
-    },
-    {
-      field: 'description',
-      headerName: 'Description',
-      flex: 1,
-      minWidth: 275,
-      type: 'string',
-    },
-    {
-      field: 'updatedAt',
-      headerName: 'Updated',
-      flex: 1,
-      minWidth: 150,
-      valueFormatter: (value: any) =>
-        value?.toDate?.().toLocaleString() || '--',
-    },
-    {
-      field: 'createdAt',
-      headerName: 'Created',
-      flex: 1,
-      minWidth: 150,
-      valueFormatter: (value: any) =>
-        value?.toDate?.().toLocaleString() || '--',
-    },
-  ]
+    [
+      loading,
+      screens,
+      screensById,
+      routingMap,
+      firestore,
+      hostId,
+      queueLoading,
+      enqueueSnackbar,
+    ],
+  )
+
+  const renderRowActions = useCallback(
+    (row: ScreenHierarchyRow) => (
+      <>
+        <IconButton
+          size="small"
+          aria-label="detail"
+          component={CellItemLinkComponent as any}
+          {...({
+            href: buildRoute(Route.SCREEN_DETAILS, {
+              hostId,
+              screenId: row.$id,
+              versionId: row.versionId as string,
+            }),
+          } as any)}
+        >
+          <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />
+        </IconButton>
+        <IconButton
+          size="small"
+          aria-label="Delete"
+          onClick={handleDeleteScreen(row.$id, row.versionId as string)}
+        >
+          <MdiIcon
+            path={ICON_VARIANT_MODIFY_DELETE.path}
+            color="error"
+            size={0.8}
+          />
+        </IconButton>
+      </>
+    ),
+    [hostId, handleDeleteScreen],
+  )
 
   // console.log('Screens props', props, data, status, screens)
 
@@ -419,17 +509,12 @@ function Screens(props) {
             {/*  SummaryContentComponent={SummaryContentComponent as any}*/}
             {/*  getItemId={(item) => item.$id}*/}
             {/*/>*/}
-            <DataTableComponent
-              rowHeight={TABLE_ROW_HEIGHT}
-              getRowId={(row) => row.$id}
-              columns={columns}
-              noRowsLabel="No screens"
-              rows={screens}
+            <ScreensHierarchyTableComponent
+              screens={screens}
+              routingMap={routingMap}
               loading={status === 'loading'}
-              initialState={{ pagination: { paginationModel: { pageSize } } }}
-              onPaginationModelChange={(model) => setPageSize(model.pageSize)}
-              pageSizeOptions={[5, 10, 15]}
-              pagination
+              onMoveScreen={handleMoveScreen}
+              renderRowActions={renderRowActions}
             />
           </CardDisplay>
         </Container>
