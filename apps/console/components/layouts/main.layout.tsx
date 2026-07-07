@@ -17,6 +17,7 @@
 
 import {
   APP_CONSOLE,
+  ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_SIGN_OUT,
@@ -413,6 +414,34 @@ export function MainLayout(props: MainLayoutProps) {
           appBarSuffix={appBarSuffix}
           quickActions={[
             ...(quickActions || []),
+            // Manage quick menu (AGL-110): Settings/Billing/Community
+            // reachable without opening the avatar menu.
+            {
+              title: 'Manage',
+              MenuProps: { dense: true, horizontalOrigin: 'right' },
+              icon: { path: ICON_VARIANT_APP_SETTINGS.path },
+              'aria-label': 'manage',
+              items: [
+                {
+                  children: 'Settings',
+                  component: AppLink,
+                  href: Route.MANAGE_USER_SETTINGS,
+                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
+                },
+                {
+                  children: 'Billing',
+                  component: AppLink,
+                  href: Route.MANAGE_BILLING,
+                  icon: { path: mdiCreditCardOutline.path },
+                },
+                {
+                  children: 'Community profile',
+                  component: AppLink,
+                  href: Route.MANAGE_COMMUNITY_PROFILE,
+                  icon: { path: mdiAccountGroupOutline.path },
+                },
+              ],
+            },
             {
               title: 'Manage account',
               MenuProps: { dense: true, horizontalOrigin: 'right' },
