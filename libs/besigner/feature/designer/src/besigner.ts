@@ -33,6 +33,7 @@ export * from './lib/contexts/component-promotion-context'
 export * from './lib/contexts/components-drawer-context.provider'
 export * from './lib/contexts/element-drawer-context'
 export * from './lib/contexts/layout-chrome-context'
+export * from './lib/contexts/media-picker-context'
 export * from './lib/contexts/rendered-canvas-elements'
 
 export * from './lib/components/accordion-list.component'

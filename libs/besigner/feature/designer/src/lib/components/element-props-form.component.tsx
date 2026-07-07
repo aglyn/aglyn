@@ -43,6 +43,7 @@ import * as Besigner from '@aglyn/besigner'
 import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AiAssistContext } from '../contexts/ai-assist-context'
 import { BindingPickerContext } from '../contexts/binding-picker-context'
+import { MediaPickerContext } from '../contexts/media-picker-context'
 import { ComponentPromotionContext } from '../contexts/component-promotion-context'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
@@ -208,6 +209,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       [node],
     )
 
+    // Browse media (AGL-106): elements with a `src` attribute can pick an
+    // asset from the host's media library; the commit spreads current props
+    // (updateNodeProps REPLACES the props object).
+    const { onPickMedia } = useContext(MediaPickerContext)
+    const hasSrcAttribute = (rawAttributes ?? []).some(
+      (field: any) => field?.name === 'src',
+    )
+    const handleBrowseMedia = useCallback(() => {
+      onPickMedia?.((url) => {
+        const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+          node?.$id
+        ]
+        Aglyn.canvas.updateNodeProps(node, { ...current?.props, src: url })
+      })
+    }, [onPickMedia, node])
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -269,6 +286,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                         ]
                       })}
                     </MuiMenu>
+                  </FormControl>
+                ) : null}
+                {onPickMedia && hasSrcAttribute ? (
+                  <FormControl margin="none" fullWidth>
+                    <Button
+                      color="secondary"
+                      onClick={handleBrowseMedia}
+                      sx={{ mt: 2 }}
+                      fullWidth
+                    >
+                      Browse media
+                    </Button>
                   </FormControl>
                 ) : null}
                 {onRewrite && textEditable ? (
