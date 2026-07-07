@@ -16,27 +16,19 @@
  */
 'use client'
 
-import {
-  PLAN_ENTITLEMENTS,
-  PLAN_PRICING,
-  resolveTenantEntitlements,
-  type TenantPlan,
-  UNLIMITED,
-} from '@aglyn/aglyn'
+import { type TenantPlan } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  Button,
-  Chip,
-  LinearProgress,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { Chip, Stack, Typography } from '@mui/material'
 import { collection, query, where } from 'firebase/firestore'
 import { useCallback } from 'react'
 import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import BillingPlanCardsComponent, {
+  PLAN_LABELS,
+} from '../../../components/billing/billing-plan-cards.component'
+import BillingUsageComponent from '../../../components/billing/billing-usage.component'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
@@ -44,41 +36,6 @@ import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
 
-const PLAN_LABELS: Record<TenantPlan, string> = {
-  free: 'Free',
-  starter: 'Starter',
-  pro: 'Pro',
-  business: 'Business',
-}
-const PLAN_ORDER: TenantPlan[] = ['free', 'starter', 'pro', 'business']
-
-/** Prices come from the versioned PLAN_PRICING model (AGL-68). */
-const priceLabel = (tier: TenantPlan) => {
-  const base = PLAN_PRICING[tier].basePriceMonthlyUsd
-  return base ? `$${base}/mo` : '$0'
-}
-const quotaLabel = (value: number) =>
-  value === UNLIMITED ? 'Unlimited' : String(value)
-
-function UsageMeter(props: { label: string; used: number; limit: number }) {
-  const { label, used, limit } = props
-  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0
-  return (
-    <Stack spacing={0.5} sx={{ mb: 2 }}>
-      <Stack direction="row" sx={{ justifyContent: 'space-between' }}>
-        <Typography variant="body2">{label}</Typography>
-        <Typography variant="body2" color="text.secondary">
-          {`${used} / ${limit}`}
-        </Typography>
-      </Stack>
-      <LinearProgress
-        variant="determinate"
-        value={pct}
-        color={pct >= 100 ? 'error' : 'secondary'}
-      />
-    </Stack>
-  )
-}
 
 const Billing: NextPageWithLayout = () => {
   const { data: user } = useUser()
@@ -95,8 +52,6 @@ const Billing: NextPageWithLayout = () => {
     { idField: '$id' },
   )
   const plan = (tenant?.plan ?? 'free') as TenantPlan
-  const entitlements = resolveTenantEntitlements(tenant)
-  const hostsUsed = hosts?.length ?? 0
 
   const handleUpgrade = useCallback(
     (targetPlan: TenantPlan) => async () => {
@@ -178,73 +133,42 @@ const Billing: NextPageWithLayout = () => {
                       spacing={1}
                       sx={{ alignItems: 'center', mb: 2 }}
                     >
-                      <Typography variant="h5">
-                        {PLAN_LABELS[plan]}
-                      </Typography>
+                      <Typography variant="h5">{PLAN_LABELS[plan]}</Typography>
                       <Chip
                         label={tenant?.subscription?.status ?? 'no subscription'}
                         size="small"
                         variant="outlined"
                       />
                     </Stack>
-                    <UsageMeter
-                      label="Hosts"
-                      used={hostsUsed}
-                      limit={entitlements.hostLimit}
-                    />
                     <Typography variant="body2" color="text.secondary">
-                      {`Screens per host: ${quotaLabel(entitlements.screensPerHost)} · ` +
-                        `Storage: ${entitlements.storagePerHostMb} MB · ` +
-                        `Members: ${entitlements.membersPerHost} · ` +
-                        `Bandwidth: ${entitlements.bandwidthGb} GB`}
+                      {tenant?.plan
+                        ? 'Usage and limits for your plan are shown beside.'
+                        : 'No plan assigned yet — limits are not enforced ' +
+                          'on this account.'}
                     </Typography>
                   </CardDisplay>
                 ),
               },
-              ...PLAN_ORDER.map((tier) => ({
-                size: { xs: 12, sm: 6, md: 2 },
+              {
+                size: { xs: 12, md: 8 },
                 children: (
-                  <CardDisplay
-                    header={PLAN_LABELS[tier]}
-                    contentGutterX
-                    contentGutterY
-                  >
-                    <Typography variant="h6" sx={{ mb: 1 }}>
-                      {priceLabel(tier)}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      component="div"
-                      sx={{ mb: 1.5 }}
-                    >
-                      {`${PLAN_ENTITLEMENTS[tier].hostLimit} hosts · ` +
-                        `${quotaLabel(PLAN_ENTITLEMENTS[tier].screensPerHost)} screens/host` +
-                        (PLAN_PRICING[tier].extraHostMonthlyUsd != null
-                          ? ` · +$${PLAN_PRICING[tier].extraHostMonthlyUsd}/extra host`
-                          : '') +
-                        (PLAN_ENTITLEMENTS[tier].features.versioning
-                          ? ' · versioning'
-                          : '') +
-                        (PLAN_ENTITLEMENTS[tier].features.reusableComponents
-                          ? ' · components'
-                          : '')}
-                    </Typography>
-                    {tier === plan ? (
-                      <Chip label="Current" color="success" size="small" />
-                    ) : tier === 'free' ? null : (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="secondary"
-                        onClick={handleUpgrade(tier)}
-                      >
-                        {'Upgrade'}
-                      </Button>
-                    )}
+                  <CardDisplay header={'Usage'} contentGutterX contentGutterY>
+                    <BillingUsageComponent
+                      tenant={tenant}
+                      hosts={hosts ?? []}
+                    />
                   </CardDisplay>
                 ),
-              })),
+              },
+              {
+                size: { xs: 12 },
+                children: (
+                  <BillingPlanCardsComponent
+                    plan={tenant?.plan as TenantPlan | undefined}
+                    onSelect={(tier) => void handleUpgrade(tier)()}
+                  />
+                ),
+              },
             ]}
           />
         </Container>

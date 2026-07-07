@@ -191,4 +191,5 @@ export const ICON_VARIANT_TABLET = mdiTablet
 
 // Symbols + Status
 export const ICON_VARIANT_SYMBOL_CONFIRMED = mdiCheck
+export const ICON_VARIANT_SYMBOL_MINUS = mdiMinus
 export const ICON_VARIANT_SYMBOL_SECURE = mdiShieldLock
