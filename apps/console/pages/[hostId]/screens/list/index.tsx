@@ -91,6 +91,7 @@ import {
 } from '../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useCurrentTenant from '../../../../hooks/use-current-tenant'
+import useHostActivityLogger from '../../../../hooks/use-host-activity-logger'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -138,6 +139,7 @@ function Screens(props) {
   }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const { tenant } = useCurrentTenant()
+  const logActivity = useHostActivityLogger(hostId)
 
   const [error, setError] = useState(null)
 
@@ -223,6 +225,13 @@ function Screens(props) {
             ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
             : undefined,
         )
+        .then(() =>
+          logActivity('Created screen', {
+            type: 'screen',
+            id: newId,
+            name: newValues.displayName,
+          }),
+        )
         .catch((error) => {
           console.error(error)
           setError({ ...error })
@@ -246,6 +255,7 @@ function Screens(props) {
       enqueueSnackbar,
       tenant,
       screens.length,
+      logActivity,
     ],
   )
 
@@ -272,12 +282,13 @@ function Screens(props) {
             unpublishScreenRoute(firestore, { hostId, screenId: id }),
           ]),
         )
+        .then(() => logActivity('Deleted screen', { type: 'screen', id }))
         .catch(() => {})
         .finally(() => {
           dequeueLoading && dequeueLoading()
         })
     },
-    [confirm, firestore, hostId, queueLoading],
+    [confirm, firestore, hostId, queueLoading, logActivity],
   )
 
   // Drop handler for the hierarchy table: re-parents/reorders the screen,

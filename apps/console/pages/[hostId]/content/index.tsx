@@ -63,6 +63,7 @@ import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useHostActivityLogger from '../../../hooks/use-host-activity-logger'
 
 const slugify = (value: string) =>
   value
@@ -81,6 +82,7 @@ const HostContent: NextPageWithLayout = () => {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const logActivity = useHostActivityLogger(hostId)
 
   const { data: collectionDocs } = useFirestoreCollectionData<any>(
     query(collection(firestore, 'hosts', hostId, 'collections'), limit(50)),
@@ -136,7 +138,12 @@ const HostContent: NextPageWithLayout = () => {
       variant: 'success',
       persist: false,
     })
-  }, [collectionName, firestore, hostId, enqueueSnackbar])
+    logActivity('Created collection', {
+      type: 'content',
+      id,
+      name: displayName,
+    })
+  }, [collectionName, firestore, hostId, enqueueSnackbar, logActivity])
 
   // Entry editor dialog state; null id = creating.
   const [editor, setEditor] = useState<{
@@ -177,7 +184,12 @@ const HostContent: NextPageWithLayout = () => {
       variant: 'success',
       persist: false,
     })
-  }, [editor, selected, firestore, hostId, enqueueSnackbar])
+    logActivity(editor.id ? 'Updated entry' : 'Created entry draft', {
+      type: 'content',
+      id,
+      name: title,
+    })
+  }, [editor, selected, firestore, hostId, enqueueSnackbar, logActivity])
 
   const handleTogglePublish = useCallback(
     (entry: any) => async () => {
@@ -201,8 +213,13 @@ const HostContent: NextPageWithLayout = () => {
         variant: 'success',
         persist: false,
       })
+      logActivity(publish ? 'Published entry' : 'Unpublished entry', {
+        type: 'content',
+        id: entry.$id,
+        name: entry.title,
+      })
     },
-    [selected, firestore, hostId, enqueueSnackbar],
+    [selected, firestore, hostId, enqueueSnackbar, logActivity],
   )
 
   const handleDeleteEntry = useCallback(
@@ -229,8 +246,13 @@ const HostContent: NextPageWithLayout = () => {
         ),
       )
       enqueueSnackbar('Entry deleted', { variant: 'success', persist: false })
+      logActivity('Deleted entry', {
+        type: 'content',
+        id: entry.$id,
+        name: entry.title,
+      })
     },
-    [selected, confirm, firestore, hostId, enqueueSnackbar],
+    [selected, confirm, firestore, hostId, enqueueSnackbar, logActivity],
   )
 
   return (

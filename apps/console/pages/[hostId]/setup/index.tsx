@@ -48,6 +48,7 @@ import HostDisplayNameComponent from '../../../components/host-display-name.comp
 import { buildRoute, Route } from '../../../constants/route-links'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useHostActivityLogger from '../../../hooks/use-host-activity-logger'
 
 const basicSchema: FormSchema = {
   id: 'hostDetails',
@@ -255,6 +256,7 @@ const HostSetup: NextPageWithLayout = (props) => {
     setDoc,
   } = useHost({ hostId })
   const [themeSaving, setThemeSaving] = useState(false)
+  const logActivity = useHostActivityLogger(hostId)
 
   const handleThemeSave = useCallback(
     async (theme: Aglyn.AglynHostTheme) => {
@@ -265,6 +267,7 @@ const HostSetup: NextPageWithLayout = (props) => {
       await setDoc({ theme }, { mergeFields: ['theme'] })
         .then(() => {
           enqueueSnackbar('Theme saved!', { variant: 'success' })
+          logActivity('Updated theme', { type: 'theme' })
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
@@ -274,7 +277,7 @@ const HostSetup: NextPageWithLayout = (props) => {
           setThemeSaving(false)
         })
     },
-    [enqueueSnackbar, queueLoading, setDoc],
+    [enqueueSnackbar, queueLoading, setDoc, logActivity],
   )
 
   const handleBasicSave = useCallback(
@@ -283,6 +286,7 @@ const HostSetup: NextPageWithLayout = (props) => {
       await setDoc(fields, { merge: true })
         .then(() => {
           enqueueSnackbar('Saved!', { variant: 'success' })
+          logActivity('Updated host settings', { type: 'host', id: hostId })
         })
         .catch((e) => {
           enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
@@ -291,7 +295,7 @@ const HostSetup: NextPageWithLayout = (props) => {
           dequeueLoading()
         })
     },
-    [enqueueSnackbar, queueLoading, setDoc],
+    [enqueueSnackbar, queueLoading, setDoc, hostId, logActivity],
   )
 
   const forms = [

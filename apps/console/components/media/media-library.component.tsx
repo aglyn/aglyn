@@ -39,6 +39,7 @@ import {
 } from 'reactfire'
 import { checkTenantQuota } from '../../constants/entitlements'
 import useCurrentTenant from '../../hooks/use-current-tenant'
+import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 
 export interface MediaLibraryComponentProps {
   hostId: string
@@ -80,6 +81,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
+  const logActivity = useHostActivityLogger(hostId)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
@@ -145,6 +147,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           variant: 'success',
           persist: false,
         })
+        logActivity('Uploaded media', { type: 'media', name: file.name })
       } catch (error) {
         console.error(error)
         enqueueSnackbar('Upload failed', {
@@ -155,7 +158,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         setBusy(false)
       }
     },
-    [user, hostId, tenant, usedBytes, enqueueSnackbar],
+    [user, hostId, tenant, usedBytes, enqueueSnackbar, logActivity],
   )
 
   const handleCopyUrl = useCallback(
@@ -195,6 +198,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
         if (!response.ok) throw new Error(`Delete failed (${response.status})`)
         enqueueSnackbar('File deleted', { variant: 'success', persist: false })
+        logActivity('Deleted media', {
+          type: 'media',
+          id: media.$id,
+          name: media.fileName ?? media.$id,
+        })
       } catch (error) {
         console.error(error)
         enqueueSnackbar('An error has occurred', {
@@ -203,7 +211,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
       }
     },
-    [confirm, user, hostId, enqueueSnackbar],
+    [confirm, user, hostId, enqueueSnackbar, logActivity],
   )
 
   return (

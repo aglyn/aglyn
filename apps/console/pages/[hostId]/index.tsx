@@ -32,6 +32,7 @@ import QuotaWarningsBanner from '../../components/quota-warnings-banner.componen
 import HostVariablesCard from '../../components/host-variables-card.component'
 import HostWorkflowsCard from '../../components/host-workflows-card.component'
 import HostComponentsCard from '../../components/host-components-card.component'
+import HostActivityCard from '../../components/host-activity-card.component'
 import HostDisplayNameComponent from '../../components/host-display-name.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import hostNavTabItems from '../../constants/host-nav-tabs'
@@ -146,6 +147,12 @@ const Index: NextPageWithLayout = (props) => {
                 md: 6,
               },
               children: <HostWorkflowsCard hostId={hostId} />,
+            },
+            {
+              size: {
+                xs: 12,
+              },
+              children: <HostActivityCard hostId={hostId} />,
             },
           ]}
         />

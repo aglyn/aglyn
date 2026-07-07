@@ -89,8 +89,10 @@ import {
   publishScreenRoute,
   unpublishScreenRoute,
 } from '../../../../../../../constants/screen-publishing'
+import HostActivityCard from '../../../../../../../components/host-activity-card.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useCurrentTenant from '../../../../../../../hooks/use-current-tenant'
+import useHostActivityLogger from '../../../../../../../hooks/use-host-activity-logger'
 
 const whiteSpace = '--'
 
@@ -134,6 +136,7 @@ function ScreenDetails() {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
+  const logActivity = useHostActivityLogger(hostId)
 
   const screenRef = doc(firestore, 'hosts', hostId, 'screens', screenId)
   const { status, data: screen } = useFirestoreDocData<any>(screenRef, {
@@ -200,12 +203,17 @@ function ScreenDetails() {
     })
       .then(() => {
         enqueueSnackbar('Screen updated', { variant: 'success', persist: false })
+        logActivity('Updated screen details', {
+          type: 'screen',
+          id: screenId,
+          name: editor.displayName.trim(),
+        })
         setEditor(null)
       })
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [editor, screenRef, enqueueSnackbar])
+  }, [editor, screenRef, enqueueSnackbar, logActivity, screenId])
 
   // --- Delete -----------------------------------------------------------
   const handleDelete = useCallback(async () => {
@@ -227,6 +235,11 @@ function ScreenDetails() {
         unpublishScreenRoute(firestore, { hostId, screenId }),
       ])
       enqueueSnackbar('Screen deleted', { variant: 'success', persist: false })
+      logActivity('Deleted screen', {
+        type: 'screen',
+        id: screenId,
+        name: displayName,
+      })
       router.push(buildRoute(Route.SCREEN_LIST, { hostId }))
     } catch (error) {
       console.error(error)
@@ -244,6 +257,7 @@ function ScreenDetails() {
     screenId,
     enqueueSnackbar,
     router,
+    logActivity,
   ])
 
   // --- Publish / unpublish the route ------------------------------------
@@ -283,6 +297,10 @@ function ScreenDetails() {
         `Published at ${screenRoutePathToUrl(composed ?? slug)}`,
         { variant: 'success', persist: false },
       )
+      logActivity(
+        `Published route ${screenRoutePathToUrl(composed ?? slug)}`,
+        { type: 'screen', id: screenId, name: displayName },
+      )
       setSlugInput(null)
     } catch (error) {
       console.error(error)
@@ -300,6 +318,8 @@ function ScreenDetails() {
     firestore,
     hostId,
     enqueueSnackbar,
+    displayName,
+    logActivity,
   ])
 
   const handleUnpublishRoute = useCallback(async () => {
@@ -310,29 +330,39 @@ function ScreenDetails() {
         variant: 'success',
         persist: false,
       })
+      logActivity('Unpublished screen', {
+        type: 'screen',
+        id: screenId,
+        name: displayName,
+      })
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', { variant: 'error' })
     } finally {
       dequeue()
     }
-  }, [queueLoading, firestore, hostId, screenId, enqueueSnackbar])
+  }, [queueLoading, firestore, hostId, screenId, enqueueSnackbar, displayName, logActivity])
 
   // --- Version publish-now ----------------------------------------------
   const handlePublishVersion = useCallback(
     (id: string) => async () => {
       await updateDoc(screenRef, { versionId: id, updatedAt: Timestamp.now() })
-        .then(() =>
+        .then(() => {
           enqueueSnackbar('Version is now live', {
             variant: 'success',
             persist: false,
-          }),
-        )
+          })
+          logActivity('Published version', {
+            type: 'screen',
+            id: screenId,
+            name: displayName,
+          })
+        })
         .catch(() =>
           enqueueSnackbar('An error has occurred', { variant: 'error' }),
         )
     },
-    [screenRef, enqueueSnackbar],
+    [screenRef, enqueueSnackbar, displayName, logActivity, screenId],
   )
 
   // --- Schedule publish / unpublish (AGL-113; Business tier like AGL-61) --
@@ -389,12 +419,16 @@ function ScreenDetails() {
           `Scheduled to ${scheduler.action} ${publishAt.toLocaleString()}`,
           { variant: 'success', persist: false },
         )
+        logActivity(
+          `Scheduled ${scheduler.action} for ${publishAt.toLocaleString()}`,
+          { type: 'screen', id: screenId, name: displayName },
+        )
         setScheduler(null)
       })
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [scheduler, screenRef, enqueueSnackbar])
+  }, [scheduler, screenRef, enqueueSnackbar, displayName, logActivity, screenId])
   const handleScheduleCancel = useCallback(async () => {
     await updateDoc(screenRef, { publishSchedule: deleteField() })
       .then(() =>
@@ -422,17 +456,22 @@ function ScreenDetails() {
         update.protection = deleteField()
       }
       await updateDoc(screenRef, update)
-        .then(() =>
+        .then(() => {
           enqueueSnackbar('Page access updated', {
             variant: 'success',
             persist: false,
-          }),
-        )
+          })
+          logActivity('Changed page access', {
+            type: 'screen',
+            id: screenId,
+            name: displayName,
+          })
+        })
         .catch(() =>
           enqueueSnackbar('An error has occurred', { variant: 'error' }),
         )
     },
-    [screen, screenRef, enqueueSnackbar],
+    [screen, screenRef, enqueueSnackbar, displayName, logActivity, screenId],
   )
   const [password, setPassword] = useState('')
   const handlePasswordSave = useCallback(async () => {
@@ -492,12 +531,17 @@ function ScreenDetails() {
     )
       .then(() => {
         enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
+        logActivity('Updated SEO', {
+          type: 'screen',
+          id: screenId,
+          name: displayName,
+        })
         setSeoDraft(null)
       })
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [seoDraft, screenRef, enqueueSnackbar])
+  }, [seoDraft, screenRef, enqueueSnackbar, displayName, logActivity, screenId])
 
   const details = [
     {
@@ -867,6 +911,16 @@ function ScreenDetails() {
                       </Button>
                     </Stack>
                   </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6, lg: 8 },
+                children: (
+                  <HostActivityCard
+                    hostId={hostId}
+                    targetId={screenId}
+                    header={'Page Activity'}
+                  />
                 ),
               },
               {
