@@ -34,11 +34,15 @@ import { NoSsr } from '@mui/material'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
+import ListSubheader from '@mui/material/ListSubheader'
+import MuiMenu from '@mui/material/Menu'
+import MuiMenuItem from '@mui/material/MenuItem'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import * as Besigner from '@aglyn/besigner'
-import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef } from 'react'
+import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AiAssistContext } from '../contexts/ai-assist-context'
+import { BindingPickerContext } from '../contexts/binding-picker-context'
 import { ComponentPromotionContext } from '../contexts/component-promotion-context'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
@@ -179,6 +183,31 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         Aglyn.FEATURE_FLAG.ENABLED) !==
       0
 
+    // Insert binding (AGL-100): appends a {{token}} to the element text.
+    // Options come from the host app (variables + functions); the commit
+    // spreads current props — updateNodeProps REPLACES the props object.
+    const { options: bindingOptions } = useContext(BindingPickerContext)
+    const [bindingAnchor, setBindingAnchor] = useState<HTMLElement | null>(
+      null,
+    )
+    const handleInsertBinding = useCallback(
+      (token: string) => {
+        setBindingAnchor(null)
+        const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
+          node?.$id
+        ]
+        const text =
+          typeof current?.props?.children === 'string'
+            ? (current.props.children as string)
+            : ''
+        Aglyn.canvas.updateNodeProps(node, {
+          ...current?.props,
+          children: text ? `${text} ${token}` : token,
+        })
+      },
+      [node],
+    )
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -206,6 +235,42 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   {...rest}
                 />
 
+                {bindingOptions?.length && textEditable ? (
+                  <FormControl margin="none" fullWidth>
+                    <Button
+                      color="secondary"
+                      onClick={(event) =>
+                        setBindingAnchor(event.currentTarget)
+                      }
+                      sx={{ mt: 2 }}
+                      fullWidth
+                    >
+                      Insert binding
+                    </Button>
+                    <MuiMenu
+                      anchorEl={bindingAnchor}
+                      open={Boolean(bindingAnchor)}
+                      onClose={() => setBindingAnchor(null)}
+                    >
+                      {bindingOptions.map((option, index) => {
+                        const previous = bindingOptions[index - 1]
+                        return [
+                          option.group && option.group !== previous?.group ? (
+                            <ListSubheader key={`${option.group}-header`}>
+                              {option.group}
+                            </ListSubheader>
+                          ) : null,
+                          <MuiMenuItem
+                            key={option.token}
+                            onClick={() => handleInsertBinding(option.token)}
+                          >
+                            {option.label}
+                          </MuiMenuItem>,
+                        ]
+                      })}
+                    </MuiMenu>
+                  </FormControl>
+                ) : null}
                 {onRewrite && textEditable ? (
                   <FormControl margin="none" fullWidth>
                     <Button

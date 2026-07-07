@@ -70,6 +70,8 @@ import Head from 'next/head'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AiAssistProvider from '../../../../../../../components/ai-assist-provider.component'
+import BesignerFunctionsButton from '../../../../../../../components/besigner-functions-button.component'
+import BindingPickerProvider from '../../../../../../../components/binding-picker-provider.component'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../components/besigner-document-switcher.component'
 import BesignerVersionsComponent from '../../../../../../../components/besigner-versions.component'
@@ -576,6 +578,7 @@ function BesignerPage(props) {
     <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
     <ReusableComponentsProvider hostId={hostId}>
     <AiAssistProvider>
+    <BindingPickerProvider hostId={hostId}>
       {hostFontsHref ? (
         <Head>
           <link
@@ -599,12 +602,15 @@ function BesignerPage(props) {
         }
         // appBarSuffix={'Besigner'}
         actionsPrefix={
+          <>
+          <BesignerFunctionsButton hostId={hostId} />
           <BesignerVersionsComponent
             hostId={hostId}
             parent={{ kind: 'screen', id: screenId }}
             versionId={versionId}
             publishedVersionId={screenResult?.data?.versionId}
           />
+          </>
         }
         backButton={
           {
@@ -946,6 +952,7 @@ function BesignerPage(props) {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
+    </BindingPickerProvider>
     </AiAssistProvider>
     </ReusableComponentsProvider>
     </Aglyn.ScreenLinkContext.Provider>

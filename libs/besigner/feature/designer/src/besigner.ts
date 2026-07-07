@@ -28,6 +28,7 @@ export * from './lib/hooks/use-leaf-drag'
 export * from './lib/hooks/use-leaf-drop'
 
 export * from './lib/contexts/ai-assist-context'
+export * from './lib/contexts/binding-picker-context'
 export * from './lib/contexts/component-promotion-context'
 export * from './lib/contexts/components-drawer-context.provider'
 export * from './lib/contexts/element-drawer-context'
