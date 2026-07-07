@@ -10,6 +10,7 @@ import {
   formFieldSchema as formField,
   formSchema as form,
 } from './components/form'
+import { schema as functionWidget } from './components/function-widget'
 import { schema as image } from './components/image'
 import { schema as layoutSlot } from './components/layout-slot'
 import { schema as list } from './components/list'
@@ -30,6 +31,7 @@ import { registerLegacyMuiPlugin } from './legacy-plugin'
 const PERSISTED_COMPONENT_IDS = [
   'form',
   'formField',
+  'functionWidget',
   'image',
   'layoutSlot',
   'muiAppBar',
@@ -66,6 +68,7 @@ describe('plugins-ui-mui', () => {
       button,
       form,
       formField,
+      functionWidget,
       image,
       container,
       layoutSlot,

@@ -25,7 +25,7 @@ import { GridList, type GridListProps, Menu } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { arrayFromLength } from '@aglyn/shared-util-tools'
-import { Box, Button, ButtonBase, Tooltip } from '@mui/material'
+import { Box, Button, ButtonBase, Tooltip, Typography } from '@mui/material'
 import {
   forwardRef,
   type MouseEvent,
@@ -89,7 +89,25 @@ export const ComponentsGridListComponent = forwardRef<
         <ElementCardComponent
           component={ButtonBase}
           onClick={(e) => handleOnActionClick(e, item)}
-          label={item?.label}
+          label={
+            // Component cards show name + short description (AGL-93
+            // drawer polish, per the component-builder mockup).
+            (item as any)?.description ? (
+              <>
+                {item?.label}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                  sx={{ lineHeight: 1.25, mt: 0.25 }}
+                >
+                  {(item as any).description}
+                </Typography>
+              </>
+            ) : (
+              item?.label
+            )
+          }
           icon={item?.icon as any}
           item={{ id: item?.$id, ...item } as any}
         />

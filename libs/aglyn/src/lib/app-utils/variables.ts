@@ -176,6 +176,34 @@ export function hasBindings(text: string): boolean {
  * option lists) pass through untouched; unsafe values in hrefs remain
  * covered by the render-time SAFE_HREF/sanitizer checks.
  */
+/** Component id of the interactive function widget (plugins-ui-mui). */
+export const FUNCTION_WIDGET_COMPONENT_ID = 'functionWidget'
+
+/**
+ * Injects each function widget's definition into its props at compose time
+ * (AGL-93): the client runs the shared evaluator locally, so the published
+ * page carries the definition instead of calling home. Unknown names leave
+ * the node untouched (the widget renders its editor placeholder).
+ */
+export function attachFunctionDefinitions<T extends Record<string, any>>(
+  nodes: T,
+  functions: HostFunctionLookup,
+): T {
+  if (!Object.keys(functions).length) return nodes
+  const next: Record<string, any> = {}
+  for (const [id, node] of Object.entries(nodes)) {
+    const name =
+      node?.componentId === FUNCTION_WIDGET_COMPONENT_ID
+        ? node?.props?.functionName
+        : undefined
+    const definition = name ? functions[String(name).trim()] : undefined
+    next[id] = definition
+      ? { ...node, props: { ...node.props, definition } }
+      : node
+  }
+  return next as T
+}
+
 export function resolveNodesBindings<T extends Record<string, any>>(
   nodes: T,
   variables: Record<string, HostVariable>,

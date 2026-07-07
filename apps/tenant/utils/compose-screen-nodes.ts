@@ -69,7 +69,9 @@ export async function composeScreenNodes(options: {
     getVariables({ hostId }),
     getFunctions({ hostId }),
   ])
-  const nodes = Aglyn.resolveNodesBindings(grafted as any, variables, functions)
+  const bound = Aglyn.resolveNodesBindings(grafted as any, variables, functions)
+  // Function widgets run client-side: embed their definitions (AGL-93).
+  const nodes = Aglyn.attachFunctionDefinitions(bound, functions)
   return Aglyn.canvas.processNodesToDenormalized(nodes as any)
 }
 

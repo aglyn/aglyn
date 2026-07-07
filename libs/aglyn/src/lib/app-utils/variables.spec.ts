@@ -91,6 +91,30 @@ describe('resolveBindings', () => {
   })
 })
 
+describe('attachFunctionDefinitions', () => {
+  it('injects definitions into function widgets only', () => {
+    const { attachFunctionDefinitions } = require('./variables')
+    const definition = { name: 'Sum', parameters: [], variables: [], operations: [] }
+    const nodes = {
+      widget: {
+        $id: 'widget',
+        componentId: 'functionWidget',
+        props: { functionName: 'Sum' },
+      },
+      other: { $id: 'other', componentId: 'muiTypography', props: {} },
+      unknown: {
+        $id: 'unknown',
+        componentId: 'functionWidget',
+        props: { functionName: 'Nope' },
+      },
+    }
+    const result = attachFunctionDefinitions(nodes, { Sum: definition })
+    expect(result.widget.props.definition).toEqual(definition)
+    expect(result.other).toBe(nodes.other)
+    expect(result.unknown.props.definition).toBeUndefined()
+  })
+})
+
 describe('resolveNodesBindings', () => {
   it('rewrites string props only and preserves untouched nodes', () => {
     const nodes = {

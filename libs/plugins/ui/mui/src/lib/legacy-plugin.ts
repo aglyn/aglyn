@@ -23,6 +23,7 @@ import * as LayoutSlot from './components/layout-slot'
 import * as List from './components/list'
 import * as ListItem from './components/list-item'
 import * as ListItemText from './components/list-item-text'
+import * as FunctionWidget from './components/function-widget'
 import * as Product from './components/product'
 import * as Blocks from './components/blocks'
 import * as FormComponents from './components/form'
@@ -88,6 +89,10 @@ export function registerLegacyMuiPlugin(): void {
         ScreenLink.default,
         ScreenLink.schema,
       )
+      Aglyn.components.registerComponent(
+        FunctionWidget.default,
+        FunctionWidget.schema,
+      )
       Aglyn.components.registerComponent(Product.default, Product.schema)
       Aglyn.components.registerComponent(SearchBox.default, SearchBox.schema)
       Aglyn.components.registerComponent(Stack.default, Stack.schema)
@@ -106,11 +111,15 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(Image.presets)
       Aglyn.components.registerPreset(ReusableInstance.presets)
       Aglyn.components.registerPreset(ScreenLink.presets)
+      Aglyn.components.registerPreset(FunctionWidget.presets)
       Aglyn.components.registerPreset(Product.presets)
       Aglyn.components.registerPreset(SearchBox.presets)
       Aglyn.components.registerPreset(Stack.presets)
     },
     destroy(): void {
+      Aglyn.components.unregisterPreset(
+        FunctionWidget.presets.map((i) => i.$id),
+      )
       Aglyn.components.unregisterPreset(AppBar.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Toolbar.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Typography.presets.map((i) => i.$id))

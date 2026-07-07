@@ -67,7 +67,15 @@ export async function getFunctions(options: {
     for (const docSnapshot of snapshot.docs) {
       const data = docSnapshot.data() as Aglyn.HostFunction
       if (data?.name && !(data as any).deletedAt) {
-        functions[data.name] = data
+        // Plain evaluator fields only: doc timestamps aren't
+        // JSON-serializable and definitions embed into page props.
+        functions[data.name] = {
+          name: data.name,
+          parameters: data.parameters ?? [],
+          variables: data.variables ?? [],
+          operations: data.operations ?? [],
+          ...(data.returnValue && { returnValue: data.returnValue }),
+        }
       }
     }
   } catch (error) {
