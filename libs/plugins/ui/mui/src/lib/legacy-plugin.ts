@@ -23,6 +23,7 @@ import * as LayoutSlot from './components/layout-slot'
 import * as List from './components/list'
 import * as ListItem from './components/list-item'
 import * as ListItemText from './components/list-item-text'
+import * as Blocks from './components/blocks'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
 import * as ReusableInstance from './components/reusable-instance'
@@ -68,6 +69,14 @@ export function registerLegacyMuiPlugin(): void {
         FormComponents.FormField,
         FormComponents.formFieldSchema,
       )
+      Aglyn.components.registerComponent(
+        Blocks.VideoEmbed,
+        Blocks.videoEmbedSchema,
+      )
+      Aglyn.components.registerComponent(
+        Blocks.SocialLinks,
+        Blocks.socialLinksSchema,
+      )
       Aglyn.components.registerComponent(Image.default, Image.schema)
       Aglyn.components.registerComponent(
         ReusableInstance.default,
@@ -88,6 +97,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(List.presets)
       Aglyn.components.registerPreset(ListItem.presets)
       Aglyn.components.registerPreset(ListItemText.presets)
+      Aglyn.components.registerPreset(Blocks.blockPresets)
       Aglyn.components.registerPreset(FormComponents.formPresets)
       Aglyn.components.registerPreset(Image.presets)
       Aglyn.components.registerPreset(ReusableInstance.presets)
@@ -104,6 +114,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterPreset(List.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ListItem.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ListItemText.presets.map((i) => i.$id))
+      Aglyn.components.unregisterPreset(Blocks.blockPresets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(
         FormComponents.formPresets.map((i) => i.$id),
       )
@@ -112,6 +123,8 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterPreset(ScreenLink.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Stack.presets.map((i) => i.$id))
 
+      Aglyn.components.unregisterComponent(Blocks.VIDEO_EMBED_ID)
+      Aglyn.components.unregisterComponent(Blocks.SOCIAL_LINKS_ID)
       Aglyn.components.unregisterComponent(FormComponents.FORM_ID)
       Aglyn.components.unregisterComponent(FormComponents.FORM_FIELD_ID)
       Aglyn.components.unregisterComponent(Image.ID)

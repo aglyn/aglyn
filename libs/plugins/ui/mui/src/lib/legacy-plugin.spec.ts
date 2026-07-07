@@ -1,6 +1,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { schema as appBar } from './components/app-bar'
 import { schema as button } from './components/button'
+import {
+  socialLinksSchema as socialLinks,
+  videoEmbedSchema as videoEmbed,
+} from './components/blocks'
 import { schema as container } from './components/container'
 import {
   formFieldSchema as formField,
@@ -37,6 +41,8 @@ const PERSISTED_COMPONENT_IDS = [
   'muiToolbar',
   'muiTypography',
   'reusableInstance',
+  'socialLinks',
+  'videoEmbed',
 ]
 
 describe('plugins-ui-mui', () => {
@@ -64,6 +70,8 @@ describe('plugins-ui-mui', () => {
       listItemText,
       reusableInstance,
       screenLink,
+      socialLinks,
+      videoEmbed,
       stack,
       toolbar,
       typography,
