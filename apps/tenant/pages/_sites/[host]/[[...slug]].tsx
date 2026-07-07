@@ -56,6 +56,10 @@ interface Props {
   content?: CollectionContent
   /** Password-protected screen: nodes withheld until unlock (AGL-87). */
   protectedScreen?: boolean
+  /** Members-only screen (AGL-109): nodes arrive via /api/membership. */
+  memberScreen?: boolean
+  /** Membership form route (AGL-109): 'signin' | 'signup'. */
+  membershipPage?: string
   /** Rendered as the custom not-found screen (noindex, AGL-87). */
   notFoundFallback?: boolean
 }
@@ -109,6 +113,20 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
 
     const hostId = hostRes.host.$id
     const pathsByScreenId = hostRes.host.screens || {}
+
+    // Membership routes (AGL-109): fixed sign-in/up surfaces per site.
+    if (path === 'signin' || path === 'signup') {
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: { host: hostRes.host },
+            nodes: null,
+            membershipPage: path,
+          }),
+        ),
+        revalidate: 60,
+      }
+    }
     const screenEntry = Object.entries(pathsByScreenId).find(([, slug]) => {
       return slug === path
     })
@@ -277,6 +295,28 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
       }
     }
 
+    // Members-only screens (AGL-109): like protected screens, the nodes
+    // never ship in static HTML — the client fetches them with its member
+    // session via /api/membership/content.
+    if (
+      (screenRes.screen as any)?.visibility ===
+      Aglyn.HostScreenVisibility.AUTHENTICATED
+    ) {
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: {
+              host: hostRes.host,
+              screen: { data: { ...screenRes.screen, protection: null } },
+            },
+            nodes: null,
+            memberScreen: true,
+          }),
+        ),
+        revalidate: 60,
+      }
+    }
+
     const denormalized = await composeScreenNodes({
       hostId,
       screenId,
@@ -337,6 +377,39 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     any
   > | null>(null)
   const [unlockError, setUnlockError] = useState(false)
+  // Members-only content (AGL-109): fetched with the session cookie.
+  const [memberNodes, setMemberNodes] = useState<Record<string, any> | null>(
+    null,
+  )
+  const [memberDenied, setMemberDenied] = useState(false)
+  const memberHostId = props.data?.host?.$id
+  const memberScreenId = props.data?.screen?.data?.$id
+  useEffect(() => {
+    if (!props.memberScreen || !memberHostId || !memberScreenId) return
+    let active = true
+    void (async () => {
+      const response = await fetch('/api/membership/content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostId: memberHostId,
+          screenId: memberScreenId,
+        }),
+      })
+      if (!active) return
+      if (!response.ok) return setMemberDenied(true)
+      const payload = await response.json()
+      if (payload?.nodes) {
+        Aglyn.canvas.setNodes(payload.nodes)
+        setMemberNodes(payload.nodes)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [props.memberScreen, memberHostId, memberScreenId])
+  // Membership forms (AGL-109).
+  const [memberFormError, setMemberFormError] = useState<string | null>(null)
 
   // Fill the canvas DURING render, not only in an effect: the server
   // otherwise emits an empty page (crawlers see nothing) and hydration
@@ -411,6 +484,114 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
 
   // Password-protected screens render an unlock form; the composed nodes
   // arrive from /api/protection/unlock after verification (AGL-87).
+  // Membership sign-in/up forms (AGL-109).
+  if (props.membershipPage) {
+    const isSignup = props.membershipPage === 'signup'
+    return (
+      <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
+        <Head>
+          <title>{isSignup ? 'Sign up' : 'Sign in'}</title>
+          <meta key="robots" name="robots" content="noindex" />
+        </Head>
+        <h1 style={{ fontSize: 22 }}>
+          {isSignup ? 'Create your account' : 'Welcome back'}
+        </h1>
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault()
+            setMemberFormError(null)
+            const form = new FormData(event.currentTarget)
+            const response = await fetch(
+              isSignup ? '/api/membership/register' : '/api/membership/login',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  hostId: props.data?.host?.$id,
+                  email: String(form.get('email') ?? ''),
+                  password: String(form.get('password') ?? ''),
+                  ...(isSignup
+                    ? { displayName: String(form.get('displayName') ?? '') }
+                    : {}),
+                }),
+              },
+            )
+            if (!response.ok) {
+              const payload = await response.json().catch(() => ({}))
+              return setMemberFormError(
+                payload?.error ??
+                  (isSignup ? 'Sign-up failed' : 'Sign-in failed'),
+              )
+            }
+            window.location.href = '/'
+          }}
+        >
+          {isSignup ? (
+            <input
+              name="displayName"
+              placeholder="Name"
+              style={{ width: '100%', padding: 8, marginBottom: 8 }}
+            />
+          ) : null}
+          <input
+            name="email"
+            type="email"
+            required
+            placeholder="Email"
+            style={{ width: '100%', padding: 8, marginBottom: 8 }}
+          />
+          <input
+            name="password"
+            type="password"
+            required
+            minLength={isSignup ? 8 : undefined}
+            placeholder="Password"
+            style={{ width: '100%', padding: 8 }}
+          />
+          <button type="submit" style={{ marginTop: 12, padding: '8px 16px' }}>
+            {isSignup ? 'Sign up' : 'Sign in'}
+          </button>
+          {memberFormError ? (
+            <p style={{ color: '#c62828' }}>{memberFormError}</p>
+          ) : null}
+        </form>
+        <p style={{ opacity: 0.8 }}>
+          {isSignup ? (
+            <a href="/signin">{'Already a member? Sign in'}</a>
+          ) : (
+            <a href="/signup">{'New here? Create an account'}</a>
+          )}
+        </p>
+      </div>
+    )
+  }
+
+  // Members-only screens (AGL-109): prompt for sign-in until the session
+  // cookie verifies and the nodes arrive.
+  if (props.memberScreen && !memberNodes) {
+    return (
+      <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
+        <Head>
+          <title>{'Members only'}</title>
+          <meta key="robots" name="robots" content="noindex" />
+        </Head>
+        {memberDenied ? (
+          <>
+            <h1 style={{ fontSize: 22 }}>{'This page is for members'}</h1>
+            <p style={{ opacity: 0.8 }}>
+              <a href="/signin">{'Sign in'}</a>
+              {' or '}
+              <a href="/signup">{'create an account'}</a>
+              {' to view it.'}
+            </p>
+          </>
+        ) : (
+          <p style={{ opacity: 0.7 }}>{'Checking your membership…'}</p>
+        )}
+      </div>
+    )
+  }
+
   if (props.protectedScreen && !unlockedNodes) {
     return (
       <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>

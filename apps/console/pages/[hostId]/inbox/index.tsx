@@ -78,6 +78,38 @@ const HostInbox: NextPageWithLayout = () => {
     (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
   )
 
+  // Site members + leads (AGL-109).
+  const { data: memberDocs } = useFirestoreCollectionData<any>(
+    query(collection(firestore, 'hosts', hostId, 'siteMembers'), limit(200)),
+    { idField: '$id' },
+  )
+  const siteMembers = [...(memberDocs ?? [])].sort(
+    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+  )
+  const { data: leadDocs } = useFirestoreCollectionData<any>(
+    query(collection(firestore, 'hosts', hostId, 'leads'), limit(200)),
+    { idField: '$id' },
+  )
+  const leads = [...(leadDocs ?? [])].sort(
+    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+  )
+  const handleDeleteMember = useCallback(
+    (member: any) => async () => {
+      const confirmed = await confirm({
+        title: 'Remove this member?',
+        description: `"${member.email}" can no longer sign in to your site.`,
+        confirmationText: 'Remove',
+        confirmationButtonProps: { color: 'error' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      await deleteDoc(doc(firestore, 'hosts', hostId, 'siteMembers', member.$id))
+      enqueueSnackbar('Member removed', { variant: 'success', persist: false })
+    },
+    [confirm, firestore, hostId, enqueueSnackbar],
+  )
+
   // Mail reader (AGL-104): opening a submission shows the full message and
   // marks it read.
   const [reader, setReader] = useState<any | null>(null)
@@ -235,7 +267,86 @@ const HostInbox: NextPageWithLayout = () => {
             </Table>
           )}
           </CardDisplay>
-          <Stack sx={{ mt: 3 }}>
+          <Stack spacing={3} sx={{ mt: 3 }}>
+            <CardDisplay
+              header={'Site Members & Leads'}
+              contentGutterX
+              contentGutterY
+              contentBordered="all"
+            >
+              {siteMembers.length === 0 && leads.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {'No members yet — visitors can join at /signup on your ' +
+                    'site; sign-ups also appear here as leads.'}
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>{'Email'}</TableCell>
+                      <TableCell>{'Type'}</TableCell>
+                      <TableCell>{'Joined'}</TableCell>
+                      <TableCell align="right">{'Actions'}</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {siteMembers.map((member) => (
+                      <TableRow key={member.$id} hover>
+                        <TableCell>
+                          {member.email}
+                          {member.displayName ? (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ ml: 1 }}
+                              component="span"
+                            >
+                              {member.displayName}
+                            </Typography>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <Chip label="Member" color="secondary" size="small" />
+                        </TableCell>
+                        <TableCell>
+                          {member.createdAt?.toDate?.().toLocaleString() ??
+                            '--'}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            color="error"
+                            onClick={handleDeleteMember(member)}
+                          >
+                            {'Remove'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {leads
+                      .filter(
+                        (lead) =>
+                          !siteMembers.some(
+                            (member) => member.email === lead.email,
+                          ),
+                      )
+                      .map((lead) => (
+                        <TableRow key={lead.$id} hover>
+                          <TableCell>{lead.email}</TableCell>
+                          <TableCell>
+                            <Chip label="Lead" size="small" variant="outlined" />
+                          </TableCell>
+                          <TableCell>
+                            {lead.createdAt?.toDate?.().toLocaleString() ??
+                              '--'}
+                          </TableCell>
+                          <TableCell align="right">{'--'}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardDisplay>
             <HostOrdersCard hostId={hostId} />
           </Stack>
         </Container>
