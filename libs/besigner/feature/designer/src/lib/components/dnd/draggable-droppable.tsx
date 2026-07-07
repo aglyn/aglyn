@@ -23,6 +23,7 @@ import { CSS as css } from '@dnd-kit/utilities'
 import { mergeProps } from '@react-aria/utils'
 import { observer } from 'mobx-react-lite'
 import { Children, cloneElement, CSSProperties, useEffect, useRef } from 'react'
+import { inlineTextEdit } from '../../utils/inline-text-edit.store'
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
   children: JSX.Element
@@ -123,12 +124,14 @@ export const DraggableDroppable = observer(
         el.addEventListener('pointerover', handleMouseOver)
         el.addEventListener('mousedown', handleMouseDown)
         el.addEventListener('pointerdown', handleMouseDown)
+        el.addEventListener('dblclick', handleDoubleClick)
 
         return () => {
           el.removeEventListener('mouseover', handleMouseOver)
           el.removeEventListener('pointerover', handleMouseOver)
           el.removeEventListener('mousedown', handleMouseDown)
           el.removeEventListener('pointerdown', handleMouseDown)
+          el.removeEventListener('dblclick', handleDoubleClick)
         }
       }
       function handleMouseOver(e: Event) {
@@ -140,6 +143,25 @@ export const DraggableDroppable = observer(
         e.preventDefault()
         e.stopPropagation()
         Besigner.focus.handleNodeSelection(node)
+      }
+      function handleDoubleClick(e: Event) {
+        // Inline text editing for components that declare textEditable;
+        // locked nodes (layout chrome in the screen besigner) stay read-only
+        // — same gate the drag system uses.
+        const flag = node?.componentSchema?.flags?.textEditable
+        const editable =
+          typeof flag === 'number' &&
+          (flag & Aglyn.FEATURE_FLAG.ENABLED) !== 0
+        if (!editable || !Besigner.dnd.canDragNode(node)) return
+        e.preventDefault()
+        e.stopPropagation()
+        const rect = (e.currentTarget as Element).getBoundingClientRect()
+        inlineTextEdit.open(node, {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        })
       }
     }, [node])
 
