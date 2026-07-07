@@ -1,0 +1,346 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import {
+  PLAN_ENTITLEMENTS,
+  resolveTenantEntitlements,
+  type TenantPlan,
+} from '@aglyn/aglyn'
+import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
+import { Container } from '@aglyn/shared-ui-jsx'
+import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
+import {
+  Alert,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from '@mui/material'
+import {
+  addDoc,
+  collection,
+  deleteField,
+  doc,
+  limit,
+  query,
+  setDoc,
+} from 'firebase/firestore'
+import { useCallback, useEffect, useState } from 'react'
+import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../components/layouts/main.layout'
+import { buildRoute, Route } from '../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+
+const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'No plan (dark launch — everything on)' },
+  { value: 'free', label: 'Free' },
+  { value: 'starter', label: 'Starter' },
+  { value: 'pro', label: 'Pro' },
+  { value: 'business', label: 'Business' },
+]
+
+/**
+ * Staff-only tenant management (AGL-42 follow-on): list tenants, override
+ * plan and host-limit entitlement, and inspect billing state. Every change
+ * writes an adminAudit entry. The page trusts the `staff` custom claim
+ * (set via tools/scripts/set-staff-claim.mjs) and the Firestore rules
+ * enforce the same claim server-side.
+ */
+const AdminTenants: NextPageWithLayout = () => {
+  const { data: user } = useUser()
+  const firestore = useFirestore()
+  const { enqueueSnackbar } = useSnackbar()
+  const [isStaff, setIsStaff] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let active = true
+    void (user as any)
+      ?.getIdTokenResult?.()
+      .then((result: any) => {
+        if (active) setIsStaff(Boolean(result?.claims?.staff))
+      })
+      .catch(() => {
+        if (active) setIsStaff(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  const { data: tenantDocs } = useFirestoreCollectionData<any>(
+    query(collection(firestore, 'tenants'), limit(200)),
+    { idField: '$id' },
+  )
+  const tenants = [...(tenantDocs ?? [])].sort((a, b) =>
+    String(a.$id).localeCompare(String(b.$id)),
+  )
+
+  const [editor, setEditor] = useState<{
+    id: string
+    plan: string
+    hostLimit: string
+    before: any
+  } | null>(null)
+
+  const handleSave = useCallback(async () => {
+    if (!editor) return
+    const plan = editor.plan as TenantPlan | ''
+    const hostLimit = Number(editor.hostLimit)
+    const overrideHostLimit =
+      editor.hostLimit.trim() !== '' &&
+      Number.isFinite(hostLimit) &&
+      plan &&
+      hostLimit !== PLAN_ENTITLEMENTS[plan as TenantPlan]?.hostLimit
+    const after = {
+      plan: plan || null,
+      entitlements: overrideHostLimit ? { hostLimit } : null,
+    }
+    try {
+      await setDoc(
+        doc(firestore, 'tenants', editor.id),
+        {
+          plan: plan || deleteField(),
+          entitlements: overrideHostLimit
+            ? { hostLimit }
+            : deleteField(),
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      )
+      await addDoc(collection(firestore, 'adminAudit'), {
+        actorUid: (user as any)?.uid ?? 'unknown',
+        action: 'tenant.override',
+        target: `tenants/${editor.id}`,
+        before: editor.before ?? null,
+        after,
+        at: Timestamp.now(),
+      })
+      enqueueSnackbar('Tenant updated (audited)', {
+        variant: 'success',
+        persist: false,
+      })
+      setEditor(null)
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar(
+        'Write failed — are the scoped Firestore rules deployed and is ' +
+          'your account staff?',
+        { variant: 'error', allowDuplicate: true },
+      )
+    }
+  }, [editor, firestore, user, enqueueSnackbar])
+
+  return (
+    <>
+      <NextPageTitle screen={'Tenants – Staff'} />
+      <DashboardLayout
+        navTabItems={[
+          {
+            id: 'nav-tab-admin-tenants',
+            label: 'Tenants',
+            href: buildRoute(Route.ADMIN_TENANTS),
+          },
+        ]}
+        activeTab={buildRoute(Route.ADMIN_TENANTS)}
+        breadcrumbItems={[
+          { children: 'Staff', href: buildRoute(Route.ADMIN_TENANTS) },
+          { children: 'Tenants', href: buildRoute(Route.ADMIN_TENANTS) },
+        ]}
+        header={{
+          children: 'Tenant Management',
+          icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
+        }}
+      >
+        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {isStaff === null ? null : !isStaff ? (
+            <Alert severity="warning">
+              {'Staff only. Grant access with ' +
+                'tools/scripts/set-staff-claim.mjs, then sign out and back ' +
+                'in to refresh the claim.'}
+            </Alert>
+          ) : (
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                {'Overrides write to the tenant doc and are audited to ' +
+                  'adminAudit. Tenants without a plan keep every feature ' +
+                  '(dark launch).'}
+              </Typography>
+              {tenants.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  {'No tenant docs yet — they appear at first checkout or ' +
+                    'staff assignment.'}
+                </Typography>
+              ) : (
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>{'Tenant (uid)'}</TableCell>
+                      <TableCell>{'Plan'}</TableCell>
+                      <TableCell>{'Subscription'}</TableCell>
+                      <TableCell>{'Host limit'}</TableCell>
+                      <TableCell align="right">{'Actions'}</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {tenants.map((tenant) => {
+                      const resolved = resolveTenantEntitlements(tenant)
+                      return (
+                        <TableRow key={tenant.$id} hover>
+                          <TableCell sx={{ fontFamily: 'monospace' }}>
+                            {tenant.$id}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={tenant.plan ?? 'no plan'}
+                              size="small"
+                              color={tenant.plan ? 'secondary' : 'default'}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {tenant.subscription?.status ?? '--'}
+                          </TableCell>
+                          <TableCell>
+                            {tenant.plan ? resolved.hostLimit : '∞ (no plan)'}
+                            {tenant.entitlements?.hostLimit != null ? (
+                              <Chip
+                                label="override"
+                                size="small"
+                                variant="outlined"
+                                sx={{ ml: 1 }}
+                              />
+                            ) : null}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Button
+                              size="small"
+                              onClick={() =>
+                                setEditor({
+                                  id: tenant.$id,
+                                  plan: tenant.plan ?? '',
+                                  hostLimit:
+                                    tenant.entitlements?.hostLimit != null
+                                      ? String(tenant.entitlements.hostLimit)
+                                      : '',
+                                  before: {
+                                    plan: tenant.plan ?? null,
+                                    entitlements:
+                                      tenant.entitlements ?? null,
+                                  },
+                                })
+                              }
+                            >
+                              {'Override'}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </Stack>
+          )}
+        </Container>
+      </DashboardLayout>
+      <Dialog
+        open={Boolean(editor)}
+        onClose={() => setEditor(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'Override tenant'}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+            {editor?.id}
+          </Typography>
+          <TextField
+            select
+            size="small"
+            label="Plan"
+            value={editor?.plan ?? ''}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, plan: event.target.value } : prev,
+              )
+            }
+          >
+            {PLAN_OPTIONS.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            label="Host limit override"
+            type="number"
+            value={editor?.hostLimit ?? ''}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, hostLimit: event.target.value } : prev,
+              )
+            }
+            helperText="Empty = plan default"
+            disabled={!editor?.plan}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleSave}
+          >
+            {'Save (audited)'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  )
+}
+AdminTenants.displayName = 'Page:AdminTenants'
+AdminTenants.layouts = [
+  {
+    Component: AuthenticatedLayout,
+  },
+  {
+    Component: MainLayout,
+    props: {
+      title: 'Staff',
+    },
+  },
+]
+
+export default AdminTenants

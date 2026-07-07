@@ -450,6 +450,12 @@ export function MainLayout(props: MainLayoutProps) {
                   icon: { path: ICON_VARIANT_USER_SETTINGS.path },
                 },
                 {
+                  children: 'Staff console',
+                  component: AppLink,
+                  href: Route.ADMIN_TENANTS,
+                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
+                },
+                {
                   type: 'divider',
                 },
                 {
