@@ -57,6 +57,11 @@ const Index: NextPageWithLayout = (props) => {
             label: 'Theme',
             href: buildRoute(Route.HOST_THEME, { hostId }),
           },
+          {
+            id: 'nav-tab-media',
+            label: 'Media',
+            href: buildRoute(Route.HOST_MEDIA, { hostId }),
+          },
         {
           id: 'nav-tab-setup',
           label: 'Setup',

@@ -218,6 +218,22 @@ export type VersionUid = string
 export type LayoutUid = string
 
 /**
+ * Uploaded media metadata (AGL-72): the binary lives in Firebase Storage at
+ * `hosts/{hostId}/media/{mediaId}`; this doc mirrors it in Firestore at the
+ * same logical path so the library can list without Storage list calls.
+ */
+export interface AglynHostMedia {
+  $id: HostMediaUid
+  fileName?: string
+  contentType?: string
+  sizeBytes?: number
+  /** Download URL captured at upload time; nodes reference this directly. */
+  url?: string
+  createdAt?: ITimestamp
+  deletedAt?: ITimestamp
+}
+
+/**
  * Pending scheduled publication (AGL-61): when `publishAt` passes, the
  * parent doc's `versionId` pointer moves to `versionId`. Applied lazily by
  * the tenant's ISR revalidation (no dedicated cron needed).

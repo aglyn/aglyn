@@ -15,56 +15,24 @@
  * limitations under the License.
  */
 
-import type * as Aglyn from '@aglyn/aglyn'
-import { ICON_VARIANT_THEME_SYSTEM } from '@aglyn/shared-data-enums'
-import { Container, useLoading } from '@aglyn/shared-ui-jsx'
+import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
+import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHost } from '@aglyn/tenant-feature-instance'
-import { useCallback, useState } from 'react'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
-import ThemeEditor from '../../../components/theme-editor/theme-editor.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
+import MediaLibraryComponent from '../../../components/media/media-library.component'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 
-const HostTheme: NextPageWithLayout = () => {
-  const { enqueueSnackbar } = useSnackbar()
-  const { queueLoading } = useLoading()
+const HostMedia: NextPageWithLayout = () => {
   const hostId = useHostId()
-  const {
-    doc: { data, status },
-    setDoc,
-  } = useHost({ hostId })
-  const [saving, setSaving] = useState(false)
-
-  const handleSave = useCallback(
-    async (theme: Aglyn.AglynHostTheme) => {
-      setSaving(true)
-      const dequeueLoading = queueLoading()
-      // mergeFields replaces the theme atomically, so cleared colors do not
-      // linger from a deep merge with the previous document.
-      await setDoc({ theme }, { mergeFields: ['theme'] })
-        .then(() => {
-          enqueueSnackbar('Theme saved!', { variant: 'success' })
-        })
-        .catch((e) => {
-          enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
-        })
-        .finally(() => {
-          dequeueLoading()
-          setSaving(false)
-        })
-    },
-    [enqueueSnackbar, queueLoading, setDoc],
-  )
 
   return (
     <>
-      <NextPageTitle screen={'Host Theme'} />
+      <NextPageTitle screen={'Media'} />
       <DashboardLayout
         navTabItems={[
           {
@@ -104,39 +72,33 @@ const HostTheme: NextPageWithLayout = () => {
             href: buildRoute(Route.HOST_DASHBOARD, { hostId }),
           },
           {
-            children: 'Theme',
-            href: buildRoute(Route.HOST_THEME, { hostId }),
+            children: 'Media',
+            href: buildRoute(Route.HOST_MEDIA, { hostId }),
           },
         ]}
         header={{
-          children: 'Host Theme',
-          icon: { path: ICON_VARIANT_THEME_SYSTEM.path },
+          children: 'Media',
+          icon: { path: ICON_VARIANT_APP_SETTINGS.path },
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {status === 'success' ? (
-            <ThemeEditor
-              theme={data?.theme}
-              saving={saving}
-              onSave={handleSave}
-            />
-          ) : null}
+          <MediaLibraryComponent hostId={hostId} />
         </Container>
       </DashboardLayout>
     </>
   )
 }
-HostTheme.displayName = 'Page:HostTheme'
-HostTheme.layouts = [
+HostMedia.displayName = 'Page:HostMedia'
+HostMedia.layouts = [
   {
     Component: AuthenticatedLayout,
   },
   {
     Component: MainLayout,
     props: {
-      title: 'Host Theme',
+      title: 'Media',
     },
   },
 ]
 
-export default HostTheme
+export default HostMedia

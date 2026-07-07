@@ -25,6 +25,7 @@ export enum Route {
   AUTH_VERIFY_EMAIL = '/verify-email',
   HOST_LIST = '/hosts',
   HOST_DASHBOARD = '/[hostId]',
+  HOST_MEDIA = '/[hostId]/media',
   HOST_SETUP = '/[hostId]/setup',
   HOST_THEME = '/[hostId]/theme',
   LAYOUT_BESIGNER = '/[hostId]/layouts/[layoutId]/versions/[versionId]/besigner',
@@ -46,6 +47,7 @@ export interface RoutePayload extends Record<keyof any, any> {
     versionId: string
   }
   [Route.HOST_DASHBOARD]: { hostId: string }
+  [Route.HOST_MEDIA]: { hostId: string }
   [Route.HOST_THEME]: { hostId: string }
   [Route.LAYOUT_BESIGNER]: {
     hostId: string

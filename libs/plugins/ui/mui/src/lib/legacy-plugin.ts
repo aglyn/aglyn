@@ -23,6 +23,7 @@ import * as LayoutSlot from './components/layout-slot'
 import * as List from './components/list'
 import * as ListItem from './components/list-item'
 import * as ListItemText from './components/list-item-text'
+import * as Image from './components/image'
 import * as ReusableInstance from './components/reusable-instance'
 import * as ScreenLink from './components/screen-link'
 import * as Stack from './components/stack'
@@ -58,6 +59,7 @@ export function registerLegacyMuiPlugin(): void {
         ListItemText.default,
         ListItemText.schema,
       )
+      Aglyn.components.registerComponent(Image.default, Image.schema)
       Aglyn.components.registerComponent(
         ReusableInstance.default,
         ReusableInstance.schema,
@@ -77,6 +79,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(List.presets)
       Aglyn.components.registerPreset(ListItem.presets)
       Aglyn.components.registerPreset(ListItemText.presets)
+      Aglyn.components.registerPreset(Image.presets)
       Aglyn.components.registerPreset(ReusableInstance.presets)
       Aglyn.components.registerPreset(ScreenLink.presets)
       Aglyn.components.registerPreset(Stack.presets)
@@ -91,10 +94,12 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterPreset(List.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ListItem.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ListItemText.presets.map((i) => i.$id))
+      Aglyn.components.unregisterPreset(Image.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ReusableInstance.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ScreenLink.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Stack.presets.map((i) => i.$id))
 
+      Aglyn.components.unregisterComponent(Image.ID)
       Aglyn.components.unregisterComponent(AppBar.ID)
       Aglyn.components.unregisterComponent(Toolbar.ID)
       Aglyn.components.unregisterComponent(Typography.ID)

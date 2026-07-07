@@ -37,6 +37,7 @@ import {
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
 import { connectAuthEmulator, getAuth } from 'firebase/auth'
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
+import { getStorage } from 'firebase/storage'
 import {
   connectFirestoreEmulator,
   getFirestore,
@@ -54,6 +55,7 @@ import {
   DatabaseProvider,
   FirebaseAppProvider,
   FirestoreProvider,
+  StorageProvider,
   useAnalytics,
   useFirebaseApp,
   useUser,
@@ -66,6 +68,7 @@ AnalyticsProvider['displayName'] = 'AnalyticsProvider'
 DatabaseProvider['displayName'] = 'DatabaseProvider'
 FirebaseAppProvider['displayName'] = 'FirebaseAppProvider'
 FirestoreProvider['displayName'] = 'FirestoreProvider'
+StorageProvider['displayName'] = 'StorageProvider'
 
 function AnalyticsGlobalEvents({ children }) {
   const analytics = useAnalytics()
@@ -185,7 +188,9 @@ function GetInnerLayout({ children }) {
       <AuthProvider sdk={auth}>
         {/*<AppCheckProvider sdk={appCheck}>*/}
         <DatabaseProvider sdk={database}>
-          <FirestoreProvider sdk={store}>{children}</FirestoreProvider>
+          <FirestoreProvider sdk={store}>
+            <StorageProvider sdk={getStorage(app)}>{children}</StorageProvider>
+          </FirestoreProvider>
         </DatabaseProvider>
         {/*</AppCheckProvider>*/}
       </AuthProvider>

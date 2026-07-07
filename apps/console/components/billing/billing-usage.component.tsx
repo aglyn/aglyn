@@ -22,7 +22,7 @@ import {
   UNLIMITED,
 } from '@aglyn/aglyn'
 import { Link, LinearProgress, Stack, Typography } from '@mui/material'
-import { collection, getCountFromServer } from 'firebase/firestore'
+import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from 'reactfire'
 
@@ -95,7 +95,8 @@ function HostUsageMeters(props: {
   const [counts, setCounts] = useState<{
     screens: number | null
     layouts: number | null
-  }>({ screens: null, layouts: null })
+    storageMb: number | null
+  }>({ screens: null, layouts: null, storageMb: null })
   const entitlements = resolveTenantEntitlements(tenant)
 
   // Aggregation counts instead of full collection reads — one billed read
@@ -109,11 +110,17 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'layouts'),
       ).catch(() => null),
-    ]).then(([screens, layouts]) => {
+      // Media bytes counter maintained by the media library (AGL-72).
+      getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
+        () => null,
+      ),
+    ]).then(([screens, layouts, media]) => {
       if (!active) return
+      const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setCounts({
         screens: screens?.data().count ?? null,
         layouts: layouts?.data().count ?? null,
+        storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
       })
     })
     return () => {
@@ -147,7 +154,7 @@ function HostUsageMeters(props: {
       />
       <UsageMeter
         label="Storage"
-        used={null}
+        used={counts.storageMb}
         limit={entitlements.storagePerHostMb}
         unit="MB"
       />

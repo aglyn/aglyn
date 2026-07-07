@@ -309,6 +309,11 @@ const HostSetup: NextPageWithLayout = (props) => {
             href: buildRoute(Route.HOST_THEME, { hostId }),
           },
           {
+            id: 'nav-tab-media',
+            label: 'Media',
+            href: buildRoute(Route.HOST_MEDIA, { hostId }),
+          },
+          {
             id: 'nav-tab-setup',
             label: 'Setup',
             href: buildRoute(Route.HOST_SETUP, { hostId }),
