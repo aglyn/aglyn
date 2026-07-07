@@ -31,10 +31,9 @@ import { useHost } from '@aglyn/tenant-feature-instance'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
-import { doc } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
-import { useAnalytics, useFirestore } from 'reactfire'
+import { useAnalytics } from 'reactfire'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../components/card-display-form-template'
 import { useHostId } from '../../../components/host-id-provider'
@@ -230,13 +229,10 @@ const seoSchema: FormSchema = {
   ],
 }
 
-const useHostRef = (id: Aglyn.HostUid) => {
-  const firestore = useFirestore()
-  return doc(firestore, 'hosts', id)
-}
-
 /** Theme tab id (AGL-114); `/setup?tab=theme` deep links land here. */
 const THEME_TAB_ID = 'theme'
+/** Custom domain tab id (AGL-122); `/setup?tab=domain` deep links. */
+const DOMAIN_TAB_ID = 'domain'
 
 const HostSetup: NextPageWithLayout = (props) => {
   const { enqueueSnackbar } = useSnackbar()
@@ -245,7 +241,9 @@ const HostSetup: NextPageWithLayout = (props) => {
   const searchParams = useSearchParams()
   const requestedTab = searchParams?.get('tab')
   const [tab, setTab] = useState(
-    requestedTab === THEME_TAB_ID || requestedTab === seoSchema.id
+    requestedTab === THEME_TAB_ID ||
+      requestedTab === DOMAIN_TAB_ID ||
+      requestedTab === seoSchema.id
       ? requestedTab
       : basicSchema.id,
   )
@@ -375,6 +373,7 @@ const HostSetup: NextPageWithLayout = (props) => {
                           />
                         ))}
                         <Tab value={THEME_TAB_ID} label={'Theme'} />
+                        <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
                       </TabList>
                     </CardDisplay>
                   ),
@@ -400,7 +399,11 @@ const HostSetup: NextPageWithLayout = (props) => {
                             initialValues={initialValues}
                           />
 
-                          <CardDisplay></CardDisplay>
+                          {schema.id === 'hostDetails' ? (
+                            <div style={{ marginTop: 24 }}>
+                              <NotFoundScreenCard hostId={hostId} />
+                            </div>
+                          ) : null}
                         </TabPanel>
                       ))}
                       <TabPanel value={THEME_TAB_ID} sx={{ padding: 'unset' }}>
@@ -412,14 +415,15 @@ const HostSetup: NextPageWithLayout = (props) => {
                           />
                         ) : null}
                       </TabPanel>
+                      <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
+                        <CustomDomainCard hostId={hostId} />
+                      </TabPanel>
                     </>
                   ),
                 },
               ]}
             />
           </TabContext>
-          <CustomDomainCard hostId={hostId} />
-          <NotFoundScreenCard hostId={hostId} />
         </Container>
       </DashboardLayout>
     </>
