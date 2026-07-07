@@ -463,6 +463,42 @@ function ScreenDetails() {
       )
   }, [password, screenRef, enqueueSnackbar])
 
+  // --- SEO (AGL-117): screen fields override host defaults on the tenant --
+  const [seoDraft, setSeoDraft] = useState<{
+    title: string
+    description: string
+    image: string
+  } | null>(null)
+  const seoValue = {
+    title: seoDraft?.title ?? screen?.seo?.title ?? '',
+    description: seoDraft?.description ?? screen?.seo?.description ?? '',
+    image: seoDraft?.image ?? screen?.seo?.image ?? '',
+  }
+  const setSeoField = (field: 'title' | 'description' | 'image') =>
+    (event: { target: { value: string } }) =>
+      setSeoDraft({ ...seoValue, [field]: event.target.value })
+  const handleSeoSave = useCallback(async () => {
+    if (!seoDraft) return
+    const seo: Record<string, string> = {}
+    if (seoDraft.title.trim()) seo.title = seoDraft.title.trim()
+    if (seoDraft.description.trim())
+      seo.description = seoDraft.description.trim()
+    if (seoDraft.image.trim()) seo.image = seoDraft.image.trim()
+    await updateDoc(
+      screenRef,
+      Object.keys(seo).length
+        ? { seo, updatedAt: Timestamp.now() }
+        : { seo: deleteField(), updatedAt: Timestamp.now() },
+    )
+      .then(() => {
+        enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
+        setSeoDraft(null)
+      })
+      .catch(() =>
+        enqueueSnackbar('An error has occurred', { variant: 'error' }),
+      )
+  }, [seoDraft, screenRef, enqueueSnackbar])
+
   const details = [
     {
       key: 'id',
@@ -780,6 +816,55 @@ function ScreenDetails() {
                         {'Per-user editor permissions arrive with the team ' +
                           'user manager.'}
                       </Typography>
+                    </Stack>
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 6, lg: 4 },
+                children: (
+                  <CardDisplay
+                    header={'SEO'}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                  >
+                    <Stack spacing={1.5}>
+                      <TextField
+                        size="small"
+                        label="Title"
+                        value={seoValue.title}
+                        onChange={setSeoField('title')}
+                        helperText={`${seoValue.title.length}/60 — overrides the host title on this page`}
+                        error={seoValue.title.length > 60}
+                      />
+                      <TextField
+                        size="small"
+                        label="Description"
+                        value={seoValue.description}
+                        onChange={setSeoField('description')}
+                        multiline
+                        minRows={2}
+                        helperText={`${seoValue.description.length}/155`}
+                        error={seoValue.description.length > 155}
+                      />
+                      <TextField
+                        size="small"
+                        label="Social image URL"
+                        value={seoValue.image}
+                        onChange={setSeoField('image')}
+                        helperText="Shown as the og:image preview when the page is shared."
+                      />
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="secondary"
+                        disabled={!seoDraft}
+                        onClick={handleSeoSave}
+                        sx={{ alignSelf: 'flex-start' }}
+                      >
+                        {'Save SEO'}
+                      </Button>
                     </Stack>
                   </CardDisplay>
                 ),
