@@ -336,6 +336,13 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     (screen as any)?.seo?.description ||
     screen?.description ||
     host?.seo?.description
+  // Social image (AGL-117): screen override falls back to the host default.
+  const socialImage =
+    ((screen as any)?.seo?.image as string) ||
+    ((host?.seo?.image as string) ?? undefined)
+  // Unlisted pages (AGL-113 visibility) stay reachable but out of search.
+  const unlisted =
+    screen?.visibility === Aglyn.HostScreenVisibility.UNLISTED
   const canonicalBase = host?.cname
     ? `https://${host.cname}`
     : host?.subdomain
@@ -484,11 +491,18 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         {canonical ? (
           <meta key="og:url" property="og:url" content={canonical} />
         ) : null}
-        <meta key="twitter:card" name="twitter:card" content="summary" />
+        {socialImage ? (
+          <meta key="og:image" property="og:image" content={socialImage} />
+        ) : null}
+        <meta
+          key="twitter:card"
+          name="twitter:card"
+          content={socialImage ? 'summary_large_image' : 'summary'}
+        />
         {canonical ? (
           <link key="canonical" rel="canonical" href={canonical} />
         ) : null}
-        {props.notFoundFallback ? (
+        {props.notFoundFallback || unlisted ? (
           <meta key="robots" name="robots" content="noindex" />
         ) : null}
       </Head>
