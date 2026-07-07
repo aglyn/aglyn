@@ -291,7 +291,20 @@ export const BesignerDocumentSwitcherComponent = observer(
             </Typography>
           </MenuItem>
         ) : null}
-        <MenuItem value="view-all" divider>
+        <MenuItem
+          value="view-all"
+          // Pinned to the bottom of the scrolling menu (AGL-94) so it's
+          // reachable without scrolling through the paginated list.
+          sx={{
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 1,
+            backgroundColor: 'surface.main',
+            borderTop: 1,
+            borderColor: 'divider',
+            '&:hover': { backgroundColor: 'surface.main' },
+          }}
+        >
           <Typography variant="body2" color="secondary">
             {'View all screens…'}
           </Typography>
