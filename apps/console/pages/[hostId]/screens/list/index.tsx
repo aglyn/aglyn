@@ -443,6 +443,11 @@ function Screens(props) {
             href: buildRoute(Route.HOST_MEDIA, { hostId }),
           },
           {
+            id: 'nav-tab-inbox',
+            label: 'Inbox',
+            href: buildRoute(Route.HOST_INBOX, { hostId }),
+          },
+          {
             id: 'nav-tab-setup',
             label: 'Setup',
             href: buildRoute(Route.HOST_SETUP, { hostId }),

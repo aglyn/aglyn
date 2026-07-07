@@ -47,6 +47,7 @@ export const PLAN_ENTITLEMENTS: Record<
     totalSiteSizeMb: 100,
     membersPerHost: 1,
     bandwidthGb: 5,
+    formSubmissionsPerMonth: 20,
     features: {
       versioning: false,
       reusableComponents: false,
@@ -64,6 +65,7 @@ export const PLAN_ENTITLEMENTS: Record<
     totalSiteSizeMb: 1024,
     membersPerHost: 3,
     bandwidthGb: 50,
+    formSubmissionsPerMonth: 200,
     features: {
       versioning: false,
       reusableComponents: true,
@@ -81,6 +83,7 @@ export const PLAN_ENTITLEMENTS: Record<
     totalSiteSizeMb: 5120,
     membersPerHost: 10,
     bandwidthGb: 250,
+    formSubmissionsPerMonth: 1000,
     features: {
       versioning: true,
       reusableComponents: true,
@@ -98,6 +101,7 @@ export const PLAN_ENTITLEMENTS: Record<
     totalSiteSizeMb: 25600,
     membersPerHost: 50,
     bandwidthGb: 1000,
+    formSubmissionsPerMonth: 10000,
     features: {
       versioning: true,
       reusableComponents: true,

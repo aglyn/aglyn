@@ -274,7 +274,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
       : undefined
 
+  const site = useMemo(() => ({ hostId: host?.$id }), [host?.$id])
+
   return (
+    <Aglyn.SiteContext.Provider value={site}>
     <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
       <Head>
         <title>{fullTitle}</title>
@@ -322,6 +325,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         </a>
       ) : null}
     </Aglyn.ScreenLinkContext.Provider>
+    </Aglyn.SiteContext.Provider>
   )
 })
 

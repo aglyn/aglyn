@@ -112,6 +112,8 @@ export interface TenantEntitlements {
   totalSiteSizeMb?: number
   membersPerHost?: number
   bandwidthGb?: number
+  /** Form submissions accepted per calendar month (Forms & Lead Capture). */
+  formSubmissionsPerMonth?: number
   features?: TenantFeatureFlags
 }
 

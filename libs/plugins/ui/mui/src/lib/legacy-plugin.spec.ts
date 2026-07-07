@@ -2,6 +2,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import { schema as appBar } from './components/app-bar'
 import { schema as button } from './components/button'
 import { schema as container } from './components/container'
+import {
+  formFieldSchema as formField,
+  formSchema as form,
+} from './components/form'
 import { schema as image } from './components/image'
 import { schema as layoutSlot } from './components/layout-slot'
 import { schema as list } from './components/list'
@@ -18,6 +22,8 @@ import { registerLegacyMuiPlugin } from './legacy-plugin'
 // These ids are persisted in screen documents and must never change
 // without a document migration.
 const PERSISTED_COMPONENT_IDS = [
+  'form',
+  'formField',
   'image',
   'layoutSlot',
   'muiAppBar',
@@ -48,6 +54,8 @@ describe('plugins-ui-mui', () => {
     const schemas = [
       appBar,
       button,
+      form,
+      formField,
       image,
       container,
       layoutSlot,
