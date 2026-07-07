@@ -277,7 +277,14 @@ export interface AglynHostMedia {
  * the tenant's ISR revalidation (no dedicated cron needed).
  */
 export interface PublishSchedule {
-  versionId: VersionUid
+  /** Version to make live; unused for `action: 'unpublish'` (AGL-113). */
+  versionId?: VersionUid
+  /**
+   * What happens at `publishAt` (AGL-113): `publish` (default) flips the
+   * live version pointer; `unpublish` removes the screen's routing-map
+   * entry so its path 404s after the next revalidate.
+   */
+  action?: 'publish' | 'unpublish'
   publishAt: ITimestamp
   status: 'pending' | 'applied' | 'canceled'
   createdAt?: ITimestamp

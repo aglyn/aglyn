@@ -17,6 +17,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 
 /**
  * Lazy scheduled-publishing executor (AGL-61): if the doc carries a pending
@@ -35,13 +36,34 @@ export async function applyDuePublishSchedule(options: {
   const { hostId, collectionName, docId, parent } = options
   const schedule = parent.publishSchedule
   const publishAtMs = (schedule?.publishAt?.seconds ?? 0) * 1000
-  if (
-    schedule?.status !== 'pending' ||
-    !schedule.versionId ||
-    publishAtMs > Date.now()
-  ) {
+  if (schedule?.status !== 'pending' || publishAtMs > Date.now()) {
     return parent.versionId
   }
+
+  // Scheduled unpublish (AGL-113, screens only): drop the routing-map entry
+  // so the path 404s on the next revalidate. This render still serves the
+  // current version — the map is matched before this runs.
+  if (schedule.action === 'unpublish') {
+    if (collectionName === 'screens') {
+      try {
+        const firestore = firebaseAdmin.app().firestore()
+        const hostRef = firestore.collection('hosts').doc(hostId)
+        await Promise.all([
+          hostRef.update({
+            [`screens.${docId}`]: FieldValue.delete(),
+          }),
+          hostRef.collection(collectionName).doc(docId).update({
+            'publishSchedule.status': 'applied',
+          }),
+        ])
+      } catch (error) {
+        console.error(error)
+      }
+    }
+    return parent.versionId
+  }
+
+  if (!schedule.versionId) return parent.versionId
 
   try {
     await firebaseAdmin
