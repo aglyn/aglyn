@@ -57,6 +57,19 @@ function verifyStripeSignature(
 }
 
 /**
+ * Maps a Stripe price id back to a plan via the STRIPE_PRICE_* env vars
+ * (AGL-68) — fallback for subscriptions whose metadata lacks `plan`, e.g.
+ * ones edited in the Stripe dashboard.
+ */
+function planFromPriceId(priceId: string | undefined): string | undefined {
+  if (!priceId) return undefined
+  if (priceId === process.env.STRIPE_PRICE_STARTER) return 'starter'
+  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro'
+  if (priceId === process.env.STRIPE_PRICE_BUSINESS) return 'business'
+  return undefined
+}
+
+/**
  * Stripe webhook: syncs subscription lifecycle onto the tenant doc
  * (`tenants/{tenantId}.plan/subscription/stripeCustomerId`). The tenant id
  * travels in the subscription metadata set at checkout. Entitlements resolve
@@ -94,7 +107,10 @@ export default async function handler(
       const tenantId = object?.metadata?.tenantId
       if (tenantId) {
         const canceled = type === 'customer.subscription.deleted'
-        const plan = canceled ? 'free' : (object?.metadata?.plan ?? 'free')
+        const priceId = object?.items?.data?.[0]?.price?.id
+        const plan = canceled
+          ? 'free'
+          : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
         await firebaseAdmin
           .app()
           .firestore()

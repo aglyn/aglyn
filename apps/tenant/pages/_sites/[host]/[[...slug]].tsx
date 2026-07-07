@@ -25,6 +25,7 @@ import type { ParsedUrlQuery } from 'querystring'
 import { useEffect, useMemo } from 'react'
 import { useFirestore, useFirestoreDocData } from 'reactfire'
 import getComponents from '../../../utils/get-components'
+import getTenant from '../../../utils/get-tenant'
 import getHost from '../../../utils/get-host'
 import getPublishedLayoutVersion from '../../../utils/get-layout-version'
 import getScreen from '../../../utils/get-screen'
@@ -43,6 +44,8 @@ interface Props {
     }
   }
   nodes: Record<Aglyn.NodeId, Aglyn.NodeSchema>
+  /** Free-tier "Made with Aglyn" badge (AGL-69, removeBranding gate). */
+  showBranding?: boolean
 }
 
 export const getStaticPaths: GetStaticPaths<StaticPathsCtx> = async (ctx) => {
@@ -174,6 +177,16 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     )
     const denormalized = Aglyn.canvas.processNodesToDenormalized(nodes as any)
 
+    // Free-tier branding (AGL-69): shown only once the owning tenant has an
+    // explicit plan without the removeBranding feature; pre-billing tenants
+    // (no plan) and lookup failures render without the badge.
+    const tenantRes = await getTenant({ tenantId: hostRes.host.tenantId })
+    const showBranding = Boolean(
+      tenantRes.tenant?.plan &&
+        !Aglyn.resolveTenantEntitlements(tenantRes.tenant).features
+          .removeBranding,
+    )
+
     const props = {
       data: JSON.parse(
         JSON.stringify({
@@ -185,6 +198,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
         }),
       ),
       nodes: denormalized,
+      showBranding,
     }
 
     return {
@@ -229,6 +243,28 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   return (
     <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
+      {props.showBranding ? (
+        <a
+          href="https://aglyn.com"
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            position: 'fixed',
+            bottom: 12,
+            right: 12,
+            zIndex: 2147483000,
+            padding: '4px 10px',
+            borderRadius: 6,
+            fontSize: 12,
+            fontFamily: 'system-ui, sans-serif',
+            color: '#fff',
+            backgroundColor: 'rgba(0, 0, 0, 0.72)',
+            textDecoration: 'none',
+          }}
+        >
+          {'Made with Aglyn'}
+        </a>
+      ) : null}
     </Aglyn.ScreenLinkContext.Provider>
   )
 })

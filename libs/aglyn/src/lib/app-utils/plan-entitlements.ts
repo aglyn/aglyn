@@ -22,12 +22,16 @@ import type {
   TenantPlan,
 } from '../foundation'
 
+/** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
+export const UNLIMITED = Number.POSITIVE_INFINITY
+
 /**
  * Plan → default entitlements. Versioned with the app so pricing changes are
  * code-reviewed; per-tenant overrides live on `tenant.entitlements` and win
- * key-by-key. Draft tier table from the Tenant Billing & SaaS Plans project
- * (2026-07-06) — treat as source until pricing is finalized. Costs are
- * passed through from Firebase/Vercel at cost × 1.30.
+ * key-by-key. Tier table aligned to the Tenant Billing & SaaS Plans proposal
+ * (AGL-67, 2026-07-07): storage-per-host is media storage and exceeds the
+ * published total-site-size cap by design. Metered costs are passed through
+ * from Firebase/Vercel at cost × 1.30 separately (AGL-41).
  */
 export const PLAN_ENTITLEMENTS: Record<
   TenantPlan,
@@ -39,8 +43,8 @@ export const PLAN_ENTITLEMENTS: Record<
     hostLimit: 1,
     screensPerHost: 5,
     sharedLayoutsPerHost: 1,
-    storagePerHostMb: 100,
-    totalSiteSizeMb: 250,
+    storagePerHostMb: 250,
+    totalSiteSizeMb: 100,
     membersPerHost: 1,
     bandwidthGb: 5,
     features: {
@@ -48,29 +52,33 @@ export const PLAN_ENTITLEMENTS: Record<
       reusableComponents: false,
       customDomain: false,
       removeBranding: false,
+      scheduledPublishing: false,
+      marketplaceSelling: false,
     },
   },
   starter: {
-    hostLimit: 2,
+    hostLimit: 1,
     screensPerHost: 25,
-    sharedLayoutsPerHost: 5,
-    storagePerHostMb: 1024,
-    totalSiteSizeMb: 2048,
+    sharedLayoutsPerHost: 3,
+    storagePerHostMb: 2048,
+    totalSiteSizeMb: 1024,
     membersPerHost: 3,
     bandwidthGb: 50,
     features: {
       versioning: false,
       reusableComponents: true,
       customDomain: true,
-      removeBranding: false,
+      removeBranding: true,
+      scheduledPublishing: false,
+      marketplaceSelling: false,
     },
   },
   pro: {
-    hostLimit: 5,
+    hostLimit: 3,
     screensPerHost: 100,
-    sharedLayoutsPerHost: 20,
-    storagePerHostMb: 5120,
-    totalSiteSizeMb: 10240,
+    sharedLayoutsPerHost: UNLIMITED,
+    storagePerHostMb: 10240,
+    totalSiteSizeMb: 5120,
     membersPerHost: 10,
     bandwidthGb: 250,
     features: {
@@ -78,14 +86,16 @@ export const PLAN_ENTITLEMENTS: Record<
       reusableComponents: true,
       customDomain: true,
       removeBranding: true,
+      scheduledPublishing: false,
+      marketplaceSelling: true,
     },
   },
   business: {
-    hostLimit: 25,
-    screensPerHost: 500,
-    sharedLayoutsPerHost: 100,
-    storagePerHostMb: 20480,
-    totalSiteSizeMb: 51200,
+    hostLimit: 10,
+    screensPerHost: UNLIMITED,
+    sharedLayoutsPerHost: UNLIMITED,
+    storagePerHostMb: 51200,
+    totalSiteSizeMb: 25600,
     membersPerHost: 50,
     bandwidthGb: 1000,
     features: {
@@ -93,8 +103,32 @@ export const PLAN_ENTITLEMENTS: Record<
       reusableComponents: true,
       customDomain: true,
       removeBranding: true,
+      scheduledPublishing: true,
+      marketplaceSelling: true,
     },
   },
+}
+
+export interface PlanPricing {
+  /** Flat monthly base price in USD. */
+  basePriceMonthlyUsd: number
+  /**
+   * Monthly price per host beyond `hostLimit` (AGL-68); null when the plan
+   * cannot buy extra hosts.
+   */
+  extraHostMonthlyUsd: number | null
+}
+
+/**
+ * Flat subscription pricing per tier (AGL-68). Kept beside the entitlements
+ * so price changes ride the same review path; Stripe price ids map to plans
+ * via `STRIPE_PRICE_*` env vars on the billing API routes.
+ */
+export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
+  free: { basePriceMonthlyUsd: 0, extraHostMonthlyUsd: null },
+  starter: { basePriceMonthlyUsd: 19, extraHostMonthlyUsd: 10 },
+  pro: { basePriceMonthlyUsd: 49, extraHostMonthlyUsd: 8 },
+  business: { basePriceMonthlyUsd: 149, extraHostMonthlyUsd: 5 },
 }
 
 function resolvePlan(tenant: Partial<AglynTenant> | null | undefined) {
