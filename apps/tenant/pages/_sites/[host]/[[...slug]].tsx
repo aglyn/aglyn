@@ -24,6 +24,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
 import { useEffect, useMemo } from 'react'
 import { useFirestore, useFirestoreDocData } from 'reactfire'
+import Head from 'next/head'
 import applyDuePublishSchedule from '../../../utils/apply-publish-schedule'
 import getComponents from '../../../utils/get-components'
 import getTenant from '../../../utils/get-tenant'
@@ -250,8 +251,53 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   const screens = props.data?.host?.screens
   const screenLinks = useMemo(() => ({ screens }), [screens])
 
+  // SEO emission (SEO Toolkit): screen seo fields with host-level defaults.
+  const host = props.data?.host
+  const screen = props.data?.screen?.data
+  const siteTitle = host?.seo?.title ?? host?.displayName
+  const separator = host?.seo?.separator ?? ' – '
+  const pageTitle = (screen as any)?.seo?.title || screen?.displayName
+  const fullTitle =
+    [pageTitle, siteTitle].filter(Boolean).join(separator) || 'Aglyn site'
+  const description =
+    (screen as any)?.seo?.description ||
+    screen?.description ||
+    host?.seo?.description
+  const canonicalBase = host?.cname
+    ? `https://${host.cname}`
+    : host?.subdomain
+      ? `https://${host.subdomain}.aglyn.app`
+      : undefined
+  const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
+  const canonical =
+    canonicalBase && screenPath != null
+      ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
+      : undefined
+
   return (
     <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
+      <Head>
+        <title>{fullTitle}</title>
+        {description ? (
+          <meta key="desc" name="description" content={description} />
+        ) : null}
+        <meta key="og:title" property="og:title" content={fullTitle} />
+        {description ? (
+          <meta
+            key="og:description"
+            property="og:description"
+            content={description}
+          />
+        ) : null}
+        <meta key="og:type" property="og:type" content="website" />
+        {canonical ? (
+          <meta key="og:url" property="og:url" content={canonical} />
+        ) : null}
+        <meta key="twitter:card" name="twitter:card" content="summary" />
+        {canonical ? (
+          <link key="canonical" rel="canonical" href={canonical} />
+        ) : null}
+      </Head>
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
       {props.showBranding ? (
         <a

@@ -124,6 +124,9 @@ function BesignerPage(props) {
   const {queueLoading} = useLoading()
   const saveAvailable = !Aglyn.canvas.isInitialSame
   const [screenDialog, setScreenDialog] = useState(false)
+  // Screen SEO fields (SEO Toolkit); null = untouched, falls back to doc.
+  const [seoTitle, setSeoTitle] = useState<string | null>(null)
+  const [seoDescription, setSeoDescription] = useState<string | null>(null)
   const handleAddElementClick = useAddElementDrawerCallback()
   const detailUrl = buildRoute(Route.SCREEN_DETAILS, {
     hostId: hostId as string,
@@ -243,6 +246,28 @@ function BesignerPage(props) {
     () => ({ chromeCanvas }),
     [chromeCanvas],
   )
+
+  const handleSeoSave = useCallback(async () => {
+    const existing = (screenResult?.data as any)?.seo ?? {}
+    await updateScreenDoc({
+      seo: {
+        ...existing,
+        title: (seoTitle ?? existing.title ?? '').trim(),
+        description: (seoDescription ?? existing.description ?? '').trim(),
+      },
+    } as any)
+      .then(() => {
+        enqueueSnackbar('SEO saved', { variant: 'success', persist: false })
+        setSeoTitle(null)
+        setSeoDescription(null)
+      })
+      .catch((e) => {
+        enqueueSnackbar(`Error: ${JSON.stringify(e)}`, {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      })
+  }, [updateScreenDoc, screenResult, seoTitle, seoDescription, enqueueSnackbar])
 
   const handleLayoutChange = useCallback(
     async (event) => {
@@ -815,6 +840,40 @@ function BesignerPage(props) {
               </MenuItem>
             ))}
           </TextField>
+          <Typography variant="subtitle2">{'SEO'}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {'Search and social metadata for this screen. Saved separately ' +
+              'from the canvas.'}
+          </Typography>
+          <TextField
+            size="small"
+            label="Search title"
+            value={seoTitle ?? (screenResult?.data as any)?.seo?.title ?? ''}
+            onChange={(e) => setSeoTitle(e.target.value)}
+            helperText="Shown as the tab/search result title (≤60 chars works best)"
+          />
+          <TextField
+            size="small"
+            label="Search description"
+            multiline
+            minRows={2}
+            value={
+              seoDescription ??
+              (screenResult?.data as any)?.seo?.description ??
+              ''
+            }
+            onChange={(e) => setSeoDescription(e.target.value)}
+            helperText="Search snippet / social share text (≤160 chars works best)"
+          />
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleSeoSave}
+            disabled={seoTitle == null && seoDescription == null}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {'Save SEO'}
+          </Button>
         </Stack>
       </PropertiesDialogComponent>
       {Boolean(Aglyn.canvas.rootNode && jsonOpen) && (
