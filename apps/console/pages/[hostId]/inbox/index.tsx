@@ -27,6 +27,11 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   Stack,
   Table,
   TableBody,
@@ -43,7 +48,7 @@ import {
   query,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import { useHostId } from '../../../components/host-id-provider'
@@ -71,6 +76,22 @@ const HostInbox: NextPageWithLayout = () => {
   )
   const submissions = [...(submissionDocs ?? [])].sort(
     (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+  )
+
+  // Mail reader (AGL-104): opening a submission shows the full message and
+  // marks it read.
+  const [reader, setReader] = useState<any | null>(null)
+  const handleOpenReader = useCallback(
+    (submission: any) => () => {
+      setReader(submission)
+      if (!submission.read) {
+        void updateDoc(
+          doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
+          { read: true },
+        )
+      }
+    },
+    [firestore, hostId],
   )
 
   const handleToggleRead = useCallback(
@@ -152,7 +173,9 @@ const HostInbox: NextPageWithLayout = () => {
                   <TableRow
                     key={submission.$id}
                     hover
+                    onClick={handleOpenReader(submission)}
                     sx={{
+                      cursor: 'pointer',
                       '& td': {
                         fontWeight: submission.read ? undefined : 600,
                       },
@@ -190,7 +213,11 @@ const HostInbox: NextPageWithLayout = () => {
                       {submission.createdAt?.toDate?.().toLocaleString() ??
                         '--'}
                     </TableCell>
-                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                    <TableCell
+                      align="right"
+                      sx={{ whiteSpace: 'nowrap' }}
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <Button size="small" onClick={handleToggleRead(submission)}>
                         {submission.read ? 'Mark unread' : 'Mark read'}
                       </Button>
@@ -213,6 +240,59 @@ const HostInbox: NextPageWithLayout = () => {
           </Stack>
         </Container>
       </DashboardLayout>
+      <Dialog
+        open={Boolean(reader)}
+        onClose={() => setReader(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{reader?.formName ?? 'Form submission'}</DialogTitle>
+        <DialogContent>
+          <Typography variant="caption" color="text.secondary">
+            {`Received ${reader?.createdAt?.toDate?.().toLocaleString() ?? ''}` +
+              (reader?.screenId ? ` · screen ${reader.screenId}` : '')}
+          </Typography>
+          <Divider sx={{ my: 1.5 }} />
+          <Stack spacing={1.5}>
+            {Object.entries(reader?.fields ?? {}).map(([key, value]) => (
+              <Stack key={key} spacing={0.25}>
+                <Typography variant="caption" color="text.secondary">
+                  {key}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                >
+                  {String(value)}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            color="error"
+            onClick={async () => {
+              const target = reader
+              setReader(null)
+              if (target) await handleDelete(target)()
+            }}
+          >
+            {'Delete'}
+          </Button>
+          <Button
+            onClick={() => {
+              if (reader) void handleToggleRead({ ...reader, read: true })()
+              setReader(null)
+            }}
+          >
+            {'Mark unread'}
+          </Button>
+          <Button variant="contained" onClick={() => setReader(null)}>
+            {'Close'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }
