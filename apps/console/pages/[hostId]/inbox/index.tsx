@@ -43,6 +43,7 @@ import { useCallback } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import { useHostId } from '../../../components/host-id-provider'
+import HostOrdersCard from '../../../components/commerce/host-orders-card.component'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
@@ -196,6 +197,9 @@ const HostInbox: NextPageWithLayout = () => {
               </TableBody>
             </Table>
           )}
+          <Stack sx={{ mt: 3 }}>
+            <HostOrdersCard hostId={hostId} />
+          </Stack>
         </Container>
       </DashboardLayout>
     </>

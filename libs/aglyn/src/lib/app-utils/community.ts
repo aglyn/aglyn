@@ -54,6 +54,15 @@ export const COMMUNITY_PLATFORM_FEE_PERCENT_FREE_PLAN = 30
 export const COMMUNITY_MAX_PRICE_USD = 1000
 
 /**
+ * Platform fee on tenant-site product sales (Commerce Starter, AGL-90) —
+ * the tenant sells to their own visitors through their connected account,
+ * so the platform takes a processing/management share only.
+ */
+export const COMMERCE_PLATFORM_FEE_PERCENT = 2
+/** Product price ceiling (whole USD). */
+export const COMMERCE_MAX_PRICE_USD = 10000
+
+/**
  * Component ids publishable to the community. Mirrors the persisted ids in
  * plugins-ui-mui (legacy-plugin.spec.ts) minus `reusableInstance` — nested
  * instances would smuggle references to another tenant's private

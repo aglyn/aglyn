@@ -158,6 +158,30 @@ export default async function handler(
           })
       }
     }
+    // Commerce Starter orders (AGL-90): recorded under the selling host.
+    if (
+      type === 'checkout.session.completed' &&
+      object?.metadata?.type === 'commerce-order' &&
+      object?.payment_status === 'paid'
+    ) {
+      const { hostId, productId, feeCents } = object.metadata ?? {}
+      if (hostId && productId) {
+        await firebaseAdmin
+          .app()
+          .firestore()
+          .collection('hosts')
+          .doc(String(hostId))
+          .collection('orders')
+          .doc(String(object.id))
+          .set({
+            productId,
+            amountCents: Number(object?.amount_total ?? 0),
+            feeCents: Number(feeCents ?? 0),
+            customerEmail: object?.customer_details?.email ?? null,
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          })
+      }
+    }
     return res.status(200).json({ received: true })
   } catch (error) {
     console.error(error)
