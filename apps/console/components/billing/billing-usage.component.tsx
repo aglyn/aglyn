@@ -96,8 +96,16 @@ function HostUsageMeters(props: {
   const [counts, setCounts] = useState<{
     screens: number | null
     layouts: number | null
+    variables: number | null
+    functions: number | null
     storageMb: number | null
-  }>({ screens: null, layouts: null, storageMb: null })
+  }>({
+    screens: null,
+    layouts: null,
+    variables: null,
+    functions: null,
+    storageMb: null,
+  })
   const [usage, setUsage] = useState<{
     siteSizeMb: number | null
     bandwidthGb: number | null
@@ -115,16 +123,24 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'layouts'),
       ).catch(() => null),
+      getCountFromServer(
+        collection(firestore, 'hosts', host.$id, 'variables'),
+      ).catch(() => null),
+      getCountFromServer(
+        collection(firestore, 'hosts', host.$id, 'functions'),
+      ).catch(() => null),
       // Media bytes counter maintained by the media library (AGL-72).
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
       ),
-    ]).then(([screens, layouts, media]) => {
+    ]).then(([screens, layouts, variables, functions, media]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setCounts({
         screens: screens?.data().count ?? null,
         layouts: layouts?.data().count ?? null,
+        variables: variables?.data().count ?? null,
+        functions: functions?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
       })
     })
@@ -189,6 +205,16 @@ function HostUsageMeters(props: {
         label="Members"
         used={members}
         limit={entitlements.membersPerHost}
+      />
+      <UsageMeter
+        label="Variables"
+        used={counts.variables}
+        limit={entitlements.variablesPerHost}
+      />
+      <UsageMeter
+        label="Functions"
+        used={counts.functions}
+        limit={entitlements.functionsPerHost}
       />
       <UsageMeter
         label="Storage"

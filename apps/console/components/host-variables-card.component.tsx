@@ -42,6 +42,8 @@ import {
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { checkTenantQuota } from '../constants/entitlements'
+import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface HostVariablesCardProps {
   hostId: string
@@ -138,6 +140,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { tenant } = useCurrentTenant()
   const { data: variableDocs } = useFirestoreCollectionData<any>(
     query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
     { idField: '$id' },
@@ -266,9 +269,21 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           size="small"
           color="secondary"
           sx={{ alignSelf: 'flex-start' }}
-          onClick={() =>
+          onClick={() => {
+            // Plan cap (AGL-99): dark-launch — plan-less tenants uncapped.
+            const quota = checkTenantQuota(
+              tenant,
+              'variablesPerHost',
+              variables.length,
+            )
+            if (!quota.allowed) {
+              return void enqueueSnackbar(
+                `Variable limit reached (${quota.limit}) — upgrade in Billing`,
+                { variant: 'warning', persist: false },
+              )
+            }
             setDraft({ id: null, name: '', type: 'text', value: '' })
-          }
+          }}
         >
           {'Add variable'}
         </Button>

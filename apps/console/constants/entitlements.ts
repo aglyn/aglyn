@@ -31,6 +31,8 @@ export type Entitlement =
   | 'scheduled-publishing'
   | 'marketplace-selling'
   | 'ai-assist'
+  | 'workflows'
+  | 'data-store'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -40,6 +42,8 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   'scheduled-publishing': 'scheduledPublishing',
   'marketplace-selling': 'marketplaceSelling',
   'ai-assist': 'aiAssist',
+  workflows: 'workflows',
+  'data-store': 'dataStore',
 }
 
 /**

@@ -87,6 +87,15 @@ describe('plan entitlements', () => {
     expect(PLAN_ENTITLEMENTS.pro.features.marketplaceSelling).toBe(true)
     expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(false)
     expect(PLAN_ENTITLEMENTS.business.features.scheduledPublishing).toBe(true)
+    // Builder gating (AGL-99): paid tiers unlock workflows/datasets, free
+    // keeps a taste of variables/functions only.
+    expect(PLAN_ENTITLEMENTS.free.workflowsPerHost).toBe(0)
+    expect(PLAN_ENTITLEMENTS.free.datasetsPerHost).toBe(0)
+    expect(PLAN_ENTITLEMENTS.free.features.workflows).toBe(false)
+    expect(PLAN_ENTITLEMENTS.starter.variablesPerHost).toBe(25)
+    expect(PLAN_ENTITLEMENTS.starter.features.dataStore).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.functionsPerHost).toBe(50)
+    expect(PLAN_ENTITLEMENTS.business.recordsPerDataset).toBe(100000)
   })
 
   it('treats UNLIMITED quotas as always allowed', () => {

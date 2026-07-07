@@ -48,6 +48,11 @@ export const PLAN_ENTITLEMENTS: Record<
     membersPerHost: 1,
     bandwidthGb: 5,
     formSubmissionsPerMonth: 20,
+    variablesPerHost: 3,
+    functionsPerHost: 1,
+    workflowsPerHost: 0,
+    datasetsPerHost: 0,
+    recordsPerDataset: 0,
     features: {
       versioning: false,
       reusableComponents: false,
@@ -56,6 +61,8 @@ export const PLAN_ENTITLEMENTS: Record<
       scheduledPublishing: false,
       marketplaceSelling: false,
       aiAssist: false,
+      workflows: false,
+      dataStore: false,
     },
   },
   starter: {
@@ -67,6 +74,11 @@ export const PLAN_ENTITLEMENTS: Record<
     membersPerHost: 3,
     bandwidthGb: 50,
     formSubmissionsPerMonth: 200,
+    variablesPerHost: 25,
+    functionsPerHost: 10,
+    workflowsPerHost: 3,
+    datasetsPerHost: 1,
+    recordsPerDataset: 1000,
     features: {
       versioning: false,
       reusableComponents: true,
@@ -75,6 +87,8 @@ export const PLAN_ENTITLEMENTS: Record<
       scheduledPublishing: false,
       marketplaceSelling: false,
       aiAssist: false,
+      workflows: true,
+      dataStore: true,
     },
   },
   pro: {
@@ -86,6 +100,11 @@ export const PLAN_ENTITLEMENTS: Record<
     membersPerHost: 10,
     bandwidthGb: 250,
     formSubmissionsPerMonth: 1000,
+    variablesPerHost: 100,
+    functionsPerHost: 50,
+    workflowsPerHost: 25,
+    datasetsPerHost: 10,
+    recordsPerDataset: 10000,
     features: {
       versioning: true,
       reusableComponents: true,
@@ -94,6 +113,8 @@ export const PLAN_ENTITLEMENTS: Record<
       scheduledPublishing: false,
       marketplaceSelling: true,
       aiAssist: true,
+      workflows: true,
+      dataStore: true,
     },
   },
   business: {
@@ -105,6 +126,11 @@ export const PLAN_ENTITLEMENTS: Record<
     membersPerHost: 50,
     bandwidthGb: 1000,
     formSubmissionsPerMonth: 10000,
+    variablesPerHost: 1000,
+    functionsPerHost: 250,
+    workflowsPerHost: 100,
+    datasetsPerHost: 50,
+    recordsPerDataset: 100000,
     features: {
       versioning: true,
       reusableComponents: true,
@@ -113,6 +139,8 @@ export const PLAN_ENTITLEMENTS: Record<
       scheduledPublishing: true,
       marketplaceSelling: true,
       aiAssist: true,
+      workflows: true,
+      dataStore: true,
     },
   },
 }

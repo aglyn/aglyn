@@ -99,6 +99,10 @@ export interface TenantFeatureFlags {
   marketplaceSelling?: boolean
   /** AI copy assist in the besigner (AGL-89). */
   aiAssist?: boolean
+  /** No-code workflow builder (AGL-101). */
+  workflows?: boolean
+  /** Datasets + repeatable components (AGL-102/103). */
+  dataStore?: boolean
 }
 
 /**
@@ -116,6 +120,15 @@ export interface TenantEntitlements {
   bandwidthGb?: number
   /** Form submissions accepted per calendar month (Forms & Lead Capture). */
   formSubmissionsPerMonth?: number
+  /** Component-builder caps (AGL-99): host variables. */
+  variablesPerHost?: number
+  /** Component-builder caps (AGL-99): host functions. */
+  functionsPerHost?: number
+  /** Workflow builder cap (AGL-99/101). */
+  workflowsPerHost?: number
+  /** Dynamic data caps (AGL-99/102). */
+  datasetsPerHost?: number
+  recordsPerDataset?: number
   features?: TenantFeatureFlags
 }
 

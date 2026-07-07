@@ -45,6 +45,8 @@ import {
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { checkTenantQuota } from '../constants/entitlements'
+import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface HostFunctionsCardProps {
   hostId: string
@@ -101,6 +103,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { tenant } = useCurrentTenant()
   const { data: functionDocs } = useFirestoreCollectionData<any>(
     query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
     { idField: '$id' },
@@ -352,6 +355,18 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           color="secondary"
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => {
+            // Plan cap (AGL-99): dark-launch — plan-less tenants uncapped.
+            const quota = checkTenantQuota(
+              tenant,
+              'functionsPerHost',
+              functions.length,
+            )
+            if (!quota.allowed) {
+              return void enqueueSnackbar(
+                `Function limit reached (${quota.limit}) — upgrade in Billing`,
+                { variant: 'warning', persist: false },
+              )
+            }
             setTestArgs({})
             setTestResult(null)
             setDraft(emptyDraft())

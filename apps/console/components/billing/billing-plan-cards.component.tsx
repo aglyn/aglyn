@@ -195,6 +195,17 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         entitlements.membersPerHost === 1 ? '' : 's'
                       }`}
                   </Typography>
+                  <Typography variant="body2">
+                    {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
+                      `${quotaLabel(entitlements.functionsPerHost)} functions · ` +
+                      `${quotaLabel(entitlements.workflowsPerHost)} workflows`}
+                  </Typography>
+                  <Typography variant="body2">
+                    {entitlements.datasetsPerHost > 0
+                      ? `${quotaLabel(entitlements.datasetsPerHost)} datasets × ` +
+                        `${quotaLabel(entitlements.recordsPerDataset)} records`
+                      : 'No datasets'}
+                  </Typography>
                 </Stack>
                 <Stack spacing={0.5}>
                   {FEATURE_ROWS.map(({ key, label }) => {
