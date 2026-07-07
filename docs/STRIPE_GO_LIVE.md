@@ -62,6 +62,10 @@ The script prints the env block to paste into the console app's environment
    and emits one idempotent meter event per tenant (value = cost × 1.30 in
    cents).
 3. The Billing page shows the same month-to-date estimate to tenants.
-4. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
+4. Optional usage email (AGL-98): set `RESEND_API_KEY` and
+   `USAGE_EMAIL_FROM`, then schedule `POST /api/billing/usage-email` (same
+   `x-cron-secret` header) after the rollup; it emails each plan-gated
+   tenant one summary per month and stamps `emailedAt` on the rollup.
+5. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
    `libs/aglyn/.../usage-metering.ts`) against a real Firebase + Vercel
    invoice month before attaching the metered price in live mode.
