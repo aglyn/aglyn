@@ -129,6 +129,8 @@ const buildNav = (type?: 'icon' | 'text') => (item, i) => {
 export interface TopAppBarProps {
   appBarSuffix?: JSX.Node
   centerNavigationItems?: CenterNavMenuItem[]
+  /** Rendered before the center nav items (e.g. the version dropdown). */
+  centerPrefix?: JSX.Node
   customCenter?: JSX.Node
   enableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
@@ -140,6 +142,7 @@ const TopAppBar = (props: TopAppBarProps) => {
   const {
     appBarSuffix,
     centerNavigationItems,
+    centerPrefix,
     customCenter,
     enableAppBarElevation,
     quickActions,
@@ -261,7 +264,9 @@ const TopAppBar = (props: TopAppBarProps) => {
                 flexGrow: 1,
                 paddingLeft: 1.5
               }}>
-              {!customCenter && _isArrEmpty(centerNavigationItems) ? null : (
+              {!customCenter &&
+              !centerPrefix &&
+              _isArrEmpty(centerNavigationItems) ? null : (
                 <Stack
                   component="nav"
                   direction="row"
@@ -269,6 +274,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                     alignItems: "center",
                     justifyContent: "flex-start"
                   }}>
+                  {centerPrefix}
                   {customCenter || centerNavigationItems.map(buildNav('text'))}
                 </Stack>
               )}
@@ -325,6 +331,7 @@ export function MainLayout(props: MainLayoutProps) {
     title,
     appBarSuffix,
     centerNavigationItems,
+    centerPrefix,
     customCenter,
     enableAppBarElevation,
     quickActions,
@@ -359,6 +366,7 @@ export function MainLayout(props: MainLayoutProps) {
         <TopAppBar
           enableAppBarElevation={enableAppBarElevation}
           backButton={backButton}
+          centerPrefix={centerPrefix}
           centerNavigationItems={centerNavigationItems || []}
           customCenter={
             // Default center nav is the host-switcher dropdown (AGL-36);
