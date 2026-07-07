@@ -440,6 +440,12 @@ export interface ComponentSchema<P = any> {
      * edit directly (Attributes "Text" field, inline canvas editing).
      */
     textEditable?: FEATURE_FLAG
+    /**
+     * Component also accepts basic rich text (AGL-54): the inline editor
+     * upgrades to a formatting surface and commits sanitized HTML into the
+     * `html` prop (with `children` kept as the plain-text fallback).
+     */
+    richTextEditable?: FEATURE_FLAG
   }
 }
 

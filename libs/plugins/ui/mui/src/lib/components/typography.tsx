@@ -26,7 +26,8 @@ import {
   mdiFormatHeader6,
   mdiFormatText,
 } from '@aglyn/shared-data-mdi'
-import Typography from '@mui/material/Typography'
+import Typography, { type TypographyProps } from '@mui/material/Typography'
+import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -67,6 +68,7 @@ export const schema: Aglyn.ComponentSchema = {
   },
   flags: {
     textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+    richTextEditable: Aglyn.FEATURE_FLAG.ENABLED,
   },
   attributes: [
     FIELD_TEXT_CONTENT,
@@ -149,4 +151,31 @@ export const presets: Aglyn.PresetSchema[] = [
   })),
 ]
 
-export default Typography
+/**
+ * Typography that renders rich text (AGL-54): when the node carries an
+ * `html` prop (sanitized at commit time by the inline editor's allowlist),
+ * it renders as innerHTML; otherwise plain `children`. Only host admins can
+ * write node props, so stored markup carries the site owner's own trust.
+ */
+const AglynTypography = forwardRef<
+  HTMLElement,
+  TypographyProps & { html?: string }
+>(function AglynTypography(props, ref) {
+  const { html, children, ...rest } = props
+  if (typeof html === 'string' && html) {
+    return (
+      <Typography
+        ref={ref}
+        {...rest}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
+  return (
+    <Typography ref={ref} {...rest}>
+      {children}
+    </Typography>
+  )
+})
+
+export default AglynTypography
