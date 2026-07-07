@@ -71,6 +71,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../components/besigner-document-switcher.component'
+import BesignerVersionsComponent from '../../../../../../../components/besigner-versions.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import '../../../../../../../constants/app-setup'
@@ -528,6 +529,14 @@ function BesignerPage(props) {
         enableAppBarElevation
         // besigner={true}
         // appBarSuffix={'Besigner'}
+        centerPrefix={
+          <BesignerVersionsComponent
+            hostId={hostId}
+            parent={{ kind: 'screen', id: screenId }}
+            versionId={versionId}
+            publishedVersionId={screenResult?.data?.versionId}
+          />
+        }
         backButton={
           {
             component: AppLink,

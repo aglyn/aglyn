@@ -41,7 +41,7 @@ import {
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
-import { useHost, useLayoutVersion } from '@aglyn/tenant-feature-instance'
+import { useHost, useLayout, useLayoutVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
@@ -52,6 +52,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../components/besigner-document-switcher.component'
+import BesignerVersionsComponent from '../../../../../../../components/besigner-versions.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import '../../../../../../../constants/app-setup'
@@ -98,6 +99,8 @@ function LayoutBesignerPage(props) {
   const handleAddElementClick = useAddElementDrawerCallback()
   const listUrl = buildRoute(Route.LAYOUT_LIST, { hostId })
   const { doc: hostResult } = useHost({ hostId })
+  const { doc: layoutResult } = useLayout({ hostId, layoutId })
+  const layoutPublishedVersionId = layoutResult?.data?.versionId
   // Id-based screen links: a layout's appbar is exactly where by-id links
   // live, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
@@ -254,6 +257,14 @@ function LayoutBesignerPage(props) {
       <MainLayout
         title={'Besigner'}
         enableAppBarElevation
+        centerPrefix={
+          <BesignerVersionsComponent
+            hostId={hostId}
+            parent={{ kind: 'layout', id: layoutId }}
+            versionId={versionId}
+            publishedVersionId={layoutPublishedVersionId}
+          />
+        }
         backButton={
           {
             component: AppLink,
