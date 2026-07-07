@@ -22,6 +22,7 @@ import type {
 } from '@aglyn/shared-data-types'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { getGoogleFontsUrl, sanitizeHostTheme } from '@aglyn/shared-ui-theme'
+import { deepEqual } from '@aglyn/shared-util-vendor'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import {
   Button,
@@ -82,8 +83,15 @@ export function ThemeEditor(props: ThemeEditorProps) {
   const { theme, saving, onSave } = props
   const [draft, setDraft] = useState<HostTheme>(() => theme ?? {})
   const [scheme, setScheme] = useState<HostThemeScheme>('light')
+  // Sanitize both sides and compare order-insensitively (AGL-56): the saved
+  // doc round-trips through Firestore with different key order than the local
+  // draft, and the draft is only sanitized at save time — a string compare
+  // left the save buttons enabled forever after the first save.
   const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(theme ?? {}),
+    () =>
+      !deepEqual(sanitizeHostTheme(draft), sanitizeHostTheme(theme ?? {}), {
+        strict: true,
+      }),
     [draft, theme],
   )
   const schemeColors = draft.colorSchemes?.[scheme]
