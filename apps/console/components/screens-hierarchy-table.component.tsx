@@ -52,6 +52,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Skeleton,
+  Stack,
   Typography,
 } from '@mui/material'
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
@@ -85,6 +87,8 @@ export interface ScreensHierarchyTableProps {
   loading?: boolean
   onMoveScreen: (move: ScreenMoveRequest) => void | Promise<void>
   renderRowActions: (row: ScreenHierarchyRow) => ReactNode
+  /** Onboarding CTA rendered inside the empty state (AGL-125). */
+  emptyAction?: ReactNode
 }
 
 const COLUMN_COUNT = 7
@@ -294,7 +298,14 @@ function ScreenTableRow(props: {
 export function ScreensHierarchyTableComponent(
   props: ScreensHierarchyTableProps,
 ) {
-  const { screens, routingMap, loading, onMoveScreen, renderRowActions } = props
+  const {
+    screens,
+    routingMap,
+    loading,
+    onMoveScreen,
+    renderRowActions,
+    emptyAction,
+  } = props
   const [collapsedIds, setCollapsedIds] = useState<Set<ScreenUid>>(new Set())
   const [activeId, setActiveId] = useState<ScreenUid | undefined>(undefined)
   const sensors = useSensors(
@@ -409,12 +420,34 @@ export function ScreensHierarchyTableComponent(
             </TableRow>
           </TableHead>
           <TableBody>
+            {loading &&
+              !visibleRows.length &&
+              [0, 1, 2].map((index) => (
+                <TableRow key={`skeleton-${index}`}>
+                  {Array.from({ length: COLUMN_COUNT }).map((_, cell) => (
+                    <TableCell key={cell}>
+                      <Skeleton variant="text" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
             {!loading && !visibleRows.length && (
               <TableRow>
                 <TableCell colSpan={COLUMN_COUNT} align="center">
-                  <Typography variant="body2" color="text.secondary">
-                    {'No screens'}
-                  </Typography>
+                  <Stack
+                    spacing={1}
+                    sx={{ alignItems: 'center', py: 4 }}
+                  >
+                    <Typography variant="subtitle1">
+                      {'No screens yet — this site is a blank canvas.'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {'Create your first screen or start from a template ' +
+                        'using the buttons above, then open it with the ' +
+                        'besigner to design your page.'}
+                    </Typography>
+                    {emptyAction ?? null}
+                  </Stack>
                 </TableCell>
               </TableRow>
             )}

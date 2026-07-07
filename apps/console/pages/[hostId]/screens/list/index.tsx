@@ -526,6 +526,25 @@ function Screens(props) {
               loading={status === 'loading'}
               onMoveScreen={handleMoveScreen}
               renderRowActions={renderRowActions}
+              emptyAction={
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="secondary"
+                    onClick={handleFormOpen}
+                  >
+                    {'Create your first screen'}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setTemplatesOpen(true)}
+                  >
+                    {'Browse templates'}
+                  </Button>
+                </Stack>
+              }
             />
           </CardDisplay>
         </Container>
