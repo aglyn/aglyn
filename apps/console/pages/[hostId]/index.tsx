@@ -20,8 +20,6 @@ import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageWithLayout, useNextPageTitle } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { DataTableComponent } from '@aglyn/shared-ui-jsx'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
@@ -34,6 +32,7 @@ import HostWorkflowsCard from '../../components/host-workflows-card.component'
 import HostComponentsCard from '../../components/host-components-card.component'
 import HostActivityCard from '../../components/host-activity-card.component'
 import HostDisplayNameComponent from '../../components/host-display-name.component'
+import HostMembersCard from '../../components/host-members-card.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import hostNavTabItems from '../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
@@ -67,44 +66,7 @@ const Index: NextPageWithLayout = (props) => {
                 xs: 12,
                 md: 6,
               },
-              children: (
-                <CardDisplay header={'Users'}>
-                  <DataTableComponent
-                    rowHeight={40}
-                    getRowId={(row) => row.uid}
-                    columns={[
-                      { field: 'uid', headerName: 'User ID', type: 'string' },
-                      {
-                        field: 'displayName',
-                        headerName: 'Display Name',
-                        type: 'string',
-                        width: 150,
-                        maxWidth: 175,
-                      },
-                      {
-                        field: 'email',
-                        headerName: 'E-Mail',
-                        type: 'string',
-                        width: 175,
-                        maxWidth: 200,
-                      },
-                      {
-                        field: 'emailVerified',
-                        headerName: 'E-Verified',
-                        type: 'boolean',
-                        maxWidth: 100,
-                      },
-                      {
-                        field: 'created',
-                        headerName: 'Created',
-                        type: 'date',
-                        maxWidth: 100,
-                      },
-                    ]}
-                    rows={[]}
-                  />
-                </CardDisplay>
-              ),
+              children: <HostMembersCard hostId={hostId} />,
             },
             {
               size: {

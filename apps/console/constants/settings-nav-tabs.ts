@@ -40,6 +40,11 @@ export function settingsNavTabItems() {
       href: buildRoute(Route.MANAGE_BILLING),
     },
     {
+      id: 'nav-tab-settings-team',
+      label: 'Team',
+      href: buildRoute(Route.MANAGE_TEAM),
+    },
+    {
       id: 'nav-tab-settings-community',
       label: 'Community',
       href: buildRoute(Route.MANAGE_COMMUNITY_PROFILE),
