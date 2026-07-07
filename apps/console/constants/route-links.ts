@@ -26,6 +26,8 @@ export enum Route {
   AUTH_VERIFY_EMAIL = '/verify-email',
   HOST_LIST = '/hosts',
   HOST_COMMUNITY = '/[hostId]/community',
+  HOST_COMMUNITY_LISTING = '/[hostId]/community/[listingId]',
+  HOST_COMMUNITY_PUBLISHER = '/[hostId]/community/publisher/[profileId]',
   HOST_CONTENT = '/[hostId]/content',
   MANAGE_COMMUNITY_PROFILE = '/manage/community',
   MANAGE_TEAM = '/manage/team',
@@ -55,6 +57,8 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_DASHBOARD]: { hostId: string }
   [Route.ADMIN_TENANTS]: undefined
   [Route.HOST_COMMUNITY]: { hostId: string }
+  [Route.HOST_COMMUNITY_LISTING]: { hostId: string; listingId: string }
+  [Route.HOST_COMMUNITY_PUBLISHER]: { hostId: string; profileId: string }
   [Route.HOST_CONTENT]: { hostId: string }
   [Route.MANAGE_COMMUNITY_PROFILE]: undefined
   [Route.MANAGE_TEAM]: undefined

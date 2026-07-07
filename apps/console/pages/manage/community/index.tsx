@@ -29,7 +29,13 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import {
   useFirestore,
   useFirestoreCollectionData,
@@ -160,6 +166,71 @@ const CommunitySettings: NextPageWithLayout = () => {
     }
   }, [uid, validHandle, handle, displayName, bio, firestore, enqueueSnackbar])
 
+  // Listing preview image (AGL-95): one shared file input; the pending
+  // listing id records which row opened the picker.
+  const previewInputRef = useRef<HTMLInputElement>(null)
+  const previewListingIdRef = useRef<string | null>(null)
+  const handlePickPreview = useCallback(
+    (listing: any) => () => {
+      previewListingIdRef.current = listing.$id
+      previewInputRef.current?.click()
+    },
+    [],
+  )
+  const handlePreviewFile = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      const listingId = previewListingIdRef.current
+      event.target.value = ''
+      if (!file || !listingId) return
+      if (!file.type.startsWith('image/')) {
+        return void enqueueSnackbar('Pick an image file', {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+      try {
+        const buffer = await file.arrayBuffer()
+        const data = btoa(
+          Array.from(new Uint8Array(buffer), (byte) =>
+            String.fromCharCode(byte),
+          ).join(''),
+        )
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/community/preview-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            listingId,
+            contentType: file.type,
+            data,
+          }),
+        })
+        const payload = await response.json()
+        if (!response.ok) {
+          return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        }
+        enqueueSnackbar('Preview image saved', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [user, enqueueSnackbar],
+  )
+
   const handleUnpublish = useCallback(
     (listing: any) => async () => {
       try {
@@ -271,6 +342,13 @@ const CommunitySettings: NextPageWithLayout = () => {
                       </Typography>
                     ) : (
                       <Stack spacing={1}>
+                        <input
+                          ref={previewInputRef}
+                          type="file"
+                          accept="image/*"
+                          hidden
+                          onChange={handlePreviewFile}
+                        />
                         {(listings ?? []).map((listing: any) => (
                           <Stack
                             key={listing.$id}
@@ -290,9 +368,19 @@ const CommunitySettings: NextPageWithLayout = () => {
                                   (Number(listing.priceUsd ?? 0) > 0
                                     ? ` · $${listing.priceUsd}`
                                     : ' · free') +
+                                  (listing.previewImageUrl
+                                    ? ' · has preview'
+                                    : '') +
                                   (listing.deletedAt ? ' · unpublished' : '')}
                               </Typography>
                             </Stack>
+                            <Button
+                              size="small"
+                              color="secondary"
+                              onClick={handlePickPreview(listing)}
+                            >
+                              {listing.previewImageUrl ? 'Replace' : 'Image'}
+                            </Button>
                             <Button
                               size="small"
                               color={listing.deletedAt ? 'secondary' : 'error'}

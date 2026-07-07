@@ -16,24 +16,28 @@
  */
 'use client'
 
-import { CardDisplay, useLoading } from '@aglyn/shared-ui-jsx'
+import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Box,
   Button,
   Chip,
   Grid,
+  Link as MuiLink,
   MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollectionData,
   useUser,
 } from 'reactfire'
+import { buildRoute, Route } from '../../constants/route-links'
+import useCommunityActions from '../../hooks/use-community-actions'
 import useTenantPermissions from '../../hooks/use-tenant-permissions'
 
 export interface CommunityBrowseProps {
@@ -54,7 +58,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { permissions } = useTenantPermissions()
-  const { queueLoading } = useLoading()
+  const { install: runInstall, buy: runBuy } = useCommunityActions(hostId)
   const [handles, setHandles] = useState<Record<string, string>>({})
 
   const { data: listings } = useFirestoreCollectionData<any>(
@@ -124,84 +128,9 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
 
   // Server-side install (AGL-46): version snapshots aren't client-readable
   // (paid content), so the API verifies access and copies the definition.
-  const handleInstall = useCallback(
-    (listing: any) => async () => {
-      const dequeue = queueLoading()
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/install', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ listingId: listing.$id, hostId }),
-        })
-        const payload = await response.json()
-        if (!response.ok) {
-          return void enqueueSnackbar(payload?.error ?? 'Install failed', {
-            variant: response.status === 402 ? 'warning' : 'error',
-            allowDuplicate: true,
-          })
-        }
-        enqueueSnackbar(
-          payload.updated
-            ? `Updated "${listing.displayName}" to v${payload.version}`
-            : `Installed "${listing.displayName}" — find it under Your components`,
-          { variant: 'success', persist: false },
-        )
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      } finally {
-        dequeue()
-      }
-    },
-    [user, hostId, queueLoading, enqueueSnackbar],
-  )
-
-  const handleBuy = useCallback(
-    (listing: any) => async () => {
-      const dequeue = queueLoading()
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        const response = await fetch('/api/community/checkout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-          },
-          body: JSON.stringify({ listingId: listing.$id, hostId }),
-        })
-        const payload = await response.json()
-        if (response.status === 501) {
-          return void enqueueSnackbar(
-            'Purchases are not configured on this deployment',
-            { variant: 'info', persist: false },
-          )
-        }
-        if (!response.ok || !payload?.url) {
-          return void enqueueSnackbar(payload?.error ?? 'Checkout failed', {
-            variant: 'error',
-            allowDuplicate: true,
-          })
-        }
-        window.location.assign(payload.url)
-      } catch (error) {
-        console.error(error)
-        enqueueSnackbar('An error has occurred', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      } finally {
-        dequeue()
-      }
-    },
-    [user, hostId, queueLoading, enqueueSnackbar],
-  )
+  // Handlers shared with the detail page live in useCommunityActions.
+  const handleInstall = (listing: any) => () => runInstall(listing)
+  const handleBuy = (listing: any) => () => runBuy(listing)
 
   // Browse controls (AGL-95): client-side search/filter/sort over the
   // fetched page of listings.
@@ -301,14 +230,37 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     height: '100%',
                   }}
                 >
+                  {listing.previewImageUrl ? (
+                    <Box
+                      component="img"
+                      src={listing.previewImageUrl}
+                      alt={`${listing.displayName} preview`}
+                      sx={{
+                        width: '100%',
+                        height: 120,
+                        objectFit: 'cover',
+                        borderRadius: 1,
+                      }}
+                    />
+                  ) : null}
                   <Stack
                     direction="row"
                     spacing={1}
                     sx={{ alignItems: 'center' }}
                   >
-                    <Typography variant="subtitle2" sx={{ flex: 1 }} noWrap>
+                    <MuiLink
+                      href={buildRoute(Route.HOST_COMMUNITY_LISTING, {
+                        hostId,
+                        listingId: listing.$id,
+                      })}
+                      color="inherit"
+                      underline="hover"
+                      variant="subtitle2"
+                      sx={{ flex: 1 }}
+                      noWrap
+                    >
                       {listing.displayName}
-                    </Typography>
+                    </MuiLink>
                     {listing.category ? (
                       <Chip size="small" label={listing.category} />
                     ) : null}
@@ -322,9 +274,23 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
                     {`v${listing.latestVersion}`}
-                    {handles[listing.profileId]
-                      ? ` · by @${handles[listing.profileId]}`
-                      : ''}
+                    {handles[listing.profileId] ? (
+                      <>
+                        {' · by '}
+                        <MuiLink
+                          href={buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
+                            hostId,
+                            profileId: listing.profileId,
+                          })}
+                          color="secondary"
+                          underline="hover"
+                        >
+                          {`@${handles[listing.profileId]}`}
+                        </MuiLink>
+                      </>
+                    ) : (
+                      ''
+                    )}
                     {listing.installCount
                       ? ` · ${listing.installCount} install${
                           listing.installCount === 1 ? '' : 's'

@@ -162,6 +162,12 @@ export default async function handler(
         deletedAt: null,
         ...(existing.empty && { createdAt: now }),
         updatedAt: now,
+        // Version metadata for the detail page (AGL-95) — snapshots
+        // themselves stay server-only, so history rides the listing doc.
+        versionHistory: firebaseAdmin.firestore.FieldValue.arrayUnion({
+          version,
+          publishedAt: firebaseAdmin.firestore.Timestamp.now(),
+        }),
       },
       { merge: true },
     )
