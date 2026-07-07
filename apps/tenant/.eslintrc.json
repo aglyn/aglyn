@@ -14,7 +14,20 @@
     },
     {
       "files": ["*.ts", "*.tsx"],
-      "rules": {}
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": ["@mui/*/*/*", "!@mui/material/test-utils/*"],
+            "paths": [
+              {
+                "name": "@aglyn/shared-ui-jsx",
+                "message": "The shared-ui-jsx barrel duplicates the module graph in the tenant app and blanks the site (AGL-52). Use @aglyn/aglyn exports instead."
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "files": ["*.js", "*.jsx"],
