@@ -30,6 +30,14 @@ service cloud.firestore {
       }
     }
 
+    // User profile docs (AGL-158): the console account page reads/writes
+    // users/{uid}; the AGL-42 hardening dropped the blanket rule without
+    // adding this match, which default-denied the collection.
+    match /users/{userId} {
+      allow read, write: if isStaff() ||
+        (isSignedIn() && request.auth.uid == userId);
+    }
+
     // Tenant docs (billing v1: keyed by the owner's uid). Owners read their
     // own doc; clients never write plan/subscription — the Stripe webhook
     // and admin tooling write via the Admin SDK (which bypasses rules), and
