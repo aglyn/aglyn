@@ -19,6 +19,9 @@ import {
   type AglynTenant,
   checkEntitlement,
   checkQuota,
+  checkSeatQuota,
+  type SeatKind,
+  type SeatQuotaResult,
   type TenantFeatureFlags,
 } from '@aglyn/aglyn'
 
@@ -74,4 +77,29 @@ export function checkTenantQuota(
     return { allowed: true, limit: Number.POSITIVE_INFINITY, remaining: Number.POSITIVE_INFINITY }
   }
   return checkQuota(tenant, quota, currentUsage)
+}
+
+/**
+ * Seat quota (AGL-112) behind the same explicit-plan gate: pre-billing
+ * tenants add users freely; once a plan exists, seats = included + purchased
+ * addons up to the plan's hard max.
+ */
+export function checkTenantSeatQuota(
+  tenant: Partial<AglynTenant> | null | undefined,
+  kind: SeatKind,
+  currentUsage: number,
+): SeatQuotaResult {
+  if (!tenant?.plan) {
+    return {
+      allowed: true,
+      limit: Number.POSITIVE_INFINITY,
+      remaining: Number.POSITIVE_INFINITY,
+      included: Number.POSITIVE_INFINITY,
+      purchased: 0,
+      maxSeats: Number.POSITIVE_INFINITY,
+      upgradeRequired: false,
+      addonPriceUsd: null,
+    }
+  }
+  return checkSeatQuota(tenant, kind, currentUsage)
 }

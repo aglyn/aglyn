@@ -18,6 +18,7 @@
 import {
   checkEntitlement,
   checkQuota,
+  checkSeatQuota,
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveTenantEntitlements,
@@ -107,10 +108,85 @@ describe('plan entitlements', () => {
 
   it('pins the AGL-68 pricing model', () => {
     expect(PLAN_PRICING).toEqual({
-      free: { basePriceMonthlyUsd: 0, extraHostMonthlyUsd: null },
-      starter: { basePriceMonthlyUsd: 19, extraHostMonthlyUsd: 10 },
-      pro: { basePriceMonthlyUsd: 49, extraHostMonthlyUsd: 8 },
-      business: { basePriceMonthlyUsd: 149, extraHostMonthlyUsd: 5 },
+      free: {
+        basePriceMonthlyUsd: 0,
+        extraHostMonthlyUsd: null,
+        extraSeatMonthlyUsd: null,
+        extraMemberMonthlyUsd: null,
+      },
+      starter: {
+        basePriceMonthlyUsd: 19,
+        extraHostMonthlyUsd: 10,
+        extraSeatMonthlyUsd: 5,
+        extraMemberMonthlyUsd: 3,
+      },
+      pro: {
+        basePriceMonthlyUsd: 49,
+        extraHostMonthlyUsd: 8,
+        extraSeatMonthlyUsd: 4,
+        extraMemberMonthlyUsd: 2,
+      },
+      business: {
+        basePriceMonthlyUsd: 149,
+        extraHostMonthlyUsd: 5,
+        extraSeatMonthlyUsd: 3,
+        extraMemberMonthlyUsd: 1,
+      },
     })
+  })
+
+  it('pins the AGL-112 seat table', () => {
+    expect(
+      Object.fromEntries(
+        Object.entries(PLAN_ENTITLEMENTS).map(([plan, value]) => [
+          plan,
+          [
+            value.managersPerTenant,
+            value.maxManagersPerTenant,
+            value.membersPerHost,
+            value.maxMembersPerHost,
+          ],
+        ]),
+      ),
+    ).toEqual({
+      free: [1, 1, 1, 1],
+      starter: [2, 5, 3, 10],
+      pro: [5, 20, 10, 25],
+      business: [15, 100, 50, 100],
+    })
+  })
+
+  it('checkSeatQuota counts purchased addons up to the hard max', () => {
+    const base = checkSeatQuota({ plan: 'starter' } as any, 'managers', 2)
+    expect(base.allowed).toBe(false)
+    expect(base.limit).toBe(2)
+    expect(base.upgradeRequired).toBe(false)
+    expect(base.addonPriceUsd).toBe(5)
+
+    const withAddons = checkSeatQuota(
+      { plan: 'starter', seatAddons: { managers: 2 } } as any,
+      'managers',
+      2,
+    )
+    expect(withAddons.allowed).toBe(true)
+    expect(withAddons.limit).toBe(4)
+    expect(withAddons.purchased).toBe(2)
+
+    // Addons clamp at the hard max; only an upgrade raises it further.
+    const capped = checkSeatQuota(
+      { plan: 'starter', seatAddons: { managers: 50 } } as any,
+      'managers',
+      4,
+    )
+    expect(capped.limit).toBe(5)
+    expect(capped.maxSeats).toBe(5)
+    expect(capped.upgradeRequired).toBe(true)
+  })
+
+  it('checkSeatQuota requires upgrading on plans without seat addons', () => {
+    const result = checkSeatQuota({ plan: 'free' } as any, 'members', 1)
+    expect(result.allowed).toBe(false)
+    expect(result.upgradeRequired).toBe(true)
+    expect(result.addonPriceUsd).toBeNull()
   })
 })

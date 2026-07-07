@@ -273,13 +273,14 @@ function LayoutBesignerPage(props) {
         }
         actionsPrefix={
           <>
-          <BesignerFunctionsButton hostId={hostId} />
-          <BesignerVersionsComponent
-            hostId={hostId}
-            parent={{ kind: 'layout', id: layoutId }}
-            versionId={versionId}
-            publishedVersionId={layoutPublishedVersionId}
-          />
+            <BesignerFunctionsButton hostId={hostId} />
+            <BesignerVersionsComponent
+              hostId={hostId}
+              parent={{ kind: 'layout', id: layoutId }}
+              versionId={versionId}
+              publishedVersionId={layoutPublishedVersionId}
+            />
+          </>
         }
         backButton={
           {

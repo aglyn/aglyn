@@ -46,6 +46,9 @@ export const PLAN_ENTITLEMENTS: Record<
     storagePerHostMb: 250,
     totalSiteSizeMb: 100,
     membersPerHost: 1,
+    managersPerTenant: 1,
+    maxManagersPerTenant: 1,
+    maxMembersPerHost: 1,
     bandwidthGb: 5,
     formSubmissionsPerMonth: 20,
     variablesPerHost: 3,
@@ -72,6 +75,9 @@ export const PLAN_ENTITLEMENTS: Record<
     storagePerHostMb: 2048,
     totalSiteSizeMb: 1024,
     membersPerHost: 3,
+    managersPerTenant: 2,
+    maxManagersPerTenant: 5,
+    maxMembersPerHost: 10,
     bandwidthGb: 50,
     formSubmissionsPerMonth: 200,
     variablesPerHost: 25,
@@ -98,6 +104,9 @@ export const PLAN_ENTITLEMENTS: Record<
     storagePerHostMb: 10240,
     totalSiteSizeMb: 5120,
     membersPerHost: 10,
+    managersPerTenant: 5,
+    maxManagersPerTenant: 20,
+    maxMembersPerHost: 25,
     bandwidthGb: 250,
     formSubmissionsPerMonth: 1000,
     variablesPerHost: 100,
@@ -124,6 +133,9 @@ export const PLAN_ENTITLEMENTS: Record<
     storagePerHostMb: 51200,
     totalSiteSizeMb: 25600,
     membersPerHost: 50,
+    managersPerTenant: 15,
+    maxManagersPerTenant: 100,
+    maxMembersPerHost: 100,
     bandwidthGb: 1000,
     formSubmissionsPerMonth: 10000,
     variablesPerHost: 1000,
@@ -153,6 +165,16 @@ export interface PlanPricing {
    * cannot buy extra hosts.
    */
   extraHostMonthlyUsd: number | null
+  /**
+   * Monthly price per tenant-manager seat beyond `managersPerTenant`
+   * (AGL-112); null when the plan cannot buy extra seats.
+   */
+  extraSeatMonthlyUsd: number | null
+  /**
+   * Monthly price per host-member seat beyond `membersPerHost` (AGL-112);
+   * null when the plan cannot buy extra member seats.
+   */
+  extraMemberMonthlyUsd: number | null
 }
 
 /**
@@ -161,10 +183,30 @@ export interface PlanPricing {
  * via `STRIPE_PRICE_*` env vars on the billing API routes.
  */
 export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
-  free: { basePriceMonthlyUsd: 0, extraHostMonthlyUsd: null },
-  starter: { basePriceMonthlyUsd: 19, extraHostMonthlyUsd: 10 },
-  pro: { basePriceMonthlyUsd: 49, extraHostMonthlyUsd: 8 },
-  business: { basePriceMonthlyUsd: 149, extraHostMonthlyUsd: 5 },
+  free: {
+    basePriceMonthlyUsd: 0,
+    extraHostMonthlyUsd: null,
+    extraSeatMonthlyUsd: null,
+    extraMemberMonthlyUsd: null,
+  },
+  starter: {
+    basePriceMonthlyUsd: 19,
+    extraHostMonthlyUsd: 10,
+    extraSeatMonthlyUsd: 5,
+    extraMemberMonthlyUsd: 3,
+  },
+  pro: {
+    basePriceMonthlyUsd: 49,
+    extraHostMonthlyUsd: 8,
+    extraSeatMonthlyUsd: 4,
+    extraMemberMonthlyUsd: 2,
+  },
+  business: {
+    basePriceMonthlyUsd: 149,
+    extraHostMonthlyUsd: 5,
+    extraSeatMonthlyUsd: 3,
+    extraMemberMonthlyUsd: 1,
+  },
 }
 
 function resolvePlan(tenant: Partial<AglynTenant> | null | undefined) {
@@ -209,6 +251,69 @@ export function checkEntitlement(
  * call before creating the next resource (e.g. usage=hostCount before
  * creating another host). `remaining` never goes negative.
  */
+export type SeatKind = 'managers' | 'members'
+
+export interface SeatQuotaResult {
+  /** False once usage meets the effective limit (included + purchased). */
+  allowed: boolean
+  /** Effective seat limit: included + purchased addons, clamped to the max. */
+  limit: number
+  remaining: number
+  /** Included seats on the plan before addons. */
+  included: number
+  /** Purchased addon seats currently applied. */
+  purchased: number
+  /** Hard cap incl. addons; reaching it requires a plan upgrade. */
+  maxSeats: number
+  /**
+   * True when buying more addon seats cannot raise the limit — either the
+   * plan sells no addons or the hard cap is reached. UI should prompt an
+   * upgrade instead of an addon purchase.
+   */
+  upgradeRequired: boolean
+  /** Monthly price per addon seat; null when the plan sells none. */
+  addonPriceUsd: number | null
+}
+
+/**
+ * Seat quota check (AGL-112): seats differ from plain quotas because tenants
+ * can buy addon seats (`tenant.seatAddons`) up to a per-plan hard max —
+ * beyond the max the only path is upgrading the plan. `managers` counts
+ * tenant-manager seats tenant-wide; `members` counts host members per host.
+ */
+export function checkSeatQuota(
+  tenant: Partial<AglynTenant> | null | undefined,
+  kind: SeatKind,
+  currentUsage: number,
+): SeatQuotaResult {
+  const entitlements = resolveTenantEntitlements(tenant)
+  const pricing = PLAN_PRICING[resolvePlan(tenant)]
+  const included =
+    kind === 'managers'
+      ? entitlements.managersPerTenant
+      : entitlements.membersPerHost
+  const maxSeats =
+    kind === 'managers'
+      ? entitlements.maxManagersPerTenant
+      : entitlements.maxMembersPerHost
+  const addonPriceUsd =
+    kind === 'managers'
+      ? pricing.extraSeatMonthlyUsd
+      : pricing.extraMemberMonthlyUsd
+  const purchased = Math.max(0, tenant?.seatAddons?.[kind] ?? 0)
+  const limit = Math.min(included + purchased, maxSeats)
+  return {
+    allowed: currentUsage < limit,
+    limit,
+    remaining: Math.max(0, limit - currentUsage),
+    included,
+    purchased,
+    maxSeats,
+    upgradeRequired: addonPriceUsd === null || limit >= maxSeats,
+    addonPriceUsd,
+  }
+}
+
 export function checkQuota(
   tenant: Partial<AglynTenant> | null | undefined,
   quota: keyof Omit<TenantEntitlements, 'features'>,

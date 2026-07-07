@@ -190,10 +190,25 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       `${mbLabel(entitlements.totalSiteSizeMb)} site`}
                   </Typography>
                   <Typography variant="body2">
-                    {`${entitlements.bandwidthGb} GB bandwidth · ` +
-                      `${entitlements.membersPerHost} member${
-                        entitlements.membersPerHost === 1 ? '' : 's'
-                      }`}
+                    {`${entitlements.bandwidthGb} GB bandwidth`}
+                  </Typography>
+                  <Typography variant="body2">
+                    {`${entitlements.managersPerTenant} team seat${
+                      entitlements.managersPerTenant === 1 ? '' : 's'
+                    }`}
+                    {pricing.extraSeatMonthlyUsd != null
+                      ? ` (+$${pricing.extraSeatMonthlyUsd}/extra, ` +
+                        `max ${entitlements.maxManagersPerTenant})`
+                      : ''}
+                  </Typography>
+                  <Typography variant="body2">
+                    {`${entitlements.membersPerHost} member${
+                      entitlements.membersPerHost === 1 ? '' : 's'
+                    } per host`}
+                    {pricing.extraMemberMonthlyUsd != null
+                      ? ` (+$${pricing.extraMemberMonthlyUsd}/extra, ` +
+                        `max ${entitlements.maxMembersPerHost})`
+                      : ''}
                   </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +

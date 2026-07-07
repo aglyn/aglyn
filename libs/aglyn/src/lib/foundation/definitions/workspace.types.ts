@@ -117,6 +117,11 @@ export interface TenantEntitlements {
   storagePerHostMb?: number
   totalSiteSizeMb?: number
   membersPerHost?: number
+  /** Seat model (AGL-112): included tenant-manager seats. */
+  managersPerTenant?: number
+  /** Hard seat caps incl. purchased addons; beyond these, upgrade the plan. */
+  maxManagersPerTenant?: number
+  maxMembersPerHost?: number
   bandwidthGb?: number
   /** Form submissions accepted per calendar month (Forms & Lead Capture). */
   formSubmissionsPerMonth?: number
@@ -130,6 +135,18 @@ export interface TenantEntitlements {
   datasetsPerHost?: number
   recordsPerDataset?: number
   features?: TenantFeatureFlags
+}
+
+/**
+ * Paid addon seats (AGL-112) purchased on top of the plan's included seats.
+ * The effective seat limit is `included + purchased`, clamped to the plan's
+ * hard max — beyond the max the tenant must upgrade.
+ */
+export interface TenantSeatAddons {
+  /** Extra tenant-manager seats. */
+  managers?: number
+  /** Extra host-member seats (applies per host). */
+  members?: number
 }
 
 export interface TenantSubscription {
@@ -155,6 +172,8 @@ export interface AglynTenant extends AglynDocument {
   plan?: TenantPlan
   /** Per-tenant entitlement overrides (admin console); win over plan defaults. */
   entitlements?: TenantEntitlements
+  /** Purchased addon seats (AGL-112); billed monthly per seat. */
+  seatAddons?: TenantSeatAddons
   stripeCustomerId?: string
   subscription?: TenantSubscription
 }
