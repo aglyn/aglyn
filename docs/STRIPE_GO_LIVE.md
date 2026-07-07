@@ -49,3 +49,19 @@ The script prints the env block to paste into the console app's environment
   tenant docs under the new scoped rules.
 - Customer portal (self-service cancel/downgrade) is not built yet; the
   Free card is intentionally non-purchasable.
+
+## 5. Metered usage billing (AGL-41, optional)
+
+1. In Stripe, create a **Billing Meter** with event name
+   `aglyn_metered_usage` (or set `STRIPE_METER_EVENT_NAME`), aggregation
+   "sum" over `value`, and attach a metered price (per-unit $0.01 — the
+   event value is billed **cents**) to each plan's subscription product.
+2. Set `CRON_SECRET` and schedule `POST /api/billing/report-usage` with the
+   `x-cron-secret` header monthly (e.g. Vercel cron on the 1st); it rolls
+   up the previous month per tenant into `tenants/{id}/usageRollups/{month}`
+   and emits one idempotent meter event per tenant (value = cost × 1.30 in
+   cents).
+3. The Billing page shows the same month-to-date estimate to tenants.
+4. **Validate the rate table** (`METERED_UNIT_RATES_USD` in
+   `libs/aglyn/.../usage-metering.ts`) against a real Firebase + Vercel
+   invoice month before attaching the metered price in live mode.

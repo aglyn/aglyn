@@ -28,6 +28,7 @@ import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../components/billing/billing-plan-cards.component'
+import BillingMeteredEstimateComponent from '../../../components/billing/billing-metered-estimate.component'
 import BillingUsageComponent from '../../../components/billing/billing-usage.component'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -162,6 +163,18 @@ const Billing: NextPageWithLayout = () => {
                       tenant={tenant}
                       hosts={hosts ?? []}
                     />
+                  </CardDisplay>
+                ),
+              },
+              {
+                size: { xs: 12, md: 4 },
+                children: (
+                  <CardDisplay
+                    header={'Metered usage estimate'}
+                    contentGutterX
+                    contentGutterY
+                  >
+                    <BillingMeteredEstimateComponent hosts={hosts ?? []} />
                   </CardDisplay>
                 ),
               },

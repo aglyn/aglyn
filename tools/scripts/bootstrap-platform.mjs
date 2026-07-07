@@ -143,6 +143,8 @@ const section = (name, status, detail) => {
         'AGLYN_TENANT_HOST_CNAME',
         'NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME',
         'ANTHROPIC_API_KEY',
+        'CRON_SECRET',
+        'STRIPE_METER_EVENT_NAME',
         'VERCEL_TOKEN',
         'VERCEL_TENANT_PROJECT_ID',
         'VERCEL_TEAM_ID',
