@@ -27,6 +27,7 @@ import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import HostAnalyticsCard from '../../components/analytics/host-analytics-card.component'
 import HostProductsCard from '../../components/commerce/host-products-card.component'
+import HostFunctionsCard from '../../components/host-functions-card.component'
 import HostVariablesCard from '../../components/host-variables-card.component'
 import HostComponentsCard from '../../components/host-components-card.component'
 import HostDisplayNameComponent from '../../components/host-display-name.component'
@@ -128,6 +129,13 @@ const Index: NextPageWithLayout = (props) => {
                 md: 6,
               },
               children: <HostVariablesCard hostId={hostId} />,
+            },
+            {
+              size: {
+                xs: 12,
+                md: 6,
+              },
+              children: <HostFunctionsCard hostId={hostId} />,
             },
           ]}
         />

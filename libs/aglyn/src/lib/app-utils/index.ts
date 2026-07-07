@@ -17,6 +17,7 @@
 
 export * from './community'
 export * from './compose-layout-nodes'
+export * from './functions'
 export * from './compose-reusable-components'
 export * from './compress'
 export * from './create-resource-uid'
