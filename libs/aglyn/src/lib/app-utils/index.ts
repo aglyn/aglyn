@@ -16,6 +16,7 @@
  */
 
 export * from './compose-layout-nodes'
+export * from './compose-reusable-components'
 export * from './compress'
 export * from './create-resource-uid'
 export * from './decompress'

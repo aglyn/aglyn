@@ -228,6 +228,31 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
   nodes?: Record<NodeId, N>
 }
 
+/** Unique id of a host-level reusable component definition. */
+export type ComponentDefUid = string
+
+/**
+ * Reusable component definition: a node subtree promoted from a screen,
+ * inserted anywhere as an instance node (`componentId: 'reusableInstance'`,
+ * `props.refId`) and grafted at render time (see
+ * `composeReusableComponentNodes`). Hosted in tenants' host project at
+ * `hosts/{hostId}/components/{componentId}`.
+ */
+export interface AglynHostComponent<N = AglynNodeSchema>
+  extends AglynDocument {
+  $id: ComponentDefUid
+  tenantId?: TenantUid
+  hostId?: HostUid
+  displayName?: string
+  description?: string
+  /** Definition tree root id within {@link AglynHostComponent.nodes}. */
+  rootId?: NodeId
+  nodes?: Record<NodeId, N>
+  createdAt?: ITimestamp
+  updatedAt?: ITimestamp
+  deletedAt?: ITimestamp
+}
+
 /**
  * Shared layout: canvas chrome (appbar, footer, nav) designed once and
  * rendered around every bound screen. Hosted in tenants' host project at
