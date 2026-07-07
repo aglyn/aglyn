@@ -25,6 +25,7 @@ import {
   FIELD_COLOR,
   FIELD_FULL_WIDTH,
   FIELD_SIZE,
+  FIELD_TEXT_CONTENT,
 } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -71,7 +72,11 @@ export const schema: Aglyn.ComponentSchema<ScreenLinkProps> = {
     path: mdiLinkVariant.path,
     sx: { color: '#2196f3' },
   },
+  flags: {
+    textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+  },
   attributes: [
+    FIELD_TEXT_CONTENT,
     {
       name: 'screenId',
       description:

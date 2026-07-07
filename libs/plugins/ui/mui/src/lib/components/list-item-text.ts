@@ -34,6 +34,22 @@ export const schema: Aglyn.ComponentSchema<ListItemTextProps> = {
   displayName: 'List Item Text',
   category: Aglyn.ComponentCategory.DATA_DISPLAY,
   icon: { path: mdiFormatListChecks.path },
+  // Text lives in `primary`/`secondary` (not `children`), so this component
+  // exposes its own text fields instead of FIELD_TEXT_CONTENT.
+  attributes: [
+    {
+      name: 'primary',
+      description: 'The main content text.',
+      component: Aglyn.FieldComponentType.TEXTAREA,
+      label: 'Primary text',
+    },
+    {
+      name: 'secondary',
+      description: 'The secondary content text.',
+      component: Aglyn.FieldComponentType.TEXTAREA,
+      label: 'Secondary text',
+    },
+  ],
 }
 
 export const presets: Aglyn.PresetSchema[] = [

@@ -435,6 +435,11 @@ export interface ComponentSchema<P = any> {
      * Describe nodes of this component type to be self-closing
      */
     selfClosing?: FEATURE_FLAG
+    /**
+     * Component renders its `children` prop as text content the editor may
+     * edit directly (Attributes "Text" field, inline canvas editing).
+     */
+    textEditable?: FEATURE_FLAG
   }
 }
 

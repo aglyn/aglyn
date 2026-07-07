@@ -96,3 +96,14 @@ export const FIELD_POSITION: AglynAttributeSchema = {
     { value: 'sticky', label: 'Sticky' },
   ],
 }
+/**
+ * Text content of a text-capable component (`children` prop). Pair with the
+ * `textEditable` schema flag so editor surfaces know the component renders
+ * its children as editable text.
+ */
+export const FIELD_TEXT_CONTENT: AglynAttributeSchema = {
+  name: 'children',
+  description: 'The text content this element displays.',
+  component: FieldComponentType.TEXTAREA,
+  label: 'Text',
+}

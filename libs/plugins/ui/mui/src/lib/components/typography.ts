@@ -28,6 +28,7 @@ import {
 } from '@aglyn/shared-data-mdi'
 import Typography from '@mui/material/Typography'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; keep the legacy ids.
@@ -64,7 +65,11 @@ export const schema: Aglyn.ComponentSchema = {
     path: mdiAlphabetical.path,
     sx: { color: '#057822' },
   },
+  flags: {
+    textEditable: Aglyn.FEATURE_FLAG.ENABLED,
+  },
   attributes: [
+    FIELD_TEXT_CONTENT,
     // FIELD_COLOR,
     {
       name: 'variant',
