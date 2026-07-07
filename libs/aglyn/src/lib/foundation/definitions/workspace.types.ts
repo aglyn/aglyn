@@ -131,6 +131,8 @@ export interface TenantEntitlements {
   functionsPerHost?: number
   /** Workflow builder cap (AGL-99/101). */
   workflowsPerHost?: number
+  /** Event-triggered workflow runs per calendar month (AGL-165). */
+  workflowRunsPerMonth?: number
   /** Dynamic data caps (AGL-99/102). */
   datasetsPerHost?: number
   recordsPerDataset?: number

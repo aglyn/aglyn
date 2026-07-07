@@ -54,6 +54,7 @@ export const PLAN_ENTITLEMENTS: Record<
     variablesPerHost: 3,
     functionsPerHost: 1,
     workflowsPerHost: 0,
+    workflowRunsPerMonth: 0,
     datasetsPerHost: 0,
     recordsPerDataset: 0,
     features: {
@@ -83,6 +84,7 @@ export const PLAN_ENTITLEMENTS: Record<
     variablesPerHost: 25,
     functionsPerHost: 10,
     workflowsPerHost: 3,
+    workflowRunsPerMonth: 500,
     datasetsPerHost: 1,
     recordsPerDataset: 1000,
     features: {
@@ -112,6 +114,7 @@ export const PLAN_ENTITLEMENTS: Record<
     variablesPerHost: 100,
     functionsPerHost: 50,
     workflowsPerHost: 25,
+    workflowRunsPerMonth: 5000,
     datasetsPerHost: 10,
     recordsPerDataset: 10000,
     features: {
@@ -141,6 +144,7 @@ export const PLAN_ENTITLEMENTS: Record<
     variablesPerHost: 1000,
     functionsPerHost: 250,
     workflowsPerHost: 100,
+    workflowRunsPerMonth: 50000,
     datasetsPerHost: 50,
     recordsPerDataset: 100000,
     features: {

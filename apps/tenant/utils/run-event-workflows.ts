@@ -21,6 +21,7 @@ import {
   type HostFunction,
   type HostVariable,
   type HostWorkflow,
+  resolveTenantEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -56,6 +57,28 @@ export async function runEventWorkflows(
     const workflows = triggered.docs.filter((doc) => !doc.get('deletedAt'))
     if (!workflows.length) return
 
+    // Monthly run cap by the owning tenant's plan (AGL-165) — dark-launch
+    // rule: tenants without a plan are uncapped, like every other gate.
+    const monthKey = new Date().toISOString().slice(0, 7)
+    const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
+    const hostSnapshot = await hostRef.get()
+    const tenantId = hostSnapshot.get('tenantId') as string | undefined
+    if (tenantId) {
+      const tenantSnapshot = await firestore
+        .collection('tenants')
+        .doc(tenantId)
+        .get()
+      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+      if (tenant?.['plan']) {
+        const limit = resolveTenantEntitlements(
+          tenant as any,
+        ).workflowRunsPerMonth
+        const counterSnapshot = await runCounterRef.get()
+        const used = Number(counterSnapshot.get(monthKey) ?? 0)
+        if (used + workflows.length > limit) return
+      }
+    }
+
     const [functionDocs, variableDocs] = await Promise.all([
       hostRef.collection('functions').limit(100).get(),
       hostRef.collection('variables').limit(100).get(),
@@ -75,6 +98,7 @@ export async function runEventWorkflows(
       }
     }
 
+    let executed = 0
     for (const doc of workflows) {
       const workflow = doc.data() as HostWorkflow
       const filter = workflow.trigger?.filter?.trim()
@@ -90,6 +114,7 @@ export async function runEventWorkflows(
         event,
         ...payload,
       })
+      executed += 1
       // `=== false` (not `!run.ok`): the union fails to narrow under the
       // stricter build tsconfig otherwise (same quirk as runWorkflow).
       const action =
@@ -105,6 +130,15 @@ export async function runEventWorkflows(
           target: { type: 'workflow', id: doc.id, name: workflow.name ?? '' },
           createdAt: FieldValue.serverTimestamp(),
         })
+        .catch(() => undefined)
+    }
+    // Filtered-out workflows do not bill — only executed runs count.
+    if (executed > 0) {
+      await runCounterRef
+        .set(
+          { [monthKey]: FieldValue.increment(executed) },
+          { merge: true },
+        )
         .catch(() => undefined)
     }
   } catch (error) {

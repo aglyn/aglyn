@@ -101,6 +101,7 @@ function HostUsageMeters(props: {
     functions: number | null
     members: number | null
     storageMb: number | null
+    workflowRuns: number | null
   }>({
     screens: null,
     layouts: null,
@@ -108,6 +109,7 @@ function HostUsageMeters(props: {
     functions: null,
     members: null,
     storageMb: null,
+    workflowRuns: null,
   })
   const [usage, setUsage] = useState<{
     siteSizeMb: number | null
@@ -141,9 +143,14 @@ function HostUsageMeters(props: {
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
       ),
-    ]).then(([screens, layouts, variables, functions, members, media]) => {
+      // Event-triggered workflow runs this month (AGL-165).
+      getDoc(
+        doc(firestore, 'hosts', host.$id, 'counters', 'workflowRuns'),
+      ).catch(() => null),
+    ]).then(([screens, layouts, variables, functions, members, media, runs]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
+      const monthKey = new Date().toISOString().slice(0, 7)
       setCounts({
         screens: screens?.data().count ?? null,
         layouts: layouts?.data().count ?? null,
@@ -151,6 +158,9 @@ function HostUsageMeters(props: {
         functions: functions?.data().count ?? null,
         members: members?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
+        workflowRuns: runs?.exists()
+          ? Number(runs.data()?.[monthKey] ?? 0)
+          : 0,
       })
     })
     return () => {
@@ -231,6 +241,11 @@ function HostUsageMeters(props: {
         used={counts.storageMb}
         limit={entitlements.storagePerHostMb}
         unit="MB"
+      />
+      <UsageMeter
+        label="Workflow runs (this month)"
+        used={counts.workflowRuns}
+        limit={entitlements.workflowRunsPerMonth}
       />
       <UsageMeter
         label="Total site size"
