@@ -23,11 +23,21 @@ import {
 } from '@aglyn/aglyn'
 
 /** Console-facing feature keys mapped onto the tenant feature flags. */
-export type Entitlement = 'versioning' | 'reusable-components'
+export type Entitlement =
+  | 'versioning'
+  | 'reusable-components'
+  | 'custom-domain'
+  | 'remove-branding'
+  | 'scheduled-publishing'
+  | 'marketplace-selling'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
   'reusable-components': 'reusableComponents',
+  'custom-domain': 'customDomain',
+  'remove-branding': 'removeBranding',
+  'scheduled-publishing': 'scheduledPublishing',
+  'marketplace-selling': 'marketplaceSelling',
 }
 
 /**

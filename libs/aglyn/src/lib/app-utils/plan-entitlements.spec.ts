@@ -18,7 +18,10 @@
 import {
   checkEntitlement,
   checkQuota,
+  PLAN_ENTITLEMENTS,
+  PLAN_PRICING,
   resolveTenantEntitlements,
+  UNLIMITED,
 } from './plan-entitlements'
 
 describe('plan entitlements', () => {
@@ -60,5 +63,45 @@ describe('plan entitlements', () => {
     })
     expect(checkQuota(tenant, 'hostLimit', 1).allowed).toBe(false)
     expect(checkQuota(tenant, 'hostLimit', 5).remaining).toBe(0)
+  })
+
+  it('pins the AGL-67 tier table', () => {
+    expect(
+      Object.fromEntries(
+        Object.entries(PLAN_ENTITLEMENTS).map(([plan, value]) => [
+          plan,
+          [value.hostLimit, value.screensPerHost, value.sharedLayoutsPerHost],
+        ]),
+      ),
+    ).toEqual({
+      free: [1, 5, 1],
+      starter: [1, 25, 3],
+      pro: [3, 100, UNLIMITED],
+      business: [10, UNLIMITED, UNLIMITED],
+    })
+    // Media storage exceeds the published-site cap by design (AGL-67).
+    for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
+      expect(plan.storagePerHostMb).toBeGreaterThan(plan.totalSiteSizeMb)
+    }
+    expect(PLAN_ENTITLEMENTS.starter.features.removeBranding).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.features.marketplaceSelling).toBe(true)
+    expect(PLAN_ENTITLEMENTS.pro.features.scheduledPublishing).toBe(false)
+    expect(PLAN_ENTITLEMENTS.business.features.scheduledPublishing).toBe(true)
+  })
+
+  it('treats UNLIMITED quotas as always allowed', () => {
+    const tenant = { plan: 'business' } as any
+    const result = checkQuota(tenant, 'screensPerHost', 100000)
+    expect(result.allowed).toBe(true)
+    expect(result.remaining).toBe(UNLIMITED)
+  })
+
+  it('pins the AGL-68 pricing model', () => {
+    expect(PLAN_PRICING).toEqual({
+      free: { basePriceMonthlyUsd: 0, extraHostMonthlyUsd: null },
+      starter: { basePriceMonthlyUsd: 19, extraHostMonthlyUsd: 10 },
+      pro: { basePriceMonthlyUsd: 49, extraHostMonthlyUsd: 8 },
+      business: { basePriceMonthlyUsd: 149, extraHostMonthlyUsd: 5 },
+    })
   })
 })

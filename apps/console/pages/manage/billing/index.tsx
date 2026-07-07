@@ -18,8 +18,10 @@
 
 import {
   PLAN_ENTITLEMENTS,
+  PLAN_PRICING,
   resolveTenantEntitlements,
   type TenantPlan,
+  UNLIMITED,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
@@ -42,14 +44,21 @@ import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
 
-/** Draft monthly pricing — placeholders until Stripe prices are final. */
-const PLAN_PRICING: Record<TenantPlan, { label: string; price: string }> = {
-  free: { label: 'Free', price: '$0' },
-  starter: { label: 'Starter', price: '$12/mo' },
-  pro: { label: 'Pro', price: '$29/mo' },
-  business: { label: 'Business', price: '$99/mo' },
+const PLAN_LABELS: Record<TenantPlan, string> = {
+  free: 'Free',
+  starter: 'Starter',
+  pro: 'Pro',
+  business: 'Business',
 }
 const PLAN_ORDER: TenantPlan[] = ['free', 'starter', 'pro', 'business']
+
+/** Prices come from the versioned PLAN_PRICING model (AGL-68). */
+const priceLabel = (tier: TenantPlan) => {
+  const base = PLAN_PRICING[tier].basePriceMonthlyUsd
+  return base ? `$${base}/mo` : '$0'
+}
+const quotaLabel = (value: number) =>
+  value === UNLIMITED ? 'Unlimited' : String(value)
 
 function UsageMeter(props: { label: string; used: number; limit: number }) {
   const { label, used, limit } = props
@@ -170,7 +179,7 @@ const Billing: NextPageWithLayout = () => {
                       sx={{ alignItems: 'center', mb: 2 }}
                     >
                       <Typography variant="h5">
-                        {PLAN_PRICING[plan].label}
+                        {PLAN_LABELS[plan]}
                       </Typography>
                       <Chip
                         label={tenant?.subscription?.status ?? 'no subscription'}
@@ -184,7 +193,7 @@ const Billing: NextPageWithLayout = () => {
                       limit={entitlements.hostLimit}
                     />
                     <Typography variant="body2" color="text.secondary">
-                      {`Screens per host: ${entitlements.screensPerHost} · ` +
+                      {`Screens per host: ${quotaLabel(entitlements.screensPerHost)} · ` +
                         `Storage: ${entitlements.storagePerHostMb} MB · ` +
                         `Members: ${entitlements.membersPerHost} · ` +
                         `Bandwidth: ${entitlements.bandwidthGb} GB`}
@@ -196,12 +205,12 @@ const Billing: NextPageWithLayout = () => {
                 size: { xs: 12, sm: 6, md: 2 },
                 children: (
                   <CardDisplay
-                    header={PLAN_PRICING[tier].label}
+                    header={PLAN_LABELS[tier]}
                     contentGutterX
                     contentGutterY
                   >
                     <Typography variant="h6" sx={{ mb: 1 }}>
-                      {PLAN_PRICING[tier].price}
+                      {priceLabel(tier)}
                     </Typography>
                     <Typography
                       variant="caption"
@@ -210,7 +219,10 @@ const Billing: NextPageWithLayout = () => {
                       sx={{ mb: 1.5 }}
                     >
                       {`${PLAN_ENTITLEMENTS[tier].hostLimit} hosts · ` +
-                        `${PLAN_ENTITLEMENTS[tier].screensPerHost} screens/host` +
+                        `${quotaLabel(PLAN_ENTITLEMENTS[tier].screensPerHost)} screens/host` +
+                        (PLAN_PRICING[tier].extraHostMonthlyUsd != null
+                          ? ` · +$${PLAN_PRICING[tier].extraHostMonthlyUsd}/extra host`
+                          : '') +
                         (PLAN_ENTITLEMENTS[tier].features.versioning
                           ? ' · versioning'
                           : '') +

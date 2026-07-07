@@ -93,6 +93,10 @@ export interface TenantFeatureFlags {
   reusableComponents?: boolean
   customDomain?: boolean
   removeBranding?: boolean
+  /** Schedule a version to publish at a date/time (tier above versioning). */
+  scheduledPublishing?: boolean
+  /** Sell listings on the community marketplace (AGL-46). */
+  marketplaceSelling?: boolean
 }
 
 /**
