@@ -18,6 +18,7 @@
 
 import {
   type AglynTenant,
+  checkSeatQuota,
   resolveTenantEntitlements,
   UNLIMITED,
 } from '@aglyn/aglyn'
@@ -98,12 +99,14 @@ function HostUsageMeters(props: {
     layouts: number | null
     variables: number | null
     functions: number | null
+    members: number | null
     storageMb: number | null
   }>({
     screens: null,
     layouts: null,
     variables: null,
     functions: null,
+    members: null,
     storageMb: null,
   })
   const [usage, setUsage] = useState<{
@@ -129,11 +132,16 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'functions'),
       ).catch(() => null),
+      // Member seats (AGL-107/119) — the managed subcollection, not the
+      // legacy admins map.
+      getCountFromServer(
+        collection(firestore, 'hosts', host.$id, 'members'),
+      ).catch(() => null),
       // Media bytes counter maintained by the media library (AGL-72).
       getDoc(doc(firestore, 'hosts', host.$id, 'counters', 'media')).catch(
         () => null,
       ),
-    ]).then(([screens, layouts, variables, functions, media]) => {
+    ]).then(([screens, layouts, variables, functions, members, media]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       setCounts({
@@ -141,6 +149,7 @@ function HostUsageMeters(props: {
         layouts: layouts?.data().count ?? null,
         variables: variables?.data().count ?? null,
         functions: functions?.data().count ?? null,
+        members: members?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
       })
     })
@@ -182,7 +191,8 @@ function HostUsageMeters(props: {
     }
   }, [user, host.$id])
 
-  const members = Object.keys(host.admins ?? {}).length
+  // Effective seat limit includes purchased addon seats (AGL-112).
+  const memberSeatLimit = checkSeatQuota(tenant, 'members', 0).limit
 
   return (
     <>
@@ -203,8 +213,8 @@ function HostUsageMeters(props: {
       />
       <UsageMeter
         label="Members"
-        used={members}
-        limit={entitlements.membersPerHost}
+        used={counts.members}
+        limit={memberSeatLimit}
       />
       <UsageMeter
         label="Variables"
@@ -246,12 +256,42 @@ function HostUsageMeters(props: {
 export function BillingUsageComponent(props: BillingUsageProps) {
   const { tenant, hosts } = props
   const entitlements = resolveTenantEntitlements(tenant)
+  const { data: user } = useUser()
+  // Team seats (AGL-119): the members subcollection is server-readable
+  // only, so the count comes from the team API; owner occupies one seat.
+  const [teamSeats, setTeamSeats] = useState<number | null>(null)
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        if (!idToken) return
+        const response = await fetch('/api/tenant/members', {
+          headers: { Authorization: `Bearer ${idToken}` },
+        })
+        if (!response.ok) return
+        const payload = await response.json()
+        if (active) setTeamSeats((payload.members?.length ?? 0) + 1)
+      } catch {
+        // Meter keeps its "not yet metered" state on failure.
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [user])
+  const teamSeatLimit = checkSeatQuota(tenant, 'managers', 0).limit
   return (
     <>
       <UsageMeter
         label="Hosts"
         used={hosts.length}
         limit={entitlements.hostLimit}
+      />
+      <UsageMeter
+        label="Team seats (incl. you)"
+        used={teamSeats}
+        limit={teamSeatLimit}
       />
       {hosts.map((host) => (
         <HostUsageMeters
