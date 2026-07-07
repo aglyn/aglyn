@@ -94,4 +94,17 @@ describe('runWorkflow', () => {
       ),
     ).toMatchObject({ ok: false, step: 1 })
   })
+
+  it('seeds event payload extraScope ahead of the steps (AGL-128)', () => {
+    const result = runWorkflow(
+      {
+        name: 'OnEvent',
+        steps: [{ functionName: 'Double', args: ['visits'] }],
+      },
+      functions,
+      {},
+      { visits: 21 },
+    )
+    expect(result).toMatchObject({ ok: true, value: 42 })
+  })
 })

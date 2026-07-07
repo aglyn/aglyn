@@ -18,6 +18,7 @@
 
 import {
   createResourceUid,
+  HOST_EVENT_TYPES,
   type HostFunction,
   type HostVariable,
   type HostWorkflow,
@@ -135,6 +136,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
       name: '',
       steps: [{ functionName: '', args: [], resultName: '' }],
       returnValue: '',
+      trigger: null,
     })
   }, [tenant, workflows.length, enqueueSnackbar])
 
@@ -222,6 +224,10 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {`${(workflow.steps ?? []).length} step${
                     (workflow.steps ?? []).length === 1 ? '' : 's'
+                  }${
+                    workflow.trigger?.event
+                      ? ` · on ${workflow.trigger.event}`
+                      : ''
                   } · ${(workflow.steps ?? [])
                     .map((step: any) => step.functionName)
                     .join(' → ')}`}
@@ -236,6 +242,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                     name: workflow.name ?? '',
                     steps: workflow.steps ?? [],
                     returnValue: workflow.returnValue ?? '',
+                    trigger: workflow.trigger ?? null,
                   })
                 }}
               >
@@ -413,6 +420,54 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           >
             {'Add step'}
           </Button>
+          <Typography variant="overline" color="text.secondary">
+            {'Trigger'}
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Run on event"
+              value={draft?.trigger?.event ?? ''}
+              onChange={(event) =>
+                patch((previous) => ({
+                  ...previous,
+                  trigger: event.target.value
+                    ? {
+                        event: event.target.value as any,
+                        filter: previous.trigger?.filter ?? '',
+                      }
+                    : null,
+                }))
+              }
+              size="small"
+              select
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{'Manual only'}</MenuItem>
+              {HOST_EVENT_TYPES.map((eventType) => (
+                <MenuItem key={eventType} value={eventType}>
+                  {eventType}
+                </MenuItem>
+              ))}
+            </TextField>
+            {draft?.trigger ? (
+              <TextField
+                label="Filter (optional)"
+                placeholder={'path == "/pricing"'}
+                helperText="Runs only when this expression is truthy"
+                value={draft?.trigger?.filter ?? ''}
+                onChange={(event) =>
+                  patch((previous) => ({
+                    ...previous,
+                    trigger: previous.trigger
+                      ? { ...previous.trigger, filter: event.target.value }
+                      : previous.trigger,
+                  }))
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              />
+            ) : null}
+          </Stack>
           <TextField
             label="Return value"
             helperText="A step result name; defaults to the last step"

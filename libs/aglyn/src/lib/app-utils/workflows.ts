@@ -30,6 +30,30 @@ import type { HostVariable } from './variables'
  * no I/O, no loops. Site-event triggers arrive in v2.
  */
 
+/**
+ * Host events a workflow can trigger on (AGL-128). The tenant emits these
+ * server-side: form submit API, analytics collector, membership APIs.
+ */
+export const HOST_EVENT_TYPES = [
+  'formSubmission',
+  'pageView',
+  'memberSignUp',
+  'memberSignIn',
+  'memberSignOut',
+  'lead',
+] as const
+
+export type HostEventType = (typeof HOST_EVENT_TYPES)[number]
+
+export interface HostWorkflowTrigger {
+  event: HostEventType
+  /**
+   * Optional expression over the event payload (plus variables); the
+   * workflow only runs when it evaluates truthy (e.g. `path == "/pricing"`).
+   */
+  filter?: string
+}
+
 export interface HostWorkflowStep {
   /** Host function to run (by name). */
   functionName: string
@@ -48,6 +72,8 @@ export interface HostWorkflow {
   steps: HostWorkflowStep[]
   /** Scope name whose final value the workflow returns. */
   returnValue?: string
+  /** Event trigger (AGL-128); absent means manual/embedded use only. */
+  trigger?: HostWorkflowTrigger | null
 }
 
 export const WORKFLOW_MAX_STEPS = 25
@@ -77,12 +103,17 @@ export function runWorkflow(
   workflow: HostWorkflow,
   functions: Record<string, HostFunction>,
   variables: Record<string, HostVariable> = {},
+  /**
+   * Extra scope entries seeded ahead of the steps — event payloads (path,
+   * formName, field values) land here (AGL-128). Wins over variables.
+   */
+  extraScope: Record<string, number | string | boolean> = {},
 ): WorkflowRunResult {
   const steps = workflow.steps ?? []
   if (steps.length > WORKFLOW_MAX_STEPS) {
     return { ok: false, error: `Workflows are capped at ${WORKFLOW_MAX_STEPS} steps` }
   }
-  const scope = variableScope(variables)
+  const scope = { ...variableScope(variables), ...extraScope }
   const results: Record<string, number | string | boolean> = {}
 
   for (const [index, step] of steps.entries()) {

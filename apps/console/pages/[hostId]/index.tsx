@@ -27,7 +27,6 @@ import HostAnalyticsCard from '../../components/analytics/host-analytics-card.co
 import HostProductsCard from '../../components/commerce/host-products-card.component'
 import HostFunctionsCard from '../../components/host-functions-card.component'
 import HostVariablesCard from '../../components/host-variables-card.component'
-import HostWorkflowsCard from '../../components/host-workflows-card.component'
 import HostComponentsCard from '../../components/host-components-card.component'
 import HostActivityCard from '../../components/host-activity-card.component'
 import HostDatasetsCard from '../../components/host-datasets-card.component'
@@ -102,13 +101,7 @@ const Index: NextPageWithLayout = (props) => {
               },
               children: <HostFunctionsCard hostId={hostId} />,
             },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              children: <HostWorkflowsCard hostId={hostId} />,
-            },
+            // Workflows moved to the dedicated /workflows page (AGL-128).
             {
               size: {
                 xs: 12,

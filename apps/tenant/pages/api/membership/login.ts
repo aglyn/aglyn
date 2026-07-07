@@ -17,6 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { runEventWorkflows } from '../../../utils/run-event-workflows'
 import {
   mintMemberSession,
   setMemberCookie,
@@ -72,6 +73,8 @@ export default async function handler(
     ) {
       return res.status(401).json({ error: 'Wrong email or password' })
     }
+    // Event trigger (AGL-128).
+    await runEventWorkflows(hostId, 'memberSignIn', { email })
     setMemberCookie(res, hostId, mintMemberSession(hostId, memberDoc.id))
     return res.status(200).json({ ok: true })
   } catch (error) {

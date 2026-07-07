@@ -19,6 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { runEventWorkflows } from '../../../utils/run-event-workflows'
 
 const MAX_FIELDS = 20
 const MAX_PAYLOAD_CHARS = 10000
@@ -124,6 +125,12 @@ export default async function handler(
       { [monthKey]: FieldValue.increment(1) },
       { merge: true },
     )
+    // Event trigger (AGL-128): field values join the workflow scope.
+    await runEventWorkflows(hostId, 'formSubmission', {
+      formName: String(formName ?? 'Form').slice(0, 100),
+      path: String(path ?? '').slice(0, 500),
+      ...sanitizedFields,
+    })
     return res.status(200).json({ received: true })
   } catch (error) {
     console.error(error)

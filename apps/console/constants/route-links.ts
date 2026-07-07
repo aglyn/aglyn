@@ -36,6 +36,7 @@ export enum Route {
   HOST_MEDIA = '/[hostId]/media',
   HOST_SETUP = '/[hostId]/setup',
   HOST_THEME = '/[hostId]/theme',
+  HOST_WORKFLOWS = '/[hostId]/workflows',
   LAYOUT_BESIGNER = '/[hostId]/layouts/[layoutId]/versions/[versionId]/besigner',
   LAYOUT_LIST = '/[hostId]/layouts/list',
   SCREEN_BESIGNER = '/[hostId]/screens/[screenId]/versions/[versionId]/besigner',
@@ -65,6 +66,7 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_INBOX]: { hostId: string }
   [Route.HOST_MEDIA]: { hostId: string }
   [Route.HOST_THEME]: { hostId: string }
+  [Route.HOST_WORKFLOWS]: { hostId: string }
   [Route.LAYOUT_BESIGNER]: {
     hostId: string
     layoutId: string
