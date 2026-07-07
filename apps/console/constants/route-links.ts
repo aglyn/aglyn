@@ -17,6 +17,7 @@
 
 export enum Route {
   MANAGE_ACCOUNT_SETTINGS = '/manage/account',
+  MANAGE_BILLING = '/manage/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   AUTH_SIGN_IN = '/signin',
   AUTH_SIGN_OUT = '/signout',

@@ -51,6 +51,7 @@ import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface BesignerVersionsProps {
   hostId: string
@@ -76,6 +77,7 @@ export const BesignerVersionsComponent = observer(
     const router = useRouter()
     const { enqueueSnackbar } = useSnackbar()
     const { queueLoading } = useLoading()
+    const { tenant } = useCurrentTenant()
     const [open, setOpen] = useState(false)
 
     const parentCollection = parent.kind === 'screen' ? 'screens' : 'layouts'
@@ -142,11 +144,11 @@ export const BesignerVersionsComponent = observer(
     )
 
     const handleCreateVersion = useCallback(async () => {
-      if (!hasEntitlement('versioning')) {
-        return enqueueSnackbar('Versioning requires a plan upgrade', {
-          variant: 'warning',
-          persist: false,
-        })
+      if (!hasEntitlement('versioning', tenant)) {
+        return enqueueSnackbar(
+          'Versioning requires a Pro plan — see Billing to upgrade',
+          { variant: 'warning', persist: false },
+        )
       }
       // Snapshot the SAVED doc, so unsaved canvas edits are never silently
       // captured (or lost) — require a save first.
@@ -189,6 +191,7 @@ export const BesignerVersionsComponent = observer(
       firestore,
       parentPath,
       versionId,
+      tenant,
       queueLoading,
       enqueueSnackbar,
       router,

@@ -34,6 +34,7 @@ import { collection, doc, getDoc, limit, query, setDoc } from 'firebase/firestor
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
+import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface ReusableComponentsProviderProps {
   hostId: string
@@ -70,6 +71,7 @@ export function ReusableComponentsProvider(
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
+  const { tenant } = useCurrentTenant()
   const [promoteNode, setPromoteNode] = useState<Aglyn.NodeSchema<any> | null>(
     null,
   )
@@ -108,12 +110,20 @@ export function ReusableComponentsProvider(
     }
   }, [componentDocs])
 
-  const handlePromote = useCallback((node: Aglyn.NodeSchema<any>) => {
-    if (!hasEntitlement('reusable-components')) return
-    setName(String(node?.componentSchema?.displayName ?? 'Component'))
-    setDescription('')
-    setPromoteNode(node)
-  }, [])
+  const handlePromote = useCallback(
+    (node: Aglyn.NodeSchema<any>) => {
+      if (!hasEntitlement('reusable-components', tenant)) {
+        return void enqueueSnackbar(
+          'Reusable components require a Starter plan — see Billing to upgrade',
+          { variant: 'warning', persist: false },
+        )
+      }
+      setName(String(node?.componentSchema?.displayName ?? 'Component'))
+      setDescription('')
+      setPromoteNode(node)
+    },
+    [tenant, enqueueSnackbar],
+  )
 
   const handlePromoteConfirm = useCallback(async () => {
     const node = promoteNode

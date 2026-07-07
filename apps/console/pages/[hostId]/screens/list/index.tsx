@@ -79,6 +79,7 @@ import {
   type ScreenHierarchyRow,
   type ScreenMoveRequest,
 } from '../../../../components/screens-hierarchy-table.component'
+import { checkTenantQuota } from '../../../../constants/entitlements'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import {
   publishScreenRoute,
@@ -86,6 +87,7 @@ import {
   unpublishScreenRoute,
 } from '../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useCurrentTenant from '../../../../hooks/use-current-tenant'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -131,6 +133,7 @@ function Screens(props) {
     return map
   }, [screens])
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
+  const { tenant } = useCurrentTenant()
 
   const [error, setError] = useState(null)
 
@@ -147,6 +150,14 @@ function Screens(props) {
     async (values) => {
       if (loading) return
       if (error) setError(null)
+      // Plan quota (AGL-39): enforced once the tenant has an explicit plan.
+      const quota = checkTenantQuota(tenant, 'screensPerHost', screens.length)
+      if (!quota.allowed) {
+        return enqueueSnackbar(
+          `Screen limit reached (${quota.limit}) — see Billing to upgrade`,
+          { variant: 'warning', persist: false },
+        )
+      }
       const dequeueLoading = queueLoading()
       const newId = createResourceUid()
       const newVersionId = createResourceUid()
@@ -229,6 +240,8 @@ function Screens(props) {
       hostId,
       handleFormClose,
       enqueueSnackbar,
+      tenant,
+      screens.length,
     ],
   )
 

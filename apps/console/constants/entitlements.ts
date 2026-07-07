@@ -18,6 +18,7 @@
 import {
   type AglynTenant,
   checkEntitlement,
+  checkQuota,
   type TenantFeatureFlags,
 } from '@aglyn/aglyn'
 
@@ -30,15 +31,31 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
 }
 
 /**
- * With a tenant doc, resolves through the plan/override model
- * (`resolveTenantEntitlements`, AGL-38). Without tenant context the feature
- * stays enabled — dark launch until the console surfaces are wired to the
- * signed-in tenant (AGL-39/40 billing UI).
+ * Resolves through the plan/override model (`resolveTenantEntitlements`,
+ * AGL-38) once the tenant has an explicit plan. Tenants without a plan
+ * (pre-billing accounts) keep every feature — enforcement turns on the
+ * moment a plan is assigned (checkout webhook or admin console), so rollout
+ * can't strand existing users.
  */
 export function hasEntitlement(
   feature: Entitlement,
   tenant?: Partial<AglynTenant> | null,
 ): boolean {
-  if (tenant) return checkEntitlement(tenant, FEATURE_KEYS[feature])
+  if (tenant?.plan) return checkEntitlement(tenant, FEATURE_KEYS[feature])
   return true
+}
+
+/**
+ * Same explicit-plan gate for quotas: returns `allowed: true` with no limit
+ * enforcement until the tenant has a plan.
+ */
+export function checkTenantQuota(
+  tenant: Partial<AglynTenant> | null | undefined,
+  quota: Parameters<typeof checkQuota>[1],
+  currentUsage: number,
+): ReturnType<typeof checkQuota> {
+  if (!tenant?.plan) {
+    return { allowed: true, limit: Number.POSITIVE_INFINITY, remaining: Number.POSITIVE_INFINITY }
+  }
+  return checkQuota(tenant, quota, currentUsage)
 }
