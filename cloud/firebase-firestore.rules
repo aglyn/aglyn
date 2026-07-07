@@ -35,7 +35,12 @@ service cloud.firestore {
     // and admin tooling write via the Admin SDK (which bypasses rules), and
     // staff may write from the admin console.
     match /tenants/{tenantId} {
-      allow read: if isStaff() || (isSignedIn() && request.auth.uid == tenantId);
+      // Team members (AGL-127) read the owner tenant they belong to — the
+      // console resolves plan/entitlements from the OWNER doc, keyed by the
+      // member's uid in the owner's members subcollection.
+      allow read: if isStaff() || (isSignedIn() &&
+        (request.auth.uid == tenantId ||
+          exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid))));
       allow write: if isStaff();
     }
 

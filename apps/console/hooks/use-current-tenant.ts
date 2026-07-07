@@ -19,12 +19,15 @@
 import type { AglynTenant } from '@aglyn/aglyn'
 import { doc } from 'firebase/firestore'
 import { useFirestore, useFirestoreDocData, useUser } from 'reactfire'
+import useTenantPermissions from './use-tenant-permissions'
 
 /**
- * The signed-in user's tenant doc. Billing v1 keys tenants by the owner's
- * uid (`tenants/{uid}`, single-user tenancy) — a missing doc simply resolves
- * as the free plan through `resolveTenantEntitlements`. Multi-user tenancy
- * (memberships) evolves this lookup later without changing consumers.
+ * The tenant the signed-in user ACTS IN. Owners resolve their own doc
+ * (`tenants/{uid}`); team members (AGL-127) resolve the OWNER's tenant via
+ * their membership record, so plan/entitlements come from the account they
+ * belong to — a member is a user of a single tenant, not a tenant of their
+ * own. Rules grant members read on the owner doc via the members
+ * subcollection.
  */
 export function useCurrentTenant(): {
   tenant: Partial<AglynTenant> | undefined
@@ -32,7 +35,8 @@ export function useCurrentTenant(): {
 } {
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const tenantId = user?.uid
+  const { ownerUid } = useTenantPermissions()
+  const tenantId = ownerUid ?? user?.uid
   const { data } = useFirestoreDocData<any>(
     doc(firestore, 'tenants', tenantId ?? '-anonymous-'),
     { idField: '$id' },

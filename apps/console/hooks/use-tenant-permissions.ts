@@ -47,14 +47,17 @@ const ALL_TRUE: TenantPermissions = {
 export function useTenantPermissions(): {
   permissions: TenantPermissions
   isOwner: boolean
+  /** Owner uid whose tenant the user acts in (self for owners, AGL-127). */
+  ownerUid: string | undefined
   loaded: boolean
 } {
   const { data: user } = useUser()
   const [state, setState] = useState<{
     permissions: TenantPermissions
     isOwner: boolean
+    ownerUid: string | undefined
     loaded: boolean
-  }>({ permissions: ALL_TRUE, isOwner: true, loaded: false })
+  }>({ permissions: ALL_TRUE, isOwner: true, ownerUid: undefined, loaded: false })
 
   useEffect(() => {
     let active = true
@@ -71,6 +74,8 @@ export function useTenantPermissions(): {
         setState({
           permissions: { ...ALL_TRUE, ...(payload.permissions ?? {}) },
           isOwner: payload.isOwner !== false,
+          ownerUid:
+            typeof payload.ownerUid === 'string' ? payload.ownerUid : undefined,
           loaded: true,
         })
       } catch {
