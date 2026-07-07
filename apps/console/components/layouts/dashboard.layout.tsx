@@ -29,6 +29,7 @@ import DashboardHeaderComponent, {
   type DashboardHeaderProps,
 } from '../dashboard-header.component'
 import FooterComponent from '../footer.component'
+import QuotaWarningsBanner from '../quota-warnings-banner.component'
 import SecondaryAppBarComponent, {
   type SecondaryAppBarProps,
 } from '../secondary-app-bar.component'
@@ -119,6 +120,8 @@ export function DashboardLayout(props: DashboardLayoutProps) {
       />
 
       <Stack component="main" direction="column" sx={{ flexGrow: 1 }}>
+        {/* Site-wide usage-cap banner (AGL-136). */}
+        <QuotaWarningsBanner />
         <DashboardHeaderComponent
           disableBreadcrumbs={disableBreadcrumbs}
           breadcrumbItems={breadcrumbs}

@@ -26,7 +26,6 @@ import MainLayout from '../../components/layouts/main.layout'
 import HostAnalyticsCard from '../../components/analytics/host-analytics-card.component'
 import HostProductsCard from '../../components/commerce/host-products-card.component'
 import HostFunctionsCard from '../../components/host-functions-card.component'
-import QuotaWarningsBanner from '../../components/quota-warnings-banner.component'
 import HostVariablesCard from '../../components/host-variables-card.component'
 import HostWorkflowsCard from '../../components/host-workflows-card.component'
 import HostComponentsCard from '../../components/host-components-card.component'
@@ -58,7 +57,6 @@ const Index: NextPageWithLayout = (props) => {
       ]}
     >
       <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-        <QuotaWarningsBanner hostId={hostId} />
         <GridItems
           spacing={3}
           items={[
