@@ -1,0 +1,212 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import * as Aglyn from '@aglyn/aglyn'
+import { useLoading } from '@aglyn/shared-ui-jsx'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Timestamp } from '@aglyn/shared-util-timestamp'
+import {
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  Typography,
+} from '@mui/material'
+import { doc, setDoc } from 'firebase/firestore'
+import { useCallback } from 'react'
+import { useFirestore } from 'reactfire'
+import { checkTenantQuota } from '../../constants/entitlements'
+import { publishScreenRoute } from '../../constants/screen-publishing'
+import {
+  STARTER_TEMPLATES,
+  type StarterTemplate,
+} from '../../constants/starter-templates'
+import useCurrentTenant from '../../hooks/use-current-tenant'
+
+export interface TemplateGalleryDialogProps {
+  hostId: string
+  open: boolean
+  onClose: () => void
+  /** Slugs already used on the host, for collision suffixing. */
+  existingSlugs: string[]
+  /** Current screen count, for the plan quota check. */
+  screenCount: number
+}
+
+/**
+ * Starter-template gallery (AGL-78/79): instantiates a template's screens
+ * into the host — fresh screen/version ids, published routing-map entries
+ * (slug conflicts get a numeric suffix), SEO fields carried over. Templates
+ * ship in code (STARTER_TEMPLATES), so there is nothing to seed.
+ */
+export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
+  const { hostId, open, onClose, existingSlugs, screenCount } = props
+  const firestore = useFirestore()
+  const { enqueueSnackbar } = useSnackbar()
+  const { queueLoading } = useLoading()
+  const { tenant } = useCurrentTenant()
+
+  const handleUse = useCallback(
+    (template: StarterTemplate) => async () => {
+      const quota = checkTenantQuota(
+        tenant,
+        'screensPerHost',
+        screenCount + template.screens.length - 1,
+      )
+      if (!quota.allowed) {
+        return void enqueueSnackbar(
+          `This template needs ${template.screens.length} screens — your ` +
+            `plan allows ${quota.limit}. See Billing to upgrade.`,
+          { variant: 'warning', persist: false },
+        )
+      }
+      const dequeue = queueLoading()
+      try {
+        const used = new Set(existingSlugs)
+        for (const screen of template.screens) {
+          const screenId = Aglyn.createResourceUid()
+          const versionId = Aglyn.createResourceUid()
+          const timestamp = Timestamp.now()
+          let slug = screen.slug
+          let attempt = 2
+          while (used.has(slug)) slug = `${screen.slug}-${attempt++}`
+          used.add(slug)
+
+          await Promise.all([
+            setDoc(doc(firestore, 'hosts', hostId, 'screens', screenId), {
+              displayName: screen.displayName,
+              ...(screen.description && { description: screen.description }),
+              ...(screen.seo && { seo: screen.seo }),
+              versionId,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            }),
+            setDoc(
+              doc(
+                firestore,
+                'hosts',
+                hostId,
+                'screens',
+                screenId,
+                'versions',
+                versionId,
+              ),
+              {
+                screenId,
+                displayName: 'Initial version',
+                nodes: screen.nodes,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              },
+            ),
+          ])
+          await publishScreenRoute(firestore, { hostId, screenId }, slug)
+        }
+        enqueueSnackbar(
+          `Added ${template.screens.length} screen${
+            template.screens.length === 1 ? '' : 's'
+          } from "${template.displayName}"`,
+          { variant: 'success', persist: false },
+        )
+        onClose()
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeue()
+      }
+    },
+    [
+      tenant,
+      screenCount,
+      existingSlugs,
+      firestore,
+      hostId,
+      queueLoading,
+      enqueueSnackbar,
+      onClose,
+    ],
+  )
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>{'Start from a template'}</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          {'Templates add ready-made, published screens you can restyle in ' +
+            'the besigner. Existing screens are never touched.'}
+        </Typography>
+        <Grid container spacing={2}>
+          {STARTER_TEMPLATES.map((template) => (
+            <Grid key={template.id} size={{ xs: 12, sm: 6, md: 4 }}>
+              <Card variant="outlined" sx={{ height: '100%' }}>
+                <CardContent>
+                  <Typography variant="h6">{template.displayName}</Typography>
+                  <Chip
+                    label={template.category}
+                    size="small"
+                    variant="outlined"
+                    sx={{ my: 1 }}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    {template.description}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ mt: 1 }}
+                  >
+                    {`${template.screens.length} screen${
+                      template.screens.length === 1 ? '' : 's'
+                    }`}
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="secondary"
+                    onClick={handleUse(template)}
+                  >
+                    {'Use template'}
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{'Start blank instead'}</Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+TemplateGalleryDialog.displayName = 'TemplateGalleryDialog'
+
+export default TemplateGalleryDialog

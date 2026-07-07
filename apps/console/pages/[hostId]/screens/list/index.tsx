@@ -48,7 +48,7 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, IconButton, Typography } from '@mui/material'
+import { Button, IconButton, Stack, Typography } from '@mui/material'
 import {
   collection,
   deleteField,
@@ -74,6 +74,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import HostDisplayNameComponent from '../../../../components/host-display-name.component'
+import TemplateGalleryDialog from '../../../../components/templates/template-gallery-dialog.component'
 import {
   compareScreenSiblings,
   ScreensHierarchyTableComponent,
@@ -117,6 +118,7 @@ function Screens(props) {
   const { status, data } = useFirestoreCollectionData<any>(screensQuery, {
     idField: '$id',
   })
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const screens: ScreenHierarchyRow[] = useMemo(
     () => (data ?? []).filter((screen: any) => !screen.deletedAt),
     [data],
@@ -469,9 +471,18 @@ function Screens(props) {
           icon: { path: ICON_VARIANT_PAGES.path },
         }}
         headerRight={
-          <Button size="small" variant="contained" onClick={handleFormOpen}>
-            {'Create New Screen'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setTemplatesOpen(true)}
+            >
+              {'Templates'}
+            </Button>
+            <Button size="small" variant="contained" onClick={handleFormOpen}>
+              {'Create New Screen'}
+            </Button>
+          </Stack>
         }
         aside={
           <NavigationDrawerComponent
@@ -543,6 +554,13 @@ function Screens(props) {
           </CardDisplay>
         </Container>
       </DashboardLayout>
+      <TemplateGalleryDialog
+        hostId={hostId}
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        existingSlugs={Object.values(routingMap ?? {})}
+        screenCount={screens.length}
+      />
     </>
   )
 }
