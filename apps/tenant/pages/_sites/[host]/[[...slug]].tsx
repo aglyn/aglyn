@@ -250,9 +250,10 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
       data: JSON.parse(
         JSON.stringify({
           host: hostRes.host,
+          // Version nodes ride in `nodes` (composed inside
+          // composeScreenNodes since AGL-87); nothing reads a version prop.
           screen: {
             data: screenRes.screen,
-            version: versionRes.version,
           },
         }),
       ),
