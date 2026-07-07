@@ -28,6 +28,7 @@ export enum Route {
   HOST_COMMUNITY = '/[hostId]/community',
   HOST_CONTENT = '/[hostId]/content',
   MANAGE_COMMUNITY_PROFILE = '/manage/community',
+  MANAGE_TEAM = '/manage/team',
   HOST_DASHBOARD = '/[hostId]',
   HOST_INBOX = '/[hostId]/inbox',
   HOST_MEDIA = '/[hostId]/media',
@@ -56,6 +57,7 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_COMMUNITY]: { hostId: string }
   [Route.HOST_CONTENT]: { hostId: string }
   [Route.MANAGE_COMMUNITY_PROFILE]: undefined
+  [Route.MANAGE_TEAM]: undefined
   [Route.HOST_INBOX]: { hostId: string }
   [Route.HOST_MEDIA]: { hostId: string }
   [Route.HOST_THEME]: { hostId: string }
