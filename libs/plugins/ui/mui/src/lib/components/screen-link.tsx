@@ -49,10 +49,18 @@ export interface ScreenLinkProps extends ButtonProps {
  * plain button when the id doesn't resolve (unpublished/deleted screen) and
  * when navigation is suppressed (besigner canvas, preview).
  */
+// Only navigable protocols: javascript:/data: URLs in a stored href would
+// execute in visitors' browsers (content-hardening review, 2026-07-07).
+const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
+
 const ScreenLink = forwardRef<any, ScreenLinkProps>((props, ref) => {
   const { screenId, href: externalHref, ...rest } = props
   const { href: resolvedHref, suppressNavigation } = Aglyn.useScreenLink(screenId)
-  const href = screenId ? resolvedHref : externalHref
+  const safeExternalHref =
+    externalHref && SAFE_HREF.test(externalHref.trim())
+      ? externalHref.trim()
+      : undefined
+  const href = screenId ? resolvedHref : safeExternalHref
 
   if (!href || suppressNavigation) {
     return <Button ref={ref} {...rest} />

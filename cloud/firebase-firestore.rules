@@ -6,13 +6,27 @@ service cloud.firestore {
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
     function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
 
-    // Hosts and everything under them keep the legacy any-authed access for
-    // now; tightening to the host `admins` map is tracked in the Admin
-    // Console project (follow-on to AGL-42).
+    // Hosts and everything under them are scoped to the host's admins map
+    // (content-hardening review, 2026-07-07): the previous any-authed access
+    // let any signed-up account write other tenants' screens — a stored-XSS
+    // and defacement vector once rich text landed. Tenant sites read through
+    // the Admin SDK (bypasses rules), so no public read is needed here.
+    function isHostAdmin(hostId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/hosts/$(hostId))
+          .data.admins[request.auth.uid] == true;
+    }
     match /hosts/{hostId} {
-      allow read, write: if isSignedIn();
+      // Queries must be admin-constrained (the console filters on
+      // admins.{uid} == true), which this rule admits.
+      allow read: if isStaff() || (isSignedIn() &&
+        resource.data.admins[request.auth.uid] == true);
+      allow create: if isSignedIn() &&
+        request.resource.data.admins[request.auth.uid] == true;
+      allow update, delete: if isStaff() ||
+        (isSignedIn() && resource.data.admins[request.auth.uid] == true);
       match /{document=**} {
-        allow read, write: if isSignedIn();
+        allow read, write: if isStaff() || isHostAdmin(hostId);
       }
     }
 
