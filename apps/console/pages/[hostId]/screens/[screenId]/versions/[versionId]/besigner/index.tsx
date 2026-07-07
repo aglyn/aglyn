@@ -69,6 +69,7 @@ import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AiAssistProvider from '../../../../../../../components/ai-assist-provider.component'
 import BesignerAppBarComponent from '../../../../../../../components/besigner-app-bar.component'
 import BesignerDocumentSwitcherComponent from '../../../../../../../components/besigner-document-switcher.component'
 import BesignerVersionsComponent from '../../../../../../../components/besigner-versions.component'
@@ -574,6 +575,7 @@ function BesignerPage(props) {
     <HostThemeDocumentContext.Provider value={hostTheme}>
     <Aglyn.ScreenLinkContext.Provider value={screenLinks}>
     <ReusableComponentsProvider hostId={hostId}>
+    <AiAssistProvider>
       {hostFontsHref ? (
         <Head>
           <link
@@ -944,6 +946,7 @@ function BesignerPage(props) {
           defaultValue={Aglyn.canvas.nestedNodes as any}
         />
       )}
+    </AiAssistProvider>
     </ReusableComponentsProvider>
     </Aglyn.ScreenLinkContext.Provider>
     </HostThemeDocumentContext.Provider>

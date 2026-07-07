@@ -30,6 +30,7 @@ export type Entitlement =
   | 'remove-branding'
   | 'scheduled-publishing'
   | 'marketplace-selling'
+  | 'ai-assist'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -38,6 +39,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   'remove-branding': 'removeBranding',
   'scheduled-publishing': 'scheduledPublishing',
   'marketplace-selling': 'marketplaceSelling',
+  'ai-assist': 'aiAssist',
 }
 
 /**
