@@ -1,8 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function isSignedIn() { return request.auth != null; }
+    // Staff access is a Firebase custom claim set via
+    // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
+    function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
+
+    // Hosts and everything under them keep the legacy any-authed access for
+    // now; tightening to the host `admins` map is tracked in the Admin
+    // Console project (follow-on to AGL-42).
+    match /hosts/{hostId} {
+      allow read, write: if isSignedIn();
+      match /{document=**} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    // Tenant docs (billing v1: keyed by the owner's uid). Owners read their
+    // own doc; clients never write plan/subscription — the Stripe webhook
+    // and admin tooling write via the Admin SDK (which bypasses rules), and
+    // staff may write from the admin console.
+    match /tenants/{tenantId} {
+      allow read: if isStaff() || (isSignedIn() && request.auth.uid == tenantId);
+      allow write: if isStaff();
+    }
+
+    // Staff-only, append-only audit log of admin actions
+    // ({ actorUid, action, target, before, after, at }).
+    match /adminAudit/{entryId} {
+      allow read, create: if isStaff();
+      allow update, delete: if false;
     }
   }
 }
