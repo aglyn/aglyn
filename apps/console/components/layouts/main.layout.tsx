@@ -132,6 +132,8 @@ export interface TopAppBarProps {
   centerNavigationItems?: CenterNavMenuItem[]
   /** Rendered before the center nav items (e.g. the version dropdown). */
   centerPrefix?: JSX.Node
+  /** Rendered on the right, before the quick actions / user menu (AGL-57). */
+  actionsPrefix?: JSX.Node
   customCenter?: JSX.Node
   enableAppBarElevation?: boolean
   quickActions?: QuickActionsMenuItem[]
@@ -144,6 +146,7 @@ const TopAppBar = (props: TopAppBarProps) => {
     appBarSuffix,
     centerNavigationItems,
     centerPrefix,
+    actionsPrefix,
     customCenter,
     enableAppBarElevation,
     quickActions,
@@ -280,6 +283,17 @@ const TopAppBar = (props: TopAppBarProps) => {
                 </Stack>
               )}
             </Stack>
+            {actionsPrefix ? (
+              <Stack
+                component="nav"
+                direction="row"
+                sx={{
+                  alignItems: "center",
+                  justifyContent: "flex-end"
+                }}>
+                {actionsPrefix}
+              </Stack>
+            ) : null}
             {_isArrEmpty(quickActions) ? null : (
               <Stack
                 component="nav"
@@ -333,6 +347,7 @@ export function MainLayout(props: MainLayoutProps) {
     appBarSuffix,
     centerNavigationItems,
     centerPrefix,
+    actionsPrefix,
     customCenter,
     enableAppBarElevation,
     quickActions,
@@ -379,6 +394,7 @@ export function MainLayout(props: MainLayoutProps) {
           enableAppBarElevation={enableAppBarElevation}
           backButton={backButton}
           centerPrefix={centerPrefix}
+          actionsPrefix={actionsPrefix}
           centerNavigationItems={centerNavigationItems || []}
           customCenter={
             // Default center nav is the host-switcher dropdown (AGL-36);

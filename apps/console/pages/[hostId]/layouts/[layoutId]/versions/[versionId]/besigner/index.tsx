@@ -260,7 +260,7 @@ function LayoutBesignerPage(props) {
         title={'Besigner'}
         enableAppBarElevation
         besigner
-        centerPrefix={
+        actionsPrefix={
           <BesignerVersionsComponent
             hostId={hostId}
             parent={{ kind: 'layout', id: layoutId }}

@@ -531,7 +531,7 @@ function BesignerPage(props) {
         enableAppBarElevation
         besigner
         // appBarSuffix={'Besigner'}
-        centerPrefix={
+        actionsPrefix={
           <BesignerVersionsComponent
             hostId={hostId}
             parent={{ kind: 'screen', id: screenId }}
