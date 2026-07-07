@@ -38,6 +38,7 @@ import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import * as Besigner from '@aglyn/besigner'
 import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef } from 'react'
+import { AiAssistContext } from '../contexts/ai-assist-context'
 import { ComponentPromotionContext } from '../contexts/component-promotion-context'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
@@ -170,6 +171,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
     const unlocked = Besigner.dnd.canDragNode(node)
 
+    // AI copy assist (AGL-89): only for text-editable elements, and only
+    // when the host app provides the rewrite callback.
+    const { onRewrite } = useContext(AiAssistContext)
+    const textEditable =
+      ((schema?.flags?.textEditable ?? Aglyn.FEATURE_FLAG.DISABLED) &
+        Aglyn.FEATURE_FLAG.ENABLED) !==
+      0
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -197,6 +206,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   {...rest}
                 />
 
+                {onRewrite && textEditable ? (
+                  <FormControl margin="none" fullWidth>
+                    <Button
+                      color="secondary"
+                      onClick={() => onRewrite(node)}
+                      sx={{ mt: 2 }}
+                      fullWidth
+                    >
+                      Rewrite with AI
+                    </Button>
+                  </FormControl>
+                ) : null}
                 {onPromote && !isInstance && unlocked ? (
                   <FormControl margin="none" fullWidth>
                     <Button

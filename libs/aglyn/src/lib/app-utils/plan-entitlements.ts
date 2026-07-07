@@ -55,6 +55,7 @@ export const PLAN_ENTITLEMENTS: Record<
       removeBranding: false,
       scheduledPublishing: false,
       marketplaceSelling: false,
+      aiAssist: false,
     },
   },
   starter: {
@@ -73,6 +74,7 @@ export const PLAN_ENTITLEMENTS: Record<
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: false,
+      aiAssist: false,
     },
   },
   pro: {
@@ -91,6 +93,7 @@ export const PLAN_ENTITLEMENTS: Record<
       removeBranding: true,
       scheduledPublishing: false,
       marketplaceSelling: true,
+      aiAssist: true,
     },
   },
   business: {
@@ -109,6 +112,7 @@ export const PLAN_ENTITLEMENTS: Record<
       removeBranding: true,
       scheduledPublishing: true,
       marketplaceSelling: true,
+      aiAssist: true,
     },
   },
 }
