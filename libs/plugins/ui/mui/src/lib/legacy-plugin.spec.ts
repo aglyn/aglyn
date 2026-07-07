@@ -16,6 +16,7 @@ import { schema as list } from './components/list'
 import { schema as listItem } from './components/list-item'
 import { schema as listItemText } from './components/list-item-text'
 import { schema as reusableInstance } from './components/reusable-instance'
+import { schema as searchBox } from './components/search-box'
 import { schema as screenLink } from './components/screen-link'
 import { schema as stack } from './components/stack'
 import { schema as toolbar } from './components/toolbar'
@@ -41,6 +42,7 @@ const PERSISTED_COMPONENT_IDS = [
   'muiToolbar',
   'muiTypography',
   'reusableInstance',
+  'searchBox',
   'socialLinks',
   'videoEmbed',
 ]
@@ -70,6 +72,7 @@ describe('plugins-ui-mui', () => {
       listItemText,
       reusableInstance,
       screenLink,
+      searchBox,
       socialLinks,
       videoEmbed,
       stack,

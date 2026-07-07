@@ -27,6 +27,7 @@ import * as Blocks from './components/blocks'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
 import * as ReusableInstance from './components/reusable-instance'
+import * as SearchBox from './components/search-box'
 import * as ScreenLink from './components/screen-link'
 import * as Stack from './components/stack'
 import * as Toolbar from './components/toolbar'
@@ -86,6 +87,7 @@ export function registerLegacyMuiPlugin(): void {
         ScreenLink.default,
         ScreenLink.schema,
       )
+      Aglyn.components.registerComponent(SearchBox.default, SearchBox.schema)
       Aglyn.components.registerComponent(Stack.default, Stack.schema)
 
       Aglyn.components.registerPreset(AppBar.presets)
@@ -102,6 +104,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(Image.presets)
       Aglyn.components.registerPreset(ReusableInstance.presets)
       Aglyn.components.registerPreset(ScreenLink.presets)
+      Aglyn.components.registerPreset(SearchBox.presets)
       Aglyn.components.registerPreset(Stack.presets)
     },
     destroy(): void {
@@ -121,8 +124,10 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterPreset(Image.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ReusableInstance.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ScreenLink.presets.map((i) => i.$id))
+      Aglyn.components.unregisterPreset(SearchBox.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Stack.presets.map((i) => i.$id))
 
+      Aglyn.components.unregisterComponent(SearchBox.ID)
       Aglyn.components.unregisterComponent(Blocks.VIDEO_EMBED_ID)
       Aglyn.components.unregisterComponent(Blocks.SOCIAL_LINKS_ID)
       Aglyn.components.unregisterComponent(FormComponents.FORM_ID)

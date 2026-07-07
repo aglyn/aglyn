@@ -208,7 +208,9 @@ export const middleware: NextMiddleware = (req, event) => {
 
   // rewrite to the current hostname under the pages/_sites folder
   // the main logic component will happen in pages/_sites/[host]/[...path].tsx
-  const rewrite = `/_sites/${tenantHost}${req.nextUrl.pathname}`
+  // Preserve the query string (search pages, tenantHost overrides) — the
+  // path-only rewrite silently dropped it.
+  const rewrite = `/_sites/${tenantHost}${req.nextUrl.pathname}${req.nextUrl.search}`
   console.debug(
     'Tenant Host Switch=',
     'Rewriting',
