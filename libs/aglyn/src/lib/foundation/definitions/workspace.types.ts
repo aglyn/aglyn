@@ -105,6 +105,8 @@ export interface TenantFeatureFlags {
   dataStore?: boolean
   /** Video/file uploads in the media manager (AGL-162). */
   videoMedia?: boolean
+  /** Appointment bookings (AGL-159). */
+  bookings?: boolean
 }
 
 /**
@@ -135,6 +137,8 @@ export interface TenantEntitlements {
   workflowsPerHost?: number
   /** Event-triggered workflow runs per calendar month (AGL-165). */
   workflowRunsPerMonth?: number
+  /** Bookable services per host (AGL-159). */
+  servicesPerHost?: number
   /** Dynamic data caps (AGL-99/102). */
   datasetsPerHost?: number
   /** Hard dataset cap incl. addons (AGL-132); beyond it, upgrade. */

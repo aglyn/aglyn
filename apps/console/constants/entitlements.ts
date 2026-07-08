@@ -36,6 +36,7 @@ export type Entitlement =
   | 'ai-assist'
   | 'workflows'
   | 'data-store'
+  | 'bookings'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -47,6 +48,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   'ai-assist': 'aiAssist',
   workflows: 'workflows',
   'data-store': 'dataStore',
+  bookings: 'bookings',
 }
 
 /**
