@@ -31,12 +31,10 @@ import { collection, doc, limit, query } from 'firebase/firestore'
 import { useRouter } from 'next/router'
 import { observer } from 'mobx-react-lite'
 import { type UIEvent, useCallback, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-} from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { buildRoute, Route } from '../constants/route-links'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 export interface BesignerDocumentSwitcherProps {
   hostId: string
@@ -69,26 +67,33 @@ export const BesignerDocumentSwitcherComponent = observer(
     const [pageCount, setPageCount] = useState(1)
     const fetchLimit = pageCount * PAGE_SIZE
 
-    const { data: screenDocs } = useFirestoreCollectionData<any>(
-      query(collection(firestore, 'hosts', hostId, 'screens'), limit(fetchLimit)),
+    const { data: screenDocs } = useFirestoreCollection<any>(
+      () =>
+        query(collection(firestore, 'hosts', hostId, 'screens'), limit(fetchLimit)),
+      [firestore, hostId, fetchLimit],
       { idField: '$id' },
     )
-    const { data: layoutDocs } = useFirestoreCollectionData<any>(
-      query(collection(firestore, 'hosts', hostId, 'layouts'), limit(fetchLimit)),
+    const { data: layoutDocs } = useFirestoreCollection<any>(
+      () =>
+        query(collection(firestore, 'hosts', hostId, 'layouts'), limit(fetchLimit)),
+      [firestore, hostId, fetchLimit],
       { idField: '$id' },
     )
-    const { data: currentDoc } = useFirestoreDocData<any>(
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        current.kind === 'screen' ? 'screens' : 'layouts',
-        current.id,
-      ),
+    const { data: currentDoc } = useFirestoreDoc<any>(
+      () =>
+        doc(
+          firestore,
+          'hosts',
+          hostId,
+          current.kind === 'screen' ? 'screens' : 'layouts',
+          current.id,
+        ),
+      [firestore, hostId, current.kind, current.id],
       { idField: '$id' },
     )
-    const { data: hostData } = useFirestoreDocData<any>(
-      doc(firestore, 'hosts', hostId),
+    const { data: hostData } = useFirestoreDoc<any>(
+      () => doc(firestore, 'hosts', hostId),
+      [firestore, hostId],
       { idField: '$id' },
     )
     const routingMap = hostData?.screens as Record<string, string> | undefined

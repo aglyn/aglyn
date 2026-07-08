@@ -56,7 +56,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../components/auth-form-template.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -69,6 +69,7 @@ import {
   CONTENT_MAX_WIDTH,
   TABLE_ROW_HEIGHT,
 } from '../../../../constants/shared'
+import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -91,11 +92,11 @@ function Layouts(props) {
   }, [])
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
-  const layoutsCollection = collection(firestore, 'hosts', hostId, 'layouts')
-  const layoutsQuery = query(layoutsCollection, limit(pageSize))
-  const { status, data } = useFirestoreCollectionData<any>(layoutsQuery, {
-    idField: '$id',
-  })
+  const { status, data } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'layouts'), limit(pageSize)),
+    [firestore, hostId, pageSize],
+    { idField: '$id' },
+  )
   const layouts = data || []
   const { enqueueSnackbar } = useSnackbar()
 

@@ -63,7 +63,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, deleteField, limit, query } from 'firebase/firestore'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
@@ -88,6 +88,7 @@ import {
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { syncScreenRouteEntries } from '../../../../../../../constants/screen-publishing'
 import { buildScreenLiveUrl } from '../../../../../../../constants/tenant-links'
+import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 
 registerLegacyMuiPlugin()
 
@@ -243,12 +244,9 @@ function BesignerPage(props) {
     [hostTheme?.fonts],
   )
   const firestore = useFirestore()
-  const layoutsQuery = query(
-    collection(firestore, 'hosts', hostId, 'layouts'),
-    limit(50),
-  )
-  const { data: layoutOptions } = useFirestoreCollectionData<any>(
-    layoutsQuery,
+  const { data: layoutOptions } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'layouts'), limit(50)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const chromeContextValue = useMemo(
@@ -337,13 +335,11 @@ function BesignerPage(props) {
   // `screens` routing map. The routed path composes ancestor slugs (parent
   // `company` + own `about` → /company/about), so slug and parent changes
   // must rewrite this screen's entry AND every descendant's.
-  const screensQuery = query(
-    collection(firestore, 'hosts', hostId, 'screens'),
-    limit(200),
+  const { data: screenDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
+    { idField: '$id' },
   )
-  const { data: screenDocs } = useFirestoreCollectionData<any>(screensQuery, {
-    idField: '$id',
-  })
   const screensById = useMemo(() => {
     const map: Record<
       string,

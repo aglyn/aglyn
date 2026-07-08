@@ -74,11 +74,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-} from 'reactfire'
+import { useFirestore } from 'reactfire'
 import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -103,6 +99,8 @@ import {
 } from '../../../../constants/screen-publishing'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useCurrentTenant from '../../../../hooks/use-current-tenant'
+import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../hooks/use-host-activity-logger'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
@@ -125,20 +123,22 @@ function Screens(props) {
     setQuickDrawerOpen(false)
   }, [])
   const firestore = useFirestore()
-  const screensCollection = collection(firestore, 'hosts', hostId, 'screens')
   // The hierarchy table renders the whole tree, so no page-sized query: a
   // paginated slice could orphan children whose parent fell off the page.
-  const screensQuery = query(screensCollection, limit(200))
-  const { status, data } = useFirestoreCollectionData<any>(screensQuery, {
-    idField: '$id',
-  })
+  const { status, data } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const screens: ScreenHierarchyRow[] = useMemo(
     () => (data ?? []).filter((screen: any) => !screen.deletedAt),
     [data],
   )
-  const { data: hostData } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: hostData } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const routingMap = hostData?.screens as Record<ScreenUid, string> | undefined

@@ -23,7 +23,8 @@ import {
 import { BindingPickerContext, type BindingOption } from '@aglyn/besigner-ui'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface BindingPickerProviderProps {
   hostId: string
@@ -38,12 +39,14 @@ export interface BindingPickerProviderProps {
 export function BindingPickerProvider(props: BindingPickerProviderProps) {
   const { hostId, children } = props
   const firestore = useFirestore()
-  const { data: variableDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
+  const { data: variableDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: functionDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
+  const { data: functionDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
 

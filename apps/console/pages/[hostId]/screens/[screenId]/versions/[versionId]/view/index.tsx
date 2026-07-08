@@ -77,7 +77,7 @@ import {
 } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useFirestoreDocData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import ScreenAnalyticsCard from '../../../../../../../components/analytics/screen-analytics-card.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
@@ -93,6 +93,8 @@ import {
 import HostActivityCard from '../../../../../../../components/host-activity-card.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useCurrentTenant from '../../../../../../../hooks/use-current-tenant'
+import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../../../../hooks/use-host-activity-logger'
 
 const whiteSpace = '--'
@@ -140,22 +142,28 @@ function ScreenDetails() {
   const logActivity = useHostActivityLogger(hostId)
 
   const screenRef = doc(firestore, 'hosts', hostId, 'screens', screenId)
-  const { status, data: screen } = useFirestoreDocData<any>(screenRef, {
-    idField: '$id',
-  })
-  const { data: hostData } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { status, data: screen } = useFirestoreDoc<any>(
+    () => screenRef,
+    [firestore, hostId, screenId],
     { idField: '$id' },
   )
-  const { data: screenDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+  const { data: hostData } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: versionDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts', hostId, 'screens', screenId, 'versions'),
-      limit(50),
-    ),
+  const { data: screenDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  const { data: versionDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'screens', screenId, 'versions'),
+        limit(50),
+      ),
+    [firestore, hostId, screenId],
     { idField: '$id' },
   )
   const versions = useMemo(

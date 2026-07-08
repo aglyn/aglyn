@@ -32,9 +32,10 @@ import {
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface ReusableComponentsProviderProps {
   hostId: string
@@ -78,8 +79,9 @@ export function ReusableComponentsProvider(
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
 
-  const { data: componentDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+  const { data: componentDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
 

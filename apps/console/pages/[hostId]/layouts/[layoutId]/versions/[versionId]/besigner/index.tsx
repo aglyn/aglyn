@@ -44,7 +44,7 @@ import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
 import { useHost, useLayout, useLayoutVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
@@ -62,6 +62,7 @@ import AuthenticatedLayout from '../../../../../../../components/layouts/authent
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import '../../../../../../../constants/app-setup'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
+import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 
 registerLegacyMuiPlugin()
 
@@ -110,13 +111,11 @@ function LayoutBesignerPage(props) {
   // live, so the canvas needs the routing map to resolve hrefs and the
   // Attributes panel needs screen names for the screen-select field.
   const firestore = useFirestore()
-  const screensQuery = query(
-    collection(firestore, 'hosts', hostId, 'screens'),
-    limit(200),
+  const { data: screenDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
+    { idField: '$id' },
   )
-  const { data: screenDocs } = useFirestoreCollectionData<any>(screensQuery, {
-    idField: '$id',
-  })
   const screenLinks = useMemo(
     () => ({
       screens: hostResult?.data?.screens as Record<string, string> | undefined,

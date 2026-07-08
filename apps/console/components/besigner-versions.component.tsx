@@ -63,14 +63,12 @@ import {
 import { observer } from 'mobx-react-lite'
 import { useRouter } from 'next/router'
 import { useCallback, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-} from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 export interface BesignerVersionsProps {
   hostId: string
@@ -112,13 +110,15 @@ export const BesignerVersionsComponent = observer(
     const parentPath = ['hosts', hostId, parentCollection, parent.id] as const
     // No orderBy: Firestore drops docs missing the ordered field, and the
     // oldest version docs predate `createdAt`. Sort client-side instead.
-    const { data: versionDocs } = useFirestoreCollectionData<any>(
-      query(collection(firestore, ...parentPath, 'versions'), limit(100)),
+    const { data: versionDocs } = useFirestoreCollection<any>(
+      () => query(collection(firestore, ...parentPath, 'versions'), limit(100)),
+      [firestore, hostId, parentCollection, parent.id],
       { idField: '$id' },
     )
     // Parent doc carries the pending publish schedule (AGL-61).
-    const { data: parentDoc } = useFirestoreDocData<any>(
-      doc(firestore, ...parentPath),
+    const { data: parentDoc } = useFirestoreDoc<any>(
+      () => doc(firestore, ...parentPath),
+      [firestore, hostId, parentCollection, parent.id],
       { idField: '$id' },
     )
     const schedule =
