@@ -22,7 +22,7 @@ import {
   type TenantPlan,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
-import { Container } from '@aglyn/shared-ui-jsx'
+import { Container, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -137,6 +137,7 @@ const AdminTenants: NextPageWithLayout = () => {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const { confirm } = useConfirmationContext()
   const [isStaff, setIsStaff] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -272,6 +273,62 @@ const AdminTenants: NextPageWithLayout = () => {
       })
     }
   }, [suspender, firestore, user, enqueueSnackbar])
+
+  // GDPR erasure request (AGL-206): sets/clears the flag only — the hard
+  // delete is a deliberate, separately-run script after a 7-day hold.
+  const handleToggleErasure = useCallback(
+    (tenant: any) => async () => {
+      const requesting = !tenant.erasureRequestedAt
+      const confirmed = await confirm({
+        title: requesting
+          ? 'Request erasure for this tenant?'
+          : 'Cancel the erasure request?',
+        description: requesting
+          ? 'Marks the tenant for GDPR deletion. Nothing is deleted now: ' +
+            'after a 7-day hold, staff run tools/scripts/erase-tenant.mjs ' +
+            'to export a final bundle and hard-delete all data. Audited.'
+          : 'The tenant is no longer marked for deletion. Audited.',
+        confirmationText: requesting ? 'Request erasure' : 'Cancel request',
+        confirmationButtonProps: { color: requesting ? 'error' : 'primary' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      try {
+        await setDoc(
+          doc(firestore, 'tenants', tenant.$id),
+          {
+            erasureRequestedAt: requesting ? Timestamp.now() : deleteField(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true },
+        )
+        await addDoc(collection(firestore, 'adminAudit'), {
+          actorUid: (user as any)?.uid ?? 'unknown',
+          action: requesting
+            ? 'tenant.erasureRequested'
+            : 'tenant.erasureCanceled',
+          target: `tenants/${tenant.$id}`,
+          before: { erasureRequested: !requesting },
+          after: { erasureRequested: requesting },
+          at: Timestamp.now(),
+        })
+        enqueueSnackbar(
+          requesting
+            ? 'Erasure requested — deletable via script after 7 days (audited)'
+            : 'Erasure request canceled (audited)',
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+    },
+    [confirm, firestore, user, enqueueSnackbar],
+  )
 
   const handleSave = useCallback(async () => {
     if (!editor) return
@@ -441,6 +498,15 @@ const AdminTenants: NextPageWithLayout = () => {
                                 sx={{ ml: 1 }}
                               />
                             ) : null}
+                            {tenant.erasureRequestedAt ? (
+                              <Chip
+                                label="erasure requested"
+                                size="small"
+                                color="error"
+                                variant="outlined"
+                                sx={{ ml: 1 }}
+                              />
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             {tenant.subscription?.status ?? '--'}
@@ -522,6 +588,19 @@ const AdminTenants: NextPageWithLayout = () => {
                               }
                             >
                               {tenant.suspendedAt ? 'Unsuspend' : 'Suspend'}
+                            </Button>
+                            <Button
+                              size="small"
+                              color={
+                                tenant.erasureRequestedAt
+                                  ? 'primary'
+                                  : 'error'
+                              }
+                              onClick={handleToggleErasure(tenant)}
+                            >
+                              {tenant.erasureRequestedAt
+                                ? 'Cancel erasure'
+                                : 'Erasure'}
                             </Button>
                           </TableCell>
                         </TableRow>

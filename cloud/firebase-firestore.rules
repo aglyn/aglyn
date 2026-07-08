@@ -5,6 +5,17 @@ service cloud.firestore {
     // Staff access is a Firebase custom claim set via
     // tools/scripts/set-staff-claim.mjs (Aglyn Admin Console, AGL-42).
     function isStaff() { return isSignedIn() && request.auth.token.staff == true; }
+    // Staff RBAC (AGL-206): roles ride a second claim; a missing role
+    // means 'super' so pre-RBAC staff keep full access (migration path).
+    // support = read-only surfaces; billing = plan/entitlement writes;
+    // super = everything including suspension and user management.
+    function staffRole() {
+      return request.auth.token.get('staffRole', 'super');
+    }
+    function isBillingStaff() {
+      return isStaff() && (staffRole() == 'super' || staffRole() == 'billing');
+    }
+    function isSuperStaff() { return isStaff() && staffRole() == 'super'; }
 
     // Hosts and everything under them are scoped to the host's admins map
     // (content-hardening review, 2026-07-07): the previous any-authed access
@@ -68,7 +79,13 @@ service cloud.firestore {
       allow read: if isStaff() || (isSignedIn() &&
         (request.auth.uid == tenantId ||
           exists(/databases/$(database)/documents/tenants/$(tenantId)/members/$(request.auth.uid))));
-      allow write: if isStaff();
+      // Plan/entitlement writes: billing or super. Suspension and erasure
+      // flags are super-only (AGL-206) — checked by key diff so a billing
+      // override save can't smuggle a suspension in.
+      allow write: if isSuperStaff() ||
+        (isBillingStaff() &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
     }
 
     // Community marketplace (AGL-44). Profiles are public publisher pages;

@@ -19,7 +19,14 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-const ACTIONS = ['grantStaff', 'revokeStaff', 'disable', 'enable'] as const
+const ACTIONS = [
+  'grantStaff',
+  'revokeStaff',
+  'disable',
+  'enable',
+  'setRole',
+] as const
+const STAFF_ROLES = ['support', 'billing', 'super'] as const
 type ManageAction = (typeof ACTIONS)[number]
 
 /**
@@ -53,6 +60,12 @@ export default async function handler(
     if (!decoded['staff']) {
       return res.status(403).json({ error: 'Staff only' })
     }
+    // RBAC (AGL-206): user management is super-only; a missing role means
+    // super so pre-RBAC staff keep access.
+    const actorRole = String(decoded['staffRole'] ?? 'super')
+    if (actorRole !== 'super') {
+      return res.status(403).json({ error: 'Requires the super staff role' })
+    }
     if (
       decoded.uid === uid &&
       (action === 'revokeStaff' || action === 'disable')
@@ -65,13 +78,29 @@ export default async function handler(
     const target = await auth.getUser(uid)
     const before = {
       staff: Boolean(target.customClaims?.['staff']),
+      staffRole: target.customClaims?.['staffRole'] ?? null,
       disabled: target.disabled,
     }
 
-    if (action === 'grantStaff' || action === 'revokeStaff') {
+    const requestedRole = String(req.body?.role ?? '')
+    if (action === 'setRole') {
+      if (!STAFF_ROLES.includes(requestedRole as any)) {
+        return res.status(400).json({ error: 'Unknown role' })
+      }
+      if (decoded.uid === uid && requestedRole !== 'super') {
+        return res.status(400).json({ error: 'You cannot demote yourself' })
+      }
+      await auth.setCustomUserClaims(uid, {
+        ...(target.customClaims ?? {}),
+        staff: true,
+        staffRole: requestedRole,
+      })
+    } else if (action === 'grantStaff' || action === 'revokeStaff') {
       await auth.setCustomUserClaims(uid, {
         ...(target.customClaims ?? {}),
         staff: action === 'grantStaff',
+        // Grants default to the least-privileged role (AGL-206).
+        ...(action === 'grantStaff' ? { staffRole: 'support' } : {}),
       })
     } else {
       await auth.updateUser(uid, { disabled: action === 'disable' })
@@ -88,11 +117,17 @@ export default async function handler(
         before,
         after: {
           staff:
-            action === 'grantStaff'
+            action === 'grantStaff' || action === 'setRole'
               ? true
               : action === 'revokeStaff'
                 ? false
                 : before.staff,
+          staffRole:
+            action === 'setRole'
+              ? requestedRole
+              : action === 'grantStaff'
+                ? 'support'
+                : before.staffRole,
           disabled:
             action === 'disable'
               ? true

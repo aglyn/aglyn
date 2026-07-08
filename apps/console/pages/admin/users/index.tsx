@@ -28,6 +28,7 @@ import {
   Alert,
   Button,
   Chip,
+  MenuItem,
   Stack,
   Table,
   TableBody,
@@ -51,6 +52,7 @@ interface AdminUser {
   displayName: string | null
   disabled: boolean
   staff: boolean
+  staffRole: string | null
   createdAt: string | null
   lastSignInAt: string | null
   providers: string[]
@@ -126,6 +128,45 @@ const AdminUsers: NextPageWithLayout = () => {
         .includes(term),
     )
   }, [users, search])
+
+  // RBAC (AGL-206): role changes go through the same audited endpoint.
+  const handleSetRole = useCallback(
+    async (record: AdminUser, role: string) => {
+      setBusy(true)
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/admin/users/manage', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ action: 'setRole', uid: record.uid, role }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(payload?.error ?? 'Role change failed', {
+            variant: 'error',
+            allowDuplicate: true,
+          })
+        }
+        enqueueSnackbar(`Role set to ${role} (audited)`, {
+          variant: 'success',
+          persist: false,
+        })
+        await loadPage()
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setBusy(false)
+      }
+    },
+    [user, loadPage, enqueueSnackbar],
+  )
 
   const handleAction = useCallback(
     (record: AdminUser, action: string, description: string) => async () => {
@@ -250,7 +291,20 @@ const AdminUsers: NextPageWithLayout = () => {
                         </TableCell>
                         <TableCell>
                           {record.staff ? (
-                            <Chip label="staff" size="small" color="secondary" />
+                            <TextField
+                              select
+                              size="small"
+                              variant="standard"
+                              value={record.staffRole ?? 'super'}
+                              onChange={(event) =>
+                                void handleSetRole(record, event.target.value)
+                              }
+                              sx={{ minWidth: 96, mr: 1 }}
+                            >
+                              <MenuItem value="support">{'support'}</MenuItem>
+                              <MenuItem value="billing">{'billing'}</MenuItem>
+                              <MenuItem value="super">{'super'}</MenuItem>
+                            </TextField>
                           ) : null}
                           {record.disabled ? (
                             <Chip

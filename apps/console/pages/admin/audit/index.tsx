@@ -21,6 +21,7 @@ import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
+  Button,
   Chip,
   Stack,
   TextField,
@@ -87,6 +88,37 @@ const AdminAudit: NextPageWithLayout = () => {
 
   const [expanded, setExpanded] = useState<string | null>(null)
 
+  // Compliance export (AGL-206): CSV of the current filter.
+  const handleExport = () => {
+    const escape = (value: unknown) => {
+      const text =
+        typeof value === 'object' && value !== null
+          ? JSON.stringify(value)
+          : String(value ?? '')
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+    }
+    const rows = [
+      ['at', 'actorUid', 'action', 'target', 'before', 'after'],
+      ...entries.map((entry: any) => [
+        entry.at?.seconds
+          ? new Date(entry.at.seconds * 1000).toISOString()
+          : '',
+        entry.actorUid,
+        entry.action,
+        entry.target,
+        entry.before,
+        entry.after,
+      ]),
+    ]
+    const csv = rows.map((row) => row.map(escape).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'admin-audit.csv'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <NextPageTitle screen={'Audit – Staff'} />
@@ -135,13 +167,22 @@ const AdminAudit: NextPageWithLayout = () => {
               contentGutterY
             >
               <Stack spacing={2}>
-                <TextField
-                  size="small"
-                  label="Filter (actor, action, target)"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  sx={{ maxWidth: 360 }}
-                />
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <TextField
+                    size="small"
+                    label="Filter (actor, action, target)"
+                    value={filter}
+                    onChange={(event) => setFilter(event.target.value)}
+                    sx={{ width: 360 }}
+                  />
+                  <Button
+                    size="small"
+                    onClick={handleExport}
+                    disabled={!entries.length}
+                  >
+                    {'Export CSV'}
+                  </Button>
+                </Stack>
                 {entries.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
                     {'No audit entries match.'}

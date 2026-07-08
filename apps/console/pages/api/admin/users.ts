@@ -54,6 +54,7 @@ export default async function handler(
         displayName: record.displayName ?? null,
         disabled: record.disabled,
         staff: Boolean(record.customClaims?.['staff']),
+        staffRole: record.customClaims?.['staffRole'] ?? null,
         createdAt: record.metadata.creationTime ?? null,
         lastSignInAt: record.metadata.lastSignInTime ?? null,
         providers: record.providerData.map((provider) => provider.providerId),

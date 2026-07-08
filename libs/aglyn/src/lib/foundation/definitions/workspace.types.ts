@@ -258,6 +258,11 @@ export interface AglynTenant extends AglynDocument {
   /** Staff suspension (AGL-202): set = all the tenant's sites serve 503. */
   suspendedAt?: ITimestamp | null
   suspendedReason?: string
+  /**
+   * GDPR erasure request (AGL-206): hard deletion happens ONLY via
+   * tools/scripts/erase-tenant.mjs after a 7-day hold from this stamp.
+   */
+  erasureRequestedAt?: ITimestamp | null
 }
 
 export type ProjectUid = string
