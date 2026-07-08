@@ -97,6 +97,11 @@ const AdminOverview: NextPageWithLayout = () => {
             label: 'Tenants',
             href: buildRoute(Route.ADMIN_TENANTS),
           },
+          {
+            id: 'nav-tab-admin-audit',
+            label: 'Audit log',
+            href: buildRoute(Route.ADMIN_AUDIT),
+          },
         ]}
         activeTab={buildRoute(Route.ADMIN_OVERVIEW)}
         breadcrumbItems={[
