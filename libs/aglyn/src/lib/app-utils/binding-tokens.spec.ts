@@ -23,6 +23,7 @@ import {
   MISSING_BINDING_LABEL,
   nodesReferenceBinding,
   normalizeBindingTokens,
+  rewriteBindingTokensDeep,
   textReferencesBinding,
 } from './binding-tokens'
 import { resolveBindings, type HostVariable } from './variables'
@@ -173,6 +174,35 @@ describe('displayBindingTokens (AGL-186)', () => {
     expect(
       displayBindingTokens('{{fn:Sum(3)}}', {}, editorFunctions),
     ).toBe('{{fn:Sum(3)}}')
+  })
+})
+
+describe('rewriteBindingTokensDeep (AGL-188)', () => {
+  const editorVariables = {
+    greeting: { name: 'greeting', $id: 'aB3xK9m2Qw' },
+    aB3xK9m2Qw: { name: 'greeting', $id: 'aB3xK9m2Qw' },
+  }
+
+  it('rewrites nested string props and reports change', () => {
+    const nodes = {
+      a: { props: { children: 'Hi {{greeting}}', list: ['{{greeting}}'] } },
+      b: { props: { children: 'plain' } },
+    }
+    const { value, changed } = rewriteBindingTokensDeep(
+      nodes,
+      editorVariables,
+    )
+    expect(changed).toBe(true)
+    expect(value.a.props.children).toBe('Hi {{var:aB3xK9m2Qw}}')
+    expect(value.a.props.list[0]).toBe('{{var:aB3xK9m2Qw}}')
+    expect(value.b.props.children).toBe('plain')
+  })
+
+  it('is idempotent and preserves identity when nothing changes', () => {
+    const nodes = { a: { props: { children: '{{var:aB3xK9m2Qw}}' } } }
+    const first = rewriteBindingTokensDeep(nodes, editorVariables)
+    expect(first.changed).toBe(false)
+    expect(first.value).toBe(nodes)
   })
 })
 
