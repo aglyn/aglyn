@@ -190,11 +190,23 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
               }
               color={host?.cnameAttachmentPending ? 'warning' : 'success'}
             />
-            {host?.cnameAttachmentPending ? (
-              <Button size="small" disabled={checking} onClick={handleRetryAttach}>
-                {'Retry attachment'}
-              </Button>
-            ) : null}
+            {/*
+              Always offer re-attach for a connected domain (AGL-166):
+              domains connected before the pending flag existed never got
+              cnameAttachmentPending set, so gating the button on it hid it
+              for exactly the domains that need attaching. Attach is
+              idempotent (Vercel returns domain_already_in_use), so it's
+              safe to run even when already attached.
+            */}
+            <Button
+              size="small"
+              disabled={checking}
+              onClick={handleRetryAttach}
+            >
+              {host?.cnameAttachmentPending
+                ? 'Retry attachment'
+                : 'Re-attach'}
+            </Button>
             <Button size="small" color="error" onClick={handleDisconnect}>
               {'Disconnect'}
             </Button>
