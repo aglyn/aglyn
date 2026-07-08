@@ -20,7 +20,8 @@ import * as Aglyn from '@aglyn/aglyn'
 import { pluginInstallToPreset } from '@aglyn/plugins-ui-mui'
 import { collection, limit, query } from 'firebase/firestore'
 import { useEffect, useRef } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
+import useFirestoreCollection from './use-firestore-collection'
 
 /**
  * Registers the host's installed plugins as named besigner drawer entries
@@ -31,8 +32,9 @@ import { useFirestore, useFirestoreCollectionData } from 'reactfire'
  */
 export function usePluginDrawerRegistration(hostId: string): void {
   const firestore = useFirestore()
-  const { data: installDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
+  const { data: installDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   // Track the ids we registered so we can unregister exactly those.

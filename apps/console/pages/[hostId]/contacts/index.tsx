@@ -55,7 +55,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -63,6 +63,7 @@ import MainLayout from '../../../components/layouts/main.layout'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
+import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 const SOURCE_LABELS: Record<ContactSource, string> = {
   form: 'Form',
@@ -91,8 +92,10 @@ const HostContacts: NextPageWithLayout = () => {
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
 
-  const { data: contactDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'contacts'), limit(1000)),
+  const { data: contactDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'contacts'), limit(1000)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const contacts: ContactDoc[] = useMemo(
@@ -105,11 +108,13 @@ const HostContacts: NextPageWithLayout = () => {
   const quota = checkQuota(tenant, 'contactsPerHost', contacts.length)
 
   // Saved segments (AGL-199): reusable audience filters.
-  const { data: segmentDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts', hostId, 'contactSegments'),
-      limit(50),
-    ),
+  const { data: segmentDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'contactSegments'),
+        limit(50),
+      ),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>

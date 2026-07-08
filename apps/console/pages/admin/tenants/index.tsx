@@ -54,12 +54,13 @@ import {
   setDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'No plan (dark launch — everything on)' },
@@ -155,8 +156,9 @@ const AdminTenants: NextPageWithLayout = () => {
     }
   }, [user])
 
-  const { data: tenantDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'tenants'), limit(200)),
+  const { data: tenantDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'tenants'), limit(200)),
+    [firestore],
     { idField: '$id' },
   )
   // Search/sort (AGL-135) over the fetched page.

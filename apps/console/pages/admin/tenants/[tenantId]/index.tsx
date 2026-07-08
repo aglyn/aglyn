@@ -45,17 +45,14 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 
 /**
  * Read-only tenant detail for staff (AGL-207). This is the "view as
@@ -87,24 +84,29 @@ const AdminTenantDetail: NextPageWithLayout = () => {
     }
   }, [user])
 
-  const { data: tenant } = useFirestoreDocData<any>(
-    doc(firestore, 'tenants', tenantId || 'missing'),
+  const { data: tenant } = useFirestoreDoc<any>(
+    () => doc(firestore, 'tenants', tenantId || 'missing'),
+    [firestore, tenantId],
     { idField: '$id' },
   )
-  const { data: hostDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts'),
-      where('tenantId', '==', tenantId || 'missing'),
-      limit(50),
-    ),
+  const { data: hostDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts'),
+        where('tenantId', '==', tenantId || 'missing'),
+        limit(50),
+      ),
+    [firestore, tenantId],
     { idField: '$id' },
   )
-  const { data: auditDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'adminAudit'),
-      orderBy('at', 'desc'),
-      limit(200),
-    ),
+  const { data: auditDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'adminAudit'),
+        orderBy('at', 'desc'),
+        limit(200),
+      ),
+    [firestore],
     { idField: '$id' },
   )
   const tenantAudit = useMemo(

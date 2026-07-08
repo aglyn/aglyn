@@ -56,8 +56,7 @@ import {
 } from 'firebase/firestore'
 import { Divider, Link as MuiLink } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestoreDocData } from 'reactfire'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
@@ -68,6 +67,8 @@ import { hasEntitlement } from '../../../constants/entitlements'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useFirestoreCollection from '../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../hooks/use-host-activity-logger'
 import MediaPickerDialog from '../../../components/media/media-picker-dialog.component'
 
@@ -90,17 +91,22 @@ const HostContent: NextPageWithLayout = () => {
   const { confirm } = useConfirmationContext()
   const logActivity = useHostActivityLogger(hostId)
 
-  const { data: collectionDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'collections'), limit(50)),
+  const { data: collectionDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'collections'), limit(50)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: hostDoc } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: hostDoc } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
   // Entry-template screens (AGL-105): assignable per collection.
-  const { data: screenDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+  const { data: screenDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const screenOptions = useMemo(
@@ -148,18 +154,20 @@ const HostContent: NextPageWithLayout = () => {
   const selected =
     collections.find((item) => item.$id === selectedId) ?? collections[0]
 
-  const { data: entryDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(
-        firestore,
-        'hosts',
-        hostId,
-        'collections',
-        selected?.$id ?? '-none-',
-        'entries',
+  const { data: entryDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(
+          firestore,
+          'hosts',
+          hostId,
+          'collections',
+          selected?.$id ?? '-none-',
+          'entries',
+        ),
+        limit(200),
       ),
-      limit(200),
-    ),
+    [firestore, hostId, selected?.$id],
     { idField: '$id' },
   )
   const entries = useMemo(

@@ -49,7 +49,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import HostCampaignsCard from '../../../components/host-campaigns-card.component'
 import { useHostId } from '../../../components/host-id-provider'
@@ -60,6 +60,7 @@ import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 /** Form submissions inbox (AGL-77). */
 const HostInbox: NextPageWithLayout = () => {
@@ -68,11 +69,13 @@ const HostInbox: NextPageWithLayout = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: submissionDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts', hostId, 'formSubmissions'),
-      limit(200),
-    ),
+  const { data: submissionDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'formSubmissions'),
+        limit(200),
+      ),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const submissions = [...(submissionDocs ?? [])].sort(
@@ -80,15 +83,18 @@ const HostInbox: NextPageWithLayout = () => {
   )
 
   // Site members + leads (AGL-109).
-  const { data: memberDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'siteMembers'), limit(200)),
+  const { data: memberDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'siteMembers'), limit(200)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const siteMembers = [...(memberDocs ?? [])].sort(
     (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
   )
-  const { data: leadDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'leads'), limit(200)),
+  const { data: leadDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'leads'), limit(200)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const leads = [...(leadDocs ?? [])].sort(

@@ -39,13 +39,7 @@ import { logEvent } from 'firebase/analytics'
 import { signInWithEmailAndPassword, updatePassword } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import {
-  useAnalytics,
-  useAuth,
-  useFirestore,
-  useFirestoreDocData,
-  useUser,
-} from 'reactfire'
+import { useAnalytics, useAuth, useFirestore, useUser } from 'reactfire'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../components/card-display-form-template'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
@@ -54,6 +48,7 @@ import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import settingsNavTabItems from '../../../constants/settings-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useFirestoreDoc from '../../../hooks/use-firestore-doc'
 
 const basicSchema: FormSchema = {
   id: 'basic',
@@ -78,8 +73,12 @@ const securitySchema: FormSchema = {
 const ManageUser: NextPageWithLayout = (props) => {
   const [tab, setTab] = useState('basic')
   const { data: user } = useUser()
-  const userRef = doc(useFirestore(), 'users', user.uid)
-  const { data } = useFirestoreDocData(userRef)
+  const firestore = useFirestore()
+  const userRef = doc(firestore, 'users', user.uid)
+  const { data } = useFirestoreDoc(
+    () => userRef,
+    [firestore, user.uid],
+  )
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const firebaseAuth = useAuth()

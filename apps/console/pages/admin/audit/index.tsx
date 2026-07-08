@@ -29,12 +29,13 @@ import {
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 /**
  * Staff audit log viewer (AGL-203): every admin mutation writes an
@@ -63,12 +64,14 @@ const AdminAudit: NextPageWithLayout = () => {
     }
   }, [user])
 
-  const { data: entryDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'adminAudit'),
-      orderBy('at', 'desc'),
-      limit(200),
-    ),
+  const { data: entryDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'adminAudit'),
+        orderBy('at', 'desc'),
+        limit(200),
+      ),
+    [firestore],
     { idField: '$id' },
   )
 

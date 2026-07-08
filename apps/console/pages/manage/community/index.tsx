@@ -36,18 +36,15 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import settingsNavTabItems from '../../../constants/settings-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import useFirestoreCollection from '../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../hooks/use-firestore-doc'
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -61,23 +58,28 @@ const CommunitySettings: NextPageWithLayout = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const uid = user?.uid
-  const { data: profile } = useFirestoreDocData<any>(
-    doc(firestore, 'profiles', uid ?? '-anonymous-'),
+  const { data: profile } = useFirestoreDoc<any>(
+    () => doc(firestore, 'profiles', uid ?? '-anonymous-'),
+    [firestore, uid],
     { idField: '$id' },
   )
-  const { data: listings } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityListings'),
-      where('profileId', '==', uid ?? '-anonymous-'),
-    ),
+  const { data: listings } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityListings'),
+        where('profileId', '==', uid ?? '-anonymous-'),
+      ),
+    [firestore, uid],
     { idField: '$id' },
   )
   // Seller ledger (AGL-46): purchase records written by the Stripe webhook.
-  const { data: sales } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityPurchases'),
-      where('sellerUid', '==', uid ?? '-anonymous-'),
-    ),
+  const { data: sales } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityPurchases'),
+        where('sellerUid', '==', uid ?? '-anonymous-'),
+      ),
+    [firestore, uid],
     { idField: '$id' },
   )
   const grossCents = (sales ?? []).reduce(
