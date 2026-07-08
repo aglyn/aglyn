@@ -101,9 +101,29 @@ const AdminTenants: NextPageWithLayout = () => {
     query(collection(firestore, 'tenants'), limit(200)),
     { idField: '$id' },
   )
-  const tenants = [...(tenantDocs ?? [])].sort((a, b) =>
-    String(a.$id).localeCompare(String(b.$id)),
-  )
+  // Search/sort (AGL-135) over the fetched page.
+  const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'id' | 'plan' | 'newest'>('id')
+  const needle = search.trim().toLowerCase()
+  const tenants = [...(tenantDocs ?? [])]
+    .filter(
+      (tenant) =>
+        !needle ||
+        [tenant.$id, tenant.displayName, tenant.plan]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(needle)),
+    )
+    .sort((a, b) => {
+      if (sortBy === 'plan') {
+        return String(a.plan ?? '').localeCompare(String(b.plan ?? ''))
+      }
+      if (sortBy === 'newest') {
+        return (
+          (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+        )
+      }
+      return String(a.$id).localeCompare(String(b.$id))
+    })
 
   const [editor, setEditor] = useState<{
     id: string
@@ -166,6 +186,11 @@ const AdminTenants: NextPageWithLayout = () => {
       <DashboardLayout
         navTabItems={[
           {
+            id: 'nav-tab-admin-overview',
+            label: 'Overview',
+            href: buildRoute(Route.ADMIN_OVERVIEW),
+          },
+          {
             id: 'nav-tab-admin-tenants',
             label: 'Tenants',
             href: buildRoute(Route.ADMIN_TENANTS),
@@ -195,6 +220,27 @@ const AdminTenants: NextPageWithLayout = () => {
                   'adminAudit. Tenants without a plan keep every feature ' +
                   '(dark launch).'}
               </Typography>
+              <Stack direction="row" spacing={1}>
+                <TextField
+                  size="small"
+                  label="Search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  sx={{ minWidth: 220 }}
+                />
+                <TextField
+                  select
+                  size="small"
+                  label="Sort"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as any)}
+                  sx={{ minWidth: 120 }}
+                >
+                  <MenuItem value="id">{'Tenant id'}</MenuItem>
+                  <MenuItem value="plan">{'Plan'}</MenuItem>
+                  <MenuItem value="newest">{'Newest'}</MenuItem>
+                </TextField>
+              </Stack>
               {tenants.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   {'No tenant docs yet — they appear at first checkout or ' +

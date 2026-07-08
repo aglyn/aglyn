@@ -18,6 +18,7 @@
 export enum Route {
   MANAGE_ACCOUNT_SETTINGS = '/manage/account',
   ADMIN_TENANTS = '/admin/tenants',
+  ADMIN_OVERVIEW = '/admin/overview',
   MANAGE_BILLING = '/manage/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   AUTH_SIGN_IN = '/signin',
@@ -59,6 +60,7 @@ export interface RoutePayload extends Record<keyof any, any> {
   }
   [Route.HOST_DASHBOARD]: { hostId: string }
   [Route.ADMIN_TENANTS]: undefined
+  [Route.ADMIN_OVERVIEW]: undefined
   [Route.HOST_COMMUNITY]: { hostId: string }
   [Route.HOST_COMMUNITY_LISTING]: { hostId: string; listingId: string }
   [Route.HOST_COMMUNITY_PUBLISHER]: { hostId: string; profileId: string }
