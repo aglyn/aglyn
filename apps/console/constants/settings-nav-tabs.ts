@@ -49,6 +49,11 @@ export function settingsNavTabItems() {
       label: 'Community',
       href: buildRoute(Route.MANAGE_COMMUNITY_PROFILE),
     },
+    {
+      id: 'nav-tab-settings-support',
+      label: 'Support',
+      href: buildRoute(Route.MANAGE_SUPPORT),
+    },
   ]
 }
 
