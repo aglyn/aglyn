@@ -76,14 +76,11 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { checkTenantQuota } from '../../constants/entitlements'
 import useCurrentTenant from '../../hooks/use-current-tenant'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaFolderRail } from './media-folder-rail.component'
@@ -177,16 +174,19 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [mediaDocs],
   )
   // Usage + total from the counter doc — accurate past pagination.
-  const { data: mediaCounter } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId, 'counters', 'media'),
+  const { data: mediaCounter } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId, 'counters', 'media'),
+    [firestore, hostId],
   )
   const usedBytes = Number(mediaCounter?.['bytes'] ?? 0)
   const totalCount = Number(mediaCounter?.['count'] ?? 0)
 
   // Folder hierarchy (AGL-171): first-class docs replace the AGL-124
   // free-text `folder` string. Legacy strings migrate lazily below.
-  const { data: folderDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'mediaFolders'), limit(500)),
+  const { data: folderDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'mediaFolders'), limit(500)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const folderList: Array<Aglyn.AglynHostMediaFolder> = useMemo(

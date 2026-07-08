@@ -43,11 +43,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { checkTenantQuota } from '../../constants/entitlements'
 import { publishScreenRoute } from '../../constants/screen-publishing'
 import {
@@ -55,6 +51,7 @@ import {
   type StarterTemplate,
 } from '../../constants/starter-templates'
 import useCurrentTenant from '../../hooks/use-current-tenant'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface TemplateGalleryDialogProps {
   hostId: string
@@ -81,12 +78,14 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { data: user } = useUser()
 
   // Community site templates (AGL-137): published bundles with previews.
-  const { data: templateListings } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityListings'),
-      where('kind', '==', 'template'),
-      limit(30),
-    ),
+  const { data: templateListings } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityListings'),
+        where('kind', '==', 'template'),
+        limit(30),
+      ),
+    [firestore],
     { idField: '$id' },
   )
   const communityTemplates = (templateListings ?? []).filter(

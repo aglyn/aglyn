@@ -30,12 +30,7 @@ import {
 import { collection, doc, limit, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/router'
 import { useMemo } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import HostDisplayNameComponent from '../../../../components/host-display-name.component'
 import { useHostId } from '../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -45,6 +40,8 @@ import hostNavTabItems from '../../../../constants/host-nav-tabs'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useCommunityActions from '../../../../hooks/use-community-actions'
+import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 import useTenantPermissions from '../../../../hooks/use-tenant-permissions'
 
 /**
@@ -62,24 +59,30 @@ const CommunityListingDetail: NextPageWithLayout = () => {
   const { permissions } = useTenantPermissions()
   const { install, buy } = useCommunityActions(hostId)
 
-  const { data: listing, status } = useFirestoreDocData<any>(
-    doc(firestore, 'communityListings', listingId || '-missing-'),
+  const { data: listing, status } = useFirestoreDoc<any>(
+    () => doc(firestore, 'communityListings', listingId || '-missing-'),
+    [firestore, listingId],
     { idField: '$id' },
   )
-  const { data: profile } = useFirestoreDocData<any>(
-    doc(firestore, 'profiles', listing?.profileId ?? '-anonymous-'),
+  const { data: profile } = useFirestoreDoc<any>(
+    () => doc(firestore, 'profiles', listing?.profileId ?? '-anonymous-'),
+    [firestore, listing?.profileId],
     { idField: '$id' },
   )
-  const { data: installedDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+  const { data: installedDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: purchaseDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityPurchases'),
-      where('buyerUid', '==', user?.uid ?? '-anonymous-'),
-      limit(200),
-    ),
+  const { data: purchaseDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityPurchases'),
+        where('buyerUid', '==', user?.uid ?? '-anonymous-'),
+        limit(200),
+      ),
+    [firestore, user?.uid],
     { idField: '$id' },
   )
 

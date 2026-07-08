@@ -20,7 +20,8 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface HostOrdersCardProps {
   hostId: string
@@ -34,12 +35,14 @@ export interface HostOrdersCardProps {
 export function HostOrdersCard(props: HostOrdersCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  const { data: orderDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'orders'), limit(200)),
+  const { data: orderDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'orders'), limit(200)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: productDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'products'), limit(100)),
+  const { data: productDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'products'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const productNames = useMemo(() => {

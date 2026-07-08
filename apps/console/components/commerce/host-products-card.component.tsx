@@ -32,7 +32,8 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface HostProductsCardProps {
   hostId: string
@@ -59,8 +60,9 @@ export function HostProductsCard(props: HostProductsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { data: productDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'products'), limit(100)),
+  const { data: productDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'products'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const products = [...(productDocs ?? [])]
@@ -130,8 +132,9 @@ export function HostProductsCard(props: HostProductsCardProps) {
   )
 
   // Coupons (AGL-96): percent-off codes at hosts/{hostId}/coupons/{CODE}.
-  const { data: couponDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'coupons'), limit(100)),
+  const { data: couponDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'coupons'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const coupons = [...(couponDocs ?? [])].sort((a: any, b: any) =>

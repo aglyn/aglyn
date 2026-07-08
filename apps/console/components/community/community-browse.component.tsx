@@ -31,13 +31,10 @@ import {
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { buildRoute, Route } from '../../constants/route-links'
 import useCommunityActions from '../../hooks/use-community-actions'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useTenantPermissions from '../../hooks/use-tenant-permissions'
 
 export interface CommunityBrowseProps {
@@ -61,27 +58,33 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const { install: runInstall, buy: runBuy } = useCommunityActions(hostId)
   const [handles, setHandles] = useState<Record<string, string>>({})
 
-  const { data: listings } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityListings'),
-      where('deletedAt', '==', null),
-      limit(60),
-    ),
+  const { data: listings } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityListings'),
+        where('deletedAt', '==', null),
+        limit(60),
+      ),
+    [firestore],
     { idField: '$id' },
   )
-  const { data: installedDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+  const { data: installedDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
 
   // Paid-listing gating (AGL-46): the buyer's purchase records, written by
   // the Stripe webhook.
-  const { data: purchaseDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityPurchases'),
-      where('buyerUid', '==', user?.uid ?? '-anonymous-'),
-      limit(200),
-    ),
+  const { data: purchaseDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityPurchases'),
+        where('buyerUid', '==', user?.uid ?? '-anonymous-'),
+        limit(200),
+      ),
+    [firestore, user?.uid],
     { idField: '$id' },
   )
   const purchased = useMemo(() => {

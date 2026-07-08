@@ -28,11 +28,7 @@ import {
 } from '@mui/material'
 import { collection, doc, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/router'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-} from 'reactfire'
+import { useFirestore } from 'reactfire'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
 import { useHostId } from '../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -41,6 +37,8 @@ import MainLayout from '../../../../../components/layouts/main.layout'
 import hostNavTabItems from '../../../../../constants/host-nav-tabs'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
 /**
  * Publisher profile public page (AGL-95): the community profile block and
@@ -52,16 +50,19 @@ const CommunityPublisher: NextPageWithLayout = () => {
   const profileId = String(router.query.profileId ?? '')
   const firestore = useFirestore()
 
-  const { data: profile, status } = useFirestoreDocData<any>(
-    doc(firestore, 'profiles', profileId || '-missing-'),
+  const { data: profile, status } = useFirestoreDoc<any>(
+    () => doc(firestore, 'profiles', profileId || '-missing-'),
+    [firestore, profileId],
     { idField: '$id' },
   )
-  const { data: listings } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityListings'),
-      where('profileId', '==', profileId || '-missing-'),
-      where('deletedAt', '==', null),
-    ),
+  const { data: listings } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityListings'),
+        where('profileId', '==', profileId || '-missing-'),
+        where('deletedAt', '==', null),
+      ),
+    [firestore, profileId],
     { idField: '$id' },
   )
 

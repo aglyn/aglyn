@@ -37,11 +37,8 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface HostPluginsCardProps {
   hostId: string
@@ -64,8 +61,9 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   const { confirm } = useConfirmationContext()
   const [busy, setBusy] = useState<string | null>(null)
 
-  const { data: installDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
+  const { data: installDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const installs = useMemo(
@@ -78,11 +76,13 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   )
 
   // Latest published version per listing (upgrade detection) — public read.
-  const { data: listingDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'communityListings'),
-      where(documentId(), 'in', listingIds.length ? listingIds : ['-none-']),
-    ),
+  const { data: listingDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'communityListings'),
+        where(documentId(), 'in', listingIds.length ? listingIds : ['-none-']),
+      ),
+    [firestore, listingIds.join(',')],
     { idField: '$id' },
   )
   const latestByListing = useMemo(() => {
@@ -94,11 +94,13 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   }, [listingDocs])
 
   // Kill switches (public revocations read) for the installed listings.
-  const { data: revocationDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'revocations'),
-      where(documentId(), 'in', listingIds.length ? listingIds : ['-none-']),
-    ),
+  const { data: revocationDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'revocations'),
+        where(documentId(), 'in', listingIds.length ? listingIds : ['-none-']),
+      ),
+    [firestore, listingIds.join(',')],
     { idField: '$id' },
   )
   const revokedByListing = useMemo(() => {
