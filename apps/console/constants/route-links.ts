@@ -35,6 +35,7 @@ export enum Route {
   MANAGE_SUPPORT = '/manage/support',
   HOST_DASHBOARD = '/[hostId]',
   HOST_INBOX = '/[hostId]/inbox',
+  HOST_CONTACTS = '/[hostId]/contacts',
   HOST_MEDIA = '/[hostId]/media',
   HOST_SETUP = '/[hostId]/setup',
   HOST_THEME = '/[hostId]/theme',
