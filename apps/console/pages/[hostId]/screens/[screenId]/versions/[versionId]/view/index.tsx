@@ -78,6 +78,7 @@ import {
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData, useFirestoreDocData } from 'reactfire'
+import ScreenAnalyticsCard from '../../../../../../../components/analytics/screen-analytics-card.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
@@ -1062,6 +1063,10 @@ function ScreenDetails() {
               },
             ]}
           />
+          {/* Per-screen traffic (AGL-152). */}
+          <div style={{ marginTop: 24 }}>
+            <ScreenAnalyticsCard hostId={hostId} screenId={screenId} />
+          </div>
         </Container>
       </DashboardLayout>
       <Dialog
