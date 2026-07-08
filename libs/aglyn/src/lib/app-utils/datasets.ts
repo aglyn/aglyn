@@ -27,8 +27,10 @@ export const DATASET_FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
 export interface HostDataset {
   $id?: string
   displayName?: string
-  /** Column names, in display order. */
+  /** Column names, in display order (v1; superseded by `model`). */
   fields?: string[]
+  /** Typed model (AGL-177); when absent, derive from `fields`. */
+  model?: import('./dataset-models').DatasetModel
 }
 
 export interface HostDatasetRecord {

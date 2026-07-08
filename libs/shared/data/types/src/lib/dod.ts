@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+/*
+ * NOTE (AGL-177): this file is the 2023-era type-level design doc. The
+ * RUNTIME source of truth for dataset models now lives in
+ * `libs/aglyn/src/lib/app-utils/dataset-models.ts` — extend that module,
+ * not this one.
+ */
+
 /**
  * (D)Document-(o)oriented (D)Database (DoD)
  *
