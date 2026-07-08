@@ -28,6 +28,7 @@ import * as Product from './components/product'
 import * as Blocks from './components/blocks'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
+import * as Booking from './components/booking'
 import * as Icon from './components/icon'
 import * as LanguageSwitcher from './components/language-switcher'
 import * as Video from './components/video'
@@ -86,6 +87,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerComponent(Image.default, Image.schema)
       Aglyn.components.registerComponent(Video.default, Video.schema)
       Aglyn.components.registerComponent(Icon.default, Icon.schema)
+      Aglyn.components.registerComponent(Booking.default, Booking.schema)
       Aglyn.components.registerComponent(LanguageSwitcher.default, LanguageSwitcher.schema)
       Aglyn.components.registerComponent(
         ReusableInstance.default,
@@ -117,6 +119,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(Image.presets)
       Aglyn.components.registerPreset(Video.presets)
       Aglyn.components.registerPreset(Icon.presets)
+      Aglyn.components.registerPreset(Booking.presets)
       Aglyn.components.registerPreset(LanguageSwitcher.presets)
       Aglyn.components.registerPreset(ReusableInstance.presets)
       Aglyn.components.registerPreset(ScreenLink.presets)
@@ -145,6 +148,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.unregisterPreset(Image.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Video.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Icon.presets.map((i) => i.$id))
+      Aglyn.components.unregisterPreset(Booking.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(LanguageSwitcher.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ReusableInstance.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ScreenLink.presets.map((i) => i.$id))

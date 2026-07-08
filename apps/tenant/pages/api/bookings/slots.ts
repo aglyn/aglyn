@@ -38,12 +38,29 @@ export default async function handler(
   }
   const hostId = String(req.query['hostId'] ?? '')
   const serviceId = String(req.query['serviceId'] ?? '')
-  if (!hostId || !serviceId) {
-    return res.status(400).json({ error: 'Missing hostId or serviceId' })
+  if (!hostId) {
+    return res.status(400).json({ error: 'Missing hostId' })
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
+
+    // No serviceId → public service directory for the booking widget
+    // (AGL-160): names/durations/prices only, never availability internals.
+    if (!serviceId) {
+      const services = await hostRef.collection('services').limit(50).get()
+      return res.status(200).json({
+        services: services.docs
+          .filter((doc) => !doc.get('deletedAt'))
+          .map((doc) => ({
+            $id: doc.id,
+            name: doc.get('name') ?? '',
+            durationMinutes: Number(doc.get('durationMinutes') ?? 30),
+            priceUsd: Number(doc.get('priceUsd') ?? 0),
+            description: doc.get('description') ?? '',
+          })),
+      })
+    }
     const serviceSnapshot = await hostRef
       .collection('services')
       .doc(serviceId)
