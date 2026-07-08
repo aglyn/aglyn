@@ -65,7 +65,26 @@ export default async function handler(
       return res.status(403).json({ error: 'Not a host admin' })
     }
 
+    // Cname uniqueness (AGL-166): middleware resolution maps hostname ->
+    // host 1:1; a duplicate would make it ambiguous.
+    const firestore = firebaseAdmin.app().firestore()
+    const duplicates = await firestore
+      .collection('hosts')
+      .where('cname', '==', domain)
+      .limit(2)
+      .get()
+    if (duplicates.docs.some((docSnapshot) => docSnapshot.id !== hostId)) {
+      return res
+        .status(409)
+        .json({ error: 'That domain is already connected to another site' })
+    }
+
     if (!token || !projectId) {
+      // Backfill path (AGL-166): remember the attachment never happened
+      // so the wizard can show it honestly and offer a retry.
+      await hostSnapshot.ref
+        .set({ cnameAttachmentPending: true }, { merge: true })
+        .catch(() => undefined)
       return res.status(501).json({
         error:
           'Domain attachment is not configured (missing VERCEL_TOKEN / ' +
@@ -88,10 +107,22 @@ export default async function handler(
     const payload = await response.json()
     if (!response.ok && payload?.error?.code !== 'domain_already_in_use') {
       console.error(payload)
+      await hostSnapshot.ref
+        .set({ cnameAttachmentPending: true }, { merge: true })
+        .catch(() => undefined)
       return res
         .status(502)
         .json({ error: payload?.error?.message ?? 'Vercel attach failed' })
     }
+    await hostSnapshot.ref
+      .set(
+        {
+          cnameAttachmentPending:
+            firebaseAdmin.firestore.FieldValue.delete(),
+        },
+        { merge: true },
+      )
+      .catch(() => undefined)
     return res.status(200).json({ attached: true })
   } catch (error) {
     console.error(error)

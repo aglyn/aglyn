@@ -129,6 +129,44 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     }
   }, [domain, firestore, hostId, user, queueLoading, enqueueSnackbar])
 
+  // Retry attachment (AGL-166): re-runs the Vercel attach for a saved
+  // cname whose platform attachment never happened (501/5xx path).
+  const handleRetryAttach = useCallback(async () => {
+    if (!connected) return
+    setChecking(true)
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/domains/attach', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ hostId, domain: connected }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (response.ok) {
+        enqueueSnackbar(`"${connected}" attached — SSL provisions shortly`, {
+          variant: 'success',
+          persist: false,
+        })
+      } else {
+        enqueueSnackbar(payload?.error ?? 'Attachment failed', {
+          variant: response.status === 501 ? 'info' : 'error',
+          allowDuplicate: true,
+        })
+      }
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setChecking(false)
+    }
+  }, [connected, hostId, user, enqueueSnackbar])
+
   const handleDisconnect = useCallback(async () => {
     await updateDoc(doc(firestore, 'hosts', hostId), {
       cname: deleteField(),
@@ -144,7 +182,19 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       <Stack spacing={2}>
         {connected ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <Chip label={connected} color="success" />
+            <Chip
+              label={
+                host?.cnameAttachmentPending
+                  ? `${connected} — attachment pending`
+                  : connected
+              }
+              color={host?.cnameAttachmentPending ? 'warning' : 'success'}
+            />
+            {host?.cnameAttachmentPending ? (
+              <Button size="small" disabled={checking} onClick={handleRetryAttach}>
+                {'Retry attachment'}
+              </Button>
+            ) : null}
             <Button size="small" color="error" onClick={handleDisconnect}>
               {'Disconnect'}
             </Button>

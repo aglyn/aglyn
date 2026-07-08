@@ -18,6 +18,13 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin, hostConverter } from '@aglyn/tenant-data-admin'
 
+/**
+ * Custom-domain sentinel (AGL-166): the middleware rewrites unrecognized
+ * hostnames to `cname--{hostname}` because the edge runtime can't query
+ * Firestore; this resolver maps them back via `host.cname`.
+ */
+export const CNAME_HOST_PREFIX = 'cname--'
+
 export async function getHost(options: { host: Aglyn.HostUid }) {
   const { host } = options
   const data = {
@@ -27,15 +34,23 @@ export async function getHost(options: { host: Aglyn.HostUid }) {
   }
   const firestore = firebaseAdmin.app().firestore()
 
-  // List batch of users, 1000 at a time.
-  await firestore
-    .collection('hosts')
-    .where('subdomain', '==', host)
+  const byCname = host.startsWith(CNAME_HOST_PREFIX)
+  const query = byCname
+    ? firestore
+        .collection('hosts')
+        .where('cname', '==', host.slice(CNAME_HOST_PREFIX.length))
+    : firestore.collection('hosts').where('subdomain', '==', host)
+
+  await query
     .withConverter(hostConverter)
-    .limit(1)
+    .limit(2)
     .get()
     .then((res) => {
       if (res.size) data.host = res.docs[0].data() as Aglyn.AglynHost
+      // Connect-time uniqueness should prevent this; log if it slips.
+      if (byCname && res.size > 1) {
+        console.error('Ambiguous cname resolution', host)
+      }
     })
     .catch((error) => {
       console.error(error)
