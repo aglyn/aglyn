@@ -32,7 +32,7 @@ import {
 import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
-import { NoSsr } from '@mui/material'
+import { Alert, NoSsr } from '@mui/material'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
@@ -315,6 +315,17 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     >
                       Browse media
                     </Button>
+                  </FormControl>
+                ) : null}
+                {(node?.props as any)?.repeatDataset ? (
+                  <FormControl margin="none" fullWidth>
+                    {/* Repeat badge (AGL-168): make dataset-driven
+                        duplication visible where props are edited. */}
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      {'Repeats over dataset "' +
+                        String((node?.props as any).repeatDataset) +
+                        '" — children render once per record on the live site.'}
+                    </Alert>
                   </FormControl>
                 ) : null}
                 {onRewrite && (textEditable || hasTextAttributes) ? (

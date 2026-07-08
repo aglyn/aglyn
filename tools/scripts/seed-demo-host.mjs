@@ -190,6 +190,7 @@ await put(blog.collection('entries').doc('seed-sourdough'), {
   slug: 'three-day-sourdough',
   excerpt: 'Slow fermentation is the whole secret.',
   coverImage: 'https://picsum.photos/seed/sourdough/960/540',
+  status: 'published',
   body:
     '## The starter\n\nOur starter is **nine years old** and lives in the ' +
     'walk-in.\n\n- Day 1: feed and rest\n- Day 2: shape and cold proof\n' +
@@ -202,6 +203,7 @@ await put(blog.collection('entries').doc('seed-croissant'), {
   slug: 'croissant-lamination',
   excerpt: 'Twenty-seven layers, zero shortcuts.',
   coverImage: 'https://picsum.photos/seed/croissant/960/540',
+  status: 'published',
   body:
     '## Butter matters\n\nWe use [cultured butter](https://example.com) at ' +
     '82% fat.\n\n## The folds\n\nThree letter folds with a full rest ' +

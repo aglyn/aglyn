@@ -22,7 +22,7 @@ export interface SearchResult {
   title: string
   url: string
   snippet: string
-  kind: 'page' | 'entry'
+  kind: 'page' | 'entry' | 'data'
 }
 
 const matches = (haystack: string | undefined, needle: string) =>
@@ -103,6 +103,74 @@ export async function searchContent(options: {
           kind: 'entry',
         })
       }
+    }
+  }
+
+  // Dataset records (AGL-168): a match links to the first published
+  // screen that repeats over the dataset — records only surface through
+  // repeatables, so an un-navigable match would be noise. Version reads
+  // happen lazily and only when a dataset actually matched.
+  const datasets = await hostRef.collection('datasets').limit(20).get()
+  let screenVersionCache: Map<string, any> | null = null
+  const loadVersions = async () => {
+    if (screenVersionCache) return screenVersionCache
+    screenVersionCache = new Map()
+    for (const snapshot of screenSnapshots.slice(0, 30)) {
+      if (!snapshot?.exists) continue
+      const versionId = (snapshot.data() as any)?.versionId
+      if (!versionId) continue
+      const version = await hostRef
+        .collection('screens')
+        .doc(snapshot.id)
+        .collection('versions')
+        .doc(String(versionId))
+        .get()
+        .catch(() => null)
+      if (version?.exists) screenVersionCache.set(snapshot.id, version.data())
+    }
+    return screenVersionCache
+  }
+  for (const datasetDoc of datasets.docs) {
+    if (datasetDoc.get('deletedAt')) continue
+    const datasetName = String(datasetDoc.get('name') ?? '')
+    const records = await datasetDoc.ref
+      .collection('records')
+      .limit(200)
+      .get()
+    const matching = records.docs.filter((record) =>
+      Object.values((record.get('values') ?? {}) as Record<string, string>)
+        .some((value) => matches(String(value), needle)),
+    )
+    if (!matching.length) continue
+    const versions = await loadVersions()
+    let targetPath: string | undefined
+    for (const [screenId, version] of versions) {
+      const nodes = (version?.nodes ?? {}) as Record<string, any>
+      const repeats = Object.values(nodes).some((node) => {
+        const key = node?.props?.repeatDataset
+        return (
+          key != null &&
+          (String(key) === datasetDoc.id ||
+            String(key).trim() === datasetName)
+        )
+      })
+      if (repeats) {
+        targetPath = routing[screenId]
+        break
+      }
+    }
+    if (targetPath == null) continue
+    for (const record of matching.slice(0, 5)) {
+      const values = (record.get('values') ?? {}) as Record<string, string>
+      results.push({
+        title:
+          Object.values(values).find((value) =>
+            matches(String(value), needle),
+          ) ?? datasetName,
+        url: Aglyn.screenRoutePathToUrl(targetPath),
+        snippet: Object.values(values).join(' · ').slice(0, 160),
+        kind: 'data',
+      })
     }
   }
 
