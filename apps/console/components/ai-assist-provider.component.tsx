@@ -26,6 +26,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   TextField,
   Typography,
 } from '@mui/material'
@@ -52,7 +53,31 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
   const { data: user } = useUser()
   const [node, setNode] = useState<Aglyn.NodeSchema<any> | null>(null)
   const [instruction, setInstruction] = useState('')
+  // Rewrite target (AGL-130): 'children' for text-editable elements, or
+  // any text attribute the element's schema declares (alt text, labels…).
+  const [targetProp, setTargetProp] = useState('children')
   const [busy, setBusy] = useState(false)
+
+  const textTargets = useMemo(() => {
+    const schema = node?.componentSchema
+    const textEditable =
+      ((schema?.flags?.textEditable ?? Aglyn.FEATURE_FLAG.DISABLED) &
+        Aglyn.FEATURE_FLAG.ENABLED) !==
+      0
+    const attributes = (schema?.attributes ?? [])
+      .filter(
+        (field: any) =>
+          field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
+          field.component === Aglyn.FieldComponentType.TEXTAREA,
+      )
+      .map((field: any) => ({
+        prop: String(field.name),
+        label: String(field.label ?? field.name),
+      }))
+    return textEditable
+      ? [{ prop: 'children', label: 'Element text' }, ...attributes]
+      : attributes
+  }, [node])
 
   const handleRewrite = useCallback(
     (target: Aglyn.NodeSchema<any>) => {
@@ -63,10 +88,16 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         )
       }
       setInstruction('')
+      setTargetProp('children')
       setNode(target)
     },
     [tenant, enqueueSnackbar],
   )
+
+  // Keep the target valid for the selected element.
+  const effectiveTarget = textTargets.some((item) => item.prop === targetProp)
+    ? targetProp
+    : (textTargets[0]?.prop ?? 'children')
 
   const handleConfirm = useCallback(async () => {
     if (!node || !instruction.trim() || busy) return
@@ -76,8 +107,8 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
         node.$id
       ]
       const text =
-        typeof current?.props?.children === 'string'
-          ? (current.props.children as string)
+        typeof current?.props?.[effectiveTarget] === 'string'
+          ? (current.props[effectiveTarget] as string)
           : ''
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/ai/assist', {
@@ -103,10 +134,10 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
       }
       Aglyn.canvas.updateNodeProps(node, {
         ...current?.props,
-        children: payload.text,
+        [effectiveTarget]: payload.text,
         // Rich-text elements render `html` over `children`; drop it so the
         // rewrite is what shows (the user can re-format inline afterwards).
-        html: undefined,
+        ...(effectiveTarget === 'children' ? { html: undefined } : {}),
       })
       setNode(null)
       enqueueSnackbar('Text rewritten — undo restores the original', {
@@ -122,7 +153,7 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
     } finally {
       setBusy(false)
     }
-  }, [node, instruction, busy, user, enqueueSnackbar])
+  }, [node, instruction, busy, user, effectiveTarget, enqueueSnackbar])
 
   const contextValue = useMemo(() => ({ onRewrite: handleRewrite }), [
     handleRewrite,
@@ -144,6 +175,22 @@ export function AiAssistProvider(props: AiAssistProviderProps) {
           <Typography variant="body2" color="text.secondary">
             {'Describe how the text should change — tone, length, message.'}
           </Typography>
+          {textTargets.length > 1 ? (
+            <TextField
+              select
+              label="Field"
+              value={effectiveTarget}
+              onChange={(event) => setTargetProp(event.target.value)}
+              size="small"
+              disabled={busy}
+            >
+              {textTargets.map((item) => (
+                <MenuItem key={item.prop} value={item.prop}>
+                  {item.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
           <TextField
             label="Instruction"
             placeholder="e.g. Make it punchier and half as long"

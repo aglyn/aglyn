@@ -45,8 +45,13 @@ export default async function handler(
     : undefined
   if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
-  const text = String(req.body?.text ?? '').slice(0, 4000)
+  const text = String(req.body?.text ?? '').slice(0, 12000)
   const instruction = String(req.body?.instruction ?? '').slice(0, 500)
+  // Modes (AGL-130): 'element' rewrites short copy; 'blog' writes or
+  // improves markdown-lite entry bodies with title/excerpt context.
+  const mode = req.body?.mode === 'blog' ? 'blog' : 'element'
+  const title = String(req.body?.title ?? '').slice(0, 200)
+  const excerpt = String(req.body?.excerpt ?? '').slice(0, 500)
   if (!instruction) {
     return res.status(400).json({ error: 'Missing instruction' })
   }
@@ -63,18 +68,33 @@ export default async function handler(
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        max_tokens: mode === 'blog' ? 2048 : 1024,
         system:
-          'You write website copy inside a site builder. Reply with ONLY ' +
-          'the final text for the element — no quotes, preamble, or ' +
-          'markdown. Keep roughly the same length and role as the current ' +
-          'text unless the instruction says otherwise.',
+          mode === 'blog'
+            ? 'You write blog posts inside a site builder. Reply with ONLY ' +
+              'the post body in markdown-lite: **bold**, *italic*, ## ' +
+              'headings, - lists, [links](https://url). No front matter, ' +
+              'title line, or preamble — the title renders separately.'
+            : 'You write website copy inside a site builder. Reply with ' +
+              'ONLY the final text for the element — no quotes, preamble, ' +
+              'or markdown. Keep roughly the same length and role as the ' +
+              'current text unless the instruction says otherwise.',
         messages: [
           {
             role: 'user',
-            content: text
-              ? `Current element text:\n${text}\n\nInstruction: ${instruction}`
-              : `Write website element text. Instruction: ${instruction}`,
+            content:
+              mode === 'blog'
+                ? [
+                    title && `Title: ${title}`,
+                    excerpt && `Excerpt: ${excerpt}`,
+                    text && `Current body:\n${text}`,
+                    `Instruction: ${instruction}`,
+                  ]
+                    .filter(Boolean)
+                    .join('\n\n')
+                : text
+                  ? `Current element text:\n${text}\n\nInstruction: ${instruction}`
+                  : `Write website element text. Instruction: ${instruction}`,
           },
         ],
       }),

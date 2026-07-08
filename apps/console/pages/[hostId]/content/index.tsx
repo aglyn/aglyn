@@ -57,13 +57,15 @@ import {
 import { Divider, Link as MuiLink } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestoreDocData } from 'reactfire'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
+import { hasEntitlement } from '../../../constants/entitlements'
+import useCurrentTenant from '../../../hooks/use-current-tenant'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useHostActivityLogger from '../../../hooks/use-host-activity-logger'
@@ -206,6 +208,61 @@ const HostContent: NextPageWithLayout = () => {
     null,
   )
   const [previewOpen, setPreviewOpen] = useState(false)
+  // AI assist (AGL-130): write or improve the markdown-lite body.
+  const { data: aiUser } = useUser()
+  const { tenant } = useCurrentTenant()
+  const [aiInstruction, setAiInstruction] = useState<string | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
+  const handleAiConfirm = useCallback(async () => {
+    if (aiInstruction == null || !aiInstruction.trim() || aiBusy || !editor) {
+      return
+    }
+    setAiBusy(true)
+    try {
+      const idToken = await (aiUser as any)?.getIdToken?.()
+      const response = await fetch('/api/ai/assist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          mode: 'blog',
+          title: editor.title,
+          excerpt: editor.excerpt,
+          text: editor.body,
+          instruction: aiInstruction.trim(),
+        }),
+      })
+      const payload = await response.json()
+      if (response.status === 501) {
+        return void enqueueSnackbar(
+          'AI assist is not configured on this deployment',
+          { variant: 'info', persist: false },
+        )
+      }
+      if (!response.ok || !payload?.text) {
+        return void enqueueSnackbar(payload?.error ?? 'AI request failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      setEditor((prev) => (prev ? { ...prev, body: payload.text } : prev))
+      setAiInstruction(null)
+      enqueueSnackbar('Body updated — review before saving', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setAiBusy(false)
+    }
+  }, [aiInstruction, aiBusy, editor, aiUser, enqueueSnackbar])
   // Scheduled publishing (AGL-123): entry id being scheduled + datetime.
   const [scheduler, setScheduler] = useState<{
     entry: any
@@ -710,6 +767,21 @@ const HostContent: NextPageWithLayout = () => {
             <Button
               size="small"
               color="secondary"
+              onClick={() => {
+                if (!hasEntitlement('ai-assist', tenant)) {
+                  return void enqueueSnackbar(
+                    'AI assist requires a Pro plan — see Billing to upgrade',
+                    { variant: 'warning', persist: false },
+                  )
+                }
+                setAiInstruction('')
+              }}
+            >
+              {editor?.body?.trim() ? 'Improve with AI' : 'Write with AI'}
+            </Button>
+            <Button
+              size="small"
+              color="secondary"
               onClick={() => setPreviewOpen(true)}
             >
               {'Preview'}
@@ -738,6 +810,54 @@ const HostContent: NextPageWithLayout = () => {
             onClick={handleSaveEntry}
           >
             {editor?.id ? 'Save' : 'Create draft'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={aiInstruction != null}
+        onClose={() => (aiBusy ? null : setAiInstruction(null))}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {editor?.body?.trim() ? 'Improve with AI' : 'Write with AI'}
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {editor?.body?.trim()
+              ? 'Describe how the body should change — tone, structure, length.'
+              : 'Describe the post — the title and excerpt are included automatically.'}
+          </Typography>
+          <TextField
+            label="Instruction"
+            placeholder={
+              editor?.body?.trim()
+                ? 'e.g. Tighten it up and add a closing call to action'
+                : 'e.g. A 500-word how-to with three practical tips'
+            }
+            value={aiInstruction ?? ''}
+            onChange={(event) => setAiInstruction(event.target.value)}
+            size="small"
+            autoFocus
+            multiline
+            minRows={2}
+            disabled={aiBusy}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={aiBusy} onClick={() => setAiInstruction(null)}>
+            {'Cancel'}
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={!aiInstruction?.trim() || aiBusy}
+            onClick={handleAiConfirm}
+          >
+            {aiBusy ? 'Working…' : editor?.body?.trim() ? 'Improve' : 'Write'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -187,13 +187,19 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       node?.componentId === Aglyn.REUSABLE_INSTANCE_COMPONENT_ID
     const unlocked = Besigner.dnd.canDragNode(node)
 
-    // AI copy assist (AGL-89): only for text-editable elements, and only
-    // when the host app provides the rewrite callback.
+    // AI copy assist (AGL-89, widened by AGL-130): text-editable elements
+    // and any element declaring text attributes, when the host app
+    // provides the rewrite callback.
     const { onRewrite } = useContext(AiAssistContext)
     const textEditable =
       ((schema?.flags?.textEditable ?? Aglyn.FEATURE_FLAG.DISABLED) &
         Aglyn.FEATURE_FLAG.ENABLED) !==
       0
+    const hasTextAttributes = (schema?.attributes ?? []).some(
+      (field) =>
+        field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
+        field.component === Aglyn.FieldComponentType.TEXTAREA,
+    )
 
     // Insert binding (AGL-100): appends a {{token}} to the element text.
     // Options come from the host app (variables + functions); the commit
@@ -311,7 +317,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     </Button>
                   </FormControl>
                 ) : null}
-                {onRewrite && textEditable ? (
+                {onRewrite && (textEditable || hasTextAttributes) ? (
                   <FormControl margin="none" fullWidth>
                     <Button
                       color="secondary"
