@@ -17,9 +17,9 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { Stack, Typography } from '@mui/material'
+import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 
 export interface HostOrdersCardProps {
@@ -56,6 +56,50 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
       (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
   )
 
+  // Filters + CSV export (AGL-96) over the loaded window.
+  const [productFilter, setProductFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
+  const visibleOrders = useMemo(() => {
+    const now = Date.now() / 1000
+    return orders.filter((order: any) => {
+      if (productFilter && order.productId !== productFilter) return false
+      const created = order.createdAt?.seconds ?? 0
+      if (dateFilter === '7d' && now - created > 7 * 86400) return false
+      if (dateFilter === '30d' && now - created > 30 * 86400) return false
+      return true
+    })
+  }, [orders, productFilter, dateFilter])
+  const handleExportCsv = useCallback(() => {
+    const escape = (cell: string) =>
+      /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell
+    const lines = [
+      'date,product,amountUsd,feeUsd,customerEmail,coupon,orderId',
+      ...visibleOrders.map((order: any) =>
+        [
+          order.createdAt?.toDate?.()
+            ? order.createdAt.toDate().toISOString()
+            : '',
+          productNames[order.productId] ?? order.productId ?? '',
+          ((order.amountCents ?? 0) / 100).toFixed(2),
+          ((order.feeCents ?? 0) / 100).toFixed(2),
+          order.customerEmail ?? '',
+          order.couponCode ?? '',
+          order.$id,
+        ]
+          .map((cell) => escape(String(cell)))
+          .join(','),
+      ),
+    ]
+    const url = URL.createObjectURL(
+      new Blob([lines.join('\n')], { type: 'text/csv' }),
+    )
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = 'orders.csv'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [visibleOrders, productNames])
+
   return (
     <CardDisplay header={'Orders'} contentGutterX contentGutterY>
       {orders.length === 0 ? (
@@ -64,7 +108,39 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1}>
-          {orders.map((order: any) => (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            <TextField
+              select
+              size="small"
+              label="Product"
+              value={productFilter}
+              onChange={(event) => setProductFilter(event.target.value)}
+              sx={{ minWidth: 160 }}
+            >
+              <MenuItem value="">{'All products'}</MenuItem>
+              {(productDocs ?? []).map((product: any) => (
+                <MenuItem key={product.$id} value={product.$id}>
+                  {product.name ?? product.$id}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              size="small"
+              label="Period"
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value)}
+              sx={{ minWidth: 130 }}
+            >
+              <MenuItem value="">{'All time'}</MenuItem>
+              <MenuItem value="7d">{'Last 7 days'}</MenuItem>
+              <MenuItem value="30d">{'Last 30 days'}</MenuItem>
+            </TextField>
+            <Button size="small" onClick={handleExportCsv}>
+              {'Export CSV'}
+            </Button>
+          </Stack>
+          {visibleOrders.map((order: any) => (
             <Stack key={order.$id} spacing={0}>
               <Typography variant="body2">
                 {`${productNames[order.productId] ?? order.productId} · ` +
