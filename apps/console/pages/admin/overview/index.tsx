@@ -128,6 +128,18 @@ const AdminOverview: NextPageWithLayout = () => {
           ) : error ? (
             <Alert severity="error">{error}</Alert>
           ) : (
+            <>
+            {(data?.anomalies ?? []).length ? (
+              <Alert severity="warning" sx={{ mb: 3 }}>
+                {'Usage anomalies (10x month-over-month): '}
+                {(data.anomalies as any[])
+                  .map(
+                    (anomaly) =>
+                      `${anomaly.tenantId} (${anomaly.spikes.join('; ')})`,
+                  )
+                  .join(' · ')}
+              </Alert>
+            ) : null}
             <GridItems
               spacing={3}
               items={[
@@ -285,6 +297,7 @@ const AdminOverview: NextPageWithLayout = () => {
                 },
               ]}
             />
+            </>
           )}
         </Container>
       </DashboardLayout>

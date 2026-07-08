@@ -20,6 +20,12 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 /** Previous calendar month as YYYY-MM (the rollup key). */
+function monthBefore(month: string): string {
+  const [year, monthPart] = month.split('-').map(Number)
+  const date = new Date(Date.UTC(year, monthPart - 1 - 1, 1))
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
 function previousMonth(): string {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
@@ -56,7 +62,13 @@ export default async function handler(
     const firestore = firebaseAdmin.app().firestore()
     const month = previousMonth()
 
-    const [tenantsSnapshot, hostsCount, purchasesSnapshot, rollupsSnapshot] =
+    const [
+      tenantsSnapshot,
+      hostsCount,
+      purchasesSnapshot,
+      rollupsSnapshot,
+      priorRollupsSnapshot,
+    ] =
       await Promise.all([
         firestore
           .collection('tenants')
@@ -77,6 +89,12 @@ export default async function handler(
         firestore
           .collectionGroup('usageRollups')
           .where('month', '==', month)
+          .limit(500)
+          .get()
+          .catch(() => null),
+        firestore
+          .collectionGroup('usageRollups')
+          .where('month', '==', monthBefore(month))
           .limit(500)
           .get()
           .catch(() => null),
@@ -129,6 +147,37 @@ export default async function handler(
       }
     })
 
+    // Anomaly flags (AGL-205): tenants whose page views or metered cost
+    // jumped >=10x month-over-month — an abuse/runaway early warning.
+    const priorByTenant = new Map<string, { pageViews: number; costUsd: number }>()
+    for (const doc of priorRollupsSnapshot?.docs ?? []) {
+      priorByTenant.set(doc.ref.parent.parent?.id ?? '', {
+        pageViews: Number(doc.get('pageViews') ?? 0),
+        costUsd: Number(doc.get('costUsd') ?? 0),
+      })
+    }
+    const anomalies = (rollupsSnapshot?.docs ?? [])
+      .map((doc) => {
+        const tenantId = doc.ref.parent.parent?.id ?? ''
+        const prior = priorByTenant.get(tenantId)
+        const pageViews = Number(doc.get('pageViews') ?? 0)
+        const costUsd = Number(doc.get('costUsd') ?? 0)
+        const spikes: string[] = []
+        if (prior && prior.pageViews >= 100 && pageViews >= prior.pageViews * 10) {
+          spikes.push(
+            `page views ${prior.pageViews.toLocaleString()} → ${pageViews.toLocaleString()}`,
+          )
+        }
+        if (prior && prior.costUsd >= 1 && costUsd >= prior.costUsd * 10) {
+          spikes.push(
+            `metered cost $${prior.costUsd.toFixed(2)} → $${costUsd.toFixed(2)}`,
+          )
+        }
+        return spikes.length ? { tenantId, spikes } : null
+      })
+      .filter(Boolean)
+      .slice(0, 20)
+
     const topUsage = (rollupsSnapshot?.docs ?? [])
       .map((doc) => ({
         tenantId: doc.ref.parent.parent?.id ?? '',
@@ -142,6 +191,7 @@ export default async function handler(
       .slice(0, 20)
 
     return res.status(200).json({
+      anomalies,
       metrics: {
         tenants: tenantsSnapshot.size,
         signups30d,

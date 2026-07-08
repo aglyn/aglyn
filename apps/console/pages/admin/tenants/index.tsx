@@ -190,6 +190,41 @@ const AdminTenants: NextPageWithLayout = () => {
     before: any
   } | null>(null)
 
+  // Usage drill-down (AGL-205): last 12 monthly rollups with deltas.
+  const [usage, setUsage] = useState<{
+    tenantId: string
+    months: Array<{
+      month: string
+      storageGb: number
+      pageViews: number
+      formSubmissions: number
+      costUsd: number
+      deltas: { pageViews: number | null; costUsd: number | null } | null
+    }>
+  } | null>(null)
+  const [usageLoading, setUsageLoading] = useState<string | null>(null)
+  const handleShowUsage = useCallback(
+    (tenantId: string) => async () => {
+      setUsageLoading(tenantId)
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch(
+          `/api/admin/tenant-usage?tenantId=${encodeURIComponent(tenantId)}`,
+          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
+        )
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload?.error ?? 'Usage failed')
+        setUsage({ tenantId, months: payload.months ?? [] })
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Could not load usage', { variant: 'error' })
+      } finally {
+        setUsageLoading(null)
+      }
+    },
+    [user, enqueueSnackbar],
+  )
+
   // Suspension (AGL-202): reversible flag; sites 503 within a minute.
   const [suspender, setSuspender] = useState<{
     id: string
@@ -426,6 +461,15 @@ const AdminTenants: NextPageWithLayout = () => {
                           <TableCell align="right">
                             <Button
                               size="small"
+                              disabled={usageLoading === tenant.$id}
+                              onClick={handleShowUsage(tenant.$id)}
+                            >
+                              {usageLoading === tenant.$id
+                                ? 'Loading…'
+                                : 'Usage'}
+                            </Button>
+                            <Button
+                              size="small"
                               onClick={() => {
                                 const quotas: Record<string, string> = {}
                                 for (const field of QUOTA_FIELDS) {
@@ -610,6 +654,87 @@ const AdminTenants: NextPageWithLayout = () => {
           >
             {'Save (audited)'}
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(usage)}
+        onClose={() => setUsage(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{`Usage — ${usage?.tenantId}`}</DialogTitle>
+        <DialogContent>
+          {usage?.months.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'No usage rollups recorded for this tenant yet.'}
+            </Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>{'Month'}</TableCell>
+                  <TableCell align="right">{'Page views'}</TableCell>
+                  <TableCell align="right">{'Storage GB'}</TableCell>
+                  <TableCell align="right">{'Forms'}</TableCell>
+                  <TableCell align="right">{'Cost'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {usage?.months.map((row) => (
+                  <TableRow key={row.month}>
+                    <TableCell>{row.month}</TableCell>
+                    <TableCell align="right">
+                      {row.pageViews.toLocaleString()}
+                      {row.deltas?.pageViews != null ? (
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color={
+                            row.deltas.pageViews > 0
+                              ? 'success.main'
+                              : 'text.secondary'
+                          }
+                          sx={{ ml: 0.5 }}
+                        >
+                          {`${row.deltas.pageViews > 0 ? '+' : ''}${Math.round(
+                            row.deltas.pageViews * 100,
+                          )}%`}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                    <TableCell align="right">
+                      {row.storageGb.toFixed(2)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {row.formSubmissions.toLocaleString()}
+                    </TableCell>
+                    <TableCell align="right">
+                      {`$${row.costUsd.toFixed(2)}`}
+                      {row.deltas?.costUsd != null ? (
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color={
+                            row.deltas.costUsd > 0
+                              ? 'warning.main'
+                              : 'text.secondary'
+                          }
+                          sx={{ ml: 0.5 }}
+                        >
+                          {`${row.deltas.costUsd > 0 ? '+' : ''}${Math.round(
+                            row.deltas.costUsd * 100,
+                          )}%`}
+                        </Typography>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUsage(null)}>{'Close'}</Button>
         </DialogActions>
       </Dialog>
       <Dialog
