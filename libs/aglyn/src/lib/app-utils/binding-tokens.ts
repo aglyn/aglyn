@@ -198,6 +198,44 @@ export function nodesReferenceBinding(
   return [...via]
 }
 
+/**
+ * Deep-walks a JSON-ish value, applying `normalizeBindingTokens` to every
+ * string containing a token opener (AGL-188 migration / host import).
+ * Arrays and plain objects recurse; other values pass through untouched.
+ * Returns the (possibly new) value and whether anything changed.
+ */
+export function rewriteBindingTokensDeep<T>(
+  value: T,
+  variables: Record<string, BindingDocRef> = {},
+  functions: Record<string, BindingDocRef> = {},
+): { value: T; changed: boolean } {
+  if (typeof value === 'string') {
+    if (!value.includes('{{')) return { value, changed: false }
+    const next = normalizeBindingTokens(value, variables, functions)
+    return { value: next as T, changed: next !== value }
+  }
+  if (Array.isArray(value)) {
+    let changed = false
+    const next = value.map((item) => {
+      const result = rewriteBindingTokensDeep(item, variables, functions)
+      changed = changed || result.changed
+      return result.value
+    })
+    return { value: (changed ? next : value) as T, changed }
+  }
+  if (value && typeof value === 'object') {
+    let changed = false
+    const next: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) {
+      const result = rewriteBindingTokensDeep(item, variables, functions)
+      changed = changed || result.changed
+      next[key] = result.value
+    }
+    return { value: (changed ? next : value) as T, changed }
+  }
+  return { value, changed: false }
+}
+
 /** Editor display text for a token whose referent no longer exists. */
 export const MISSING_BINDING_LABEL = 'missing binding'
 

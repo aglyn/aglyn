@@ -18,6 +18,7 @@
 import {
   checkEntitlement,
   effectiveDatasetModel,
+  rewriteBindingTokensDeep,
   validateDocument,
 } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -157,6 +158,23 @@ export default async function handler(
       }
     }
 
+    // Legacy binding tokens in imported nodes normalize to id form
+    // (AGL-188): bundle docs keep their export ids, so the bundle's own
+    // variables/functions provide the name → id mapping.
+    const tokenLookup = (name: 'variables' | 'functions') => {
+      const map: Record<string, { name?: string; $id?: string }> = {}
+      const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
+      for (const item of items) {
+        if (item?.$id && item?.name) {
+          map[String(item.name)] = { name: item.name, $id: String(item.$id) }
+          map[String(item.$id)] = { name: item.name, $id: String(item.$id) }
+        }
+      }
+      return map
+    }
+    const bundleVariables = tokenLookup('variables')
+    const bundleFunctions = tokenLookup('functions')
+
     // Screens/layouts restore the doc plus its published version.
     const importVersioned = async (name: 'screens' | 'layouts') => {
       const items: any[] = Array.isArray(bundle[name]) ? bundle[name] : []
@@ -165,9 +183,15 @@ export default async function handler(
         const docRef = hostRef.collection(name).doc(String(item.$id))
         await write(docRef, cleanDoc(item))
         if (item.version?.$id) {
+          const version = cleanDoc(item.version)
+          version['nodes'] = rewriteBindingTokensDeep(
+            version['nodes'],
+            bundleVariables,
+            bundleFunctions,
+          ).value
           await write(
             docRef.collection('versions').doc(String(item.version.$id)),
-            cleanDoc(item.version),
+            version,
           )
         }
       }
