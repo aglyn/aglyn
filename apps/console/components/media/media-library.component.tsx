@@ -85,6 +85,7 @@ import {
 import { checkTenantQuota } from '../../constants/entitlements'
 import useCurrentTenant from '../../hooks/use-current-tenant'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
+import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaFolderRail } from './media-folder-rail.component'
 
 export interface MediaLibraryComponentProps {
@@ -690,6 +691,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [editor, setEditor] = useState<{
     id: string
     media: any
+    fileName: string
     folderId: string
     tags: string
     alt: string
@@ -702,6 +704,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       folderId,
       // Legacy string kept in sync until every reader is on folderId.
       folder: folderId ? (folderNameById[folderId] ?? '') : '',
+      // Rename (AGL-184): display-name only; the Storage object id/URL
+      // stays stable so existing references keep resolving.
+      ...(editor.fileName.trim()
+        ? { fileName: editor.fileName.trim().slice(0, 200) }
+        : {}),
       tags: Aglyn.normalizeMediaTags(editor.tags),
       alt: editor.alt.trim().slice(0, Aglyn.MEDIA_ALT_MAX_LENGTH),
       description: editor.description.trim(),
@@ -723,6 +730,65 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
   }, [editor, folderNameById, firestore, hostId, enqueueSnackbar, logActivity, refresh])
+
+  // Asset editing (AGL-184): replace-file + image transforms.
+  const replaceInputRef = useRef<HTMLInputElement>(null)
+  const [imageEditorOpen, setImageEditorOpen] = useState(false)
+  const replaceBytes = useCallback(
+    async (base64: string, contentType: string) => {
+      if (!editor) return
+      const idToken = await (user as any)?.getIdToken?.()
+      const updatedAtMs =
+        editor.media?.updatedAt?.toMillis?.() ??
+        (editor.media?.updatedAt?.seconds
+          ? editor.media.updatedAt.seconds * 1000
+          : undefined)
+      const response = await fetch('/api/media/replace', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          hostId,
+          mediaId: editor.id,
+          contentType,
+          data: base64,
+          ...(updatedAtMs ? { expectedUpdatedAtMs: updatedAtMs } : {}),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        return void enqueueSnackbar(payload?.error ?? 'Replace failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      }
+      enqueueSnackbar('Image replaced', { variant: 'success', persist: false })
+      logActivity('Replaced media file', {
+        type: 'media',
+        id: editor.id,
+        name: editor.media?.fileName ?? editor.id,
+      })
+      setEditor(null)
+      refresh()
+    },
+    [editor, user, hostId, enqueueSnackbar, logActivity, refresh],
+  )
+  const handleReplaceFile = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      if (!file || !file.type.startsWith('image/')) return
+      setBusy(true)
+      try {
+        await replaceBytes(await fileToBase64(file), file.type)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [replaceBytes],
+  )
 
   // Bulk tag/delete (AGL-173) on the current selection.
   const [bulkTag, setBulkTag] = useState<{
@@ -1387,6 +1453,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                           setEditor({
                             id: media.$id as string,
                             media,
+                            fileName: (media as any).fileName ?? '',
                             folderId: (media as any).folderId ?? '',
                             tags: ((media as any).tags ?? []).join(', '),
                             alt: (media as any).alt ?? '',
@@ -1428,9 +1495,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         onClose={() => setEditor(null)}
       >
         <Stack spacing={2} sx={{ width: 340, p: 2 }}>
-          <Typography variant="h6" noWrap>
-            {editor?.media?.fileName ?? editor?.id}
-          </Typography>
+          <TextField
+            size="small"
+            label="File name"
+            value={editor?.fileName ?? ''}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, fileName: event.target.value } : prev,
+              )
+            }
+            helperText="Display name only — the URL stays the same"
+          />
           {editor?.media?.url ? (
             String(editor.media.contentType ?? '').startsWith('video/') ? (
               <Box
@@ -1473,11 +1548,34 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               .filter(Boolean)
               .join(' · ')}
           </Typography>
-          {editor?.media?.url ? (
-            <Button size="small" onClick={handleCopyUrl(editor.media)}>
-              {'Copy URL'}
-            </Button>
-          ) : null}
+          <Stack direction="row" spacing={1}>
+            {editor?.media?.url ? (
+              <Button size="small" onClick={handleCopyUrl(editor.media)}>
+                {'Copy URL'}
+              </Button>
+            ) : null}
+            {String(editor?.media?.contentType ?? '').startsWith('image/') ? (
+              <>
+                <Button
+                  size="small"
+                  onClick={() => replaceInputRef.current?.click()}
+                >
+                  {'Replace file'}
+                </Button>
+                <Button size="small" onClick={() => setImageEditorOpen(true)}>
+                  {'Edit image'}
+                </Button>
+              </>
+            ) : null}
+          </Stack>
+          <Box
+            component="input"
+            ref={replaceInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleReplaceFile}
+            sx={{ display: 'none' }}
+          />
           <Typography variant="caption" color="text.secondary" component="div">
             {usage === null
               ? 'Checking usage…'
@@ -1555,6 +1653,67 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           </Stack>
         </Stack>
       </Drawer>
+      <ImageEditorDialog
+        open={imageEditorOpen}
+        src={editor?.media?.url ?? ''}
+        fileName={editor?.fileName || editor?.media?.fileName || 'image'}
+        onClose={() => setImageEditorOpen(false)}
+        onSave={async (result) => {
+          setImageEditorOpen(false)
+          if (result.saveAsCopy) {
+            // Save-as-copy uploads a new asset via the upload path.
+            setBusy(true)
+            try {
+              const idToken = await (user as any)?.getIdToken?.()
+              const copyName = (editor?.fileName || 'image').replace(
+                /(\.[^.]+)?$/,
+                ' (edited)$1',
+              )
+              const response = await fetch('/api/media/upload', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+                },
+                body: JSON.stringify({
+                  hostId,
+                  fileName: copyName,
+                  contentType: result.contentType,
+                  folderId:
+                    typeof currentFolder === 'string' &&
+                    currentFolder !== 'all'
+                      ? currentFolder
+                      : null,
+                  data: result.data,
+                }),
+              })
+              if (response.ok) {
+                enqueueSnackbar('Saved edited copy', {
+                  variant: 'success',
+                  persist: false,
+                })
+                setEditor(null)
+                refresh()
+              } else {
+                const payload = await response.json().catch(() => ({}))
+                enqueueSnackbar(payload?.error ?? 'Save failed', {
+                  variant: 'error',
+                  allowDuplicate: true,
+                })
+              }
+            } finally {
+              setBusy(false)
+            }
+          } else {
+            setBusy(true)
+            try {
+              await replaceBytes(result.data, result.contentType)
+            } finally {
+              setBusy(false)
+            }
+          }
+        }}
+      />
       <Dialog
         open={Boolean(bulkTag)}
         onClose={() => setBulkTag(null)}
