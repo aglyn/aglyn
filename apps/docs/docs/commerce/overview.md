@@ -9,6 +9,19 @@ description: Sell products with a product block and checkout, and manage orders,
 Aglyn's **commerce** features let you sell directly from your site — add products, drop a
 product block on a screen, take payment at checkout, and manage what comes after the sale.
 
+```mermaid
+sequenceDiagram
+  participant V as Visitor
+  participant S as Your site
+  participant St as Stripe
+  V->>S: Add product to cart
+  V->>S: Checkout
+  S->>St: Collect payment
+  St-->>S: Payment confirmed
+  S-->>V: Receipt
+  S->>S: Create order, adjust inventory
+```
+
 :::info Plan availability
 **Paid**. Selling requires a paid tier; payments run through Stripe.
 :::

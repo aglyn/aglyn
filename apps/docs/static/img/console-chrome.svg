@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 300" role="img" aria-label="Annotated diagram of the Aglyn console app bar: host switcher, breadcrumbs, screen switcher, version dropdown, and account menu">
+  <defs>
+    <style>
+      .bg{fill:#F8F9FA;stroke:#E0E0E0;stroke-width:1;}
+      .appbar{fill:#404C5C;}
+      .tl{fill:#FFFFFF;font-family:Roboto,system-ui,sans-serif;font-size:14px;}
+      .accent{fill:#00b0ff;}
+      .lbl{fill:#00b0ff;font-family:Roboto,system-ui,sans-serif;font-size:12px;font-weight:700;}
+      .lblt{fill:#616161;font-family:Roboto,system-ui,sans-serif;font-size:12px;}
+      .callout{fill:none;stroke:#00b0ff;stroke-width:1.5;}
+    </style>
+  </defs>
+  <rect class="bg" x="1" y="1" width="918" height="298" rx="8"/>
+
+  <!-- App bar -->
+  <rect class="appbar" x="1" y="30" width="918" height="58" rx="8"/>
+  <rect class="appbar" x="1" y="60" width="918" height="28"/>
+
+  <!-- host switcher -->
+  <circle class="accent" cx="40" cy="59" r="12"/>
+  <text class="tl" x="62" y="64">Acme Co ▾</text>
+  <!-- breadcrumbs -->
+  <text class="tl" x="200" y="64" opacity="0.8">Home / About</text>
+  <!-- screen switcher -->
+  <rect class="accent" x="360" y="46" width="160" height="26" rx="4"/>
+  <text class="tl" x="378" y="64" font-size="13">Screen: About ▾</text>
+  <!-- version dropdown -->
+  <text class="tl" x="700" y="64" opacity="0.9">v3 ▾</text>
+  <!-- manage + account -->
+  <circle cx="820" cy="59" r="11" fill="#FFFFFF" opacity="0.6"/>
+  <circle cx="875" cy="59" r="14" fill="#00b0ff"/>
+  <text class="tl" x="869" y="64" font-size="12">Z</text>
+
+  <!-- callouts -->
+  <line class="callout" x1="40" y1="88" x2="40" y2="120"/>
+  <text class="lbl" x="18" y="138">Host switcher</text>
+  <text class="lblt" x="18" y="154">pick / create a host</text>
+
+  <line class="callout" x1="235" y1="88" x2="235" y2="176"/>
+  <text class="lbl" x="150" y="194">Breadcrumbs</text>
+  <text class="lblt" x="150" y="210">where you are</text>
+
+  <line class="callout" x1="440" y1="88" x2="440" y2="120"/>
+  <text class="lbl" x="370" y="138">Screen switcher</text>
+  <text class="lblt" x="370" y="154">paginated jump between screens</text>
+
+  <line class="callout" x1="708" y1="88" x2="708" y2="176"/>
+  <text class="lbl" x="620" y="194">Version dropdown</text>
+  <text class="lblt" x="620" y="210">view / schedule a version</text>
+
+  <line class="callout" x1="875" y1="88" x2="875" y2="120"/>
+  <text class="lbl" x="792" y="138">Account menu</text>
+  <text class="lblt" x="792" y="154">billing, profile, sign out</text>
+</svg>

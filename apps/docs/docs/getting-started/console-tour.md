@@ -8,6 +8,8 @@ description: Where things live in the Aglyn console app bar and navigation.
 
 The **console** is where you manage a host. Here's what each part of the chrome does.
 
+![The console app bar with the host switcher, breadcrumbs, screen switcher, version dropdown, and account menu labeled](/img/console-chrome.svg)
+
 ## The app bar
 
 - **Host switcher** (left) — jump between the hosts you own, or create a new one.

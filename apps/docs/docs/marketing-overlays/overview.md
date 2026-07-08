@@ -9,6 +9,15 @@ description: Site-wide announcement bars and promotional popups with triggers, s
 **Marketing overlays** are the announcement bars and popups that sit on top of your site to
 promote offers and capture emails — without touching your page designs.
 
+```mermaid
+flowchart LR
+  Visit[Visitor arrives] --> Trig{Trigger met?<br/>load / scroll / exit}
+  Trig -->|yes| Cap{Within frequency cap?}
+  Cap -->|yes| Show[Show popup]
+  Show --> Email["Capture email<br/>→ contacts & campaigns"]
+  Show --> Metrics[Impression & conversion metrics]
+```
+
 :::info Plan availability
 **Paid**, gated by the `marketingOverlays` entitlement.
 :::

@@ -10,6 +10,13 @@ description: Extend Aglyn with sandboxed plugins — install from the marketplac
 **community marketplace**, configure them per host, and they run **sandboxed** so they can't
 compromise your site.
 
+```mermaid
+flowchart LR
+  Host["Aglyn host runtime"] <-->|sandbox bridge protocol| Frame["Sandboxed PluginFrame<br/>(isolated by origin)"]
+  Frame --> Comp["Plugin components<br/>in the drawer"]
+  Host -->|host-mediated| Net["Network bridge"]
+```
+
 :::info Plan availability
 **Free** to install community plugins; some plugins and marketplace monetization features
 are paid.

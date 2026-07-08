@@ -10,6 +10,8 @@ The **Besigner** is Aglyn's visual editor. You build a screen by placing compone
 **canvas**, arranging them in a **hierarchy**, and editing content directly on the page.
 It renders your screen under the real host theme, so what you see matches what publishes.
 
+![The Besigner editor: components drawer and hierarchy on the left, the live canvas in the center, and the inspector on the right](/img/besigner-surface.svg)
+
 :::info Plan availability
 **Free**. The Besigner is core to building; some components and actions it exposes are
 plan-gated (noted where relevant).

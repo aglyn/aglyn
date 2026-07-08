@@ -10,6 +10,14 @@ The **media library** stores your images, video, and files, keeps them organized
 serves them quickly. Media plugs into components like **Image** and **Video** and into the
 theme's favicon.
 
+```mermaid
+flowchart LR
+  U[Upload] --> Org["Organize<br/>(folders, tags, metadata)"]
+  Org --> Tr["Transform<br/>(crop, resize)"]
+  Tr --> CDN["CDN delivery<br/>(hashed URLs, WebP)"]
+  CDN --> Site[Live site]
+```
+
 :::info Plan availability
 **Free** with storage quotas. **CDN delivery** with WebP variants is a **paid-tier**
 feature; large video uploads and higher storage are gated by plan.

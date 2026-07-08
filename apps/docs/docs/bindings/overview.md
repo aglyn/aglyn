@@ -10,6 +10,13 @@ description: Live values in your content — typed variables, no-code functions,
 a variable, a function result, or a dataset field, and Aglyn resolves it when the page
 renders.
 
+```mermaid
+flowchart LR
+  A["Text prop:<br/>Welcome, {{firstName}}!"] --> B{Resolve at render}
+  B --> C["Variable firstName<br/>(by id)"]
+  C --> D["Welcome, Ada!"]
+```
+
 :::info Plan availability
 **Free** to start, with plan caps on the number of variables, functions, and workflows.
 :::

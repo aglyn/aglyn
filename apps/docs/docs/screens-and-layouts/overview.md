@@ -9,6 +9,16 @@ description: Screen hierarchy and routing, shared layouts, reusable components, 
 Screens are your pages; layouts are the shared frames they render inside. Together they
 define your site's structure, URLs, and reusable chrome.
 
+The screen hierarchy maps directly to your URL paths:
+
+```mermaid
+flowchart TD
+  Home["Home — /"] --> Services["Services — /services"]
+  Home --> About["About — /about"]
+  Services --> Pricing["Pricing — /services/pricing"]
+  Services --> Support["Support — /services/support"]
+```
+
 :::info Plan availability
 **Free** for core screens and layouts. Higher tiers raise caps on screens, versions, and
 reusable components.

@@ -10,6 +10,14 @@ description: Model structured content with typed fields and relations, then bind
 it. Screens read from datasets to render dynamic, repeatable content, and
 [forms](../forms/overview.md) write new records back in.
 
+```mermaid
+flowchart LR
+  Model["Model<br/>(typed fields)"] --> Records[(Records)]
+  Forms[Forms] --> Records
+  Records --> Repeat["Repeatable component<br/>on a screen"]
+  Records --> Import["CSV / JSON<br/>import & export"]
+```
+
 :::info Plan availability
 **Pro**. Free hosts get a limited number of datasets; Pro and above raise the cap, and
 extra-dataset add-ons are available.

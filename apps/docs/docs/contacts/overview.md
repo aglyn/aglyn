@@ -10,6 +10,16 @@ The **Contacts CRM** is a single list of the people who interact with your site.
 builds it automatically from everything they do, so you always have an up-to-date view of
 your audience.
 
+```mermaid
+flowchart LR
+  F[Form submissions] --> C[(Unified contact)]
+  M[Site members] --> C
+  O[Orders] --> C
+  B[Bookings] --> C
+  C --> S[Segments]
+  C --> E[Email campaigns]
+```
+
 :::info Plan availability
 **Paid**. Contacts power [email campaigns](../email-campaigns/overview.md) and segments.
 :::

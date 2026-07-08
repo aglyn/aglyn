@@ -9,6 +9,15 @@ description: Send email to audiences built from your contacts, with tiered send 
 **Email campaigns** let you reach the people in your [contacts CRM](../contacts/overview.md).
 Build an audience, compose a send, and Aglyn handles delivery, caps, and unsubscribes.
 
+```mermaid
+flowchart LR
+  Contacts[(Contacts)] --> Aud["Audience / segment"]
+  Aud --> Camp[Compose campaign]
+  Camp --> Cap{Within send cap?}
+  Cap -->|yes| Send[Deliver]
+  Send --> Unsub["Unsubscribe link<br/>(honored automatically)"]
+```
+
 :::info Plan availability
 **Paid**, with **tiered send caps** — how many emails you can send per period depends on
 your plan.

@@ -80,9 +80,47 @@ console palette changes, update these to match:
 Typography is self-hosted **Roboto** / **Roboto Mono** via `@fontsource` (no external
 CDN), matching Material.
 
-## Images
+## Visuals
 
-Put screenshots in `static/img/<area>/` and reference them as `/img/<area>/file.png`.
+Pages should **show**, not just tell. We use three kinds of visuals:
+
+### 1. Mermaid diagrams (preferred for flows & architecture)
+
+Write them inline in a fenced ` ```mermaid ` block — they're version-controlled, diff-able,
+and theme-aware. They're already colored to the console palette via `themeConfig.mermaid`
+in `docusaurus.config.ts` (primary `#404C5C`, accent/lines `#00b0ff`). Use them for
+sequences (checkout, booking), pipelines (media, campaigns), and structure (routing,
+plugin sandbox).
+
+### 2. Themed SVG mockups (for UI surfaces)
+
+Hand-built, console-colored SVGs live in `static/img/` (e.g. `besigner-surface.svg`,
+`console-chrome.svg`). Keep them self-contained (their own background panel) so they read in
+both light and dark mode, and label parts in the accent color. Reference with standard
+Markdown image syntax and **always add alt text**:
+
+```md
+![The Besigner editor with the drawer, canvas, and inspector labeled](/img/besigner-surface.svg)
+```
+
+### 3. Real screenshots
+
+Put real captures in `static/img/<area>/` and reference them as `/img/<area>/file.png`.
+Follow the runbook below so they're consistent.
+
+#### Screenshot capture runbook
+
+1. Run the console locally (`npx nx serve console`) against a host seeded with the
+   **seed-demo-host** fixtures (AGL-144) so every feature has realistic data.
+2. Use a **1440×900** window, the **light** color scheme, and hide personal data.
+3. Capture the specific surface (crop tightly to the relevant panel).
+4. Save as `static/img/<area>/<page>-<step>.png`, optimize (e.g. `pngquant`), and keep files
+   under ~300 KB.
+5. Add the image with descriptive alt text right where the step is described.
+
+> Diagrams and SVG mockups render without a running app, so prefer them for evergreen
+> concepts. Reserve real screenshots for UI that's hard to convey otherwise, and re-capture
+> them when the UI changes.
 
 ## Deploying
 

@@ -15,6 +15,18 @@ These docs teach you how to actually *use* Aglyn, feature by feature. If you're 
 start with **[Getting Started](getting-started/create-a-host.md)**. If you're catching
 up on what shipped recently, see **[What's New](whats-new.md)**.
 
+```mermaid
+flowchart TD
+  H[Host — your website] --> S[Screens]
+  H --> L[Layouts]
+  H --> D[Data: datasets, variables, functions]
+  H --> M[Media]
+  L -. wraps .-> S
+  D -. binds into .-> S
+  M -. used by .-> S
+  S --> P[Published site]
+```
+
 ## The mental model
 
 A few concepts show up everywhere in Aglyn. Learn these first and the rest of the

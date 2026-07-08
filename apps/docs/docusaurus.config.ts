@@ -72,6 +72,23 @@ const config: Config = {
       defaultMode: 'light',
       respectPrefersColorScheme: true,
     },
+    // Mermaid diagrams themed to the console palette (console.theme.ts):
+    // primary = #404C5C nodes, secondary = #00b0ff accents/lines.
+    mermaid: {
+      theme: { light: 'base', dark: 'base' },
+      options: {
+        themeVariables: {
+          primaryColor: '#404C5C',
+          primaryTextColor: '#FFFFFF',
+          primaryBorderColor: '#2C3540',
+          secondaryColor: '#00b0ff',
+          secondaryTextColor: '#FFFFFF',
+          tertiaryColor: '#F8F9FA',
+          lineColor: '#00b0ff',
+          fontFamily: 'Roboto, system-ui, sans-serif',
+        },
+      },
+    },
     navbar: {
       title: 'Aglyn Docs',
       logo: {

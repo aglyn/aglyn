@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 540" role="img" aria-label="Annotated diagram of the Besigner editor: app bar, components drawer, hierarchy, canvas, and inspector">
+  <defs>
+    <style>
+      .bg{fill:#F8F9FA;stroke:#E0E0E0;stroke-width:1;}
+      .appbar{fill:#404C5C;}
+      .panel{fill:#FFFFFF;stroke:#E0E0E0;stroke-width:1;}
+      .canvas{fill:#F5F5F5;stroke:#E0E0E0;stroke-width:1;}
+      .accent{fill:#00b0ff;}
+      .accentStroke{fill:none;stroke:#00b0ff;stroke-width:2;}
+      .chip{fill:#EEEEEE;stroke:#E0E0E0;stroke-width:1;}
+      .chipSel{fill:#E1F5FE;stroke:#00b0ff;stroke-width:1.5;}
+      .t{fill:#212121;font-family:Roboto,system-ui,sans-serif;font-size:13px;}
+      .tl{fill:#FFFFFF;font-family:Roboto,system-ui,sans-serif;font-size:13px;}
+      .tm{fill:#616161;font-family:Roboto,system-ui,sans-serif;font-size:11px;}
+      .lbl{fill:#00b0ff;font-family:Roboto,system-ui,sans-serif;font-size:12px;font-weight:700;}
+      .muted{fill:#BDBDBD;}
+    </style>
+  </defs>
+
+  <rect class="bg" x="1" y="1" width="918" height="538" rx="8"/>
+
+  <!-- App bar -->
+  <rect class="appbar" x="1" y="1" width="918" height="46" rx="8"/>
+  <rect class="appbar" x="1" y="30" width="918" height="17"/>
+  <circle class="accent" cx="28" cy="24" r="9"/>
+  <text class="tl" x="48" y="28">Acme Co ▾</text>
+  <text class="tl" x="150" y="28" opacity="0.75">Home / About</text>
+  <rect class="accent" x="360" y="13" width="150" height="22" rx="4"/>
+  <text class="tl" x="378" y="28" font-size="12">Screen: About ▾</text>
+  <text class="tl" x="720" y="28" opacity="0.85">v3 ▾</text>
+  <circle class="muted" cx="835" cy="24" r="10"/>
+  <circle cx="880" cy="24" r="12" fill="#00b0ff"/>
+
+  <!-- Left panel: components + hierarchy -->
+  <rect class="panel" x="14" y="60" width="180" height="464" rx="6"/>
+  <text class="tm" x="26" y="82" font-weight="700">COMPONENTS</text>
+  <rect class="chip" x="26" y="92" width="70" height="26" rx="4"/><text class="t" x="38" y="109">Text</text>
+  <rect class="chip" x="104" y="92" width="70" height="26" rx="4"/><text class="t" x="116" y="109">Button</text>
+  <rect class="chip" x="26" y="124" width="70" height="26" rx="4"/><text class="t" x="38" y="141">Image</text>
+  <rect class="chip" x="104" y="124" width="70" height="26" rx="4"/><text class="t" x="116" y="141">Form</text>
+  <line x1="26" y1="166" x2="182" y2="166" stroke="#EEEEEE"/>
+  <text class="tm" x="26" y="188" font-weight="700">HIERARCHY</text>
+  <rect class="chipSel" x="26" y="198" width="156" height="24" rx="4"/><text class="t" x="38" y="215">▸ Section</text>
+  <text class="t" x="52" y="243">▸ Heading</text>
+  <text class="t" x="52" y="267">▸ Paragraph</text>
+  <text class="t" x="52" y="291">▾ Button group</text>
+  <text class="t" x="70" y="315" fill="#616161">Button</text>
+  <text class="t" x="70" y="339" fill="#616161">Button</text>
+
+  <!-- Canvas -->
+  <rect class="canvas" x="206" y="60" width="480" height="464" rx="6"/>
+  <rect x="240" y="96" width="412" height="30" rx="4" fill="#FFFFFF" stroke="#E0E0E0"/>
+  <text class="t" x="256" y="116" font-size="16" font-weight="700">Your headline here</text>
+  <rect x="240" y="140" width="412" height="12" rx="3" fill="#E0E0E0"/>
+  <rect x="240" y="160" width="360" height="12" rx="3" fill="#E0E0E0"/>
+  <!-- selected element with overlay -->
+  <rect x="240" y="196" width="150" height="40" rx="4" fill="#00b0ff"/>
+  <text class="tl" x="278" y="221" font-size="13">Get started</text>
+  <rect class="accentStroke" x="234" y="190" width="162" height="52" rx="6"/>
+  <circle class="accent" cx="234" cy="190" r="4"/><circle class="accent" cx="396" cy="190" r="4"/>
+  <circle class="accent" cx="234" cy="242" r="4"/><circle class="accent" cx="396" cy="242" r="4"/>
+  <rect x="410" y="196" width="150" height="40" rx="4" fill="#FFFFFF" stroke="#BDBDBD"/>
+  <text class="t" x="446" y="221">Learn more</text>
+  <rect x="240" y="270" width="412" height="150" rx="6" fill="#FFFFFF" stroke="#E0E0E0"/>
+  <rect x="256" y="286" width="120" height="80" rx="4" fill="#EEEEEE"/>
+  <rect x="392" y="292" width="240" height="12" rx="3" fill="#E0E0E0"/>
+  <rect x="392" y="314" width="200" height="12" rx="3" fill="#E0E0E0"/>
+  <rect x="392" y="336" width="220" height="12" rx="3" fill="#E0E0E0"/>
+
+  <!-- Right panel: inspector -->
+  <rect class="panel" x="698" y="60" width="208" height="464" rx="6"/>
+  <text class="tm" x="712" y="82" font-weight="700">INSPECTOR — BUTTON</text>
+  <text class="tm" x="712" y="110">Text</text>
+  <rect x="712" y="116" width="180" height="26" rx="4" fill="#FFFFFF" stroke="#00b0ff"/>
+  <text class="t" x="722" y="133">Get started</text>
+  <text class="tm" x="712" y="164">Link to screen</text>
+  <rect x="712" y="170" width="180" height="26" rx="4" fill="#FFFFFF" stroke="#E0E0E0"/>
+  <text class="t" x="722" y="187">Pricing ▾</text>
+  <text class="tm" x="712" y="218">Color</text>
+  <rect class="accent" x="712" y="224" width="26" height="26" rx="4"/>
+  <rect x="744" y="224" width="26" height="26" rx="4" fill="#e040fb"/>
+  <rect x="776" y="224" width="26" height="26" rx="4" fill="#404C5C"/>
+
+  <!-- Callout labels -->
+  <text class="lbl" x="26" y="504">Drawer &amp; hierarchy</text>
+  <text class="lbl" x="360" y="504" text-anchor="middle">Canvas (live theme)</text>
+  <text class="lbl" x="712" y="504">Inspector</text>
+</svg>

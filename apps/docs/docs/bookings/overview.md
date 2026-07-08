@@ -9,6 +9,19 @@ description: Offer services with availability, let visitors book, take payment, 
 **Bookings** turn your site into a scheduling tool: define services, publish your
 availability, and let visitors book time — with optional payment and automatic reminders.
 
+```mermaid
+sequenceDiagram
+  participant V as Visitor
+  participant W as Booking widget
+  participant St as Stripe
+  V->>W: Pick a service & open slot
+  W->>W: Hold the slot
+  W->>St: Collect payment (paid services)
+  St-->>W: Confirmed
+  W-->>V: Booking confirmed
+  W->>V: Reminder email before the appointment
+```
+
 :::info Plan availability
 **Paid**. Paid bookings use Stripe; reminder emails are included.
 :::
