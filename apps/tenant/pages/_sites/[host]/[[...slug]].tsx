@@ -527,7 +527,19 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // Id-based screen links resolve against this routing map at render time;
   // ISR keeps it current (slug renames show up on the next revalidate).
   const screens = props.data?.host?.screens
-  const screenLinks = useMemo(() => ({ screens }), [screens])
+  // Locale plumbing (AGL-164): the switcher component reads variants of
+  // the CURRENT screen from this context.
+  const screenLocale = (props.data?.screen?.data as any)?.locale
+  const screenLocaleVariants = (props.data?.screen?.data as any)
+    ?.localeVariants
+  const screenLinks = useMemo(
+    () => ({
+      screens,
+      currentLocale: screenLocale,
+      localeVariants: screenLocaleVariants,
+    }),
+    [screens, screenLocale, screenLocaleVariants],
+  )
 
   // SEO emission (SEO Toolkit): screen seo fields with host-level defaults.
   const host = props.data?.host
@@ -1043,6 +1055,32 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
             key="ld-breadcrumbs"
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: breadcrumbLd }}
+          />
+        ) : null}
+        {/* hreflang alternates (AGL-164): variants resolve through the
+            routing map, so slug renames stay correct. */}
+        {canonicalBase && screenLocaleVariants
+          ? Object.entries(
+              screenLocaleVariants as Record<string, string>,
+            ).map(([locale, variantId]) => {
+              const variantPath = host?.screens?.[variantId]
+              if (variantPath == null) return null
+              return (
+                <link
+                  key={`alt-${locale}`}
+                  rel="alternate"
+                  hrefLang={locale}
+                  href={`${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`}
+                />
+              )
+            })
+          : null}
+        {canonicalBase && screenLocaleVariants && canonical ? (
+          <link
+            key="alt-self"
+            rel="alternate"
+            hrefLang={screenLocale || 'x-default'}
+            href={canonical}
           />
         ) : null}
         {canonical ? (

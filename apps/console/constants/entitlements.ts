@@ -40,6 +40,7 @@ export type Entitlement =
   | 'actions'
   | 'webhooks'
   | 'site-export'
+  | 'multilingual'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -55,6 +56,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   actions: 'actions',
   webhooks: 'webhooks',
   'site-export': 'siteExport',
+  multilingual: 'multilingual',
 }
 
 /**

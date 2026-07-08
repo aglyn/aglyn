@@ -40,6 +40,10 @@ export interface ScreenLinkContextValue {
    * render their content but must not navigate.
    */
   suppressNavigation?: boolean
+  /** Current screen's translations: locale → screen id (AGL-164). */
+  localeVariants?: Record<string, string>
+  /** Locale of the screen being rendered (AGL-164). */
+  currentLocale?: string
 }
 
 /**

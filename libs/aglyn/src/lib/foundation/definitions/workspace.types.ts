@@ -113,6 +113,8 @@ export interface TenantFeatureFlags {
   webhooks?: boolean
   /** Whole-site export/backup + restore (AGL-163). */
   siteExport?: boolean
+  /** Multilingual sites (AGL-164): locale variants + switcher. */
+  multilingual?: boolean
 }
 
 /**
@@ -243,6 +245,10 @@ export interface AglynHost extends AglynDocument {
   errorScreens?: HostErrorScreens
   /** Maintenance mode (AGL-131): every path renders the 503 screen. */
   maintenance?: boolean
+  /** Site languages (AGL-164), e.g. ['en', 'es']; first is the default
+   * unless `defaultLocale` says otherwise. */
+  locales?: string[]
+  defaultLocale?: string
   /** Directory of shared layouts by display name (mirrors `screens`). */
   layouts?: Record<LayoutUid, string>
   theme?: AglynHostTheme
@@ -340,6 +346,10 @@ export interface AglynScreen extends AglynDocument {
   publishSchedule?: PublishSchedule
   /** Password protection (AGL-87): sha256 hex of the visitor password. */
   protection?: { passwordHash?: string }
+  /** Language this screen is written in (AGL-164), e.g. 'en'. */
+  locale?: string
+  /** Translations of this screen: locale → screen id (AGL-164). */
+  localeVariants?: Record<string, ScreenUid>
   status?: HostScreenStatus
   createdAt?: ITimestamp
   updatedAt?: ITimestamp

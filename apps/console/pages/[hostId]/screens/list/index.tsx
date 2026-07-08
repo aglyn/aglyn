@@ -48,7 +48,19 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, IconButton, Stack, Typography } from '@mui/material'
+import { mdiTranslate } from '@aglyn/shared-data-mdi'
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import {
   collection,
   deleteField,
@@ -391,6 +403,47 @@ function Screens(props) {
     ],
   )
 
+  // Translations (AGL-164): per-locale variant screen mapping.
+  const hostLocales: string[] = Array.isArray(hostData?.locales)
+    ? hostData.locales
+    : []
+  const [translationsFor, setTranslationsFor] = useState<{
+    screenId: string
+    locale: string
+    variants: Record<string, string>
+  } | null>(null)
+  const handleSaveTranslations = useCallback(async () => {
+    if (!translationsFor) return
+    const variants: Record<string, string> = {}
+    for (const [locale, screenId] of Object.entries(
+      translationsFor.variants,
+    )) {
+      if (screenId) variants[locale] = screenId
+    }
+    try {
+      await updateDoc(
+        doc(firestore, 'hosts', hostId, 'screens', translationsFor.screenId),
+        {
+          locale: translationsFor.locale || deleteField(),
+          localeVariants: Object.keys(variants).length
+            ? variants
+            : deleteField(),
+        },
+      )
+      setTranslationsFor(null)
+      enqueueSnackbar('Translations saved', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [translationsFor, firestore, hostId, enqueueSnackbar])
+
   const renderRowActions = useCallback(
     (row: ScreenHierarchyRow) => (
       <>
@@ -408,6 +461,24 @@ function Screens(props) {
         >
           <MdiIcon path={ICON_VARIANT_SHOW_DETAIL.path} size={0.8} />
         </IconButton>
+        {hostLocales.length ? (
+          <IconButton
+            size="small"
+            aria-label="Translations"
+            onClick={() => {
+              const current = screens.find(
+                (screen: any) => screen.$id === row.$id,
+              ) as any
+              setTranslationsFor({
+                screenId: row.$id,
+                locale: current?.locale ?? '',
+                variants: { ...(current?.localeVariants ?? {}) },
+              })
+            }}
+          >
+            <MdiIcon path={mdiTranslate.path} size={0.8} />
+          </IconButton>
+        ) : null}
         <IconButton
           size="small"
           aria-label="Delete"
@@ -421,7 +492,7 @@ function Screens(props) {
         </IconButton>
       </>
     ),
-    [hostId, handleDeleteScreen],
+    [hostId, handleDeleteScreen, hostLocales.length, screens],
   )
 
   // console.log('Screens props', props, data, status, screens)
@@ -556,6 +627,84 @@ function Screens(props) {
         existingSlugs={Object.values(routingMap ?? {})}
         screenCount={screens.length}
       />
+
+      <Dialog
+        open={Boolean(translationsFor)}
+        onClose={() => setTranslationsFor(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'Screen translations'}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+        >
+          <TextField
+            select
+            label="This screen's language"
+            value={translationsFor?.locale ?? ''}
+            onChange={(event) =>
+              setTranslationsFor((prev) =>
+                prev ? { ...prev, locale: event.target.value } : prev,
+              )
+            }
+            size="small"
+            sx={{ mt: 1 }}
+          >
+            <MenuItem value="">{'Unset'}</MenuItem>
+            {hostLocales.map((locale) => (
+              <MenuItem key={locale} value={locale}>
+                {locale}
+              </MenuItem>
+            ))}
+          </TextField>
+          {hostLocales
+            .filter((locale) => locale !== translationsFor?.locale)
+            .map((locale) => (
+              <TextField
+                key={locale}
+                select
+                label={`${locale} version`}
+                value={translationsFor?.variants[locale] ?? ''}
+                onChange={(event) =>
+                  setTranslationsFor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          variants: {
+                            ...prev.variants,
+                            [locale]: event.target.value,
+                          },
+                        }
+                      : prev,
+                  )
+                }
+                size="small"
+              >
+                <MenuItem value="">{'None'}</MenuItem>
+                {screens
+                  .filter(
+                    (screen: any) =>
+                      screen.$id !== translationsFor?.screenId,
+                  )
+                  .map((screen: any) => (
+                    <MenuItem key={screen.$id} value={screen.$id}>
+                      {screen.displayName ?? screen.$id}
+                    </MenuItem>
+                  ))}
+              </TextField>
+            ))}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTranslationsFor(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleSaveTranslations}
+          >
+            {'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }
