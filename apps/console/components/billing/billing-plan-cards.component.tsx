@@ -80,6 +80,7 @@ const FEATURE_ROWS: Array<{
   { key: 'redirects', label: 'URL redirects' },
   { key: 'webhooks', label: 'Webhooks' },
   { key: 'multilingual', label: 'Multilingual sites' },
+  { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
 ]
 
 export interface BillingPlanCardsProps {

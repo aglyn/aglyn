@@ -209,6 +209,11 @@ export function HostAnalyticsCard(props: { hostId: string }) {
               ))}
             </Stack>
           ) : null}
+          {/* Per-screen teaser (AGL-153). */}
+          <Typography variant="caption" color="text.secondary">
+            {'Per-screen breakdowns live on each screen\u2019s view page ' +
+              '(Pro plans).'}
+          </Typography>
           {topPaths.length ? (
             <Stack spacing={0.5}>
               <Typography variant="subtitle2">{'Top pages'}</Typography>
