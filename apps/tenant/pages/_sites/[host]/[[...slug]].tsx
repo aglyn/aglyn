@@ -27,6 +27,7 @@ import { useFirestore, useFirestoreDocData } from 'reactfire'
 import Head from 'next/head'
 import applyDuePublishSchedule from '../../../utils/apply-publish-schedule'
 import composeScreenNodes from '../../../utils/compose-screen-nodes'
+import { resolveRedirect } from '../../../utils/resolve-redirect'
 import getCollectionContent, {
   type CollectionContent,
 } from '../../../utils/get-collection-content'
@@ -159,6 +160,20 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
             maintenanceFallback: true,
           }),
         ),
+        revalidate: 30,
+      }
+    }
+
+    // Redirect rules (AGL-155) fire before any route resolution, so a
+    // rule can move even a published screen. Option A per the issue:
+    // ISR-cached with a 30s revalidate; hit counts are sampled.
+    const redirectRule = await resolveRedirect(hostRes.host as any, path)
+    if (redirectRule) {
+      return {
+        redirect: {
+          destination: redirectRule.destination,
+          statusCode: redirectRule.statusCode,
+        },
         revalidate: 30,
       }
     }
