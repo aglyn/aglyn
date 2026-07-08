@@ -44,6 +44,7 @@ import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import { checkTenantQuota } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import WhereUsedDialog from './where-used-dialog.component'
 import {
   fetchWhereUsed,
   summarizeDependents,
@@ -483,51 +484,11 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
-      <Dialog
-        open={Boolean(usage)}
+      <WhereUsedDialog
+        hostId={hostId}
+        usage={usage}
         onClose={() => setUsage(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{`Where "${usage?.name}" is used`}</DialogTitle>
-        <DialogContent>
-          {usage?.result.total === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'Not referenced by any published screen, layout, or ' +
-                'workflow. Unpublished drafts are not scanned.'}
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {usage?.result.dependents.map((dependent) => (
-                <Stack
-                  key={`${dependent.type}-${dependent.id}`}
-                  direction="row"
-                  spacing={1}
-                  sx={{ justifyContent: 'space-between' }}
-                >
-                  <Typography variant="body2" noWrap>
-                    {dependent.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {dependent.type +
-                      (dependent.via.includes('name') ? ' · legacy token' : '')}
-                  </Typography>
-                </Stack>
-              ))}
-              {usage?.result.legacyCount ? (
-                <Typography variant="caption" color="warning.main">
-                  {'Legacy tokens reference this variable by name and ' +
-                    'break if it is renamed — re-save those screens to ' +
-                    'upgrade them.'}
-                </Typography>
-              ) : null}
-            </Stack>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setUsage(null)}>{'Close'}</Button>
-        </DialogActions>
-      </Dialog>
+      />
     </CardDisplay>
   )
 }

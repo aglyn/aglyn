@@ -54,6 +54,7 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocs,
   limit,
   query,
   setDoc,
@@ -158,6 +159,55 @@ export const BesignerVersionsComponent = observer(
       (targetVersionId: string) => async () => {
         const dequeue = queueLoading()
         try {
+          // Publish-time normalization (AGL-193): legacy {{name}} tokens in
+          // the version being published rewrite to rename-safe id form, so
+          // actively-maintained content converges without the AGL-188
+          // script. Best-effort — a failure never blocks the publish.
+          try {
+            const [variableDocs, functionDocs] = await Promise.all([
+              getDocs(
+                query(
+                  collection(firestore, 'hosts', hostId, 'variables'),
+                  limit(1000),
+                ),
+              ),
+              getDocs(
+                query(
+                  collection(firestore, 'hosts', hostId, 'functions'),
+                  limit(1000),
+                ),
+              ),
+            ])
+            const toLookup = (docs: typeof variableDocs) => {
+              const lookup: Record<string, { name?: string; $id?: string }> =
+                {}
+              for (const snapshot of docs.docs) {
+                const name = snapshot.get('name')
+                if (!name || snapshot.get('deletedAt')) continue
+                lookup[String(name)] = { name, $id: snapshot.id }
+                lookup[snapshot.id] = { name, $id: snapshot.id }
+              }
+              return lookup
+            }
+            const versionRef = doc(
+              firestore,
+              ...parentPath,
+              'versions',
+              targetVersionId,
+            )
+            const versionSnapshot = await getDoc(versionRef)
+            const nodes = versionSnapshot.get('nodes')
+            if (nodes) {
+              const { value, changed } = Aglyn.rewriteBindingTokensDeep(
+                nodes,
+                toLookup(variableDocs),
+                toLookup(functionDocs),
+              )
+              if (changed) await updateDoc(versionRef, { nodes: value })
+            }
+          } catch (error) {
+            console.warn('Publish-time token normalization skipped', error)
+          }
           await updateDoc(doc(firestore, ...parentPath), {
             versionId: targetVersionId,
             updatedAt: Timestamp.now(),
@@ -176,7 +226,7 @@ export const BesignerVersionsComponent = observer(
           dequeue()
         }
       },
-      [firestore, parentPath, queueLoading, enqueueSnackbar],
+      [firestore, hostId, parentPath, queueLoading, enqueueSnackbar],
     )
 
     const handleCreateVersion = useCallback(() => {

@@ -212,6 +212,31 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const [bindingAnchor, setBindingAnchor] = useState<HTMLElement | null>(
       null,
     )
+    // Friendly summary of bound string props (AGL-193): id tokens display
+    // as current names; missing referents surface in warning color.
+    const boundPropSummaries = useMemo(() => {
+      const summaries: Array<{
+        prop: string
+        display: string
+        missing: boolean
+      }> = []
+      for (const [key, value] of Object.entries(nodeProps ?? {})) {
+        if (typeof value !== 'string' || !Aglyn.hasBindings(value)) continue
+        const display = Aglyn.displayBindingTokens(
+          value,
+          (bindingVariables ?? {}) as any,
+          (bindingFunctions ?? {}) as any,
+        )
+        summaries.push({
+          prop: key,
+          display,
+          missing: display.includes(Aglyn.MISSING_BINDING_LABEL),
+        })
+      }
+      return summaries
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(nodeProps ?? {}), bindingVariables, bindingFunctions])
+
     // Hosts can have hundreds of variables (AGL-186) — filter as you type.
     const [bindingSearch, setBindingSearch] = useState('')
     const visibleBindingOptions = useMemo(() => {
@@ -294,6 +319,49 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   {...rest}
                 />
 
+                {boundPropSummaries.length ? (
+                  <Box sx={{ mt: 2 }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        fontSize: 12,
+                        color: 'text.secondary',
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      {'Bindings on this element'}
+                    </Box>
+                    {boundPropSummaries.map((summary) => (
+                      <Box
+                        key={summary.prop}
+                        sx={{
+                          display: 'flex',
+                          gap: 1,
+                          fontSize: 13,
+                          mt: 0.5,
+                          color: summary.missing
+                            ? 'warning.main'
+                            : 'text.primary',
+                        }}
+                      >
+                        <Box component="span" sx={{ color: 'text.secondary' }}>
+                          {summary.prop}
+                        </Box>
+                        <Box
+                          component="span"
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {summary.display}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                ) : null}
                 {bindingOptions?.length && textEditable ? (
                   <FormControl margin="none" fullWidth>
                     <Button

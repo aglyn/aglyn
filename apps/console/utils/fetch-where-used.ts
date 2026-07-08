@@ -20,6 +20,8 @@ export interface WhereUsedDependent {
   id: string
   name: string
   via: Array<'id' | 'name'>
+  /** Published version scanned (screens/layouts) — deep-link target. */
+  versionId?: string
 }
 
 export interface WhereUsedResult {

@@ -45,7 +45,12 @@ import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
-import { fetchWhereUsed, summarizeDependents } from '../utils/fetch-where-used'
+import WhereUsedDialog from './where-used-dialog.component'
+import {
+  fetchWhereUsed,
+  summarizeDependents,
+  type WhereUsedResult,
+} from '../utils/fetch-where-used'
 
 export interface HostWorkflowsCardProps {
   hostId: string
@@ -105,6 +110,14 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   }, [variableDocs])
 
   const [draft, setDraft] = useState<WorkflowDraft | null>(null)
+
+  // Where-used dialog (AGL-193).
+  const [usage, setUsage] = useState<{
+    name: string
+    result: WhereUsedResult
+  } | null>(null)
+  const [usageLoading, setUsageLoading] = useState<string | null>(null)
+
   const [testResult, setTestResult] = useState<string | null>(null)
 
   // Case-insensitive uniqueness (AGL-185): workflow names must stay
@@ -191,6 +204,21 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
     }
   }, [draft, nameTaken, firestore, hostId, enqueueSnackbar])
 
+  const handleShowUsage = useCallback(
+    (workflow: any) => async () => {
+      setUsageLoading(workflow.$id)
+      const result = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'workflow',
+        id: workflow.$id,
+        name: workflow.name,
+      })
+      setUsageLoading(null)
+      setUsage({ name: workflow.name, result })
+    },
+    [user, hostId],
+  )
+
   const handleDelete = useCallback(
     (workflow: any) => async () => {
       // Dependents warning (AGL-187): computed variables backed by this
@@ -257,6 +285,13 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                     .join(' → ')}`}
                 </Typography>
               </Stack>
+              <Button
+                size="small"
+                disabled={usageLoading === workflow.$id}
+                onClick={handleShowUsage(workflow)}
+              >
+                {usageLoading === workflow.$id ? 'Scanning…' : 'Usage'}
+              </Button>
               <Button
                 size="small"
                 onClick={() => {
@@ -537,6 +572,11 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
+      <WhereUsedDialog
+        hostId={hostId}
+        usage={usage}
+        onClose={() => setUsage(null)}
+      />
     </CardDisplay>
   )
 }

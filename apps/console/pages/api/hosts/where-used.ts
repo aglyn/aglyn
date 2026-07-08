@@ -29,6 +29,8 @@ export interface WhereUsedDependent {
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */
   via: BindingRefVia[]
+  /** Published version scanned (screens/layouts) — deep-link target. */
+  versionId?: string
 }
 
 /**
@@ -109,6 +111,7 @@ export default async function handler(
               id: docSnapshot.id,
               name: String(docSnapshot.get('name') ?? docSnapshot.id),
               via,
+              versionId: String(versionId),
             })
           }
         }

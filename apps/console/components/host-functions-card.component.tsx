@@ -46,7 +46,12 @@ import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/fires
 import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import { checkTenantQuota } from '../constants/entitlements'
-import { fetchWhereUsed, summarizeDependents } from '../utils/fetch-where-used'
+import WhereUsedDialog from './where-used-dialog.component'
+import {
+  fetchWhereUsed,
+  summarizeDependents,
+  type WhereUsedResult,
+} from '../utils/fetch-where-used'
 import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface HostFunctionsCardProps {
@@ -117,6 +122,14 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
     )
 
   const [draft, setDraft] = useState<FunctionDraft | null>(null)
+
+  // Where-used dialog (AGL-193).
+  const [usage, setUsage] = useState<{
+    name: string
+    result: WhereUsedResult
+  } | null>(null)
+  const [usageLoading, setUsageLoading] = useState<string | null>(null)
+
   const [testArgs, setTestArgs] = useState<Record<string, string>>({})
   const [testResult, setTestResult] = useState<string | null>(null)
 
@@ -178,6 +191,21 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
       })
     }
   }, [draft, nameTaken, firestore, hostId, enqueueSnackbar])
+
+  const handleShowUsage = useCallback(
+    (definition: any) => async () => {
+      setUsageLoading(definition.$id)
+      const result = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'function',
+        id: definition.$id,
+        name: definition.name,
+      })
+      setUsageLoading(null)
+      setUsage({ name: definition.name, result })
+    },
+    [user, hostId],
+  )
 
   const handleDelete = useCallback(
     (definition: any) => async () => {
@@ -349,6 +377,13 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
                   {`${(definition.parameters ?? []).map((p: any) => p.name).join(', ') || 'no parameters'} → ${definition.returnValue || '—'}`}
                 </Typography>
               </Stack>
+              <Button
+                size="small"
+                disabled={usageLoading === definition.$id}
+                onClick={handleShowUsage(definition)}
+              >
+                {usageLoading === definition.$id ? 'Scanning…' : 'Usage'}
+              </Button>
               <Button
                 size="small"
                 onClick={() => {
@@ -798,6 +833,11 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
           </Button>
         </DialogActions>
       </Dialog>
+      <WhereUsedDialog
+        hostId={hostId}
+        usage={usage}
+        onClose={() => setUsage(null)}
+      />
     </CardDisplay>
   )
 }
