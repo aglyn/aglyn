@@ -15,16 +15,36 @@
  * limitations under the License.
  */
 
-import {getMdiAllIcons, getMdiIconFromId, type Icon, type IconId} from '@aglyn/shared-data-mdi'
-import {useMemo} from 'react'
-
+import {
+  getMdiAllIcons,
+  getMdiIconFromId,
+  type Icon,
+  type IconId,
+  loadMdiIcons,
+} from '@aglyn/shared-data-mdi'
+import { useEffect, useMemo, useState } from 'react'
 
 export function useMdiIcons(iconId?: IconId[]): Icon[] {
+  // The catalog loads lazily on first use (AGL-189); `ready` flips once the
+  // MdiIcons map is populated so the memo recomputes with the full set.
+  const [ready, setReady] = useState(() => getMdiAllIcons().size > 0)
+  useEffect(() => {
+    if (ready) return
+    let active = true
+    void loadMdiIcons().then((icons) => {
+      if (active && icons.size > 0) setReady(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [ready])
+
   return useMemo(() => {
     const MdiIcons = getMdiAllIcons()
     return Array.isArray(iconId)
       ? [...iconId].map(getMdiIconFromId)
       : [...MdiIcons.values()]
-  }, [iconId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iconId, ready])
 }
 export default useMdiIcons

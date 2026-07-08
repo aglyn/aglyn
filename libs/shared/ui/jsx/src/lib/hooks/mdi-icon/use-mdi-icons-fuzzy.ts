@@ -17,7 +17,7 @@
 
 import type { Icon, IconId } from '@aglyn/shared-data-mdi'
 import { Fuse } from '@aglyn/shared-util-vendor'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ApplyFilterFn, ClearFilterFn } from '../../types'
 import { useMdiIcons } from './use-mdi-icons'
 
@@ -30,6 +30,12 @@ type UseMdiIconsReturn = [
 export function useMdiIconsFuzzy(iconId?: IconId[]): UseMdiIconsReturn {
   const allIcons = useMdiIcons(iconId)
   const [filteredIcons, setFilteredIcons] = useState(allIcons)
+
+  // The catalog arrives async (AGL-189): when the icon set materializes
+  // after mount, refresh the unfiltered view or the grid stays empty.
+  useEffect(() => {
+    setFilteredIcons(allIcons)
+  }, [allIcons])
 
   const fuzzy = useMemo(() => {
     return new Fuse(allIcons, {
