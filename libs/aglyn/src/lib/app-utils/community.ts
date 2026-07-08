@@ -40,7 +40,14 @@ export interface CommunityListing {
   displayName: string
   description?: string
   category?: string
-  latestVersion: number
+  /**
+   * Declarative component (default) or executable plugin (AGL-45).
+   * Plugins version by semver string; components by integer.
+   */
+  type?: 'component' | 'plugin'
+  latestVersion: number | string
+  /** Plugin manifest id, for `type: 'plugin'` listings (AGL-45). */
+  pluginId?: string
   /** One-time price in whole USD; 0/absent = free (AGL-46). */
   priceUsd?: number
   deletedAt?: unknown

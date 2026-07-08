@@ -82,6 +82,21 @@ service cloud.firestore {
       match /versions/{version} {
         allow read, write: if isStaff();
       }
+      // Plugin version records hold the artifact sha256 + manifest (AGL-45).
+      // Server-only, same as component versions: installs go through
+      // /api/community/install-plugin, which checks entitlement + kill
+      // switch and copies the pin into the host's installs.
+      match /pluginVersions/{version} {
+        allow read, write: if isStaff();
+      }
+    }
+
+    // Plugin kill switch (AGL-45): loaders check this before executing a
+    // pinned plugin, so it is a PUBLIC read; only staff (or the Admin SDK)
+    // may write a revocation.
+    match /revocations/{listingId} {
+      allow read: if true;
+      allow write: if isStaff();
     }
 
     // Marketplace purchase records (AGL-46): written only by the Stripe
