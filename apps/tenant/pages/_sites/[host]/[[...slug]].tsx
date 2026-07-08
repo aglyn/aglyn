@@ -559,6 +559,27 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
       : undefined
 
+  // BreadcrumbList (AGL-143) for nested screen paths (a/b/c).
+  const breadcrumbSegments =
+    typeof screenPath === 'string'
+      ? screenPath.split('/').filter(Boolean)
+      : []
+  const breadcrumbLd =
+    canonicalBase && breadcrumbSegments.length > 1
+      ? JSON.stringify({
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: breadcrumbSegments.map((segment, index) => ({
+            '@type': 'ListItem',
+            position: index + 1,
+            name: segment,
+            item: `${canonicalBase}/${breadcrumbSegments
+              .slice(0, index + 1)
+              .join('/')}`,
+          })),
+        })
+      : null
+
   const site = useMemo(() => ({ hostId: host?.$id }), [host?.$id])
 
   // Password-protected screens render an unlock form; the composed nodes
@@ -769,6 +790,91 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           {entry?.excerpt ? (
             <meta key="desc" name="description" content={entry.excerpt} />
           ) : null}
+          {/* Social/SEO completeness (AGL-143). */}
+          {entry ? (
+            <>
+              <meta key="og:type" property="og:type" content="article" />
+              <meta
+                key="og:title"
+                property="og:title"
+                content={contentFullTitle}
+              />
+              {entry.excerpt ? (
+                <meta
+                  key="og:description"
+                  property="og:description"
+                  content={entry.excerpt}
+                />
+              ) : null}
+              {(entry as any).coverImage ? (
+                <>
+                  <meta
+                    key="og:image"
+                    property="og:image"
+                    content={(entry as any).coverImage}
+                  />
+                  <meta
+                    key="twitter:image"
+                    name="twitter:image"
+                    content={(entry as any).coverImage}
+                  />
+                </>
+              ) : null}
+              {entry.publishedAt?.seconds ? (
+                <meta
+                  key="article:published_time"
+                  property="article:published_time"
+                  content={new Date(
+                    entry.publishedAt.seconds * 1000,
+                  ).toISOString()}
+                />
+              ) : null}
+              {(entry as any).updatedAt?.seconds ? (
+                <meta
+                  key="article:modified_time"
+                  property="article:modified_time"
+                  content={new Date(
+                    (entry as any).updatedAt.seconds * 1000,
+                  ).toISOString()}
+                />
+              ) : null}
+              <script
+                key="ld-article"
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                  __html: JSON.stringify({
+                    '@context': 'https://schema.org',
+                    '@type': 'Article',
+                    headline: entry.title,
+                    ...(entry.excerpt && { description: entry.excerpt }),
+                    ...((entry as any).coverImage && {
+                      image: [(entry as any).coverImage],
+                    }),
+                    ...(entry.publishedAt?.seconds && {
+                      datePublished: new Date(
+                        entry.publishedAt.seconds * 1000,
+                      ).toISOString(),
+                    }),
+                    ...((entry as any).updatedAt?.seconds && {
+                      dateModified: new Date(
+                        (entry as any).updatedAt.seconds * 1000,
+                      ).toISOString(),
+                    }),
+                    ...(host?.seo?.entity?.name && {
+                      author: {
+                        '@type':
+                          host.seo.entity.type ===
+                          Aglyn.HostEntityType.PERSON
+                            ? 'Person'
+                            : 'Organization',
+                        name: host.seo.entity.name,
+                      },
+                    }),
+                  }),
+                }}
+              />
+            </>
+          ) : null}
         </Head>
         {entry ? (
           <article>
@@ -888,11 +994,57 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         {socialImage ? (
           <meta key="og:image" property="og:image" content={socialImage} />
         ) : null}
+        {socialImage ? (
+          <meta
+            key="twitter:image"
+            name="twitter:image"
+            content={socialImage}
+          />
+        ) : null}
+        {siteTitle ? (
+          <meta key="og:site_name" property="og:site_name" content={siteTitle} />
+        ) : null}
         <meta
           key="twitter:card"
           name="twitter:card"
           content={socialImage ? 'summary_large_image' : 'summary'}
         />
+        {/* Structured data (AGL-143): WebSite + host entity, and
+            breadcrumbs for nested paths. Event schema arrives with the
+            Event Calendar add-on (AGL-145). */}
+        {canonicalBase ? (
+          <script
+            key="ld-website"
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify({
+                '@context': 'https://schema.org',
+                '@type': 'WebSite',
+                name: siteTitle ?? host?.displayName ?? 'Site',
+                url: canonicalBase,
+                ...(host?.seo?.entity?.name && {
+                  publisher: {
+                    '@type':
+                      host.seo.entity.type === Aglyn.HostEntityType.PERSON
+                        ? 'Person'
+                        : 'Organization',
+                    name: host.seo.entity.name,
+                    ...(host.seo.entity.logo && {
+                      logo: host.seo.entity.logo,
+                    }),
+                  },
+                }),
+              }),
+            }}
+          />
+        ) : null}
+        {breadcrumbLd ? (
+          <script
+            key="ld-breadcrumbs"
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: breadcrumbLd }}
+          />
+        ) : null}
         {canonical ? (
           <link key="canonical" rel="canonical" href={canonical} />
         ) : null}
