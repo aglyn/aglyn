@@ -16,9 +16,12 @@
  */
 
 import {
+  displayBindingTokens,
   formatFunctionIdToken,
   formatVariableIdToken,
   keyByIdAndName,
+  MISSING_BINDING_LABEL,
+  normalizeBindingTokens,
 } from './binding-tokens'
 import { resolveBindings, type HostVariable } from './variables'
 
@@ -70,10 +73,8 @@ describe('resolveBindings id tokens (AGL-185)', () => {
     expect(resolveBindings('{{salutation}}', renamed)).toBe('Hello')
   })
 
-  it('keeps unknown id tokens literal (fail-open)', () => {
-    expect(resolveBindings('{{var:missing00}}', variables)).toBe(
-      '{{var:missing00}}',
-    )
+  it('renders unknown id tokens as empty (AGL-186 — ids never leak)', () => {
+    expect(resolveBindings('a{{var:missing00}}b', variables)).toBe('ab')
   })
 
   it('resolves {{fn:id(args)}} through the id-keyed lookup', () => {
@@ -104,5 +105,71 @@ describe('resolveBindings id tokens (AGL-185)', () => {
     expect(
       resolveBindings('{{greeting}} / {{var:7Zt-pL_4Yc}}', variables),
     ).toBe('Hello / 42')
+  })
+})
+
+describe('normalizeBindingTokens (AGL-186)', () => {
+  const editorVariables = {
+    greeting: { name: 'greeting', $id: 'aB3xK9m2Qw' },
+    aB3xK9m2Qw: { name: 'greeting', $id: 'aB3xK9m2Qw' },
+  }
+  const editorFunctions = {
+    Sum: { name: 'Sum', $id: '9fnAbC12Xy' },
+    '9fnAbC12Xy': { name: 'Sum', $id: '9fnAbC12Xy' },
+  }
+
+  it('rewrites typed names to id tokens', () => {
+    expect(
+      normalizeBindingTokens('Hi {{greeting}}!', editorVariables),
+    ).toBe('Hi {{var:aB3xK9m2Qw}}!')
+    expect(
+      normalizeBindingTokens('{{fn:Sum(1, 2)}}', {}, editorFunctions),
+    ).toBe('{{fn:9fnAbC12Xy(1, 2)}}')
+  })
+
+  it('leaves unknown names and existing id tokens untouched', () => {
+    expect(normalizeBindingTokens('{{later}}', editorVariables)).toBe(
+      '{{later}}',
+    )
+    expect(
+      normalizeBindingTokens('{{var:aB3xK9m2Qw}}', editorVariables),
+    ).toBe('{{var:aB3xK9m2Qw}}')
+    expect(
+      normalizeBindingTokens('{{fn:9fnAbC12Xy(1)}}', {}, editorFunctions),
+    ).toBe('{{fn:9fnAbC12Xy(1)}}')
+  })
+})
+
+describe('displayBindingTokens (AGL-186)', () => {
+  const editorVariables = {
+    aB3xK9m2Qw: { name: 'salutation', $id: 'aB3xK9m2Qw' },
+  }
+  const editorFunctions = {
+    '9fnAbC12Xy': { name: 'Sum', $id: '9fnAbC12Xy' },
+    Sum: { name: 'Sum', $id: '9fnAbC12Xy' },
+  }
+
+  it('maps id tokens to current names for display', () => {
+    expect(
+      displayBindingTokens('Hi {{var:aB3xK9m2Qw}}', editorVariables),
+    ).toBe('Hi {{salutation}}')
+    expect(
+      displayBindingTokens('{{fn:9fnAbC12Xy(1, 2)}}', {}, editorFunctions),
+    ).toBe('{{fn:Sum(1, 2)}}')
+  })
+
+  it('marks deleted referents instead of leaking ids', () => {
+    expect(displayBindingTokens('{{var:gone123456}}', editorVariables)).toBe(
+      `{{${MISSING_BINDING_LABEL}}}`,
+    )
+  })
+
+  it('leaves legacy name tokens as-is', () => {
+    expect(displayBindingTokens('{{typedName}}', editorVariables)).toBe(
+      '{{typedName}}',
+    )
+    expect(
+      displayBindingTokens('{{fn:Sum(3)}}', {}, editorFunctions),
+    ).toBe('{{fn:Sum(3)}}')
   })
 })

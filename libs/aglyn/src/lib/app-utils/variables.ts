@@ -152,9 +152,11 @@ export function resolveBindings(
 ): string {
   const withVariableIds = text.replace(
     VARIABLE_ID_TOKEN_PATTERN,
-    (token, id) => {
+    (_token, id) => {
       const variable = variables[String(id)]
-      return variable ? formatVariableValue(variable) : token
+      // Unknown ids render EMPTY, not literal (AGL-186): a raw doc id is
+      // meaningless to visitors, unlike a readable legacy {{name}} token.
+      return variable ? formatVariableValue(variable) : ''
     },
   )
   const withFunctions = withVariableIds.replace(

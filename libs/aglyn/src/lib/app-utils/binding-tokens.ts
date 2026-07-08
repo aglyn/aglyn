@@ -82,3 +82,76 @@ export function keyByIdAndName<T extends { name?: string }>(
   }
   return map
 }
+
+/**
+ * Doc shape the editor-side helpers need: consoles pass Firestore docs
+ * that carry their id as `$id` (reactfire idField) beside the name.
+ */
+export interface BindingDocRef {
+  name?: string
+  $id?: string
+  parameters?: Array<{ name: string }>
+}
+
+/**
+ * Rewrites legacy name tokens to their id forms when the name matches a
+ * known doc (AGL-186 typing normalization): hand-typed `{{Message}}`
+ * becomes `{{var:abc123}}` at save so it survives renames. Unknown names
+ * are left alone — the variable may be created later, and legacy
+ * resolution still covers them meanwhile.
+ */
+export function normalizeBindingTokens(
+  text: string,
+  variables: Record<string, BindingDocRef> = {},
+  functions: Record<string, BindingDocRef> = {},
+): string {
+  const withFunctions = text.replace(
+    FUNCTION_TOKEN_PATTERN,
+    (token, ref, rawArgs) => {
+      const definition = functions[String(ref).trim()]
+      // Already an id (the ref maps to a doc whose $id is the ref itself)
+      // or unknown: leave as-is.
+      if (!definition?.$id || definition.$id === String(ref).trim()) {
+        return token
+      }
+      return `{{fn:${definition.$id}(${String(rawArgs)})}}`
+    },
+  )
+  return withFunctions.replace(NAME_TOKEN_PATTERN, (token, name) => {
+    const variable = variables[name]
+    return variable?.$id ? formatVariableIdToken(variable.$id) : token
+  })
+}
+
+/** Editor display text for a token whose referent no longer exists. */
+export const MISSING_BINDING_LABEL = 'missing binding'
+
+/**
+ * Rewrites id tokens to friendly name forms for editor display (AGL-186):
+ * `{{var:abc123}}` shows as `{{Message}}` (the CURRENT name — renames
+ * reflect immediately), and tokens whose doc was deleted show as
+ * `{{missing binding}}` instead of leaking raw ids. Display only — never
+ * persist the result.
+ */
+export function displayBindingTokens(
+  text: string,
+  variables: Record<string, BindingDocRef> = {},
+  functions: Record<string, BindingDocRef> = {},
+): string {
+  const withVariables = text.replace(
+    VARIABLE_ID_TOKEN_PATTERN,
+    (_token, id) => {
+      const variable = variables[String(id)]
+      return `{{${variable?.name ?? MISSING_BINDING_LABEL}}}`
+    },
+  )
+  return withVariables.replace(
+    FUNCTION_TOKEN_PATTERN,
+    (token, ref, rawArgs) => {
+      const definition = functions[String(ref).trim()]
+      // Name-form refs already read fine; only id-form refs get mapped.
+      if (!definition || definition.name === String(ref).trim()) return token
+      return `{{fn:${definition.name ?? MISSING_BINDING_LABEL}(${String(rawArgs)})}}`
+    },
+  )
+}
