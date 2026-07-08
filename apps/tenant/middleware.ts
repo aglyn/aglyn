@@ -161,7 +161,18 @@ export const middleware: NextMiddleware = (req, event) => {
       )
       tenantHost = reqHost.replace(`.localhost:4500`, '') || 'demo'
       break
-    default:
+    default: {
+      // Custom domains (AGL-166): any other hostname is a customer domain
+      // CNAMEd at Vercel. The edge runtime can't query Firestore, so the
+      // hostname travels as a `cname--` sentinel and getStaticProps
+      // resolves it via host.cname (unknown domains 404 there). Only
+      // host-shaped names proceed; garbage still bounces to the console.
+      const hostname = reqHost.split(':')[0].toLowerCase()
+      if (IS_VERCEL && /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(hostname)) {
+        console.debug('Tenant Host Switch=', 'cname', 'hostname=', hostname)
+        tenantHost = `cname--${hostname}`
+        break
+      }
       console.debug(
         'Tenant Host Switch=',
         'Redirecting',
@@ -171,6 +182,7 @@ export const middleware: NextMiddleware = (req, event) => {
         'https://console.aglyn.io',
       )
       return NextResponse.redirect('https://console.aglyn.io')
+    }
   }
 
   if (
