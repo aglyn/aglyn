@@ -107,6 +107,7 @@
     "fuse.js": "^7.0.0",
     "gravatar": "^1.8.2",
     "hoist-non-react-statics": "^3.3.2",
+    "js-cookie": "^2.2.1",
     "jss": "^10.10.0",
     "jss-rtl": "^0.3.0",
     "lodash-es": "^4.17.21",
@@ -266,6 +267,7 @@
     "webpack-merge": "^5.10.0"
   },
   "overrides": {
+    "js-cookie": "^2.2.1",
     "classname": "$clsx",
     "classnames": "$clsx",
     "@mui/styles": {
