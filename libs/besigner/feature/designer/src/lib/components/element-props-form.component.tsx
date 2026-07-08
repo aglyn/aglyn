@@ -32,7 +32,7 @@ import {
 import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
-import { Alert, NoSsr } from '@mui/material'
+import { Alert, NoSsr, TextField } from '@mui/material'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
@@ -204,10 +204,23 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // Insert binding (AGL-100): appends a {{token}} to the element text.
     // Options come from the host app (variables + functions); the commit
     // spreads current props — updateNodeProps REPLACES the props object.
-    const { options: bindingOptions } = useContext(BindingPickerContext)
+    const {
+      options: bindingOptions,
+      variables: bindingVariables,
+      functions: bindingFunctions,
+    } = useContext(BindingPickerContext)
     const [bindingAnchor, setBindingAnchor] = useState<HTMLElement | null>(
       null,
     )
+    // Hosts can have hundreds of variables (AGL-186) — filter as you type.
+    const [bindingSearch, setBindingSearch] = useState('')
+    const visibleBindingOptions = useMemo(() => {
+      const term = bindingSearch.trim().toLowerCase()
+      if (!term) return bindingOptions ?? []
+      return (bindingOptions ?? []).filter((option) =>
+        option.label.toLowerCase().includes(term),
+      )
+    }, [bindingOptions, bindingSearch])
     const handleInsertBinding = useCallback(
       (token: string) => {
         setBindingAnchor(null)
@@ -245,9 +258,21 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
-        Aglyn.canvas.updateNodeProps(node, values)
+        // Hand-typed {{name}} tokens normalize to their rename-safe
+        // {{var:id}} form at save (AGL-186); unknown names pass through.
+        const normalized: Record<string, unknown> = { ...values }
+        for (const [key, value] of Object.entries(values)) {
+          if (typeof value === 'string' && Aglyn.hasBindings(value)) {
+            normalized[key] = Aglyn.normalizeBindingTokens(
+              value,
+              (bindingVariables ?? {}) as any,
+              (bindingFunctions ?? {}) as any,
+            )
+          }
+        }
+        Aglyn.canvas.updateNodeProps(node, normalized)
       },
-      [node],
+      [node, bindingVariables, bindingFunctions],
     )
 
     return (
@@ -284,10 +309,31 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     <MuiMenu
                       anchorEl={bindingAnchor}
                       open={Boolean(bindingAnchor)}
-                      onClose={() => setBindingAnchor(null)}
+                      onClose={() => {
+                        setBindingAnchor(null)
+                        setBindingSearch('')
+                      }}
                     >
-                      {bindingOptions.map((option, index) => {
-                        const previous = bindingOptions[index - 1]
+                      <Box sx={{ px: 1.5, pb: 1 }}>
+                        <TextField
+                          size="small"
+                          placeholder="Search bindings…"
+                          value={bindingSearch}
+                          onChange={(event) =>
+                            setBindingSearch(event.target.value)
+                          }
+                          onKeyDown={(event) => event.stopPropagation()}
+                          autoFocus
+                          fullWidth
+                        />
+                      </Box>
+                      {visibleBindingOptions.length === 0 ? (
+                        <MuiMenuItem disabled>
+                          {'No bindings match'}
+                        </MuiMenuItem>
+                      ) : null}
+                      {visibleBindingOptions.map((option, index) => {
+                        const previous = visibleBindingOptions[index - 1]
                         return [
                           option.group && option.group !== previous?.group ? (
                             <ListSubheader key={`${option.group}-header`}>
@@ -296,7 +342,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                           ) : null,
                           <MuiMenuItem
                             key={option.token}
-                            onClick={() => handleInsertBinding(option.token)}
+                            onClick={() => {
+                              setBindingSearch('')
+                              handleInsertBinding(option.token)
+                            }}
                           >
                             {option.label}
                           </MuiMenuItem>,

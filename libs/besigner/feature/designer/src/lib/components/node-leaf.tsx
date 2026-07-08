@@ -82,7 +82,6 @@ export const NodeLeaf = observer(
     )
     const renderNode = useMemo(() => {
       if (
-        resolveFlag === false ||
         !boundProps.length ||
         (!Object.keys(variables ?? {}).length &&
           !Object.keys(functions ?? {}).length)
@@ -91,11 +90,20 @@ export const NodeLeaf = observer(
       }
       const resolved: Record<string, unknown> = { ...(node?.props ?? {}) }
       for (const [key, value] of boundProps) {
-        resolved[key] = Aglyn.resolveBindings(
-          value as string,
-          (variables ?? {}) as any,
-          (functions ?? {}) as any,
-        )
+        // Resolve toggle off → show friendly token text: id tokens map to
+        // the referent's CURRENT name (AGL-186), never raw doc ids.
+        resolved[key] =
+          resolveFlag === false
+            ? Aglyn.displayBindingTokens(
+                value as string,
+                (variables ?? {}) as any,
+                (functions ?? {}) as any,
+              )
+            : Aglyn.resolveBindings(
+                value as string,
+                (variables ?? {}) as any,
+                (functions ?? {}) as any,
+              )
       }
       return { ...node, props: resolved }
     }, [node, boundProps, resolveFlag, variables, functions])

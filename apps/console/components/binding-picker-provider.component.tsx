@@ -16,6 +16,10 @@
  */
 'use client'
 
+import {
+  formatFunctionIdToken,
+  formatVariableIdToken,
+} from '@aglyn/aglyn'
 import { BindingPickerContext, type BindingOption } from '@aglyn/besigner-ui'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
@@ -44,24 +48,26 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
   )
 
   const value = useMemo(() => {
+    // Inserted tokens carry doc ids (AGL-186) so they survive renames;
+    // labels stay the friendly names.
     const options: BindingOption[] = []
     for (const variable of variableDocs ?? []) {
       if (variable.deletedAt || !variable.name) continue
       options.push({
         group: 'Variables',
         label: variable.name,
-        token: `{{${variable.name}}}`,
+        token: formatVariableIdToken(variable.$id),
       })
     }
     for (const definition of functionDocs ?? []) {
       if (definition.deletedAt || !definition.name) continue
-      const parameters = (definition.parameters ?? [])
-        .map((parameter: any) => parameter.name)
-        .join(', ')
+      const parameters = (definition.parameters ?? []).map(
+        (parameter: any) => parameter.name,
+      )
       options.push({
         group: 'Functions',
-        label: `${definition.name}(${parameters})`,
-        token: `{{fn:${definition.name}(${parameters})}}`,
+        label: `${definition.name}(${parameters.join(', ')})`,
+        token: formatFunctionIdToken(definition.$id, parameters),
       })
     }
     // Live canvas resolution (AGL-97): maps for resolveBindings, keyed by
