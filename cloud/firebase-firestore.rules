@@ -16,17 +16,36 @@ service cloud.firestore {
         get(/databases/$(database)/documents/hosts/$(hostId))
           .data.admins[request.auth.uid] == true;
     }
+    // Suspension write-block (AGL-210): staff-suspended tenants keep read
+    // access but cannot mutate content. Fail-open when the tenant doc is
+    // missing (pre-billing hosts) so legacy data never locks up; the
+    // identical host-doc get() is deduped with isHostAdmin's by rules.
+    function tenantSuspendedById(tenantId) {
+      return tenantId != null &&
+        exists(/databases/$(database)/documents/tenants/$(tenantId)) &&
+        get(/databases/$(database)/documents/tenants/$(tenantId))
+          .data.get('suspendedAt', null) != null;
+    }
+    function hostTenantSuspended(hostId) {
+      return tenantSuspendedById(
+        get(/databases/$(database)/documents/hosts/$(hostId))
+          .data.get('tenantId', null));
+    }
     match /hosts/{hostId} {
       // Queries must be admin-constrained (the console filters on
       // admins.{uid} == true), which this rule admits.
       allow read: if isStaff() || (isSignedIn() &&
         resource.data.admins[request.auth.uid] == true);
       allow create: if isSignedIn() &&
-        request.resource.data.admins[request.auth.uid] == true;
+        request.resource.data.admins[request.auth.uid] == true &&
+        !tenantSuspendedById(request.resource.data.get('tenantId', null));
       allow update, delete: if isStaff() ||
-        (isSignedIn() && resource.data.admins[request.auth.uid] == true);
+        (isSignedIn() && resource.data.admins[request.auth.uid] == true &&
+          !hostTenantSuspended(hostId));
       match /{document=**} {
-        allow read, write: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() || isHostAdmin(hostId);
+        allow write: if isStaff() ||
+          (isHostAdmin(hostId) && !hostTenantSuspended(hostId));
       }
     }
 
