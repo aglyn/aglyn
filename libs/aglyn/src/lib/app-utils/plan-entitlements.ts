@@ -80,6 +80,7 @@ export const PLAN_ENTITLEMENTS: Record<
       multilingual: false,
       eventCalendar: false,
       redirects: false,
+      screenAnalytics: false,
     },
   },
   starter: {
@@ -123,6 +124,7 @@ export const PLAN_ENTITLEMENTS: Record<
       multilingual: false,
       eventCalendar: false,
       redirects: true,
+      screenAnalytics: false,
     },
   },
   pro: {
@@ -166,6 +168,7 @@ export const PLAN_ENTITLEMENTS: Record<
       multilingual: false,
       eventCalendar: false,
       redirects: true,
+      screenAnalytics: true,
     },
   },
   business: {
@@ -209,6 +212,7 @@ export const PLAN_ENTITLEMENTS: Record<
       multilingual: true,
       eventCalendar: false,
       redirects: true,
+      screenAnalytics: true,
     },
   },
 }

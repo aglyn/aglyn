@@ -119,6 +119,8 @@ export interface TenantFeatureFlags {
   eventCalendar?: boolean
   /** URL redirects manager (AGL-154). */
   redirects?: boolean
+  /** Per-screen traffic analytics (AGL-150). */
+  screenAnalytics?: boolean
 }
 
 /**

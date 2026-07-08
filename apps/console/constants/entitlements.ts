@@ -43,6 +43,7 @@ export type Entitlement =
   | 'multilingual'
   | 'event-calendar'
   | 'redirects'
+  | 'screen-analytics'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -61,6 +62,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   multilingual: 'multilingual',
   'event-calendar': 'eventCalendar',
   redirects: 'redirects',
+  'screen-analytics': 'screenAnalytics',
 }
 
 /**
