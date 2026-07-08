@@ -27,12 +27,18 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   resolveRolePermissions,
   TENANT_ROLE_LABELS,
+  type TenantCustomRole,
   type TenantRoleId,
 } from '@aglyn/aglyn'
 import {
   Button,
   Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   FormControlLabel,
   MenuItem,
   Stack,
@@ -83,7 +89,14 @@ const ManageTeam: NextPageWithLayout = () => {
   const canManage = isOwner || permissions.manageMembers
   const [members, setMembers] = useState<any[]>([])
   const [email, setEmail] = useState('')
-  const [newRole, setNewRole] = useState<TenantRoleId>('editor')
+  const [newRole, setNewRole] = useState<string>('editor')
+  // Custom roles (AGL-133): owner-defined permission sets.
+  const [customRoles, setCustomRoles] = useState<any[]>([])
+  const [roleEditor, setRoleEditor] = useState<{
+    id: string | null
+    name: string
+    permissions: Record<string, boolean>
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const seatQuota = checkTenantSeatQuota(tenant, 'managers', members.length + 1)
 
@@ -111,11 +124,39 @@ const ManageTeam: NextPageWithLayout = () => {
     [user, enqueueSnackbar],
   )
 
+  const rolesRequest = useCallback(
+    async (method: string, body?: Record<string, unknown>) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/tenant/roles', {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        enqueueSnackbar(payload?.error ?? 'Role operation failed', {
+          variant: 'warning',
+          persist: false,
+        })
+        return null
+      }
+      return payload
+    },
+    [user, enqueueSnackbar],
+  )
+
   const refresh = useCallback(async () => {
     if (!user) return
-    const payload = await request('GET')
+    const [payload, rolesPayload] = await Promise.all([
+      request('GET'),
+      rolesRequest('GET'),
+    ])
     if (payload?.members) setMembers(payload.members)
-  }, [user, request])
+    if (rolesPayload?.roles) setCustomRoles(rolesPayload.roles)
+  }, [user, request, rolesRequest])
 
   useEffect(() => {
     void refresh()
@@ -159,11 +200,15 @@ const ManageTeam: NextPageWithLayout = () => {
     [request, refresh],
   )
 
+  const customRoleMap: Record<string, TenantCustomRole | undefined> =
+    Object.fromEntries(customRoles.map((role) => [role.$id, role]))
+
   const handleTogglePermission = useCallback(
     (member: any, key: string) => async () => {
       const effective = resolveRolePermissions(
         member.role,
         member.permissions,
+        customRoleMap,
       ) as any
       const permissions = {
         ...(member.permissions ?? {}),
@@ -181,7 +226,7 @@ const ManageTeam: NextPageWithLayout = () => {
       })
       if (!payload) void refresh()
     },
-    [request, refresh],
+    [request, refresh, customRoleMap],
   )
 
   const handleRemove = useCallback(
@@ -248,14 +293,17 @@ const ManageTeam: NextPageWithLayout = () => {
                   size="small"
                   label="Role"
                   value={newRole}
-                  onChange={(event) =>
-                    setNewRole(event.target.value as TenantRoleId)
-                  }
+                  onChange={(event) => setNewRole(event.target.value)}
                   sx={{ minWidth: 110 }}
                 >
                   {ROLE_IDS.map((role) => (
                     <MenuItem key={role} value={role}>
                       {TENANT_ROLE_LABELS[role]}
+                    </MenuItem>
+                  ))}
+                  {customRoles.map((role) => (
+                    <MenuItem key={role.$id} value={role.$id}>
+                      {role.name}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -328,7 +376,8 @@ const ManageTeam: NextPageWithLayout = () => {
                             size="small"
                             variant="standard"
                             value={
-                              (member.role as string) in TENANT_ROLE_LABELS
+                              (member.role as string) in TENANT_ROLE_LABELS ||
+                              member.role in customRoleMap
                                 ? member.role
                                 : 'viewer'
                             }
@@ -341,6 +390,11 @@ const ManageTeam: NextPageWithLayout = () => {
                                 {TENANT_ROLE_LABELS[role]}
                               </MenuItem>
                             ))}
+                            {customRoles.map((role) => (
+                              <MenuItem key={role.$id} value={role.$id}>
+                                {role.name}
+                              </MenuItem>
+                            ))}
                           </TextField>
                           <Stack
                             direction="row"
@@ -350,6 +404,7 @@ const ManageTeam: NextPageWithLayout = () => {
                               const effective = resolveRolePermissions(
                                 member.role,
                                 member.permissions,
+                                customRoleMap,
                               ) as any
                               return (
                                 <FormControlLabel
@@ -397,6 +452,171 @@ const ManageTeam: NextPageWithLayout = () => {
               </Typography>
             </Stack>
           </CardDisplay>
+
+          <Divider sx={{ my: 3 }} />
+
+          <CardDisplay
+            header={'Custom roles'}
+            contentGutterX
+            contentGutterY
+            contentBordered="all"
+          >
+            <Stack spacing={1.5}>
+              <Typography variant="body2" color="text.secondary">
+                {'Define named permission sets beyond Admin/Editor/Viewer ' +
+                  'and assign them like any role. Deleting a role drops ' +
+                  'its members to Viewer until reassigned.'}
+              </Typography>
+              {customRoles.map((role) => (
+                <Stack
+                  key={role.$id}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Stack sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>
+                      {role.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {PERMISSIONS.filter(
+                        ({ key }) => role.permissions?.[key],
+                      )
+                        .map(({ label }) => label)
+                        .join(', ') || 'No permissions'}
+                    </Typography>
+                  </Stack>
+                  <Button
+                    size="small"
+                    disabled={!canManage}
+                    onClick={() =>
+                      setRoleEditor({
+                        id: role.$id,
+                        name: role.name ?? '',
+                        permissions: { ...(role.permissions ?? {}) },
+                      })
+                    }
+                  >
+                    {'Edit'}
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={!canManage}
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Delete this role?',
+                        description:
+                          `Members with "${role.name}" drop to Viewer ` +
+                          'until reassigned.',
+                        confirmationText: 'Delete',
+                        confirmationButtonProps: { color: 'error' },
+                      })
+                        .then(() => true)
+                        .catch(() => false)
+                      if (!confirmed) return
+                      const payload = await rolesRequest('DELETE', {
+                        roleId: role.$id,
+                      })
+                      if (payload) void refresh()
+                    }}
+                  >
+                    {'Delete'}
+                  </Button>
+                </Stack>
+              ))}
+              <Button
+                size="small"
+                color="secondary"
+                disabled={!canManage}
+                sx={{ alignSelf: 'flex-start' }}
+                onClick={() =>
+                  setRoleEditor({ id: null, name: '', permissions: {} })
+                }
+              >
+                {'Add custom role'}
+              </Button>
+            </Stack>
+          </CardDisplay>
+
+          <Dialog
+            open={Boolean(roleEditor)}
+            onClose={() => setRoleEditor(null)}
+            maxWidth="xs"
+            fullWidth
+          >
+            <DialogTitle>
+              {roleEditor?.id ? 'Edit role' : 'Add custom role'}
+            </DialogTitle>
+            <DialogContent
+              sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 1 }}
+            >
+              <TextField
+                label="Role name"
+                value={roleEditor?.name ?? ''}
+                onChange={(event) =>
+                  setRoleEditor((previous) =>
+                    previous
+                      ? { ...previous, name: event.target.value }
+                      : previous,
+                  )
+                }
+                size="small"
+                autoFocus
+                sx={{ mt: 1 }}
+              />
+              {PERMISSIONS.map(({ key, label }) => (
+                <FormControlLabel
+                  key={key}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={Boolean(roleEditor?.permissions?.[key])}
+                      onChange={() =>
+                        setRoleEditor((previous) =>
+                          previous
+                            ? {
+                                ...previous,
+                                permissions: {
+                                  ...previous.permissions,
+                                  [key]: !previous.permissions[key],
+                                },
+                              }
+                            : previous,
+                        )
+                      }
+                    />
+                  }
+                  label={label}
+                />
+              ))}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setRoleEditor(null)}>{'Cancel'}</Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                disabled={!roleEditor?.name.trim()}
+                onClick={async () => {
+                  if (!roleEditor) return
+                  const payload = await rolesRequest('POST', {
+                    ...(roleEditor.id ? { roleId: roleEditor.id } : {}),
+                    name: roleEditor.name.trim(),
+                    permissions: roleEditor.permissions,
+                  })
+                  if (!payload) return
+                  setRoleEditor(null)
+                  enqueueSnackbar('Role saved', {
+                    variant: 'success',
+                    persist: false,
+                  })
+                  void refresh()
+                }}
+              >
+                {'Save role'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Container>
       </DashboardLayout>
     </>

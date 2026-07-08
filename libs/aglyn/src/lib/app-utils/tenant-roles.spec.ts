@@ -46,4 +46,26 @@ describe('tenant roles', () => {
       resolveRolePermissions('admin', { manageMembers: false }).manageMembers,
     ).toBe(false)
   })
+
+  it('resolves custom roles from the map, viewer otherwise (AGL-133)', () => {
+    const customRoles = {
+      marketer: {
+        name: 'Marketer',
+        permissions: { publishToCommunity: true, installPlugins: true },
+      },
+    }
+    const resolved = resolveRolePermissions('marketer', null, customRoles)
+    expect(resolved.publishToCommunity).toBe(true)
+    expect(resolved.installPlugins).toBe(true)
+    expect(resolved.createHosts).toBe(false)
+    // Per-user overrides still win over the custom role.
+    expect(
+      resolveRolePermissions('marketer', { installPlugins: false }, customRoles)
+        .installPlugins,
+    ).toBe(false)
+    // Unknown custom id stays least-privilege viewer.
+    expect(
+      resolveRolePermissions('ghost', null, customRoles).publishToCommunity,
+    ).toBe(false)
+  })
 })

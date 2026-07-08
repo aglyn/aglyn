@@ -16,7 +16,9 @@
  */
 
 import {
+  isBuiltInRole,
   resolveRolePermissions,
+  type TenantCustomRole,
   type TenantPermissionSet,
 } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -62,13 +64,33 @@ export async function resolveTenantPermissions(
       return { isOwner: true, ownerUid: uid, permissions: ALL_TRUE }
     }
     const data = membership.data()
+    const ownerUid = membership.ref.parent.parent?.id ?? uid
+    // Custom roles (AGL-133): a non-built-in role id resolves against the
+    // owner's roles collection; missing docs fall back to viewer.
+    let customRoles: Record<string, TenantCustomRole | undefined> | null = null
+    const roleId = data['role']
+    if (roleId && !isBuiltInRole(roleId)) {
+      const roleSnapshot = await firestore
+        .collection('tenants')
+        .doc(ownerUid)
+        .collection('roles')
+        .doc(String(roleId))
+        .get()
+      if (roleSnapshot.exists) {
+        customRoles = { [String(roleId)]: roleSnapshot.data() as any }
+      }
+    }
     // Role defaults + per-user overrides (AGL-120). Members created before
     // roles have no `role` and resolve as viewer + their stored flags —
     // identical effective permissions to the pre-role behavior.
     return {
       isOwner: false,
-      ownerUid: membership.ref.parent.parent?.id ?? uid,
-      permissions: resolveRolePermissions(data['role'], data['permissions']),
+      ownerUid,
+      permissions: resolveRolePermissions(
+        data['role'],
+        data['permissions'],
+        customRoles,
+      ),
     }
   } catch (error) {
     console.error('tenant-permissions resolve failed (failing open)', error)

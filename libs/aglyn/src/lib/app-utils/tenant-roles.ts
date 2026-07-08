@@ -36,6 +36,12 @@ export type TenantPermissionSet = Record<TenantPermissionKey, boolean>
 
 export type TenantRoleId = 'admin' | 'editor' | 'viewer'
 
+/** Owner-defined role at `tenants/{uid}/roles/{id}` (AGL-133). */
+export interface TenantCustomRole {
+  name: string
+  permissions?: Partial<TenantPermissionSet>
+}
+
 export const TENANT_ROLE_LABELS: Record<TenantRoleId, string> = {
   admin: 'Admin',
   editor: 'Editor',
@@ -79,14 +85,34 @@ export const TENANT_ROLE_PERMISSIONS: Record<TenantRoleId, TenantPermissionSet> 
 export function resolveRolePermissions(
   role: string | null | undefined,
   overrides?: Partial<Record<TenantPermissionKey, unknown>> | null,
+  /**
+   * Custom roles (AGL-133), keyed by role id (`tenants/{uid}/roles`). A
+   * non-built-in role id resolves against this map — viewer base with the
+   * custom role's permissions applied; unknown ids stay plain viewer.
+   */
+  customRoles?: Record<string, TenantCustomRole | undefined> | null,
 ): TenantPermissionSet {
-  const base =
-    TENANT_ROLE_PERMISSIONS[(role ?? '') as TenantRoleId] ??
-    TENANT_ROLE_PERMISSIONS.viewer
+  const builtIn = TENANT_ROLE_PERMISSIONS[(role ?? '') as TenantRoleId]
+  let base = builtIn ?? TENANT_ROLE_PERMISSIONS.viewer
+  if (!builtIn) {
+    const custom = customRoles?.[role ?? '']
+    if (custom) {
+      base = { ...TENANT_ROLE_PERMISSIONS.viewer }
+      for (const key of TENANT_PERMISSION_KEYS) {
+        const value = custom.permissions?.[key]
+        if (typeof value === 'boolean') base[key] = value
+      }
+    }
+  }
   const permissions = { ...base }
   for (const key of TENANT_PERMISSION_KEYS) {
     const value = overrides?.[key]
     if (typeof value === 'boolean') permissions[key] = value
   }
   return permissions
+}
+
+/** True for the fixed admin/editor/viewer ids. */
+export function isBuiltInRole(role: string | null | undefined): boolean {
+  return (role ?? '') in TENANT_ROLE_PERMISSIONS
 }

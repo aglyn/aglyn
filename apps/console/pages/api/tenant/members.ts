@@ -27,10 +27,18 @@ import { resolveTenantPermissions } from '../../../utils/server/tenant-permissio
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** Role + per-key overrides (AGL-120): only boolean overrides persist. */
-function sanitizeRole(input: unknown): string {
+/**
+ * Role + per-key overrides (AGL-120): built-ins pass through; custom role
+ * ids (AGL-133) are accepted when the owner's roles collection has them.
+ */
+async function sanitizeRole(
+  input: unknown,
+  rolesRef: FirebaseFirestore.CollectionReference,
+): Promise<string> {
   const role = String(input ?? '')
-  return role in TENANT_ROLE_PERMISSIONS ? role : 'viewer'
+  if (role in TENANT_ROLE_PERMISSIONS) return role
+  if (role && (await rolesRef.doc(role).get()).exists) return role
+  return 'viewer'
 }
 
 function sanitizePermissions(input: unknown) {
@@ -74,6 +82,7 @@ export default async function handler(
     // Tenants are keyed by the owner's uid; only the owner manages seats.
     const tenantRef = firestore.collection('tenants').doc(decoded.uid)
     const membersRef = tenantRef.collection('members')
+    const rolesRef = tenantRef.collection('roles')
 
     if (req.method === 'GET') {
       const snapshot = await membersRef.limit(200).get()
@@ -124,7 +133,7 @@ export default async function handler(
         email,
         status: authUser ? 'active' : 'invited',
         ...(authUser ? { uid: authUser.uid } : {}),
-        role: sanitizeRole(req.body?.role),
+        role: await sanitizeRole(req.body?.role, rolesRef),
         permissions: sanitizePermissions(req.body?.permissions),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
@@ -143,7 +152,7 @@ export default async function handler(
       }
       await membersRef.doc(memberId).update({
         ...(req.body?.role != null
-          ? { role: sanitizeRole(req.body.role) }
+          ? { role: await sanitizeRole(req.body.role, rolesRef) }
           : {}),
         ...(req.body?.permissions != null
           ? { permissions: sanitizePermissions(req.body.permissions) }
