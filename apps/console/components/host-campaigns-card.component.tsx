@@ -27,11 +27,8 @@ import {
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 /**
  * Email campaigns (AGL-161): compose + send to leads or site members via
@@ -45,21 +42,25 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  const { data: campaignDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts', hostId, 'campaigns'),
-      orderBy('sentAt', 'desc'),
-      limit(20),
-    ),
+  const { data: campaignDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'campaigns'),
+        orderBy('sentAt', 'desc'),
+        limit(20),
+      ),
+    [firestore, hostId],
     { idField: '$id' },
   )
 
   // Contact segments (AGL-199) join the built-in audiences.
-  const { data: segmentDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts', hostId, 'contactSegments'),
-      limit(50),
-    ),
+  const { data: segmentDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'contactSegments'),
+        limit(50),
+      ),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>

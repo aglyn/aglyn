@@ -44,13 +44,11 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-} from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 function generateSecret(): string {
   const bytes = new Uint8Array(24)
@@ -82,16 +80,20 @@ export function HostWebhooksCard(props: { hostId: string }) {
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
 
-  const { data: webhookDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
+  const { data: webhookDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: workflowDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+  const { data: workflowDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: host } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: host } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const webhooks = [...(webhookDocs ?? [])]

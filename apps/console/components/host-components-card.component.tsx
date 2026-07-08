@@ -31,7 +31,8 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface HostComponentsCardProps {
   hostId: string
@@ -50,8 +51,10 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { data: componentDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+  const { data: componentDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'components'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const components = [...(componentDocs ?? [])]

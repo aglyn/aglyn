@@ -30,11 +30,12 @@ import {
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore, useFirestoreDocData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import OverlayStatsRow from './overlay-stats-row.component'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 
 export interface PopupCardProps {
@@ -67,8 +68,9 @@ export function PopupCard(props: PopupCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const logActivity = useHostActivityLogger(hostId)
-  const { data: host } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: host } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const entitled = hasEntitlement('marketing-overlays', tenant)

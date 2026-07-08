@@ -33,14 +33,11 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-  useUser,
-} from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { checkTenantSeatQuota } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import useTenantPermissions from '../hooks/use-tenant-permissions'
 
@@ -75,12 +72,14 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const [role, setRole] = useState('editor')
   const [busy, setBusy] = useState(false)
 
-  const { data: host } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: host } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: memberDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'members'), limit(100)),
+  const { data: memberDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'members'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const members = useMemo(

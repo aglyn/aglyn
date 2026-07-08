@@ -35,11 +35,9 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
-import {
-  useFirestore,
-  useFirestoreCollectionData,
-  useFirestoreDocData,
-} from 'reactfire'
+import { useFirestore } from 'reactfire'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 export interface ErrorScreensCardProps {
   hostId: string
@@ -82,12 +80,14 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const { data: host } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: host } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: screenDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+  const { data: screenDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const screens = [...(screenDocs ?? [])]

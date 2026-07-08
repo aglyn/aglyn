@@ -43,9 +43,10 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -98,16 +99,20 @@ export function HostBookings(props: { hostId: string }) {
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
 
-  const { data: serviceDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'services'), limit(100)),
+  const { data: serviceDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'services'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: bookingDocs } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts', hostId, 'bookings'),
-      orderBy('startsAtMs', 'desc'),
-      limit(100),
-    ),
+  const { data: bookingDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'bookings'),
+        orderBy('startsAtMs', 'desc'),
+        limit(100),
+      ),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const services = [...(serviceDocs ?? [])]

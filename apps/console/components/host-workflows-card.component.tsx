@@ -42,9 +42,10 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
   fetchWhereUsed,
@@ -75,16 +76,22 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
 
-  const { data: workflowDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+  const { data: workflowDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: functionDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
+  const { data: functionDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'functions'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: variableDocs } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
+  const { data: variableDocs } = useFirestoreCollection<any>(
+    () =>
+      query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const workflows = [...(workflowDocs ?? [])]

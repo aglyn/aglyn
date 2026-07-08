@@ -21,9 +21,10 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { useFirestore, useFirestoreDocData } from 'reactfire'
+import { useFirestore } from 'reactfire'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 const LOCALE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/
 
@@ -38,8 +39,9 @@ export function LanguagesCard(props: { hostId: string }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { tenant } = useCurrentTenant()
-  const { data: host } = useFirestoreDocData<any>(
-    doc(firestore, 'hosts', hostId),
+  const { data: host } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId),
+    [firestore, hostId],
     { idField: '$id' },
   )
   const [locales, setLocales] = useState('')
