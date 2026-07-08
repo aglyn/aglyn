@@ -82,6 +82,7 @@ import useCurrentTenant from '../../hooks/use-current-tenant'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
+import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaFolderRail } from './media-folder-rail.component'
 
@@ -310,10 +311,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const fetchPage = useCallback(
     async (cursor: QueryDocumentSnapshot | null) => {
-      const snapshot = await getDocs(
-        query(
-          collection(firestore, 'hosts', hostId, 'media'),
-          ...buildConstraints(cursor),
+      const snapshot = await firestoreOneShotRetry(() =>
+        getDocs(
+          query(
+            collection(firestore, 'hosts', hostId, 'media'),
+            ...buildConstraints(cursor),
+          ),
         ),
       )
       return {
@@ -444,10 +447,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     let active = true
     void Promise.all(
       folderList.map((folder) =>
-        getCountFromServer(
-          query(
-            collection(firestore, 'hosts', hostId, 'media'),
-            where('folderId', '==', folder.$id),
+        firestoreOneShotRetry(() =>
+          getCountFromServer(
+            query(
+              collection(firestore, 'hosts', hostId, 'media'),
+              where('folderId', '==', folder.$id),
+            ),
           ),
         )
           .then((snapshot) => [folder.$id, snapshot.data().count] as const)
