@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkQuota, createResourceUid } from '@aglyn/aglyn'
+import {
+  checkQuota,
+  contactMatchesSegment,
+  createResourceUid,
+} from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHash, createHmac } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -77,7 +81,7 @@ export default async function handler(
   if (!hostId || !subject || !body) {
     return res.status(400).json({ error: 'Missing hostId, subject, or body' })
   }
-  if (!['leads', 'members', 'manual'].includes(audience)) {
+  if (!['leads', 'members', 'manual', 'segment'].includes(audience)) {
     return res.status(400).json({ error: 'Unknown audience' })
   }
 
@@ -108,6 +112,29 @@ export default async function handler(
     } else if (audience === 'members') {
       const members = await hostRef.collection('siteMembers').limit(1000).get()
       recipients = members.docs.map((doc) => String(doc.get('email') ?? ''))
+    } else if (audience === 'segment') {
+      // Contact segments (AGL-199): resolve the saved filter against the
+      // contacts collection server-side.
+      const segmentId = String(req.body?.segmentId ?? '')
+      const segmentSnapshot = segmentId
+        ? await hostRef.collection('contactSegments').doc(segmentId).get()
+        : null
+      if (!segmentSnapshot?.exists) {
+        return res.status(400).json({ error: 'Unknown segment' })
+      }
+      const segment = {
+        tags: segmentSnapshot.get('tags') ?? [],
+        sources: segmentSnapshot.get('sources') ?? [],
+      }
+      const contacts = await hostRef.collection('contacts').limit(5000).get()
+      recipients = contacts.docs
+        .filter((doc) =>
+          contactMatchesSegment(
+            { tags: doc.get('tags') ?? [], sources: doc.get('sources') ?? {} },
+            segment,
+          ),
+        )
+        .map((doc) => String(doc.get('email') ?? ''))
     } else {
       recipients = Array.isArray(req.body?.emails)
         ? req.body.emails.map((value: unknown) => String(value))

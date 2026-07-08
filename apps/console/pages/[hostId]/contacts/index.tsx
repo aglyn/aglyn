@@ -17,8 +17,10 @@
 'use client'
 
 import {
+  type ContactSegment,
   type ContactSource,
   checkQuota,
+  contactMatchesSegment,
   type HostContact,
 } from '@aglyn/aglyn'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
@@ -28,6 +30,7 @@ import {
   Alert,
   Button,
   Chip,
+  MenuItem,
   Drawer,
   Stack,
   Table,
@@ -38,7 +41,15 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  limit,
+  query,
+  updateDoc,
+} from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import { useHostId } from '../../../components/host-id-provider'
@@ -88,18 +99,78 @@ const HostContacts: NextPageWithLayout = () => {
   )
   const quota = checkQuota(tenant, 'contactsPerHost', contacts.length)
 
+  // Saved segments (AGL-199): reusable audience filters.
+  const { data: segmentDocs } = useFirestoreCollectionData<any>(
+    query(
+      collection(firestore, 'hosts', hostId, 'contactSegments'),
+      limit(50),
+    ),
+    { idField: '$id' },
+  )
+  const segments = [...(segmentDocs ?? [])].sort((a, b) =>
+    String(a.name ?? '').localeCompare(String(b.name ?? '')),
+  )
+
   const [search, setSearch] = useState('')
+  const [sourceFilter, setSourceFilter] = useState<'' | ContactSource>('')
+  const [tagFilter, setTagFilter] = useState('')
+  const filterSegment: Pick<ContactSegment, 'tags' | 'sources'> = useMemo(
+    () => ({
+      tags: tagFilter
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+      sources: sourceFilter ? [sourceFilter] : [],
+    }),
+    [tagFilter, sourceFilter],
+  )
+  const filterActive = Boolean(
+    filterSegment.tags?.length || filterSegment.sources?.length,
+  )
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return contacts
-    return contacts.filter((contact) =>
-      [contact.email, contact.name, ...(contact.tags ?? [])]
+    return contacts.filter((contact) => {
+      if (!contactMatchesSegment(contact, filterSegment)) return false
+      if (!term) return true
+      return [contact.email, contact.name, ...(contact.tags ?? [])]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
-        .includes(term),
-    )
-  }, [contacts, search])
+        .includes(term)
+    })
+  }, [contacts, search, filterSegment])
+
+  const [segmentName, setSegmentName] = useState('')
+  const handleSaveSegment = useCallback(async () => {
+    const name = segmentName.trim().slice(0, 60)
+    if (!name || !filterActive) return
+    try {
+      await addDoc(collection(firestore, 'hosts', hostId, 'contactSegments'), {
+        name,
+        tags: filterSegment.tags ?? [],
+        sources: filterSegment.sources ?? [],
+        createdAt: new Date(),
+      })
+      setSegmentName('')
+      enqueueSnackbar(
+        `Segment "${name}" saved — usable as a campaign audience`,
+        { variant: 'success', persist: false },
+      )
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [
+    segmentName,
+    filterActive,
+    filterSegment,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+  ])
 
   // Profile drawer with editable tags/notes.
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -192,6 +263,77 @@ const HostContacts: NextPageWithLayout = () => {
                 <Button size="small" onClick={handleExport} disabled={!visible.length}>
                   {'Export CSV'}
                 </Button>
+              </Stack>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+              >
+                <TextField
+                  select
+                  size="small"
+                  label="Source"
+                  value={sourceFilter}
+                  onChange={(event) =>
+                    setSourceFilter(event.target.value as any)
+                  }
+                  sx={{ minWidth: 140 }}
+                >
+                  <MenuItem value="">{'Any source'}</MenuItem>
+                  {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  size="small"
+                  label="Tags"
+                  placeholder="vip, beta"
+                  value={tagFilter}
+                  onChange={(event) => setTagFilter(event.target.value)}
+                  sx={{ minWidth: 160 }}
+                />
+                {filterActive ? (
+                  <>
+                    <TextField
+                      size="small"
+                      label="Segment name"
+                      value={segmentName}
+                      onChange={(event) => setSegmentName(event.target.value)}
+                      sx={{ minWidth: 160 }}
+                    />
+                    <Button
+                      size="small"
+                      disabled={!segmentName.trim()}
+                      onClick={handleSaveSegment}
+                    >
+                      {'Save segment'}
+                    </Button>
+                  </>
+                ) : null}
+                {segments.map((segment: any) => (
+                  <Chip
+                    key={segment.$id}
+                    label={segment.name}
+                    size="small"
+                    onClick={() => {
+                      setTagFilter((segment.tags ?? []).join(', '))
+                      setSourceFilter(segment.sources?.[0] ?? '')
+                    }}
+                    onDelete={() =>
+                      deleteDoc(
+                        doc(
+                          firestore,
+                          'hosts',
+                          hostId,
+                          'contactSegments',
+                          segment.$id,
+                        ),
+                      )
+                    }
+                  />
+                ))}
               </Stack>
               {!quota.allowed ? (
                 <Alert severity="warning">

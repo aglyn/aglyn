@@ -16,6 +16,7 @@
  */
 
 import {
+  contactMatchesSegment,
   CONTACT_INTERACTIONS_CAP,
   extractEmailFromFields,
   mergeContactInteraction,
@@ -78,5 +79,19 @@ describe('contacts (AGL-197)', () => {
       },
     )
     expect(merged.name).toBe('New Name')
+  })
+
+  it('matches segments: AND across kinds, OR within one', () => {
+    const contact = { tags: ['VIP', 'beta'], sources: { form: true as const } }
+    expect(contactMatchesSegment(contact, {})).toBe(true)
+    expect(contactMatchesSegment(contact, { tags: ['vip'] })).toBe(true)
+    expect(contactMatchesSegment(contact, { tags: ['other'] })).toBe(false)
+    expect(contactMatchesSegment(contact, { sources: ['form', 'order'] })).toBe(
+      true,
+    )
+    expect(contactMatchesSegment(contact, { sources: ['order'] })).toBe(false)
+    expect(
+      contactMatchesSegment(contact, { tags: ['vip'], sources: ['order'] }),
+    ).toBe(false)
   })
 })

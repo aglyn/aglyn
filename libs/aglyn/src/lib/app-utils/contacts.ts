@@ -98,3 +98,33 @@ export function mergeContactInteraction(
     ),
   }
 }
+
+/** `hosts/{hostId}/contactSegments/{id}` — a saved audience filter. */
+export interface ContactSegment {
+  name: string
+  /** Match contacts sharing at least one tag (empty = any). */
+  tags?: string[]
+  /** Match contacts with at least one of these sources (empty = any). */
+  sources?: ContactSource[]
+}
+
+/** Segment matching (AGL-199): AND across filter kinds, OR within one. */
+export function contactMatchesSegment(
+  contact: Pick<HostContact, 'tags' | 'sources'>,
+  segment: Pick<ContactSegment, 'tags' | 'sources'>,
+): boolean {
+  if (segment.tags?.length) {
+    const contactTags = new Set(
+      (contact.tags ?? []).map((tag) => tag.toLowerCase()),
+    )
+    if (!segment.tags.some((tag) => contactTags.has(tag.toLowerCase()))) {
+      return false
+    }
+  }
+  if (segment.sources?.length) {
+    if (!segment.sources.some((source) => contact.sources?.[source])) {
+      return false
+    }
+  }
+  return true
+}

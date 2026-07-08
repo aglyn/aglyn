@@ -54,9 +54,21 @@ export function HostCampaignsCard(props: { hostId: string }) {
     { idField: '$id' },
   )
 
+  // Contact segments (AGL-199) join the built-in audiences.
+  const { data: segmentDocs } = useFirestoreCollectionData<any>(
+    query(
+      collection(firestore, 'hosts', hostId, 'contactSegments'),
+      limit(50),
+    ),
+    { idField: '$id' },
+  )
+  const segments = [...(segmentDocs ?? [])].sort((a, b) =>
+    String(a.name ?? '').localeCompare(String(b.name ?? '')),
+  )
+
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
-  const [audience, setAudience] = useState<'leads' | 'members'>('leads')
+  const [audience, setAudience] = useState<string>('leads')
   const [busy, setBusy] = useState(false)
 
   const handleSend = useCallback(async () => {
@@ -65,7 +77,11 @@ export function HostCampaignsCard(props: { hostId: string }) {
       title: 'Send this campaign?',
       description:
         `"${subject.trim()}" goes to every ${
-          audience === 'leads' ? 'lead' : 'site member'
+          audience === 'leads'
+            ? 'lead'
+            : audience === 'members'
+              ? 'site member'
+              : 'contact in the segment'
         } who hasn't unsubscribed.`,
       confirmationText: 'Send',
     })
@@ -85,7 +101,10 @@ export function HostCampaignsCard(props: { hostId: string }) {
           hostId,
           subject: subject.trim(),
           body: body.trim(),
-          audience,
+          audience: audience.startsWith('segment:') ? 'segment' : audience,
+          ...(audience.startsWith('segment:')
+            ? { segmentId: audience.slice('segment:'.length) }
+            : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -144,6 +163,11 @@ export function HostCampaignsCard(props: { hostId: string }) {
           >
             <MenuItem value="leads">{'Leads'}</MenuItem>
             <MenuItem value="members">{'Site members'}</MenuItem>
+            {segments.map((segment: any) => (
+              <MenuItem key={segment.$id} value={`segment:${segment.$id}`}>
+                {`Segment: ${segment.name}`}
+              </MenuItem>
+            ))}
           </TextField>
         </Stack>
         <TextField
