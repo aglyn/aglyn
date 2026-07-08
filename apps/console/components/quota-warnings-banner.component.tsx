@@ -149,6 +149,20 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, plan])
 
+  // Suspension (AGL-202) outranks everything — not dismissible, shown
+  // regardless of plan so pre-billing tenants see it too.
+  if ((tenant as any)?.suspendedAt) {
+    return (
+      <Alert severity="error" sx={{ borderRadius: 0 }}>
+        {'This account is suspended' +
+          ((tenant as any)?.suspendedReason
+            ? ` — ${(tenant as any).suspendedReason}`
+            : '') +
+          '. Your published sites are offline. Contact support to resolve.'}
+      </Alert>
+    )
+  }
+
   if (!plan || dismissed) return null
   const breached = quotas.filter(
     (quota) =>

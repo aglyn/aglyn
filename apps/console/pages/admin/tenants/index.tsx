@@ -132,6 +132,54 @@ const AdminTenants: NextPageWithLayout = () => {
     before: any
   } | null>(null)
 
+  // Suspension (AGL-202): reversible flag; sites 503 within a minute.
+  const [suspender, setSuspender] = useState<{
+    id: string
+    suspended: boolean
+    reason: string
+  } | null>(null)
+  const handleSuspendSave = useCallback(async () => {
+    if (!suspender) return
+    try {
+      const suspending = !suspender.suspended
+      await setDoc(
+        doc(firestore, 'tenants', suspender.id),
+        {
+          suspendedAt: suspending ? Timestamp.now() : deleteField(),
+          suspendedReason: suspending
+            ? suspender.reason.trim().slice(0, 200)
+            : deleteField(),
+          updatedAt: Timestamp.now(),
+        },
+        { merge: true },
+      )
+      await addDoc(collection(firestore, 'adminAudit'), {
+        actorUid: (user as any)?.uid ?? 'unknown',
+        action: suspending ? 'tenant.suspend' : 'tenant.unsuspend',
+        target: `tenants/${suspender.id}`,
+        before: { suspended: suspender.suspended },
+        after: {
+          suspended: suspending,
+          ...(suspending ? { reason: suspender.reason.trim() } : {}),
+        },
+        at: Timestamp.now(),
+      })
+      enqueueSnackbar(
+        suspending
+          ? 'Tenant suspended — sites go offline within a minute (audited)'
+          : 'Tenant unsuspended (audited)',
+        { variant: 'success', persist: false },
+      )
+      setSuspender(null)
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [suspender, firestore, user, enqueueSnackbar])
+
   const handleSave = useCallback(async () => {
     if (!editor) return
     const plan = editor.plan as TenantPlan | ''
@@ -271,6 +319,14 @@ const AdminTenants: NextPageWithLayout = () => {
                               size="small"
                               color={tenant.plan ? 'secondary' : 'default'}
                             />
+                            {tenant.suspendedAt ? (
+                              <Chip
+                                label="suspended"
+                                size="small"
+                                color="error"
+                                sx={{ ml: 1 }}
+                              />
+                            ) : null}
                           </TableCell>
                           <TableCell>
                             {tenant.subscription?.status ?? '--'}
@@ -306,6 +362,19 @@ const AdminTenants: NextPageWithLayout = () => {
                               }
                             >
                               {'Override'}
+                            </Button>
+                            <Button
+                              size="small"
+                              color={tenant.suspendedAt ? 'success' : 'error'}
+                              onClick={() =>
+                                setSuspender({
+                                  id: tenant.$id,
+                                  suspended: Boolean(tenant.suspendedAt),
+                                  reason: tenant.suspendedReason ?? '',
+                                })
+                              }
+                            >
+                              {tenant.suspendedAt ? 'Unsuspend' : 'Suspend'}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -370,6 +439,51 @@ const AdminTenants: NextPageWithLayout = () => {
             onClick={handleSave}
           >
             {'Save (audited)'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(suspender)}
+        onClose={() => setSuspender(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {suspender?.suspended ? 'Unsuspend tenant?' : 'Suspend tenant?'}
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {suspender?.suspended
+              ? 'Their published sites come back online within a minute.'
+              : 'Every published site of this tenant returns 503 within a ' +
+                'minute and the owner sees a suspension banner in the ' +
+                'console. No data is deleted; this is reversible.'}
+          </Typography>
+          {!suspender?.suspended ? (
+            <TextField
+              size="small"
+              label="Reason (shown to the owner)"
+              value={suspender?.reason ?? ''}
+              onChange={(event) =>
+                setSuspender((previous) =>
+                  previous
+                    ? { ...previous, reason: event.target.value }
+                    : previous,
+                )
+              }
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSuspender(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color={suspender?.suspended ? 'success' : 'error'}
+            onClick={handleSuspendSave}
+          >
+            {suspender?.suspended ? 'Unsuspend' : 'Suspend'}
           </Button>
         </DialogActions>
       </Dialog>

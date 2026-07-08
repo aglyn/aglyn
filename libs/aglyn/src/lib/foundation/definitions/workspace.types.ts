@@ -253,6 +253,9 @@ export interface AglynTenant extends AglynDocument {
   seatAddons?: TenantSeatAddons
   stripeCustomerId?: string
   subscription?: TenantSubscription
+  /** Staff suspension (AGL-202): set = all the tenant's sites serve 503. */
+  suspendedAt?: ITimestamp | null
+  suspendedReason?: string
 }
 
 export type ProjectUid = string

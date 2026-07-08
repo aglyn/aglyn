@@ -151,6 +151,23 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     const hostId = hostRes.host.$id
     const pathsByScreenId = hostRes.host.screens || {}
 
+    // Tenant suspension (AGL-202): staff-suspended tenants stop serving
+    // every path immediately (short revalidate bounds the lag). Loaded
+    // once here and reused by the branding/overlay branches below.
+    const tenantRes = await getTenant({ tenantId: hostRes.host.tenantId })
+    if ((tenantRes.tenant as any)?.suspendedAt) {
+      return {
+        props: JSON.parse(
+          JSON.stringify({
+            data: { host: hostRes.host },
+            nodes: null,
+            maintenanceFallback: true,
+          }),
+        ),
+        revalidate: 60,
+      }
+    }
+
     // Maintenance mode (AGL-131): every path renders the assigned 503
     // screen (noindex) or a built-in notice; short revalidate so flipping
     // the toggle recovers quickly.
@@ -372,7 +389,6 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     // in the static HTML — the client unlocks via /api/protection/unlock.
     const protection = (screenRes.screen as any)?.protection
     if (protection?.passwordHash) {
-      const tenantRes = await getTenant({ tenantId: hostRes.host.tenantId })
       return {
         props: JSON.parse(
           JSON.stringify({
@@ -448,7 +464,6 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     // Free-tier branding (AGL-69): shown only once the owning tenant has an
     // explicit plan without the removeBranding feature; pre-billing tenants
     // (no plan) and lookup failures render without the badge.
-    const tenantRes = await getTenant({ tenantId: hostRes.host.tenantId })
     const showBranding = Boolean(
       tenantRes.tenant?.plan &&
         !Aglyn.resolveTenantEntitlements(tenantRes.tenant).features
