@@ -55,6 +55,7 @@ export const PLAN_ENTITLEMENTS: Record<
     functionsPerHost: 1,
     workflowsPerHost: 0,
     workflowRunsPerMonth: 0,
+    servicesPerHost: 0,
     datasetsPerHost: 0,
     maxDatasetsPerHost: 0,
     recordsPerDataset: 0,
@@ -69,6 +70,7 @@ export const PLAN_ENTITLEMENTS: Record<
       workflows: false,
       dataStore: false,
       videoMedia: false,
+      bookings: false,
     },
   },
   starter: {
@@ -87,6 +89,7 @@ export const PLAN_ENTITLEMENTS: Record<
     functionsPerHost: 10,
     workflowsPerHost: 3,
     workflowRunsPerMonth: 500,
+    servicesPerHost: 1,
     datasetsPerHost: 1,
     maxDatasetsPerHost: 3,
     recordsPerDataset: 1000,
@@ -101,6 +104,7 @@ export const PLAN_ENTITLEMENTS: Record<
       workflows: true,
       dataStore: true,
       videoMedia: false,
+      bookings: true,
     },
   },
   pro: {
@@ -119,6 +123,7 @@ export const PLAN_ENTITLEMENTS: Record<
     functionsPerHost: 50,
     workflowsPerHost: 25,
     workflowRunsPerMonth: 5000,
+    servicesPerHost: UNLIMITED,
     datasetsPerHost: 10,
     maxDatasetsPerHost: 25,
     recordsPerDataset: 10000,
@@ -133,6 +138,7 @@ export const PLAN_ENTITLEMENTS: Record<
       workflows: true,
       dataStore: true,
       videoMedia: true,
+      bookings: true,
     },
   },
   business: {
@@ -151,6 +157,7 @@ export const PLAN_ENTITLEMENTS: Record<
     functionsPerHost: 250,
     workflowsPerHost: 100,
     workflowRunsPerMonth: 50000,
+    servicesPerHost: UNLIMITED,
     datasetsPerHost: 50,
     maxDatasetsPerHost: 100,
     recordsPerDataset: 100000,
@@ -165,6 +172,7 @@ export const PLAN_ENTITLEMENTS: Record<
       workflows: true,
       dataStore: true,
       videoMedia: true,
+      bookings: true,
     },
   },
 }

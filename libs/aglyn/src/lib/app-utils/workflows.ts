@@ -41,6 +41,7 @@ export const HOST_EVENT_TYPES = [
   'memberSignIn',
   'memberSignOut',
   'lead',
+  'booking',
 ] as const
 
 export type HostEventType = (typeof HOST_EVENT_TYPES)[number]
