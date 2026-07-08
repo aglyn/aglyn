@@ -21,23 +21,34 @@ import {
   resolveNodesBindings,
 } from './variables'
 
+// Id-keyed lookups (AGL-194): map keys are doc ids; names live on the
+// values and only matter for expression scopes.
 const variables = {
-  Message: { name: 'Message', type: 'text', value: 'Hello world' },
-  count: { name: 'count', type: 'number', value: '42' },
-  live: { name: 'live', type: 'boolean', value: 'true' },
-  tags: { name: 'tags', type: 'collection', value: '["a","b"]' },
-  meta: { name: 'meta', type: 'dictionary', value: '{"k":"v"}' },
-  launch: { name: 'launch', type: 'date', value: '2026-07-04' },
+  idMessage01: { name: 'Message', type: 'text', value: 'Hello world' },
+  idCount0002: { name: 'count', type: 'number', value: '42' },
+  idLive00003: { name: 'live', type: 'boolean', value: 'true' },
+  idTags00004: { name: 'tags', type: 'collection', value: '["a","b"]' },
+  idMeta00005: { name: 'meta', type: 'dictionary', value: '{"k":"v"}' },
+  idLaunch006: { name: 'launch', type: 'date', value: '2026-07-04' },
 } as const
 
 describe('resolveBindings', () => {
   it('replaces known tokens and formats per type', () => {
     expect(
-      resolveBindings('{{Message}} x{{count}} live={{live}}', variables as any),
+      resolveBindings(
+        '{{var:idMessage01}} x{{var:idCount0002}} live={{var:idLive00003}}',
+        variables as any,
+      ),
     ).toBe('Hello world x42 live=true')
-    expect(resolveBindings('{{ tags }}', variables as any)).toBe('a, b')
-    expect(resolveBindings('{{meta}}', variables as any)).toBe('k: v')
-    expect(resolveBindings('{{launch}}', variables as any)).toContain('2026')
+    expect(resolveBindings('{{var:idTags00004}}', variables as any)).toBe(
+      'a, b',
+    )
+    expect(resolveBindings('{{var:idMeta00005}}', variables as any)).toBe(
+      'k: v',
+    )
+    expect(
+      resolveBindings('{{var:idLaunch006}}', variables as any),
+    ).toContain('2026')
   })
 
   it('keeps unknown tokens literal', () => {
@@ -118,7 +129,10 @@ describe('attachFunctionDefinitions', () => {
 describe('resolveNodesBindings', () => {
   it('rewrites string props only and preserves untouched nodes', () => {
     const nodes = {
-      a: { $id: 'a', props: { children: 'Hi {{Message}}', sx: { m: 1 } } },
+      a: {
+        $id: 'a',
+        props: { children: 'Hi {{var:idMessage01}}', sx: { m: 1 } },
+      },
       b: { $id: 'b', props: { children: 'static' } },
       c: { $id: 'c' },
     }

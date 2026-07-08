@@ -181,35 +181,6 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!draft || !validName || nameTaken) return
-    // Rename safety (AGL-187): id tokens survive a rename, but dependents
-    // still holding legacy {{oldName}} tokens break — warn hard first.
-    const original = draft.id
-      ? variables.find((variable: any) => variable.$id === draft.id)
-      : null
-    if (original && original.name && original.name !== draft.name.trim()) {
-      const scan = await fetchWhereUsed(user as any, {
-        hostId,
-        kind: 'variable',
-        id: draft.id as string,
-        name: original.name,
-      })
-      if (scan.legacyCount > 0) {
-        const proceed = await confirm({
-          title: `Rename "${original.name}"?`,
-          description:
-            `${scan.legacyCount} place${scan.legacyCount === 1 ? '' : 's'} ` +
-            `(${summarizeDependents(scan)}) still reference this variable ` +
-            `by its old name and will stop resolving after the rename. ` +
-            'Re-save those screens in the designer to upgrade their ' +
-            'references first, or continue anyway.',
-          confirmationText: 'Rename anyway',
-          confirmationButtonProps: { color: 'warning' },
-        })
-          .then(() => true)
-          .catch(() => false)
-        if (!proceed) return
-      }
-    }
     try {
       const id = draft.id ?? createResourceUid()
       await setDoc(
@@ -236,17 +207,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
         allowDuplicate: true,
       })
     }
-  }, [
-    draft,
-    validName,
-    nameTaken,
-    variables,
-    user,
-    confirm,
-    firestore,
-    hostId,
-    enqueueSnackbar,
-  ])
+  }, [draft, validName, nameTaken, firestore, hostId, enqueueSnackbar])
 
   const handleShowUsage = useCallback(
     (variable: any) => async () => {

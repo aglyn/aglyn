@@ -26,8 +26,8 @@
  * - legacy name tokens: `{{name}}` and `{{fn:name(args)}}` — resolved as a
  *   fallback until AGL-188 migrates stored content.
  *
- * Resolution maps are therefore double-keyed (doc id AND name → same doc);
- * id entries are written last so an id match wins if the two ever collide.
+ * Resolution maps are id-keyed (AGL-194); the editor keeps name-capable
+ * lookups only for typed-name normalization and friendly display.
  */
 
 /** Firestore doc ids and legacy binding names both fit this shape. */
@@ -66,17 +66,15 @@ export function formatFunctionIdToken(
 }
 
 /**
- * Double-keys resource docs by id and name so one map serves both token
- * generations. Name entries are written first; id entries last, so an id
- * lookup wins on a (pathological) name/id collision.
+ * Keys resource docs by doc id — the only key resolution uses since the
+ * legacy name fallback retired (AGL-194). Editor-side lookups that need
+ * name access (typed-name normalization, friendly display) read the
+ * `name` field off the values instead of relying on map keys.
  */
-export function keyByIdAndName<T extends { name?: string }>(
+export function keyById<T extends { name?: string }>(
   docs: Array<T & { id: string }>,
 ): Record<string, T> {
   const map: Record<string, T> = {}
-  for (const { id: _id, ...doc } of docs) {
-    if (doc.name) map[doc.name] = doc as unknown as T
-  }
   for (const { id, ...doc } of docs) {
     map[id] = doc as unknown as T
   }

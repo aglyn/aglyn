@@ -19,7 +19,7 @@ import {
   displayBindingTokens,
   formatFunctionIdToken,
   formatVariableIdToken,
-  keyByIdAndName,
+  keyById,
   MISSING_BINDING_LABEL,
   nodesReferenceBinding,
   normalizeBindingTokens,
@@ -32,7 +32,7 @@ const docs: Array<HostVariable & { id: string }> = [
   { id: 'aB3xK9m2Qw', name: 'greeting', type: 'text', value: 'Hello' },
   { id: '7Zt-pL_4Yc', name: 'count', type: 'number', value: '42' },
 ]
-const variables = keyByIdAndName(docs)
+const variables = keyById(docs)
 
 describe('binding token grammar (AGL-185)', () => {
   it('formats picker tokens', () => {
@@ -42,19 +42,11 @@ describe('binding token grammar (AGL-185)', () => {
     )
   })
 
-  it('keyByIdAndName double-keys docs with id winning collisions', () => {
-    expect(variables['greeting']).toEqual(
-      expect.objectContaining({ name: 'greeting' }),
-    )
+  it('keyById keys docs by id only (AGL-194)', () => {
     expect(variables['aB3xK9m2Qw']).toEqual(
       expect.objectContaining({ name: 'greeting' }),
     )
-    // A doc whose id equals another doc's name: the id entry wins.
-    const collided = keyByIdAndName([
-      { id: 'winner', name: 'other', type: 'text', value: 'by-name' },
-      { id: 'x1', name: 'winner', type: 'text', value: 'by-id' },
-    ] as Array<HostVariable & { id: string }>)
-    expect(collided['winner'].value).toBe('by-name')
+    expect(variables['greeting']).toBeUndefined()
   })
 })
 
@@ -65,15 +57,15 @@ describe('resolveBindings id tokens (AGL-185)', () => {
   })
 
   it('keeps resolving id tokens after a rename (the point of AGL-185)', () => {
-    const renamed = keyByIdAndName(
+    const renamed = keyById(
       docs.map((doc) =>
         doc.id === 'aB3xK9m2Qw' ? { ...doc, name: 'salutation' } : doc,
       ),
     )
-    // Id token unaffected by the rename; the old name token goes literal.
+    // Id token unaffected; bare-name tokens are plain text (AGL-194).
     expect(resolveBindings('{{var:aB3xK9m2Qw}}', renamed)).toBe('Hello')
     expect(resolveBindings('{{greeting}}', renamed)).toBe('{{greeting}}')
-    expect(resolveBindings('{{salutation}}', renamed)).toBe('Hello')
+    expect(resolveBindings('{{salutation}}', renamed)).toBe('{{salutation}}')
   })
 
   it('renders unknown id tokens as empty (AGL-186 — ids never leak)', () => {
@@ -94,20 +86,25 @@ describe('resolveBindings id tokens (AGL-185)', () => {
       ],
       returnValue: 'P2',
     }
-    const functions = keyByIdAndName([{ id: '9fnAbC12Xy', ...definition }])
+    const functions = keyById([{ id: '9fnAbC12Xy', ...definition }])
     expect(
       resolveBindings('{{fn:9fnAbC12Xy(21)}}', variables, functions as any),
     ).toBe('42')
-    // Legacy name form still resolves through the same map.
+    // Name-form function refs no longer resolve (AGL-194).
     expect(
       resolveBindings('{{fn:Double(5)}}', variables, functions as any),
-    ).toBe('10')
+    ).toBe('{{fn:Double(5)}}')
+    // Function args still reference variables by NAME (scope keys by
+    // doc name even though the map is id-keyed).
+    expect(
+      resolveBindings('{{fn:9fnAbC12Xy(count)}}', variables, functions as any),
+    ).toBe('84')
   })
 
-  it('mixes legacy and id tokens in one string', () => {
+  it('leaves bare-name strings as plain text beside id tokens', () => {
     expect(
       resolveBindings('{{greeting}} / {{var:7Zt-pL_4Yc}}', variables),
-    ).toBe('Hello / 42')
+    ).toBe('{{greeting}} / 42')
   })
 })
 

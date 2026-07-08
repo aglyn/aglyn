@@ -70,9 +70,10 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
         token: formatFunctionIdToken(definition.$id, parameters),
       })
     }
-    // Live canvas resolution (AGL-97): maps for resolveBindings, keyed by
-    // name (legacy {{name}} tokens) and doc id ({{var:id}}, AGL-185) — id
-    // entries last so an id match wins on collision.
+    // Live canvas resolution (AGL-97): id keys serve resolveBindings;
+    // name keys stay ONLY for save-time typed-name normalization
+    // (normalizeBindingTokens looks names up as map keys) — the retired
+    // legacy pass (AGL-194) no longer reads them at render.
     const variables: Record<string, any> = {}
     for (const variable of variableDocs ?? []) {
       if (variable.deletedAt || !variable.name) continue

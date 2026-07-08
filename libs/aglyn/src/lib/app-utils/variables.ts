@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-// Token grammar shared with the picker/besigner (AGL-185):
-// NAME_TOKEN_PATTERN is the legacy `{{name}}` form; the id forms resolve
-// through the same maps, which are double-keyed by id and name.
+// Token grammar shared with the picker/besigner (AGL-185/194): id-form
+// tokens only — legacy name resolution retired after the production
+// content migration ran clean.
 import {
   FUNCTION_TOKEN_PATTERN,
-  NAME_TOKEN_PATTERN,
   VARIABLE_ID_TOKEN_PATTERN,
 } from './binding-tokens'
 import {
@@ -122,28 +121,35 @@ export function formatVariableValue(variable: HostVariable): string {
 /** A function definition lookup keyed by function name (AGL-93). */
 export type HostFunctionLookup = Record<string, HostFunction>
 
-/** Variable values as an expression scope (numbers stay numeric). */
+/**
+ * Variable values as an expression scope (numbers stay numeric). Keyed by
+ * each doc's NAME regardless of how the lookup map is keyed (AGL-194:
+ * maps are id-keyed now, but expressions reference variables by name).
+ */
 function variableScope(
   variables: Record<string, HostVariable>,
 ): Record<string, number | string | boolean> {
   const scope: Record<string, number | string | boolean> = {}
-  for (const [name, variable] of Object.entries(variables)) {
-    if (variable.type === 'number') scope[name] = Number(variable.value ?? 0)
-    else if (variable.type === 'boolean') scope[name] = variable.value === 'true'
-    else scope[name] = variable.value ?? ''
+  for (const variable of Object.values(variables)) {
+    if (!variable?.name) continue
+    if (variable.type === 'number') {
+      scope[variable.name] = Number(variable.value ?? 0)
+    } else if (variable.type === 'boolean') {
+      scope[variable.name] = variable.value === 'true'
+    } else {
+      scope[variable.name] = variable.value ?? ''
+    }
   }
   return scope
 }
 
 /**
- * Replaces binding tokens with values (AGL-91/93/185): id forms
- * `{{var:id}}` / `{{fn:id(args)}}` and legacy `{{name}}` /
- * `{{fn:name(args)}}` resolve through the same lookup maps — suppliers
- * double-key them by doc id and name (see `keyByIdAndName`), so a rename
- * only changes which *legacy* tokens still match. Function args are
- * expressions over literals and variable names. Unknown refs and failed
- * runs keep the literal token so problems stay visible instead of
- * vanishing silently.
+ * Replaces binding tokens with values (AGL-91/93/185/194): id forms
+ * `{{var:id}}` / `{{fn:id(args)}}` resolve through id-keyed lookup maps.
+ * Function args are expressions over literals and variable NAMES (the
+ * scope keys by each doc's name). Unknown function refs keep the literal
+ * token; unknown variable ids render empty; bare `{{name}}` strings are
+ * plain text since the legacy fallback retired.
  */
 export function resolveBindings(
   text: string,
@@ -182,10 +188,11 @@ export function resolveBindings(
       }
     },
   )
-  return withFunctions.replace(NAME_TOKEN_PATTERN, (token, name) => {
-    const variable = variables[name]
-    return variable ? formatVariableValue(variable) : token
-  })
+  // Legacy {{name}} resolution retired (AGL-194): the production content
+  // migration ran clean, so bare-name tokens are plain text now. Typing
+  // them in the editor still works — save-time normalization converts
+  // known names to id tokens before they persist.
+  return withFunctions
 }
 
 /** Fast pre-check so binding-free content skips the walk entirely. */

@@ -19,11 +19,10 @@ import type * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
- * Fetches the host's variables keyed by binding name AND doc id (AGL-91,
- * AGL-185): legacy `{{name}}` tokens hit the name key, rename-safe
- * `{{var:id}}` tokens hit the id key. Id entries are written last so an
- * id match wins on collision. Fail-open: on error an empty map is
- * returned and tokens render literally.
+ * Fetches the host's variables keyed by doc id (AGL-185/194) for
+ * `{{var:id}}` tokens; expression scopes read names off the values.
+ * Fail-open: on error an empty map is returned and tokens render
+ * literally/empty.
  */
 export async function getVariables(options: {
   hostId: string
@@ -38,12 +37,6 @@ export async function getVariables(options: {
       .collection('variables')
       .limit(100)
       .get()
-    for (const docSnapshot of snapshot.docs) {
-      const data = docSnapshot.data() as Aglyn.HostVariable
-      if (data?.name && !((data as any).deletedAt)) {
-        variables[data.name] = data
-      }
-    }
     for (const docSnapshot of snapshot.docs) {
       const data = docSnapshot.data() as Aglyn.HostVariable
       if (data?.name && !((data as any).deletedAt)) {
@@ -85,8 +78,7 @@ export async function getFunctions(options: {
           operations: data.operations ?? [],
           ...(data.returnValue && { returnValue: data.returnValue }),
         }
-        // Keyed by name (legacy tokens) and doc id ({{fn:id(...)}}, AGL-185).
-        functions[data.name] = definition
+        // Keyed by doc id only ({{fn:id(...)}}, AGL-185/194).
         functions[docSnapshot.id] = definition
       }
     }
