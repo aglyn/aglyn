@@ -41,6 +41,7 @@ import AuthenticatedLayout from '../../../components/layouts/authenticated.layou
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import CustomDomainCard from '../../../components/custom-domain-card.component'
+import FaviconCard from '../../../components/favicon-card.component'
 import NotFoundScreenCard from '../../../components/not-found-screen-card.component'
 import ThemeEditor from '../../../components/theme-editor/theme-editor.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
@@ -457,6 +458,11 @@ const HostSetup: NextPageWithLayout = (props) => {
                           {schema.id === 'hostDetails' ? (
                             <div style={{ marginTop: 24 }}>
                               <NotFoundScreenCard hostId={hostId} />
+                            </div>
+                          ) : null}
+                          {schema.id === 'hostSeo' ? (
+                            <div style={{ marginTop: 24 }}>
+                              <FaviconCard hostId={hostId} />
                             </div>
                           ) : null}
                         </TabPanel>

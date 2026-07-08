@@ -123,6 +123,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const [search, setSearch] = useState('')
   const [folderFilter, setFolderFilter] = useState('')
   const [tagFilter, setTagFilter] = useState('')
+  // Sorting + type/date/size filters (AGL-134).
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'size'>(
+    'newest',
+  )
+  const [typeFilter, setTypeFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
+  const [sizeFilter, setSizeFilter] = useState('')
   const folders = useMemo(
     () =>
       [...new Set(items.map((item: any) => item.folder).filter(Boolean))].sort(),
@@ -135,9 +142,28 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   )
   const visibleItems = useMemo(() => {
     const term = search.trim().toLowerCase()
-    return items.filter((item: any) => {
+    const now = Date.now() / 1000
+    const filtered = items.filter((item: any) => {
       if (folderFilter && item.folder !== folderFilter) return false
       if (tagFilter && !(item.tags ?? []).includes(tagFilter)) return false
+      const contentType = String(item.contentType ?? '')
+      if (typeFilter === 'image' && !contentType.startsWith('image/')) {
+        return false
+      }
+      if (typeFilter === 'video' && !contentType.startsWith('video/')) {
+        return false
+      }
+      if (typeFilter === 'pdf' && contentType !== 'application/pdf') {
+        return false
+      }
+      const createdSeconds = item.createdAt?.seconds ?? 0
+      if (dateFilter === '7d' && now - createdSeconds > 7 * 86400) return false
+      if (dateFilter === '30d' && now - createdSeconds > 30 * 86400) {
+        return false
+      }
+      const sizeBytes = item.sizeBytes ?? 0
+      if (sizeFilter === '1mb' && sizeBytes < 1024 * 1024) return false
+      if (sizeFilter === '5mb' && sizeBytes < 5 * 1024 * 1024) return false
       if (!term) return true
       const haystack = [
         item.fileName,
@@ -151,7 +177,26 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         .toLowerCase()
       return haystack.includes(term)
     })
-  }, [items, search, folderFilter, tagFilter])
+    return [...filtered].sort((a: any, b: any) => {
+      if (sortBy === 'name') {
+        return String(a.fileName ?? '').localeCompare(String(b.fileName ?? ''))
+      }
+      if (sortBy === 'size') return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0)
+      if (sortBy === 'oldest') {
+        return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)
+      }
+      return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+    })
+  }, [
+    items,
+    search,
+    folderFilter,
+    tagFilter,
+    typeFilter,
+    dateFilter,
+    sizeFilter,
+    sortBy,
+  ])
 
   // Metadata editor (folder, tags, alt text, description) — metadata lives
   // on the Firestore mirror doc, so host admins edit it client-side.
@@ -363,6 +408,56 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               {folder}
             </MenuItem>
           ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Type"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+          sx={{ minWidth: 110 }}
+        >
+          <MenuItem value="">{'All types'}</MenuItem>
+          <MenuItem value="image">{'Images'}</MenuItem>
+          <MenuItem value="video">{'Video'}</MenuItem>
+          <MenuItem value="pdf">{'PDF'}</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Uploaded"
+          value={dateFilter}
+          onChange={(event) => setDateFilter(event.target.value)}
+          sx={{ minWidth: 120 }}
+        >
+          <MenuItem value="">{'Any time'}</MenuItem>
+          <MenuItem value="7d">{'Last 7 days'}</MenuItem>
+          <MenuItem value="30d">{'Last 30 days'}</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Size"
+          value={sizeFilter}
+          onChange={(event) => setSizeFilter(event.target.value)}
+          sx={{ minWidth: 110 }}
+        >
+          <MenuItem value="">{'Any size'}</MenuItem>
+          <MenuItem value="1mb">{'Over 1 MB'}</MenuItem>
+          <MenuItem value="5mb">{'Over 5 MB'}</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Sort"
+          value={sortBy}
+          onChange={(event) => setSortBy(event.target.value as any)}
+          sx={{ minWidth: 120 }}
+        >
+          <MenuItem value="newest">{'Newest'}</MenuItem>
+          <MenuItem value="oldest">{'Oldest'}</MenuItem>
+          <MenuItem value="name">{'Name'}</MenuItem>
+          <MenuItem value="size">{'Largest'}</MenuItem>
         </TextField>
         {tags.length ? (
           <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
