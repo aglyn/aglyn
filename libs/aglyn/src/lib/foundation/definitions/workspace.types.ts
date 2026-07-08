@@ -137,6 +137,8 @@ export interface TenantEntitlements {
   workflowRunsPerMonth?: number
   /** Dynamic data caps (AGL-99/102). */
   datasetsPerHost?: number
+  /** Hard dataset cap incl. addons (AGL-132); beyond it, upgrade. */
+  maxDatasetsPerHost?: number
   recordsPerDataset?: number
   features?: TenantFeatureFlags
 }
@@ -151,6 +153,8 @@ export interface TenantSeatAddons {
   managers?: number
   /** Extra host-member seats (applies per host). */
   members?: number
+  /** Extra datasets per host (AGL-132); billed monthly per dataset. */
+  datasets?: number
 }
 
 export interface TenantSubscription {

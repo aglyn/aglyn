@@ -56,6 +56,7 @@ export const PLAN_ENTITLEMENTS: Record<
     workflowsPerHost: 0,
     workflowRunsPerMonth: 0,
     datasetsPerHost: 0,
+    maxDatasetsPerHost: 0,
     recordsPerDataset: 0,
     features: {
       versioning: false,
@@ -87,6 +88,7 @@ export const PLAN_ENTITLEMENTS: Record<
     workflowsPerHost: 3,
     workflowRunsPerMonth: 500,
     datasetsPerHost: 1,
+    maxDatasetsPerHost: 3,
     recordsPerDataset: 1000,
     features: {
       versioning: false,
@@ -118,6 +120,7 @@ export const PLAN_ENTITLEMENTS: Record<
     workflowsPerHost: 25,
     workflowRunsPerMonth: 5000,
     datasetsPerHost: 10,
+    maxDatasetsPerHost: 25,
     recordsPerDataset: 10000,
     features: {
       versioning: true,
@@ -149,6 +152,7 @@ export const PLAN_ENTITLEMENTS: Record<
     workflowsPerHost: 100,
     workflowRunsPerMonth: 50000,
     datasetsPerHost: 50,
+    maxDatasetsPerHost: 100,
     recordsPerDataset: 100000,
     features: {
       versioning: true,
@@ -183,6 +187,11 @@ export interface PlanPricing {
    * null when the plan cannot buy extra member seats.
    */
   extraMemberMonthlyUsd: number | null
+  /**
+   * Monthly price per dataset beyond `datasetsPerHost` (AGL-132); null
+   * when the plan cannot buy extra datasets.
+   */
+  extraDatasetMonthlyUsd: number | null
 }
 
 /**
@@ -196,24 +205,28 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraHostMonthlyUsd: null,
     extraSeatMonthlyUsd: null,
     extraMemberMonthlyUsd: null,
+    extraDatasetMonthlyUsd: null,
   },
   starter: {
     basePriceMonthlyUsd: 19,
     extraHostMonthlyUsd: 10,
     extraSeatMonthlyUsd: 5,
     extraMemberMonthlyUsd: 3,
+    extraDatasetMonthlyUsd: 2,
   },
   pro: {
     basePriceMonthlyUsd: 49,
     extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 4,
     extraMemberMonthlyUsd: 2,
+    extraDatasetMonthlyUsd: 2,
   },
   business: {
     basePriceMonthlyUsd: 149,
     extraHostMonthlyUsd: 5,
     extraSeatMonthlyUsd: 3,
     extraMemberMonthlyUsd: 1,
+    extraDatasetMonthlyUsd: 1,
   },
 }
 
@@ -332,5 +345,48 @@ export function checkQuota(
     allowed: currentUsage < limit,
     limit,
     remaining: Math.max(0, limit - currentUsage),
+  }
+}
+
+export interface DatasetQuotaResult {
+  /** False once usage meets the effective limit (included + purchased). */
+  allowed: boolean
+  /** Effective dataset limit: included + purchased, clamped to the max. */
+  limit: number
+  remaining: number
+  included: number
+  purchased: number
+  maxDatasets: number
+  /** True when addons cannot raise the limit — upgrade instead. */
+  upgradeRequired: boolean
+  /** Monthly price per extra dataset; null when the plan sells none. */
+  addonPriceUsd: number | null
+}
+
+/**
+ * Dataset quota check (AGL-132), mirroring `checkSeatQuota`: tenants can
+ * buy addon datasets (`tenant.seatAddons.datasets`, applied per host) up
+ * to the plan's hard max; beyond the max the only path is upgrading.
+ */
+export function checkDatasetQuota(
+  tenant: Partial<AglynTenant> | null | undefined,
+  currentUsage: number,
+): DatasetQuotaResult {
+  const entitlements = resolveTenantEntitlements(tenant)
+  const pricing = PLAN_PRICING[resolvePlan(tenant)]
+  const included = entitlements.datasetsPerHost
+  const maxDatasets = entitlements.maxDatasetsPerHost
+  const addonPriceUsd = pricing.extraDatasetMonthlyUsd
+  const purchased = Math.max(0, tenant?.seatAddons?.datasets ?? 0)
+  const limit = Math.min(included + purchased, maxDatasets)
+  return {
+    allowed: currentUsage < limit,
+    limit,
+    remaining: Math.max(0, limit - currentUsage),
+    included,
+    purchased,
+    maxDatasets,
+    upgradeRequired: addonPriceUsd === null || limit >= maxDatasets,
+    addonPriceUsd,
   }
 }

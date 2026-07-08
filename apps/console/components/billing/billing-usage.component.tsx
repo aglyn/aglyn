@@ -18,6 +18,7 @@
 
 import {
   type AglynTenant,
+  checkDatasetQuota,
   checkSeatQuota,
   resolveTenantEntitlements,
   UNLIMITED,
@@ -102,6 +103,7 @@ function HostUsageMeters(props: {
     members: number | null
     storageMb: number | null
     workflowRuns: number | null
+    datasets: number | null
   }>({
     screens: null,
     layouts: null,
@@ -110,6 +112,7 @@ function HostUsageMeters(props: {
     members: null,
     storageMb: null,
     workflowRuns: null,
+    datasets: null,
   })
   const [usage, setUsage] = useState<{
     siteSizeMb: number | null
@@ -134,6 +137,9 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'functions'),
       ).catch(() => null),
+      getCountFromServer(
+        collection(firestore, 'hosts', host.$id, 'datasets'),
+      ).catch(() => null),
       // Member seats (AGL-107/119) — the managed subcollection, not the
       // legacy admins map.
       getCountFromServer(
@@ -147,7 +153,7 @@ function HostUsageMeters(props: {
       getDoc(
         doc(firestore, 'hosts', host.$id, 'counters', 'workflowRuns'),
       ).catch(() => null),
-    ]).then(([screens, layouts, variables, functions, members, media, runs]) => {
+    ]).then(([screens, layouts, variables, functions, datasets, members, media, runs]) => {
       if (!active) return
       const bytes = media?.exists() ? (media.data()?.bytes ?? 0) : 0
       const monthKey = new Date().toISOString().slice(0, 7)
@@ -158,6 +164,7 @@ function HostUsageMeters(props: {
         functions: functions?.data().count ?? null,
         members: members?.data().count ?? null,
         storageMb: Math.round((bytes / (1024 * 1024)) * 10) / 10,
+        datasets: datasets?.data().count ?? null,
         workflowRuns: runs?.exists()
           ? Number(runs.data()?.[monthKey] ?? 0)
           : 0,
@@ -246,6 +253,11 @@ function HostUsageMeters(props: {
         label="Workflow runs (this month)"
         used={counts.workflowRuns}
         limit={entitlements.workflowRunsPerMonth}
+      />
+      <UsageMeter
+        label="Datasets"
+        used={counts.datasets}
+        limit={checkDatasetQuota(tenant, 0).limit}
       />
       <UsageMeter
         label="Total site size"

@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  checkDatasetQuota,
   createResourceUid,
   parseDatasetFields,
   sanitizeRecordValues,
@@ -123,10 +124,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         { variant: 'warning', persist: false },
       )
     }
-    const quota = checkTenantQuota(tenant, 'datasetsPerHost', datasets.length)
+    // Addon-aware quota (AGL-132): purchased extra datasets raise the
+    // limit up to the plan's hard max; beyond that only an upgrade helps.
+    const quota = checkDatasetQuota(tenant as any, datasets.length)
     if (!quota.allowed) {
       return enqueueSnackbar(
-        `Dataset limit reached (${quota.limit}) — see Billing to upgrade`,
+        quota.upgradeRequired
+          ? `Dataset limit reached (${quota.limit}) — upgrade in Billing`
+          : `Dataset limit reached (${quota.limit}) — add extra datasets ` +
+            `for $${quota.addonPriceUsd}/mo each or upgrade in Billing`,
         { variant: 'warning', persist: false },
       )
     }

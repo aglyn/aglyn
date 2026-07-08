@@ -16,6 +16,7 @@
  */
 
 import {
+  checkDatasetQuota,
   checkEntitlement,
   checkQuota,
   checkSeatQuota,
@@ -113,24 +114,28 @@ describe('plan entitlements', () => {
         extraHostMonthlyUsd: null,
         extraSeatMonthlyUsd: null,
         extraMemberMonthlyUsd: null,
+        extraDatasetMonthlyUsd: null,
       },
       starter: {
         basePriceMonthlyUsd: 19,
         extraHostMonthlyUsd: 10,
         extraSeatMonthlyUsd: 5,
         extraMemberMonthlyUsd: 3,
+        extraDatasetMonthlyUsd: 2,
       },
       pro: {
         basePriceMonthlyUsd: 49,
         extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 4,
         extraMemberMonthlyUsd: 2,
+        extraDatasetMonthlyUsd: 2,
       },
       business: {
         basePriceMonthlyUsd: 149,
         extraHostMonthlyUsd: 5,
         extraSeatMonthlyUsd: 3,
         extraMemberMonthlyUsd: 1,
+        extraDatasetMonthlyUsd: 1,
       },
     })
   })
@@ -188,5 +193,21 @@ describe('plan entitlements', () => {
     expect(result.allowed).toBe(false)
     expect(result.upgradeRequired).toBe(true)
     expect(result.addonPriceUsd).toBeNull()
+  })
+
+  it('checkDatasetQuota counts purchased addon datasets up to the max (AGL-132)', () => {
+    const tenant = { plan: 'starter', seatAddons: { datasets: 2 } } as any
+    const quota = checkDatasetQuota(tenant, 2)
+    expect(quota.limit).toBe(3)
+    expect(quota.allowed).toBe(true)
+    expect(checkDatasetQuota(tenant, 3).allowed).toBe(false)
+    // Hard max: starter caps at 3 no matter how many addons.
+    const maxed = { plan: 'starter', seatAddons: { datasets: 99 } } as any
+    expect(checkDatasetQuota(maxed, 0).limit).toBe(3)
+    expect(checkDatasetQuota(maxed, 3).upgradeRequired).toBe(true)
+    // Free plan sells no dataset addons.
+    expect(checkDatasetQuota({ plan: 'free' } as any, 0).upgradeRequired).toBe(
+      true,
+    )
   })
 })

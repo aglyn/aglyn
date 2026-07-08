@@ -56,6 +56,11 @@ export function hostNavTabItems(hostId: string) {
       href: buildRoute(Route.HOST_INBOX, { hostId }),
     },
     {
+      id: 'nav-tab-data',
+      label: 'Data',
+      href: buildRoute(Route.HOST_DATA, { hostId }),
+    },
+    {
       id: 'nav-tab-workflows',
       label: 'Workflows',
       href: buildRoute(Route.HOST_WORKFLOWS, { hostId }),
