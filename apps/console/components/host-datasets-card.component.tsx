@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  applyDatasetQuery,
   checkDatasetQuota,
   coerceDocumentValues,
   createResourceUid,
@@ -25,6 +26,8 @@ import {
   effectiveDatasetModel,
   formatDatasetValue,
   parseDatasetFields,
+  parseDatasetFilter,
+  parseDatasetSort,
   sortDatasetRecords,
   validateDocument,
 } from '@aglyn/aglyn'
@@ -126,6 +129,24 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     () => sortDatasetRecords([...(recordDocs ?? [])]),
     [recordDocs],
   )
+  // Query layer (AGL-181): the same evaluator the renderer uses, applied
+  // in memory over the loaded window (explicitly bounded, never silently
+  // unbounded — the helper text says so).
+  const [filterText, setFilterText] = useState('')
+  const [sortText, setSortText] = useState('')
+  const visibleRecords = useMemo(() => {
+    const where = parseDatasetFilter(filterText)
+    const orderBy = parseDatasetSort(sortText)
+    if (!where && !orderBy) return records
+    const rows = records.map((record: any) => ({
+      __record: record,
+      ...(record.values ?? {}),
+    }))
+    return applyDatasetQuery(model, rows, {
+      ...(where ? { where: [where] } : {}),
+      ...(orderBy ? { orderBy } : {}),
+    }).map((row: any) => row.__record)
+  }, [records, filterText, sortText, model])
 
   // --- Create dataset -----------------------------------------------------
   const [creator, setCreator] = useState<{
@@ -537,6 +558,26 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           </Stack>
         )}
         {selected && records.length > 0 ? (
+          <Stack direction="row" spacing={1}>
+            <TextField
+              size="small"
+              label="Filter"
+              value={filterText}
+              onChange={(event) => setFilterText(event.target.value)}
+              helperText={'e.g. price <= 20 · applies to loaded records'}
+              sx={{ minWidth: 220 }}
+            />
+            <TextField
+              size="small"
+              label="Sort"
+              value={sortText}
+              onChange={(event) => setSortText(event.target.value)}
+              helperText={'e.g. price desc'}
+              sx={{ minWidth: 140 }}
+            />
+          </Stack>
+        ) : null}
+        {selected && records.length > 0 ? (
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -549,7 +590,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {records.map((record) => (
+              {visibleRecords.map((record: any) => (
                 <TableRow key={record.$id} hover>
                   {fields.map((fieldId) => (
                     <TableCell key={fieldId}>

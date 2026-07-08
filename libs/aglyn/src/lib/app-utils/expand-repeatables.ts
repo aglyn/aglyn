@@ -16,6 +16,11 @@
  */
 
 import type { AglynNodeSchema, NodeId } from '../foundation'
+import {
+  applyDatasetQuery,
+  parseDatasetFilter,
+  parseDatasetSort,
+} from './dataset-query'
 
 /** Namespaces cloned template ids per container/record. */
 export const REPEAT_NODE_ID_PREFIX = 'rep__'
@@ -135,7 +140,19 @@ export function expandRepeatables<N extends AglynNodeSchema = AglynNodeSchema>(
   for (const [containerId, container] of repeatIds) {
     const key = String((container.props as any).repeatDataset).trim()
     const dataset = datasetsByKey[key]
-    const records = dataset?.records ?? []
+    // Query config (AGL-181): `repeatFilter` ("field op value") and
+    // `repeatSort` ("field asc|desc") evaluate in memory over the
+    // fetch-bounded rows; unparseable input fails open (no filter).
+    const where = parseDatasetFilter(
+      String((container.props as any).repeatFilter ?? ''),
+    )
+    const orderBy = parseDatasetSort(
+      String((container.props as any).repeatSort ?? ''),
+    )
+    const records = applyDatasetQuery(dataset?.model, dataset?.records ?? [], {
+      ...(where ? { where: [where] } : {}),
+      ...(orderBy ? { orderBy } : {}),
+    })
     if (!records.length) continue
     const limitRaw = Number((container.props as any).repeatLimit)
     const limit =
