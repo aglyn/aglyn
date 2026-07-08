@@ -43,13 +43,18 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   limit,
   query,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  useFirestore,
+  useFirestoreCollectionData,
+  useFirestoreDocData,
+} from 'reactfire'
 import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
 
@@ -86,6 +91,50 @@ export function HostRedirects(props: { hostId: string }) {
     )
 
   const [draft, setDraft] = useState<RedirectDraft | null>(null)
+
+  // Host routing map for the screen-collision warning (AGL-156 spec).
+  const { data: host } = useFirestoreDocData<any>(
+    doc(firestore, 'hosts', hostId),
+    { idField: '$id' },
+  )
+
+  // Sampled hit counts (AGL-157): summed from the last 30 analytics day
+  // docs' `redirects` maps written by enforcement. Counts are sampled —
+  // one per ISR revalidation window with traffic, not per request.
+  const [hits, setHits] = useState<Record<string, number> | null>(null)
+  useEffect(() => {
+    if (!entitled) return
+    let active = true
+    const ids = Array.from({ length: 30 }, (_, index) => {
+      const date = new Date()
+      date.setDate(date.getDate() - index)
+      return date.toISOString().slice(0, 10)
+    })
+    void Promise.all(
+      ids.map((id) =>
+        getDoc(doc(firestore, 'hosts', hostId, 'analytics', id))
+          .then((snapshot) => (snapshot.get('redirects') ?? {}) as Record<string, number>)
+          .catch(() => ({}) as Record<string, number>),
+      ),
+    ).then((days) => {
+      if (!active) return
+      const totals: Record<string, number> = {}
+      for (const dayMap of days) {
+        for (const [redirectId, count] of Object.entries(dayMap)) {
+          totals[redirectId] = (totals[redirectId] ?? 0) + Number(count)
+        }
+      }
+      setHits(totals)
+    })
+    return () => {
+      active = false
+    }
+  }, [entitled, firestore, hostId])
+  const idKey = (value: string) => value.replace(/[.$#[\]/]/g, '_')
+  const totalHits = Object.values(hits ?? {}).reduce(
+    (sum, count) => sum + count,
+    0,
+  )
 
   const handleAdd = useCallback(() => {
     if (!entitled) {
@@ -136,6 +185,37 @@ export function HostRedirects(props: { hostId: string }) {
         persist: false,
       })
     }
+    // Chain-loop detection (AGL-156): follow internal destinations through
+    // the rule set; a walk that returns to this source can never execute.
+    if (destination.startsWith('/')) {
+      const bySource = new Map<string, string>(
+        redirects
+          .filter((redirect: any) => redirect.$id !== draft.id)
+          .map((redirect: any) => [redirect.source, redirect.destination]),
+      )
+      let cursor: string | undefined = destination.toLowerCase()
+      for (let hop = 0; hop < 10 && cursor; hop += 1) {
+        if (cursor === source) {
+          return void enqueueSnackbar(
+            'That destination chains back to this rule — a redirect loop',
+            { variant: 'warning', persist: false },
+          )
+        }
+        const next: string | undefined = bySource.get(cursor)
+        cursor = next && next.startsWith('/') ? next.toLowerCase() : undefined
+      }
+    }
+    // Screen-route collision: shadowing a live page may be intentional
+    // (moved pages) — warn, don't block (decision per the issue).
+    const routedPaths = Object.values(
+      (host?.screens ?? {}) as Record<string, string>,
+    ).map((path) => (path === '/' ? '/' : `/${path}`))
+    if (routedPaths.includes(source)) {
+      enqueueSnackbar(
+        `${source} is a published page — the redirect takes precedence`,
+        { variant: 'info', persist: false },
+      )
+    }
     try {
       const id = draft.id ?? createResourceUid()
       await setDoc(
@@ -167,7 +247,7 @@ export function HostRedirects(props: { hostId: string }) {
         allowDuplicate: true,
       })
     }
-  }, [draft, redirects, firestore, hostId, enqueueSnackbar])
+  }, [draft, redirects, host, firestore, hostId, enqueueSnackbar])
 
   const handleToggle = useCallback(
     (redirect: any) => async (event: { target: { checked: boolean } }) => {
@@ -212,6 +292,13 @@ export function HostRedirects(props: { hostId: string }) {
               'sure (browsers cache 301 aggressively). Changes go live ' +
               'within ~30 seconds.'}
           </Typography>
+          {hits && totalHits > 0 ? (
+            <Typography variant="caption" color="text.secondary">
+              {`${totalHits} redirect hit${totalHits === 1 ? '' : 's'} in ` +
+                'the last 30 days (sampled — one per cache window with ' +
+                'traffic).'}
+            </Typography>
+          ) : null}
           {redirects.map((redirect: any) => (
             <Stack
               key={redirect.$id}
@@ -229,11 +316,20 @@ export function HostRedirects(props: { hostId: string }) {
                 <Typography variant="body2" noWrap>
                   {`${redirect.source} → ${redirect.destination}`}
                 </Typography>
-                {redirect.lastHitAt ? (
+                {hits || redirect.lastHitAt ? (
                   <Typography variant="caption" color="text.secondary">
-                    {`Last hit ${redirect.lastHitAt
-                      .toDate()
-                      .toLocaleString()}`}
+                    {[
+                      hits
+                        ? `${hits[idKey(redirect.$id)] ?? 0} hits (30d, sampled)`
+                        : null,
+                      redirect.lastHitAt
+                        ? `last ${redirect.lastHitAt
+                            .toDate()
+                            .toLocaleString()}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Typography>
                 ) : null}
               </Stack>
