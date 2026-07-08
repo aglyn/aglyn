@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-export { appCheck, firebaseApp } from '@aglyn/shared-util-fbclient'
-export * from './lib/client/tenant.utils'
+import { servePluginFetch } from '@aglyn/tenant-data-admin'
 
-export * from './lib/server/firebase-admin'
-export * from './lib/server/serve-media-cdn'
-export * from './lib/server/serve-plugin-fetch'
-export * from './lib/server/tenant.utils'
+/**
+ * Host-mediated plugin fetch on the published tenant site (AGL-191).
+ * Allowlist-gated; see `servePluginFetch` for the contract.
+ */
+export default servePluginFetch

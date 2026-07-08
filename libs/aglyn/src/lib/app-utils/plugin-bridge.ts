@@ -50,7 +50,29 @@ export type PluginGuestMessage =
       name: string
       payload?: unknown
     }
+  | {
+      // Host-mediated fetch (AGL-191): the host validates `url` against the
+      // manifest network allowlist and proxies it, replying with the
+      // matching `id`.
+      type: 'fetch-request'
+      v: number
+      id: string
+      url: string
+      method?: string
+      body?: string
+    }
   | { type: 'error'; v: number; message: string }
+
+/** Host → plugin fetch reply (AGL-191). */
+export interface PluginFetchResponseMessage {
+  type: 'fetch-response'
+  v: number
+  id: string
+  ok: boolean
+  status: number
+  body?: string
+  error?: string
+}
 
 /** Largest plugin-declared render height the host will honor (px). */
 export const PLUGIN_MAX_HEIGHT_PX = 4096
@@ -123,6 +145,25 @@ export function parseGuestMessage(
         payload = undefined
       }
       return { type: 'event', v: PLUGIN_BRIDGE_VERSION, name, payload }
+    }
+    case 'fetch-request': {
+      // Shape-only here; the HOST re-validates the url against the manifest
+      // network allowlist (isPluginNetworkAllowed) before proxying.
+      const id = String(data['id'] ?? '')
+      const url = String(data['url'] ?? '')
+      if (!id || !url) return null
+      const rawMethod = String(data['method'] ?? 'GET').toUpperCase()
+      const method = rawMethod === 'POST' ? 'POST' : 'GET'
+      const body =
+        typeof data['body'] === 'string' ? data['body'] : undefined
+      return {
+        type: 'fetch-request',
+        v: PLUGIN_BRIDGE_VERSION,
+        id,
+        url,
+        method,
+        ...(body !== undefined ? { body } : {}),
+      }
     }
     case 'error':
       return {

@@ -269,6 +269,34 @@ export function isPluginRevoked(
   )
 }
 
+/** Methods a host-mediated plugin fetch may use (AGL-191). */
+export const PLUGIN_FETCH_METHODS = ['GET', 'POST'] as const
+export type PluginFetchMethod = (typeof PLUGIN_FETCH_METHODS)[number]
+/** Request/response body cap for host-mediated fetch (bytes). */
+export const PLUGIN_FETCH_MAX_BODY_BYTES = 256 * 1024
+
+/**
+ * True when `url`'s origin is an exact match against the manifest's
+ * declared `network` allowlist (AGL-191). The host re-checks this before
+ * proxying a plugin's `fetch-request`, so a plugin can only reach origins
+ * it declared at install (and the install screen surfaced). No allowlist =
+ * no host-mediated network; https-only.
+ */
+export function isPluginNetworkAllowed(
+  url: string,
+  capabilities: PluginCapabilities | undefined,
+): boolean {
+  const allow = capabilities?.network
+  if (!allow?.length) return false
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:') return false
+    return allow.includes(parsed.origin)
+  } catch {
+    return false
+  }
+}
+
 /** Component id of the sandboxed plugin canvas element (plugins-ui-mui). */
 export const PLUGIN_COMPONENT_ID = 'communityPlugin'
 

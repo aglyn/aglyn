@@ -17,6 +17,7 @@
 
 import {
   attachPluginInstalls,
+  isPluginNetworkAllowed,
   isPluginRevoked,
   PLUGIN_COMPONENT_ID,
   type PluginManifest,
@@ -163,6 +164,19 @@ describe('attachPluginInstalls', () => {
       L1: { listingId: 'L1', version: '1.0.0', sha256: 'abc', revoked: true },
     })
     expect(result.p1.props.revoked).toBe(true)
+  })
+})
+
+describe('isPluginNetworkAllowed (AGL-191)', () => {
+  const caps = { network: ['https://api.example.com'] }
+  it('allows only exact-origin https matches in the allowlist', () => {
+    expect(isPluginNetworkAllowed('https://api.example.com/data', caps)).toBe(
+      true,
+    )
+    expect(isPluginNetworkAllowed('https://evil.com/x', caps)).toBe(false)
+    expect(isPluginNetworkAllowed('http://api.example.com/x', caps)).toBe(false)
+    expect(isPluginNetworkAllowed('https://api.example.com/x', {})).toBe(false)
+    expect(isPluginNetworkAllowed('not-a-url', caps)).toBe(false)
   })
 })
 

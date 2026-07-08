@@ -64,6 +64,8 @@ const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
       typeof process !== 'undefined'
         ? process.env['NEXT_PUBLIC_PLUGIN_ORIGIN']
         : undefined
+    // Host id for host-mediated fetch (AGL-191); empty in the editor.
+    const { hostId } = Aglyn.useSite()
 
     // No resolved install (editor canvas / uninstalled): inert placeholder.
     if (!listingId || !version || !sha256) {
@@ -97,6 +99,7 @@ const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
       <PluginFrame
         ref={ref as any}
         pluginOrigin={pluginOrigin}
+        hostId={hostId}
         listingId={listingId}
         version={version}
         sha256={sha256}

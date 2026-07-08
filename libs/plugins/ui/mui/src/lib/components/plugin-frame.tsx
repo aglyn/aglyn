@@ -47,6 +47,8 @@ import {
 export interface PluginFrameProps {
   /** Dedicated plugin origin, e.g. `https://plugins.aglyn.app`. */
   pluginOrigin?: string
+  /** Host id, for scoping host-mediated fetch (AGL-191). */
+  hostId?: string
   listingId: string
   version: string
   sha256: string
@@ -106,6 +108,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
   (props, ref) => {
     const {
       pluginOrigin,
+      hostId,
       listingId,
       version,
       sha256,
@@ -182,6 +185,50 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
               payload: message.payload,
             })
             break
+          case 'fetch-request': {
+            // Host-mediated fetch (AGL-191): proxy through the host API,
+            // which re-checks the manifest allowlist server-side. Reply on
+            // the same id; a disallowed/failed call resolves ok:false.
+            const requestId = message.id
+            const respond = (payload: {
+              ok: boolean
+              status: number
+              body?: string
+              error?: string
+            }) =>
+              frameRef.current?.contentWindow?.postMessage(
+                { type: 'fetch-response', v: Aglyn.PLUGIN_BRIDGE_VERSION, id: requestId, ...payload },
+                expectedOrigin,
+              )
+            if (!hostId) {
+              respond({ ok: false, status: 0, error: 'No host context' })
+              break
+            }
+            void fetch('/api/plugins/fetch', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                hostId,
+                listingId,
+                url: message.url,
+                method: message.method,
+                body: message.body,
+              }),
+            })
+              .then((response) => response.json())
+              .then((payload) =>
+                respond({
+                  ok: Boolean(payload?.ok),
+                  status: Number(payload?.status ?? 0),
+                  body: payload?.body,
+                  error: payload?.error,
+                }),
+              )
+              .catch(() =>
+                respond({ ok: false, status: 0, error: 'Fetch failed' }),
+              )
+            break
+          }
           case 'error':
             setState('error')
             break
@@ -191,7 +238,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       return () => window.removeEventListener('message', handleMessage)
       // filteredProps is re-sent by the effect below; init uses the latest.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [originUsable, pluginOrigin, listingId, allowedEvents, scheme, src])
+    }, [originUsable, pluginOrigin, hostId, listingId, allowedEvents, scheme, src])
 
     // Push prop updates to an already-ready frame.
     useEffect(() => {

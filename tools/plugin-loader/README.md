@@ -36,19 +36,26 @@ versioned postMessage bridge from `@aglyn/aglyn` (`plugin-bridge.ts`).
 A plugin bundle's entry module default-exports a render function:
 
 ```js
-export default function render({ mount, props, scheme, emit }) {
+export default function render({ mount, props, scheme, emit, hostFetch }) {
   // `mount` is a container element; render your UI into it.
   // `props` are the host props, already filtered to your manifest allowlist.
   // Call `emit(name, payload)` to send a declared event to the host.
+  // Call `hostFetch(url, { method, body })` for host-mediated network
+  //   (AGL-191) — resolves { ok, status, body }; the host rejects any URL
+  //   whose origin isn't in your manifest `network` allowlist.
   // Return a cleanup function (optional).
 }
 ```
 
 The loader wires `props`/`scheme` from the host `init`/`props` messages,
 forwards `emit` calls as bridge `event` messages (dropped by the host
-unless declared in the manifest's `events`), and reports rendered height
-via `resize`. No DOM, storage, or network access is provided by the bridge;
-the plugin's own `fetch` is constrained to the manifest `connect-src`.
+unless declared in the manifest's `events`), reports rendered height via
+`resize`, and relays `hostFetch` through the `fetch-request`/`fetch-response`
+bridge. Two network paths exist: the plugin's own direct `fetch`
+(constrained by the plugin-origin CSP's manifest `connect-src`), and
+`hostFetch` (host-proxied, allowlist re-checked server-side, works even
+under a strict CSP and gives the platform a metering point). No DOM or
+storage access is provided by the bridge.
 
 `load.html` is intentionally not built by this repo's Nx graph — it deploys
 with the separate plugin project. It is version-pinned here as the contract

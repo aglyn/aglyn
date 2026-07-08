@@ -83,10 +83,29 @@
           const emit = (name, payload) =>
             post({ type: 'event', name: String(name), payload })
 
+          // Host-mediated fetch (AGL-191): the plugin calls hostFetch(url,
+          // opts); the host validates the url against the manifest allowlist
+          // and proxies it. Resolves with { ok, status, body }.
+          let fetchSeq = 0
+          const pendingFetches = new Map()
+          const hostFetch = (url, opts) =>
+            new Promise((resolve) => {
+              const id = `f${fetchSeq++}`
+              pendingFetches.set(id, resolve)
+              post({
+                type: 'fetch-request',
+                id,
+                url: String(url),
+                method: (opts && opts.method) || 'GET',
+                body: opts && opts.body,
+              })
+            })
+
           const start = (props, scheme) => {
             if (typeof cleanup === 'function') cleanup()
             cleanup =
-              render({ mount, props: props || {}, scheme, emit }) || null
+              render({ mount, props: props || {}, scheme, emit, hostFetch }) ||
+              null
             // Report height so the host can size the iframe region.
             requestAnimationFrame(() =>
               post({ type: 'resize', height: mount.scrollHeight }),
@@ -106,6 +125,12 @@
             } else if (data.type === 'props') {
               lastProps = data.props || {}
               start(lastProps, lastScheme)
+            } else if (data.type === 'fetch-response') {
+              const resolve = pendingFetches.get(data.id)
+              if (resolve) {
+                pendingFetches.delete(data.id)
+                resolve({ ok: data.ok, status: data.status, body: data.body })
+              }
             }
           })
 

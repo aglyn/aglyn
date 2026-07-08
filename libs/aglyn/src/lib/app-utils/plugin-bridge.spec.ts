@@ -71,6 +71,37 @@ describe('parseGuestMessage', () => {
     expect(parseGuestMessage({ type: 'resize', v, height: -5 }, [])).toBeNull()
   })
 
+  it('shapes fetch-request and normalizes the method (AGL-191)', () => {
+    expect(
+      parseGuestMessage(
+        { type: 'fetch-request', v, id: 'r1', url: 'https://a.com/x' },
+        [],
+      ),
+    ).toEqual({
+      type: 'fetch-request',
+      v,
+      id: 'r1',
+      url: 'https://a.com/x',
+      method: 'GET',
+    })
+    expect(
+      parseGuestMessage(
+        {
+          type: 'fetch-request',
+          v,
+          id: 'r2',
+          url: 'https://a.com',
+          method: 'delete',
+          body: 'x',
+        },
+        [],
+      ),
+    ).toMatchObject({ method: 'GET', body: 'x' })
+    expect(
+      parseGuestMessage({ type: 'fetch-request', v, id: '', url: '' }, []),
+    ).toBeNull()
+  })
+
   it('sanitizes event payloads to JSON-round-trippable data', () => {
     const result = parseGuestMessage(
       { type: 'event', v, name: 'x', payload: { a: 1, b: [2, 3] } },
