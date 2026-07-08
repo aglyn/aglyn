@@ -220,13 +220,12 @@ export default async function handler(
       object?.metadata?.type === 'commerce-order' &&
       object?.payment_status === 'paid'
     ) {
-      const { hostId, productId, feeCents } = object.metadata ?? {}
+      const { hostId, productId, feeCents, couponCode } =
+        object.metadata ?? {}
       if (hostId && productId) {
-        await firebaseAdmin
-          .app()
-          .firestore()
-          .collection('hosts')
-          .doc(String(hostId))
+        const firestore = firebaseAdmin.app().firestore()
+        const hostRef = firestore.collection('hosts').doc(String(hostId))
+        await hostRef
           .collection('orders')
           .doc(String(object.id))
           .set({
@@ -234,8 +233,83 @@ export default async function handler(
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
             customerEmail: object?.customer_details?.email ?? null,
+            ...(couponCode ? { couponCode } : {}),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
+        const productRef = hostRef.collection('products').doc(String(productId))
+        const productSnapshot = await productRef.get()
+        // Inventory decrement (AGL-96): only tracked products; the
+        // checkout guard makes negative stock a race-window edge, and a
+        // floor here keeps the display sane if it happens.
+        if (productSnapshot.get('inventory') != null) {
+          const remaining = Math.max(
+            0,
+            Number(productSnapshot.get('inventory')) - 1,
+          )
+          await productRef
+            .set({ inventory: remaining }, { merge: true })
+            .catch(() => undefined)
+        }
+        if (couponCode) {
+          await hostRef
+            .collection('coupons')
+            .doc(String(couponCode))
+            .set(
+              {
+                redemptions: firebaseAdmin.firestore.FieldValue.increment(1),
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+        }
+        // Receipt + seller notification (AGL-96): env-gated like every
+        // other outbound email; failures never fail the webhook.
+        const resendKey = process.env.RESEND_API_KEY
+        const emailFrom = process.env.USAGE_EMAIL_FROM
+        if (resendKey && emailFrom) {
+          const productName = String(
+            productSnapshot.get('name') ?? 'your purchase',
+          )
+          const amount = (Number(object?.amount_total ?? 0) / 100).toFixed(2)
+          const sendEmail = (to: string, subject: string, text: string) =>
+            fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${resendKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ from: emailFrom, to: [to], subject, text }),
+            }).catch(() => undefined)
+          const buyerEmail = object?.customer_details?.email
+          if (buyerEmail) {
+            await sendEmail(
+              String(buyerEmail),
+              `Receipt: ${productName}`,
+              `Thanks for your purchase!\n\n${productName} — $${amount}` +
+                `\nOrder reference: ${object.id}`,
+            )
+          }
+          const hostSnapshot = await hostRef.get()
+          const sellerUid = Object.keys(hostSnapshot.get('admins') ?? {})[0]
+          if (sellerUid) {
+            const seller = await firebaseAdmin
+              .app()
+              .auth()
+              .getUser(sellerUid)
+              .catch(() => null)
+            if (seller?.email) {
+              await sendEmail(
+                seller.email,
+                `New order: ${productName}`,
+                `You made a sale on ${String(
+                  hostSnapshot.get('displayName') ?? hostId,
+                )}!\n\n${productName} — $${amount}` +
+                  (buyerEmail ? `\nBuyer: ${buyerEmail}` : '') +
+                  `\nOrder reference: ${object.id}`,
+              )
+            }
+          }
+        }
       }
     }
     return res.status(200).json({ received: true })

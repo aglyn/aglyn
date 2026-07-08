@@ -44,6 +44,8 @@ interface ProductDraft {
   price: string
   description: string
   imageUrl: string
+  /** Blank = untracked; 0 = sold out (AGL-96). */
+  inventory: string
 }
 
 /**
@@ -86,6 +88,10 @@ export function HostProductsCard(props: HostProductsCardProps) {
           ...(draft.imageUrl.trim() && {
             imageUrl: draft.imageUrl.trim().slice(0, 500),
           }),
+          inventory:
+            draft.inventory.trim() === ''
+              ? null
+              : Math.max(0, Math.round(Number(draft.inventory))),
           updatedAt: Timestamp.now(),
           ...(draft.id ? {} : { createdAt: Timestamp.now() }),
         },
@@ -123,6 +129,51 @@ export function HostProductsCard(props: HostProductsCardProps) {
     [confirm, firestore, hostId, enqueueSnackbar],
   )
 
+  // Coupons (AGL-96): percent-off codes at hosts/{hostId}/coupons/{CODE}.
+  const { data: couponDocs } = useFirestoreCollectionData<any>(
+    query(collection(firestore, 'hosts', hostId, 'coupons'), limit(100)),
+    { idField: '$id' },
+  )
+  const coupons = [...(couponDocs ?? [])].sort((a: any, b: any) =>
+    String(a.$id).localeCompare(String(b.$id)),
+  )
+  const [couponDraft, setCouponDraft] = useState<{
+    code: string
+    percentOff: string
+    maxRedemptions: string
+  } | null>(null)
+  const handleCouponSave = useCallback(async () => {
+    if (!couponDraft) return
+    const code = couponDraft.code
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '')
+      .slice(0, 40)
+    const percentOff = Math.round(Number(couponDraft.percentOff))
+    if (!code || !(percentOff > 0 && percentOff <= 100)) return
+    await setDoc(doc(firestore, 'hosts', hostId, 'coupons', code), {
+      percentOff,
+      enabled: true,
+      redemptions: 0,
+      ...(couponDraft.maxRedemptions.trim()
+        ? { maxRedemptions: Math.max(1, Math.round(Number(couponDraft.maxRedemptions))) }
+        : {}),
+      createdAt: Timestamp.now(),
+    })
+    setCouponDraft(null)
+    enqueueSnackbar(`Coupon ${code} created`, {
+      variant: 'success',
+      persist: false,
+    })
+  }, [couponDraft, firestore, hostId, enqueueSnackbar])
+  const handleCouponToggle = useCallback(
+    (coupon: any) => () =>
+      updateDoc(doc(firestore, 'hosts', hostId, 'coupons', coupon.$id), {
+        enabled: coupon.enabled === false,
+      }),
+    [firestore, hostId],
+  )
+
   return (
     <CardDisplay header={'Products'} contentGutterX contentGutterY>
       <Stack spacing={1}>
@@ -141,7 +192,12 @@ export function HostProductsCard(props: HostProductsCardProps) {
             >
               <Stack sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" noWrap>
-                  {`${product.name} · $${product.priceUsd}`}
+                  {`${product.name} · $${product.priceUsd}` +
+                    (product.inventory != null
+                      ? Number(product.inventory) > 0
+                        ? ` · ${product.inventory} in stock`
+                        : ' · sold out'
+                      : '')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" noWrap>
                   {`id: ${product.$id}`}
@@ -156,6 +212,10 @@ export function HostProductsCard(props: HostProductsCardProps) {
                     price: String(product.priceUsd ?? ''),
                     description: product.description ?? '',
                     imageUrl: product.imageUrl ?? '',
+                    inventory:
+                      product.inventory == null
+                        ? ''
+                        : String(product.inventory),
                   })
                 }
               >
@@ -178,12 +238,107 @@ export function HostProductsCard(props: HostProductsCardProps) {
               price: '',
               description: '',
               imageUrl: '',
+              inventory: '',
             })
           }
         >
           {'Add product'}
         </Button>
       </Stack>
+      <Stack spacing={1} sx={{ mt: 2 }}>
+        <Typography variant="subtitle2">{'Coupons'}</Typography>
+        {coupons.map((coupon: any) => (
+          <Stack
+            key={coupon.$id}
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center' }}
+          >
+            <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+              {`${coupon.$id} · ${coupon.percentOff}% off · ` +
+                `${coupon.redemptions ?? 0}${
+                  coupon.maxRedemptions ? `/${coupon.maxRedemptions}` : ''
+                } used` +
+                (coupon.enabled === false ? ' · disabled' : '')}
+            </Typography>
+            <Button size="small" onClick={handleCouponToggle(coupon)}>
+              {coupon.enabled === false ? 'Enable' : 'Disable'}
+            </Button>
+          </Stack>
+        ))}
+        <Button
+          size="small"
+          sx={{ alignSelf: 'flex-start' }}
+          onClick={() =>
+            setCouponDraft({ code: '', percentOff: '', maxRedemptions: '' })
+          }
+        >
+          {'Add coupon'}
+        </Button>
+      </Stack>
+      <Dialog
+        open={Boolean(couponDraft)}
+        onClose={() => setCouponDraft(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{'New coupon'}</DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <TextField
+            label="Code"
+            value={couponDraft?.code ?? ''}
+            onChange={(event) =>
+              setCouponDraft((prev) =>
+                prev ? { ...prev, code: event.target.value } : prev,
+              )
+            }
+            size="small"
+            autoFocus
+            sx={{ mt: 1 }}
+            helperText="Letters/numbers; stored uppercase, e.g. LAUNCH20"
+          />
+          <TextField
+            label="Percent off"
+            type="number"
+            value={couponDraft?.percentOff ?? ''}
+            onChange={(event) =>
+              setCouponDraft((prev) =>
+                prev ? { ...prev, percentOff: event.target.value } : prev,
+              )
+            }
+            size="small"
+          />
+          <TextField
+            label="Max redemptions"
+            type="number"
+            placeholder="Blank = unlimited"
+            value={couponDraft?.maxRedemptions ?? ''}
+            onChange={(event) =>
+              setCouponDraft((prev) =>
+                prev ? { ...prev, maxRedemptions: event.target.value } : prev,
+              )
+            }
+            size="small"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCouponDraft(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={
+              !couponDraft?.code.trim() ||
+              !(Number(couponDraft?.percentOff) > 0) ||
+              Number(couponDraft?.percentOff) > 100
+            }
+            onClick={handleCouponSave}
+          >
+            {'Create'}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={Boolean(draft)}
         onClose={() => setDraft(null)}
@@ -233,6 +388,19 @@ export function HostProductsCard(props: HostProductsCardProps) {
             size="small"
             multiline
             minRows={2}
+          />
+          <TextField
+            label="Inventory"
+            type="number"
+            placeholder="Blank = untracked"
+            helperText="0 shows the block as sold out; each sale decrements"
+            value={draft?.inventory ?? ''}
+            onChange={(event) =>
+              setDraft((prev) =>
+                prev ? { ...prev, inventory: event.target.value } : prev,
+              )
+            }
+            size="small"
           />
           <TextField
             label="Image URL"

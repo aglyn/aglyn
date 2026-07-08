@@ -22,6 +22,7 @@ import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import CardMedia from '@mui/material/CardMedia'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
@@ -39,6 +40,8 @@ export interface ProductProps {
   description?: string
   imageUrl?: string
   buyLabel?: string
+  /** Shows a coupon-code input above the buy button (AGL-96). */
+  showCoupon?: boolean
 }
 
 /**
@@ -55,30 +58,42 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
     description,
     imageUrl,
     buyLabel,
+    showCoupon,
     ...rest
   } = props
   const { hostId } = Aglyn.useSite()
   const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
+  const [coupon, setCoupon] = useState('')
+  const [message, setMessage] = useState('')
+  const soldOut = message === 'Sold out'
 
   const handleBuy = useCallback(async () => {
     if (!hostId || !productId || status === 'sending') return
     setStatus('sending')
+    setMessage('')
     try {
       const response = await fetch('/api/commerce/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostId, productId }),
+        body: JSON.stringify({
+          hostId,
+          productId,
+          ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
+        }),
       })
       const payload = await response.json().catch(() => ({}))
       if (response.ok && payload?.url) {
         window.location.assign(payload.url)
         return
       }
+      // Server messages are visitor-safe (AGL-96): "Sold out", "Invalid
+      // or expired coupon", etc.
+      setMessage(String(payload?.error ?? ''))
       setStatus('error')
     } catch {
       setStatus('error')
     }
-  }, [hostId, productId, status])
+  }, [hostId, productId, status, coupon])
 
   return (
     <Card ref={ref} variant="outlined" sx={{ maxWidth: 360 }} {...rest}>
@@ -103,19 +118,33 @@ const Product = forwardRef<HTMLDivElement, ProductProps>((props, ref) => {
           </Typography>
         ) : null}
         {status === 'error' ? (
-          <Alert severity="error" sx={{ mt: 1 }}>
-            {'Checkout is unavailable right now.'}
+          <Alert severity={soldOut ? 'info' : 'error'} sx={{ mt: 1 }}>
+            {message || 'Checkout is unavailable right now.'}
           </Alert>
+        ) : null}
+        {showCoupon && !soldOut ? (
+          <TextField
+            size="small"
+            fullWidth
+            label="Coupon code"
+            value={coupon}
+            onChange={(event) => setCoupon(event.target.value)}
+            sx={{ mt: 1.5 }}
+          />
         ) : null}
         <Button
           variant="contained"
           color="primary"
           sx={{ mt: 2 }}
-          disabled={status === 'sending'}
+          disabled={status === 'sending' || soldOut}
           onClick={handleBuy}
           fullWidth
         >
-          {status === 'sending' ? 'Redirecting…' : buyLabel || 'Buy now'}
+          {soldOut
+            ? 'Sold out'
+            : status === 'sending'
+              ? 'Redirecting…'
+              : buyLabel || 'Buy now'}
         </Button>
       </CardContent>
     </Card>
@@ -168,6 +197,13 @@ export const schema: Aglyn.ComponentSchema<ProductProps> = {
       description: 'Buy button label.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Button label',
+    },
+    {
+      name: 'showCoupon',
+      label: 'Show coupon field',
+      description:
+        'Adds a coupon-code input; codes are managed on the Products card.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
     },
   ],
 }

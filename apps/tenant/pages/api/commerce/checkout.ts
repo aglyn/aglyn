@@ -43,6 +43,10 @@ export default async function handler(
     typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
   const hostId = String(body.hostId ?? '')
   const productId = String(body.productId ?? '')
+  const couponCode = String(body.couponCode ?? '')
+    .trim()
+    .toUpperCase()
+    .slice(0, 40)
   if (!hostId || !productId) {
     return res.status(400).json({ error: 'Missing hostId or productId' })
   }
@@ -65,6 +69,11 @@ export default async function handler(
     if (!(priceUsd > 0) || priceUsd > Aglyn.COMMERCE_MAX_PRICE_USD) {
       return res.status(400).json({ error: 'Product is not purchasable' })
     }
+    // Inventory (AGL-96): blank = untracked; 0 = sold out. Enforced here
+    // (the block's display is cosmetic) and decremented by the webhook.
+    if (product.inventory != null && Number(product.inventory) <= 0) {
+      return res.status(409).json({ error: 'Sold out' })
+    }
 
     const ownerId =
       hostSnapshot.get('tenantId') ??
@@ -86,7 +95,38 @@ export default async function handler(
         .json({ error: 'This site has not enabled payments yet' })
     }
 
-    const amountCents = Math.round(priceUsd * 100)
+    let amountCents = Math.round(priceUsd * 100)
+    // Coupons (AGL-96): host-defined percent-off codes; invalid codes are
+    // a visible 400, never a silent full-price charge.
+    let appliedCoupon = ''
+    if (couponCode) {
+      const couponSnapshot = await hostRef
+        .collection('coupons')
+        .doc(couponCode)
+        .get()
+      const coupon = couponSnapshot.data() as any
+      const percentOff = Number(coupon?.percentOff ?? 0)
+      const expired =
+        coupon?.expiresAtMs != null && Number(coupon.expiresAtMs) < Date.now()
+      const exhausted =
+        coupon?.maxRedemptions != null &&
+        Number(coupon.redemptions ?? 0) >= Number(coupon.maxRedemptions)
+      if (
+        !coupon ||
+        coupon.enabled === false ||
+        expired ||
+        exhausted ||
+        !(percentOff > 0 && percentOff <= 100)
+      ) {
+        return res.status(400).json({ error: 'Invalid or expired coupon' })
+      }
+      // Stripe's charge minimum is 50¢ — never discount below it.
+      amountCents = Math.max(
+        50,
+        Math.round((amountCents * (100 - percentOff)) / 100),
+      )
+      appliedCoupon = couponCode
+    }
     const feeCents = Math.max(
       1,
       Math.round((amountCents * Aglyn.COMMERCE_PLATFORM_FEE_PERCENT) / 100),
@@ -112,6 +152,7 @@ export default async function handler(
       'metadata[hostId]': hostId,
       'metadata[productId]': productId,
       'metadata[feeCents]': String(feeCents),
+      ...(appliedCoupon ? { 'metadata[couponCode]': appliedCoupon } : {}),
     })
     const response = await fetch(
       'https://api.stripe.com/v1/checkout/sessions',
