@@ -51,6 +51,7 @@ import {
 import { useCallback, useState } from 'react'
 import { useFirestore, useFirestoreCollectionData } from 'reactfire'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
+import HostCampaignsCard from '../../../components/host-campaigns-card.component'
 import { useHostId } from '../../../components/host-id-provider'
 import HostOrdersCard from '../../../components/commerce/host-orders-card.component'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
@@ -349,6 +350,9 @@ const HostInbox: NextPageWithLayout = () => {
             </CardDisplay>
             <HostOrdersCard hostId={hostId} />
           </Stack>
+          <div style={{ marginTop: 24 }}>
+            <HostCampaignsCard hostId={hostId} />
+          </div>
         </Container>
       </DashboardLayout>
       <Dialog

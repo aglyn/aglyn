@@ -139,6 +139,8 @@ export interface TenantEntitlements {
   workflowRunsPerMonth?: number
   /** Bookable services per host (AGL-159). */
   servicesPerHost?: number
+  /** Campaign emails sendable per calendar month (AGL-161). */
+  emailSendsPerMonth?: number
   /** Dynamic data caps (AGL-99/102). */
   datasetsPerHost?: number
   /** Hard dataset cap incl. addons (AGL-132); beyond it, upgrade. */
