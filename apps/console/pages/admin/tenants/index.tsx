@@ -69,6 +69,63 @@ const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'business', label: 'Business' },
 ]
 
+
+/** Every numeric entitlement staff may override (AGL-201). */
+const QUOTA_FIELDS: Array<{ key: string; label: string }> = [
+  { key: 'hostLimit', label: 'Hosts' },
+  { key: 'screensPerHost', label: 'Screens / host' },
+  { key: 'sharedLayoutsPerHost', label: 'Layouts / host' },
+  { key: 'storagePerHostMb', label: 'Storage MB' },
+  { key: 'totalSiteSizeMb', label: 'Site size MB' },
+  { key: 'membersPerHost', label: 'Members / host' },
+  { key: 'managersPerTenant', label: 'Manager seats' },
+  { key: 'maxManagersPerTenant', label: 'Max manager seats' },
+  { key: 'maxMembersPerHost', label: 'Max member seats' },
+  { key: 'bandwidthGb', label: 'Bandwidth GB' },
+  { key: 'formSubmissionsPerMonth', label: 'Form subs / mo' },
+  { key: 'variablesPerHost', label: 'Variables' },
+  { key: 'functionsPerHost', label: 'Functions' },
+  { key: 'workflowsPerHost', label: 'Workflows' },
+  { key: 'workflowRunsPerMonth', label: 'Workflow runs / mo' },
+  { key: 'servicesPerHost', label: 'Booking services' },
+  { key: 'redirectsPerHost', label: 'Redirects' },
+  { key: 'contactsPerHost', label: 'Contacts' },
+  { key: 'emailSendsPerMonth', label: 'Email sends / mo' },
+  { key: 'actionRunsPerMonth', label: 'Action runs / mo' },
+  { key: 'datasetsPerHost', label: 'Datasets' },
+  { key: 'maxDatasetsPerHost', label: 'Max datasets' },
+  { key: 'recordsPerDataset', label: 'Records / dataset' },
+]
+
+/** Every boolean feature flag, overridable as inherit / on / off. */
+const FLAG_FIELDS: string[] = [
+  'versioning',
+  'reusableComponents',
+  'customDomain',
+  'removeBranding',
+  'scheduledPublishing',
+  'marketplaceSelling',
+  'aiAssist',
+  'workflows',
+  'dataStore',
+  'videoMedia',
+  'bookings',
+  'actions',
+  'webhooks',
+  'siteExport',
+  'multilingual',
+  'eventCalendar',
+  'redirects',
+  'screenAnalytics',
+  'mediaCdn',
+  'marketingOverlays',
+]
+
+/** Count of explicit overrides on a tenant doc, for the row chip. */
+const overrideCount = (tenant: any): number =>
+  Object.keys(tenant?.entitlements ?? {}).filter((key) => key !== 'features')
+    .length + Object.keys(tenant?.entitlements?.features ?? {}).length
+
 /**
  * Staff-only tenant management (AGL-42 follow-on): list tenants, override
  * plan and host-limit entitlement, and inspect billing state. Every change
@@ -128,7 +185,8 @@ const AdminTenants: NextPageWithLayout = () => {
   const [editor, setEditor] = useState<{
     id: string
     plan: string
-    hostLimit: string
+    quotas: Record<string, string>
+    flags: Record<string, '' | 'on' | 'off'>
     before: any
   } | null>(null)
 
@@ -183,24 +241,35 @@ const AdminTenants: NextPageWithLayout = () => {
   const handleSave = useCallback(async () => {
     if (!editor) return
     const plan = editor.plan as TenantPlan | ''
-    const hostLimit = Number(editor.hostLimit)
-    const overrideHostLimit =
-      editor.hostLimit.trim() !== '' &&
-      Number.isFinite(hostLimit) &&
-      plan &&
-      hostLimit !== PLAN_ENTITLEMENTS[plan as TenantPlan]?.hostLimit
+    // Full override build (AGL-201): only explicit entries persist —
+    // empty quota fields and 'inherit' flags fall back to plan defaults.
+    const entitlements: Record<string, unknown> = {}
+    for (const field of QUOTA_FIELDS) {
+      const raw = (editor.quotas[field.key] ?? '').trim()
+      if (raw === '') continue
+      const value = Number(raw)
+      if (Number.isFinite(value) && value >= 0) {
+        entitlements[field.key] = value
+      }
+    }
+    const features: Record<string, boolean> = {}
+    for (const key of FLAG_FIELDS) {
+      const state = editor.flags[key] ?? ''
+      if (state === 'on') features[key] = true
+      if (state === 'off') features[key] = false
+    }
+    if (Object.keys(features).length) entitlements['features'] = features
+    const hasOverrides = Object.keys(entitlements).length > 0
     const after = {
       plan: plan || null,
-      entitlements: overrideHostLimit ? { hostLimit } : null,
+      entitlements: hasOverrides ? entitlements : null,
     }
     try {
       await setDoc(
         doc(firestore, 'tenants', editor.id),
         {
           plan: plan || deleteField(),
-          entitlements: overrideHostLimit
-            ? { hostLimit }
-            : deleteField(),
+          entitlements: hasOverrides ? entitlements : deleteField(),
           updatedAt: Timestamp.now(),
         },
         { merge: true },
@@ -338,9 +407,11 @@ const AdminTenants: NextPageWithLayout = () => {
                           </TableCell>
                           <TableCell>
                             {tenant.plan ? resolved.hostLimit : '∞ (no plan)'}
-                            {tenant.entitlements?.hostLimit != null ? (
+                            {overrideCount(tenant) ? (
                               <Chip
-                                label="override"
+                                label={`${overrideCount(tenant)} override${
+                                  overrideCount(tenant) === 1 ? '' : 's'
+                                }`}
                                 size="small"
                                 variant="outlined"
                                 sx={{ ml: 1 }}
@@ -350,21 +421,35 @@ const AdminTenants: NextPageWithLayout = () => {
                           <TableCell align="right">
                             <Button
                               size="small"
-                              onClick={() =>
+                              onClick={() => {
+                                const quotas: Record<string, string> = {}
+                                for (const field of QUOTA_FIELDS) {
+                                  const value =
+                                    tenant.entitlements?.[field.key]
+                                  if (typeof value === 'number') {
+                                    quotas[field.key] = String(value)
+                                  }
+                                }
+                                const flags: Record<string, '' | 'on' | 'off'> =
+                                  {}
+                                for (const key of FLAG_FIELDS) {
+                                  const value =
+                                    tenant.entitlements?.features?.[key]
+                                  if (value === true) flags[key] = 'on'
+                                  if (value === false) flags[key] = 'off'
+                                }
                                 setEditor({
                                   id: tenant.$id,
                                   plan: tenant.plan ?? '',
-                                  hostLimit:
-                                    tenant.entitlements?.hostLimit != null
-                                      ? String(tenant.entitlements.hostLimit)
-                                      : '',
+                                  quotas,
+                                  flags,
                                   before: {
                                     plan: tenant.plan ?? null,
                                     entitlements:
                                       tenant.entitlements ?? null,
                                   },
                                 })
-                              }
+                              }}
                             >
                               {'Override'}
                             </Button>
@@ -395,7 +480,7 @@ const AdminTenants: NextPageWithLayout = () => {
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}
-        maxWidth="xs"
+        maxWidth="md"
         fullWidth
       >
         <DialogTitle>{'Override tenant'}</DialogTitle>
@@ -422,19 +507,94 @@ const AdminTenants: NextPageWithLayout = () => {
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            size="small"
-            label="Host limit override"
-            type="number"
-            value={editor?.hostLimit ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, hostLimit: event.target.value } : prev,
+          <Typography variant="subtitle2">{'Quota overrides'}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {'Empty = plan default. Only filled fields persist as ' +
+              'per-tenant overrides.'}
+          </Typography>
+          <Stack
+            direction="row"
+            sx={{ flexWrap: 'wrap', gap: 1 }}
+          >
+            {QUOTA_FIELDS.map((field) => {
+              const plan = editor?.plan as TenantPlan | ''
+              const fallback = plan
+                ? (PLAN_ENTITLEMENTS[plan] as any)?.[field.key]
+                : undefined
+              return (
+                <TextField
+                  key={field.key}
+                  size="small"
+                  label={field.label}
+                  type="number"
+                  value={editor?.quotas[field.key] ?? ''}
+                  placeholder={
+                    fallback === undefined
+                      ? ''
+                      : Number.isFinite(fallback)
+                        ? String(fallback)
+                        : '∞'
+                  }
+                  onChange={(event) =>
+                    setEditor((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            quotas: {
+                              ...prev.quotas,
+                              [field.key]: event.target.value,
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                  sx={{ width: 168 }}
+                />
               )
-            }
-            helperText="Empty = plan default"
-            disabled={!editor?.plan}
-          />
+            })}
+          </Stack>
+          <Typography variant="subtitle2">{'Feature overrides'}</Typography>
+          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {FLAG_FIELDS.map((key) => {
+              const plan = editor?.plan as TenantPlan | ''
+              const fallback = plan
+                ? Boolean(
+                    (PLAN_ENTITLEMENTS[plan]?.features as any)?.[key],
+                  )
+                : undefined
+              return (
+                <TextField
+                  key={key}
+                  select
+                  size="small"
+                  label={key}
+                  value={editor?.flags[key] ?? ''}
+                  onChange={(event) =>
+                    setEditor((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            flags: {
+                              ...prev.flags,
+                              [key]: event.target.value as any,
+                            },
+                          }
+                        : prev,
+                    )
+                  }
+                  sx={{ width: 168 }}
+                >
+                  <MenuItem value="">
+                    {fallback === undefined
+                      ? 'Inherit'
+                      : `Inherit (${fallback ? 'on' : 'off'})`}
+                  </MenuItem>
+                  <MenuItem value="on">{'Force on'}</MenuItem>
+                  <MenuItem value="off">{'Force off'}</MenuItem>
+                </TextField>
+              )
+            })}
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
