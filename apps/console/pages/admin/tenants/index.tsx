@@ -461,6 +461,14 @@ const AdminTenants: NextPageWithLayout = () => {
                           <TableCell align="right">
                             <Button
                               size="small"
+                              href={buildRoute(Route.ADMIN_TENANT_DETAIL, {
+                                tenantId: tenant.$id,
+                              })}
+                            >
+                              {'Open'}
+                            </Button>
+                            <Button
+                              size="small"
                               disabled={usageLoading === tenant.$id}
                               onClick={handleShowUsage(tenant.$id)}
                             >
