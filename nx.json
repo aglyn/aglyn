@@ -128,7 +128,7 @@
     ]
   },
   "useDaemonProcess": true,
-  "nxCloudAccessToken": "MmI2Y2NlN2MtNjM4NC00NTQ0LTgxODItNGI3YzMwZTQyZTM1fHJlYWQtd3JpdGU=",
+  "neverConnectToCloud": true,
   "parallel": 1,
   "defaultBase": "main",
   "analytics": true,
