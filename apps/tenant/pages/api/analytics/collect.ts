@@ -43,6 +43,7 @@ export default async function handler(
       typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
     const hostId = String(body.hostId ?? '')
     const path = String(body.path ?? '/')
+    const screenId = String(body.screenId ?? '')
     if (!hostId || hostId.length > 64) return res.status(204).end()
 
     // Referrer host (AGL-138): external sources only — same-host and
@@ -87,6 +88,31 @@ export default async function handler(
         },
         { merge: true },
       )
+    // Per-screen attribution (AGL-151): same day-doc shape, one doc per
+    // screen per day. Always collected; DISPLAY is what the paid
+    // `screenAnalytics` flag gates (AGL-150 decision) — keeps the beacon
+    // cheap and the history ready the moment a tenant upgrades.
+    if (screenId && screenId.length <= 64) {
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('hosts')
+        .doc(hostId)
+        .collection('screenAnalytics')
+        .doc(`${screenId}:${day}`)
+        .set(
+          {
+            screenId,
+            day,
+            total: FieldValue.increment(1),
+            devices: { [device]: FieldValue.increment(1) },
+            ...(referrerHost && {
+              referrers: { [referrerHost]: FieldValue.increment(1) },
+            }),
+          },
+          { merge: true },
+        )
+    }
     // Event trigger (AGL-128/148): fire-and-forget — never delays the
     // beacon; alerts have no response channel here and are dropped.
     void emitHostEvent(hostId, 'pageView', { path })

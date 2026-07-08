@@ -529,6 +529,8 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         JSON.stringify({
           hostId: beaconHostId,
           path: window.location.pathname,
+          // Per-screen attribution (AGL-151).
+          screenId: props.data?.screen?.data?.$id || undefined,
           // External referrer host only; same-site moves are dropped
           // server-side (AGL-138).
           referrer: document.referrer || undefined,
