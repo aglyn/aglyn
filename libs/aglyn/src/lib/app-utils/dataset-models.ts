@@ -254,6 +254,62 @@ export function validateDocument(
   return errors
 }
 
+/** Storage value → grid display string (AGL-179). */
+export function formatDatasetValue(
+  field: DatasetFieldDefinition,
+  value: unknown,
+): string {
+  if (value == null || value === '') return ''
+  switch (field.type) {
+    case 'bool':
+      return value === true ? '✓' : value === false ? '—' : String(value)
+    case 'timestamp':
+      return isFiniteNumber(value)
+        ? new Date(value).toISOString().slice(0, 16).replace('T', ' ')
+        : String(value)
+    case 'coordinates': {
+      const coordinates = value as { latitude?: number; longitude?: number }
+      return isFiniteNumber(coordinates?.latitude) &&
+        isFiniteNumber(coordinates?.longitude)
+        ? `${coordinates.latitude}, ${coordinates.longitude}`
+        : String(value)
+    }
+    case 'sorted':
+      return Array.isArray(value) ? value.join(', ') : String(value)
+    case 'map':
+      try {
+        return JSON.stringify(value)
+      } catch {
+        return String(value)
+      }
+    default:
+      return String(value)
+  }
+}
+
+/**
+ * Storage value → form-input string (AGL-179): the inverse of
+ * `coerceDocumentValues` for populating type-appropriate inputs
+ * (timestamps as `datetime-local` values, coordinates as "lat, lon").
+ */
+export function datasetValueToInput(
+  field: DatasetFieldDefinition,
+  value: unknown,
+): string {
+  if (value == null) return ''
+  if (field.type === 'timestamp' && isFiniteNumber(value)) {
+    return new Date(value).toISOString().slice(0, 16)
+  }
+  if (field.type === 'bool') {
+    return value === true ? 'true' : value === false ? 'false' : String(value)
+  }
+  if (field.type === 'coordinates' || field.type === 'sorted') {
+    return formatDatasetValue(field, value)
+  }
+  if (field.type === 'map') return formatDatasetValue(field, value)
+  return String(value)
+}
+
 /**
  * Coerces user-input strings (form fields, CSV cells) into storage form
  * per the field type. Unparseable input is passed through untouched so

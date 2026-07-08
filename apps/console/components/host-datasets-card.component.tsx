@@ -18,11 +18,15 @@
 
 import {
   checkDatasetQuota,
+  coerceDocumentValues,
   createResourceUid,
+  datasetValueToInput,
   deriveModelFromFields,
+  effectiveDatasetModel,
+  formatDatasetValue,
   parseDatasetFields,
-  sanitizeRecordValues,
   sortDatasetRecords,
+  validateDocument,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -94,7 +98,13 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const [schemaOpen, setSchemaOpen] = useState(false)
   const selected =
     datasets.find((item) => item.$id === selectedId) ?? datasets[0]
-  const fields: string[] = selected?.fields ?? []
+  // Typed model (AGL-179): drives headers, cell rendering, and the
+  // document form; v1 datasets get a derived all-text model.
+  const model = useMemo(
+    () => effectiveDatasetModel(selected ?? {}),
+    [selected],
+  )
+  const fields: string[] = useMemo(() => model.order, [model])
 
   const { data: recordDocs } = useFirestoreCollectionData<any>(
     query(
@@ -200,10 +210,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity,
   ])
 
-  // --- Record editor (null id = new row) ----------------------------------
+  // --- Document editor (null id = new; AGL-179 typed inputs) --------------
   const [editor, setEditor] = useState<{
     id: string | null
     values: Record<string, string>
+    errors: Record<string, string>
   } | null>(null)
   const handleOpenRecord = useCallback(
     (record?: any) => () => {
@@ -220,25 +231,61 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           )
         }
       }
-      setEditor({
-        id: record?.$id ?? null,
-        values: { ...(record?.values ?? {}) },
-      })
+      const values: Record<string, string> = {}
+      for (const fieldId of model.order) {
+        const field = model.fields[fieldId]
+        if (!field) continue
+        if (record) {
+          values[fieldId] = datasetValueToInput(
+            field,
+            record.values?.[fieldId],
+          )
+        } else if (field.default != null) {
+          values[fieldId] = String(field.default)
+        }
+      }
+      // Flag non-conforming stored values (AGL-178 policy: type changes
+      // never rewrite documents; the editor surfaces the mismatch).
+      const errors = record
+        ? validateDocument(model, record.values ?? {})
+        : {}
+      setEditor({ id: record?.$id ?? null, values, errors })
     },
-    [tenant, records.length, enqueueSnackbar],
+    [tenant, records.length, model, enqueueSnackbar],
   )
   const handleSaveRecord = useCallback(async () => {
     if (!editor || !selected) return
+    const coerced = coerceDocumentValues(model, editor.values)
+    const errors = validateDocument(model, coerced)
+    if (Object.keys(errors).length) {
+      return void setEditor((prev) => (prev ? { ...prev, errors } : prev))
+    }
     const id = editor.id ?? createResourceUid()
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'datasets', selected.$id, 'records', id),
-      {
-        values: sanitizeRecordValues(fields, editor.values),
-        ...(editor.id ? {} : { order: records.length, createdAt: Timestamp.now() }),
-        updatedAt: Timestamp.now(),
-      },
-      { merge: true },
+    const recordRef = doc(
+      firestore,
+      'hosts',
+      hostId,
+      'datasets',
+      selected.$id,
+      'records',
+      id,
     )
+    // `values` is replaced wholesale (not merged) so orphaned values from
+    // removed fields strip here, lazily, per the documented AGL-178 policy.
+    if (editor.id) {
+      await setDoc(
+        recordRef,
+        { values: coerced, updatedAt: Timestamp.now() },
+        { mergeFields: ['values', 'updatedAt'] },
+      )
+    } else {
+      await setDoc(recordRef, {
+        values: coerced,
+        order: records.length,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      })
+    }
     setEditor(null)
     enqueueSnackbar(editor.id ? 'Record saved' : 'Record added', {
       variant: 'success',
@@ -254,7 +301,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     selected,
     firestore,
     hostId,
-    fields,
+    model,
     records.length,
     enqueueSnackbar,
     logActivity,
@@ -326,8 +373,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {fields.map((field) => (
-                  <TableCell key={field}>{field}</TableCell>
+                {fields.map((fieldId) => (
+                  <TableCell key={fieldId}>
+                    {model.fields[fieldId]?.name ?? fieldId}
+                  </TableCell>
                 ))}
                 <TableCell align="right">{'Actions'}</TableCell>
               </TableRow>
@@ -335,9 +384,14 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             <TableBody>
               {records.map((record) => (
                 <TableRow key={record.$id} hover>
-                  {fields.map((field) => (
-                    <TableCell key={field}>
-                      {record.values?.[field] ?? '--'}
+                  {fields.map((fieldId) => (
+                    <TableCell key={fieldId}>
+                      {model.fields[fieldId]
+                        ? formatDatasetValue(
+                            model.fields[fieldId],
+                            record.values?.[fieldId],
+                          ) || '--'
+                        : '--'}
                     </TableCell>
                   ))}
                   <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
@@ -432,26 +486,94 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
-          {fields.map((field, index) => (
-            <TextField
-              key={field}
-              label={field}
-              value={editor?.values[field] ?? ''}
-              onChange={(event) =>
-                setEditor((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        values: { ...prev.values, [field]: event.target.value },
-                      }
-                    : prev,
-                )
-              }
-              size="small"
-              autoFocus={index === 0}
-              sx={index === 0 ? { mt: 1 } : undefined}
-            />
-          ))}
+          {fields.map((fieldId, index) => {
+            const field = model.fields[fieldId]
+            if (!field) return null
+            const value = editor?.values[fieldId] ?? ''
+            const error = editor?.errors[fieldId]
+            const label = field.required ? `${field.name} *` : field.name
+            const setValue = (nextValue: string) =>
+              setEditor((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      values: { ...prev.values, [fieldId]: nextValue },
+                      errors: { ...prev.errors, [fieldId]: '' },
+                    }
+                  : prev,
+              )
+            const common = {
+              label,
+              value,
+              size: 'small' as const,
+              autoFocus: index === 0,
+              error: Boolean(error),
+              helperText: error || field.description,
+              sx: index === 0 ? { mt: 1 } : undefined,
+              onChange: (event: { target: { value: string } }) =>
+                setValue(event.target.value),
+            }
+            // Typed inputs per FT.Tag (AGL-179).
+            if (field.type === 'bool') {
+              return (
+                <TextField key={fieldId} {...common} select>
+                  <MenuItem value="">{'—'}</MenuItem>
+                  <MenuItem value="true">{'Yes'}</MenuItem>
+                  <MenuItem value="false">{'No'}</MenuItem>
+                </TextField>
+              )
+            }
+            if (field.type === 'text' && field.validation?.options?.length) {
+              return (
+                <TextField key={fieldId} {...common} select>
+                  <MenuItem value="">{'—'}</MenuItem>
+                  {field.validation.options.map((option) => (
+                    <MenuItem key={option} value={option}>
+                      {option}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )
+            }
+            if (
+              field.type === 'int32' ||
+              field.type === 'int64' ||
+              field.type === 'float'
+            ) {
+              return <TextField key={fieldId} {...common} type="number" />
+            }
+            if (field.type === 'timestamp') {
+              return (
+                <TextField
+                  key={fieldId}
+                  {...common}
+                  type="datetime-local"
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              )
+            }
+            if (field.type === 'coordinates') {
+              return (
+                <TextField
+                  key={fieldId}
+                  {...common}
+                  helperText={error || field.description || 'lat, lon'}
+                />
+              )
+            }
+            if (field.type === 'sorted') {
+              return (
+                <TextField
+                  key={fieldId}
+                  {...common}
+                  helperText={
+                    error || field.description || 'Comma-separated list'
+                  }
+                />
+              )
+            }
+            return <TextField key={fieldId} {...common} />
+          })}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
