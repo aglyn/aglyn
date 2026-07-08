@@ -123,6 +123,23 @@ export interface TenantFeatureFlags {
   screenAnalytics?: boolean
   /** CDN delivery + responsive image variants for media (AGL-175). */
   mediaCdn?: boolean
+  /** Announcement bar + promotional popups (AGL-195/196). */
+  marketingOverlays?: boolean
+}
+
+/**
+ * Site-wide announcement bar config on the host doc (AGL-195). Text may
+ * contain binding tokens; the tenant render resolves them server-side.
+ */
+export interface HostAnnouncementBar {
+  enabled?: boolean
+  text?: string
+  /** Optional link the whole bar navigates to. */
+  href?: string
+  backgroundColor?: string
+  textColor?: string
+  /** Visitors may hide the bar; hidden state re-arms when text changes. */
+  dismissible?: boolean
 }
 
 /**
@@ -232,6 +249,8 @@ export interface AglynHost extends AglynDocument {
   tenantId?: TenantUid
   subdomain?: string
   cname?: string
+  /** Site-wide announcement bar (AGL-195); marketingOverlays-gated. */
+  announcementBar?: HostAnnouncementBar
   displayName?: string
   seo?: {
     title?: string

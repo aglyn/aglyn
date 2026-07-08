@@ -44,6 +44,7 @@ export type Entitlement =
   | 'event-calendar'
   | 'redirects'
   | 'screen-analytics'
+  | 'marketing-overlays'
   | 'media-cdn'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
@@ -64,6 +65,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   'event-calendar': 'eventCalendar',
   redirects: 'redirects',
   'screen-analytics': 'screenAnalytics',
+  'marketing-overlays': 'marketingOverlays',
   'media-cdn': 'mediaCdn',
 }
 

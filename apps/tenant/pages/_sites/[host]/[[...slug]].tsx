@@ -22,7 +22,7 @@ import { doc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import type { GetStaticPaths, GetStaticProps } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
-import { useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useFirestoreDocData } from 'reactfire'
 import Head from 'next/head'
 import applyDuePublishSchedule from '../../../utils/apply-publish-schedule'
@@ -33,6 +33,7 @@ import getCollectionContent, {
 } from '../../../utils/get-collection-content'
 import getComponents from '../../../utils/get-components'
 import getTenant from '../../../utils/get-tenant'
+import getVariables from '../../../utils/get-variables'
 import getHost from '../../../utils/get-host'
 import getPublishedLayoutVersion from '../../../utils/get-layout-version'
 import getScreen from '../../../utils/get-screen'
@@ -53,6 +54,19 @@ interface Props {
   nodes: Record<Aglyn.NodeId, Aglyn.NodeSchema> | null
   /** Free-tier "Made with Aglyn" badge (AGL-69, removeBranding gate). */
   showBranding?: boolean
+  /**
+   * Site-wide announcement bar (AGL-195): text already binding-resolved
+   * server-side; `contentHash` keys the visitor's dismissal so edits
+   * re-show the bar. Null when disabled or not entitled.
+   */
+  announcementBar?: {
+    text: string
+    href?: string
+    backgroundColor?: string
+    textColor?: string
+    dismissible?: boolean
+    contentHash: string
+  } | null
   /** Collection list/entry payload when the path is content, not a screen. */
   content?: CollectionContent
   /** Password-protected screen: nodes withheld until unlock (AGL-87). */
@@ -423,6 +437,37 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
           .removeBranding,
     )
 
+    // Announcement bar (AGL-195): marketingOverlays-gated (dark-launch for
+    // plan-less tenants like other AGL-99 gates); binding tokens resolve
+    // server-side so the client ships plain text.
+    const barConfig = (hostRes.host as any)
+      ?.announcementBar as Aglyn.HostAnnouncementBar | undefined
+    let announcementBar: Props['announcementBar'] = null
+    if (
+      barConfig?.enabled &&
+      barConfig.text &&
+      (!tenantRes.tenant?.plan ||
+        Aglyn.resolveTenantEntitlements(tenantRes.tenant).features
+          .marketingOverlays)
+    ) {
+      const barVariables = await getVariables({ hostId })
+      const text = Aglyn.resolveBindings(barConfig.text, barVariables)
+      let hash = 0
+      for (let index = 0; index < text.length; index += 1) {
+        hash = (hash * 31 + text.charCodeAt(index)) | 0
+      }
+      announcementBar = {
+        text,
+        ...(barConfig.href ? { href: barConfig.href } : {}),
+        ...(barConfig.backgroundColor
+          ? { backgroundColor: barConfig.backgroundColor }
+          : {}),
+        ...(barConfig.textColor ? { textColor: barConfig.textColor } : {}),
+        dismissible: barConfig.dismissible !== false,
+        contentHash: Math.abs(hash).toString(36),
+      }
+    }
+
     const props = {
       data: JSON.parse(
         JSON.stringify({
@@ -436,6 +481,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
       ),
       nodes: denormalized,
       showBranding,
+      announcementBar,
     }
 
     return {
@@ -450,6 +496,85 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
       revalidate: 60,
     }
   }
+}
+
+/**
+ * Site-wide announcement bar (AGL-195). Dismissal is per content-hash in
+ * localStorage (no cookies): editing the text re-shows the bar for
+ * everyone who hid the old one.
+ */
+function AnnouncementBar(props: {
+  bar: NonNullable<Props['announcementBar']>
+}) {
+  const { bar } = props
+  const storageKey = `aglyn-abar-${bar.contentHash}`
+  const [hidden, setHidden] = useState(true)
+  useEffect(() => {
+    try {
+      setHidden(Boolean(window.localStorage.getItem(storageKey)))
+    } catch {
+      setHidden(false)
+    }
+  }, [storageKey])
+  if (hidden) return null
+  const style: CSSProperties = {
+    position: 'relative',
+    zIndex: 1300,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: '8px 40px 8px 16px',
+    fontSize: 14,
+    fontFamily: 'system-ui, sans-serif',
+    textAlign: 'center',
+    color: bar.textColor || '#fff',
+    backgroundColor: bar.backgroundColor || '#111827',
+  }
+  const text = bar.href ? (
+    <a
+      href={bar.href}
+      style={{ color: 'inherit', textDecoration: 'underline' }}
+    >
+      {bar.text}
+    </a>
+  ) : (
+    <span>{bar.text}</span>
+  )
+  return (
+    <div role="region" aria-label="Announcement" style={style}>
+      {text}
+      {bar.dismissible ? (
+        <button
+          type="button"
+          aria-label="Dismiss announcement"
+          onClick={() => {
+            try {
+              window.localStorage.setItem(storageKey, '1')
+            } catch {
+              // Storage may be unavailable (private mode); hide anyway.
+            }
+            setHidden(true)
+          }}
+          style={{
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            border: 'none',
+            background: 'transparent',
+            color: 'inherit',
+            fontSize: 16,
+            lineHeight: 1,
+            cursor: 'pointer',
+            padding: 6,
+          }}
+        >
+          {'✕'}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 const CatchAllPage = observer(function CatchAllPage(props: Props) {
@@ -1127,6 +1252,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           </>
         ) : null}
       </Head>
+      {props.announcementBar ? (
+        <AnnouncementBar bar={props.announcementBar} />
+      ) : null}
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
       {props.showBranding ? (
         <a

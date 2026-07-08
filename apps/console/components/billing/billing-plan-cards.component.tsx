@@ -81,6 +81,7 @@ const FEATURE_ROWS: Array<{
   { key: 'webhooks', label: 'Webhooks' },
   { key: 'multilingual', label: 'Multilingual sites' },
   { key: 'screenAnalytics', label: 'Per-screen traffic analytics' },
+  { key: 'marketingOverlays', label: 'Announcement bar & popups' },
   { key: 'mediaCdn', label: 'CDN delivery & responsive images' },
 ]
 

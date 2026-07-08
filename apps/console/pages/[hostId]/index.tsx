@@ -29,6 +29,7 @@ import HostFunctionsCard from '../../components/host-functions-card.component'
 import HostVariablesCard from '../../components/host-variables-card.component'
 import HostComponentsCard from '../../components/host-components-card.component'
 import HostActivityCard from '../../components/host-activity-card.component'
+import AnnouncementBarCard from '../../components/announcement-bar-card.component'
 import HostDisplayNameComponent from '../../components/host-display-name.component'
 import HostMembersCard from '../../components/host-members-card.component'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -71,6 +72,13 @@ const Index: NextPageWithLayout = (props) => {
                 md: 6,
               },
               children: <HostAnalyticsCard hostId={hostId} />,
+            },
+            {
+              size: {
+                xs: 12,
+                md: 6,
+              },
+              children: <AnnouncementBarCard hostId={hostId} />,
             },
             {
               size: {

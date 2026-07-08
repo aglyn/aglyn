@@ -75,10 +75,10 @@ export function keyByIdAndName<T extends { name?: string }>(
 ): Record<string, T> {
   const map: Record<string, T> = {}
   for (const { id: _id, ...doc } of docs) {
-    if (doc.name) map[doc.name] = doc as T
+    if (doc.name) map[doc.name] = doc as unknown as T
   }
   for (const { id, ...doc } of docs) {
-    map[id] = doc as T
+    map[id] = doc as unknown as T
   }
   return map
 }

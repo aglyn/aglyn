@@ -55,6 +55,7 @@ export type {
   TenantSubscription,
   AglynUser,
   ComponentDefUid,
+  HostAnnouncementBar,
   HostMediaUid,
   HostPath,
   HostUid,

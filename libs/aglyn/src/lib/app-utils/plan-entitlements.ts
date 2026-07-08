@@ -82,6 +82,7 @@ export const PLAN_ENTITLEMENTS: Record<
       redirects: false,
       screenAnalytics: false,
       mediaCdn: false,
+      marketingOverlays: false,
     },
   },
   starter: {
@@ -127,6 +128,7 @@ export const PLAN_ENTITLEMENTS: Record<
       redirects: true,
       screenAnalytics: false,
       mediaCdn: true,
+      marketingOverlays: true,
     },
   },
   pro: {
@@ -172,6 +174,7 @@ export const PLAN_ENTITLEMENTS: Record<
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
+      marketingOverlays: true,
     },
   },
   business: {
@@ -217,6 +220,7 @@ export const PLAN_ENTITLEMENTS: Record<
       redirects: true,
       screenAnalytics: true,
       mediaCdn: true,
+      marketingOverlays: true,
     },
   },
 }
