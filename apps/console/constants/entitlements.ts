@@ -38,6 +38,7 @@ export type Entitlement =
   | 'data-store'
   | 'bookings'
   | 'actions'
+  | 'webhooks'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -51,6 +52,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   'data-store': 'dataStore',
   bookings: 'bookings',
   actions: 'actions',
+  webhooks: 'webhooks',
 }
 
 /**

@@ -109,6 +109,8 @@ export interface TenantFeatureFlags {
   bookings?: boolean
   /** Event → action automation builder (AGL-148). */
   actions?: boolean
+  /** Outbound/inbound webhooks (AGL-149). */
+  webhooks?: boolean
 }
 
 /**

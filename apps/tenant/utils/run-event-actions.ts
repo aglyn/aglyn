@@ -19,6 +19,8 @@ import {
   ACTION_MAX_EVENT_DEPTH,
   ACTION_MAX_STEPS,
   checkEntitlement,
+  type HostWebhook,
+  WEBHOOK_URL_PATTERN,
   evaluateExpression,
   type HostAction,
   type HostActionAlert,
@@ -30,6 +32,7 @@ import {
   sanitizeRecordValues,
 } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { HostEventPayload } from './run-event-workflows'
 
@@ -73,6 +76,8 @@ export async function runEventActions(
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     const hostSnapshot = await hostRef.get()
     const tenantId = hostSnapshot.get('tenantId') as string | undefined
+    // Webhook steps take the higher `webhooks` gate (AGL-149).
+    let webhooksAllowed = true
     if (tenantId) {
       const tenantSnapshot = await firestore
         .collection('tenants')
@@ -81,6 +86,7 @@ export async function runEventActions(
       const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
       if (tenant?.['plan']) {
         if (!checkEntitlement(tenant as any, 'actions')) return alerts
+        webhooksAllowed = checkEntitlement(tenant as any, 'webhooks')
         const limit = resolveTenantEntitlements(
           tenant as any,
         ).actionRunsPerMonth
@@ -164,6 +170,63 @@ export async function runEventActions(
               depth + 1,
             )
             alerts.push(...nested)
+          } else if (step.type === 'webhookPost') {
+            if (!webhooksAllowed) {
+              stepErrors.push('webhooks require a Business plan')
+              continue
+            }
+            const hooks = await hostRef
+              .collection('webhooks')
+              .where('name', '==', step.webhookName.trim())
+              .limit(1)
+              .get()
+            const hook = hooks.docs[0]?.data() as HostWebhook | undefined
+            if (
+              !hook ||
+              hooks.docs[0].get('deletedAt') ||
+              hook.enabled === false ||
+              hook.direction !== 'outbound' ||
+              !hook.url ||
+              !WEBHOOK_URL_PATTERN.test(hook.url)
+            ) {
+              stepErrors.push(`unknown webhook "${step.webhookName}"`)
+              continue
+            }
+            const body = JSON.stringify({
+              event,
+              payload,
+              sentAt: new Date().toISOString(),
+            })
+            const signature = hook.secret
+              ? createHmac('sha256', hook.secret).update(body).digest('hex')
+              : ''
+            // Two quick retries — serverless-friendly; longer retry queues
+            // are a follow-up.
+            let delivered = false
+            for (let attempt = 0; attempt < 3 && !delivered; attempt += 1) {
+              try {
+                const response = await fetch(hook.url, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(signature && { 'X-Aglyn-Signature': signature }),
+                  },
+                  body,
+                  signal: AbortSignal.timeout(5000),
+                })
+                delivered = response.ok
+              } catch {
+                // Retry below.
+              }
+              if (!delivered && attempt < 2) {
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 500 * (attempt + 1)),
+                )
+              }
+            }
+            if (!delivered) {
+              stepErrors.push(`webhook "${step.webhookName}" delivery failed`)
+            }
           } else if (step.type === 'datasetAppend') {
             const datasets = await hostRef
               .collection('datasets')

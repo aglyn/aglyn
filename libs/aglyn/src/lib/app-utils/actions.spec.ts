@@ -19,6 +19,7 @@ import {
   type HostAction,
   isCustomEventName,
   validateHostAction,
+  WEBHOOK_URL_PATTERN,
 } from './actions'
 
 const base: HostAction = {
@@ -76,5 +77,24 @@ describe('isCustomEventName', () => {
     expect(isCustomEventName('cart-updated')).toBe(true)
     expect(isCustomEventName('formSubmission')).toBe(false)
     expect(isCustomEventName('x')).toBe(false)
+  })
+
+describe('WEBHOOK_URL_PATTERN', () => {
+  it('allows public https and blocks local/private targets (AGL-149)', () => {
+    expect(WEBHOOK_URL_PATTERN.test('https://hooks.example.com/x')).toBe(true)
+    expect(WEBHOOK_URL_PATTERN.test('http://example.com')).toBe(false)
+    expect(WEBHOOK_URL_PATTERN.test('https://localhost/x')).toBe(false)
+    expect(WEBHOOK_URL_PATTERN.test('https://192.168.1.5/x')).toBe(false)
+    expect(WEBHOOK_URL_PATTERN.test('https://10.0.0.1/x')).toBe(false)
+  })
+
+  it('validates webhookPost steps', () => {
+    expect(
+      validateHostAction({
+        name: 'Notify',
+        trigger: { event: 'lead' },
+        steps: [{ type: 'webhookPost', webhookName: '' }],
+      }),
+    ).toMatch(/Step 1/)
   })
 })

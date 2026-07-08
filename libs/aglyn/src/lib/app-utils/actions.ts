@@ -34,6 +34,7 @@ export type HostActionStep =
     }
   | { type: 'customEvent'; eventName: string }
   | { type: 'datasetAppend'; datasetName: string }
+  | { type: 'webhookPost'; webhookName: string }
 
 export type HostActionStepType = HostActionStep['type']
 
@@ -61,6 +62,7 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   siteAlert: 'Show a site alert',
   customEvent: 'Fire a custom event',
   datasetAppend: 'Write to a dataset',
+  webhookPost: 'Send a webhook (Business)',
 }
 
 /** True for a custom (non-built-in) event name an action may fire. */
@@ -103,6 +105,9 @@ export function validateHostAction(action: HostAction): string | null {
     if (step.type === 'datasetAppend' && !step.datasetName?.trim()) {
       return `${label}: pick a dataset`
     }
+    if (step.type === 'webhookPost' && !step.webhookName?.trim()) {
+      return `${label}: pick a webhook`
+    }
   }
   return null
 }
@@ -112,3 +117,27 @@ export interface HostActionAlert {
   message: string
   severity: 'info' | 'success' | 'warning' | 'error'
 }
+
+/**
+ * Webhooks (AGL-149) at `hosts/{hostId}/webhooks/{id}`. Outbound entries
+ * are targets a `webhookPost` action step delivers to (HMAC-signed);
+ * inbound entries mint `/api/hooks/{hostId}/{hookId}` endpoints that run
+ * a workflow with the posted JSON in scope. Business tier (`webhooks`
+ * flag); Pro can be enabled per-tenant via entitlement overrides.
+ */
+export interface HostWebhook {
+  name: string
+  direction: 'outbound' | 'inbound'
+  /** Outbound delivery URL (https only; checked again at send time). */
+  url?: string
+  /** Shared secret: signs outbound bodies, verifies inbound callers. */
+  secret?: string
+  /** Inbound: workflow (by name) enrolled with the payload in scope. */
+  workflowName?: string
+  enabled?: boolean
+}
+
+export const WEBHOOK_MAX_PER_HOST = 5
+/** Outbound URLs must be public https — first-line SSRF guard. */
+export const WEBHOOK_URL_PATTERN =
+  /^https:\/\/(?!localhost)(?!127\.)(?!0\.)(?!10\.)(?!172\.(1[6-9]|2\d|3[01])\.)(?!192\.168\.)(?!169\.254\.)[^\s]+$/i

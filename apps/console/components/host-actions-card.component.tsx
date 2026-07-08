@@ -71,6 +71,8 @@ function defaultStep(type: HostActionStepType): HostActionStep {
       return { type, message: '', severity: 'info' }
     case 'customEvent':
       return { type, eventName: '' }
+    case 'webhookPost':
+      return { type, webhookName: '' }
     default:
       return { type: 'datasetAppend', datasetName: '' }
   }
@@ -101,6 +103,10 @@ export function HostActionsCard(props: { hostId: string }) {
     query(collection(firestore, 'hosts', hostId, 'datasets'), limit(100)),
     { idField: '$id' },
   )
+  const { data: webhookDocs } = useFirestoreCollectionData<any>(
+    query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
+    { idField: '$id' },
+  )
   const actions = [...(actionDocs ?? [])]
     .filter((action: any) => !action.deletedAt)
     .sort((a: any, b: any) =>
@@ -113,6 +119,13 @@ export function HostActionsCard(props: { hostId: string }) {
   const datasetNames = (datasetDocs ?? [])
     .filter((dataset: any) => !dataset.deletedAt && dataset.name)
     .map((dataset: any) => dataset.name as string)
+    .sort()
+  const webhookNames = (webhookDocs ?? [])
+    .filter(
+      (hook: any) =>
+        !hook.deletedAt && hook.name && hook.direction === 'outbound',
+    )
+    .map((hook: any) => hook.name as string)
     .sort()
 
   const [draft, setDraft] = useState<ActionDraft | null>(null)
@@ -478,6 +491,30 @@ export function HostActionsCard(props: { hostId: string }) {
                   size="small"
                   sx={{ flex: 1 }}
                 />
+              ) : step.type === 'webhookPost' ? (
+                <TextField
+                  select
+                  label="Webhook"
+                  value={step.webhookName}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) =>
+                        index2 === index
+                          ? { ...s, webhookName: event.target.value }
+                          : s,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ flex: 1 }}
+                >
+                  {webhookNames.map((name) => (
+                    <MenuItem key={name} value={name}>
+                      {name}
+                    </MenuItem>
+                  ))}
+                </TextField>
               ) : (
                 <TextField
                   select

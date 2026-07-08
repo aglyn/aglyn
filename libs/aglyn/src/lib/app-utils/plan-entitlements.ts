@@ -74,6 +74,7 @@ export const PLAN_ENTITLEMENTS: Record<
       videoMedia: false,
       bookings: false,
       actions: false,
+      webhooks: false,
     },
   },
   starter: {
@@ -111,6 +112,7 @@ export const PLAN_ENTITLEMENTS: Record<
       videoMedia: false,
       bookings: true,
       actions: false,
+      webhooks: false,
     },
   },
   pro: {
@@ -148,6 +150,7 @@ export const PLAN_ENTITLEMENTS: Record<
       videoMedia: true,
       bookings: true,
       actions: true,
+      webhooks: false,
     },
   },
   business: {
@@ -185,6 +188,7 @@ export const PLAN_ENTITLEMENTS: Record<
       videoMedia: true,
       bookings: true,
       actions: true,
+      webhooks: true,
     },
   },
 }
