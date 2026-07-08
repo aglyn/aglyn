@@ -20,7 +20,8 @@ import { Leaf, type LeafProps } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { Box } from '@mui/material'
 import { observer } from 'mobx-react-lite'
-import { forwardRef } from 'react'
+import { forwardRef, useContext, useMemo } from 'react'
+import BindingPickerContext from '../contexts/binding-picker-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import DraggableDroppable from './dnd/draggable-droppable'
 
@@ -64,6 +65,41 @@ export const NodeLeaf = observer(
       node?.componentId === Aglyn.LAYOUT_SLOT_COMPONENT_ID &&
       viewType === Aglyn.HostViewType.LAYOUT
 
+    // WYSIWYG bindings (AGL-97): resolve variable/function tokens
+    // live on the rendered copy (selection/dnd keep the original node).
+    // Bound nodes are flagged either way so editors can spot them.
+    const [resolveFlag] = useAglynBesignerFlag('resolveBindings')
+    const { variables, functions } = useContext(BindingPickerContext)
+    const boundProps = useMemo(
+      () =>
+        Object.entries(node?.props ?? {}).filter(
+          ([, value]) =>
+            typeof value === 'string' && Aglyn.hasBindings(value),
+        ),
+      // MobX props are observable; the JSON string keys the memo cheaply.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [node, JSON.stringify(node?.props ?? {})],
+    )
+    const renderNode = useMemo(() => {
+      if (
+        resolveFlag === false ||
+        !boundProps.length ||
+        (!Object.keys(variables ?? {}).length &&
+          !Object.keys(functions ?? {}).length)
+      ) {
+        return node
+      }
+      const resolved: Record<string, unknown> = { ...(node?.props ?? {}) }
+      for (const [key, value] of boundProps) {
+        resolved[key] = Aglyn.resolveBindings(
+          value as string,
+          (variables ?? {}) as any,
+          (functions ?? {}) as any,
+        )
+      }
+      return { ...node, props: resolved }
+    }, [node, boundProps, resolveFlag, variables, functions])
+
     return (
       <DraggableDroppable
         node={node}
@@ -73,8 +109,9 @@ export const NodeLeaf = observer(
       >
         <Leaf
           ref={ref}
-          node={node}
+          node={renderNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
+          data-aglyn-bound={boundProps.length ? '' : undefined}
           {...rest}
         >
           {children}

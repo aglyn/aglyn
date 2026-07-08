@@ -34,6 +34,14 @@ export interface BindingOption {
 
 export interface BindingPickerContextValue {
   options?: BindingOption[]
+  /**
+   * Live-resolution inputs (AGL-97): the host's variable docs (by name)
+   * and function definitions (by name) so the canvas can render resolved
+   * values via `resolveBindings`. Optional — without them the canvas
+   * shows raw tokens regardless of the toggle.
+   */
+  variables?: Record<string, import('@aglyn/aglyn').HostVariable>
+  functions?: Record<string, import('@aglyn/aglyn').HostFunction>
 }
 
 export const BindingPickerContext = createContext<BindingPickerContextValue>(

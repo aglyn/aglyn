@@ -64,7 +64,18 @@ export function BindingPickerProvider(props: BindingPickerProviderProps) {
         token: `{{fn:${definition.name}(${parameters})}}`,
       })
     }
-    return { options }
+    // Live canvas resolution (AGL-97): name-keyed maps for resolveBindings.
+    const variables: Record<string, any> = {}
+    for (const variable of variableDocs ?? []) {
+      if (variable.deletedAt || !variable.name) continue
+      variables[variable.name] = variable
+    }
+    const functions: Record<string, any> = {}
+    for (const definition of functionDocs ?? []) {
+      if (definition.deletedAt || !definition.name) continue
+      functions[definition.name] = definition
+    }
+    return { options, variables, functions }
   }, [variableDocs, functionDocs])
 
   return (

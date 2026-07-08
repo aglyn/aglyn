@@ -45,6 +45,11 @@ export type BesignerContext = {
     canvasScheme?: HostThemeScheme
     /** What kind of host view the canvas is editing (screen or shared layout). */
     viewType?: HostViewType
+    /**
+     * WYSIWYG bindings (AGL-97): when not false, the canvas resolves
+     * variable/function binding tokens live; toggle off for raw tokens.
+     */
+    resolveBindings?: boolean
   }
   panels: {
     panelLeft?: BesignerPanelItem

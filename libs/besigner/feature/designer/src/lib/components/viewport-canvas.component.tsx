@@ -40,6 +40,15 @@ const ViewportCanvas = styled('div', {
   overflowY: 'auto',
   overflowX: 'auto',
   // display: 'flex',
+  // Bound-content marker (AGL-97): elements whose props carry binding
+  // tokens get a subtle dotted underline so editors can
+  // spot dynamic content whether tokens are shown raw or resolved.
+  '& [data-aglyn-bound]': {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'dotted',
+    textDecorationColor: 'rgba(123, 31, 162, 0.55)',
+    textUnderlineOffset: 3,
+  },
 })
 
 const ViewportArtboard = styled('div', {
