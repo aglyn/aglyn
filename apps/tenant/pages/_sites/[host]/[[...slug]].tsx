@@ -499,6 +499,13 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
 
   // Pageview beacon (AGL-82): privacy-friendly counter, no cookies.
   const beaconHostId = props.data?.host?.$id
+  // Strict format check — the id lands inside an inline script (AGL-138).
+  const gaCandidate = String(
+    (props.data?.host as any)?.analytics?.gaMeasurementId ?? '',
+  )
+  const gaMeasurementId = /^G-[A-Z0-9]{4,16}$/.test(gaCandidate)
+    ? gaCandidate
+    : null
   useEffect(() => {
     if (!beaconHostId || typeof navigator === 'undefined') return
     try {
@@ -507,6 +514,9 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         JSON.stringify({
           hostId: beaconHostId,
           path: window.location.pathname,
+          // External referrer host only; same-site moves are dropped
+          // server-side (AGL-138).
+          referrer: document.referrer || undefined,
         }),
       )
     } catch {
@@ -888,6 +898,26 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         ) : null}
         {props.notFoundFallback || props.maintenanceFallback || unlisted ? (
           <meta key="robots" name="robots" content="noindex" />
+        ) : null}
+        {/* Google Analytics (AGL-138): tenant-configured measurement id. */}
+        {gaMeasurementId ? (
+          <>
+            <script
+              key="ga-src"
+              async
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
+            />
+            <script
+              key="ga-init"
+              dangerouslySetInnerHTML={{
+                __html:
+                  'window.dataLayer=window.dataLayer||[];' +
+                  'function gtag(){dataLayer.push(arguments);}' +
+                  "gtag('js', new Date());" +
+                  `gtag('config', '${gaMeasurementId}');`,
+              }}
+            />
+          </>
         ) : null}
       </Head>
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />

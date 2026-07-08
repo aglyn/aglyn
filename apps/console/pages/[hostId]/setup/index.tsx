@@ -105,6 +105,19 @@ const seoSchema: FormSchema = {
   fields: [
     {
       component: FieldComponentType.TEXT_FIELD,
+      name: 'analytics.gaMeasurementId',
+      label: 'Google Analytics measurement ID',
+      helperText: 'Optional — e.g. G-XXXXXXXXXX; injects gtag on your site',
+      type: 'text',
+      FormFieldGridProps: {
+        size: {
+          xs: 12,
+          sm: 6,
+        },
+      },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
       name: 'seo.title',
       label: 'Title',
       type: 'text',

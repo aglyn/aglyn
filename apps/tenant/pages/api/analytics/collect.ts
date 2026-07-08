@@ -45,6 +45,29 @@ export default async function handler(
     const path = String(body.path ?? '/')
     if (!hostId || hostId.length > 64) return res.status(204).end()
 
+    // Referrer host (AGL-138): external sources only — same-host and
+    // unparsable referrers are dropped.
+    let referrerHost = ''
+    try {
+      const referrer = String(body.referrer ?? '')
+      if (referrer) {
+        const url = new URL(referrer)
+        const requestHost = String(req.headers.host ?? '')
+        if (url.host && url.host !== requestHost) {
+          referrerHost = url.host.slice(0, 100).replace(/[.$#[\]]/g, '_')
+        }
+      }
+    } catch {
+      // Ignore junk referrers.
+    }
+    // Coarse device class from the UA (AGL-138) — no fingerprinting.
+    const userAgent = String(req.headers['user-agent'] ?? '')
+    const device = /ipad|tablet/i.test(userAgent)
+      ? 'tablet'
+      : /mobi|android|iphone/i.test(userAgent)
+        ? 'mobile'
+        : 'desktop'
+
     const day = new Date().toISOString().slice(0, 10)
     await firebaseAdmin
       .app()
@@ -57,6 +80,10 @@ export default async function handler(
         {
           total: FieldValue.increment(1),
           paths: { [pathKey(path)]: FieldValue.increment(1) },
+          devices: { [device]: FieldValue.increment(1) },
+          ...(referrerHost && {
+            referrers: { [referrerHost]: FieldValue.increment(1) },
+          }),
         },
         { merge: true },
       )

@@ -20,7 +20,9 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   LinearProgress,
+  MenuItem,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -28,29 +30,31 @@ import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from 'reactfire'
 
-const DAYS = 14
-
 interface DayStat {
   day: string
   total: number
   paths: Record<string, number>
+  referrers: Record<string, number>
+  devices: Record<string, number>
 }
 
 /**
- * Glanceable traffic panel (AGL-82): last 14 days of pageviews from the
- * per-day counter docs the tenant beacon writes, plus the top pages across
- * the window. Explicitly not a GA replacement.
+ * Glanceable traffic panel (AGL-82, insights AGL-138): pageviews over a
+ * selectable window from the per-day counter docs the tenant beacon
+ * writes, plus top pages, top referrers, and a device split. Explicitly
+ * not a GA replacement — Setup accepts a GA measurement id for that.
  */
 export function HostAnalyticsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
   const [days, setDays] = useState<DayStat[] | null>(null)
+  const [range, setRange] = useState(14)
 
   useEffect(() => {
     let active = true
-    const ids = Array.from({ length: DAYS }, (_, index) => {
+    const ids = Array.from({ length: range }, (_, index) => {
       const date = new Date()
-      date.setDate(date.getDate() - (DAYS - 1 - index))
+      date.setDate(date.getDate() - (range - 1 - index))
       return date.toISOString().slice(0, 10)
     })
     void Promise.all(
@@ -60,8 +64,22 @@ export function HostAnalyticsCard(props: { hostId: string }) {
             day: id,
             total: Number(snapshot.get('total') ?? 0),
             paths: (snapshot.get('paths') ?? {}) as Record<string, number>,
+            referrers: (snapshot.get('referrers') ?? {}) as Record<
+              string,
+              number
+            >,
+            devices: (snapshot.get('devices') ?? {}) as Record<
+              string,
+              number
+            >,
           }))
-          .catch(() => ({ day: id, total: 0, paths: {} })),
+          .catch(() => ({
+            day: id,
+            total: 0,
+            paths: {},
+            referrers: {},
+            devices: {},
+          })),
       ),
     ).then((stats) => {
       if (active) setDays(stats)
@@ -69,7 +87,7 @@ export function HostAnalyticsCard(props: { hostId: string }) {
     return () => {
       active = false
     }
-  }, [firestore, hostId])
+  }, [firestore, hostId, range])
 
   const total = (days ?? []).reduce((sum, day) => sum + day.total, 0)
   const max = Math.max(1, ...(days ?? []).map((day) => day.total))
@@ -83,9 +101,54 @@ export function HostAnalyticsCard(props: { hostId: string }) {
   )
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5)
+  const topReferrers = Object.entries(
+    (days ?? []).reduce<Record<string, number>>((acc, day) => {
+      for (const [host, count] of Object.entries(day.referrers)) {
+        acc[host] = (acc[host] ?? 0) + count
+      }
+      return acc
+    }, {}),
+  )
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+  const deviceTotals = (days ?? []).reduce<Record<string, number>>(
+    (acc, day) => {
+      for (const [device, count] of Object.entries(day.devices)) {
+        acc[device] = (acc[device] ?? 0) + count
+      }
+      return acc
+    },
+    {},
+  )
+  const deviceSum = Object.values(deviceTotals).reduce(
+    (sum, count) => sum + count,
+    0,
+  )
 
   return (
-    <CardDisplay header={'Traffic (14 days)'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Traffic'}
+      contentGutterX
+      contentGutterY
+      HeaderProps={{
+        action: (
+          <TextField
+            select
+            size="small"
+            value={range}
+            onChange={(event) => {
+              setDays(null)
+              setRange(Number(event.target.value))
+            }}
+          >
+            <MenuItem value={7}>{'7 days'}</MenuItem>
+            <MenuItem value={14}>{'14 days'}</MenuItem>
+            <MenuItem value={30}>{'30 days'}</MenuItem>
+            <MenuItem value={90}>{'90 days'}</MenuItem>
+          </TextField>
+        ),
+      }}
+    >
       {days === null ? (
         <LinearProgress />
       ) : total === 0 ? (
@@ -114,6 +177,38 @@ export function HostAnalyticsCard(props: { hostId: string }) {
               </Tooltip>
             ))}
           </Stack>
+          {deviceSum ? (
+            <Typography variant="caption" color="text.secondary">
+              {['desktop', 'mobile', 'tablet']
+                .filter((device) => deviceTotals[device])
+                .map(
+                  (device) =>
+                    `${device} ${Math.round(
+                      ((deviceTotals[device] ?? 0) / deviceSum) * 100,
+                    )}%`,
+                )
+                .join(' · ')}
+            </Typography>
+          ) : null}
+          {topReferrers.length ? (
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2">{'Top referrers'}</Typography>
+              {topReferrers.map(([host, count]) => (
+                <Stack
+                  key={host}
+                  direction="row"
+                  sx={{ justifyContent: 'space-between' }}
+                >
+                  <Typography variant="body2" noWrap sx={{ maxWidth: '80%' }}>
+                    {host}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {count.toLocaleString()}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          ) : null}
           {topPaths.length ? (
             <Stack spacing={0.5}>
               <Typography variant="subtitle2">{'Top pages'}</Typography>
