@@ -21,6 +21,7 @@ import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Box,
   Button,
   Card,
   CardActions,
@@ -33,9 +34,20 @@ import {
   Grid,
   Typography,
 } from '@mui/material'
-import { doc, setDoc } from 'firebase/firestore'
-import { useCallback } from 'react'
-import { useFirestore } from 'reactfire'
+import {
+  collection,
+  doc,
+  limit,
+  query,
+  setDoc,
+  where,
+} from 'firebase/firestore'
+import { useCallback, useState } from 'react'
+import {
+  useFirestore,
+  useFirestoreCollectionData,
+  useUser,
+} from 'reactfire'
 import { checkTenantQuota } from '../../constants/entitlements'
 import { publishScreenRoute } from '../../constants/screen-publishing'
 import {
@@ -66,6 +78,66 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { tenant } = useCurrentTenant()
+  const { data: user } = useUser()
+
+  // Community site templates (AGL-137): published bundles with previews.
+  const { data: templateListings } = useFirestoreCollectionData<any>(
+    query(
+      collection(firestore, 'communityListings'),
+      where('kind', '==', 'template'),
+      limit(30),
+    ),
+    { idField: '$id' },
+  )
+  const communityTemplates = (templateListings ?? []).filter(
+    (listing: any) => !listing.deletedAt,
+  )
+  const [installingId, setInstallingId] = useState<string | null>(null)
+  const handleInstallTemplate = useCallback(
+    (listing: any) => async () => {
+      if (installingId) return
+      setInstallingId(listing.$id)
+      const dequeue = queueLoading()
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/community/install-template', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({ listingId: listing.$id, hostId }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'Template install failed',
+            {
+              variant: response.status === 402 ? 'warning' : 'error',
+              allowDuplicate: true,
+            },
+          )
+        }
+        enqueueSnackbar(
+          `Added ${payload.screens} screen${payload.screens === 1 ? '' : 's'}` +
+            ` from "${listing.displayName}"` +
+            (payload.themeApplied ? ' (theme applied)' : ''),
+          { variant: 'success', persist: false },
+        )
+        onClose()
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        setInstallingId(null)
+        dequeue()
+      }
+    },
+    [installingId, user, hostId, queueLoading, enqueueSnackbar, onClose],
+  )
 
   const handleUse = useCallback(
     (template: StarterTemplate) => async () => {
@@ -200,6 +272,75 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             </Grid>
           ))}
         </Grid>
+        {communityTemplates.length ? (
+          <>
+            <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
+              {'Community templates'}
+            </Typography>
+            <Grid container spacing={2}>
+              {communityTemplates.map((listing: any) => (
+                <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    {listing.previewImageUrl ? (
+                      <Box
+                        component="img"
+                        src={listing.previewImageUrl}
+                        alt={`${listing.displayName} preview`}
+                        sx={{
+                          width: '100%',
+                          height: 120,
+                          objectFit: 'cover',
+                        }}
+                      />
+                    ) : null}
+                    <CardContent>
+                      <Typography variant="h6">
+                        {listing.displayName}
+                      </Typography>
+                      {listing.category ? (
+                        <Chip
+                          label={listing.category}
+                          size="small"
+                          variant="outlined"
+                          sx={{ my: 1 }}
+                        />
+                      ) : null}
+                      <Typography variant="body2" color="text.secondary">
+                        {listing.description ?? ''}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        component="div"
+                        sx={{ mt: 1 }}
+                      >
+                        {`${listing.screenCount ?? '?'} screens · v${
+                          listing.latestVersion
+                        }` +
+                          (Number(listing.priceUsd ?? 0) > 0
+                            ? ` · $${listing.priceUsd}`
+                            : ' · free')}
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="secondary"
+                        disabled={installingId === listing.$id}
+                        onClick={handleInstallTemplate(listing)}
+                      >
+                        {installingId === listing.$id
+                          ? 'Installing…'
+                          : 'Use template'}
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </>
+        ) : null}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{'Start blank instead'}</Button>
