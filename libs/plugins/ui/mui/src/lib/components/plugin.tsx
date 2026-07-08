@@ -37,6 +37,27 @@ export interface CommunityPluginProps {
   revoked?: boolean
   /** Extra props forwarded to the plugin (filtered to its allowlist). */
   pluginProps?: Record<string, unknown>
+  /**
+   * Per-placement plugin settings as JSON (AGL-192), authored in the
+   * element panel. Parsed into `pluginProps` and filtered to the
+   * manifest's declared props before it reaches the plugin.
+   */
+  pluginPropsJson?: string
+}
+
+/** Parses the authored settings JSON; invalid input yields no props. */
+export function parsePluginPropsJson(
+  raw: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!raw || !raw.trim()) return undefined
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -58,8 +79,15 @@ const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
       capabilities,
       revoked,
       pluginProps,
+      pluginPropsJson,
       ...rest
     } = props
+    // Merge authored settings (AGL-192) under any compose-injected props;
+    // PluginFrame filters the result to the manifest allowlist.
+    const resolvedPluginProps = {
+      ...(pluginProps ?? {}),
+      ...(parsePluginPropsJson(pluginPropsJson) ?? {}),
+    }
     const pluginOrigin =
       typeof process !== 'undefined'
         ? process.env['NEXT_PUBLIC_PLUGIN_ORIGIN']
@@ -104,7 +132,7 @@ const CommunityPlugin = forwardRef<HTMLElement, CommunityPluginProps>(
         version={version}
         sha256={sha256}
         capabilities={capabilities}
-        pluginProps={pluginProps}
+        pluginProps={resolvedPluginProps}
         revoked={revoked}
       />
     )
@@ -127,6 +155,14 @@ export const schema: Aglyn.ComponentSchema<CommunityPluginProps> = {
         'plugin renders in an isolated iframe region.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Plugin listing id',
+    },
+    {
+      name: 'pluginPropsJson',
+      description:
+        'Optional settings as JSON, e.g. {"city":"NYC"}. Keys the plugin ' +
+        'did not declare in its manifest are ignored.',
+      component: Aglyn.FieldComponentType.TEXTAREA,
+      label: 'Plugin settings (JSON)',
     },
   ],
 }

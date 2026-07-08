@@ -16,9 +16,19 @@
  */
 
 import {
+  parsePluginPropsJson,
   PLUGIN_DRAWER_CATEGORY,
   pluginInstallToPreset,
 } from './plugin'
+
+describe('parsePluginPropsJson (AGL-192)', () => {
+  it('parses an object and rejects junk/arrays', () => {
+    expect(parsePluginPropsJson('{"city":"NYC"}')).toEqual({ city: 'NYC' })
+    expect(parsePluginPropsJson('')).toBeUndefined()
+    expect(parsePluginPropsJson('not json')).toBeUndefined()
+    expect(parsePluginPropsJson('[1,2]')).toBeUndefined()
+  })
+})
 
 describe('pluginInstallToPreset (AGL-190)', () => {
   it('builds a Community-category preset pinning the listing id', () => {
