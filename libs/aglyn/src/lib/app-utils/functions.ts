@@ -43,6 +43,12 @@ export interface FunctionSetOperation {
   set: string
   /** Expression text, e.g. `P1 + P2` or `(P1 + 1) * 2`. */
   expression: string
+  /**
+   * Workflow (by name) whose result to assign instead of `expression`
+   * (AGL-129). Runs with the function's current scope visible; only
+   * honored when the caller provides a workflow runner.
+   */
+  workflow?: string
 }
 
 /** The mockup's numbered operation card: if / then / otherwise. */
@@ -244,9 +250,22 @@ export type FunctionRunResult =
  * evaluates its `if` and applies the matching SET list in order, and the
  * `returnValue` name's final value comes back.
  */
+export interface EvaluateFunctionOptions {
+  /**
+   * Workflow invoker for `set.workflow` operations (AGL-129); wired by
+   * `runWorkflow` so cross-calls share one depth guard. Absent means
+   * workflow operations fail with a clear error.
+   */
+  invokeWorkflow?: (
+    name: string,
+    scope: Scope,
+  ) => number | string | boolean
+}
+
 export function evaluateHostFunction(
   definition: HostFunction,
   args: Record<string, unknown>,
+  options?: EvaluateFunctionOptions,
 ): FunctionRunResult {
   try {
     const scope: Scope = {}
@@ -282,10 +301,20 @@ export function evaluateHostFunction(
         if (!(setOperation.set in scope)) {
           throw new Error(`Unknown variable "${setOperation.set}"`)
         }
-        scope[setOperation.set] = evaluateExpression(
-          setOperation.expression,
-          scope,
-        )
+        if (setOperation.workflow) {
+          if (!options?.invokeWorkflow) {
+            throw new Error('Workflow calls are not available here')
+          }
+          scope[setOperation.set] = options.invokeWorkflow(
+            setOperation.workflow,
+            scope,
+          )
+        } else {
+          scope[setOperation.set] = evaluateExpression(
+            setOperation.expression,
+            scope,
+          )
+        }
       }
     }
 

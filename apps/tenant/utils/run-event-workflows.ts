@@ -56,6 +56,16 @@ export async function runEventWorkflows(
       .get()
     const workflows = triggered.docs.filter((doc) => !doc.get('deletedAt'))
     if (!workflows.length) return
+    // Full workflow map for nested function→workflow calls (AGL-129).
+    const allWorkflowDocs = await hostRef
+      .collection('workflows')
+      .limit(100)
+      .get()
+    const workflowMap: Record<string, HostWorkflow> = {}
+    for (const doc of allWorkflowDocs.docs) {
+      const data = doc.data() as any
+      if (data?.name && !data.deletedAt) workflowMap[data.name] = data
+    }
 
     // Monthly run cap by the owning tenant's plan (AGL-165) — dark-launch
     // rule: tenants without a plan are uncapped, like every other gate.
@@ -110,10 +120,13 @@ export async function runEventWorkflows(
           continue // A broken filter never fires.
         }
       }
-      const run = runWorkflow(workflow, functions, variables, {
-        event,
-        ...payload,
-      })
+      const run = runWorkflow(
+        workflow,
+        functions,
+        variables,
+        { event, ...payload },
+        { workflows: workflowMap },
+      )
       executed += 1
       // `=== false` (not `!run.ok`): the union fails to narrow under the
       // stricter build tsconfig otherwise (same quirk as runWorkflow).

@@ -16,7 +16,10 @@
  */
 
 import type { HostFunction } from './functions'
-import { runWorkflow } from './workflows'
+import {
+  resolveComputedVariables,
+  runWorkflow,
+} from './workflows'
 
 const sum: HostFunction = {
   name: 'Sum',
@@ -106,5 +109,78 @@ describe('runWorkflow', () => {
       { visits: 21 },
     )
     expect(result).toMatchObject({ ok: true, value: 42 })
+  })
+
+  it('lets function operations invoke workflows with a depth guard (AGL-129)', () => {
+    const caller: any = {
+      name: 'Caller',
+      parameters: [{ name: 'X', type: 'number', required: true }],
+      variables: [{ name: 'Y', type: 'number' }],
+      operations: [
+        {
+          if: { left: '1', comparator: '==', right: '1' },
+          then: [{ set: 'Y', expression: '', workflow: 'Inner' }],
+          otherwise: [],
+        },
+      ],
+      returnValue: 'Y',
+    }
+    const inner = {
+      name: 'Inner',
+      steps: [{ functionName: 'Double', args: ['X'] }],
+    }
+    const outer = {
+      name: 'Outer',
+      steps: [{ functionName: 'Caller', args: ['5'] }],
+    }
+    const allFunctions = { ...functions, Caller: caller }
+    const workflows = { Inner: inner, Outer: outer }
+    const result = runWorkflow(outer, allFunctions, {}, {}, { workflows })
+    expect(result).toMatchObject({ ok: true, value: 10 })
+
+    // Self-recursive workflow terminates at the depth cap.
+    const loopFn: any = {
+      ...caller,
+      name: 'LoopFn',
+      operations: [
+        {
+          if: { left: '1', comparator: '==', right: '1' },
+          then: [{ set: 'Y', expression: '', workflow: 'Loop' }],
+          otherwise: [],
+        },
+      ],
+    }
+    const loop = { name: 'Loop', steps: [{ functionName: 'LoopFn', args: ['1'] }] }
+    const looped = runWorkflow(
+      loop,
+      { ...allFunctions, LoopFn: loopFn },
+      {},
+      {},
+      { workflows: { Loop: loop } },
+    )
+    expect(looped.ok).toBe(false)
+  })
+
+  it('resolves computed variables from workflows with fallback (AGL-129)', () => {
+    const wf = { name: 'Answer', steps: [{ functionName: 'Double', args: ['21'] }] }
+    const variables: any = {
+      answer: {
+        name: 'answer',
+        type: 'number',
+        value: '0',
+        workflowName: 'Answer',
+      },
+      missing: {
+        name: 'missing',
+        type: 'number',
+        value: '7',
+        workflowName: 'Nope',
+      },
+    }
+    const resolved = resolveComputedVariables(variables, functions, {
+      Answer: wf,
+    })
+    expect(resolved['answer'].value).toBe('42')
+    expect(resolved['missing'].value).toBe('7')
   })
 })

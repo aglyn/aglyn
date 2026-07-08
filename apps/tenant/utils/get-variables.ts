@@ -85,3 +85,32 @@ export async function getFunctions(options: {
 }
 
 export default getVariables
+
+/**
+ * Fetches the host's workflows keyed by name for computed variables and
+ * function→workflow calls (AGL-129). Fail-open like variables.
+ */
+export async function getWorkflows(options: {
+  hostId: string
+}): Promise<Record<string, Aglyn.HostWorkflow>> {
+  const workflows: Record<string, Aglyn.HostWorkflow> = {}
+  try {
+    const snapshot = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(options.hostId)
+      .collection('workflows')
+      .limit(100)
+      .get()
+    for (const docSnapshot of snapshot.docs) {
+      const data = docSnapshot.data() as Aglyn.HostWorkflow
+      if (data?.name && !(data as any).deletedAt) {
+        workflows[data.name] = data
+      }
+    }
+  } catch (error) {
+    console.error(error)
+  }
+  return workflows
+}

@@ -54,6 +54,8 @@ interface VariableDraft {
   name: string
   type: HostVariableType
   value: string
+  /** Workflow (by name) computing this variable at render (AGL-129). */
+  workflowName: string
 }
 
 /** Per-type value editor: mirrors the mockup's type list. */
@@ -171,6 +173,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           name: draft.name,
           type: draft.type,
           value: draft.value,
+          workflowName: draft.workflowName.trim(),
           updatedAt: Timestamp.now(),
           ...(draft.id ? {} : { createdAt: Timestamp.now() }),
         },
@@ -250,6 +253,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
                     name: variable.name ?? '',
                     type: variable.type ?? 'text',
                     value: variable.value ?? '',
+                    workflowName: variable.workflowName ?? '',
                   })
                 }
               >
@@ -282,7 +286,13 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
                 { variant: 'warning', persist: false },
               )
             }
-            setDraft({ id: null, name: '', type: 'text', value: '' })
+            setDraft({
+              id: null,
+              name: '',
+              type: 'text',
+              value: '',
+              workflowName: '',
+            })
           }}
         >
           {'Add variable'}
@@ -359,6 +369,21 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
               }
             />
           ) : null}
+          <TextField
+            label="Computed from workflow (optional)"
+            helperText={
+              'A workflow name from the Workflows page — its result ' +
+              'becomes this variable\u2019s value at render; the value ' +
+              'above is the fallback (AGL-129)'
+            }
+            value={draft?.workflowName ?? ''}
+            onChange={(event) =>
+              setDraft((prev) =>
+                prev ? { ...prev, workflowName: event.target.value } : prev,
+              )
+            }
+            size="small"
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDraft(null)}>{'Cancel'}</Button>

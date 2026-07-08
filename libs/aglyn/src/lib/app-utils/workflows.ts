@@ -77,6 +77,8 @@ export interface HostWorkflow {
 }
 
 export const WORKFLOW_MAX_STEPS = 25
+/** Max nesting across workflow→function→workflow cross-calls (AGL-129). */
+export const CROSS_MAX_DEPTH = 3
 
 export type WorkflowRunResult =
   | {
@@ -99,6 +101,13 @@ function variableScope(
   return scope
 }
 
+export interface WorkflowRunContext {
+  /** All host workflows by name, enabling function→workflow calls. */
+  workflows?: Record<string, HostWorkflow>
+  /** Cross-call nesting depth; internal — callers omit it. */
+  depth?: number
+}
+
 export function runWorkflow(
   workflow: HostWorkflow,
   functions: Record<string, HostFunction>,
@@ -108,10 +117,30 @@ export function runWorkflow(
    * formName, field values) land here (AGL-128). Wins over variables.
    */
   extraScope: Record<string, number | string | boolean> = {},
+  context: WorkflowRunContext = {},
 ): WorkflowRunResult {
   const steps = workflow.steps ?? []
   if (steps.length > WORKFLOW_MAX_STEPS) {
     return { ok: false, error: `Workflows are capped at ${WORKFLOW_MAX_STEPS} steps` }
+  }
+  const depth = context.depth ?? 0
+  if (depth > CROSS_MAX_DEPTH) {
+    return { ok: false, error: 'Workflow nesting is too deep' }
+  }
+  // Function steps may call other workflows (AGL-129); every hop shares
+  // this depth guard so mutual recursion terminates.
+  const invokeWorkflow = (
+    name: string,
+    callScope: Record<string, number | string | boolean>,
+  ): number | string | boolean => {
+    const nested = context.workflows?.[name?.trim()]
+    if (!nested) throw new Error(`Unknown workflow "${name}"`)
+    const run = runWorkflow(nested, functions, variables, callScope, {
+      ...context,
+      depth: depth + 1,
+    })
+    if (run.ok === false) throw new Error(run.error)
+    return run.value
   }
   const scope = { ...variableScope(variables), ...extraScope }
   const results: Record<string, number | string | boolean> = {}
@@ -140,7 +169,11 @@ export function runWorkflow(
         step: index + 1,
       }
     }
-    const run = evaluateHostFunction(definition, args)
+    const run = evaluateHostFunction(
+      definition,
+      args,
+      context.workflows ? { invokeWorkflow } : undefined,
+    )
     // `=== false` (not `!run.ok`): the union fails to narrow under the
     // stricter lib build tsconfig otherwise (same quirk as publish.ts).
     if (run.ok === false) {
@@ -161,4 +194,32 @@ export function runWorkflow(
       ? scope[returnName]
       : (Object.values(results).at(-1) ?? '')
   return { ok: true, value, results }
+}
+
+/**
+ * Computed variables (AGL-129): a variable with `workflowName` takes the
+ * named workflow's result as its value at compose time; failures keep the
+ * stored fallback value. Each computed variable evaluates once, bounded
+ * by the shared depth guard.
+ */
+export function resolveComputedVariables(
+  variables: Record<string, HostVariable>,
+  functions: Record<string, HostFunction>,
+  workflows: Record<string, HostWorkflow>,
+): Record<string, HostVariable> {
+  const resolved: Record<string, HostVariable> = {}
+  for (const [name, variable] of Object.entries(variables)) {
+    const workflowName = variable.workflowName?.trim()
+    const workflow = workflowName ? workflows[workflowName] : undefined
+    if (!workflow) {
+      resolved[name] = variable
+      continue
+    }
+    const run = runWorkflow(workflow, functions, variables, {}, { workflows })
+    resolved[name] =
+      run.ok === false
+        ? variable
+        : { ...variable, value: String(run.value) }
+  }
+  return resolved
 }

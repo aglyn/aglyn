@@ -55,6 +55,12 @@ export interface HostVariable {
   type: HostVariableType
   /** Persisted as a string; formatted per type at resolve time. */
   value?: string
+  /**
+   * Workflow (by name) whose result becomes this variable's value at
+   * compose time (AGL-129); `value` acts as the fallback when the
+   * workflow is missing or fails.
+   */
+  workflowName?: string
 }
 
 export const VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]{0,39}$/

@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
-import getVariables, { getFunctions } from './get-variables'
+import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
 
@@ -68,11 +68,19 @@ export async function composeScreenNodes(options: {
   // Host variable + function bindings (AGL-91/93): {{name}} and
   // {{fn:name(args)}} in string props resolve to values; unknown tokens
   // and failed runs stay literal.
-  const [variables, functions, datasets] = await Promise.all([
+  const [rawVariables, functions, datasets, workflows] = await Promise.all([
     getVariables({ hostId }),
     getFunctions({ hostId }),
     getDatasets({ hostId }),
+    getWorkflows({ hostId }),
   ])
+  // Computed variables (AGL-129): workflow-backed values resolve once per
+  // compose; failures keep each variable's stored fallback.
+  const variables = Aglyn.resolveComputedVariables(
+    rawVariables,
+    functions,
+    workflows,
+  )
   // Repeatables (AGL-103) expand after grafting (so they work inside
   // reusable components) and before bindings (so {{name}} tokens inside
   // cloned items still resolve).
