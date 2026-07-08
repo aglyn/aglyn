@@ -42,6 +42,7 @@ export enum Route {
   HOST_DATA = '/[hostId]/data',
   HOST_BOOKINGS = '/[hostId]/bookings',
   HOST_EVENTS = '/[hostId]/events',
+  HOST_REDIRECTS = '/[hostId]/redirects',
   LAYOUT_BESIGNER = '/[hostId]/layouts/[layoutId]/versions/[versionId]/besigner',
   LAYOUT_LIST = '/[hostId]/layouts/list',
   SCREEN_BESIGNER = '/[hostId]/screens/[screenId]/versions/[versionId]/besigner',
@@ -77,6 +78,7 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_DATA]: { hostId: string }
   [Route.HOST_BOOKINGS]: { hostId: string }
   [Route.HOST_EVENTS]: { hostId: string }
+  [Route.HOST_REDIRECTS]: { hostId: string }
   [Route.LAYOUT_BESIGNER]: {
     hostId: string
     layoutId: string
