@@ -1,0 +1,9 @@
+{
+  // Standalone config — does NOT extend the monorepo's tsconfig.base.json on purpose.
+  // Docusaurus ships its own strict base with the right JSX/module settings for React 18.
+  "extends": "@docusaurus/tsconfig",
+  "compilerOptions": {
+    "baseUrl": "."
+  },
+  "exclude": [".docusaurus", "build"]
+}

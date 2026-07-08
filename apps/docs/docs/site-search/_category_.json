@@ -1,0 +1,7 @@
+{
+  "label": "Site Search",
+  "position": 38,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "site-search/overview" }
+}

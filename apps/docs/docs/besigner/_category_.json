@@ -1,0 +1,7 @@
+{
+  "label": "The Besigner",
+  "position": 10,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "besigner/overview" }
+}

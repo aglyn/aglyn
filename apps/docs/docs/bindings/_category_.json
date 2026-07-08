@@ -1,0 +1,7 @@
+{
+  "label": "Bindings, Variables & Functions",
+  "position": 12,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "bindings/overview" }
+}

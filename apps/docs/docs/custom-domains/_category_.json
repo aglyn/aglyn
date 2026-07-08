@@ -1,0 +1,7 @@
+{
+  "label": "Custom Domains",
+  "position": 32,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "custom-domains/overview" }
+}

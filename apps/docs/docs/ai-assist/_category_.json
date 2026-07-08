@@ -1,0 +1,7 @@
+{
+  "label": "AI Assist",
+  "position": 36,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "ai-assist/overview" }
+}

@@ -1,0 +1,7 @@
+{
+  "label": "Bookings & Scheduling",
+  "position": 17,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "bookings/overview" }
+}

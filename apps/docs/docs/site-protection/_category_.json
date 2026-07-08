@@ -1,0 +1,7 @@
+{
+  "label": "Site Protection & Error Pages",
+  "position": 31,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "site-protection/overview" }
+}

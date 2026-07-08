@@ -1,0 +1,7 @@
+{
+  "label": "Plugins & Marketplace",
+  "position": 21,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "plugins/overview" }
+}

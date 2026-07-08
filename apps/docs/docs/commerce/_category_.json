@@ -1,0 +1,7 @@
+{
+  "label": "Commerce",
+  "position": 16,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "commerce/overview" }
+}

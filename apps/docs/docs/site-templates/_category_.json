@@ -1,0 +1,7 @@
+{
+  "label": "Templates, Blocks & Content",
+  "position": 35,
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "site-templates/overview" }
+}

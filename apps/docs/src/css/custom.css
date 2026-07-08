@@ -1,0 +1,121 @@
+/**
+ * Aglyn Docs theme.
+ *
+ * Colors are a faithful port of the console app's MUI theme. The single source of
+ * truth is `libs/shared/ui/theme/src/lib/console.theme.ts` in this repo — if the
+ * palette changes there, update the CSS variables below to match. See the mapping
+ * table in apps/docs/CONTRIBUTING.md.
+ *
+ *   console.theme.ts            ->  used here for
+ *   -------------------------------------------------------------
+ *   secondary.main  #00b0ff     ->  accent / links / primary buttons (interactive)
+ *   primary.main    #404C5C     ->  navbar + footer background (Material app bar), light
+ *   primary.main    #2C3540     ->  navbar background, dark
+ *   background.default #F5F5F5  ->  page background, light
+ *   background.paper   #FFFFFF   ->  surface, light
+ *   background.default #161c21  ->  page background, dark
+ *   background.paper   #2a3440   ->  surface, dark
+ *   surface.main       #202934   ->  raised surface, dark
+ *   info/success/warning/error   ->  admonitions
+ *   shape.borderRadius 4         ->  --ifm-global-radius
+ */
+
+/* Self-hosted Roboto (Material typeface) — no external CDN, CSP-safe. */
+@import '@fontsource/roboto/300.css';
+@import '@fontsource/roboto/400.css';
+@import '@fontsource/roboto/500.css';
+@import '@fontsource/roboto/700.css';
+@import '@fontsource/roboto-mono/400.css';
+
+:root {
+  /* Interactive accent — console secondary #00b0ff and a generated ramp. */
+  --ifm-color-primary: #00b0ff;
+  --ifm-color-primary-dark: #00a1e6;
+  --ifm-color-primary-darker: #0098d9;
+  --ifm-color-primary-darkest: #007eb3;
+  --ifm-color-primary-light: #1ab8ff;
+  --ifm-color-primary-lighter: #26bcff;
+  --ifm-color-primary-lightest: #4dc8ff;
+
+  /* Material typography + shape. */
+  --ifm-font-family-base: 'Roboto', system-ui, -apple-system, 'Segoe UI', Helvetica,
+    Arial, sans-serif;
+  --ifm-font-family-monospace: 'Roboto Mono', ui-monospace, 'SFMono-Regular', Menlo,
+    monospace;
+  --ifm-global-radius: 4px;
+  --ifm-heading-font-weight: 500;
+
+  /* Surfaces (light). */
+  --ifm-background-color: #f5f5f5;
+  --ifm-background-surface-color: #ffffff;
+
+  /* Material app-bar look: dark navbar with light text over console primary. */
+  --ifm-navbar-background-color: #404c5c;
+  --ifm-navbar-link-color: rgba(255, 255, 255, 0.9);
+  --ifm-navbar-link-hover-color: #00b0ff;
+  --ifm-footer-background-color: #404c5c;
+
+  /* Semantic colors from console.theme.ts, wired into admonitions. */
+  --ifm-color-info: #1e88e5;
+  --ifm-color-success: #4caf50;
+  --ifm-color-warning: #ffab40;
+  --ifm-color-danger: #e53935;
+
+  /* MUI-style elevation. */
+  --ifm-global-shadow-lw: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14);
+  --ifm-global-shadow-md: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.12);
+  --ifm-global-shadow-tl: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.12);
+
+  --docusaurus-highlighted-code-line-bg: rgba(0, 176, 255, 0.12);
+}
+
+/* Dark scheme — console dark surfaces. */
+[data-theme='dark'] {
+  --ifm-color-primary: #00b0ff;
+  --ifm-color-primary-dark: #00a1e6;
+  --ifm-color-primary-darker: #0098d9;
+  --ifm-color-primary-darkest: #007eb3;
+  --ifm-color-primary-light: #33c0ff;
+  --ifm-color-primary-lighter: #4dc8ff;
+  --ifm-color-primary-lightest: #80d6ff;
+
+  --ifm-background-color: #161c21; /* background.default (dark) */
+  --ifm-background-surface-color: #2a3440; /* background.paper (dark) */
+
+  --ifm-navbar-background-color: #2c3540; /* primary.main (dark) */
+  --ifm-footer-background-color: #202934; /* surface.main (dark) */
+
+  --docusaurus-highlighted-code-line-bg: rgba(0, 176, 255, 0.2);
+}
+
+/* Material app-bar: subtle elevation under the fixed navbar. */
+.navbar {
+  box-shadow: var(--ifm-global-shadow-lw);
+}
+.navbar__title {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Cards and admonitions get Material elevation + rounded corners. */
+.card,
+.theme-admonition {
+  box-shadow: var(--ifm-global-shadow-lw);
+  border-radius: var(--ifm-global-radius);
+}
+
+/* Sidebar category labels: Material-style uppercase section tracking. */
+.menu__list-item-collapsible > .menu__link--sublist {
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  opacity: 0.75;
+}
+
+/* Primary buttons feel like MUI contained buttons. */
+.button--primary {
+  color: #ffffff;
+  text-transform: none;
+  box-shadow: var(--ifm-global-shadow-lw);
+}
