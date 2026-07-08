@@ -28,6 +28,7 @@ import * as Product from './components/product'
 import * as Blocks from './components/blocks'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
+import * as Video from './components/video'
 import * as ReusableInstance from './components/reusable-instance'
 import * as SearchBox from './components/search-box'
 import * as ScreenLink from './components/screen-link'
@@ -81,6 +82,7 @@ export function registerLegacyMuiPlugin(): void {
         Blocks.socialLinksSchema,
       )
       Aglyn.components.registerComponent(Image.default, Image.schema)
+      Aglyn.components.registerComponent(Video.default, Video.schema)
       Aglyn.components.registerComponent(
         ReusableInstance.default,
         ReusableInstance.schema,
@@ -109,6 +111,7 @@ export function registerLegacyMuiPlugin(): void {
       Aglyn.components.registerPreset(Blocks.blockPresets)
       Aglyn.components.registerPreset(FormComponents.formPresets)
       Aglyn.components.registerPreset(Image.presets)
+      Aglyn.components.registerPreset(Video.presets)
       Aglyn.components.registerPreset(ReusableInstance.presets)
       Aglyn.components.registerPreset(ScreenLink.presets)
       Aglyn.components.registerPreset(FunctionWidget.presets)
@@ -134,6 +137,7 @@ export function registerLegacyMuiPlugin(): void {
         FormComponents.formPresets.map((i) => i.$id),
       )
       Aglyn.components.unregisterPreset(Image.presets.map((i) => i.$id))
+      Aglyn.components.unregisterPreset(Video.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ReusableInstance.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(ScreenLink.presets.map((i) => i.$id))
       Aglyn.components.unregisterPreset(Product.presets.map((i) => i.$id))

@@ -201,11 +201,15 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       const file = event.target.files?.[0]
       event.target.value = ''
       if (!file) return
-      if (!file.type.startsWith('image/')) {
-        return void enqueueSnackbar('Only image uploads are supported', {
-          variant: 'warning',
-          persist: false,
-        })
+      const allowed =
+        file.type.startsWith('image/') ||
+        ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type) ||
+        file.type === 'application/pdf'
+      if (!allowed) {
+        return void enqueueSnackbar(
+          'Supported uploads: images, mp4/webm video, PDF',
+          { variant: 'warning', persist: false },
+        )
       }
       const usedMb = (usedBytes + file.size) / (1024 * 1024)
       const quota = checkTenantQuota(tenant, 'storagePerHostMb', usedMb - 1)
@@ -261,7 +265,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     (media: Aglyn.AglynHostMedia) => () => {
       if (!media.url) return
       void navigator.clipboard.writeText(media.url)
-      enqueueSnackbar('Image URL copied — paste it into an Image element', {
+      enqueueSnackbar('URL copied — paste it into an Image or Video element', {
         variant: 'success',
         persist: false,
       })
@@ -319,7 +323,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           disabled={busy}
           onClick={() => inputRef.current?.click()}
         >
-          {'Upload image'}
+          {'Upload media'}
         </Button>
         <Typography variant="body2" color="text.secondary">
           {`${items.length} file${items.length === 1 ? '' : 's'} · ${formatBytes(usedBytes)} used`}
@@ -328,7 +332,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           component="input"
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf"
           onChange={handleUpload}
           sx={{ display: 'none' }}
         />
@@ -379,24 +383,54 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       {busy ? <LinearProgress /> : null}
       {items.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
-          {'No media yet — upload an image to use it on your site.'}
+          {'No media yet — upload images, video, or PDFs to use on your site.'}
         </Typography>
       ) : (
         <Grid container spacing={2}>
           {visibleItems.map((media: any) => (
             <Grid key={media.$id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
               <Card variant="outlined">
-                <CardMedia
-                  component="img"
-                  image={media.url}
-                  alt={media.fileName ?? ''}
-                  onClick={onSelect ? () => onSelect(media) : undefined}
-                  sx={{
-                    height: 96,
-                    objectFit: 'cover',
-                    cursor: onSelect ? 'pointer' : undefined,
-                  }}
-                />
+                {String(media.contentType ?? '').startsWith('video/') ? (
+                  <CardMedia
+                    component="video"
+                    src={media.url}
+                    muted
+                    onClick={onSelect ? () => onSelect(media) : undefined}
+                    sx={{
+                      height: 96,
+                      objectFit: 'cover',
+                      cursor: onSelect ? 'pointer' : undefined,
+                    }}
+                  />
+                ) : media.contentType === 'application/pdf' ? (
+                  <CardMedia
+                    onClick={onSelect ? () => onSelect(media) : undefined}
+                    sx={{
+                      height: 96,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: 'action.hover',
+                      typography: 'caption',
+                      color: 'text.secondary',
+                      cursor: onSelect ? 'pointer' : undefined,
+                    }}
+                  >
+                    {'PDF'}
+                  </CardMedia>
+                ) : (
+                  <CardMedia
+                    component="img"
+                    image={media.url}
+                    alt={media.fileName ?? ''}
+                    onClick={onSelect ? () => onSelect(media) : undefined}
+                    sx={{
+                      height: 96,
+                      objectFit: 'cover',
+                      cursor: onSelect ? 'pointer' : undefined,
+                    }}
+                  />
+                )}
                 <Box sx={{ px: 1, pt: 0.5 }}>
                   <Typography variant="caption" noWrap component="div">
                     {media.fileName ?? media.$id}

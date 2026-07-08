@@ -15,15 +15,19 @@
  * limitations under the License.
  */
 
-import { checkQuota, createResourceUid } from '@aglyn/aglyn'
+import { checkEntitlement, checkQuota, createResourceUid } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-// Base64 JSON payloads: ~15MB of image data encodes to ~20MB of body.
-export const config = { api: { bodyParser: { sizeLimit: '21mb' } } }
+// Base64 JSON payloads: ~25MB of media encodes to ~34MB of body.
+export const config = { api: { bodyParser: { sizeLimit: '34mb' } } }
 
-const MAX_FILE_BYTES = 15 * 1024 * 1024
+// Per-type caps (AGL-162). Large-video signed-URL uploads come later.
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024
+const MAX_VIDEO_BYTES = 25 * 1024 * 1024
+const MAX_PDF_BYTES = 10 * 1024 * 1024
+const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
 
 /**
  * Authenticated media upload/delete (AGL-85): Storage rules deny client
@@ -96,12 +100,26 @@ export default async function handler(
     const fileName = String(req.body?.fileName ?? 'upload').slice(0, 200)
     const contentType = String(req.body?.contentType ?? '')
     const data = String(req.body?.data ?? '')
-    if (!contentType.startsWith('image/')) {
-      return res.status(415).json({ error: 'Only image uploads are supported' })
+    // Media-type allowlist (AGL-162): images for everyone; video and PDF
+    // by tier (videoMedia flag; dark-launch tenants uncapped as usual).
+    const isImage = contentType.startsWith('image/')
+    const isVideo = VIDEO_TYPES.has(contentType)
+    const isPdf = contentType === 'application/pdf'
+    if (!isImage && !isVideo && !isPdf) {
+      return res
+        .status(415)
+        .json({ error: 'Supported uploads: images, mp4/webm video, PDF' })
     }
     const buffer = Buffer.from(data, 'base64')
-    if (!buffer.length || buffer.length > MAX_FILE_BYTES) {
-      return res.status(413).json({ error: 'File is empty or too large' })
+    const maxBytes = isVideo
+      ? MAX_VIDEO_BYTES
+      : isPdf
+        ? MAX_PDF_BYTES
+        : MAX_IMAGE_BYTES
+    if (!buffer.length || buffer.length > maxBytes) {
+      return res.status(413).json({
+        error: `File is empty or too large (${Math.round(maxBytes / 1024 / 1024)}MB max)`,
+      })
     }
 
     // Server-side quota: counter bytes + this file against the plan limit
@@ -116,6 +134,11 @@ export default async function handler(
       .doc(decoded.uid)
       .get()
     const tenant = tenantSnapshot.data() ?? {}
+    if ((isVideo || isPdf) && tenant['plan'] && !checkEntitlement(tenant, 'videoMedia')) {
+      return res.status(403).json({
+        error: 'Video and file uploads require a Pro plan',
+      })
+    }
     if (tenant['plan']) {
       const usedMb = (usedBytes + buffer.length) / (1024 * 1024)
       const quota = checkQuota(tenant, 'storagePerHostMb', usedMb - 1)

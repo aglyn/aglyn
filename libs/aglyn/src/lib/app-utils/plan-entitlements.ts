@@ -67,6 +67,7 @@ export const PLAN_ENTITLEMENTS: Record<
       aiAssist: false,
       workflows: false,
       dataStore: false,
+      videoMedia: false,
     },
   },
   starter: {
@@ -97,6 +98,7 @@ export const PLAN_ENTITLEMENTS: Record<
       aiAssist: false,
       workflows: true,
       dataStore: true,
+      videoMedia: false,
     },
   },
   pro: {
@@ -127,6 +129,7 @@ export const PLAN_ENTITLEMENTS: Record<
       aiAssist: true,
       workflows: true,
       dataStore: true,
+      videoMedia: true,
     },
   },
   business: {
@@ -157,6 +160,7 @@ export const PLAN_ENTITLEMENTS: Record<
       aiAssist: true,
       workflows: true,
       dataStore: true,
+      videoMedia: true,
     },
   },
 }

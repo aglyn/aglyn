@@ -103,6 +103,8 @@ export interface TenantFeatureFlags {
   workflows?: boolean
   /** Datasets + repeatable components (AGL-102/103). */
   dataStore?: boolean
+  /** Video/file uploads in the media manager (AGL-162). */
+  videoMedia?: boolean
 }
 
 /**
