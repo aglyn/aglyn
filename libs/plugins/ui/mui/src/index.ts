@@ -17,3 +17,4 @@
 
 export * from './lib/constants/bundle-common'
 export * from './lib/legacy-plugin'
+export * from './lib/components/plugin-frame'

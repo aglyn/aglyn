@@ -1,0 +1,121 @@
+<!doctype html>
+<!--
+  Plugin origin loader (AGL-45) — reference implementation.
+  Deploys with the separate plugin project (e.g. plugins.aglyn.app), NOT
+  this repo's Nx build. The serving layer stamps a manifest-derived CSP
+  (see tools/plugin-loader/README.md). Security relies on this being a
+  dedicated cross-origin: the host frames it sandboxed, and the same-origin
+  policy walls it off from every app and tenant site.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aglyn plugin</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+      }
+      #root {
+        min-height: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      const BRIDGE_VERSION = 1
+      const params = new URLSearchParams(location.search)
+      const listingId = params.get('listing')
+      const version = params.get('v')
+      const expectedSha = params.get('sha')
+
+      // The host frames us; every inbound message must come from an aglyn
+      // app origin. The serving layer restricts frame-ancestors to these,
+      // and we echo that here as defense in depth.
+      const ALLOWED_ANCESTORS = [
+        'https://console.aglyn.io',
+        'https://sites.aglyn.app',
+      ]
+      const hostOrigin = document.referrer
+        ? new URL(document.referrer).origin
+        : null
+
+      const post = (message) =>
+        parent.postMessage({ ...message, v: BRIDGE_VERSION }, hostOrigin || '*')
+
+      async function sha256Hex(buffer) {
+        const digest = await crypto.subtle.digest('SHA-256', buffer)
+        return [...new Uint8Array(digest)]
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('')
+      }
+
+      async function boot() {
+        try {
+          if (hostOrigin && !ALLOWED_ANCESTORS.includes(hostOrigin)) {
+            throw new Error('Untrusted host origin')
+          }
+          // Fetch the pinned bundle and verify integrity BEFORE executing —
+          // a tampered artifact must never run.
+          const bundleUrl = `/artifacts/${listingId}/${version}/${expectedSha}.bundle`
+          const response = await fetch(bundleUrl)
+          if (!response.ok) throw new Error('Bundle fetch failed')
+          const bytes = await response.arrayBuffer()
+          const actualSha = await sha256Hex(bytes)
+          if (actualSha !== expectedSha) {
+            throw new Error('Integrity check failed')
+          }
+
+          const moduleUrl = URL.createObjectURL(
+            new Blob([bytes], { type: 'text/javascript' }),
+          )
+          const mod = await import(moduleUrl)
+          const render = mod.default
+          if (typeof render !== 'function') {
+            throw new Error('Plugin has no render entry')
+          }
+
+          const mount = document.getElementById('root')
+          let cleanup = null
+          const emit = (name, payload) =>
+            post({ type: 'event', name: String(name), payload })
+
+          const start = (props, scheme) => {
+            if (typeof cleanup === 'function') cleanup()
+            cleanup =
+              render({ mount, props: props || {}, scheme, emit }) || null
+            // Report height so the host can size the iframe region.
+            requestAnimationFrame(() =>
+              post({ type: 'resize', height: mount.scrollHeight }),
+            )
+          }
+
+          let lastProps = {}
+          let lastScheme
+          window.addEventListener('message', (event) => {
+            if (hostOrigin && event.origin !== hostOrigin) return
+            const data = event.data
+            if (!data || data.v !== BRIDGE_VERSION) return
+            if (data.type === 'init') {
+              lastProps = data.props || {}
+              lastScheme = data.scheme
+              start(lastProps, lastScheme)
+            } else if (data.type === 'props') {
+              lastProps = data.props || {}
+              start(lastProps, lastScheme)
+            }
+          })
+
+          post({ type: 'ready' })
+        } catch (error) {
+          post({ type: 'error', message: String(error && error.message) })
+        }
+      }
+
+      boot()
+    </script>
+  </body>
+</html>
