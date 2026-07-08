@@ -19,7 +19,9 @@ import * as Aglyn from '@aglyn/aglyn'
 import {
   mdiGestureTapButton,
 } from '@aglyn/shared-data-mdi'
+import { AppLink } from '@aglyn/shared-ui-jsx'
 import Button, { type ButtonProps } from '@mui/material/Button'
+import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import {
   FIELD_COLOR,
@@ -33,7 +35,40 @@ import { generatePresetId } from '../utils/generate-preset-id'
 // Component ids are persisted in screen documents; keep the legacy ids.
 export const ID: Aglyn.ComponentId = 'muiButton'
 
-export const schema: Aglyn.ComponentSchema<ButtonProps> = {
+export interface LinkableButtonProps extends ButtonProps {
+  /** Target screen id; resolved from the routing map (AGL-139). */
+  screenId?: string
+  /** External URL, used only when no `screenId` is set. */
+  href?: string
+}
+
+// Only navigable protocols — mirrors ScreenLink's hardening.
+const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
+
+/**
+ * Button with optional link mode (AGL-139): a screen id or external URL
+ * renders through AppLink exactly like the Screen Link component —
+ * degrading to a plain button in the besigner/preview and when the id
+ * doesn't resolve.
+ */
+const LinkableButton = forwardRef<any, LinkableButtonProps>((props, ref) => {
+  const { screenId, href: externalHref, ...rest } = props
+  const { href: resolvedHref, suppressNavigation } =
+    Aglyn.useScreenLink(screenId)
+  const safeExternalHref =
+    externalHref && SAFE_HREF.test(externalHref.trim())
+      ? externalHref.trim()
+      : undefined
+  const href = screenId ? resolvedHref : safeExternalHref
+
+  if (!href || suppressNavigation) {
+    return <Button ref={ref} {...rest} />
+  }
+  return <AppLink ref={ref} componentVariant="button" href={href} {...rest} />
+})
+LinkableButton.displayName = 'LinkableButton'
+
+export const schema: Aglyn.ComponentSchema<LinkableButtonProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Button',
@@ -63,6 +98,20 @@ export const schema: Aglyn.ComponentSchema<ButtonProps> = {
         { value: 'contained', label: 'Contained' },
       ],
     },
+    {
+      name: 'screenId',
+      description:
+        'Optional: navigate to this screen when clicked — the address ' +
+        'follows the published path like a Screen Link (AGL-139).',
+      component: Aglyn.FieldComponentType.SCREEN_SELECT,
+      label: 'Link to screen',
+    },
+    {
+      name: 'href',
+      description: 'External URL used only when no screen is selected.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'External URL',
+    },
   ],
 }
 
@@ -88,4 +137,4 @@ export const presets: Aglyn.PresetSchema[] = [
   },
 ]
 
-export default Button
+export default LinkableButton
