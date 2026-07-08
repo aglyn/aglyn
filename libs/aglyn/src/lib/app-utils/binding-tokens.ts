@@ -123,6 +123,81 @@ export function normalizeBindingTokens(
   })
 }
 
+/** A variable/function referent to search for in stored content. */
+export interface BindingRef {
+  kind: 'variable' | 'function'
+  /** Firestore doc id — matches id-form tokens. */
+  id?: string
+  /** Current name — matches legacy name-form tokens. */
+  name?: string
+}
+
+/** How a dependent references the binding: rename-safe id or legacy name. */
+export type BindingRefVia = 'id' | 'name'
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Which token generation(s) in `text` reference the given binding
+ * (AGL-187 where-used). Returns matches so callers can distinguish
+ * rename-safe id references from legacy name references — a rename only
+ * endangers the latter.
+ */
+export function textReferencesBinding(
+  text: string,
+  ref: BindingRef,
+): BindingRefVia[] {
+  const via: BindingRefVia[] = []
+  if (ref.kind === 'variable') {
+    if (
+      ref.id &&
+      new RegExp(`\\{\\{\\s*var:${escapeRegExp(ref.id)}\\s*\\}\\}`).test(text)
+    ) {
+      via.push('id')
+    }
+    if (
+      ref.name &&
+      new RegExp(`\\{\\{\\s*${escapeRegExp(ref.name)}\\s*\\}\\}`).test(text)
+    ) {
+      via.push('name')
+    }
+  } else {
+    if (
+      ref.id &&
+      new RegExp(`\\{\\{\\s*fn:${escapeRegExp(ref.id)}\\s*\\(`).test(text)
+    ) {
+      via.push('id')
+    }
+    if (
+      ref.name &&
+      new RegExp(`\\{\\{\\s*fn:${escapeRegExp(ref.name)}\\s*\\(`).test(text)
+    ) {
+      via.push('name')
+    }
+  }
+  return via
+}
+
+/**
+ * Scans a normalized nodes map's string props for references to the
+ * binding; returns the union of match kinds across all nodes.
+ */
+export function nodesReferenceBinding(
+  nodes: Record<string, { props?: Record<string, unknown> } | undefined>,
+  ref: BindingRef,
+): BindingRefVia[] {
+  const via = new Set<BindingRefVia>()
+  for (const node of Object.values(nodes ?? {})) {
+    for (const value of Object.values(node?.props ?? {})) {
+      if (typeof value !== 'string' || !value.includes('{{')) continue
+      for (const match of textReferencesBinding(value, ref)) via.add(match)
+    }
+    if (via.size === 2) break
+  }
+  return [...via]
+}
+
 /** Editor display text for a token whose referent no longer exists. */
 export const MISSING_BINDING_LABEL = 'missing binding'
 

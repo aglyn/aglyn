@@ -42,9 +42,10 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import { fetchWhereUsed, summarizeDependents } from '../utils/fetch-where-used'
 
 export interface HostWorkflowsCardProps {
   hostId: string
@@ -64,6 +65,7 @@ interface WorkflowDraft extends HostWorkflow {
 export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
@@ -191,9 +193,20 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
 
   const handleDelete = useCallback(
     (workflow: any) => async () => {
+      // Dependents warning (AGL-187): computed variables backed by this
+      // workflow keep their stored fallback value once it is gone.
+      const scan = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'workflow',
+        id: workflow.$id,
+        name: workflow.name,
+      })
       const confirmed = await confirm({
         title: 'Delete this workflow?',
-        description: `"${workflow.name}" will no longer be runnable.`,
+        description: scan.total
+          ? `"${workflow.name}" computes ${summarizeDependents(scan)} — ` +
+            'those variables will fall back to their stored values.'
+          : `"${workflow.name}" will no longer be runnable.`,
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -209,7 +222,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [user, confirm, firestore, hostId, enqueueSnackbar],
   )
 
   return (

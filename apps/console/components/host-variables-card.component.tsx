@@ -41,9 +41,14 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import { checkTenantQuota } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import {
+  fetchWhereUsed,
+  summarizeDependents,
+  type WhereUsedResult,
+} from '../utils/fetch-where-used'
 
 export interface HostVariablesCardProps {
   hostId: string
@@ -140,9 +145,16 @@ function VariableValueField(props: {
 export function HostVariablesCard(props: HostVariablesCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
+  // Where-used dependents dialog (AGL-187).
+  const [usage, setUsage] = useState<{
+    name: string
+    result: WhereUsedResult
+  } | null>(null)
+  const [usageLoading, setUsageLoading] = useState<string | null>(null)
   const { data: variableDocs } = useFirestoreCollectionData<any>(
     query(collection(firestore, 'hosts', hostId, 'variables'), limit(100)),
     { idField: '$id' },
@@ -168,6 +180,35 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!draft || !validName || nameTaken) return
+    // Rename safety (AGL-187): id tokens survive a rename, but dependents
+    // still holding legacy {{oldName}} tokens break — warn hard first.
+    const original = draft.id
+      ? variables.find((variable: any) => variable.$id === draft.id)
+      : null
+    if (original && original.name && original.name !== draft.name.trim()) {
+      const scan = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'variable',
+        id: draft.id as string,
+        name: original.name,
+      })
+      if (scan.legacyCount > 0) {
+        const proceed = await confirm({
+          title: `Rename "${original.name}"?`,
+          description:
+            `${scan.legacyCount} place${scan.legacyCount === 1 ? '' : 's'} ` +
+            `(${summarizeDependents(scan)}) still reference this variable ` +
+            `by its old name and will stop resolving after the rename. ` +
+            'Re-save those screens in the designer to upgrade their ' +
+            'references first, or continue anyway.',
+          confirmationText: 'Rename anyway',
+          confirmationButtonProps: { color: 'warning' },
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (!proceed) return
+      }
+    }
     try {
       const id = draft.id ?? createResourceUid()
       await setDoc(
@@ -194,15 +235,50 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
         allowDuplicate: true,
       })
     }
-  }, [draft, validName, nameTaken, firestore, hostId, enqueueSnackbar])
+  }, [
+    draft,
+    validName,
+    nameTaken,
+    variables,
+    user,
+    confirm,
+    firestore,
+    hostId,
+    enqueueSnackbar,
+  ])
+
+  const handleShowUsage = useCallback(
+    (variable: any) => async () => {
+      setUsageLoading(variable.$id)
+      const result = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'variable',
+        id: variable.$id,
+        name: variable.name,
+      })
+      setUsageLoading(null)
+      setUsage({ name: variable.name, result })
+    },
+    [user, hostId],
+  )
 
   const handleDelete = useCallback(
     (variable: any) => async () => {
+      // Real dependents warning (AGL-187) instead of the generic copy.
+      const scan = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'variable',
+        id: variable.$id,
+        name: variable.name,
+      })
       const confirmed = await confirm({
         title: 'Delete this variable?',
-        description:
-          `Text using {{${variable.name}}} will show the token ` +
-          'literally after the next publish.',
+        description: scan.total
+          ? `"${variable.name}" is used in ${summarizeDependents(scan)}. ` +
+            'Those bindings will render as empty or literal tokens after ' +
+            'the next publish.'
+          : `"${variable.name}" is not referenced by any published ` +
+            'screen, layout, or workflow.',
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -218,7 +294,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [user, confirm, firestore, hostId, enqueueSnackbar],
   )
 
   return (
@@ -248,6 +324,13 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
                   }`}
                 </Typography>
               </Stack>
+              <Button
+                size="small"
+                disabled={usageLoading === variable.$id}
+                onClick={handleShowUsage(variable)}
+              >
+                {usageLoading === variable.$id ? 'Scanning…' : 'Usage'}
+              </Button>
               <Button
                 size="small"
                 onClick={() =>
@@ -398,6 +481,51 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           >
             {'Save variable'}
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(usage)}
+        onClose={() => setUsage(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{`Where "${usage?.name}" is used`}</DialogTitle>
+        <DialogContent>
+          {usage?.result.total === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'Not referenced by any published screen, layout, or ' +
+                'workflow. Unpublished drafts are not scanned.'}
+            </Typography>
+          ) : (
+            <Stack spacing={1}>
+              {usage?.result.dependents.map((dependent) => (
+                <Stack
+                  key={`${dependent.type}-${dependent.id}`}
+                  direction="row"
+                  spacing={1}
+                  sx={{ justifyContent: 'space-between' }}
+                >
+                  <Typography variant="body2" noWrap>
+                    {dependent.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {dependent.type +
+                      (dependent.via.includes('name') ? ' · legacy token' : '')}
+                  </Typography>
+                </Stack>
+              ))}
+              {usage?.result.legacyCount ? (
+                <Typography variant="caption" color="warning.main">
+                  {'Legacy tokens reference this variable by name and ' +
+                    'break if it is renamed — re-save those screens to ' +
+                    'upgrade them.'}
+                </Typography>
+              ) : null}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setUsage(null)}>{'Close'}</Button>
         </DialogActions>
       </Dialog>
     </CardDisplay>

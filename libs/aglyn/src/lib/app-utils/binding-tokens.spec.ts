@@ -21,7 +21,9 @@ import {
   formatVariableIdToken,
   keyByIdAndName,
   MISSING_BINDING_LABEL,
+  nodesReferenceBinding,
   normalizeBindingTokens,
+  textReferencesBinding,
 } from './binding-tokens'
 import { resolveBindings, type HostVariable } from './variables'
 
@@ -171,5 +173,38 @@ describe('displayBindingTokens (AGL-186)', () => {
     expect(
       displayBindingTokens('{{fn:Sum(3)}}', {}, editorFunctions),
     ).toBe('{{fn:Sum(3)}}')
+  })
+})
+
+describe('where-used matchers (AGL-187)', () => {
+  it('distinguishes id and name references', () => {
+    const ref = { kind: 'variable' as const, id: 'aB3xK9m2Qw', name: 'greeting' }
+    expect(textReferencesBinding('Hi {{var:aB3xK9m2Qw}}', ref)).toEqual(['id'])
+    expect(textReferencesBinding('Hi {{greeting}}', ref)).toEqual(['name'])
+    expect(
+      textReferencesBinding('{{var:aB3xK9m2Qw}} {{greeting}}', ref),
+    ).toEqual(['id', 'name'])
+    expect(textReferencesBinding('Hi {{other}}', ref)).toEqual([])
+  })
+
+  it('matches function refs by call form only', () => {
+    const ref = { kind: 'function' as const, id: '9fnAbC12Xy', name: 'Sum' }
+    expect(textReferencesBinding('{{fn:9fnAbC12Xy(1)}}', ref)).toEqual(['id'])
+    expect(textReferencesBinding('{{fn:Sum(1, 2)}}', ref)).toEqual(['name'])
+    // A variable named Sum is not a function reference.
+    expect(textReferencesBinding('{{Sum}}', ref)).toEqual([])
+  })
+
+  it('scans node prop maps', () => {
+    const ref = { kind: 'variable' as const, id: 'aB3xK9m2Qw', name: 'greeting' }
+    const nodes = {
+      a: { props: { children: 'plain' } },
+      b: { props: { children: 'Hi {{greeting}}', title: 'x' } },
+      c: undefined,
+    }
+    expect(nodesReferenceBinding(nodes, ref)).toEqual(['name'])
+    expect(
+      nodesReferenceBinding({ a: { props: { children: 'nope' } } }, ref),
+    ).toEqual([])
   })
 })

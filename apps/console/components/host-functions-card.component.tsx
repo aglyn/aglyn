@@ -44,8 +44,9 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData } from 'reactfire'
+import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
 import { checkTenantQuota } from '../constants/entitlements'
+import { fetchWhereUsed, summarizeDependents } from '../utils/fetch-where-used'
 import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface HostFunctionsCardProps {
@@ -101,6 +102,7 @@ function SectionLabel(props: { children: string }) {
 export function HostFunctionsCard(props: HostFunctionsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { tenant } = useCurrentTenant()
@@ -179,9 +181,20 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
 
   const handleDelete = useCallback(
     (definition: any) => async () => {
+      // Dependents warning (AGL-187): screens/layouts binding the function
+      // and workflow steps calling it.
+      const scan = await fetchWhereUsed(user as any, {
+        hostId,
+        kind: 'function',
+        id: definition.$id,
+        name: definition.name,
+      })
       const confirmed = await confirm({
         title: 'Delete this function?',
-        description: `"${definition.name}" will no longer be runnable.`,
+        description: scan.total
+          ? `"${definition.name}" is used in ${summarizeDependents(scan)} ` +
+            'and those bindings and workflow steps will stop running.'
+          : `"${definition.name}" will no longer be runnable.`,
         confirmationText: 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
@@ -197,7 +210,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [user, confirm, firestore, hostId, enqueueSnackbar],
   )
 
   const setRow = (
