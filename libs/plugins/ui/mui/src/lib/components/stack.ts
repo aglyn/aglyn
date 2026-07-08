@@ -33,13 +33,16 @@ type StackWithFlexProps = StackProps & {
   /** Repeatable marker (AGL-103); consumed at compose time, not by MUI. */
   repeatDataset?: string
   repeatLimit?: number | string
+  /** Query config (AGL-181); compose-time, not rendered. */
+  repeatFilter?: string
+  repeatSort?: string
 }
 
 const Stack = forwardRef<HTMLDivElement, StackWithFlexProps>(
   // repeatDataset/repeatLimit are compose-time attributes (AGL-103): the
   // tenant expands them before render; strip so they never hit the DOM.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  ({ justifyContent, alignItems, repeatDataset, repeatLimit, sx, ...props }, ref) =>
+  ({ justifyContent, alignItems, repeatDataset, repeatLimit, repeatFilter, repeatSort, sx, ...props }, ref) =>
     createElement(MuiStack, {
       ref,
       sx: [{ justifyContent, alignItems }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])],
@@ -112,6 +115,22 @@ export const schema: Aglyn.ComponentSchema = {
       description: 'Maximum records rendered (blank = all, capped at 100).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       type: 'number',
+    },
+    {
+      name: 'repeatFilter',
+      label: 'Repeat filter',
+      description:
+        'Optional "field op value" filter, e.g. "price <= 20", ' +
+        '"tier == plus", or "tags contains red". Ops: == != > >= < <= ' +
+        'contains. Applies to the first 100 records.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
+    {
+      name: 'repeatSort',
+      label: 'Repeat sort',
+      description:
+        'Optional "field" or "field desc" ordering, e.g. "price desc".',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
   ],
 }
