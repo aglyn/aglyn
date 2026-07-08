@@ -143,6 +143,30 @@ export interface HostAnnouncementBar {
 }
 
 /**
+ * Promotional popup config on the host doc (AGL-196); one per host,
+ * marketingOverlays-gated. Body text may contain binding tokens; the
+ * tenant render resolves them server-side.
+ */
+export interface HostPopup {
+  enabled?: boolean
+  headline?: string
+  body?: string
+  /** Media-library image URL shown above the copy. */
+  imageUrl?: string
+  ctaLabel?: string
+  ctaHref?: string
+  /** How the popup opens. */
+  trigger?: 'delay' | 'scroll' | 'exit'
+  /** Seconds (delay trigger) or percent 0-100 (scroll trigger). */
+  triggerValue?: number
+  /** Re-show after this many days once dismissed (localStorage). */
+  frequencyDays?: number
+  /** Optional showing window (epoch millis; simple to serialize). */
+  startAtMs?: number
+  endAtMs?: number
+}
+
+/**
  * Effective limits/gates for a tenant. Plan defaults come from
  * `PLAN_ENTITLEMENTS` (versioned with the app); per-tenant overrides can be
  * stored on the tenant doc and win over the plan defaults.
@@ -251,6 +275,8 @@ export interface AglynHost extends AglynDocument {
   cname?: string
   /** Site-wide announcement bar (AGL-195); marketingOverlays-gated. */
   announcementBar?: HostAnnouncementBar
+  /** Promotional popup (AGL-196); marketingOverlays-gated. */
+  popup?: HostPopup
   displayName?: string
   seo?: {
     title?: string

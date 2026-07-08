@@ -56,6 +56,7 @@ export type {
   AglynUser,
   ComponentDefUid,
   HostAnnouncementBar,
+  HostPopup,
   HostMediaUid,
   HostPath,
   HostUid,

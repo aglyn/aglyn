@@ -67,6 +67,24 @@ interface Props {
     dismissible?: boolean
     contentHash: string
   } | null
+  /**
+   * Promotional popup (AGL-196): copy binding-resolved server-side; the
+   * client owns trigger timing, the schedule window re-check (ISR pages
+   * cache up to 60s), and localStorage frequency capping.
+   */
+  popup?: {
+    headline?: string
+    body: string
+    imageUrl?: string
+    ctaLabel?: string
+    ctaHref?: string
+    trigger: 'delay' | 'scroll' | 'exit'
+    triggerValue: number
+    frequencyDays: number
+    startAtMs?: number
+    endAtMs?: number
+    contentHash: string
+  } | null
   /** Collection list/entry payload when the path is content, not a screen. */
   content?: CollectionContent
   /** Password-protected screen: nodes withheld until unlock (AGL-87). */
@@ -437,25 +455,34 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
           .removeBranding,
     )
 
-    // Announcement bar (AGL-195): marketingOverlays-gated (dark-launch for
-    // plan-less tenants like other AGL-99 gates); binding tokens resolve
-    // server-side so the client ships plain text.
+    // Marketing overlays (AGL-195/196): marketingOverlays-gated
+    // (dark-launch for plan-less tenants like other AGL-99 gates); binding
+    // tokens resolve server-side so the client ships plain text.
+    const overlaysEntitled =
+      !tenantRes.tenant?.plan ||
+      Aglyn.resolveTenantEntitlements(tenantRes.tenant).features
+        .marketingOverlays
+    const contentHash = (value: string) => {
+      let hash = 0
+      for (let index = 0; index < value.length; index += 1) {
+        hash = (hash * 31 + value.charCodeAt(index)) | 0
+      }
+      return Math.abs(hash).toString(36)
+    }
     const barConfig = (hostRes.host as any)
       ?.announcementBar as Aglyn.HostAnnouncementBar | undefined
+    const popupConfig = (hostRes.host as any)?.popup as
+      | Aglyn.HostPopup
+      | undefined
+    const overlayVariables =
+      overlaysEntitled &&
+      ((barConfig?.enabled && barConfig.text) ||
+        (popupConfig?.enabled && popupConfig.body))
+        ? await getVariables({ hostId })
+        : {}
     let announcementBar: Props['announcementBar'] = null
-    if (
-      barConfig?.enabled &&
-      barConfig.text &&
-      (!tenantRes.tenant?.plan ||
-        Aglyn.resolveTenantEntitlements(tenantRes.tenant).features
-          .marketingOverlays)
-    ) {
-      const barVariables = await getVariables({ hostId })
-      const text = Aglyn.resolveBindings(barConfig.text, barVariables)
-      let hash = 0
-      for (let index = 0; index < text.length; index += 1) {
-        hash = (hash * 31 + text.charCodeAt(index)) | 0
-      }
+    if (overlaysEntitled && barConfig?.enabled && barConfig.text) {
+      const text = Aglyn.resolveBindings(barConfig.text, overlayVariables)
       announcementBar = {
         text,
         ...(barConfig.href ? { href: barConfig.href } : {}),
@@ -464,7 +491,27 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
           : {}),
         ...(barConfig.textColor ? { textColor: barConfig.textColor } : {}),
         dismissible: barConfig.dismissible !== false,
-        contentHash: Math.abs(hash).toString(36),
+        contentHash: contentHash(text),
+      }
+    }
+    let popup: Props['popup'] = null
+    if (overlaysEntitled && popupConfig?.enabled && popupConfig.body) {
+      const body = Aglyn.resolveBindings(popupConfig.body, overlayVariables)
+      const headline = popupConfig.headline
+        ? Aglyn.resolveBindings(popupConfig.headline, overlayVariables)
+        : undefined
+      popup = {
+        ...(headline ? { headline } : {}),
+        body,
+        ...(popupConfig.imageUrl ? { imageUrl: popupConfig.imageUrl } : {}),
+        ...(popupConfig.ctaLabel ? { ctaLabel: popupConfig.ctaLabel } : {}),
+        ...(popupConfig.ctaHref ? { ctaHref: popupConfig.ctaHref } : {}),
+        trigger: popupConfig.trigger ?? 'delay',
+        triggerValue: Number(popupConfig.triggerValue ?? 3),
+        frequencyDays: Math.max(1, Number(popupConfig.frequencyDays ?? 7)),
+        ...(popupConfig.startAtMs ? { startAtMs: popupConfig.startAtMs } : {}),
+        ...(popupConfig.endAtMs ? { endAtMs: popupConfig.endAtMs } : {}),
+        contentHash: contentHash(`${headline ?? ''}|${body}`),
       }
     }
 
@@ -482,6 +529,7 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
       nodes: denormalized,
       showBranding,
       announcementBar,
+      popup,
     }
 
     return {
@@ -573,6 +621,172 @@ function AnnouncementBar(props: {
           {'✕'}
         </button>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * Promotional popup (AGL-196). Client owns: schedule-window re-check (the
+ * page is ISR-cached), trigger timing (delay/scroll/exit), and frequency
+ * capping via a per-content-hash localStorage stamp (no cookies). ESC and
+ * backdrop close; reduced-motion preferences skip the entrance ease.
+ */
+function PopupOverlay(props: { popup: NonNullable<Props['popup']> }) {
+  const { popup } = props
+  const storageKey = `aglyn-popup-${popup.contentHash}`
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const now = Date.now()
+    if (popup.startAtMs && now < popup.startAtMs) return
+    if (popup.endAtMs && now > popup.endAtMs) return
+    try {
+      const stamp = Number(window.localStorage.getItem(storageKey) ?? 0)
+      if (stamp && now - stamp < popup.frequencyDays * 86400000) return
+    } catch {
+      // Storage unavailable: show at most per-pageview.
+    }
+    let cleanup: (() => void) | undefined
+    if (popup.trigger === 'scroll') {
+      const threshold = Math.min(100, Math.max(0, popup.triggerValue)) / 100
+      const onScroll = () => {
+        const height =
+          document.documentElement.scrollHeight - window.innerHeight
+        if (height <= 0 || window.scrollY / height >= threshold) {
+          setOpen(true)
+        }
+      }
+      window.addEventListener('scroll', onScroll, { passive: true })
+      cleanup = () => window.removeEventListener('scroll', onScroll)
+    } else if (popup.trigger === 'exit') {
+      const onLeave = (event: MouseEvent) => {
+        if (event.clientY <= 0) setOpen(true)
+      }
+      document.addEventListener('mouseout', onLeave)
+      cleanup = () => document.removeEventListener('mouseout', onLeave)
+    } else {
+      const timer = window.setTimeout(
+        () => setOpen(true),
+        Math.max(0, popup.triggerValue) * 1000,
+      )
+      cleanup = () => window.clearTimeout(timer)
+    }
+    return cleanup
+  }, [popup, storageKey])
+
+  const close = () => {
+    try {
+      window.localStorage.setItem(storageKey, String(Date.now()))
+    } catch {
+      // Private mode etc. — closing still works for this pageview.
+    }
+    setOpen(false)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  if (!open) return null
+  return (
+    <div
+      onClick={close}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483200,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        padding: 16,
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={popup.headline || 'Announcement'}
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          maxWidth: 420,
+          width: '100%',
+          background: '#fff',
+          color: '#111827',
+          borderRadius: 12,
+          overflow: 'hidden',
+          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.35)',
+          fontFamily: 'system-ui, sans-serif',
+          position: 'relative',
+        }}
+      >
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={close}
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            border: 'none',
+            background: 'rgba(255, 255, 255, 0.85)',
+            borderRadius: '50%',
+            width: 28,
+            height: 28,
+            cursor: 'pointer',
+            fontSize: 14,
+            lineHeight: 1,
+          }}
+        >
+          {'✕'}
+        </button>
+        {popup.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={popup.imageUrl}
+            alt=""
+            style={{
+              width: '100%',
+              maxHeight: 200,
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        ) : null}
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          {popup.headline ? (
+            <h2 style={{ margin: '0 0 8px', fontSize: 20 }}>
+              {popup.headline}
+            </h2>
+          ) : null}
+          <p style={{ margin: 0, fontSize: 14, whiteSpace: 'pre-wrap' }}>
+            {popup.body}
+          </p>
+          {popup.ctaHref && popup.ctaLabel ? (
+            <a
+              href={popup.ctaHref}
+              onClick={close}
+              style={{
+                display: 'inline-block',
+                marginTop: 16,
+                padding: '10px 24px',
+                borderRadius: 8,
+                background: '#111827',
+                color: '#fff',
+                textDecoration: 'none',
+                fontSize: 14,
+              }}
+            >
+              {popup.ctaLabel}
+            </a>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1255,6 +1469,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       {props.announcementBar ? (
         <AnnouncementBar bar={props.announcementBar} />
       ) : null}
+      {props.popup ? <PopupOverlay popup={props.popup} /> : null}
       <AglynNodeRenderer node={Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)} />
       {props.showBranding ? (
         <a
