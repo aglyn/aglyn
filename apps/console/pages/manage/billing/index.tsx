@@ -18,13 +18,17 @@
 
 import { type TenantPlan } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
+import {
+  CardDisplay,
+  Container,
+  GridItems,
+  useLoading,
+} from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Chip, Stack, Typography } from '@mui/material'
-import { collection, query, where } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../components/billing/billing-plan-cards.component'
@@ -36,11 +40,12 @@ import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
 import settingsNavTabItems from '../../../constants/settings-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import { useAdminHosts } from '../../../hooks/use-admin-hosts'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
 import useTenantPermissions from '../../../hooks/use-tenant-permissions'
 
 
-const Billing: NextPageWithLayout = () => {
+const BillingContent: NextPageWithLayout = () => {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { tenant } = useCurrentTenant()
@@ -48,13 +53,7 @@ const Billing: NextPageWithLayout = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
 
-  const { data: hosts } = useFirestoreCollectionData<any>(
-    query(
-      collection(firestore, 'hosts'),
-      where(`admins.${user?.uid ?? '-anonymous-'}`, '==', true),
-    ),
-    { idField: '$id' },
-  )
+  const { hosts } = useAdminHosts(firestore, user?.uid)
   const plan = (tenant?.plan ?? 'free') as TenantPlan
 
   const handleUpgrade = useCallback(
@@ -182,6 +181,10 @@ const Billing: NextPageWithLayout = () => {
       </DashboardLayout>
     </>
   )
+}
+
+const Billing: NextPageWithLayout = () => {
+  return <BillingContent />
 }
 Billing.displayName = 'Page:Billing'
 Billing.layouts = [

@@ -30,12 +30,26 @@ import {
   Menu,
   MenuItem,
 } from '@mui/material'
-import { collection, query, where } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { type MouseEvent, useCallback, useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { buildRoute, Route } from '../constants/route-links'
+import { useAdminHosts } from '../hooks/use-admin-hosts'
+
+function HostsPlainLink() {
+  return (
+    <Button
+      id="center-nav-hosts"
+      color="inherit"
+      component={AppLink as any}
+      {...({ componentVariant: 'button', nativeButton: false } as any)}
+      href={buildRoute(Route.HOST_LIST)}
+    >
+      {'Hosts'}
+    </Button>
+  )
+}
 
 /**
  * Host-switcher dropdown for the primary app bar: the button shows the
@@ -47,17 +61,7 @@ export function HostSwitcherNavComponent() {
   const { data: user } = useUser()
   // Firestore hooks need a uid; render the plain link until signed in.
   if (!user) {
-    return (
-      <Button
-        id="center-nav-hosts"
-        color="inherit"
-        component={AppLink as any}
-        {...({ componentVariant: 'button', nativeButton: false } as any)}
-        href={buildRoute(Route.HOST_LIST)}
-      >
-        {'Hosts'}
-      </Button>
-    )
+    return <HostsPlainLink />
   }
   return <HostSwitcherMenu uid={user.uid} />
 }
@@ -69,10 +73,7 @@ function HostSwitcherMenu(props: { uid: string }) {
   const hostId = params?.hostId
   const router = useRouter()
   const firestore = useFirestore()
-  const { data: hosts } = useFirestoreCollectionData<any>(
-    query(collection(firestore, 'hosts'), where(`admins.${uid}`, '==', true)),
-    { idField: '$id' },
-  )
+  const { hosts } = useAdminHosts(firestore, uid)
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
   const handleOpen = useCallback((event: MouseEvent<HTMLElement>) => {

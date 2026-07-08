@@ -24,9 +24,8 @@ import { AppLink } from '@aglyn/shared-ui-jsx'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { Button, Typography } from '@mui/material'
-import { collection, query, where } from 'firebase/firestore'
 import { useState } from 'react'
-import { useFirestore, useFirestoreCollectionData, useUser } from 'reactfire'
+import { useFirestore, useUser } from 'reactfire'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CreateHostDialog from '../../components/create-host-dialog.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
@@ -34,6 +33,7 @@ import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
+import { useAdminHosts } from '../../hooks/use-admin-hosts'
 import useTenantPermissions from '../../hooks/use-tenant-permissions'
 
 function HostInfoItem({ label, value }) {
@@ -71,12 +71,10 @@ function HostInfoItem({ label, value }) {
   );
 }
 
-function Hosts() {
+function HostsContent() {
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const ref = collection(firestore, 'hosts')
-  const hostsQuery = query(ref, where(`admins.${user.uid}`, '==', true))
-  const { data } = useFirestoreCollectionData(hostsQuery, { idField: '$id' })
+  const { hosts: data } = useAdminHosts(firestore, user?.uid)
   const [creating, setCreating] = useState(false)
   const { permissions } = useTenantPermissions()
 
@@ -198,6 +196,10 @@ function Hosts() {
       </DashboardLayout>
     </>
   )
+}
+
+function Hosts() {
+  return <HostsContent />
 }
 Hosts.displayName = 'Page:Hosts'
 Hosts.layouts = [

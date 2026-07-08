@@ -17,9 +17,13 @@
 'use client'
 
 import type { AglynTenant } from '@aglyn/aglyn'
-import { doc } from 'firebase/firestore'
-import { useFirestore, useFirestoreDocData, useUser } from 'reactfire'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { useEffect, useState } from 'react'
+import { useFirestore, useUser } from 'reactfire'
 import useTenantPermissions from './use-tenant-permissions'
+
+const RETRY_DELAY_MS = 400
+const MAX_RETRIES = 5
 
 /**
  * The tenant the signed-in user ACTS IN. Owners resolve their own doc
@@ -28,6 +32,13 @@ import useTenantPermissions from './use-tenant-permissions'
  * belong to — a member is a user of a single tenant, not a tenant of their
  * own. Rules grant members read on the owner doc via the members
  * subcollection.
+ *
+ * Subscribes with a raw `onSnapshot` (with its own retry) rather than
+ * reactfire's `useFirestoreDocData` — that hook's cached Observable is a
+ * *terminated* RxJS stream once it errors, so it can't recover from the one
+ * transient `permission-denied` this read can hit right after sign-in, when
+ * `useUser()` reports a signed-in user a beat before Firestore's own
+ * credential provider has attached that user's ID token (AGL-216).
  */
 export function useCurrentTenant(): {
   tenant: Partial<AglynTenant> | undefined
@@ -37,11 +48,52 @@ export function useCurrentTenant(): {
   const firestore = useFirestore()
   const { ownerUid } = useTenantPermissions()
   const tenantId = ownerUid ?? user?.uid
-  const { data } = useFirestoreDocData<any>(
-    doc(firestore, 'tenants', tenantId ?? '-anonymous-'),
-    { idField: '$id' },
+  const [tenant, setTenant] = useState<Partial<AglynTenant> | undefined>(
+    undefined,
   )
-  return { tenant: tenantId ? data : undefined, tenantId }
+
+  useEffect(() => {
+    if (!tenantId) {
+      setTenant(undefined)
+      return
+    }
+    let cancelled = false
+    let unsubscribe: (() => void) | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let attempt = 0
+
+    const subscribe = () => {
+      unsubscribe = onSnapshot(
+        doc(firestore, 'tenants', tenantId),
+        (snapshot) => {
+          if (cancelled) return
+          attempt = 0
+          setTenant(
+            snapshot.exists()
+              ? ({ $id: snapshot.id, ...snapshot.data() } as Partial<AglynTenant>)
+              : undefined,
+          )
+        },
+        () => {
+          if (cancelled) return
+          unsubscribe?.()
+          if (attempt < MAX_RETRIES) {
+            attempt += 1
+            timer = setTimeout(subscribe, RETRY_DELAY_MS)
+          }
+        },
+      )
+    }
+    subscribe()
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      unsubscribe?.()
+    }
+  }, [firestore, tenantId])
+
+  return { tenant, tenantId }
 }
 
 export default useCurrentTenant
