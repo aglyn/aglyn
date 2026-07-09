@@ -23,6 +23,7 @@ import { decode, encode } from '@msgpack/msgpack'
 import { type App, getApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getDatabase } from 'firebase-admin/database'
+import { getRemoteConfig } from 'firebase-admin/remote-config'
 import {
   FieldPath,
   FieldValue,
@@ -136,6 +137,9 @@ function wrapApp(app: App) {
     firestore: () => getFirestore(app),
     auth: () => getAuth(app),
     storage: () => getStorage(app),
+    // Release-flag management (AGL-230): the staff admin flags API reads
+    // and publishes the Remote Config template server-side.
+    remoteConfig: () => getRemoteConfig(app),
   }
 }
 
