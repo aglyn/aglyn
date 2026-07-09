@@ -47,6 +47,10 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore'
+import {
+  type RemoteConfig,
+  getRemoteConfig as getRemoteConfigInstance,
+} from 'firebase/remote-config'
 import { type FirebaseStorage, getStorage as getStorageInstance } from 'firebase/storage'
 import {
   createContext,
@@ -91,6 +95,7 @@ interface FirebaseServices {
   database: Database
   storage: FirebaseStorage
   analytics: Analytics
+  remoteConfig: RemoteConfig
 }
 
 const FirebaseServicesContext = createContext<FirebaseServices | undefined>(undefined)
@@ -171,6 +176,17 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
     } catch (error) {
       console.error(error)
     }
+    // Remote Config (AGL-228): release-flag delivery. Browser-only like
+    // analytics; consumers set defaultConfig before their first getValue so
+    // gating never blocks on the network.
+    let remoteConfig: RemoteConfig
+    try {
+      remoteConfig = getRemoteConfigInstance(app)
+      remoteConfig.settings.minimumFetchIntervalMillis =
+        process.env.NODE_ENV === 'production' ? 3_600_000 : 60_000
+    } catch (error) {
+      console.error(error)
+    }
 
     servicesRef.current = {
       app,
@@ -179,6 +195,7 @@ export function FirebaseServicesProvider(props: FirebaseServicesProviderProps) {
       database,
       storage: getStorageInstance(app),
       analytics,
+      remoteConfig,
     }
   }
 
@@ -217,6 +234,9 @@ export function useStorage(): FirebaseStorage {
 }
 export function useAnalytics(): Analytics {
   return useFirebaseServices().analytics
+}
+export function useRemoteConfig(): RemoteConfig {
+  return useFirebaseServices().remoteConfig
 }
 
 /**
