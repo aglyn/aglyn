@@ -18,7 +18,7 @@
 import { createEmotionCache } from '@aglyn/shared-ui-theme'
 import { renderStylesToString } from '@emotion/server'
 import { Portal } from '@mui/material'
-import { paramCase } from 'change-case'
+import { kebabCase } from 'change-case'
 import {
   createContext,
   forwardRef,
@@ -142,7 +142,7 @@ export function createMuiShadowDomProxy(
 ) {
   return new Proxy(target, {
     get: function get(_, name) {
-      const tag = paramCase(String(name), { delimiter: '-' })
+      const tag = kebabCase(String(name))
       const id = `${key}-${tag}`
 
       if (!tags.has(id)) {

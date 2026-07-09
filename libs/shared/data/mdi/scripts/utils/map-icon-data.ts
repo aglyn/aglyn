@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {capitalCase, paramCase} from 'change-case'
+import {capitalCase, kebabCase} from 'change-case'
 
 
 interface IconData {
@@ -27,7 +27,7 @@ interface IconData {
 }
 
 export function mapIconData(data: IconData) {
-  const id = paramCase(data.name),
+  const id = kebabCase(data.name),
     name = capitalCase(data.name),
     path = data.path,
     as = [...data.aliases],
