@@ -141,3 +141,12 @@
 .docusaurus-mermaid-container svg[aria-roledescription='sequence'] defs marker[id$='sequencenumber'] circle {
   fill: var(--ifm-font-color-base) !important;
 }
+
+/* Sequence-diagram lifelines and the stick-figure glyph are stroked with the
+   console border color (#2C3540), which is indistinguishable from the dark
+   page background — restroke them with a visible gray in dark mode only. */
+html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] line.actor-line,
+html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] .actor-man line,
+html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] .actor-man circle {
+  stroke: var(--ifm-color-emphasis-500) !important;
+}
