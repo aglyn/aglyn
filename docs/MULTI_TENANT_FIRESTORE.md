@@ -310,14 +310,25 @@ Phase 5 — **Cutover & cleanup**: stop dual-writes, freeze `tenants`/top-level
 `hosts` read paths behind staff-only fallback, delete after a full billing
 cycle of parity checks. Remove v1 rules.
 
-## 11. Open questions
+## 11. Resource scoping (DECIDED 2026-07-09, drives AGL-237)
 
-- Org deletion/export: GDPR erasure currently keys off tenant uid
-  (`erasureRequestedAt`) — needs an org-level equivalent with per-member
-  handling.
-- Do host-scoped `contacts` stay host-scoped, or become org-shared audiences?
-  (Email campaigns pull cross-host; leaning host-scoped with org-level
-  audience *views* — decide in Phase 4.)
+- **Media — two tiers.** Host media stays host-scoped and is NOT shared
+  between sibling hosts; a separate **org media library**
+  (`orgs/{orgId}/media`) is shareable with any host in the org.
+- **Datasets — org-scoped**, including contacts. Form submissions pick the
+  target org dataset (the form config selects which `orgs/{orgId}/datasets`
+  collection receives entries).
+- **Contacts — org-based** (an org dataset, not per host).
+- **Plugins — two tiers.** Plugins that extend the org (and/or its hosts)
+  install at org scope (`orgs/{orgId}/pluginInstalls`); host-only plugins
+  stay host-scoped. Both levels coexist.
+
+## 12. Open questions
+
+- ~~Org-level GDPR erasure~~ — v1 shipped: `erase-tenant.mjs` is org-aware
+  (solely-owned orgs deleted with slug/hostIndex; shared memberships
+  removed; owned-with-members skipped). Ownership transfer still undesigned.
+- ~~Contacts scoping~~ — decided: org-based (see §11).
 - Slug squatting / trademark policy for subdomains.
 - Whether `hostIndex` should also carry the public-domain → host mapping the
   tenant app uses today (probably yes, consolidating two lookups).
