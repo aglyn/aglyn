@@ -28,6 +28,7 @@ import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { useReleaseFlags } from '../../hooks/use-release-flags'
 import { buildRoute, Route } from '../../constants/route-links'
+import OrgSwitcherNav from '../org-switcher-nav.component'
 import DashboardHeaderComponent, {
   type DashboardHeaderProps,
 } from '../dashboard-header.component'
@@ -47,6 +48,8 @@ const defaultTabBarTitle = (
       lineHeight: 'normal',
       color: 'tertiary.main'
     }}>
+    {/* Org switcher renders only when release_org_workspaces admits it. */}
+    <OrgSwitcherNav />
     <span>{'Secure'}</span>
     <MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} fontSize={'small'} />
   </Stack>

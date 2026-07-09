@@ -29,6 +29,7 @@ import { logEvent, setUserId, setUserProperties } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
+import { OrgWorkspaceProvider } from '../../hooks/use-org-workspace'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 
 function AnalyticsGlobalEvents({ children }) {
@@ -95,7 +96,9 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
         appName={FIREBASE_CLIENT_APP_NAME}
       >
         <ReleaseFlagsProvider>
-          <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+          <OrgWorkspaceProvider>
+            <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+          </OrgWorkspaceProvider>
         </ReleaseFlagsProvider>
       </FirebaseServicesProvider>
     </NoSsr>
