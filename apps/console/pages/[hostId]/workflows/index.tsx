@@ -22,6 +22,7 @@ import HostActionsCard from '../../../components/host-actions-card.component'
 import HostWebhooksCard from '../../../components/host-webhooks-card.component'
 import HostWorkflowsCard from '../../../components/host-workflows-card.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
+import FeatureGate from '../../../components/feature-gate.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -59,15 +60,17 @@ const HostWorkflows: NextPageWithLayout = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <HostWorkflowsCard hostId={hostId} />
-          {/* Actions builder (AGL-148). */}
-          <div style={{ marginTop: 24 }}>
-            <HostActionsCard hostId={hostId} />
-          </div>
-          {/* Webhooks (AGL-149). */}
-          <div style={{ marginTop: 24 }}>
-            <HostWebhooksCard hostId={hostId} />
-          </div>
+          <FeatureGate flag="release_workflows">
+            <HostWorkflowsCard hostId={hostId} />
+            {/* Actions builder (AGL-148). */}
+            <div style={{ marginTop: 24 }}>
+              <HostActionsCard hostId={hostId} />
+            </div>
+            {/* Webhooks (AGL-149). */}
+            <div style={{ marginTop: 24 }}>
+              <HostWebhooksCard hostId={hostId} />
+            </div>
+          </FeatureGate>
         </Container>
       </DashboardLayout>
     </>

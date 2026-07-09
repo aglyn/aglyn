@@ -20,6 +20,7 @@ import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import HostBookings from '../../../components/host-bookings.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
+import FeatureGate from '../../../components/feature-gate.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -56,7 +57,9 @@ const HostBookingsPage: NextPageWithLayout = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <HostBookings hostId={hostId} />
+          <FeatureGate flag="release_bookings">
+            <HostBookings hostId={hostId} />
+          </FeatureGate>
         </Container>
       </DashboardLayout>
     </>

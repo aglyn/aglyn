@@ -29,6 +29,7 @@ import { logEvent, setUserId, setUserProperties } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
+import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 
 function AnalyticsGlobalEvents({ children }) {
   const analytics = useAnalytics()
@@ -93,7 +94,9 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
         firebaseConfig={fbClientAppOptions}
         appName={FIREBASE_CLIENT_APP_NAME}
       >
-        <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+        <ReleaseFlagsProvider>
+          <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+        </ReleaseFlagsProvider>
       </FirebaseServicesProvider>
     </NoSsr>
   )
