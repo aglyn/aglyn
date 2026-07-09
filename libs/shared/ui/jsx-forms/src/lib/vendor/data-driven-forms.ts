@@ -16,10 +16,8 @@
  */
 
 export {
-  type ActionMapper,
   type ActionResolution,
   type AnyObject,
-  type CommonTypes,
   type ComponentMapper,
   type ComponentType,
   componentTypes,
@@ -29,40 +27,25 @@ export {
   type ConditionProps,
   type DataType,
   dataTypes,
-  type DataTypeValidators,
   // DefaultSchemaError,
   defaultSchemaValidator,
-  type ExtendedMapperComponent,
   type Field as FieldSchema,
-  type FieldAction,
-  type FieldActions,
-  type FieldApi,
   FieldArray,
-  type FieldArrayField,
   FieldProvider,
-  type FieldProviderProps,
   Form,
   FormError,
   type FormOptions,
   FormRenderer,
   type FormRendererProps,
   FormSpy,
-  type FormTemplateRenderProps,
   type InnerWhenFunction,
-  type Input,
   type LenghtOptions,
-  type MessageTypes,
   type Meta,
   type NumericalityOptions,
   parseCondition,
-  type ParseCondition,
-  type PartialValidator,
   type PatternOptions,
   RendererContext,
-  type RendererContextValue,
-  type ResolvePropsFunction,
   type Schema as FormSchema,
-  type SchemaValidatorMapper,
   useFieldApi,
   type UseFieldApiComponentConfig,
   type UseFieldApiConfig,
@@ -76,12 +59,25 @@ export {
   type ValidatorType,
   validatorTypes,
   type WhenFunction,
-  type WizardContextValue,
 } from '@data-driven-forms/react-form-renderer'
 
 // The root ESM barrel of the renderer does not re-export WizardContext at
 // runtime; the subpath entry does.
 export { default as WizardContext } from '@data-driven-forms/react-form-renderer/wizard-context'
+
+// Since v4 these types live only on the common-types entry, not the root
+// barrel. `ActionMapper`, `CommonTypes` and `MessageTypes` were removed
+// upstream with no replacement.
+export {
+  type ExtendedMapperComponent,
+  type FieldAction,
+  type FieldActions,
+  type FieldApi,
+  type FormTemplateRenderProps,
+  type Input,
+  type PartialValidator,
+  type ResolvePropsFunction,
+} from '@data-driven-forms/react-form-renderer/common-types'
 
 declare module '@data-driven-forms/react-form-renderer' {
   interface Schema extends Record<string, any> {
@@ -97,9 +93,12 @@ export {
 
 export {
   prepareMsg,
-  type MessageObject,
   memoize,
 } from '@data-driven-forms/react-form-renderer/common'
+
+// v4 no longer exports the MessageObject interface; derive it from prepareMsg.
+import { prepareMsg as _prepareMsg } from '@data-driven-forms/react-form-renderer/common'
+export type MessageObject = ReturnType<typeof _prepareMsg>
 
 export { default as prepareComponentProps } from '@data-driven-forms/react-form-renderer/prepare-component-props'
 

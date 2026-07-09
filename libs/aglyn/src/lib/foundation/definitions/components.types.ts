@@ -18,10 +18,12 @@
 import type {
   ConditionDefinition,
   DataType,
-  FieldActions,
-  ResolvePropsFunction,
   Validator,
 } from '@data-driven-forms/react-form-renderer'
+import type {
+  FieldActions,
+  ResolvePropsFunction,
+} from '@data-driven-forms/react-form-renderer/common-types'
 import type { SvgIconProps } from '@mui/material'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
 import type { CANVAS_ROOT_ELEMENT_ID } from '../constants/canvas'

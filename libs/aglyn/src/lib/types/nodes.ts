@@ -18,10 +18,12 @@
 import type {
   ConditionDefinition,
   DataType,
-  FieldActions,
-  ResolvePropsFunction,
   Validator,
 } from '@data-driven-forms/react-form-renderer'
+import type {
+  FieldActions,
+  ResolvePropsFunction,
+} from '@data-driven-forms/react-form-renderer/common-types'
 import type { MuiStyledOptions } from '@mui/system/createStyled'
 import type { SvgIconProps } from '@mui/material/SvgIcon'
 /** Minimal icon-props type used in component/preset schemas. Structurally compatible with @aglyn/shared-ui-jsx MdiIconProps. */

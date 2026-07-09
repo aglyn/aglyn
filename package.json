@@ -57,8 +57,8 @@
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
-    "@data-driven-forms/common": "^3.22.0",
-    "@data-driven-forms/react-form-renderer": "^3.22.0",
+    "@data-driven-forms/common": "^4.2.0",
+    "@data-driven-forms/react-form-renderer": "^4.2.0",
     "@dnd-kit/core": "^6.3.1",
     "@emotion/cache": "^11.14.0",
     "@emotion/css": "^11.13.5",
