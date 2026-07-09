@@ -48,7 +48,6 @@ const defaultTabBarTitle = (
       lineHeight: 'normal',
       color: 'tertiary.main'
     }}>
-    {/* Org switcher renders only when release_org_workspaces admits it. */}
     <OrgSwitcherNav />
     <span>{'Secure'}</span>
     <MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} fontSize={'small'} />

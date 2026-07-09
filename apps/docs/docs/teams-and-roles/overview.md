@@ -21,16 +21,16 @@ Aglyn has two kinds of people: your **team** (who build and manage the host) and
 - Permissions are enforced across the console's APIs and surfaces, and team members act in
   the **owner's** tenant, not their own.
 
-## Organizations (early access)
+## Organizations
 
-Aglyn is moving to **organization workspaces**: an organization subscribes once, owns
+Aglyn is built around **organization workspaces**: an organization subscribes once, owns
 multiple websites, and shares media, plugins, dynamic data and billing across them. You
 can belong to several organizations with a different role in each (owner, admin, editor,
 viewer), and editors/viewers can be limited to specific sites. Each organization gets a
 Slack-style workspace address (`your-org.aglyn.com`).
 
-This is rolling out behind a release flag; the team features above keep working
-unchanged in the meantime.
+Every account operates inside an organization — solo accounts simply get a personal
+workspace automatically. The team features above keep working unchanged.
 
 ## Site membership
 

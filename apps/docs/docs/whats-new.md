@@ -90,7 +90,7 @@ Each links into its section for the how-to.
 - **[Feature flags](staff-console/feature-flags.md)** *(Aglyn staff only)* — Remote
   Config–backed release gating with percentage rollout; staff preview unreleased
   features with warnings.
-- **[Organization workspaces](teams-and-roles/overview.md#organizations-early-access)**
-  *(early access)* — orgs own multiple sites with shared billing, role-based membership
-  with per-site access, and Slack-style workspace subdomains
+- **[Organization workspaces](teams-and-roles/overview.md#organizations)** — orgs own
+  multiple sites with shared billing, role-based membership with per-site access, and
+  Slack-style workspace subdomains
   ([architecture](staff-console/architecture-multi-tenancy.md)).

@@ -33,7 +33,6 @@ export type ReleaseFlagKey =
   | 'release_workflows'
   | 'release_redirects'
   | 'release_community'
-  | 'release_org_workspaces'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -106,13 +105,6 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description: 'Community browsing, publishing and plugin installs.',
     defaultEnabled: true,
     navTabId: 'nav-tab-community',
-  },
-  {
-    key: 'release_org_workspaces',
-    label: 'Organization workspaces',
-    description:
-      'Multi-tenant org UX (AGL-236): org switcher and workspace subdomains.',
-    defaultEnabled: false,
   },
 ]
 

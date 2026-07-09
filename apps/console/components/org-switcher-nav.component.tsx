@@ -16,8 +16,6 @@
  */
 'use client'
 
-import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Button,
   ListItemText,
@@ -28,39 +26,26 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { useOrgWorkspace } from '../hooks/use-org-workspace'
-import { useReleaseFlag } from '../hooks/use-release-flags'
 
 /**
  * Slack-style organization switcher (AGL-236), rendered in the secondary
- * app bar behind the `release_org_workspaces` flag. Switching scopes the
- * console to that org (persisted locally); once wildcard workspace
- * subdomains are live the menu will navigate to {slug}.aglyn.com instead.
+ * app bar. Switching scopes the console to that org (persisted locally);
+ * once wildcard workspace subdomains are live the menu will navigate to
+ * {slug}.aglyn.com instead.
  */
 export function OrgSwitcherNav() {
-  const { visible, staffPreview } = useReleaseFlag('release_org_workspaces')
   const { orgs, currentOrg, selectOrg, workspaceSlug } = useOrgWorkspace()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
 
-  if (!visible || !currentOrg) return null
+  if (!currentOrg) return null
 
   return (
     <>
-      <Tooltip
-        title={
-          staffPreview
-            ? 'Organization workspaces are release-flagged (staff preview)'
-            : `Workspace: ${currentOrg.orgName ?? currentOrg.$id}`
-        }
-      >
+      <Tooltip title={`Workspace: ${currentOrg.orgName ?? currentOrg.$id}`}>
         <Button
           size="small"
           color="inherit"
           onClick={(event) => setAnchor(event.currentTarget)}
-          startIcon={
-            staffPreview ? (
-              <MdiIcon path={ICON_VARIANT_SYMBOL_FLAG} fontSize="small" />
-            ) : undefined
-          }
           sx={{ textTransform: 'none', maxWidth: 220 }}
         >
           <Typography variant="subtitle2" noWrap>

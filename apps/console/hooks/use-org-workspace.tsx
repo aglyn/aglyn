@@ -75,7 +75,7 @@ const OrgWorkspaceContext = createContext<OrgWorkspaceContextValue>({
 })
 
 /**
- * Org workspace context (AGL-236, flag `release_org_workspaces`): the
+ * Org workspace context (AGL-236): the
  * Slack-style scope the console operates in. Precedence — the workspace
  * subdomain ({slug}.aglyn.com, resolved via the public orgSlugs doc),
  * then the locally remembered selection, then the user's first org.

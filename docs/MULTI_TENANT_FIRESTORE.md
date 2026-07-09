@@ -7,7 +7,8 @@ Author: Zach Gover, 2026-07-09
 > machinery in §10 was dropped in favor of a direct cutover. Implemented:
 > org model + APIs (AGL-233), membership/invites (AGL-234), rules v2
 > (AGL-235), the `backfill-orgs.mjs` one-shot script, and the org switcher
-> behind `release_org_workspaces` (AGL-236 partial). Host content
+> (AGL-236 partial; orgs are the permanent model — the release flag that
+> briefly gated the workspace UX was removed). Host content
 > authorization uses a role-aware `memberRoles` projection on the host doc
 > (kept in sync by the org APIs) instead of a second rules `get()`, and
 > hosts remain top-level (`hostIndex` resolves host → org) — ancestry
@@ -292,8 +293,8 @@ Phase 0 — **Dual-model foundation**: create `orgs` schema, slug reservation,
 kept). Dual-write from API routes (writes go to both models).
 
 Phase 1 — **Membership & invites** on the new model (roles, per-host access,
-reverse index); console team UI reads new model behind a release flag
-(`release_org_workspaces` — dogfood via the feature-flag system).
+reverse index); console team UI reads the new model directly — orgs are the
+permanent tenancy model, not a flagged rollout.
 
 Phase 2 — **Rules v2** for the `orgs` subtree + storage rules; emulator test
 suite covering member/non-member/suspended/staff matrices for both models.

@@ -48,13 +48,6 @@
       },
       "description": "Community browsing, publishing and plugin installs.",
       "valueType": "JSON"
-    },
-    "release_org_workspaces": {
-      "defaultValue": {
-        "value": "{\"enabled\":false,\"rolloutPercent\":0,\"note\":\"Org workspace UX dogfood (AGL-236)\"}"
-      },
-      "description": "Multi-tenant org UX (AGL-236): org switcher and workspace subdomains.",
-      "valueType": "JSON"
     }
   },
   "version": {

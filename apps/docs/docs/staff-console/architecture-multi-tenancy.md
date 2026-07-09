@@ -131,9 +131,9 @@ flowchart LR
 ```
 
 The middleware is inert until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN` beside the
-wildcard domain. The whole workspace UX ships behind the `release_org_workspaces`
-[feature flag](./feature-flags.md) — staff preview it today; customers see it when the
-flag flips.
+wildcard domain. Organizations are the permanent tenancy model (not release-flagged):
+every account operates inside an org, and the switcher appears as soon as a user
+belongs to one.
 
 ## Billing & cost attribution
 
