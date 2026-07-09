@@ -31,6 +31,9 @@ module.exports = {
         // firebase-admin's app-check module pulls in jwks-rsa -> jose, which
         // ships ESM-only (no CJS build) as of jose v6 (firebase-admin v14).
         'jose',
+        // ESM-only as of change-case v5, cookie v2, deepmerge-ts v7,
+        // nanoid-dictionary v5.
+        'change-case', 'cookie', 'deepmerge-ts', 'nanoid-dictionary',
       ].join('|') +
       ')/)',
   ],
