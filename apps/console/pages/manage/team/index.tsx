@@ -53,6 +53,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
+import OrgMembersCard from '../../../components/org-members-card.component'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import { checkTenantSeatQuota } from '../../../constants/entitlements'
@@ -269,6 +270,10 @@ const ManageTeam: NextPageWithLayout = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Org membership (AGL-234) — the permanent tenancy model. The
+              legacy manager-seat card below it retires with AGL-238. */}
+          <OrgMembersCard />
+          <Divider sx={{ my: 3 }} />
           <CardDisplay
             header={'Team Members'}
             contentGutterX

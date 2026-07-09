@@ -29,6 +29,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CreateHostDialog from '../../components/create-host-dialog.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
+import OrgInvitesBanner from '../../components/org-invites-banner.component'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -106,6 +107,8 @@ function HostsContent() {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Pending org invites (AGL-234). */}
+          <OrgInvitesBanner />
           <GridItems
             spacing={3}
             items={[

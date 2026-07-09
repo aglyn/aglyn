@@ -54,10 +54,41 @@ export default async function handler(
   const orgId = String(
     (req.method === 'GET' ? req.query.orgId : req.body?.orgId) ?? '',
   )
-  if (!orgId) return res.status(400).json({ error: 'Missing orgId' })
+  const mine = req.method === 'GET' && req.query.mine === '1'
+  if (!orgId && !mine) return res.status(400).json({ error: 'Missing orgId' })
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+
+    // Cross-org "invites for me" (AGL-234): pending invites addressed to
+    // the caller's verified email, joined with the org names so the
+    // console banner can render without extra reads.
+    if (mine) {
+      const email = String(decoded.email ?? '').toLowerCase()
+      if (!email || !decoded.email_verified) {
+        return res.status(200).json({ invites: [] })
+      }
+      const firestore = firebaseAdmin.app().firestore()
+      const snapshot = await firestore
+        .collectionGroup('invites')
+        .where('email', '==', email)
+        .where('acceptedAt', '==', null)
+        .limit(20)
+        .get()
+      const invites = await Promise.all(
+        snapshot.docs.map(async (inviteDoc) => {
+          const orgRef = inviteDoc.ref.parent.parent
+          const orgSnapshot = orgRef ? await orgRef.get() : null
+          return {
+            $id: inviteDoc.id,
+            orgId: orgRef?.id ?? null,
+            orgName: orgSnapshot?.get('name') ?? null,
+            role: inviteDoc.get('role') ?? null,
+          }
+        }),
+      )
+      return res.status(200).json({ invites })
+    }
     const isStaff = decoded['staff'] === true
     const actor = await resolveOrgMembership(decoded.uid, orgId)
     const firestore = firebaseAdmin.app().firestore()
