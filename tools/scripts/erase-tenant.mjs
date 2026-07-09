@@ -117,6 +117,40 @@ async function main() {
     console.log(`  - hosts/${host.id} (${host.get('displayName') ?? ''})`)
   }
 
+  // Org tenancy (AGL-233): plan the user's org footprint. Solely-owned
+  // orgs are erased with them (subtree + slug + hostIndex); memberships in
+  // shared orgs are removed; orgs they OWN that still have other members
+  // are skipped loudly — transfer ownership first.
+  const membershipEntries = await firestore
+    .collection('users')
+    .doc(tenantId)
+    .collection('orgs')
+    .get()
+  const orgPlans = []
+  for (const entry of membershipEntries.docs) {
+    const orgRef = firestore.collection('orgs').doc(entry.id)
+    const orgSnapshot = await orgRef.get()
+    if (!orgSnapshot.exists) {
+      orgPlans.push({ orgRef, mode: 'index-only' })
+      continue
+    }
+    const isOwner = orgSnapshot.get('ownerUid') === tenantId
+    const members = await orgRef.collection('members').get()
+    const others = members.docs.filter((member) => member.id !== tenantId)
+    const mode = !isOwner
+      ? 'leave'
+      : others.length === 0
+        ? 'delete-org'
+        : 'skip-shared'
+    orgPlans.push({ orgRef, orgSnapshot, mode })
+    console.log(
+      `  - orgs/${entry.id} (${orgSnapshot.get('name') ?? ''}): ${mode}` +
+        (mode === 'skip-shared'
+          ? ` — ${others.length} other member(s), transfer ownership first`
+          : ''),
+    )
+  }
+
   if (!confirmFlag) {
     console.log(
       '\nDry run — nothing deleted. Re-run with --confirm to export a ' +
@@ -131,6 +165,11 @@ async function main() {
     tenant: await exportDocTree(firestore, tenantRef),
     hosts: await Promise.all(
       hosts.docs.map((host) => exportDocTree(firestore, host.ref)),
+    ),
+    orgs: await Promise.all(
+      orgPlans
+        .filter((plan) => plan.mode === 'delete-org')
+        .map((plan) => exportDocTree(firestore, plan.orgRef)),
     ),
   }
   const exportPath = `erasure-${tenantId}-${Date.now()}.json`
@@ -152,6 +191,48 @@ async function main() {
   }
   await firestore.recursiveDelete(tenantRef)
   console.log(`Deleted tenants/${tenantId}`)
+
+  // Org cleanup per the plan above.
+  for (const plan of orgPlans) {
+    const orgId = plan.orgRef.id
+    if (plan.mode === 'skip-shared') {
+      console.warn(
+        `SKIPPED orgs/${orgId}: other members remain — transfer ownership, ` +
+          'then re-run for the org.',
+      )
+      continue
+    }
+    if (plan.mode === 'delete-org') {
+      const slug = plan.orgSnapshot?.get('slug')
+      const orgHostIds = Object.keys(plan.orgSnapshot?.get('hosts') ?? {})
+      for (const hostId of orgHostIds) {
+        await firestore.collection('hostIndex').doc(hostId).delete()
+      }
+      await firestore.recursiveDelete(plan.orgRef)
+      if (slug) await firestore.collection('orgSlugs').doc(slug).delete()
+      console.log(`Deleted orgs/${orgId} (slug: ${slug ?? '—'})`)
+    } else if (plan.mode === 'leave') {
+      // Membership in someone else's org: member doc + stale projection.
+      await plan.orgRef.collection('members').doc(tenantId).delete()
+      const orgHostIds = Object.keys(plan.orgSnapshot?.get('hosts') ?? {})
+      for (const hostId of orgHostIds) {
+        await firestore
+          .collection('hosts')
+          .doc(hostId)
+          .set(
+            { memberRoles: { [tenantId]: FieldValue.delete() } },
+            { merge: true },
+          )
+      }
+      console.log(`Left orgs/${orgId}`)
+    }
+    await firestore
+      .collection('users')
+      .doc(tenantId)
+      .collection('orgs')
+      .doc(orgId)
+      .delete()
+  }
 
   await firestore.collection('adminAudit').add({
     actorUid: `script:erase-tenant`,
