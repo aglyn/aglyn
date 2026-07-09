@@ -16,13 +16,19 @@
  */
 
 import {
+  canManageOrg,
   checkQuota,
   createResourceUid,
   isBlockedSubdomain,
   SUBDOMAIN_PATTERN,
   suggestSubdomains,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  ensureOrgForUser,
+  firebaseAdmin,
+  registerOrgHost,
+  resolveOrgMembership,
+} from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
 
@@ -73,6 +79,27 @@ export default async function handler(
       return res
         .status(403)
         .json({ error: 'Your team role does not allow creating hosts' })
+    }
+    // Org resolution (AGL-233): hosts belong to an organization. The org
+    // comes from the request (workspace context) or the user's first org,
+    // auto-creating a personal org for brand-new accounts. Creating hosts
+    // is an org admin/owner power.
+    const requestedOrgId = String(req.body?.orgId ?? '') || null
+    const orgMembership = requestedOrgId
+      ? await resolveOrgMembership(decoded.uid, requestedOrgId)
+      : await ensureOrgForUser(decoded.uid, {
+          email: decoded.email ?? null,
+          displayName: (decoded['name'] as string | undefined) ?? null,
+        })
+    if (!orgMembership) {
+      return res
+        .status(403)
+        .json({ error: 'You are not a member of that organization' })
+    }
+    if (!canManageOrg(orgMembership.member.role)) {
+      return res
+        .status(403)
+        .json({ error: 'Your organization role does not allow creating hosts' })
     }
     const firestore = firebaseAdmin.app().firestore()
 
@@ -129,13 +156,18 @@ export default async function handler(
       .set({
         displayName,
         subdomain,
+        orgId: orgMembership.orgId,
+        // Legacy billing-v1 fields kept until AGL-237 re-keys billing:
+        // tenantId feeds plan resolution, admins feeds pre-org queries.
         tenantId: decoded.uid,
         admins: { [decoded.uid]: true },
         screens: {},
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
-    return res.status(200).json({ hostId })
+    // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
+    await registerOrgHost(orgMembership.orgId, hostId, subdomain)
+    return res.status(200).json({ hostId, orgId: orgMembership.orgId })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Host creation failed' })
