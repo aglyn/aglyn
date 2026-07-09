@@ -12,9 +12,15 @@ Author: Zach Gover, 2026-07-09
 > (kept in sync by the org APIs) instead of a second rules `get()`, and
 > hosts remain top-level (`hostIndex` resolves host → org) — ancestry
 > nesting was traded for keeping every existing `hosts/{hostId}` path
-> working. Still open: wildcard subdomain routing + session cookies
-> (AGL-236), org-shared resources + billing re-key (AGL-237), usage
-> rollups + legacy `tenants` removal (AGL-238).
+> working. Second pass (same day): workspace-subdomain middleware (inert
+> until ops sets `NEXT_PUBLIC_WORKSPACE_DOMAIN`), org-scoped host
+> creation, billing mirrored to org docs with entitlements resolving from
+> them (AGL-237 part 1), per-org usage rollups (AGL-238 part 1), and a
+> rules emulator matrix (`npm run test:rules`, 13 cases) that caught and
+> fixed an editor-can-delete-host wildcard hole. Still open: wildcard DNS
+> + cross-subdomain session cookies (ops, AGL-236), moving media/datasets/
+> plugins to org scope + Stripe metering re-key (AGL-237), legacy
+> `tenants` removal after a parity soak (AGL-238).
 
 ## 1. Context & goals
 
