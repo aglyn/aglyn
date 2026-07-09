@@ -14,7 +14,7 @@
     "jsxImportSource": "react",
     "lib": ["dom", "dom.iterable", "esnext"],
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "target": "es2022",
     "noEmit": false,
     "noFallthroughCasesInSwitch": false,
