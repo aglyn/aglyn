@@ -19,6 +19,7 @@
 import {
   collection,
   onSnapshot,
+  or,
   query,
   where,
   type DocumentData,
@@ -62,9 +63,14 @@ export function useAdminHosts(
     let attempt = 0
 
     const subscribe = () => {
+      // Legacy per-host admins map OR the org membership projection
+      // (AGL-233) — the rules admit exactly this disjunction.
       const q = query(
         collection(firestore, 'hosts'),
-        where(`admins.${uid}`, '==', true),
+        or(
+          where(`admins.${uid}`, '==', true),
+          where(`memberRoles.${uid}`, 'in', ['admin', 'editor', 'viewer']),
+        ),
       )
       unsubscribe = onSnapshot(
         q,
