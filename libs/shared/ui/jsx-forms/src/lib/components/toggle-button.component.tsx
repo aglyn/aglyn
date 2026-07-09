@@ -15,10 +15,7 @@
  * limitations under the License.
  */
 
-import {
-  FormFieldGrid,
-  validationError,
-} from '@data-driven-forms/mui-component-mapper'
+import { FormFieldGrid, validationError } from '../mapper'
 import {
   useFieldApi,
   type UseFieldApiConfig,

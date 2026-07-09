@@ -26,6 +26,8 @@ export * from './components/textarea.component'
 export * from './components/grid-form-template.component'
 export * from './components/toggle-button.component'
 
+export * from './mapper'
+
 export * from './constants/component-mappers'
 export * from './constants/dynamic-fields'
 export * from './constants/field-configurations'

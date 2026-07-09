@@ -20,10 +20,7 @@ import {
   type ColorPickerProps as AglynColorPickerProps,
 } from '@aglyn/shared-ui-color-picker'
 import { styled } from '@aglyn/shared-ui-theme'
-import {
-  FormFieldGrid,
-  validationError,
-} from '@data-driven-forms/mui-component-mapper'
+import { FormFieldGrid, validationError } from '../mapper'
 import {
   useFieldApi,
   type UseFieldApiComponentConfig,

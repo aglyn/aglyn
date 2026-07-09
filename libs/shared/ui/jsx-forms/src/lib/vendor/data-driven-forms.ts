@@ -79,6 +79,10 @@ export {
   type WizardContextValue,
 } from '@data-driven-forms/react-form-renderer'
 
+// The root ESM barrel of the renderer does not re-export WizardContext at
+// runtime; the subpath entry does.
+export { default as WizardContext } from '@data-driven-forms/react-form-renderer/wizard-context'
+
 declare module '@data-driven-forms/react-form-renderer' {
   interface Schema extends Record<string, any> {
     id?: string
