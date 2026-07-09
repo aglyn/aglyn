@@ -20,6 +20,7 @@ import type { AglynTenant } from '@aglyn/aglyn'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import useOrgWorkspace from './use-org-workspace'
 import useTenantPermissions from './use-tenant-permissions'
 
 const RETRY_DELAY_MS = 400
@@ -43,17 +44,33 @@ const MAX_RETRIES = 5
 export function useCurrentTenant(): {
   tenant: Partial<AglynTenant> | undefined
   tenantId: string | undefined
+  /** The org the billing data came from, once orgs carry it (AGL-237). */
+  orgId: string | undefined
 } {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { ownerUid } = useTenantPermissions()
+  const { currentOrg, loading: orgsLoading } = useOrgWorkspace()
   const tenantId = ownerUid ?? user?.uid
+  // Billing re-key (AGL-237): the org doc mirrors plan/entitlements
+  // (backfill + webhook), so it is preferred as the source once the user
+  // has an org; uid-keyed tenants remain the fallback until AGL-238
+  // retires them. The returned tenantId stays uid-keyed for the legacy
+  // billing APIs either way.
+  const orgId = currentOrg?.$id
+  const sourcePath = orgsLoading
+    ? null
+    : orgId
+      ? (['orgs', orgId] as const)
+      : tenantId
+        ? (['tenants', tenantId] as const)
+        : null
   const [tenant, setTenant] = useState<Partial<AglynTenant> | undefined>(
     undefined,
   )
 
   useEffect(() => {
-    if (!tenantId) {
+    if (!sourcePath) {
       setTenant(undefined)
       return
     }
@@ -62,9 +79,10 @@ export function useCurrentTenant(): {
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
 
+    const [collectionName, docId] = sourcePath
     const subscribe = () => {
       unsubscribe = onSnapshot(
-        doc(firestore, 'tenants', tenantId),
+        doc(firestore, collectionName, docId),
         (snapshot) => {
           if (cancelled) return
           attempt = 0
@@ -91,9 +109,11 @@ export function useCurrentTenant(): {
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }
-  }, [firestore, tenantId])
+    // sourcePath is derived state; its parts are the real dependencies.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firestore, sourcePath?.[0], sourcePath?.[1]])
 
-  return { tenant, tenantId }
+  return { tenant, tenantId, orgId }
 }
 
 export default useCurrentTenant

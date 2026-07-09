@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin, upsertHostContact } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  resolveOrgMembership,
+  upsertHostContact,
+} from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -111,25 +115,39 @@ export default async function handler(
         const plan = canceled
           ? 'free'
           : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
+        const billing = {
+          plan,
+          stripeCustomerId: object?.customer ?? null,
+          subscription: {
+            status: canceled ? 'canceled' : (object?.status ?? 'active'),
+            priceId: object?.items?.data?.[0]?.price?.id ?? null,
+            currentPeriodEnd: object?.current_period_end
+              ? new Date(object.current_period_end * 1000)
+              : null,
+          },
+        }
         await firebaseAdmin
           .app()
           .firestore()
           .collection('tenants')
           .doc(tenantId)
-          .set(
-            {
-              plan,
-              stripeCustomerId: object?.customer ?? null,
-              subscription: {
-                status: canceled ? 'canceled' : (object?.status ?? 'active'),
-                priceId: object?.items?.data?.[0]?.price?.id ?? null,
-                currentPeriodEnd: object?.current_period_end
-                  ? new Date(object.current_period_end * 1000)
-                  : null,
-              },
-            },
-            { merge: true },
-          )
+          .set(billing, { merge: true })
+        // Org mirror (AGL-237): orgs are becoming the entitlement source.
+        // New checkouts carry orgId in metadata; older subscriptions
+        // resolve through the owner's membership. The tenants write above
+        // stays until the legacy path is removed (AGL-238).
+        const orgId =
+          object?.metadata?.orgId ??
+          (await resolveOrgMembership(tenantId))?.orgId ??
+          null
+        if (orgId) {
+          await firebaseAdmin
+            .app()
+            .firestore()
+            .collection('orgs')
+            .doc(String(orgId))
+            .set(billing, { merge: true })
+        }
       }
     }
 

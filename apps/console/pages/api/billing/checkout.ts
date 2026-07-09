@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, resolveOrgMembership } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 const PRICE_ENV: Record<string, string | undefined> = {
@@ -57,6 +57,13 @@ export default async function handler(
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const tenantId = decoded.uid
+    // Org metadata (AGL-237): the webhook mirrors billing to this org so
+    // orgs can take over as the entitlement source. Explicit orgId from
+    // the workspace-scoped console wins; otherwise the user's first org.
+    const orgMembership = await resolveOrgMembership(
+      decoded.uid,
+      String(req.body?.orgId ?? '') || null,
+    )
     const origin = req.headers.origin ?? `https://${req.headers.host}`
 
     const params = new URLSearchParams({
@@ -68,6 +75,9 @@ export default async function handler(
       client_reference_id: tenantId,
       'subscription_data[metadata][tenantId]': tenantId,
       'subscription_data[metadata][plan]': plan,
+      ...(orgMembership
+        ? { 'subscription_data[metadata][orgId]': orgMembership.orgId }
+        : {}),
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
 
