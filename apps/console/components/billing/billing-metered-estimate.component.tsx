@@ -25,7 +25,7 @@ import { Stack, Typography } from '@mui/material'
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { documentId } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 
 export interface BillingMeteredEstimateProps {
   hosts: any[]

@@ -28,7 +28,7 @@ import {
 } from '@mui/material'
 import { collection, doc, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/router'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
 import { useHostId } from '../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'

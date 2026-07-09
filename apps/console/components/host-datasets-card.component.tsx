@@ -65,7 +65,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   checkTenantQuota,
   hasEntitlement,

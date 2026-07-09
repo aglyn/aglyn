@@ -17,7 +17,7 @@
 
 import { onSnapshot, type DocumentReference } from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
-import { type ObservableStatus, type ReactFireOptions } from 'reactfire'
+import type { ObservableStatus, FirestoreDocOptions } from '../firebase/firebase-services'
 import useModifyDocCallback, {
   type UseModifyDocCallback,
 } from './use-modify-doc-callback'
@@ -39,7 +39,7 @@ const MAX_RETRIES = 5
  */
 export function useDocData<T>(
   ref: DocumentReference<T>,
-  options?: ReactFireOptions<T>,
+  options?: FirestoreDocOptions<T>,
 ): ObservableStatus<T> {
   const idField = options?.idField
   const initialData = options?.initialData
@@ -121,7 +121,7 @@ export type UseDocData<T> = typeof useDocData<T>
 
 export function useDoc<T>(
   ref: DocumentReference<T>,
-  options?: ReactFireOptions<T>,
+  options?: FirestoreDocOptions<T>,
 ): {doc: ReturnType<UseDocData<T>>, setDoc: ReturnType<UseModifyDocCallback<T>>} {
   return {doc: useDocData(ref, options), setDoc: useModifyDocCallback(ref)}
 }

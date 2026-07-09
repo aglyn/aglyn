@@ -63,7 +63,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, deleteField, limit, query } from 'firebase/firestore'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'

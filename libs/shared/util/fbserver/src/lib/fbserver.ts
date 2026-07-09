@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
-import * as fbAdmin from 'firebase-admin'
+import { cert, getApp, getApps, initializeApp, type App } from 'firebase-admin/app'
+import { getAppCheck } from 'firebase-admin/app-check'
+import { getAuth } from 'firebase-admin/auth'
+import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 
-export let fbAdminApp: fbAdmin.app.App
+export let fbAdminApp: App
 
 /**
  * @ignore - default module loading invokes
@@ -32,17 +35,17 @@ export let fbAdminApp: fbAdmin.app.App
  * during collection) while leaving runtime behavior untouched.
  */
 ;(function main(): void {
-  if (fbAdmin.apps.length) {
-    fbAdminApp = fbAdmin.app()
+  if (getApps().length) {
+    fbAdminApp = getApp()
     return
   }
   const privateKey = process.env.FIREBASE_PRIVATE_KEY
   if (!privateKey) return
-  fbAdminApp = fbAdmin.initializeApp({
+  fbAdminApp = initializeApp({
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
     databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
     serviceAccountId: process.env.FIREBASE_CLIENT_EMAIL,
-    credential: fbAdmin.credential.cert({
+    credential: cert({
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       // https://stackoverflow.com/a/41044630/1332513
@@ -50,11 +53,28 @@ export let fbAdminApp: fbAdmin.app.App
     }),
   })
   // reCAPTCHA v3
-  fbAdmin.appCheck(fbAdminApp)
+  getAppCheck(fbAdminApp)
 })()
 
 export function verifyIdToken(idToken: string) {
-  return fbAdmin.auth().verifyIdToken(idToken)
+  return getAuth(fbAdminApp).verifyIdToken(idToken)
+}
+
+/**
+ * Compatibility facade replacing firebase-admin v14's removed namespace API
+ * (`import * as admin from 'firebase-admin'`) so existing call sites
+ * (`fbAdmin.firestore()`, `fbAdmin.firestore.Timestamp`, `fbAdmin.auth()`)
+ * keep working unchanged, backed internally by the modular SDK.
+ */
+function firestoreNamespace(app?: App) {
+  return getFirestore(app ?? fbAdminApp)
+}
+firestoreNamespace.FieldValue = FieldValue
+firestoreNamespace.Timestamp = Timestamp
+
+const fbAdmin = {
+  firestore: firestoreNamespace,
+  auth: (app?: App) => getAuth(app ?? fbAdminApp),
 }
 
 export { fbAdmin }

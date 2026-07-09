@@ -16,59 +16,19 @@
  */
 'use client'
 
-import {
-  FIREBASE_AUTH_EMULATOR_ENABLED,
-  FIREBASE_DATABASE_EMULATOR_ENABLED,
-  FIREBASE_FIRESTORE_EMULATOR_ENABLED,
-} from '@aglyn/shared-data-enums'
 import { NextRouterEvent, SplashScreen } from '@aglyn/shared-ui-jsx'
 import {
   fbClientAppOptions,
   FIREBASE_CLIENT_APP_NAME,
-  RECAPTCHA_API_KEY,
+  FirebaseServicesProvider,
+  useAnalytics,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import { NoSsr } from '@mui/material'
-import {
-  getAnalytics,
-  logEvent,
-  setUserId,
-  setUserProperties,
-} from 'firebase/analytics'
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check'
-import { connectAuthEmulator, getAuth } from 'firebase/auth'
-import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
-import { getStorage } from 'firebase/storage'
-import {
-  connectFirestoreEmulator,
-  getFirestore,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-} from 'firebase/firestore'
+import { logEvent, setUserId, setUserProperties } from 'firebase/analytics'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
-import {
-  AnalyticsProvider,
-  AppCheckProvider,
-  AuthProvider,
-  DatabaseProvider,
-  FirebaseAppProvider,
-  FirestoreProvider,
-  StorageProvider,
-  useAnalytics,
-  useFirebaseApp,
-  useUser,
-} from 'reactfire'
-// import {getDatabase, connectDatabaseEmulator} from 'firebase/database'
-
-AuthProvider['displayName'] = 'AuthProvider'
-AppCheckProvider['displayName'] = 'AppCheckProvider'
-AnalyticsProvider['displayName'] = 'AnalyticsProvider'
-DatabaseProvider['displayName'] = 'DatabaseProvider'
-FirebaseAppProvider['displayName'] = 'FirebaseAppProvider'
-FirestoreProvider['displayName'] = 'FirestoreProvider'
-StorageProvider['displayName'] = 'StorageProvider'
 
 function AnalyticsGlobalEvents({ children }) {
   const analytics = useAnalytics()
@@ -120,84 +80,6 @@ function AnalyticsGlobalEvents({ children }) {
   return children
 }
 
-let connectedFirestore = null
-let connectedDatabase = null
-let connectedAuth = null
-
-function GetInnerLayout({ children }) {
-  const app = useFirebaseApp()
-  const auth = getAuth(app)
-  const database = getDatabase(app)
-
-  if (!connectedFirestore) {
-    try {
-      initializeFirestore(app, {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager(),
-        }),
-      })
-      if (FIREBASE_FIRESTORE_EMULATOR_ENABLED) {
-        connectFirestoreEmulator(getFirestore(app), 'localhost', 8082)
-      }
-    } catch {
-      // already initialized (e.g. HMR reset the module flag) — getFirestore() returns the existing instance
-    } finally {
-      connectedFirestore = true
-    }
-  }
-
-  const store = getFirestore(app)
-  if (!connectedDatabase) {
-    try {
-      if (FIREBASE_DATABASE_EMULATOR_ENABLED) {
-        connectDatabaseEmulator(database, 'localhost', 9000)
-      }
-      connectedDatabase = true
-    } catch (error) {
-      console.error(error)
-    }
-  }
-  if (!connectedAuth) {
-    try {
-      if (FIREBASE_AUTH_EMULATOR_ENABLED) {
-        connectAuthEmulator(auth, 'http://localhost:9099')
-      }
-      connectedAuth = true
-    } catch (error) {
-      console.error(error)
-    }
-  }
-  let appCheck
-  try {
-    appCheck = initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(RECAPTCHA_API_KEY),
-      isTokenAutoRefreshEnabled: true,
-    })
-  } catch (error) {
-    console.error(error)
-  }
-  let analytics
-  try {
-    analytics = getAnalytics(app)
-  } catch (error) {
-    console.error(error)
-  }
-
-  return (
-    <AnalyticsProvider sdk={analytics}>
-      <AuthProvider sdk={auth}>
-        {/*<AppCheckProvider sdk={appCheck}>*/}
-        <DatabaseProvider sdk={database}>
-          <FirestoreProvider sdk={store}>
-            <StorageProvider sdk={getStorage(app)}>{children}</StorageProvider>
-          </FirestoreProvider>
-        </DatabaseProvider>
-        {/*</AppCheckProvider>*/}
-      </AuthProvider>
-    </AnalyticsProvider>
-  )
-}
-
 export interface FirebaseAppLayoutProps {
   children?: JSX.Children
 }
@@ -206,16 +88,14 @@ function FirebaseAppLayout(props: FirebaseAppLayoutProps) {
   const { children } = props
 
   return (
-    <FirebaseAppProvider
-      firebaseConfig={fbClientAppOptions}
-      appName={FIREBASE_CLIENT_APP_NAME}
-    >
-      <NoSsr>
-        <GetInnerLayout>
-          <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
-        </GetInnerLayout>
-      </NoSsr>
-    </FirebaseAppProvider>
+    <NoSsr>
+      <FirebaseServicesProvider
+        firebaseConfig={fbClientAppOptions}
+        appName={FIREBASE_CLIENT_APP_NAME}
+      >
+        <AnalyticsGlobalEvents>{children}</AnalyticsGlobalEvents>
+      </FirebaseServicesProvider>
+    </NoSsr>
   )
 }
 FirebaseAppLayout.displayName = 'FirebaseAppLayout'

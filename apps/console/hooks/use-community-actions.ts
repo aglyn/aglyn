@@ -19,7 +19,7 @@
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useCallback } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from '@aglyn/tenant-feature-instance'
 
 /**
  * Shared install/buy handlers for community listings (AGL-95): used by the

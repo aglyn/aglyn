@@ -21,7 +21,7 @@ import {
   type DocumentSnapshot,
   type SnapshotOptions,
 } from 'firebase/firestore'
-import { ReactFireOptions, useFirestore } from 'reactfire'
+import { useFirestore, type FirestoreDocOptions } from './firebase/firebase-services'
 import useDoc from './helpers/use-doc'
 
 export const useHostRef = ({ hostId }: { hostId: Aglyn.HostUid }) => {
@@ -45,7 +45,7 @@ export const useHostRef = ({ hostId }: { hostId: Aglyn.HostUid }) => {
 
 export const useHost = (
   data: { hostId: Aglyn.HostUid },
-  options?: ReactFireOptions<Aglyn.AglynHost>,
+  options?: FirestoreDocOptions<Aglyn.AglynHost>,
 ) => {
   return useDoc(useHostRef(data), options)
 }

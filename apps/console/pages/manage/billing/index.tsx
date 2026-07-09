@@ -28,7 +28,7 @@ import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Chip, Stack, Typography } from '@mui/material'
 import { useCallback } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../components/billing/billing-plan-cards.component'

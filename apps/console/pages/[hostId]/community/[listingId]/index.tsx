@@ -30,7 +30,7 @@ import {
 import { collection, doc, limit, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/router'
 import { useMemo } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../../components/host-display-name.component'
 import { useHostId } from '../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'

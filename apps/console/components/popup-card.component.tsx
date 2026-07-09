@@ -30,7 +30,7 @@ import {
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 import OverlayStatsRow from './overlay-stats-row.component'

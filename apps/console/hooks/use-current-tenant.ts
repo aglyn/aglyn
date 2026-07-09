@@ -17,9 +17,9 @@
 'use client'
 
 import type { AglynTenant } from '@aglyn/aglyn'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
 import useTenantPermissions from './use-tenant-permissions'
 
 const RETRY_DELAY_MS = 400

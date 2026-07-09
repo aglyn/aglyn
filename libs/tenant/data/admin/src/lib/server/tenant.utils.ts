@@ -16,9 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import type { Database, DataSnapshot } from 'firebase-admin/database'
 import firebaseAdmin from './firebase-admin'
 
-let db: firebaseAdmin.database.Database
+let db: Database
 if (!db) {
   db = firebaseAdmin.database()
   if (process.env.NODE_ENV !== 'production') {
@@ -43,6 +44,6 @@ export function setAdminTenant(tenant: Aglyn.AglynTenant): Promise<void> {
 
 export function getAdminTenant(
   tenantId: Aglyn.TenantUid,
-): Promise<firebaseAdmin.database.DataSnapshot> {
+): Promise<DataSnapshot> {
   return ref.child(tenantId).get()
 }

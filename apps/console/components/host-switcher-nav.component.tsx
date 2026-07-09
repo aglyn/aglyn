@@ -33,7 +33,7 @@ import {
 import { useParams } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { type MouseEvent, useCallback, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import { useAdminHosts } from '../hooks/use-admin-hosts'
 

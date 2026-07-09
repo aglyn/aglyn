@@ -28,6 +28,9 @@ module.exports = {
         'remark-.*', 'space-separated-tokens', 'stringify-entities',
         'trim-lines', 'trough', 'unified', 'unist-util-.*', 'vfile.*', 'zwitch',
         '@react-dnd/.*', 'dnd-core', 'react-dnd', 'react-dnd-html5-backend',
+        // firebase-admin's app-check module pulls in jwks-rsa -> jose, which
+        // ships ESM-only (no CJS build) as of jose v6 (firebase-admin v14).
+        'jose',
       ].join('|') +
       ')/)',
   ],

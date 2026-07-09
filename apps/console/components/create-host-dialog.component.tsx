@@ -32,7 +32,7 @@ import {
 } from '@mui/material'
 import { useRouter } from 'next/router'
 import { useCallback, useState } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 
 export interface CreateHostDialogProps {

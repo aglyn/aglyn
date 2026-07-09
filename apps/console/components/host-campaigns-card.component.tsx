@@ -27,7 +27,7 @@ import {
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 /**

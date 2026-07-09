@@ -44,7 +44,7 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { checkTenantQuota } from '../constants/entitlements'
 import WhereUsedDialog from './where-used-dialog.component'
 import {

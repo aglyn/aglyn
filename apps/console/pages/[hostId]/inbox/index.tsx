@@ -49,7 +49,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import HostCampaignsCard from '../../../components/host-campaigns-card.component'
 import { useHostId } from '../../../components/host-id-provider'

@@ -17,7 +17,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from '@aglyn/tenant-feature-instance'
 
 export interface TenantPermissions {
   createHosts: boolean

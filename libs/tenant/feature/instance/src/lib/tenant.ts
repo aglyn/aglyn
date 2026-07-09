@@ -19,6 +19,7 @@ export * from './constants/mock-data'
 export * from './constants/site-paths'
 export * from './constants/firebase-config'
 
+export * from './hooks/firebase/firebase-services'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
 

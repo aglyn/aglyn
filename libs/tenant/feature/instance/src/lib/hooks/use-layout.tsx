@@ -22,7 +22,7 @@ import {
   type DocumentSnapshot,
   type SnapshotOptions,
 } from 'firebase/firestore'
-import { ReactFireOptions, useFirestore } from 'reactfire'
+import { useFirestore, type FirestoreDocOptions } from './firebase/firebase-services'
 import useDoc from './helpers/use-doc'
 
 export const useLayoutRef = ({
@@ -55,7 +55,7 @@ export const useLayout = (
     hostId: Aglyn.HostUid
     layoutId: Aglyn.LayoutUid
   },
-  options?: ReactFireOptions<Aglyn.AglynLayout>,
+  options?: FirestoreDocOptions<Aglyn.AglynLayout>,
 ) => {
   return useDoc(useLayoutRef(data), options)
 }

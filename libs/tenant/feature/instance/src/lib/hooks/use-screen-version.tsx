@@ -20,7 +20,7 @@ import { compress, decompress } from '@aglyn/aglyn'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { DocumentReference } from '@firebase/firestore'
 import { Bytes, doc } from 'firebase/firestore'
-import { ReactFireOptions, useFirestore } from 'reactfire'
+import { useFirestore, type FirestoreDocOptions } from './firebase/firebase-services'
 import useDoc from './helpers/use-doc'
 
 export const useScreenVersionRef = ({ hostId, screenId, versionId }: { hostId: string; screenId: string; versionId: string }) => {
@@ -59,7 +59,7 @@ export const useScreenVersion = (
     versionId: string
     hostId: string
   },
-  options?: ReactFireOptions<Aglyn.AglynScreenVersion>,
+  options?: FirestoreDocOptions<Aglyn.AglynScreenVersion>,
 ) => {
   return useDoc(useScreenVersionRef(data), options)
 }

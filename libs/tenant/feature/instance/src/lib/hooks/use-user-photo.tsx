@@ -19,7 +19,7 @@ import {
   type GravatarUrlOptions,
 } from '@aglyn/shared-util-tools'
 import { useMemo } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from './firebase/firebase-services'
 
 export function useUserGravatar(options?: GravatarUrlOptions) {
   const { data } = useUser()

@@ -37,7 +37,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface HostPluginsCardProps {

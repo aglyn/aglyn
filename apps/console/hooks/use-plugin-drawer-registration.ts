@@ -20,7 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { pluginInstallToPreset } from '@aglyn/plugins-ui-mui'
 import { collection, limit, query } from 'firebase/firestore'
 import { useEffect, useRef } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from './use-firestore-collection'
 
 /**

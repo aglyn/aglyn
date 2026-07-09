@@ -29,7 +29,7 @@ import {
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'

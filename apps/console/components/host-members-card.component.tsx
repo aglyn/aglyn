@@ -33,7 +33,7 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { checkTenantSeatQuota } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
 import useFirestoreCollection from '../hooks/use-firestore-collection'

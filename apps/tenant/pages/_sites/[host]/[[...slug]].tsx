@@ -18,12 +18,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
-import { doc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import type { GetStaticPaths, GetStaticProps } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreDocData } from 'reactfire'
 import Head from 'next/head'
 import applyDuePublishSchedule from '../../../utils/apply-publish-schedule'
 import composeScreenNodes from '../../../utils/compose-screen-nodes'
@@ -107,16 +105,6 @@ export const getStaticPaths: GetStaticPaths<StaticPathsCtx> = async (ctx) => {
     paths: [],
     fallback: 'blocking', // ISR server-render if static cache is not available
   }
-}
-
-const useHostRef = (id: string) => {
-  const firestore = useFirestore()
-  return doc(firestore, 'hosts', id)
-}
-
-const useHost = (id: string) => {
-  const ref = useHostRef(id)
-  return useFirestoreDocData(ref, { idField: '$id' })
 }
 
 export const getStaticProps: GetStaticProps<Props> = async (context) => {

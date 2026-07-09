@@ -20,7 +20,17 @@ import * as Aglyn from '@aglyn/aglyn'
 // service account, AppCheck) on module load.
 import '@aglyn/shared-util-fbserver'
 import { decode, encode } from '@msgpack/msgpack'
-import * as firebaseAdmin from 'firebase-admin'
+import { type App, getApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
+import { getDatabase } from 'firebase-admin/database'
+import {
+  FieldPath,
+  FieldValue,
+  type FirestoreDataConverter,
+  Timestamp,
+  getFirestore,
+} from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 
 function compress(value: any) {
   return Buffer.from(encode(value))
@@ -29,37 +39,35 @@ function decompress(value: any) {
   return decode(value)
 }
 
-export const hostConverter: firebaseAdmin.firestore.FirestoreDataConverter<Aglyn.AglynHost> =
-  {
-    toFirestore(data) {
-      if (data.$id) delete data.$id
-      // data.updatedAt = firebaseAdmin.firestore.Timestamp.now()
-      return data
-    },
-    fromFirestore(snapshot) {
-      if (!snapshot.exists) return undefined
-      const data = snapshot.data()
-      data.$id = snapshot.id
-      return data as Aglyn.AglynScreen
-    },
-  }
+export const hostConverter: FirestoreDataConverter<Aglyn.AglynHost> = {
+  toFirestore(data) {
+    if (data.$id) delete data.$id
+    // data.updatedAt = Timestamp.now()
+    return data
+  },
+  fromFirestore(snapshot) {
+    if (!snapshot.exists) return undefined
+    const data = snapshot.data()
+    data.$id = snapshot.id
+    return data as Aglyn.AglynScreen
+  },
+}
 
-export const screenConverter: firebaseAdmin.firestore.FirestoreDataConverter<Aglyn.AglynScreen> =
-  {
-    toFirestore(data) {
-      if (data.$id) delete data.$id
-      data.updatedAt = firebaseAdmin.firestore.Timestamp.now()
-      return data
-    },
-    fromFirestore(snapshot) {
-      if (!snapshot.exists) return undefined
-      const data = snapshot.data()
-      data.$id = snapshot.id
-      return data as Aglyn.AglynScreen
-    },
-  }
+export const screenConverter: FirestoreDataConverter<Aglyn.AglynScreen> = {
+  toFirestore(data) {
+    if (data.$id) delete data.$id
+    data.updatedAt = Timestamp.now()
+    return data
+  },
+  fromFirestore(snapshot) {
+    if (!snapshot.exists) return undefined
+    const data = snapshot.data()
+    data.$id = snapshot.id
+    return data as Aglyn.AglynScreen
+  },
+}
 
-export const screenVersionConverter: firebaseAdmin.firestore.FirestoreDataConverter<Aglyn.AglynScreenVersion> =
+export const screenVersionConverter: FirestoreDataConverter<Aglyn.AglynScreenVersion> =
   {
     toFirestore(data) {
       if (data.elements) {
@@ -72,7 +80,7 @@ export const screenVersionConverter: firebaseAdmin.firestore.FirestoreDataConver
       }
       if (data.nodes) data.nodes = compress(data.nodes) as any
       if (data.$id) delete data.$id
-      data.updatedAt = firebaseAdmin.firestore.Timestamp.now()
+      data.updatedAt = Timestamp.now()
       return data
     },
     fromFirestore(snapshot) {
@@ -98,24 +106,51 @@ export const screenVersionConverter: firebaseAdmin.firestore.FirestoreDataConver
     },
   }
 
-export const layoutConverter: firebaseAdmin.firestore.FirestoreDataConverter<Aglyn.AglynLayout> =
-  {
-    toFirestore(data) {
-      if (data.$id) delete data.$id
-      data.updatedAt = firebaseAdmin.firestore.Timestamp.now()
-      return data
-    },
-    fromFirestore(snapshot) {
-      if (!snapshot.exists) return undefined
-      const data = snapshot.data()
-      data.$id = snapshot.id
-      return data as Aglyn.AglynLayout
-    },
-  }
+export const layoutConverter: FirestoreDataConverter<Aglyn.AglynLayout> = {
+  toFirestore(data) {
+    if (data.$id) delete data.$id
+    data.updatedAt = Timestamp.now()
+    return data
+  },
+  fromFirestore(snapshot) {
+    if (!snapshot.exists) return undefined
+    const data = snapshot.data()
+    data.$id = snapshot.id
+    return data as Aglyn.AglynLayout
+  },
+}
 
 // Layout versions persist nodes exactly like screen versions (compressed).
 export const layoutVersionConverter =
-  screenVersionConverter as unknown as firebaseAdmin.firestore.FirestoreDataConverter<Aglyn.AglynLayoutVersion>
+  screenVersionConverter as unknown as FirestoreDataConverter<Aglyn.AglynLayoutVersion>
+
+/**
+ * Compatibility facade replacing firebase-admin v14's removed namespace API
+ * (`import * as admin from 'firebase-admin'`) so existing call sites
+ * (`firebaseAdmin.app().firestore()`, `firebaseAdmin.firestore.FieldValue`,
+ * `firebaseAdmin.database()`) keep working unchanged, backed internally by
+ * the modular SDK.
+ */
+function wrapApp(app: App) {
+  return {
+    firestore: () => getFirestore(app),
+    auth: () => getAuth(app),
+    storage: () => getStorage(app),
+  }
+}
+
+function firestoreNamespace() {
+  return getFirestore(getApp())
+}
+firestoreNamespace.FieldValue = FieldValue
+firestoreNamespace.Timestamp = Timestamp
+firestoreNamespace.FieldPath = FieldPath
+
+const firebaseAdmin = {
+  app: (name?: string) => wrapApp(name ? getApp(name) : getApp()),
+  firestore: firestoreNamespace,
+  database: () => getDatabase(getApp()),
+}
 
 export { firebaseAdmin }
 export default firebaseAdmin

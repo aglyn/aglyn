@@ -20,7 +20,7 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface HostOrdersCardProps {
