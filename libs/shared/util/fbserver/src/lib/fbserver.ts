@@ -16,7 +16,6 @@
  */
 
 import { cert, getApp, getApps, initializeApp, type App } from 'firebase-admin/app'
-import { getAppCheck } from 'firebase-admin/app-check'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 
@@ -52,8 +51,6 @@ export let fbAdminApp: App
       privateKey: privateKey.replace(/\\n/g, '\n'),
     }),
   })
-  // reCAPTCHA v3
-  getAppCheck(fbAdminApp)
 })()
 
 export function verifyIdToken(idToken: string) {
