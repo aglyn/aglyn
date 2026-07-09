@@ -20,6 +20,16 @@
         "tenant"
       ],
       "port": 4500
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "nx",
+        "serve",
+        "docs"
+      ],
+      "port": 3000
     }
   ]
 }

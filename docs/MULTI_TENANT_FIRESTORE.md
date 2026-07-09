@@ -122,6 +122,26 @@ users/{uid}
   orgs/{orgId} -> { role, orgName, slug }    # reverse index: "my organizations"
 ```
 
+```mermaid
+graph TD
+  subgraph ORG ["orgs/#lcub;orgId#rcub; — the tenant boundary"]
+    O["org doc: name · slug · plan · billing"]
+    M["members/#lcub;uid#rcub;: role · allHosts · hostAccess"]
+    I["invites/#lcub;inviteId#rcub;"]
+    U["usage/#lcub;yyyymm#rcub; rollups"]
+  end
+  SLUG["orgSlugs/#lcub;slug#rcub; (public read)"] --> O
+  HIDX["hostIndex/#lcub;hostId#rcub;"] --> O
+  RIDX["users/#lcub;uid#rcub;/orgs/#lcub;orgId#rcub; (reverse index)"] --> O
+  subgraph HOST ["hosts/#lcub;hostId#rcub; (top-level)"]
+    H["host doc: orgId · memberRoles projection · legacy admins"]
+    HC["screens · layouts · contacts · media · datasets …"]
+  end
+  O -- "hosts directory" --> H
+  M -- "syncHostMemberRoles() fan-out" --> H
+  H --- HC
+```
+
 Notes:
 
 - **hostId stays globally unique** (it's the console's route param and the
@@ -192,6 +212,23 @@ match /orgSlugs/{slug} { allow read: if true; allow write: if false; }  // API-o
 
 Identical `get()`s within one evaluation are billed once, so `member()`
 appearing in several functions still costs one read per request.
+
+As implemented, host-content authorization reads only the host doc's
+`memberRoles` projection (synced by the org APIs):
+
+```mermaid
+flowchart TD
+  R["Request on hosts/#lcub;hostId#rcub;/…"] --> G["Rules read the host doc (1 get)"]
+  G --> P{"memberRoles[uid] or legacy admins[uid]"}
+  P -- "absent" --> DENY["denied"]
+  P -- "viewer" --> READ["read only"]
+  P -- "editor" --> RW["read + write content (no host delete)"]
+  P -- "admin" --> ALL["read + write + delete"]
+  RW --> S{"owning tenant suspended?"}
+  ALL --> S
+  S -- "yes" --> RO["reads ok, writes blocked"]
+  S -- "no" --> OK["allowed"]
+```
 
 ## 6. Subdomains (Slack-style)
 

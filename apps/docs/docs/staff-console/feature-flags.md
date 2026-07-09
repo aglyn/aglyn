@@ -16,6 +16,28 @@ Release flags control whether a feature is **launched** — a separate axis from
 *plan includes* a feature. A customer sees a feature only when it's released **and**
 their plan allows it.
 
+## How a flag is evaluated
+
+Every check runs client-side against the activated Remote Config template, with the
+registry's code defaults as the offline fallback:
+
+```mermaid
+flowchart TD
+  A["Console surface<br/>(nav tab or FeatureGate page)"] --> B["Flag value from Remote Config<br/><code>release_*</code> JSON: enabled, rolloutPercent"]
+  B --> C{enabled?}
+  C -- "yes" --> ON["✅ Visible to everyone"]
+  C -- "no" --> D{"rolloutPercent #gt; 0?"}
+  D -- "yes" --> E{"hash(flag + tenant) mod 100<br/>#lt; rolloutPercent?"}
+  E -- "yes" --> ON
+  D -- "no" --> F{Staff claim?}
+  E -- "no" --> F
+  F -- "yes" --> PREVIEW["🚩 Visible with staff warning<br/>(flag icon on tab, banner on page)"]
+  F -- "no" --> OFF["🙈 Hidden: tab removed,<br/>deep links show 'coming soon'"]
+```
+
+The rollout hash is seeded with the **flag key and the tenant**, so a workspace keeps a
+stable verdict across sessions and different flags don't share buckets.
+
 ## How gating behaves
 
 - **Customers** with a flag off don't see the feature: its dashboard tab disappears and
@@ -43,6 +65,26 @@ member published first, the page reloads the latest values instead of overwritin
 
 Reads are open to all staff roles; publishing requires the **super** role, matching user
 management.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor S as Super staff
+  participant UI as Flags page
+  participant API as flags API
+  participant RC as Remote Config
+  participant CC as Consoles
+
+  S->>UI: toggle / rollout / note
+  UI->>API: PUT key + value + etag
+  API->>API: staff check (super)
+  API->>RC: publishTemplate (etag)
+  Note right of RC: etag mismatch →<br/>409, UI reloads
+  API->>API: adminAudit entry
+  API-->>UI: ok + new etag
+  CC->>RC: fetchAndActivate (≤ 1h)
+  RC-->>CC: new values re-gate tabs & pages
+```
 
 ## Under the hood
 

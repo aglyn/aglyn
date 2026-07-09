@@ -87,3 +87,10 @@ Each links into its section for the how-to.
   custom 404/401/403/503 screens, and maintenance mode.
 - **[Staff console](staff-console/overview.md)** *(Aglyn staff only)* — tenant management,
   entitlement editor, users admin, suspension, and an audit viewer.
+- **[Feature flags](staff-console/feature-flags.md)** *(Aglyn staff only)* — Remote
+  Config–backed release gating with percentage rollout; staff preview unreleased
+  features with warnings.
+- **[Organization workspaces](teams-and-roles/overview.md#organizations-early-access)**
+  *(early access)* — orgs own multiple sites with shared billing, role-based membership
+  with per-site access, and Slack-style workspace subdomains
+  ([architecture](staff-console/architecture-multi-tenancy.md)).
