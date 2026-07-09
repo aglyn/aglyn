@@ -34,6 +34,7 @@ import { useRouter } from 'next/router'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
+import { useOrgWorkspace } from '../hooks/use-org-workspace'
 
 export interface CreateHostDialogProps {
   open: boolean
@@ -49,6 +50,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
   const { open, onClose } = props
   const router = useRouter()
   const { data: user } = useUser()
+  const { currentOrg } = useOrgWorkspace()
   const { enqueueSnackbar } = useSnackbar()
   const [name, setName] = useState('')
   const [subdomain, setSubdomain] = useState('')
@@ -70,7 +72,13 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify({ displayName: name.trim(), subdomain }),
+        body: JSON.stringify({
+          displayName: name.trim(),
+          subdomain,
+          // Create into the selected workspace (AGL-236); the server
+          // falls back to the user's first org when absent.
+          ...(currentOrg ? { orgId: currentOrg.$id } : {}),
+        }),
       })
       const payload = await response.json()
       if (!response.ok || !payload?.hostId) {
@@ -98,7 +106,7 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
     } finally {
       setBusy(false)
     }
-  }, [name, subdomain, validSubdomain, busy, user, router, enqueueSnackbar])
+  }, [name, subdomain, validSubdomain, busy, user, currentOrg, router, enqueueSnackbar])
 
   return (
     <Dialog
