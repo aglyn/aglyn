@@ -20,6 +20,8 @@ The **staff console** is where Aglyn operators manage the platform and support t
 - **Tenant management** — audited plan and entitlement overrides.
 - **Entitlement editor** — full override editor for a tenant's entitlements.
 - **Users admin** — staff-claim management and disabling users, with gated listing.
+- **[Feature flags](./feature-flags.md)** — release-gate console features via Remote
+  Config, with percentage rollout; staff preview everything.
 - **Tenant suspension** — a staff toggle that serves 503s on suspended sites and shows the
   owner a banner.
 - **Audit log viewer** — a record of staff actions.

@@ -1,1 +1,56 @@
-{}
+{
+  "parameters": {
+    "release_contacts": {
+      "defaultValue": {
+        "value": "{\"enabled\":false,\"rolloutPercent\":0,\"note\":\"Held until Contacts CRM v1 is ready (AGL-227)\"}"
+      },
+      "description": "Unified contacts list, segments and profile drawer (Contacts CRM v1).",
+      "valueType": "JSON"
+    },
+    "release_bookings": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
+      },
+      "description": "Bookings & scheduling for host sites.",
+      "valueType": "JSON"
+    },
+    "release_events": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
+      },
+      "description": "Event calendar management (AGL-145 add-on surface).",
+      "valueType": "JSON"
+    },
+    "release_data_store": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
+      },
+      "description": "Datasets, models and dynamic data bindings.",
+      "valueType": "JSON"
+    },
+    "release_workflows": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
+      },
+      "description": "Workflow builder and automation runs.",
+      "valueType": "JSON"
+    },
+    "release_redirects": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
+      },
+      "description": "Redirect manager with usage analytics.",
+      "valueType": "JSON"
+    },
+    "release_community": {
+      "defaultValue": {
+        "value": "{\"enabled\":true,\"rolloutPercent\":0}"
+      },
+      "description": "Community browsing, publishing and plugin installs.",
+      "valueType": "JSON"
+    }
+  },
+  "version": {
+    "description": "Release flags seed (AGL-231): one JSON parameter per release-gated console feature; managed in the staff admin Feature Flags page thereafter."
+  }
+}
