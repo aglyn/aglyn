@@ -1,7 +1,20 @@
 # Multi-Tenant Organizations & Firestore v2 — Design
 
-Status: **Proposed** (Linear project: Multi-Tenant Organizations & Firestore v2)
+Status: **In progress** (Linear project: Multi-Tenant Organizations & Firestore v2)
 Author: Zach Gover, 2026-07-09
+
+> **2026-07-09 update:** the product is pre-launch, so the dual-write
+> machinery in §10 was dropped in favor of a direct cutover. Implemented:
+> org model + APIs (AGL-233), membership/invites (AGL-234), rules v2
+> (AGL-235), the `backfill-orgs.mjs` one-shot script, and the org switcher
+> behind `release_org_workspaces` (AGL-236 partial). Host content
+> authorization uses a role-aware `memberRoles` projection on the host doc
+> (kept in sync by the org APIs) instead of a second rules `get()`, and
+> hosts remain top-level (`hostIndex` resolves host → org) — ancestry
+> nesting was traded for keeping every existing `hosts/{hostId}` path
+> working. Still open: wildcard subdomain routing + session cookies
+> (AGL-236), org-shared resources + billing re-key (AGL-237), usage
+> rollups + legacy `tenants` removal (AGL-238).
 
 ## 1. Context & goals
 
