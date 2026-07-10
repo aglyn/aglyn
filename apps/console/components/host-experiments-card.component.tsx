@@ -38,8 +38,10 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -190,6 +192,10 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
         doc(firestore, 'hosts', hostId, 'experiments', id),
         {
           ...JSON.parse(JSON.stringify(payload)),
+          // Clearing the end date / auto-winner must overwrite — a
+          // merge-set keeps absent keys otherwise (AGL-273).
+          endAtMs: editor.endAtMs ?? null,
+          autoWinner: editor.autoWinner ?? null,
           updatedAt: Timestamp.now(),
           ...(editor.$id ? {} : { createdAt: Timestamp.now() }),
         },
@@ -458,6 +464,92 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               </MenuItem>
             ))}
           </TextField>
+          {/* Schedule + auto-winner (AGL-273). */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+          >
+            <TextField
+              size="small"
+              type="datetime-local"
+              label="Ends at (optional)"
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={
+                editor?.endAtMs
+                  ? new Date(
+                      editor.endAtMs -
+                        new Date().getTimezoneOffset() * 60000,
+                    )
+                      .toISOString()
+                      .slice(0, 16)
+                  : ''
+              }
+              onChange={(event) => {
+                const ms = event.target.value
+                  ? new Date(event.target.value).getTime()
+                  : undefined
+                patch({
+                  endAtMs: Number.isFinite(ms as number) ? ms : undefined,
+                })
+              }}
+              helperText="Past this, visitors get the default"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={Boolean(editor?.autoWinner)}
+                  onChange={(event) =>
+                    patch({
+                      autoWinner: event.target.checked
+                        ? { minExposures: 200, confidence: 0.95 }
+                        : undefined,
+                    })
+                  }
+                />
+              }
+              label="Auto-declare winner"
+            />
+            {editor?.autoWinner ? (
+              <>
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Min exposures / variant"
+                  value={editor.autoWinner.minExposures}
+                  onChange={(event) =>
+                    patch({
+                      autoWinner: {
+                        ...editor.autoWinner!,
+                        minExposures: Number(event.target.value),
+                      },
+                    })
+                  }
+                  sx={{ width: 170 }}
+                />
+                <TextField
+                  select
+                  size="small"
+                  label="Confidence"
+                  value={String(editor.autoWinner.confidence)}
+                  onChange={(event) =>
+                    patch({
+                      autoWinner: {
+                        ...editor.autoWinner!,
+                        confidence: Number(event.target.value),
+                      },
+                    })
+                  }
+                  sx={{ width: 120 }}
+                >
+                  <MenuItem value="0.9">{'90%'}</MenuItem>
+                  <MenuItem value="0.95">{'95%'}</MenuItem>
+                  <MenuItem value="0.99">{'99%'}</MenuItem>
+                </TextField>
+              </>
+            ) : null}
+          </Stack>
           <Typography variant="subtitle2">{'Variants'}</Typography>
           {(editor?.variants ?? []).map((variant, index) => (
             <Stack key={variant.id} spacing={1}>
@@ -551,7 +643,18 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>{`Results — ${results?.experiment.name ?? ''}`}</DialogTitle>
+        <DialogTitle>
+          {`Results — ${results?.experiment.name ?? ''}`}
+          {results?.experiment.autoCompleted ? (
+            // The track pipeline decided this one (AGL-273).
+            <Chip
+              size="small"
+              color="success"
+              label="Auto-completed"
+              sx={{ ml: 1 }}
+            />
+          ) : null}
+        </DialogTitle>
         <DialogContent>
           <Table size="small">
             <TableHead>

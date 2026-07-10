@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { checkEntitlement } from '@aglyn/aglyn'
+import {
+  checkEntitlement,
+  evaluateAutoWinner,
+  type HostExperiment,
+} from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -61,6 +65,12 @@ export default async function handler(
     if (!experiment.exists || experiment.get('status') !== 'running') {
       return res.status(200).json({ ok: true })
     }
+    // Ended experiments (AGL-273) stop counting: stale cached pages may
+    // still beacon briefly, and post-end stats would skew the decision.
+    const endAtMs = Number(experiment.get('endAtMs') ?? 0)
+    if (endAtMs && Date.now() > endAtMs) {
+      return res.status(200).json({ ok: true })
+    }
     await experimentRef
       .collection('stats')
       .doc(variantId)
@@ -72,6 +82,31 @@ export default async function handler(
         },
         { merge: true },
       )
+    // Auto-winner (AGL-273): conversions re-evaluate the opt-in decision
+    // rule; a decided experiment finishes itself and serves the winner.
+    const data = experiment.data() as HostExperiment
+    if (kind === 'conversion' && data.autoWinner) {
+      const statsSnapshot = await experimentRef.collection('stats').get()
+      const statsByVariant: Record<
+        string,
+        { exposures?: number; conversions?: number }
+      > = {}
+      for (const doc of statsSnapshot.docs) {
+        statsByVariant[doc.id] = {
+          exposures: Number(doc.get('exposures') ?? 0),
+          conversions: Number(doc.get('conversions') ?? 0),
+        }
+      }
+      const decision = evaluateAutoWinner(data, statsByVariant)
+      if (decision) {
+        await experimentRef.update({
+          status: 'done',
+          winnerVariantId: decision.variantId,
+          autoCompleted: true,
+          completedAt: FieldValue.serverTimestamp(),
+        })
+      }
+    }
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)

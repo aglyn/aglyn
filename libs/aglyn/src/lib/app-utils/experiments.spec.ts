@@ -18,6 +18,7 @@
 import {
   assignExperimentVariant,
   compareVariants,
+  evaluateAutoWinner,
   summarizeVariantStats,
   validateExperiment,
   type HostExperiment,
@@ -132,5 +133,105 @@ describe('experiments (AGL-252)', () => {
       { exposures: 200, conversions: 30, rate: 0.15 },
     )
     expect(summarizeVariantStats({}).rate).toBe(0)
+  })
+})
+
+describe('end dates (AGL-273)', () => {
+  const timed: HostExperiment = {
+    name: 'Timed test',
+    status: 'running',
+    target: 'screen',
+    screenId: 'screen-1',
+    endAtMs: 1_000,
+    variants: [{ id: 'a' }, { id: 'b' }],
+  }
+
+  it('serves variants inside the window and default past it', () => {
+    expect(assignExperimentVariant(timed, 'x', 'visitor', 999)).not.toBeNull()
+    expect(assignExperimentVariant(timed, 'x', 'visitor', 1_001)).toBeNull()
+  })
+
+  it('still serves the winner after the end date', () => {
+    const decided = { ...timed, status: 'done' as const, winnerVariantId: 'b' }
+    expect(assignExperimentVariant(decided, 'x', 'visitor', 2_000)?.id).toBe(
+      'b',
+    )
+  })
+})
+
+describe('evaluateAutoWinner (AGL-273)', () => {
+  const base: HostExperiment = {
+    name: 'Auto test',
+    status: 'running',
+    target: 'screen',
+    screenId: 'screen-1',
+    variants: [{ id: 'control' }, { id: 'challenger' }],
+    autoWinner: { minExposures: 100, confidence: 0.95 },
+  }
+
+  it('waits until every arm has minimum exposures', () => {
+    expect(
+      evaluateAutoWinner(base, {
+        control: { exposures: 100, conversions: 5 },
+        challenger: { exposures: 99, conversions: 30 },
+      }),
+    ).toBeNull()
+  })
+
+  it('promotes a confidently better challenger', () => {
+    const decision = evaluateAutoWinner(base, {
+      control: { exposures: 500, conversions: 25 },
+      challenger: { exposures: 500, conversions: 75 },
+    })
+    expect(decision?.variantId).toBe('challenger')
+    expect(decision?.confidence).toBeGreaterThan(0.95)
+  })
+
+  it('declares the control when every challenger confidently loses', () => {
+    const decision = evaluateAutoWinner(base, {
+      control: { exposures: 500, conversions: 75 },
+      challenger: { exposures: 500, conversions: 25 },
+    })
+    expect(decision?.variantId).toBe('control')
+  })
+
+  it('stays undecided in the uncertain middle', () => {
+    expect(
+      evaluateAutoWinner(base, {
+        control: { exposures: 500, conversions: 50 },
+        challenger: { exposures: 500, conversions: 53 },
+      }),
+    ).toBeNull()
+  })
+
+  it('ignores experiments without the opt-in or not running', () => {
+    expect(
+      evaluateAutoWinner(
+        { ...base, autoWinner: undefined },
+        { control: {}, challenger: {} },
+      ),
+    ).toBeNull()
+    expect(
+      evaluateAutoWinner(
+        { ...base, status: 'paused' },
+        { control: {}, challenger: {} },
+      ),
+    ).toBeNull()
+  })
+
+  it('validates auto-winner config', () => {
+    expect(
+      validateExperiment({
+        ...base,
+        autoWinner: { minExposures: 0, confidence: 0.95 },
+      }),
+    ).toContain('minimum exposure')
+    expect(
+      validateExperiment({
+        ...base,
+        autoWinner: { minExposures: 100, confidence: 1.2 },
+      }),
+    ).toContain('confidence')
+    expect(validateExperiment(base)).toBeNull()
   })
 })

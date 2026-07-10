@@ -53,6 +53,20 @@ export interface HostExperiment {
   goal?: { event: string; filter?: string }
   /** Set when finished; the renderer then serves only the winner. */
   winnerVariantId?: string
+  /**
+   * Epoch millis (AGL-273): past this a running experiment stops serving
+   * variants (visitors get the default) until someone declares a winner.
+   */
+  endAtMs?: number
+  /**
+   * Opt-in auto-completion (AGL-273): once every variant has
+   * `minExposures` and a challenger clears `confidence` (0..1) against
+   * the control, the track pipeline promotes it and finishes the
+   * experiment. Control wins when every challenger is confidently worse.
+   */
+  autoWinner?: { minExposures: number; confidence: number }
+  /** Set by the pipeline when `autoWinner` decided the experiment. */
+  autoCompleted?: boolean
 }
 
 export const EXPERIMENT_MAX_VARIANTS = 4
@@ -73,11 +87,15 @@ function bucketHash(value: string): number {
  * non-running experiments without a winner return null (serve default).
  */
 export function assignExperimentVariant(
-  experiment: Pick<HostExperiment, 'status' | 'variants' | 'winnerVariantId'> & {
+  experiment: Pick<
+    HostExperiment,
+    'status' | 'variants' | 'winnerVariantId' | 'endAtMs'
+  > & {
     $id?: string
   },
   experimentId: string,
   visitorId: string,
+  nowMs: number = Date.now(),
 ): ExperimentVariant | null {
   const variants = (experiment.variants ?? []).slice(
     0,
@@ -91,6 +109,9 @@ export function assignExperimentVariant(
     )
   }
   if (experiment.status !== 'running') return null
+  // Past the end date (AGL-273) visitors get the default until a winner
+  // is declared — stats stop accruing rather than drifting post-test.
+  if (experiment.endAtMs && nowMs > experiment.endAtMs) return null
   const totalWeight = variants.reduce(
     (sum, variant) => sum + Math.max(0, variant.weight ?? 1),
     0,
@@ -128,6 +149,15 @@ export function validateExperiment(
     !experiment.screenId?.trim()
   ) {
     return 'Pick the screen under test'
+  }
+  if (experiment.autoWinner) {
+    const { minExposures, confidence } = experiment.autoWinner
+    if (!Number.isFinite(minExposures) || minExposures < 1) {
+      return 'Auto-winner needs a minimum exposure count of at least 1'
+    }
+    if (!Number.isFinite(confidence) || confidence <= 0.5 || confidence >= 1) {
+      return 'Auto-winner confidence must be between 0.5 and 1'
+    }
   }
   return null
 }
@@ -207,4 +237,50 @@ export function compareVariants(
   }
   const z = (b.rate - a.rate) / standardError
   return { lift, confidence: normalCdf(z) }
+}
+
+/**
+ * Auto-winner evaluation (AGL-273): decides a running experiment from
+ * per-variant stats once thresholds are met. The first variant is the
+ * control. Undecidable states return null: any arm still under
+ * `minExposures`, or no challenger confidently better while some remain
+ * in the uncertain middle. Control wins only when every challenger is
+ * confidently worse (its win probability is below `1 - confidence`).
+ */
+export function evaluateAutoWinner(
+  experiment: Pick<HostExperiment, 'status' | 'variants' | 'autoWinner'>,
+  statsByVariant: Record<
+    string,
+    { exposures?: number; conversions?: number } | undefined
+  >,
+): { variantId: string; confidence: number } | null {
+  const config = experiment.autoWinner
+  if (!config || experiment.status !== 'running') return null
+  const variants = (experiment.variants ?? []).slice(
+    0,
+    EXPERIMENT_MAX_VARIANTS,
+  )
+  if (variants.length < 2) return null
+  const controlStats = statsByVariant[variants[0].id] ?? {}
+  if ((controlStats.exposures ?? 0) < config.minExposures) return null
+  let best: { variantId: string; confidence: number } | null = null
+  let everyLoses = true
+  for (const challenger of variants.slice(1)) {
+    const challengerStats = statsByVariant[challenger.id] ?? {}
+    if ((challengerStats.exposures ?? 0) < config.minExposures) return null
+    const { confidence } = compareVariants(controlStats, challengerStats)
+    if (confidence === null) return null
+    if (
+      confidence >= config.confidence &&
+      (!best || confidence > best.confidence)
+    ) {
+      best = { variantId: challenger.id, confidence }
+    }
+    if (confidence > 1 - config.confidence) everyLoses = false
+  }
+  if (best) return best
+  if (everyLoses) {
+    return { variantId: variants[0].id, confidence: config.confidence }
+  }
+  return null
 }

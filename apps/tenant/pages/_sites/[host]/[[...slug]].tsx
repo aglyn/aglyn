@@ -700,7 +700,9 @@ function ExperimentsRunner(props: {
       { status: experiment.status, variants: experiment.variants,
         ...(experiment.winnerVariantId
           ? { winnerVariantId: experiment.winnerVariantId }
-          : {}) },
+          : {}),
+        // End dates (AGL-273): past-end experiments serve the default.
+        ...(experiment.endAtMs ? { endAtMs: experiment.endAtMs } : {}) },
       experiment.id,
       visitorId,
     )

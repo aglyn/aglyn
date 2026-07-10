@@ -35,6 +35,8 @@ export interface ScreenExperiment {
   status: Aglyn.ExperimentStatus
   nodeId?: string
   winnerVariantId?: string
+  /** Past this the client runner serves the default (AGL-273). */
+  endAtMs?: number
   goal?: { event: string; filter?: string }
   variants: Array<{ id: string; weight?: number; versionId?: string }>
   payloads: Record<string, Record<string, any> | null>
@@ -94,6 +96,7 @@ export async function getScreenExperiments(options: {
         ...(experiment.winnerVariantId
           ? { winnerVariantId: experiment.winnerVariantId }
           : {}),
+        ...(experiment.endAtMs ? { endAtMs: experiment.endAtMs } : {}),
         ...(experiment.goal ? { goal: experiment.goal } : {}),
         variants: (experiment.variants ?? []).map((variant) => ({
           id: variant.id,
