@@ -47,6 +47,10 @@ export enum Route {
   HOST_THEME = '/[hostId]/theme',
   HOST_WORKFLOWS = '/[hostId]/workflows',
   HOST_DATA = '/[hostId]/data',
+  HOST_LOGIC = '/[hostId]/logic',
+  HOST_PRODUCTS = '/[hostId]/products',
+  HOST_COMPONENTS = '/[hostId]/components',
+  HOST_MARKETING = '/[hostId]/marketing',
   HOST_BOOKINGS = '/[hostId]/bookings',
   HOST_EVENTS = '/[hostId]/events',
   HOST_REDIRECTS = '/[hostId]/redirects',
@@ -90,6 +94,10 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_THEME]: { hostId: string }
   [Route.HOST_WORKFLOWS]: { hostId: string }
   [Route.HOST_DATA]: { hostId: string }
+  [Route.HOST_LOGIC]: { hostId: string }
+  [Route.HOST_PRODUCTS]: { hostId: string }
+  [Route.HOST_COMPONENTS]: { hostId: string }
+  [Route.HOST_MARKETING]: { hostId: string }
   [Route.HOST_BOOKINGS]: { hostId: string }
   [Route.HOST_EVENTS]: { hostId: string }
   [Route.HOST_REDIRECTS]: { hostId: string }

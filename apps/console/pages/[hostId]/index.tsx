@@ -24,10 +24,6 @@ import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import HostAnalyticsCard from '../../components/analytics/host-analytics-card.component'
-import HostProductsCard from '../../components/commerce/host-products-card.component'
-import HostFunctionsCard from '../../components/host-functions-card.component'
-import HostVariablesCard from '../../components/host-variables-card.component'
-import HostComponentsCard from '../../components/host-components-card.component'
 import HostActivityCard from '../../components/host-activity-card.component'
 import AnnouncementBarCard from '../../components/announcement-bar-card.component'
 import PopupCard from '../../components/popup-card.component'
@@ -88,41 +84,20 @@ const Index: NextPageWithLayout = (props) => {
               },
               children: <PopupCard hostId={hostId} />,
             },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              children: <HostComponentsCard hostId={hostId} />,
-            },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              children: <HostProductsCard hostId={hostId} />,
-            },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              children: <HostVariablesCard hostId={hostId} />,
-            },
-            {
-              size: {
-                xs: 12,
-                md: 6,
-              },
-              children: <HostFunctionsCard hostId={hostId} />,
-            },
-            // Workflows moved to /workflows (AGL-128); datasets moved to
-            // /data (AGL-132).
+            // Components, products, variables and functions moved to their
+            // own pages (AGL-250); workflows to /workflows (AGL-128);
+            // datasets to /data (AGL-132).
             {
               size: {
                 xs: 12,
               },
-              children: <HostActivityCard hostId={hostId} />,
+              children: (
+                <HostActivityCard
+                  hostId={hostId}
+                  max={10}
+                  viewAllHref={`${buildRoute(Route.HOST_SETUP, { hostId })}?tab=activity`}
+                />
+              ),
             },
           ]}
         />

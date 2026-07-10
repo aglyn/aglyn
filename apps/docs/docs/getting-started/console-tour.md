@@ -26,10 +26,14 @@ The **console** is where you manage a site. Here's what each part of the chrome 
 | Section | What's there |
 | --- | --- |
 | **Screens** | The screen hierarchy — create, reorder (drag-and-drop), and open screens. |
-| **Data** | Datasets, variables, functions, and workflows. |
+| **Components** | Reusable components shared across screens. |
+| **Data** | Organization datasets — shared by every site. |
+| **Products** | Commerce products and orders. |
+| **Logic** | Variables and functions screens bind to. |
+| **Workflows** | Workflows, automations, and webhooks. |
 | **Media** | The media library — folders, images, video, and files. |
 | **Content** | Collections, blog entries, and the inbox. |
-| **Setup** | Theme editor, custom domain, SEO, and integrations. |
+| **Setup** | Theme editor, custom domain, SEO, and the full activity log. |
 | **Billing** | Plan cards and usage meters. |
 
 ## Editing vs. managing
@@ -41,8 +45,9 @@ without opening the editor. When you want to design it, open the
 ## A site's dashboard
 
 Opening a site lands you on its dashboard — the primary navigation tabs across the top,
-account/role management, and quick controls for surfaces like the announcement bar and
-promotional popup.
+account/role management, quick controls for surfaces like the announcement bar and
+promotional popup, and the ten most recent activity entries (the full, paginated log
+lives under **Setup → Activity**).
 
 ![The Aglyn console site dashboard, showing the primary navigation tabs (Dashboard, Screens, Layouts, Media, Content, Inbox, Contacts, Bookings, Events, Data, Redirects, Workflows, Community), the Users card with the account owner listed, and Announcement bar / Promotional popup quick-edit cards](/img/getting-started/console-dashboard.png)
 

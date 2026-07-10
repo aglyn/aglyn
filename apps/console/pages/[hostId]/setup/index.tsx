@@ -34,6 +34,7 @@ import { logEvent } from 'firebase/analytics'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
+import HostActivityTable from '../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../components/card-display-form-template'
 import { useHostId } from '../../../components/host-id-provider'
@@ -250,6 +251,8 @@ const seoSchema: FormSchema = {
 const THEME_TAB_ID = 'theme'
 /** Custom domain tab id (AGL-122); `/setup?tab=domain` deep links. */
 const DOMAIN_TAB_ID = 'domain'
+/** Activity tab id (AGL-249); `/setup?tab=activity` deep links. */
+const ACTIVITY_TAB_ID = 'activity'
 
 const HostSetup: NextPageWithLayout = (props) => {
   const { enqueueSnackbar } = useSnackbar()
@@ -260,6 +263,7 @@ const HostSetup: NextPageWithLayout = (props) => {
   const [tab, setTab] = useState(
     requestedTab === THEME_TAB_ID ||
       requestedTab === DOMAIN_TAB_ID ||
+      requestedTab === ACTIVITY_TAB_ID ||
       requestedTab === seoSchema.id
       ? requestedTab
       : basicSchema.id,
@@ -446,6 +450,7 @@ const HostSetup: NextPageWithLayout = (props) => {
                         ))}
                         <Tab value={THEME_TAB_ID} label={'Theme'} />
                         <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
+                        <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
                       </TabList>
                     </CardDisplay>
                   ),
@@ -505,6 +510,12 @@ const HostSetup: NextPageWithLayout = (props) => {
                       </TabPanel>
                       <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
                         <CustomDomainCard hostId={hostId} />
+                      </TabPanel>
+                      <TabPanel
+                        value={ACTIVITY_TAB_ID}
+                        sx={{ padding: 'unset' }}
+                      >
+                        <HostActivityTable hostId={hostId} />
                       </TabPanel>
                     </>
                   ),

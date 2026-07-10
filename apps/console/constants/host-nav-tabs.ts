@@ -39,6 +39,12 @@ export function hostNavTabItems(hostId: string) {
       label: 'Layouts',
       href: buildRoute(Route.LAYOUT_LIST, { hostId }),
     },
+    // Dedicated pages for former dashboard cards (AGL-250).
+    {
+      id: 'nav-tab-components',
+      label: 'Components',
+      href: buildRoute(Route.HOST_COMPONENTS, { hostId }),
+    },
     // Theme lives under Setup → Theme (AGL-114); the /theme route redirects.
     {
       id: 'nav-tab-media',
@@ -76,9 +82,19 @@ export function hostNavTabItems(hostId: string) {
       href: buildRoute(Route.HOST_DATA, { hostId }),
     },
     {
+      id: 'nav-tab-products',
+      label: 'Products',
+      href: buildRoute(Route.HOST_PRODUCTS, { hostId }),
+    },
+    {
       id: 'nav-tab-redirects',
       label: 'Redirects',
       href: buildRoute(Route.HOST_REDIRECTS, { hostId }),
+    },
+    {
+      id: 'nav-tab-logic',
+      label: 'Logic',
+      href: buildRoute(Route.HOST_LOGIC, { hostId }),
     },
     {
       id: 'nav-tab-workflows',

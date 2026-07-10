@@ -18,6 +18,7 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
+  Link,
   List,
   ListItem,
   ListItemText,
@@ -35,6 +36,8 @@ export interface HostActivityCardProps {
   /** Entries rendered after filtering/sorting. */
   max?: number
   header?: string
+  /** When set, a "View all activity" link renders under the list (AGL-249). */
+  viewAllHref?: string
 }
 
 /**
@@ -43,7 +46,8 @@ export interface HostActivityCardProps {
  * pages show just their own history.
  */
 export function HostActivityCard(props: HostActivityCardProps) {
-  const { hostId, targetId, max = 20, header = 'Recent Activity' } = props
+  const { hostId, targetId, max = 20, header = 'Recent Activity', viewAllHref } =
+    props
   const firestore = useFirestore()
   const { data: entries } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'activity'), limit(200)),
@@ -90,6 +94,13 @@ export function HostActivityCard(props: HostActivityCardProps) {
           ))}
         </List>
       )}
+      {viewAllHref ? (
+        <Typography variant="body2" sx={{ mt: 1 }}>
+          <Link href={viewAllHref} color="secondary" underline="hover">
+            {'View all activity'}
+          </Link>
+        </Typography>
+      ) : null}
     </CardDisplay>
   )
 }
