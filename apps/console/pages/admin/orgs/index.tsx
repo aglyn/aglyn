@@ -94,9 +94,10 @@ const QUOTA_FIELDS: Array<{ key: string; label: string }> = [
   { key: 'contactsPerHost', label: 'Contacts' },
   { key: 'emailSendsPerMonth', label: 'Email sends / mo' },
   { key: 'actionRunsPerMonth', label: 'Action runs / mo' },
-  { key: 'datasetsPerHost', label: 'Datasets' },
-  { key: 'maxDatasetsPerHost', label: 'Max datasets' },
+  { key: 'datasetsPerOrg', label: 'Datasets (org)' },
+  { key: 'maxDatasetsPerOrg', label: 'Max datasets (org)' },
   { key: 'recordsPerDataset', label: 'Records / dataset' },
+  { key: 'dataStorageMbPerOrg', label: 'Data storage MB (org)' },
 ]
 
 /** Every boolean feature flag, overridable as inherit / on / off. */

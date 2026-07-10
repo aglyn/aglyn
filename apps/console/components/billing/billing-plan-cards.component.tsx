@@ -229,9 +229,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                       `${quotaLabel(entitlements.workflowsPerHost)} workflows`}
                   </Typography>
                   <Typography variant="body2">
-                    {entitlements.datasetsPerHost > 0
-                      ? `${quotaLabel(entitlements.datasetsPerHost)} datasets × ` +
-                        `${quotaLabel(entitlements.recordsPerDataset)} records`
+                    {entitlements.datasetsPerOrg > 0
+                      ? `${quotaLabel(entitlements.datasetsPerOrg)} org datasets × ` +
+                        `${quotaLabel(entitlements.recordsPerDataset)} records · ` +
+                        `${Math.round(entitlements.dataStorageMbPerOrg / 1024)} GB data`
                       : 'No datasets'}
                   </Typography>
                 </Stack>

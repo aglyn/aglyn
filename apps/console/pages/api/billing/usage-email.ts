@@ -107,6 +107,8 @@ export default async function handler(
       const pageViews = Number(rollup.get('pageViews') ?? 0)
       const formSubmissions = Number(rollup.get('formSubmissions') ?? 0)
       const costUsd = Number(rollup.get('costUsd') ?? 0)
+      const dataStorageMb = Number(rollup.get('dataStorageMb') ?? 0)
+      const dataOverageUsd = Number(rollup.get('dataOverageUsd') ?? 0)
       const lines = [
         `Here is your Aglyn usage summary for ${month}.`,
         '',
@@ -114,7 +116,11 @@ export default async function handler(
         `Storage: ${storageGb.toFixed(2)} GB`,
         `Page views: ${pageViews}`,
         `Form submissions: ${formSubmissions}`,
-        `Metered usage estimate: ${formatUsd(costUsd)}`,
+        `Dataset storage: ${(dataStorageMb / 1024).toFixed(2)} GB` +
+          (dataOverageUsd > 0
+            ? ` (overage ${formatUsd(dataOverageUsd)})`
+            : ''),
+        `Metered usage estimate: ${formatUsd(costUsd + dataOverageUsd)}`,
         '',
         'Full meters and plan limits: your console → Manage → Billing.',
       ]

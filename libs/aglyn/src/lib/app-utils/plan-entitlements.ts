@@ -33,12 +33,17 @@ export const UNLIMITED = Number.POSITIVE_INFINITY
  * published total-site-size cap by design. Metered costs are passed through
  * from Firebase/Vercel at cost × 1.30 separately (AGL-41).
  */
-export const PLAN_ENTITLEMENTS: Record<
-  TenantPlan,
-  Required<Omit<TenantEntitlements, 'features'>> & {
-    features: Required<TenantFeatureFlags>
-  }
-> = {
+/** Legacy host-keyed dataset overrides resolved into org keys (AGL-240). */
+type LegacyEntitlementKeys = 'datasetsPerHost' | 'maxDatasetsPerHost'
+
+/** Fully-resolved entitlements: every quota present, features complete. */
+export type ResolvedTenantEntitlements = Required<
+  Omit<TenantEntitlements, 'features' | LegacyEntitlementKeys>
+> & {
+  features: Required<TenantFeatureFlags>
+}
+
+export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> = {
   free: {
     hostLimit: 1,
     screensPerHost: 5,
@@ -60,9 +65,10 @@ export const PLAN_ENTITLEMENTS: Record<
     contactsPerHost: 100,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
-    datasetsPerHost: 0,
-    maxDatasetsPerHost: 0,
+    datasetsPerOrg: 0,
+    maxDatasetsPerOrg: 0,
     recordsPerDataset: 0,
+    dataStorageMbPerOrg: 0,
     features: {
       versioning: false,
       reusableComponents: false,
@@ -107,9 +113,10 @@ export const PLAN_ENTITLEMENTS: Record<
     contactsPerHost: 1000,
     emailSendsPerMonth: 500,
     actionRunsPerMonth: 0,
-    datasetsPerHost: 1,
-    maxDatasetsPerHost: 3,
+    datasetsPerOrg: 3,
+    maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
+    dataStorageMbPerOrg: 1024,
     features: {
       versioning: false,
       reusableComponents: true,
@@ -154,9 +161,10 @@ export const PLAN_ENTITLEMENTS: Record<
     contactsPerHost: 10000,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
-    datasetsPerHost: 10,
-    maxDatasetsPerHost: 25,
+    datasetsPerOrg: 15,
+    maxDatasetsPerOrg: 50,
     recordsPerDataset: 10000,
+    dataStorageMbPerOrg: 5120,
     features: {
       versioning: true,
       reusableComponents: true,
@@ -201,9 +209,10 @@ export const PLAN_ENTITLEMENTS: Record<
     contactsPerHost: 100000,
     emailSendsPerMonth: 50000,
     actionRunsPerMonth: 50000,
-    datasetsPerHost: 50,
-    maxDatasetsPerHost: 100,
+    datasetsPerOrg: 100,
+    maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
+    dataStorageMbPerOrg: 25600,
     features: {
       versioning: true,
       reusableComponents: true,
@@ -255,10 +264,17 @@ export interface PlanPricing {
    */
   extraMemberMonthlyUsd: number | null
   /**
-   * Monthly price per dataset beyond `datasetsPerHost` (AGL-132); null
-   * when the plan cannot buy extra datasets.
+   * Monthly price per org dataset beyond `datasetsPerOrg` (AGL-132/240);
+   * null when the plan cannot buy extra datasets.
    */
   extraDatasetMonthlyUsd: number | null
+  /**
+   * Metered overage per GB-month of dataset storage beyond
+   * `dataStorageMbPerOrg` (AGL-240). Priced from Firestore storage cost
+   * (~$0.18/GiB-mo) at roughly the platform's cost-plus posture; null
+   * when the plan hard-blocks at the included size instead of metering.
+   */
+  extraDataGbMonthlyUsd: number | null
 }
 
 /**
@@ -273,6 +289,7 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraSeatMonthlyUsd: null,
     extraMemberMonthlyUsd: null,
     extraDatasetMonthlyUsd: null,
+    extraDataGbMonthlyUsd: null,
   },
   starter: {
     basePriceMonthlyUsd: 19,
@@ -280,6 +297,7 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 5,
     extraMemberMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
+    extraDataGbMonthlyUsd: 0.25,
   },
   pro: {
     basePriceMonthlyUsd: 49,
@@ -287,6 +305,7 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 4,
     extraMemberMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
+    extraDataGbMonthlyUsd: 0.25,
   },
   business: {
     basePriceMonthlyUsd: 149,
@@ -294,6 +313,7 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraSeatMonthlyUsd: 3,
     extraMemberMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
+    extraDataGbMonthlyUsd: 0.25,
   },
 }
 
@@ -309,16 +329,30 @@ function resolvePlan(tenant: Partial<AglynTenant> | null | undefined) {
  */
 export function resolveTenantEntitlements(
   tenant: Partial<AglynTenant> | null | undefined,
-): Required<Omit<TenantEntitlements, 'features'>> & {
-  features: Required<TenantFeatureFlags>
-} {
+): ResolvedTenantEntitlements {
   const defaults = PLAN_ENTITLEMENTS[resolvePlan(tenant)]
   const overrides = tenant?.entitlements
   if (!overrides) return defaults
-  const { features: featureOverrides, ...quotaOverrides } = overrides
+  const {
+    features: featureOverrides,
+    datasetsPerHost: legacyDatasets,
+    maxDatasetsPerHost: legacyMaxDatasets,
+    ...quotaOverrides
+  } = overrides
   const merged = { ...defaults }
   for (const [key, value] of Object.entries(quotaOverrides)) {
     if (typeof value === 'number') (merged as any)[key] = value
+  }
+  // Pre-AGL-240 override docs keyed datasets per host; resolve them into
+  // the org keys unless an org-keyed override is present.
+  if (typeof legacyDatasets === 'number' && overrides.datasetsPerOrg == null) {
+    merged.datasetsPerOrg = legacyDatasets
+  }
+  if (
+    typeof legacyMaxDatasets === 'number' &&
+    overrides.maxDatasetsPerOrg == null
+  ) {
+    merged.maxDatasetsPerOrg = legacyMaxDatasets
   }
   return {
     ...merged,
@@ -431,9 +465,9 @@ export interface DatasetQuotaResult {
 }
 
 /**
- * Dataset quota check (AGL-132), mirroring `checkSeatQuota`: tenants can
- * buy addon datasets (`tenant.seatAddons.datasets`, applied per host) up
- * to the plan's hard max; beyond the max the only path is upgrading.
+ * Dataset quota check (AGL-132/240), mirroring `checkSeatQuota`: orgs can
+ * buy addon datasets (`tenant.seatAddons.datasets`, org-wide) up to the
+ * plan's hard max; beyond the max the only path is upgrading.
  */
 export function checkDatasetQuota(
   tenant: Partial<AglynTenant> | null | undefined,
@@ -441,8 +475,8 @@ export function checkDatasetQuota(
 ): DatasetQuotaResult {
   const entitlements = resolveTenantEntitlements(tenant)
   const pricing = PLAN_PRICING[resolvePlan(tenant)]
-  const included = entitlements.datasetsPerHost
-  const maxDatasets = entitlements.maxDatasetsPerHost
+  const included = entitlements.datasetsPerOrg
+  const maxDatasets = entitlements.maxDatasetsPerOrg
   const addonPriceUsd = pricing.extraDatasetMonthlyUsd
   const purchased = Math.max(0, tenant?.seatAddons?.datasets ?? 0)
   const limit = Math.min(included + purchased, maxDatasets)
@@ -455,5 +489,55 @@ export function checkDatasetQuota(
     maxDatasets,
     upgradeRequired: addonPriceUsd === null || limit >= maxDatasets,
     addonPriceUsd,
+  }
+}
+
+export interface DataStorageQuotaResult {
+  /**
+   * False only when the plan hard-blocks (no overage pricing) and usage
+   * meets the included size; metered plans always allow and bill overage.
+   */
+  allowed: boolean
+  /** Included dataset storage on the plan, MB. */
+  includedMb: number
+  usedMb: number
+  /** Remaining included storage, MB; 0 once into overage. */
+  remainingMb: number
+  /** Usage beyond the included size, GB (0 when within the plan). */
+  overageGb: number
+  /** Estimated overage this month at the plan's per-GB rate. */
+  overageMonthlyUsd: number
+  /** Per-GB-month overage rate; null when the plan meters nothing. */
+  overageRateUsd: number | null
+}
+
+/**
+ * Org dataset-storage meter (AGL-240): aggregate stored document bytes
+ * across `orgs/{orgId}/datasets`. Plans with an `extraDataGbMonthlyUsd`
+ * rate meter the overage onto the monthly invoice (cost-plus, AGL-41);
+ * plans without one (free) hard-block at the included size.
+ */
+export function checkDataStorageQuota(
+  tenant: Partial<AglynTenant> | null | undefined,
+  usedMb: number,
+): DataStorageQuotaResult {
+  const entitlements = resolveTenantEntitlements(tenant)
+  const pricing = PLAN_PRICING[resolvePlan(tenant)]
+  const includedMb = entitlements.dataStorageMbPerOrg
+  const overageRateUsd = pricing.extraDataGbMonthlyUsd
+  const used = Math.max(0, usedMb)
+  const overageMb = Math.max(0, used - includedMb)
+  const overageGb = overageMb / 1024
+  return {
+    allowed: overageRateUsd !== null ? true : used < includedMb,
+    includedMb,
+    usedMb: used,
+    remainingMb: Math.max(0, includedMb - used),
+    overageGb,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round(overageGb * overageRateUsd * 100) / 100,
+    overageRateUsd,
   }
 }

@@ -16,6 +16,7 @@
  */
 
 import {
+  checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
@@ -92,7 +93,7 @@ describe('plan entitlements', () => {
     // Builder gating (AGL-99): paid tiers unlock workflows/datasets, free
     // keeps a taste of variables/functions only.
     expect(PLAN_ENTITLEMENTS.free.workflowsPerHost).toBe(0)
-    expect(PLAN_ENTITLEMENTS.free.datasetsPerHost).toBe(0)
+    expect(PLAN_ENTITLEMENTS.free.datasetsPerOrg).toBe(0)
     expect(PLAN_ENTITLEMENTS.free.features.workflows).toBe(false)
     expect(PLAN_ENTITLEMENTS.starter.variablesPerHost).toBe(25)
     expect(PLAN_ENTITLEMENTS.starter.features.dataStore).toBe(true)
@@ -119,6 +120,7 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: null,
         extraMemberMonthlyUsd: null,
         extraDatasetMonthlyUsd: null,
+        extraDataGbMonthlyUsd: null,
       },
       starter: {
         basePriceMonthlyUsd: 19,
@@ -126,6 +128,7 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 5,
         extraMemberMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
+        extraDataGbMonthlyUsd: 0.25,
       },
       pro: {
         basePriceMonthlyUsd: 49,
@@ -133,6 +136,7 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 4,
         extraMemberMonthlyUsd: 2,
         extraDatasetMonthlyUsd: 2,
+        extraDataGbMonthlyUsd: 0.25,
       },
       business: {
         basePriceMonthlyUsd: 149,
@@ -140,6 +144,7 @@ describe('plan entitlements', () => {
         extraSeatMonthlyUsd: 3,
         extraMemberMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
+        extraDataGbMonthlyUsd: 0.25,
       },
     })
   })
@@ -199,19 +204,52 @@ describe('plan entitlements', () => {
     expect(result.addonPriceUsd).toBeNull()
   })
 
-  it('checkDatasetQuota counts purchased addon datasets up to the max (AGL-132)', () => {
+  it('checkDatasetQuota counts purchased addon datasets up to the max (AGL-132/240)', () => {
     const tenant = { plan: 'starter', seatAddons: { datasets: 2 } } as any
-    const quota = checkDatasetQuota(tenant, 2)
-    expect(quota.limit).toBe(3)
+    const quota = checkDatasetQuota(tenant, 4)
+    expect(quota.limit).toBe(5)
     expect(quota.allowed).toBe(true)
-    expect(checkDatasetQuota(tenant, 3).allowed).toBe(false)
-    // Hard max: starter caps at 3 no matter how many addons.
+    expect(checkDatasetQuota(tenant, 5).allowed).toBe(false)
+    // Hard max: starter caps at 10 org datasets no matter how many addons.
     const maxed = { plan: 'starter', seatAddons: { datasets: 99 } } as any
-    expect(checkDatasetQuota(maxed, 0).limit).toBe(3)
-    expect(checkDatasetQuota(maxed, 3).upgradeRequired).toBe(true)
+    expect(checkDatasetQuota(maxed, 0).limit).toBe(10)
+    expect(checkDatasetQuota(maxed, 10).upgradeRequired).toBe(true)
     // Free plan sells no dataset addons.
     expect(checkDatasetQuota({ plan: 'free' } as any, 0).upgradeRequired).toBe(
       true,
     )
+  })
+
+  it('resolves legacy per-host dataset overrides into org keys (AGL-240)', () => {
+    const legacy = {
+      plan: 'starter',
+      entitlements: { datasetsPerHost: 7, maxDatasetsPerHost: 12 },
+    } as any
+    const resolved = resolveTenantEntitlements(legacy)
+    expect(resolved.datasetsPerOrg).toBe(7)
+    expect(resolved.maxDatasetsPerOrg).toBe(12)
+    // Org-keyed overrides win over legacy keys.
+    const both = {
+      plan: 'starter',
+      entitlements: { datasetsPerHost: 7, datasetsPerOrg: 9 },
+    } as any
+    expect(resolveTenantEntitlements(both).datasetsPerOrg).toBe(9)
+  })
+
+  it('checkDataStorageQuota meters overage on paid plans, blocks on free (AGL-240)', () => {
+    // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.25/GB.
+    const starter = checkDataStorageQuota({ plan: 'starter' } as any, 1536)
+    expect(starter.allowed).toBe(true)
+    expect(starter.includedMb).toBe(1024)
+    expect(starter.overageGb).toBeCloseTo(0.5)
+    expect(starter.overageMonthlyUsd).toBeCloseTo(0.13)
+    // Within the included size there is no overage.
+    const within = checkDataStorageQuota({ plan: 'pro' } as any, 1024)
+    expect(within.overageGb).toBe(0)
+    expect(within.remainingMb).toBe(4096)
+    // Free has no metered rate and hard-blocks at the (zero) included size.
+    const free = checkDataStorageQuota({ plan: 'free' } as any, 1)
+    expect(free.allowed).toBe(false)
+    expect(free.overageRateUsd).toBeNull()
   })
 })

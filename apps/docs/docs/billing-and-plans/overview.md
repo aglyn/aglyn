@@ -33,6 +33,16 @@ Every site has a plan. **Free**, **Pro**, and **Business** unlock progressively 
 - Team and site-member **seats** are metered and enforced per tier.
 - Buy **paid seat add-ons** to grow your team beyond the included seats.
 
+## Organization data
+
+- **Datasets are organization-scoped**: counts and storage meter against your
+  organization, not individual sites.
+- Each paid tier includes a number of datasets and an included **data storage** size
+  (Starter 1 GB, Pro 5 GB, Business 25 GB).
+- Extra datasets are a monthly **add-on** ($2/mo on Starter and Pro, $1/mo on Business);
+  storage beyond the included size is **metered overage** at $0.25 per GB-month on your
+  monthly invoice.
+
 ## Payments
 
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the

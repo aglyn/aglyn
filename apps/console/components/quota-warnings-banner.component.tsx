@@ -77,8 +77,12 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       getDoc(doc(firestore, 'hosts', hostId, 'counters', 'media')).catch(
         () => null,
       ),
+      // Datasets are org-scoped (AGL-239/240); the host path is the
+      // pre-migration fallback.
       getCountFromServer(
-        collection(firestore, 'hosts', hostId, 'datasets'),
+        orgId
+          ? collection(firestore, 'orgs', orgId, 'datasets')
+          : collection(firestore, 'hosts', hostId, 'datasets'),
       ).catch(() => null),
     ]).then(([screens, media, datasets]) => {
       if (!active) return
@@ -98,7 +102,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
         {
           label: 'datasets',
           used: datasets?.data().count ?? 0,
-          limit: entitlements.datasetsPerHost,
+          limit: entitlements.datasetsPerOrg,
         },
       ])
     })
@@ -106,7 +110,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firestore, hostId, plan])
+  }, [firestore, hostId, orgId, plan])
 
   // Org-level team seats (AGL-238): the org roster is member-readable,
   // so the seat count is a client aggregate query, cached per session.

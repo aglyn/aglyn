@@ -206,11 +206,21 @@ export interface TenantEntitlements {
   emailSendsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
-  /** Dynamic data caps (AGL-99/102). */
-  datasetsPerHost?: number
-  /** Hard dataset cap incl. addons (AGL-132); beyond it, upgrade. */
-  maxDatasetsPerHost?: number
+  /** Dynamic data caps — org-scoped (AGL-239/240): datasets are shared
+   * by every host in the org, so counts and size meter per org. */
+  datasetsPerOrg?: number
+  /** Hard dataset cap incl. addons (AGL-132/240); beyond it, upgrade. */
+  maxDatasetsPerOrg?: number
   recordsPerDataset?: number
+  /** Included aggregate dataset storage (MB) across the org (AGL-240);
+   * beyond it, metered overage per GB where the plan prices it. */
+  dataStorageMbPerOrg?: number
+  /** @deprecated Legacy host-keyed override (pre-AGL-240); resolved into
+   * `datasetsPerOrg` by `resolveTenantEntitlements`. */
+  datasetsPerHost?: number
+  /** @deprecated Legacy host-keyed override (pre-AGL-240); resolved into
+   * `maxDatasetsPerOrg` by `resolveTenantEntitlements`. */
+  maxDatasetsPerHost?: number
   features?: TenantFeatureFlags
 }
 
@@ -224,7 +234,7 @@ export interface TenantSeatAddons {
   managers?: number
   /** Extra host-member seats (applies per host). */
   members?: number
-  /** Extra datasets per host (AGL-132); billed monthly per dataset. */
+  /** Extra org datasets (AGL-132/240); billed monthly per dataset. */
   datasets?: number
 }
 

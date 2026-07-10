@@ -16,6 +16,7 @@
  */
 
 import {
+  checkDataStorageQuota,
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
 } from '@aglyn/aglyn'
@@ -28,6 +29,35 @@ function previousMonth(): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
     .toISOString()
     .slice(0, 7)
+}
+
+/**
+ * Approximate aggregate dataset bytes for an org (AGL-240): per dataset,
+ * an aggregate record count × the average serialized size of a small
+ * sample — O(datasets) reads instead of O(records), good enough for
+ * metering (the billing export replaces this when it lands).
+ */
+async function orgDatasetBytes(
+  orgRef: FirebaseFirestore.DocumentReference,
+): Promise<number> {
+  const datasets = await orgRef.collection('datasets').get()
+  let total = 0
+  for (const dataset of datasets.docs) {
+    total += JSON.stringify(dataset.data() ?? {}).length
+    const records = dataset.ref.collection('records')
+    const [countSnapshot, sample] = await Promise.all([
+      records.count().get(),
+      records.limit(50).get(),
+    ])
+    const count = Number(countSnapshot.data().count ?? 0)
+    const sampleBytes = sample.docs.reduce(
+      (sum, record) => sum + JSON.stringify(record.data() ?? {}).length,
+      0,
+    )
+    const average = sample.size > 0 ? sampleBytes / sample.size : 0
+    total += Math.round(average * count)
+  }
+  return total
 }
 
 async function hostUsage(
@@ -125,20 +155,28 @@ export default async function handler(
     for (const [orgId, hostRefs] of Object.entries(byOrg)) {
       const usage = await Promise.all(hostRefs.map(usageFor))
       const estimate = estimateMonthlyUsageCost(usage)
-      const usageRef = firestore
-        .collection('orgs')
-        .doc(orgId)
-        .collection('usage')
-        .doc(month)
+      const orgRef = firestore.collection('orgs').doc(orgId)
+      const orgSnapshot = await orgRef.get()
+      // Dataset storage overage (AGL-240): plan-priced (not cost-plus),
+      // metered on top of the infra estimate.
+      const datasetBytes = await orgDatasetBytes(orgRef)
+      const dataStorageMb =
+        Math.round((datasetBytes / (1024 * 1024)) * 10) / 10
+      const dataQuota = checkDataStorageQuota(
+        orgSnapshot.data() as any,
+        dataStorageMb,
+      )
+      const billedCents =
+        estimate.billedCents + Math.round(dataQuota.overageMonthlyUsd * 100)
+      const usageRef = orgRef.collection('usage').doc(month)
       const existing = await usageRef.get()
       if (existing.get('reportedAt')) {
-        orgResults[orgId] = { billedCents: estimate.billedCents, skipped: true }
+        orgResults[orgId] = { billedCents, skipped: true }
         continue
       }
 
       let reported = false
-      if (stripeKey && estimate.billedCents > 0) {
-        const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
+      if (stripeKey && billedCents > 0) {
         const customerId = orgSnapshot.get('stripeCustomerId')
         if (customerId) {
           const response = await fetch(
@@ -153,7 +191,7 @@ export default async function handler(
                 event_name: meterEventName,
                 identifier: `${orgId}-${month}`,
                 'payload[stripe_customer_id]': String(customerId),
-                'payload[value]': String(estimate.billedCents),
+                'payload[value]': String(billedCents),
               }).toString(),
             },
           )
@@ -170,7 +208,9 @@ export default async function handler(
           pageViews: estimate.pageViews,
           formSubmissions: estimate.formSubmissions,
           costUsd: estimate.costUsd,
-          billedCents: estimate.billedCents,
+          dataStorageMb,
+          dataOverageUsd: dataQuota.overageMonthlyUsd,
+          billedCents,
           computedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           ...(reported && {
             reportedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
@@ -178,7 +218,7 @@ export default async function handler(
         },
         { merge: true },
       )
-      orgResults[orgId] = { billedCents: estimate.billedCents, reported }
+      orgResults[orgId] = { billedCents, reported }
     }
     return res.status(200).json({ month, orgs: orgResults })
   } catch (error) {
