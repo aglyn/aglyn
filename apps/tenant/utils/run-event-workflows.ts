@@ -119,6 +119,7 @@ export async function runEventWorkflows(
           continue // A broken filter never fires.
         }
       }
+      const startedAt = Date.now()
       const run = runWorkflow(
         workflow,
         functions,
@@ -126,6 +127,7 @@ export async function runEventWorkflows(
         { event, ...payload },
         { workflows: workflowMap },
       )
+      const durationMs = Date.now() - startedAt
       executed += 1
       // `=== false` (not `!run.ok`): the union fails to narrow under the
       // stricter build tsconfig otherwise (same quirk as runWorkflow).
@@ -133,12 +135,16 @@ export async function runEventWorkflows(
         run.ok === false
           ? `Workflow failed on ${event}: ${run.error}`.slice(0, 300)
           : `Workflow ran on ${event}`
+      // Run history (wave v6): status + duration ride the activity entry
+      // so the workflows card's Runs dialog reads like a run log.
       await hostRef
         .collection('activity')
         .add({
           actorId: null,
           actorEmail: null,
           action,
+          status: run.ok === false ? 'error' : 'ok',
+          durationMs,
           target: { type: 'workflow', id: doc.id, name: workflow.name ?? '' },
           createdAt: FieldValue.serverTimestamp(),
         })

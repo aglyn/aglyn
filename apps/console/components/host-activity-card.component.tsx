@@ -86,9 +86,18 @@ export function HostActivityCard(props: HostActivityCardProps) {
                     ? `${entry.action} — ${entry.target.name}`
                     : entry.action
                 }
-                secondary={`${entry.actorEmail ?? 'Someone'} · ${
-                  entry.createdAt?.toDate?.().toLocaleString() ?? ''
-                }`}
+                secondary={
+                  `${entry.actorEmail ?? 'Someone'} · ${
+                    entry.createdAt?.toDate?.().toLocaleString() ?? ''
+                  }` +
+                  // Run-log entries carry duration (wave v6).
+                  (entry.durationMs != null ? ` · ${entry.durationMs}ms` : '')
+                }
+                slotProps={
+                  entry.status === 'error'
+                    ? { primary: { color: 'error' } }
+                    : undefined
+                }
               />
             </ListItem>
           ))}

@@ -46,6 +46,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import HostActivityCard from './host-activity-card.component'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
   fetchWhereUsed,
@@ -139,6 +140,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const [usageLoading, setUsageLoading] = useState<string | null>(null)
 
   const [testResult, setTestResult] = useState<string | null>(null)
+  const [runsFor, setRunsFor] = useState<any | null>(null)
 
   // Case-insensitive uniqueness (AGL-185): workflow names must stay
   // unambiguous for computed-variable lookups keyed by name.
@@ -311,6 +313,11 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
                 onClick={handleShowUsage(workflow)}
               >
                 {usageLoading === workflow.$id ? 'Scanning…' : 'Usage'}
+              </Button>
+              {/* Run history (wave v6): the event runner logs status +
+                  duration per run. */}
+              <Button size="small" onClick={() => setRunsFor(workflow)}>
+                {'Runs'}
               </Button>
               <Button
                 size="small"
@@ -613,6 +620,29 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
         usage={usage}
         onClose={() => setUsage(null)}
       />
+      <Dialog
+        open={Boolean(runsFor)}
+        onClose={() => setRunsFor(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{`Runs — ${runsFor?.name ?? ''}`}</DialogTitle>
+        <DialogContent>
+          {runsFor ? (
+            <HostActivityCard
+              hostId={hostId}
+              targetId={runsFor.$id}
+              header="Recent runs"
+              max={25}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setRunsFor(null)}>
+            {'Close'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </CardDisplay>
   )
 }
