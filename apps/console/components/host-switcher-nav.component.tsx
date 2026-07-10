@@ -101,11 +101,13 @@ function HostSwitcherMenu(props: { uid: string }) {
     <>
       <Button
         id="center-nav-hosts"
+        variant="outlined"
         color="inherit"
+        size="small"
         aria-haspopup="menu"
         aria-expanded={anchorEl ? 'true' : undefined}
         onClick={handleOpen}
-        endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
+        endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN} />}
         sx={{
           maxWidth: 260,
           '& .MuiButton-endIcon': { marginLeft: 0 },

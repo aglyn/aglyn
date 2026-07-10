@@ -17,7 +17,8 @@
 'use client'
 
 import { generateOrgSlug } from '@aglyn/aglyn'
-import { AppLink } from '@aglyn/shared-ui-jsx'
+import { ICON_VARIANT_MENU_DOWN } from '@aglyn/shared-data-enums'
+import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -100,9 +101,11 @@ export function OrgSwitcherNav() {
       <Tooltip title={`Workspace: ${currentOrg.orgName ?? currentOrg.$id}`}>
         <Button
           size="small"
+          variant="outlined"
           color="inherit"
           onClick={(event) => setAnchor(event.currentTarget)}
-          sx={{ textTransform: 'none', maxWidth: 220 }}
+          endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN} fontSize="small" />}
+          sx={{ textTransform: 'none', maxWidth: 240 }}
         >
           <Typography variant="subtitle2" noWrap>
             {currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id}
@@ -136,7 +139,7 @@ export function OrgSwitcherNav() {
         <MenuItem
           component={AppLink as any}
           {...({ componentVariant: 'naked' } as any)}
-          href={buildRoute(Route.ORG_MEMBERS)}
+          href={buildRoute(Route.MANAGE_TEAM)}
           onClick={() => setAnchor(null)}
         >
           {'Manage organization…'}
