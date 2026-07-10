@@ -184,7 +184,9 @@ export const MultipleChoiceList = <T extends OptionValue = OptionValue>({
   >
     <MultipleChoiceListCommon
       name={name}
-      options={options}
+      // The common list only maps over options; ReactNode labels render
+      // fine even though its prop type says string.
+      options={options as never}
       {...props}
       Wrapper={Wrapper}
       Checkbox={FinalCheckbox}

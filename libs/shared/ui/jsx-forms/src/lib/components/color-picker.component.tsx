@@ -20,7 +20,11 @@ import {
   type ColorPickerProps as AglynColorPickerProps,
 } from '@aglyn/shared-ui-color-picker'
 import { styled } from '@aglyn/shared-ui-theme'
-import { FormFieldGrid, validationError } from '../mapper'
+import {
+  type ExtendedFieldMeta,
+  FormFieldGrid,
+  validationError,
+} from '../mapper'
 import {
   useFieldApi,
   type UseFieldApiComponentConfig,
@@ -140,7 +144,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     } = useFieldApi(props as any)
 
     const id = `color-picker-${useId()}`
-    const invalid = validationError(meta, validateOnMount)
+    const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
     const hasError = Boolean(invalid)
 
     const value = input?.value || defaultValue || ''

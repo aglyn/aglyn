@@ -128,7 +128,9 @@ export function Checkbox<T = OptionValue>({
   ...props
 }: CheckboxProps<T>) {
   return options ? (
-    <MultipleChoiceList options={options} {...props} />
+    // The list renders option values opaquely, so the wider generic is
+    // safe to narrow to the common OptionValue shape.
+    <MultipleChoiceList options={options as SelectOption<OptionValue>[]} {...props} />
   ) : (
     <SingleCheckbox {...props} />
   )

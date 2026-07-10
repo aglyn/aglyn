@@ -45,7 +45,6 @@ export {
   parseCondition,
   type PatternOptions,
   RendererContext,
-  type Schema as FormSchema,
   useFieldApi,
   type UseFieldApiComponentConfig,
   type UseFieldApiConfig,
@@ -79,11 +78,14 @@ export {
   type ResolvePropsFunction,
 } from '@data-driven-forms/react-form-renderer/common-types'
 
-declare module '@data-driven-forms/react-form-renderer' {
-  interface Schema extends Record<string, any> {
-    id?: string
-    name?: string
-  }
+// v4's `Schema<T>` derives `fields` from a ComponentMapper generic whose
+// default collapses to `never[]`; our schemas are plain field objects, so
+// the public type extends the legacy shape, keeping the id/name extras
+// (and arbitrary keys) the v3 module augmentation used to provide.
+import type { LegacySchemaType } from '@data-driven-forms/react-form-renderer/common-types/schema'
+export interface FormSchema extends LegacySchemaType, Record<string, any> {
+  id?: string
+  name?: string
 }
 
 export {

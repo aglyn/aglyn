@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { FormFieldGrid, validationError } from '../mapper'
+import {
+  type ExtendedFieldMeta,
+  FormFieldGrid,
+  validationError,
+} from '../mapper'
 import {
   useFieldApi,
   type UseFieldApiConfig,
@@ -61,7 +65,7 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
   } = useFieldApi({
     ...props,
   })
-  const invalid = validationError(meta, validateOnMount)
+  const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
   const hasError = Boolean(invalid)
   const text =
     invalid ||
@@ -79,7 +83,7 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
       >
         <FormGroup {...FormGroupProps}>
           <FormLabel
-            htmlFor={input.id || input.name}
+            htmlFor={input.name}
             sx={{ marginBottom: 1 }}
             {...FormLabelProps}
           >
@@ -88,7 +92,7 @@ export const ToggleButtonComponent = (props: ToggleButtonProps) => {
           <div>
             <ToggleButtonGroup
               color="primary"
-              id={input.id || input.name}
+              id={input.name}
               {...input}
               {...ToggleButtonGroupProps}
               disabled={isDisabled || isReadOnly}
