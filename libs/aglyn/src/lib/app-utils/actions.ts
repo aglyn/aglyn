@@ -61,6 +61,11 @@ export interface HostActionTrigger {
   threshold?: number
   /** Path pattern the site event listens on (overlay glob rules); empty = all. */
   pathPattern?: string
+  /**
+   * Fire at most once per visitor (AGL-266, localStorage-keyed) instead
+   * of once per pageview. Site events only.
+   */
+  oncePerVisitor?: boolean
 }
 
 export type HostActionStep =

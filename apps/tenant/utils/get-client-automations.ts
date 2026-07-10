@@ -29,6 +29,8 @@ export interface ClientAutomation {
   event: Aglyn.SiteEventType
   selector?: string
   threshold?: number
+  /** Fire at most once per visitor (AGL-266). */
+  oncePerVisitor?: boolean
   steps: Aglyn.HostActionStep[]
   hasServerSteps: boolean
 }
@@ -79,6 +81,9 @@ export async function getClientAutomations(options: {
           : {}),
         ...(Number(action.trigger?.threshold) > 0
           ? { threshold: Number(action.trigger.threshold) }
+          : {}),
+        ...(action.trigger?.oncePerVisitor === true
+          ? { oncePerVisitor: true }
           : {}),
         steps: clientSteps,
         hasServerSteps,

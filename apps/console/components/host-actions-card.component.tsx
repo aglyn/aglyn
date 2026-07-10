@@ -33,10 +33,12 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Stack,
@@ -58,6 +60,7 @@ import { hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
 import useHostOrgId from '../hooks/use-host-org-id'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import HostActivityCard from './host-activity-card.component'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
 
@@ -247,6 +250,43 @@ export function HostActionsCard(props: { hostId: string }) {
     })
   }, [tenant, enqueueSnackbar])
 
+  // Run log + test runs (AGL-266).
+  const [runsFor, setRunsFor] = useState<any | null>(null)
+  const handleTestRun = useCallback(
+    async (action: any) => {
+      try {
+        const response = await fetch('/api/events/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostId,
+            actionId: action.$id,
+            event: action.trigger?.event,
+            payload: { path: '/console-test', test: 'true' },
+          }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(payload?.error ?? 'Test run failed', {
+            variant: 'warning',
+            persist: false,
+          })
+        }
+        const alerts = Array.isArray(payload?.alerts) ? payload.alerts : []
+        enqueueSnackbar(
+          alerts.length
+            ? `Test ran — first alert: ${alerts[0].message}`
+            : 'Test ran — server steps executed (see Runs)',
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Test run failed', { variant: 'error' })
+      }
+    },
+    [hostId, enqueueSnackbar],
+  )
+
   const handleSave = useCallback(async () => {
     if (!draft) return
     const isCustom = draft.trigger.event === CUSTOM_EVENT_VALUE
@@ -266,6 +306,9 @@ export function HostActionsCard(props: { hostId: string }) {
           : {}),
         ...(draft.trigger.pathPattern?.trim()
           ? { pathPattern: draft.trigger.pathPattern.trim() }
+          : {}),
+        ...(draft.trigger.oncePerVisitor === true
+          ? { oncePerVisitor: true }
           : {}),
       },
       steps: draft.steps,
@@ -369,23 +412,40 @@ export function HostActionsCard(props: { hostId: string }) {
                 setDraft({
                   id: action.$id,
                   name: action.name ?? '',
+                  // Site events are first-class (AGL-256/266): keep their
+                  // selector/threshold/path config through an edit.
                   trigger: {
-                    event: HOST_EVENT_TYPES.includes(action.trigger?.event)
-                      ? action.trigger.event
-                      : CUSTOM_EVENT_VALUE,
+                    event:
+                      HOST_EVENT_TYPES.includes(action.trigger?.event) ||
+                      isSiteEventType(String(action.trigger?.event ?? ''))
+                        ? action.trigger.event
+                        : CUSTOM_EVENT_VALUE,
                     filter: action.trigger?.filter ?? '',
+                    selector: action.trigger?.selector ?? '',
+                    threshold: action.trigger?.threshold,
+                    pathPattern: action.trigger?.pathPattern ?? '',
+                    oncePerVisitor: action.trigger?.oncePerVisitor === true,
                   },
                   steps: action.steps ?? [],
                   enabled: action.enabled !== false,
-                  customEvent: HOST_EVENT_TYPES.includes(
-                    action.trigger?.event,
-                  )
-                    ? ''
-                    : (action.trigger?.event ?? ''),
+                  customEvent:
+                    HOST_EVENT_TYPES.includes(action.trigger?.event) ||
+                    isSiteEventType(String(action.trigger?.event ?? ''))
+                      ? ''
+                      : (action.trigger?.event ?? ''),
                 })
               }
             >
               {'Edit'}
+            </Button>
+            {isSiteEventType(String(action.trigger?.event ?? '')) ? (
+              // Test run (AGL-266): server steps only, via the dispatch API.
+              <Button size="small" onClick={() => void handleTestRun(action)}>
+                {'Test'}
+              </Button>
+            ) : null}
+            <Button size="small" onClick={() => setRunsFor(action)}>
+              {'Runs'}
             </Button>
             <Button size="small" color="error" onClick={handleDelete(action)}>
               {'Delete'}
@@ -542,6 +602,24 @@ export function HostActionsCard(props: { hostId: string }) {
                 }
                 size="small"
                 sx={{ flex: 1 }}
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={draft?.trigger.oncePerVisitor === true}
+                    onChange={(event) =>
+                      patch((previous) => ({
+                        ...previous,
+                        trigger: {
+                          ...previous.trigger,
+                          oncePerVisitor: event.target.checked,
+                        },
+                      }))
+                    }
+                  />
+                }
+                label="Once per visitor"
               />
             </Stack>
           ) : null}
@@ -1068,6 +1146,29 @@ export function HostActionsCard(props: { hostId: string }) {
             onClick={handleSave}
           >
             {'Save action'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(runsFor)}
+        onClose={() => setRunsFor(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{`Runs — ${runsFor?.name ?? ''}`}</DialogTitle>
+        <DialogContent>
+          {runsFor ? (
+            <HostActivityCard
+              hostId={hostId}
+              targetId={runsFor.$id}
+              header="Recent runs"
+              max={25}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setRunsFor(null)}>
+            {'Close'}
           </Button>
         </DialogActions>
       </Dialog>

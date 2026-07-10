@@ -857,6 +857,16 @@ function AutomationsEngine(props: {
     const fire = (automation: ClientAutomation) => {
       if (fired.has(automation.id)) return
       fired.add(automation.id)
+      // Once per visitor (AGL-266): a persisted flag outlives the pageview.
+      if (automation.oncePerVisitor) {
+        const key = `aglyn:auto:${automation.id}`
+        try {
+          if (localStorage.getItem(key)) return
+          localStorage.setItem(key, '1')
+        } catch {
+          // Storage unavailable — degrade to once per pageview.
+        }
+      }
       runClientSteps(automation)
       if (automation.hasServerSteps) {
         void fetch('/api/events/dispatch', {
