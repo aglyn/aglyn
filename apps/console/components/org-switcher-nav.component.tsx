@@ -17,6 +17,7 @@
 'use client'
 
 import { generateOrgSlug } from '@aglyn/aglyn'
+import { AppLink } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Button,
@@ -36,6 +37,7 @@ import {
 import { useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { useOrgWorkspace } from '../hooks/use-org-workspace'
+import { buildRoute, Route } from '../constants/route-links'
 
 const WORKSPACE_DOMAIN =
   process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.io'
@@ -131,6 +133,14 @@ export function OrgSwitcherNav() {
           </MenuItem>
         ))}
         <Divider />
+        <MenuItem
+          component={AppLink as any}
+          {...({ componentVariant: 'naked' } as any)}
+          href={buildRoute(Route.ORG_MEMBERS)}
+          onClick={() => setAnchor(null)}
+        >
+          {'Manage organization…'}
+        </MenuItem>
         <MenuItem
           onClick={() => {
             setAnchor(null)

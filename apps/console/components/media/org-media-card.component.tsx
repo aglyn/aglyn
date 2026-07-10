@@ -30,7 +30,6 @@ import { collection, limit, query } from 'firebase/firestore'
 import { useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
-import useHostOrgId from '../../hooks/use-host-org-id'
 
 /**
  * Organization media library (AGL-237): assets shared with every host in
@@ -38,13 +37,12 @@ import useHostOrgId from '../../hooks/use-host-org-id'
  * to this site. Uploads/deletes go through /api/orgs/media so the
  * Storage object and its doc never drift.
  */
-export function OrgMediaCard(props: { hostId: string }) {
-  const { hostId } = props
+export function OrgMediaCard(props: { orgId: string | null }) {
+  const { orgId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const orgId = useHostOrgId(hostId)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
 
