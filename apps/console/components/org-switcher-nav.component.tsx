@@ -18,7 +18,7 @@
 
 import { generateOrgSlug } from '@aglyn/aglyn'
 import {
-  ICON_VARIANT_MENU_DOWN,
+  ICON_VARIANT_MENU_DOWN, ICON_VARIANT_ORGANIZATION,
   ICON_VARIANT_SYMBOL_SECURE,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -85,8 +85,16 @@ export function OrgSwitcherNav() {
         return
       }
       enqueueSnackbar(`Created "${name.trim()}"`, { variant: 'success' })
+      // Land in the new workspace, not on the previous org's pages —
+      // from a subdomain that means the new org's own subdomain.
+      if (workspaceSlug && slug) {
+        window.location.assign(
+          `https://${slug}.${WORKSPACE_DOMAIN}` +
+            buildRoute(Route.HOST_LIST),
+        )
+        return
+      }
       selectOrg(payload.orgId)
-      // Land in the new workspace, not on the previous org's pages.
       void router.push(buildRoute(Route.HOST_LIST))
       setCreating(false)
       setName('')
@@ -111,10 +119,7 @@ export function OrgSwitcherNav() {
           color="primary"
           onClick={(event) => setAnchor(event.currentTarget)}
           startIcon={
-            <MdiIcon
-              path={ICON_VARIANT_SYMBOL_SECURE.path}
-              fontSize={'small'}
-            />
+            <MdiIcon path={ICON_VARIANT_ORGANIZATION.path} fontSize={'small'} />
           }
           endIcon={
             <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
@@ -140,17 +145,23 @@ export function OrgSwitcherNav() {
           <MenuItem
             key={org.$id}
             selected={org.$id === currentOrg.$id}
-            // Subdomain-scoped sessions are pinned to their workspace; the
-            // switcher only re-scopes the apex console.
-            disabled={Boolean(workspaceSlug) && org.$id !== currentOrg.$id}
             onClick={() => {
-              selectOrg(org.$id)
               setAnchor(null)
-              // Switching workspaces re-scopes everything — leave any
-              // host/org page from the previous org (Slack semantics).
-              if (org.$id !== currentOrg.$id) {
-                void router.push(buildRoute(Route.HOST_LIST))
+              if (org.$id === currentOrg.$id) return
+              // On a workspace subdomain the org IS the hostname, so
+              // switching means moving to the other org's subdomain —
+              // the session cookie signs it in silently (AGL-236).
+              if (workspaceSlug && org.slug) {
+                window.location.assign(
+                  `https://${org.slug}.${WORKSPACE_DOMAIN}` +
+                    buildRoute(Route.HOST_LIST),
+                )
+                return
               }
+              // Apex: re-scope in place and leave any page from the
+              // previous org (Slack semantics).
+              selectOrg(org.$id)
+              void router.push(buildRoute(Route.HOST_LIST))
             }}
           >
             <ListItemText

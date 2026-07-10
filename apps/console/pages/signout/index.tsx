@@ -35,7 +35,16 @@ function SignOut() {
   const firebaseAuth = useAuth()
 
   useEffect(() => {
-    void signOut(firebaseAuth)
+    void (async () => {
+      // The shared workspace cookie dies FIRST (AGL-236): waiting on the
+      // DELETE before signOut means neither a hard navigation nor an
+      // in-flight mint can strand a live cookie that would silently
+      // re-sign-in every subdomain.
+      await fetch('/api/auth/session', { method: 'DELETE' }).catch(
+        () => undefined,
+      )
+      await signOut(firebaseAuth)
+    })()
   }, [firebaseAuth])
 
   return (
