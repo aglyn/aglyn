@@ -17,6 +17,10 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import {
+  mediaObjectPath,
+  resolveMediaScope,
+} from '../../../utils/server/media-scope'
 
 export interface MediaReference {
   kind: 'screen' | 'layout'
@@ -38,10 +42,9 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const hostId = String(req.body?.hostId ?? '')
   const mediaId = String(req.body?.mediaId ?? '')
-  if (!hostId || !mediaId) {
-    return res.status(400).json({ error: 'Missing hostId or mediaId' })
+  if (!mediaId) {
+    return res.status(400).json({ error: 'Missing mediaId' })
   }
   const authorization = req.headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -52,17 +55,18 @@ export default async function handler(
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown site' })
-    }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (!memberRole) {
-      return res.status(403).json({ error: 'Not a site admin' })
+    const { scope, error } = await resolveMediaScope(
+      req.body,
+      req.query,
+      decoded.uid,
+    )
+    if (!scope) {
+      return res
+        .status(error?.status ?? 400)
+        .json({ error: error?.message ?? 'Bad request' })
     }
 
-    const mediaSnapshot = await hostRef
+    const mediaSnapshot = await scope.scopeRef
       .collection('media')
       .doc(mediaId)
       .get()
@@ -73,10 +77,23 @@ export default async function handler(
       mediaSnapshot.get('url'),
       mediaSnapshot.get('cdnPath'),
       // Any URL containing the storage object path also counts.
-      `hosts/${hostId}/media/${mediaId}`,
+      mediaObjectPath(mediaSnapshot, scope.base),
     ].filter(Boolean) as string[]
 
+    // Org assets can appear on any of the org's sites — scan them all;
+    // a host asset scans its own site only.
+    const hostRefs =
+      scope.collection === 'orgs'
+        ? (
+            await firestore
+              .collection('hosts')
+              .where('orgId', '==', scope.scopeId)
+              .get()
+          ).docs.map((host) => host.ref)
+        : [scope.scopeRef]
+
     const references: MediaReference[] = []
+    for (const hostRef of hostRefs)
     for (const kind of ['screens', 'layouts'] as const) {
       const parents = await hostRef.collection(kind).get()
       await Promise.all(
@@ -103,7 +120,7 @@ export default async function handler(
 
     return res.status(200).json({ references })
   } catch (error) {
-    console.error('media references scan failed', hostId, mediaId, error)
+    console.error('media references scan failed', mediaId, error)
     return res.status(500).json({ error: 'Scan failed' })
   }
 }

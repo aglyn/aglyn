@@ -23,11 +23,15 @@ import {
 } from '@aglyn/aglyn'
 import {
   firebaseAdmin,
-  getOrgForHost,
   MEDIA_CDN_VARIANT_WIDTHS,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import {
+  folderStoragePath,
+  mediaObjectPath,
+  resolveMediaScope,
+} from '../../../utils/server/media-scope'
 
 // Base64 JSON payloads: ~25MB of media encodes to ~34MB of body.
 export const config = { api: { bodyParser: { sizeLimit: '34mb' } } }
@@ -41,9 +45,10 @@ const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
 /**
  * Authenticated media upload/delete (AGL-85): Storage rules deny client
  * writes entirely, so every mutation passes this route's checks — Firebase
- * ID token, host-admin membership, image-only content types, and the
- * server-enforced storage quota (client-side checks are advisory). Files
- * land at `hosts/{hostId}/media/{mediaId}` with a download-token URL; the
+ * ID token, host or org membership (org DAM parity), allowed content
+ * types, and the server-enforced storage quota. Files land under the
+ * scope's media prefix inside their REAL folder path
+ * (`{base}/media/{folder…}/{mediaId}`) with a download-token URL; the
  * Firestore metadata mirror and bytes counter are written here too.
  */
 export default async function handler(
@@ -53,9 +58,6 @@ export default async function handler(
   if (req.method !== 'POST' && req.method !== 'DELETE') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const hostId = String(req.body?.hostId ?? '')
-  if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-
   const authorization = req.headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
@@ -64,16 +66,17 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown site' })
+    const { scope, error } = await resolveMediaScope(
+      req.body,
+      req.query,
+      decoded.uid,
+    )
+    if (!scope) {
+      return res
+        .status(error?.status ?? 400)
+        .json({ error: error?.message ?? 'Bad request' })
     }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
-    }
+    const scopeRef = scope.scopeRef
     const bucket = firebaseAdmin
       .app()
       .storage()
@@ -82,19 +85,17 @@ export default async function handler(
     if (req.method === 'DELETE') {
       const mediaId = String(req.body?.mediaId ?? '')
       if (!mediaId) return res.status(400).json({ error: 'Missing mediaId' })
-      const mediaRef = hostRef.collection('media').doc(mediaId)
+      const mediaRef = scopeRef.collection('media').doc(mediaId)
       const mediaSnapshot = await mediaRef.get()
+      const objectPath = mediaObjectPath(mediaSnapshot, scope.base)
       // Object may already be gone; still remove the metadata.
-      await bucket
-        .file(`hosts/${hostId}/media/${mediaId}`)
-        .delete()
-        .catch(() => undefined)
+      await bucket.file(objectPath).delete().catch(() => undefined)
       // CDN variants (AGL-175) ride along.
       const variantWidths: number[] = mediaSnapshot.get('variants') ?? []
       await Promise.all(
         variantWidths.map((width) =>
           bucket
-            .file(`hosts/${hostId}/media/${mediaId}__w${width}.webp`)
+            .file(`${objectPath}__w${width}.webp`)
             .delete()
             .catch(() => undefined),
         ),
@@ -102,7 +103,7 @@ export default async function handler(
       if (mediaSnapshot.exists) {
         const sizeBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
         await mediaRef.delete()
-        await hostRef
+        await scopeRef
           .collection('counters')
           .doc('media')
           .set(
@@ -150,13 +151,13 @@ export default async function handler(
 
     // Server-side quota: counter bytes + this file against the plan limit
     // (no enforcement until the tenant has an explicit plan — AGL-38 gate).
-    const counterSnapshot = await hostRef
+    const counterSnapshot = await scopeRef
       .collection('counters')
       .doc('media')
       .get()
     const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
     // Quota/entitlements ride the owning org's doc (AGL-238).
-    const tenant = (await getOrgForHost(hostId))?.org ?? {}
+    const tenant = scope.billing
     if ((isVideo || isPdf) && tenant['plan'] && !checkEntitlement(tenant, 'videoMedia')) {
       return res.status(403).json({
         error: 'Video and file uploads require a Pro plan',
@@ -174,7 +175,12 @@ export default async function handler(
 
     const mediaId = createResourceUid()
     const token = randomUUID()
-    const file = bucket.file(`hosts/${hostId}/media/${mediaId}`)
+    // Real folders (org DAM work): the object lives INSIDE its folder's
+    // Storage prefix, so the bucket tree mirrors the library tree.
+    const folderPath = await folderStoragePath(scopeRef, folderId)
+    const objectPath =
+      `${scope.base}/media/` + (folderPath ? `${folderPath}/` : '') + mediaId
+    const file = bucket.file(objectPath)
     await file.save(buffer, {
       contentType,
       metadata: {
@@ -186,7 +192,7 @@ export default async function handler(
     })
     const url =
       `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(`hosts/${hostId}/media/${mediaId}`)}` +
+      `${encodeURIComponent(objectPath)}` +
       `?alt=media&token=${token}`
 
     // Auto-captured metadata (AGL-173): image dimensions from the file
@@ -217,7 +223,7 @@ export default async function handler(
             .webp({ quality: 80 })
             .toBuffer()
           await bucket
-            .file(`hosts/${hostId}/media/${mediaId}__w${width}.webp`)
+            .file(`${objectPath}__w${width}.webp`)
             .save(webp, {
               contentType: 'image/webp',
               metadata: {
@@ -232,22 +238,25 @@ export default async function handler(
       }
     }
 
-    await hostRef.collection('media').doc(mediaId).set({
+    await scopeRef.collection('media').doc(mediaId).set({
       fileName,
       contentType,
       sizeBytes: buffer.length,
       url,
+      storagePath: objectPath,
       folderId,
       ...(dimensions ?? {}),
       uploadedBy: decoded.uid,
       contentHash,
       variants,
       ...(cdnAllowed
-        ? { cdnPath: `/api/media/cdn/${hostId}/${mediaId}/${contentHash}` }
+        ? {
+            cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}/${contentHash}`,
+          }
         : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })
-    await hostRef
+    await scopeRef
       .collection('counters')
       .doc('media')
       .set(

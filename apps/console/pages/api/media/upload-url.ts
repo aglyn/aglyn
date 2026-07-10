@@ -16,7 +16,11 @@
  */
 
 import { checkEntitlement, checkQuota, createResourceUid } from '@aglyn/aglyn'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  folderStoragePath,
+  resolveMediaScope,
+} from '../../../utils/server/media-scope'
 import { randomUUID } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -41,9 +45,6 @@ export default async function handler(
   if (req.method !== 'POST' && req.method !== 'PATCH') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const hostId = String(req.body?.hostId ?? '')
-  if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-
   const authorization = req.headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
@@ -52,15 +53,15 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown site' })
-    }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+    const { scope, error } = await resolveMediaScope(
+      req.body,
+      req.query,
+      decoded.uid,
+    )
+    if (!scope) {
+      return res
+        .status(error?.status ?? 400)
+        .json({ error: error?.message ?? 'Bad request' })
     }
     const bucket = firebaseAdmin
       .app()
@@ -68,8 +69,8 @@ export default async function handler(
       .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
 
     // Quota/entitlements ride the owning org's doc (AGL-238).
-    const tenant = (await getOrgForHost(hostId))?.org ?? {}
-    const counterRef = hostRef.collection('counters').doc('media')
+    const tenant = scope.billing
+    const counterRef = scope.scopeRef.collection('counters').doc('media')
 
     if (req.method === 'POST') {
       const contentType = String(req.body?.contentType ?? '')
@@ -107,8 +108,19 @@ export default async function handler(
         }
       }
 
+      // Real folders: the signed URL is path-bound, so the destination
+      // folder is decided here (the finalize PATCH re-derives it).
+      const folderId =
+        typeof req.body?.folderId === 'string' && req.body.folderId
+          ? String(req.body.folderId).slice(0, 64)
+          : null
+      const folderPath = await folderStoragePath(scope.scopeRef, folderId)
       const mediaId = createResourceUid()
-      const file = bucket.file(`hosts/${hostId}/media/${mediaId}`)
+      const file = bucket.file(
+        `${scope.base}/media/` +
+          (folderPath ? `${folderPath}/` : '') +
+          mediaId,
+      )
       const [uploadUrl] = await file.getSignedUrl({
         version: 'v4',
         action: 'write',
@@ -126,7 +138,10 @@ export default async function handler(
         ? String(req.body.folderId).slice(0, 64)
         : null
     if (!mediaId) return res.status(400).json({ error: 'Missing mediaId' })
-    const file = bucket.file(`hosts/${hostId}/media/${mediaId}`)
+    const folderPath = await folderStoragePath(scope.scopeRef, folderId)
+    const objectPath =
+      `${scope.base}/media/` + (folderPath ? `${folderPath}/` : '') + mediaId
+    const file = bucket.file(objectPath)
     const [exists] = await file.exists()
     if (!exists) {
       return res.status(409).json({ error: 'Upload not found — retry' })
@@ -157,13 +172,14 @@ export default async function handler(
     })
     const url =
       `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(`hosts/${hostId}/media/${mediaId}`)}` +
+      `${encodeURIComponent(objectPath)}` +
       `?alt=media&token=${token}`
-    await hostRef.collection('media').doc(mediaId).set({
+    await scope.scopeRef.collection('media').doc(mediaId).set({
       fileName,
       contentType,
       sizeBytes: actualBytes,
       url,
+      storagePath: objectPath,
       folderId,
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
     })

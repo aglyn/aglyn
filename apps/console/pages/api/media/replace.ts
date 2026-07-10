@@ -22,9 +22,12 @@ import {
 } from '@aglyn/aglyn'
 import {
   firebaseAdmin,
-  getOrgForHost,
   MEDIA_CDN_VARIANT_WIDTHS,
 } from '@aglyn/tenant-data-admin'
+import {
+  mediaObjectPath,
+  resolveMediaScope,
+} from '../../../utils/server/media-scope'
 import { createHash, randomUUID } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -58,17 +61,14 @@ export default async function handler(
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const hostId = String(req.body?.hostId ?? '')
   const mediaId = String(req.body?.mediaId ?? '')
   const contentType = String(req.body?.contentType ?? '')
   const data = String(req.body?.data ?? '')
   const expectedUpdatedAtMs = req.body?.expectedUpdatedAtMs
     ? Number(req.body.expectedUpdatedAtMs)
     : undefined
-  if (!hostId || !mediaId || !data) {
-    return res
-      .status(400)
-      .json({ error: 'Missing hostId, mediaId, or data' })
+  if (!mediaId || !data) {
+    return res.status(400).json({ error: 'Missing mediaId or data' })
   }
   if (!contentType.startsWith('image/')) {
     return res.status(415).json({ error: 'Only images can be replaced' })
@@ -82,18 +82,18 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown site' })
-    }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin' })
+    const { scope, error } = await resolveMediaScope(
+      req.body,
+      req.query,
+      decoded.uid,
+    )
+    if (!scope) {
+      return res
+        .status(error?.status ?? 400)
+        .json({ error: error?.message ?? 'Bad request' })
     }
 
-    const mediaRef = hostRef.collection('media').doc(mediaId)
+    const mediaRef = scope.scopeRef.collection('media').doc(mediaId)
     const mediaSnapshot = await mediaRef.get()
     if (!mediaSnapshot.exists || mediaSnapshot.get('deletedAt')) {
       return res.status(404).json({ error: 'Unknown media' })
@@ -119,9 +119,9 @@ export default async function handler(
 
     const previousBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
     // Quota rides the owning org's doc (AGL-238).
-    const tenant = (await getOrgForHost(hostId))?.org ?? {}
+    const tenant = scope.billing
     if (tenant['plan']) {
-      const counterSnapshot = await hostRef
+      const counterSnapshot = await scope.scopeRef
         .collection('counters')
         .doc('media')
         .get()
@@ -142,19 +142,20 @@ export default async function handler(
       .storage()
       .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
 
+    const objectPath = mediaObjectPath(mediaSnapshot, scope.base)
     // Drop the previous CDN variants — they belong to the old content.
     const previousVariants: number[] = mediaSnapshot.get('variants') ?? []
     await Promise.all(
       previousVariants.map((width) =>
         bucket
-          .file(`hosts/${hostId}/media/${mediaId}__w${width}.webp`)
+          .file(`${objectPath}__w${width}.webp`)
           .delete()
           .catch(() => undefined),
       ),
     )
 
     const token = randomUUID()
-    const file = bucket.file(`hosts/${hostId}/media/${mediaId}`)
+    const file = bucket.file(objectPath)
     await file.save(buffer, {
       contentType,
       metadata: {
@@ -164,7 +165,7 @@ export default async function handler(
     })
     const url =
       `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(`hosts/${hostId}/media/${mediaId}`)}` +
+      `${encodeURIComponent(objectPath)}` +
       `?alt=media&token=${token}`
 
     const dimensions = readImageDimensions(new Uint8Array(buffer))
@@ -184,7 +185,7 @@ export default async function handler(
             .webp({ quality: 80 })
             .toBuffer()
           await bucket
-            .file(`hosts/${hostId}/media/${mediaId}__w${width}.webp`)
+            .file(`${objectPath}__w${width}.webp`)
             .save(webp, {
               contentType: 'image/webp',
               metadata: {
@@ -210,7 +211,7 @@ export default async function handler(
         contentHash,
         variants,
         ...(cdnAllowed
-          ? { cdnPath: `/api/media/cdn/${hostId}/${mediaId}/${contentHash}` }
+          ? { cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}/${contentHash}` }
           : { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }),
         replacedBy: decoded.uid,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
@@ -219,7 +220,7 @@ export default async function handler(
     )
 
     // Adjust the storage counter by the byte delta (count unchanged).
-    await hostRef
+    await scope.scopeRef
       .collection('counters')
       .doc('media')
       .set(

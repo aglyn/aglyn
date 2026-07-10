@@ -100,10 +100,20 @@ service cloud.firestore {
         allow write: if isStaff() || canWriteOrgData();
       }
 
-      // Org media library (AGL-237): shareable with any host in the org.
-      // Docs are API-written only — every doc pairs with a Storage object
-      // under orgs/{orgId}/media/, and the API keeps them consistent.
+      // Org media library (AGL-237, full DAM parity): shareable with any
+      // host in the org. Storage objects stay API-managed (upload/delete
+      // routes enforce quota), but editors mutate the metadata docs the
+      // same way they do on a host's library (rename, folder moves).
       match /media/{mediaId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() || canWriteOrgData();
+      }
+      match /mediaFolders/{folderId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() || canWriteOrgData();
+      }
+      // Storage quota meter for the org library.
+      match /counters/{counterId} {
         allow read: if isStaff() || isOrgMember();
         allow write: if false;
       }
@@ -112,6 +122,13 @@ service cloud.firestore {
       // in the org; written only by the install API (entitlement + kill
       // switch checks live there).
       match /installs/{listingId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if false;
+      }
+
+      // Org activity log: mirrors hosts/{hostId}/activity, visible to any
+      // member; written only by the org API routes (Admin SDK).
+      match /activity/{entryId} {
         allow read: if isStaff() || isOrgMember();
         allow write: if false;
       }

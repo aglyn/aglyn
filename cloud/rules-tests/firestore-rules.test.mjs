@@ -265,11 +265,22 @@ describe('org-shared data (AGL-237)', () => {
     )
   })
 
-  it('media and installs are member-read, API-write only', async () => {
+  it('media docs and folders are editor-writable (DAM parity); installs stay API-only', async () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'media', 'm1')))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'installs', 'p1')))
     await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'media', 'm1')))
-    await assertFails(setDoc(doc(authed(OWNER), 'orgs', ORG, 'media', 'm2'), { url: 'x' }))
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'media', 'm1'), { folderId: 'f1' }, { merge: true }),
+    )
+    await assertSucceeds(
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'mediaFolders', 'f1'), { name: 'Brand' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(VIEWER), 'orgs', ORG, 'mediaFolders', 'f2'), { name: 'No' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'media', 'm2'), { url: 'x' }),
+    )
     await assertFails(setDoc(doc(authed(OWNER), 'orgs', ORG, 'installs', 'p2'), { version: '2' }))
   })
 })
