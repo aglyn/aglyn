@@ -64,7 +64,7 @@ import useCurrentTenant from '../../../hooks/use-current-tenant'
 import useTenantPermissions from '../../../hooks/use-tenant-permissions'
 
 const PERMISSIONS: Array<{ key: string; label: string }> = [
-  { key: 'createHosts', label: 'Create hosts' },
+  { key: 'createHosts', label: 'Create sites' },
   { key: 'editHosts', label: 'Edit hosts' },
   { key: 'editBilling', label: 'Edit billing' },
   { key: 'publishToCommunity', label: 'Publish to community' },
@@ -452,7 +452,7 @@ const ManageTeam: NextPageWithLayout = () => {
               <Typography variant="caption" color="text.secondary">
                 {'Roles set the default permissions; ticking a box applies ' +
                   'a per-member override on top (changing the role resets ' +
-                  'overrides). Host-level access is managed per host on ' +
+                  'overrides). Site-level access is managed per site on ' +
                   'its dashboard.'}
               </Typography>
             </Stack>

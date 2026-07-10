@@ -58,11 +58,11 @@ export default async function handler(
       .doc(hostId)
       .get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
     const admins = hostSnapshot.get('admins') ?? {}
     if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+      return res.status(403).json({ error: 'Not a site admin' })
     }
 
     // Cname uniqueness (AGL-166): middleware resolution maps hostname ->

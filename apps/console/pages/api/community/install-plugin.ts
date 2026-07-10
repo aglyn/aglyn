@@ -64,12 +64,12 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
     const admins = hostSnapshot.get('admins') ?? {}
     const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
     if (!admins[decoded.uid] && !['admin', 'editor'].includes(memberRole)) {
-      return res.status(403).json({ error: 'Not a host admin' })
+      return res.status(403).json({ error: 'Not a site admin' })
     }
 
     // Org-tier uninstall (AGL-237): org pins are API-managed (rules deny
@@ -77,7 +77,7 @@ export default async function handler(
     if (req.body?.action === 'uninstall' && req.body?.scope === 'org') {
       const orgId = await resolveOrgIdForHost(hostId)
       if (!orgId) {
-        return res.status(409).json({ error: 'Host has no organization yet' })
+        return res.status(409).json({ error: 'This site has no organization yet' })
       }
       await firestore
         .collection('orgs')
@@ -143,7 +143,7 @@ export default async function handler(
     if (scope === 'org') {
       const orgId = await resolveOrgIdForHost(hostId)
       if (!orgId) {
-        return res.status(409).json({ error: 'Host has no organization yet' })
+        return res.status(409).json({ error: 'This site has no organization yet' })
       }
       installRef = firestore
         .collection('orgs')

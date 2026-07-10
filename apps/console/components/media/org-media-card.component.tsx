@@ -106,15 +106,15 @@ export function OrgMediaCard(props: { orgId: string | null }) {
 
   return (
     <CardDisplay
-      header={'Organization media (shared with all hosts)'}
+      header={'Organization media (shared with all sites)'}
       contentGutterX
       contentGutterY
     >
       <Stack spacing={2}>
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Typography variant="body2" color="text.secondary" sx={{ flexGrow: 1 }}>
-            {'Assets here can be used by any host in your organization; the ' +
-              'library above stays private to this host.'}
+            {'Assets here can be used by any site in your organization; the ' +
+              'library above stays private to this site.'}
           </Typography>
           <input
             ref={fileInput}
@@ -184,7 +184,7 @@ export function OrgMediaCard(props: { orgId: string | null }) {
                     onClick={() =>
                       void confirm({
                         title: 'Delete org media?',
-                        description: `${item.fileName} disappears from every host using it.`,
+                        description: `${item.fileName} disappears from every site using it.`,
                       }).then(async (accepted) => {
                         if (accepted) await request({ action: 'delete', mediaId: item.$id })
                       })

@@ -88,12 +88,12 @@ function HostsContent() {
         activeTab={buildRoute(Route.HOST_LIST)}
         breadcrumbItems={[
           {
-            children: 'Hosts',
+            children: 'Sites',
             href: buildRoute(Route.MANAGE_ACCOUNT_SETTINGS),
           },
         ]}
         header={{
-          children: 'All Hosts',
+          children: 'All Sites',
           icon: { path: ICON_VARIANT_HOST_GROUP.path },
         }}
         headerRight={
@@ -103,7 +103,7 @@ function HostsContent() {
               color="secondary"
               onClick={() => setCreating(true)}
             >
-              {'Create host'}
+              {'Create site'}
             </Button>
           ) : undefined
         }
@@ -214,7 +214,7 @@ Hosts.layouts = [
   {
     Component: MainLayout,
     props: {
-      title: 'Hosts',
+      title: 'Sites',
       enableAppBarElevation: true,
     },
   },

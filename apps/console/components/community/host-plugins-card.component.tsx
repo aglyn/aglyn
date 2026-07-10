@@ -246,7 +246,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
       const confirmed = await confirm({
         title: `Uninstall "${install.displayName ?? install.$id}" org-wide?`,
         description:
-          'Every host in the organization loses this plugin unless it has ' +
+          'Every site in the organization loses this plugin unless it has ' +
           'its own host-level pin.',
         confirmationText: 'Uninstall',
         confirmationButtonProps: { color: 'error' },
@@ -339,7 +339,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                   ) : null}
                   {orgId &&
                   !orgInstalls.some((entry) => entry.$id === install.$id) ? (
-                    <Tooltip title="Install for every host in the organization and remove this host's own pin">
+                    <Tooltip title="Install for every site in the organization and remove this site's own pin">
                       <Button
                         size="small"
                         disabled={busy === install.$id}
@@ -412,7 +412,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                 <Chip size="small" color="secondary" label="Organization" />
                 <Chip size="small" label={`v${install.version}`} />
                 {shadowed ? (
-                  <Tooltip title="This host has its own pin, which takes precedence here">
+                  <Tooltip title="This site has its own pin, which takes precedence here">
                     <Chip size="small" variant="outlined" label="shadowed" />
                   </Tooltip>
                 ) : null}
@@ -434,7 +434,7 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                 </Button>
               </Stack>
               <Typography variant="caption" color="text.secondary" noWrap>
-                {`id: ${install.$id} · shared with every host in the org`}
+                {`id: ${install.$id} · shared with every site in the org`}
               </Typography>
             </Stack>
           )

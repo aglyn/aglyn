@@ -178,7 +178,7 @@ export function OrgMembersCard() {
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'Owners and admins manage the whole organization; editors and ' +
-            'viewers can be limited to specific hosts.'}
+            'viewers can be limited to specific sites.'}
         </Typography>
         {canManage ? (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
@@ -210,7 +210,7 @@ export function OrgMembersCard() {
                   onChange={(event) => setAllHosts(event.target.checked)}
                 />
               }
-              label="All hosts"
+              label="All sites"
             />
             <Button
               variant="contained"
@@ -267,7 +267,7 @@ export function OrgMembersCard() {
                 </TableCell>
                 <TableCell>
                   {member.role === 'owner' || member.role === 'admin' ? (
-                    'All hosts'
+                    'All sites'
                   ) : canManage ? (
                     <Button
                       size="small"
@@ -283,13 +283,13 @@ export function OrgMembersCard() {
                       }
                     >
                       {member.allHosts
-                        ? 'All hosts'
-                        : `${Object.keys(member.hostAccess ?? {}).length} host(s)`}
+                        ? 'All sites'
+                        : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
                     </Button>
                   ) : member.allHosts ? (
-                    'All hosts'
+                    'All sites'
                   ) : (
-                    `${Object.keys(member.hostAccess ?? {}).length} host(s)`
+                    `${Object.keys(member.hostAccess ?? {}).length} site(s)`
                   )}
                 </TableCell>
                 <TableCell align="right">
@@ -300,7 +300,7 @@ export function OrgMembersCard() {
                       onClick={() =>
                         void confirm({
                           title: 'Remove member?',
-                          description: `${member.email ?? member.$id} loses access to every host in this organization.`,
+                          description: `${member.email ?? member.$id} loses access to every site in this organization.`,
                         }).then(async (accepted) => {
                           if (!accepted) return
                           const ok = await request('/api/orgs/members', 'POST', {
@@ -371,7 +371,7 @@ export function OrgMembersCard() {
                 }
               />
             }
-            label={`All hosts (as ${accessDraft?.role ?? 'member'})`}
+            label={`All sites (as ${accessDraft?.role ?? 'member'})`}
           />
           {accessDraft?.allHosts
             ? null

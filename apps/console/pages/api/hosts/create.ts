@@ -78,7 +78,7 @@ export default async function handler(
     if (!membership.permissions.createHosts) {
       return res
         .status(403)
-        .json({ error: 'Your team role does not allow creating hosts' })
+        .json({ error: 'Your team role does not allow creating sites' })
     }
     // Org resolution (AGL-233): hosts belong to an organization. The org
     // comes from the request (workspace context) or the user's first org,
@@ -99,7 +99,7 @@ export default async function handler(
     if (!canManageOrg(orgMembership.member.role)) {
       return res
         .status(403)
-        .json({ error: 'Your organization role does not allow creating hosts' })
+        .json({ error: 'Your organization role does not allow creating sites' })
     }
     const firestore = firebaseAdmin.app().firestore()
 
@@ -143,8 +143,8 @@ export default async function handler(
       if (!quota.allowed) {
         return res.status(403).json({
           error:
-            `Host limit reached (${quota.limit}) — upgrade or add extra ` +
-            'hosts from Billing',
+            `Site limit reached (${quota.limit}) — upgrade or add extra ` +
+            'sites from Billing',
         })
       }
     }
@@ -170,6 +170,6 @@ export default async function handler(
     return res.status(200).json({ hostId, orgId: orgMembership.orgId })
   } catch (error) {
     console.error(error)
-    return res.status(500).json({ error: 'Host creation failed' })
+    return res.status(500).json({ error: 'Site creation failed' })
   }
 }

@@ -64,7 +64,7 @@ export default async function handler(
     const hostSnapshot = await hostRef.get()
     const host = hostSnapshot.data()
     if (!host || host['admins']?.[decoded.uid] !== true) {
-      return res.status(403).json({ error: 'Not a host admin' })
+      return res.status(403).json({ error: 'Not a site admin' })
     }
     const membersRef = hostRef.collection('members')
 
