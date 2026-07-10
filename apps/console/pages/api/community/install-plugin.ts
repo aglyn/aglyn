@@ -67,8 +67,25 @@ export default async function handler(
       return res.status(404).json({ error: 'Unknown host' })
     }
     const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (!admins[decoded.uid] && !['admin', 'editor'].includes(memberRole)) {
       return res.status(403).json({ error: 'Not a host admin' })
+    }
+
+    // Org-tier uninstall (AGL-237): org pins are API-managed (rules deny
+    // client writes), so removal comes through here too.
+    if (req.body?.action === 'uninstall' && req.body?.scope === 'org') {
+      const orgId = await resolveOrgIdForHost(hostId)
+      if (!orgId) {
+        return res.status(409).json({ error: 'Host has no organization yet' })
+      }
+      await firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection('installs')
+        .doc(listingId)
+        .delete()
+      return res.status(200).json({ ok: true })
     }
 
     const listingRef = firestore

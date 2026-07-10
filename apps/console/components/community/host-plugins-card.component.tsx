@@ -39,6 +39,7 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import useHostOrgId from '../../hooks/use-host-org-id'
 
 export interface HostPluginsCardProps {
   hostId: string
@@ -61,18 +62,40 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   const { confirm } = useConfirmationContext()
   const [busy, setBusy] = useState<string | null>(null)
 
+  const orgId = useHostOrgId(hostId)
   const { data: installDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
     [firestore, hostId],
     { idField: '$id' },
+  )
+  // Org-tier pins (AGL-237): apply to every host in the org; a host pin
+  // of the same listing shadows the org one.
+  const { data: orgInstallDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'orgs', orgId ?? '-pending-', 'installs'),
+        limit(50),
+      ),
+    [firestore, orgId],
+    { idField: '$id' },
+  )
+  const orgInstalls = useMemo(
+    () => [...((orgInstallDocs as any[]) ?? [])],
+    [orgInstallDocs],
   )
   const installs = useMemo(
     () => [...((installDocs as any[]) ?? [])],
     [installDocs],
   )
   const listingIds = useMemo(
-    () => installs.map((install) => install.$id).slice(0, 10),
-    [installs],
+    () =>
+      [
+        ...new Set([
+          ...installs.map((install) => install.$id),
+          ...orgInstalls.map((install) => install.$id),
+        ]),
+      ].slice(0, 10),
+    [installs, orgInstalls],
   )
 
   // Latest published version per listing (upgrade detection) — public read.
@@ -150,6 +173,102 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
     [hostId, user, enqueueSnackbar],
   )
 
+  const requestPluginApi = useCallback(
+    async (body: Record<string, unknown>) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/community/install-plugin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ hostId, ...body }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        enqueueSnackbar(payload?.error ?? 'Plugin operation failed', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+        return null
+      }
+      return payload
+    },
+    [hostId, user, enqueueSnackbar],
+  )
+
+  // Promote a host pin to the org tier (AGL-237): org pin first, then the
+  // host pin is removed — host pins shadow org ones in the loader.
+  const handleShareWithOrg = useCallback(
+    (install: any) => async () => {
+      setBusy(install.$id)
+      try {
+        const payload = await requestPluginApi({
+          listingId: install.$id,
+          scope: 'org',
+        })
+        if (!payload) return
+        await deleteDoc(doc(firestore, 'hosts', hostId, 'installs', install.$id))
+        enqueueSnackbar('Plugin now installed for the whole organization', {
+          variant: 'success',
+          persist: false,
+        })
+      } finally {
+        setBusy(null)
+      }
+    },
+    [requestPluginApi, firestore, hostId, enqueueSnackbar],
+  )
+
+  const handleOrgUpgrade = useCallback(
+    (install: any) => async () => {
+      setBusy(install.$id)
+      try {
+        const payload = await requestPluginApi({
+          listingId: install.$id,
+          scope: 'org',
+        })
+        if (payload) {
+          enqueueSnackbar(`Upgraded to ${payload.version}`, {
+            variant: 'success',
+            persist: false,
+          })
+        }
+      } finally {
+        setBusy(null)
+      }
+    },
+    [requestPluginApi, enqueueSnackbar],
+  )
+
+  const handleOrgUninstall = useCallback(
+    (install: any) => async () => {
+      const confirmed = await confirm({
+        title: `Uninstall "${install.displayName ?? install.$id}" org-wide?`,
+        description:
+          'Every site in the organization loses this plugin unless it has ' +
+          'its own host-level pin.',
+        confirmationText: 'Uninstall',
+        confirmationButtonProps: { color: 'error' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      const payload = await requestPluginApi({
+        listingId: install.$id,
+        scope: 'org',
+        action: 'uninstall',
+      })
+      if (payload) {
+        enqueueSnackbar('Plugin uninstalled org-wide', {
+          variant: 'success',
+          persist: false,
+        })
+      }
+    },
+    [confirm, requestPluginApi, enqueueSnackbar],
+  )
+
   const handleUninstall = useCallback(
     (install: any) => async () => {
       const confirmed = await confirm({
@@ -218,6 +337,18 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
                       {`Upgrade to v${latest}`}
                     </Button>
                   ) : null}
+                  {orgId &&
+                  !orgInstalls.some((entry) => entry.$id === install.$id) ? (
+                    <Tooltip title="Install for every site in the organization and remove this site's own pin">
+                      <Button
+                        size="small"
+                        disabled={busy === install.$id}
+                        onClick={handleShareWithOrg(install)}
+                      >
+                        {'Share with org'}
+                      </Button>
+                    </Tooltip>
+                  ) : null}
                   <Button
                     size="small"
                     color="error"
@@ -259,6 +390,55 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
             )
           })
         )}
+        {orgInstalls.map((install) => {
+          const latest = latestByListing[install.$id]
+          const canUpgrade = latest && latest !== install.version
+          const shadowed = installs.some((entry) => entry.$id === install.$id)
+          return (
+            <Stack
+              key={`org-${install.$id}`}
+              spacing={0.5}
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                p: 1.5,
+              }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                  {install.displayName ?? install.pluginId ?? install.$id}
+                </Typography>
+                <Chip size="small" color="secondary" label="Organization" />
+                <Chip size="small" label={`v${install.version}`} />
+                {shadowed ? (
+                  <Tooltip title="This site has its own pin, which takes precedence here">
+                    <Chip size="small" variant="outlined" label="shadowed" />
+                  </Tooltip>
+                ) : null}
+                {canUpgrade ? (
+                  <Button
+                    size="small"
+                    disabled={busy === install.$id}
+                    onClick={handleOrgUpgrade(install)}
+                  >
+                    {`Upgrade to v${latest}`}
+                  </Button>
+                ) : null}
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={handleOrgUninstall(install)}
+                >
+                  {'Uninstall'}
+                </Button>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {`id: ${install.$id} · shared with every site in the org`}
+              </Typography>
+            </Stack>
+          )
+        })}
         <Typography variant="caption" color="text.secondary">
           {`Place a plugin on a screen with the Plugin element (component id ` +
             `"${PLUGIN_COMPONENT_ID}"), set to the listing id above.`}
