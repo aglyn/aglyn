@@ -30,9 +30,12 @@ import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
 import { OrgWorkspaceProvider } from '../../hooks/use-org-workspace'
+import useSessionCookie from '../../hooks/use-session-cookie'
 import { ReleaseFlagsProvider } from '../../hooks/use-release-flags'
 
 function AnalyticsGlobalEvents({ children }) {
+  // Cross-subdomain session cookie sync (AGL-236).
+  useSessionCookie()
   const analytics = useAnalytics()
   const router = useRouter()
   const pathname = usePathname()
