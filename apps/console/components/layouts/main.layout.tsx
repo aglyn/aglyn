@@ -65,7 +65,7 @@ import { useColorScheme } from '@mui/material/styles'
 import { Fragment, useMemo } from 'react'
 import { Route } from '../../constants/route-links'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
-import HostSwitcherNavComponent from '../host-switcher-nav.component'
+import OrgSwitcherNav from '../org-switcher-nav.component'
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
@@ -406,10 +406,11 @@ export function MainLayout(props: MainLayoutProps) {
           actionsPrefix={actionsPrefix}
           centerNavigationItems={centerNavigationItems || []}
           customCenter={
-            // Default center nav is the host-switcher dropdown (AGL-36);
-            // pages that pass their own nav items or custom center keep them.
+            // Default center nav is the ORG switcher (AGL-236 — swapped
+            // with the host switcher, which now lives in the secondary
+            // bar); pages passing their own nav items or center keep them.
             customCenter ??
-            (centerNavigationItems ? undefined : <HostSwitcherNavComponent />)
+            (centerNavigationItems ? undefined : <OrgSwitcherNav />)
           }
           appBarSuffix={appBarSuffix}
           quickActions={[
