@@ -64,6 +64,7 @@ import MainLayout from '../../../components/layouts/main.layout'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
+import useHostOrgId from '../../../hooks/use-host-org-id'
 import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 const SOURCE_LABELS: Record<ContactSource, string> = {
@@ -88,6 +89,12 @@ const csvEscape = (value: unknown) => {
  */
 const HostContacts: NextPageWithLayout = () => {
   const hostId = useHostId()
+  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // fallback for hosts not yet org-wired.
+  const hostOrgId = useHostOrgId(hostId)
+  const dataScope = hostOrgId
+    ? (['orgs', hostOrgId] as const)
+    : (['hosts', hostId] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -95,8 +102,8 @@ const HostContacts: NextPageWithLayout = () => {
 
   const { data: contactDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'contacts'), limit(1000)),
-    [firestore, hostId],
+      query(collection(firestore, dataScope[0], dataScope[1], 'contacts'), limit(1000)),
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const contacts: ContactDoc[] = useMemo(
@@ -112,10 +119,10 @@ const HostContacts: NextPageWithLayout = () => {
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
       query(
-        collection(firestore, 'hosts', hostId, 'contactSegments'),
+        collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
         limit(50),
       ),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
@@ -156,7 +163,7 @@ const HostContacts: NextPageWithLayout = () => {
     const name = segmentName.trim().slice(0, 60)
     if (!name || !filterActive) return
     try {
-      await addDoc(collection(firestore, 'hosts', hostId, 'contactSegments'), {
+      await addDoc(collection(firestore, dataScope[0], dataScope[1], 'contactSegments'), {
         name,
         tags: filterSegment.tags ?? [],
         sources: filterSegment.sources ?? [],
@@ -212,7 +219,7 @@ const HostContacts: NextPageWithLayout = () => {
       .catch(() => false)
     if (!confirmed) return
     try {
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'contacts', selectedId))
+      await deleteDoc(doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId))
       setSelectedId(null)
       enqueueSnackbar('Contact deleted', {
         variant: 'success',
@@ -239,7 +246,7 @@ const HostContacts: NextPageWithLayout = () => {
       ),
     ]
     try {
-      await updateDoc(doc(firestore, 'hosts', hostId, 'contacts', selectedId), {
+      await updateDoc(doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId), {
         tags,
         notes: notesDraft.slice(0, 2000),
       })
@@ -371,8 +378,8 @@ const HostContacts: NextPageWithLayout = () => {
                         deleteDoc(
                           doc(
                             firestore,
-                            'hosts',
-                            hostId,
+                            dataScope[0],
+                            dataScope[1],
                             'contactSegments',
                             segment.$id,
                           ),
