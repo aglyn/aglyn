@@ -76,7 +76,10 @@ function toFieldId(name: string, taken: Set<string>): string | null {
 }
 
 export interface DatasetSchemaDialogProps {
-  hostId: string
+  /** Host context; resolves the owning org for the data scope. */
+  hostId?: string
+  /** Direct org scope (AGL-239): wins over `hostId` resolution when set. */
+  orgId?: string
   dataset: {
     $id: string
     displayName?: string
@@ -107,12 +110,13 @@ export interface DatasetSchemaDialogProps {
  */
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { hostId, dataset, datasets, recordCount, onClose } = props
-  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // Org-shared data root (AGL-237/239); the host path is the pre-migration
   // fallback for hosts not yet org-wired.
-  const hostOrgId = useHostOrgId(hostId)
-  const dataScope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  const hostOrgId = useHostOrgId(props.orgId ? undefined : hostId)
+  const orgId = props.orgId ?? hostOrgId
+  const dataScope = orgId
+    ? (['orgs', orgId] as const)
+    : (['hosts', hostId ?? '-none-'] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -276,7 +280,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
       .catch(() =>
         enqueueSnackbar('An error has occurred', { variant: 'error' }),
       )
-  }, [dataset, model, names, firestore, hostId, enqueueSnackbar, onClose])
+  }, [dataset, model, names, firestore, hostId, orgId, enqueueSnackbar, onClose])
 
   const editorDefinition = fieldEditor?.definition
 

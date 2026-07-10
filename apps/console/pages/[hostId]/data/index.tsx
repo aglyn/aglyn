@@ -18,6 +18,7 @@
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { Alert, Button, Stack } from '@mui/material'
 import HostDatasetsCard from '../../../components/host-datasets-card.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import FeatureGate from '../../../components/feature-gate.component'
@@ -58,7 +59,24 @@ const HostData: NextPageWithLayout = () => {
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <FeatureGate flag="release_data_store">
-            <HostDatasetsCard hostId={hostId} />
+            <Stack spacing={2}>
+              <Alert
+                severity="info"
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    href={buildRoute(Route.ORG_DATA)}
+                  >
+                    {'Open organization data'}
+                  </Button>
+                }
+              >
+                {'Datasets belong to your organization and are shared ' +
+                  'across every site — changes here apply to all of them.'}
+              </Alert>
+              <HostDatasetsCard hostId={hostId} />
+            </Stack>
           </FeatureGate>
         </Container>
       </DashboardLayout>

@@ -10,6 +10,12 @@ description: Model structured content with typed fields and relations, then bind
 it. Screens read from datasets to render dynamic, repeatable content, and
 [forms](../forms/overview.md) write new records back in.
 
+Datasets belong to your **organization**, not to a single site — every site in the
+organization shares the same collections. Manage them from the organization **Data**
+page (next to Media in the organization tabs), or from any site's Data page; both edit
+the same data. Dataset limits, storage, and add-ons are billed at the organization
+level.
+
 ![The Data page in the Aglyn console, showing the empty state with an "Add dataset" button — datasets are created here, then repeated over with `{{item.field}}` bindings](/img/datasets/data-page.png)
 
 ```mermaid

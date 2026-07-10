@@ -77,23 +77,30 @@ import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 
 export interface HostDatasetsCardProps {
-  hostId: string
+  /** Host context: resolves the owning org and logs host activity. */
+  hostId?: string
+  /**
+   * Direct org scope (AGL-239): the org Data page renders the editor
+   * without any host context. Wins over `hostId` resolution when set.
+   */
+  orgId?: string
 }
 
 /**
- * Datasets editor (AGL-102): tabular data at `hosts/{hostId}/datasets` with
- * a `records` subcollection, consumed by repeatable components (AGL-103)
- * via `{{item.field}}`. Starter+ (`data-store` flag) with per-plan dataset
- * and record caps — dark-launch rule as everywhere (no plan, no gate).
+ * Datasets editor (AGL-102): org-shared document collections at
+ * `orgs/{orgId}/datasets` (AGL-237/239) with a `records` subcollection,
+ * consumed by repeatable components (AGL-103) via `{{item.field}}`.
+ * Starter+ (`data-store` flag) with per-plan dataset and record caps —
+ * dark-launch rule as everywhere (no plan, no gate). The host path is
+ * the pre-migration fallback for hosts not yet org-wired.
  */
 export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const { hostId } = props
-  // Org-shared data root (AGL-237); the host path is the pre-migration
-  // fallback for hosts not yet org-wired.
-  const hostOrgId = useHostOrgId(hostId)
-  const dataScope = hostOrgId
-    ? (['orgs', hostOrgId] as const)
-    : (['hosts', hostId] as const)
+  const hostOrgId = useHostOrgId(props.orgId ? undefined : hostId)
+  const orgId = props.orgId ?? hostOrgId
+  const dataScope = orgId
+    ? (['orgs', orgId] as const)
+    : (['hosts', hostId ?? '-none-'] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -102,7 +109,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
 
   const { data: datasetDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, dataScope[0], dataScope[1], 'datasets'), limit(100)),
-    [firestore, hostId, hostOrgId],
+    [firestore, hostId, orgId],
     { idField: '$id' },
   )
   const datasets = useMemo(
@@ -137,7 +144,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         ),
         limit(500),
       ),
-    [firestore, hostId, hostOrgId, selected?.$id],
+    [firestore, hostId, orgId, selected?.$id],
     { idField: '$id' },
   )
   const records = useMemo(
@@ -211,7 +218,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       id,
       name: creator.name.trim(),
     })
-  }, [creator, creatorFields, firestore, hostId, enqueueSnackbar, logActivity])
+  }, [creator, creatorFields, firestore, hostId, orgId, enqueueSnackbar, logActivity])
 
   // Join collection template (AGL-180): extrinsic many-to-many as a
   // visible, editable collection of FKey pairs — no magic.
@@ -247,7 +254,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [joiner, datasets, firestore, hostId, enqueueSnackbar])
+  }, [joiner, datasets, firestore, hostId, orgId, enqueueSnackbar])
 
   const handleDeleteDataset = useCallback(async () => {
     if (!selected) return
@@ -280,6 +287,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     confirm,
     firestore,
     hostId,
+    orgId,
     enqueueSnackbar,
     logActivity,
   ])
@@ -340,7 +348,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     return () => {
       active = false
     }
-  }, [model, datasets, firestore, hostId])
+  }, [model, datasets, firestore, hostId, orgId])
   const referenceLabel = useCallback(
     (fieldId: string, value: unknown): string => {
       const options = refOptions[fieldId] ?? []
@@ -445,6 +453,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     selected,
     firestore,
     hostId,
+    orgId,
     model,
     records.length,
     enqueueSnackbar,
@@ -525,7 +534,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       )
       enqueueSnackbar('Record deleted', { variant: 'success', persist: false })
     },
-    [selected, datasets, firestore, hostId, enqueueSnackbar],
+    [selected, datasets, firestore, hostId, orgId, enqueueSnackbar],
   )
 
   // CSV/JSON round-tripping (AGL-182) over the loaded window.
@@ -661,6 +670,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     records.length,
     firestore,
     hostId,
+    orgId,
     enqueueSnackbar,
     logActivity,
   ])
@@ -673,6 +683,12 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
+        {orgId ? (
+          <Typography variant="caption" color="text.secondary">
+            {'Datasets belong to your organization and are shared by all ' +
+              'of its sites.'}
+          </Typography>
+        ) : null}
         {datasets.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'Create a dataset (e.g. Products) and repeat a component over ' +
@@ -1104,6 +1120,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       </Dialog>
       <DatasetSchemaDialog
         hostId={hostId}
+        orgId={orgId ?? undefined}
         dataset={schemaOpen && selected ? selected : null}
         datasets={datasets}
         recordCount={records.length}

@@ -44,7 +44,7 @@ export interface HostActivityTarget {
  * an audit miss must not break the edit that triggered it. Covered by the
  * host-admin wildcard rule, so no rules change is needed.
  */
-export function useHostActivityLogger(hostId: string) {
+export function useHostActivityLogger(hostId: string | undefined) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   return useCallback(

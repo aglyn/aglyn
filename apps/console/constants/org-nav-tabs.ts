@@ -39,6 +39,11 @@ export function orgNavTabItems() {
       href: buildRoute(Route.ORG_MEDIA),
     },
     {
+      id: 'nav-tab-org-data',
+      label: 'Data',
+      href: buildRoute(Route.ORG_DATA),
+    },
+    {
       id: 'nav-tab-org-billing',
       label: 'Billing',
       href: buildRoute(Route.MANAGE_BILLING),

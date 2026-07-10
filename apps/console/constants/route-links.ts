@@ -23,6 +23,7 @@ export enum Route {
   ADMIN_USERS = '/admin/users',
   ADMIN_FLAGS = '/admin/flags',
   ORG_MEDIA = '/org/media',
+  ORG_DATA = '/org/data',
   ORG_SETTINGS = '/org/settings',
   MANAGE_BILLING = '/org/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
@@ -75,6 +76,7 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.ADMIN_USERS]: undefined
   [Route.ADMIN_FLAGS]: undefined
   [Route.ORG_MEDIA]: undefined
+  [Route.ORG_DATA]: undefined
   [Route.ORG_SETTINGS]: undefined
   [Route.HOST_COMMUNITY]: { hostId: string }
   [Route.HOST_COMMUNITY_LISTING]: { hostId: string; listingId: string }
