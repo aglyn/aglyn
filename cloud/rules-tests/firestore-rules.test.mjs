@@ -232,6 +232,43 @@ describe('hosts', () => {
   })
 })
 
+describe('org-shared data (AGL-237)', () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1'), { name: 'Team' })
+      await setDoc(doc(db, 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1'), { a: 1 })
+      await setDoc(doc(db, 'orgs', ORG, 'contacts', 'c1'), { email: 'x@y.z' })
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'm1'), { url: 'u' })
+      await setDoc(doc(db, 'orgs', ORG, 'installs', 'p1'), { version: '1' })
+    })
+  })
+
+  it('members read; editors write datasets/contacts; viewers stay read-only', async () => {
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1')))
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')))
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
+    await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'datasets', 'ds1')))
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r2'), { a: 2 }),
+    )
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c3'), { email: 'v@y.z' }),
+    )
+  })
+
+  it('media and installs are member-read, API-write only', async () => {
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'media', 'm1')))
+    await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'installs', 'p1')))
+    await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'media', 'm1')))
+    await assertFails(setDoc(doc(authed(OWNER), 'orgs', ORG, 'media', 'm2'), { url: 'x' }))
+    await assertFails(setDoc(doc(authed(OWNER), 'orgs', ORG, 'installs', 'p2'), { version: '2' }))
+  })
+})
+
 describe('tenants (billing v1 fallback)', () => {
   it('owner reads own doc; others denied; client writes denied', async () => {
     await assertSucceeds(getDoc(doc(authed(OWNER), 'tenants', OWNER)))
