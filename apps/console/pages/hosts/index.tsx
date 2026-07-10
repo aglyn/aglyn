@@ -97,7 +97,7 @@ function HostsContent() {
         breadcrumbItems={[
           {
             children: 'Sites',
-            href: buildRoute(Route.MANAGE_ACCOUNT_SETTINGS),
+            href: buildRoute(Route.HOST_LIST),
           },
         ]}
         header={{

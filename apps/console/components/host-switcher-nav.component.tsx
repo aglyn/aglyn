@@ -117,6 +117,7 @@ function HostSwitcherMenu(props: { uid: string }) {
         aria-haspopup="menu"
         aria-expanded={anchorEl ? 'true' : undefined}
         onClick={handleOpen}
+        startIcon={<MdiIcon path={ICON_VARIANT_HOST.path} />}
         endIcon={<MdiIcon path={ICON_VARIANT_MENU_DOWN.path} />}
         sx={{
           maxWidth: 260,

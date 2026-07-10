@@ -49,9 +49,7 @@ const defaultTabBarTitle = (
       color: 'tertiary.main',
     }}
   >
-    <MdiIcon path={ICON_VARIANT_SYMBOL_SECURE.path} fontSize={'small'} />
     <HostSwitcherNavComponent />
-    {/*<span>{'Secure'}</span>*/}
   </Stack>
 )
 

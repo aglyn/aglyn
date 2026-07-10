@@ -201,10 +201,6 @@ const OrgSettings: NextPageWithLayout = () => {
         navTabItems={orgNavTabItems()}
         activeTab={buildRoute(Route.ORG_SETTINGS)}
         breadcrumbItems={[
-          {
-            children: currentOrg?.orgName ?? 'Organization',
-            href: buildRoute(Route.MANAGE_TEAM),
-          },
           { children: 'Settings', href: buildRoute(Route.ORG_SETTINGS) },
         ]}
         header={{

@@ -16,7 +16,6 @@
  */
 
 export enum Route {
-  MANAGE_ACCOUNT_SETTINGS = '/manage/account',
   ADMIN_ORGS = '/admin/orgs',
   ADMIN_ORG_DETAIL = '/admin/orgs/[orgId]',
   ADMIN_OVERVIEW = '/admin/overview',

@@ -17,8 +17,6 @@
 
 import {
   APP_CONSOLE,
-  ICON_VARIANT_APP_PREFERENCES,
-  ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_SIGN_OUT,
@@ -416,28 +414,30 @@ export function MainLayout(props: MainLayoutProps) {
           appBarSuffix={appBarSuffix}
           quickActions={[
             ...(quickActions || []),
-            // Manage quick menu (AGL-110), trimmed to the user-scoped
-            // pages — Billing/Community/Team/Support live in the org tab
-            // strip now (AGL-236).
+            // Theme mode toggle, in the slot the "Manage" cog menu used to
+            // occupy (AGL-236 follow-up) — a direct click-to-cycle icon
+            // button rather than a single-item menu.
             {
-              title: 'Manage',
-              MenuProps: { dense: true, horizontalOrigin: 'right' },
-              icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-              'aria-label': 'manage',
-              items: [
-                {
-                  children: 'User settings',
-                  component: AppLink,
-                  href: Route.MANAGE_USER_SETTINGS,
-                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
-                },
-                {
-                  children: 'Account',
-                  component: AppLink,
-                  href: Route.MANAGE_ACCOUNT_SETTINGS,
-                  icon: { path: ICON_VARIANT_APP_PREFERENCES.path },
-                },
-              ],
+              title: `Theme mode: ${themeModeDisplayName}`,
+              onClick: () => {
+                // cycle: system/undefined → light → dark → system
+                setMode(
+                  mode === 'dark'
+                    ? 'system'
+                    : mode === 'light'
+                      ? 'dark'
+                      : 'light',
+                )
+              },
+              icon: {
+                path:
+                  mode === 'dark'
+                    ? ICON_VARIANT_THEME_DARK.path
+                    : mode === 'light'
+                      ? ICON_VARIANT_THEME_LIGHT.path
+                      : ICON_VARIANT_THEME_SYSTEM.path,
+              },
+              'aria-label': 'switch theme mode',
             },
             {
               title: 'Manage account',
@@ -454,29 +454,6 @@ export function MainLayout(props: MainLayoutProps) {
                 },
               },
               items: [
-                {
-                  onClick: () => {
-                    // cycle: system/undefined → light → dark → system
-                    setMode(
-                      mode === 'dark'
-                        ? 'system'
-                        : mode === 'light'
-                          ? 'dark'
-                          : 'light',
-                    )
-                  },
-                  // component: 'button',
-                  children: `Theme mode: ${themeModeDisplayName}`,
-                  icon: {
-                    path:
-                      mode === 'dark'
-                        ? ICON_VARIANT_THEME_DARK.path
-                        : mode === 'light'
-                          ? ICON_VARIANT_THEME_LIGHT.path
-                          : ICON_VARIANT_THEME_SYSTEM.path,
-                  },
-                  'aria-label': 'switch theme mode',
-                },
                 {
                   children: 'Settings',
                   component: AppLink,

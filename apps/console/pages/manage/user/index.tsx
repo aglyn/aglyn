@@ -46,7 +46,6 @@ import AuthenticatedLayout from '../../../components/layouts/authenticated.layou
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
 import { buildRoute, Route } from '../../../constants/route-links'
-import settingsNavTabItems from '../../../constants/settings-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useFirestoreDoc from '../../../hooks/use-firestore-doc'
 
@@ -149,11 +148,11 @@ const ManageUser: NextPageWithLayout = (props) => {
     <>
       <NextPageTitle screen={'Settings'} />
       <DashboardLayout
-        navTabItems={settingsNavTabItems()}
+        navTabItems={[]}
         breadcrumbItems={[
           {
             children: 'Settings',
-            href: buildRoute(Route.MANAGE_ACCOUNT_SETTINGS),
+            href: buildRoute(Route.MANAGE_USER_SETTINGS),
           },
         ]}
         header={{

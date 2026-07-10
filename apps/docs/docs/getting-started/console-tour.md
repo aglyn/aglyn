@@ -18,8 +18,8 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   the editor.
 - **Version dropdown** (right, near your avatar) — pick or schedule a
   [version](../screens-and-layouts/overview.md#versions--scheduled-publishing) to view.
-- **Manage menu** — quick access to site-level management actions.
-- **Account menu** — billing, community profile, and sign-out.
+- **Theme toggle** — cycle between light, dark, and system display mode.
+- **Account menu** — settings, billing, community profile, and sign-out.
 
 ## Primary navigation
 
