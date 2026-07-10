@@ -181,6 +181,23 @@ export async function resolveOrgIdForHost(
   return typeof orgId === 'string' ? orgId : null
 }
 
+/**
+ * Org-scoped data collection for a host (AGL-237): datasets, contacts and
+ * contactSegments live on the org so every host shares them. Falls back
+ * to the host's own subcollection for hosts not yet org-wired (pre-
+ * migration safety) — callers use the returned ref for reads AND writes
+ * so both sides stay consistent either way.
+ */
+export async function orgDataCollectionForHost(
+  hostId: string,
+  name: 'datasets' | 'contacts' | 'contactSegments',
+): Promise<FirebaseFirestore.CollectionReference> {
+  const orgId = await resolveOrgIdForHost(hostId)
+  return orgId
+    ? firestore().collection('orgs').doc(orgId).collection(name)
+    : firestore().collection('hosts').doc(hostId).collection(name)
+}
+
 export async function listOrgMembers(
   orgId: string,
 ): Promise<AglynOrgMember[]> {

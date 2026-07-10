@@ -24,9 +24,10 @@ import {
 } from '@aglyn/aglyn'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
+import { orgDataCollectionForHost } from './organizations'
 
 /**
- * Contacts ingestion (AGL-197): upserts a `hosts/{hostId}/contacts` doc
+ * Contacts ingestion (AGL-197): upserts an org-scoped contact doc (AGL-237)
  * keyed by normalized email from any capture point (forms, membership,
  * orders, bookings). Fire-and-forget by design — callers should never
  * fail their primary write because contact capture had a problem.
@@ -47,6 +48,12 @@ export async function upsertHostContact(options: {
     if (!email) return
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(options.hostId)
+    // Contacts are org-scoped (AGL-237): every host in the org feeds one
+    // shared list; hostId is stamped per contact for provenance.
+    const contactsRef = await orgDataCollectionForHost(
+      options.hostId,
+      'contacts',
+    )
     const interaction: ContactInteraction = {
       type: options.source,
       atMs: options.interaction.atMs ?? Date.now(),
@@ -58,8 +65,7 @@ export async function upsertHostContact(options: {
         : {}),
     }
 
-    const existing = await hostRef
-      .collection('contacts')
+    const existing = await contactsRef
       .where('email', '==', email)
       .limit(1)
       .get()
@@ -96,9 +102,7 @@ export async function upsertHostContact(options: {
     const limit = resolveTenantEntitlements(
       tenantSnapshot?.exists ? (tenantSnapshot.data() as any) : null,
     ).contactsPerHost
-    const count = (
-      await hostRef.collection('contacts').count().get()
-    ).data().count
+    const count = (await contactsRef.count().get()).data().count
     if (count >= limit) {
       await hostRef
         .collection('counters')
@@ -107,7 +111,8 @@ export async function upsertHostContact(options: {
       return
     }
 
-    await hostRef.collection('contacts').add({
+    await contactsRef.add({
+      hostId: options.hostId,
       email,
       ...(options.name ? { name: options.name.slice(0, 120) } : {}),
       sources: { [options.source]: true },

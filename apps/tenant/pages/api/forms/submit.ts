@@ -16,7 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  orgDataCollectionForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { extractEmailFromFields } from '@aglyn/aglyn'
 import { upsertHostContact } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -146,8 +147,11 @@ export default async function handler(
       .slice(0, 60)
     if (datasetName) {
       try {
-        const datasetsSnapshot = await hostRef
-          .collection('datasets')
+        // Org-scoped datasets (AGL-237): the form's named dataset
+        // resolves against the org so every host shares it.
+        const datasetsSnapshot = await (
+          await orgDataCollectionForHost(hostId, 'datasets')
+        )
           .where('name', '==', datasetName)
           .limit(1)
           .get()

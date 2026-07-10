@@ -31,7 +31,8 @@ import {
   runWorkflow,
   sanitizeRecordValues,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  orgDataCollectionForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { HostEventPayload } from './run-event-workflows'
@@ -228,8 +229,9 @@ export async function runEventActions(
               stepErrors.push(`webhook "${step.webhookName}" delivery failed`)
             }
           } else if (step.type === 'datasetAppend') {
-            const datasets = await hostRef
-              .collection('datasets')
+            const datasets = await (
+              await orgDataCollectionForHost(hostId, 'datasets')
+            )
               .where('name', '==', step.datasetName.trim())
               .limit(1)
               .get()

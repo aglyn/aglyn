@@ -67,8 +67,34 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Org-shared resources (media, datasets, plugin installs) land here
-      // in AGL-237; scoped rules ship with that move.
+      // Org-shared data (AGL-237): datasets (records included), contacts
+      // and segments are shared across every host in the org. Any member
+      // reads; editors and up write; viewers stay read-only. Suspension
+      // rides the member doc like org renames.
+      function canWriteOrgData() {
+        return isOrgMember() &&
+          orgMember().role in ['owner', 'admin', 'editor'] &&
+          orgNotSuspended();
+      }
+      match /datasets/{datasetId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() || canWriteOrgData();
+        match /records/{recordId} {
+          allow read: if isStaff() || isOrgMember();
+          allow write: if isStaff() || canWriteOrgData();
+        }
+      }
+      match /contacts/{contactId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() || canWriteOrgData();
+      }
+      match /contactSegments/{segmentId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() || canWriteOrgData();
+      }
+
+      // Org media library and plugin installs follow with the remaining
+      // AGL-237 moves.
     }
 
     // Workspace-subdomain resolution ({slug}.aglyn.com): public read so

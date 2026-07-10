@@ -16,7 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  orgDataCollectionForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 export interface SearchResult {
   title: string
@@ -110,7 +111,11 @@ export async function searchContent(options: {
   // screen that repeats over the dataset — records only surface through
   // repeatables, so an un-navigable match would be noise. Version reads
   // happen lazily and only when a dataset actually matched.
-  const datasets = await hostRef.collection('datasets').limit(20).get()
+  const datasets = await (
+    await orgDataCollectionForHost(host.$id, 'datasets')
+  )
+    .limit(20)
+    .get()
   let screenVersionCache: Map<string, any> | null = null
   const loadVersions = async () => {
     if (screenVersionCache) return screenVersionCache

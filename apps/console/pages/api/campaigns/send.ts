@@ -20,7 +20,8 @@ import {
   contactMatchesSegment,
   createResourceUid,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  orgDataCollectionForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHash, createHmac } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -117,7 +118,7 @@ export default async function handler(
       // contacts collection server-side.
       const segmentId = String(req.body?.segmentId ?? '')
       const segmentSnapshot = segmentId
-        ? await hostRef.collection('contactSegments').doc(segmentId).get()
+        ? await (await orgDataCollectionForHost(hostId, 'contactSegments')).doc(segmentId).get()
         : null
       if (!segmentSnapshot?.exists) {
         return res.status(400).json({ error: 'Unknown segment' })
@@ -126,7 +127,7 @@ export default async function handler(
         tags: segmentSnapshot.get('tags') ?? [],
         sources: segmentSnapshot.get('sources') ?? [],
       }
-      const contacts = await hostRef.collection('contacts').limit(5000).get()
+      const contacts = await (await orgDataCollectionForHost(hostId, 'contacts')).limit(5000).get()
       recipients = contacts.docs
         .filter((doc) =>
           contactMatchesSegment(
