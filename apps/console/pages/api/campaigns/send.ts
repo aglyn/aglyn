@@ -82,7 +82,7 @@ export default async function handler(
   if (!hostId || !subject || !body) {
     return res.status(400).json({ error: 'Missing hostId, subject, or body' })
   }
-  if (!['leads', 'members', 'manual', 'segment'].includes(audience)) {
+  if (!['leads', 'members', 'manual', 'segment', 'list'].includes(audience)) {
     return res.status(400).json({ error: 'Unknown audience' })
   }
 
@@ -136,6 +136,18 @@ export default async function handler(
           ),
         )
         .map((doc) => String(doc.get('email') ?? ''))
+    } else if (audience === 'list') {
+      // Org lists (AGL-254): static audiences enrolled manually or by the
+      // enrollList automation step.
+      const listId = String(req.body?.listId ?? '')
+      const listRef = listId
+        ? (await orgDataCollectionForHost(hostId, 'contacts')).parent
+            ?.collection('lists')
+            .doc(listId)
+        : null
+      if (!listRef) return res.status(400).json({ error: 'Unknown list' })
+      const members = await listRef.collection('members').limit(5000).get()
+      recipients = members.docs.map((doc) => String(doc.get('email') ?? ''))
     } else {
       recipients = Array.isArray(req.body?.emails)
         ? req.body.emails.map((value: unknown) => String(value))

@@ -46,6 +46,7 @@ export type Entitlement =
   | 'screen-analytics'
   | 'marketing-overlays'
   | 'media-cdn'
+  | 'ab-testing'
 
 const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   versioning: 'versioning',
@@ -67,6 +68,7 @@ const FEATURE_KEYS: Record<Entitlement, keyof TenantFeatureFlags> = {
   'screen-analytics': 'screenAnalytics',
   'marketing-overlays': 'marketingOverlays',
   'media-cdn': 'mediaCdn',
+  'ab-testing': 'abTesting',
 }
 
 /**

@@ -73,6 +73,19 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
     String(a.name ?? '').localeCompare(String(b.name ?? '')),
   )
+  // Org email lists (AGL-254) join the audiences.
+  const { data: listDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, dataScope[0], dataScope[1], 'lists'),
+        limit(50),
+      ),
+    [firestore, hostId, hostOrgId],
+    { idField: '$id' },
+  )
+  const lists = [...(listDocs ?? [])].sort((a, b) =>
+    String(a.name ?? '').localeCompare(String(b.name ?? '')),
+  )
 
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
@@ -89,7 +102,9 @@ export function HostCampaignsCard(props: { hostId: string }) {
             ? 'lead'
             : audience === 'members'
               ? 'site member'
-              : 'contact in the segment'
+              : audience.startsWith('list:')
+                ? 'list subscriber'
+                : 'contact in the segment'
         } who hasn't unsubscribed.`,
       confirmationText: 'Send',
     })
@@ -109,9 +124,16 @@ export function HostCampaignsCard(props: { hostId: string }) {
           hostId,
           subject: subject.trim(),
           body: body.trim(),
-          audience: audience.startsWith('segment:') ? 'segment' : audience,
+          audience: audience.startsWith('segment:')
+            ? 'segment'
+            : audience.startsWith('list:')
+              ? 'list'
+              : audience,
           ...(audience.startsWith('segment:')
             ? { segmentId: audience.slice('segment:'.length) }
+            : {}),
+          ...(audience.startsWith('list:')
+            ? { listId: audience.slice('list:'.length) }
             : {}),
         }),
       })
@@ -174,6 +196,11 @@ export function HostCampaignsCard(props: { hostId: string }) {
             {segments.map((segment: any) => (
               <MenuItem key={segment.$id} value={`segment:${segment.$id}`}>
                 {`Segment: ${segment.name}`}
+              </MenuItem>
+            ))}
+            {lists.map((list: any) => (
+              <MenuItem key={list.$id} value={`list:${list.$id}`}>
+                {`List: ${list.name}`}
               </MenuItem>
             ))}
           </TextField>

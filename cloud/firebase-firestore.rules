@@ -107,6 +107,17 @@ service cloud.firestore {
         allow write: if isStaff() || canWriteOrgData();
       }
 
+      // Email lists (AGL-254): static audiences shared across the org's
+      // hosts; the enrollList automation step writes members server-side.
+      match /lists/{listId} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if isStaff() || canWriteOrgData();
+        match /members/{memberId} {
+          allow read: if isStaff() || isOrgMember();
+          allow write: if isStaff() || canWriteOrgData();
+        }
+      }
+
       // Org media library (AGL-237, full DAM parity): shareable with any
       // host in the org. Storage objects stay API-managed (upload/delete
       // routes enforce quota), but editors mutate the metadata docs the

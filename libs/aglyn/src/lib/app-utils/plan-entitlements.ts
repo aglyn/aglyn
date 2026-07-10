@@ -70,6 +70,7 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     recordsPerDataset: 0,
     dataStorageMbPerOrg: 0,
     features: {
+      abTesting: false,
       versioning: false,
       reusableComponents: false,
       customDomain: false,
@@ -118,6 +119,7 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     recordsPerDataset: 1000,
     dataStorageMbPerOrg: 1024,
     features: {
+      abTesting: false,
       versioning: false,
       reusableComponents: true,
       customDomain: true,
@@ -166,6 +168,7 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     recordsPerDataset: 10000,
     dataStorageMbPerOrg: 5120,
     features: {
+      abTesting: false,
       versioning: true,
       reusableComponents: true,
       customDomain: true,
@@ -214,6 +217,7 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     recordsPerDataset: 100000,
     dataStorageMbPerOrg: 25600,
     features: {
+      abTesting: true,
       versioning: true,
       reusableComponents: true,
       customDomain: true,

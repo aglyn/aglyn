@@ -89,6 +89,8 @@ export type TenantPlan = 'free' | 'starter' | 'pro' | 'business'
 
 /** Boolean feature gates per plan; quotas live beside them as numbers. */
 export interface TenantFeatureFlags {
+  /** A/B experiments (AGL-252); Business tier. */
+  abTesting?: boolean
   versioning?: boolean
   reusableComponents?: boolean
   customDomain?: boolean

@@ -20,8 +20,11 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import AnnouncementBarCard from '../../../components/announcement-bar-card.component'
+import HostCampaignsCard from '../../../components/host-campaigns-card.component'
+import HostExperimentsCard from '../../../components/host-experiments-card.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import HostOverlaysCard from '../../../components/host-overlays-card.component'
+import OrgListsCard from '../../../components/org-lists-card.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -75,6 +78,20 @@ const HostMarketing: NextPageWithLayout = () => {
               {
                 size: { xs: 12, md: 6 },
                 children: <PopupCard hostId={hostId} />,
+              },
+              // Email marketing (AGL-254): campaigns + org lists.
+              {
+                size: { xs: 12, md: 6 },
+                children: <HostCampaignsCard hostId={hostId} />,
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: <OrgListsCard hostId={hostId} />,
+              },
+              // A/B experiments (AGL-252).
+              {
+                size: { xs: 12 },
+                children: <HostExperimentsCard hostId={hostId} />,
               },
             ]}
           />

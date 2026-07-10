@@ -25,10 +25,22 @@ your plan.
 
 ## Send a campaign
 
-1. Build an **audience** — a set of contacts, including [segments](../contacts/overview.md#segments)
-   used as campaign audiences.
-2. Compose the campaign.
+1. Build an **audience** — leads, site members, [segments](../contacts/overview.md#segments),
+   or an **email list**.
+2. Compose the campaign from the **Marketing** page.
 3. Send — subject to your plan's **send cap**.
+
+## Email lists
+
+**Lists** are static audiences shared across your organization's sites. Create them on
+the Marketing page, then grow them with the **"Enroll in a list"** automation step (e.g.
+on form completion) or popup email capture. Target any list from the campaign composer.
+
+## Experiments
+
+Business plans can A/B test screens, sections, and emails from the **Experiments** card
+on the Marketing page: weighted variants, deterministic visitor assignment, a conversion
+goal, and per-variant exposure/conversion rates with a pick-the-winner flow.
 
 ## Compliance
 
