@@ -18,6 +18,7 @@
 import {
   firebaseAdmin,
   getOrgForHost,
+  notifyHostManagers,
   notifyOrgAdmins,
   resolveOrgMembership,
   upsertHostContact,
@@ -284,6 +285,16 @@ export default async function handler(
             ...(couponCode ? { couponCode } : {}),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
+        // In-app order notification (wave v6): host managers see sales
+        // in the bell, not just the owner's email.
+        void notifyHostManagers(String(hostId), {
+          type: 'content.order',
+          title: `New order — $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`,
+          ...(object?.customer_details?.email
+            ? { body: `From ${object.customer_details.email}` }
+            : {}),
+          link: `/${hostId}/products`,
+        })
         // Contacts ingestion (AGL-197): buyers become contacts.
         void upsertHostContact({
           hostId: String(hostId),
