@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Connect a domain
-description: Point your own domain at your Aglyn host with a CNAME and DNS verification.
+description: Point your own domain at your Aglyn site with a CNAME and DNS verification.
 ---
 
 # Connect a domain

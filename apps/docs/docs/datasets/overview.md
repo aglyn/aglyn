@@ -21,14 +21,14 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Pro**. Free hosts get a limited number of datasets; Pro and above raise the cap, and
+**Pro**. Free sites get a limited number of datasets; Pro and above raise the cap, and
 extra-dataset add-ons are available.
 :::
 
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,
-and more). The model comes from the host's `dod.ts` blueprint at runtime, so records are
+and more). The model comes from the site's `dod.ts` blueprint at runtime, so records are
 validated against it.
 
 ## Typed documents

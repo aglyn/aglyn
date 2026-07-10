@@ -12,12 +12,12 @@ visually in the **Besigner**, bind them to your own data, and publish to a fast,
 SEO-ready site — all without writing code.
 
 These docs teach you how to actually *use* Aglyn, feature by feature. If you're new,
-start with **[Getting Started](getting-started/create-a-host.md)**. If you're catching
+start with **[Getting Started](getting-started/create-a-site.md)**. If you're catching
 up on what shipped recently, see **[What's New](whats-new.md)**.
 
 ```mermaid
 flowchart TD
-  H[Host — your website] --> S[Screens]
+  H[Site — your website] --> S[Screens]
   H --> L[Layouts]
   H --> D[Data: datasets, variables, functions]
   H --> M[Media]
@@ -34,7 +34,7 @@ product clicks into place.
 
 | Concept | What it is |
 | --- | --- |
-| **Host** | Your website — its screens, theme, data, domain, and settings. You can own more than one. |
+| **Site** | Your website — its screens, theme, data, domain, and settings. You can own more than one. |
 | **Screen** | A page. Screens have a URL slug, live in a hierarchy, and are edited in the Besigner. |
 | **Layout** | A shared frame (header/footer/nav) that many screens render inside via a layout **slot**. |
 | **Besigner** | The visual editor. Drag components onto a canvas, arrange a hierarchy, and edit text inline. |
@@ -45,7 +45,7 @@ product clicks into place.
 
 ## How the docs are organized
 
-- **Getting Started** — create a host and publish your first screen.
+- **Getting Started** — create a site and publish your first screen.
 - **What's New** — the features shipped most recently, with links into each area.
 - **Feature areas** — one section per part of the product (Besigner, Datasets, Media,
   Commerce, and so on), each with an overview and task-based how-tos.
@@ -60,4 +60,4 @@ like the one below.
 notes what it needs.
 :::
 
-Ready? Head to **[Create your first host](getting-started/create-a-host.md)**.
+Ready? Head to **[Create your first site](getting-started/create-a-site.md)**.

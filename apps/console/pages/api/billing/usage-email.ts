@@ -71,35 +71,35 @@ export default async function handler(
   try {
     const firestore = firebaseAdmin.app().firestore()
     const auth = firebaseAdmin.app().auth()
-    const rollups = await firestore
-      .collectionGroup('usageRollups')
-      .where('month', '==', month)
-      .limit(1000)
-      .get()
+    // Org usage rollups (AGL-238): orgs/{orgId}/usage/{month}, emailed to
+    // the org owner's account address.
+    const orgsSnapshot = await firestore.collection('orgs').limit(1000).get()
 
     const results: Record<string, any> = {}
-    for (const rollup of rollups.docs) {
-      const tenantRef = rollup.ref.parent.parent
-      if (!tenantRef) continue
-      const tenantId = tenantRef.id
+    for (const orgDoc of orgsSnapshot.docs) {
+      const orgId = orgDoc.id
+      const rollup = await orgDoc.ref.collection('usage').doc(month).get()
+      if (!rollup.exists) continue
       if (rollup.get('emailedAt')) {
-        results[tenantId] = { skipped: 'already emailed' }
+        results[orgId] = { skipped: 'already emailed' }
         continue
       }
-      const tenantSnapshot = await tenantRef.get()
-      // Dark-launch rule: only tenants with an explicit plan get billing
+      // Dark-launch rule: only orgs with an explicit plan get billing
       // email; everyone else isn't metered in any user-visible way yet.
-      const plan = tenantSnapshot.get('plan')
+      const plan = orgDoc.get('plan')
       if (!plan) {
-        results[tenantId] = { skipped: 'no plan' }
+        results[orgId] = { skipped: 'no plan' }
         continue
       }
-      const email = await auth
-        .getUser(tenantId)
-        .then((user) => user.email)
-        .catch(() => undefined)
+      const ownerUid = String(orgDoc.get('ownerUid') ?? '')
+      const email = ownerUid
+        ? await auth
+            .getUser(ownerUid)
+            .then((user) => user.email)
+            .catch(() => undefined)
+        : undefined
       if (!email) {
-        results[tenantId] = { skipped: 'no email' }
+        results[orgId] = { skipped: 'no email' }
         continue
       }
 
@@ -132,17 +132,17 @@ export default async function handler(
         }),
       })
       if (!response.ok) {
-        console.error('usage email failed', tenantId, await response.text())
-        results[tenantId] = { sent: false }
+        console.error('usage email failed', orgId, await response.text())
+        results[orgId] = { sent: false }
         continue
       }
       await rollup.ref.set(
         { emailedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp() },
         { merge: true },
       )
-      results[tenantId] = { sent: true }
+      results[orgId] = { sent: true }
     }
-    return res.status(200).json({ month, tenants: results })
+    return res.status(200).json({ month, orgs: results })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Usage email failed' })

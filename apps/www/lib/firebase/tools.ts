@@ -16,6 +16,7 @@
  */
 
 import {createUid} from '@aglyn/shared-util-vendor'
+import type { Timestamp } from 'firebase-admin/firestore'
 import fbAdmin from './fb-admin'
 
 
@@ -23,6 +24,6 @@ export function createDocumentId(): string {
   return createUid(10)
 }
 
-export function createTimestamp(): fbAdmin.firestore.Timestamp {
+export function createTimestamp(): Timestamp {
   return fbAdmin.firestore.Timestamp.now()
 }

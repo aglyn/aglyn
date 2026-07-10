@@ -23,7 +23,6 @@ import { defineConfig } from 'vite'
 import dts from 'vite-plugin-dts'
 import svgr from 'vite-plugin-svgr'
 
-
 export default defineConfig({
   root: __dirname,
   cacheDir: '../../../../node_modules/.vite/shared-svg-icons-svg-icons',
@@ -66,7 +65,7 @@ export default defineConfig({
       // Don't forgot to update your package.json as well.
       formats: ['es', 'cjs'],
     },
-    rollupOptions: {
+    rolldownOptions: {
       // External packages that should not be bundled into your library.
       external: ['react', 'react-dom', 'react/jsx-runtime'],
     },

@@ -8,7 +8,7 @@ description: Aglyn's visual editor — canvas, hierarchy, inline text, multi-sel
 
 The **Besigner** is Aglyn's visual editor. You build a screen by placing components on a
 **canvas**, arranging them in a **hierarchy**, and editing content directly on the page.
-It renders your screen under the real host theme, so what you see matches what publishes.
+It renders your screen under the real site theme, so what you see matches what publishes.
 
 ![The Besigner editor: components drawer and hierarchy on the left, the live canvas in the center, and the inspector on the right](/img/besigner-surface.svg)
 
@@ -56,7 +56,7 @@ Every element on the canvas is a node in a tree. The hierarchy panel lets you:
 
 Promote any subtree into a **reusable component**, then insert instances of it across
 screens. Editing the source updates every instance at render time. You can rename, demote,
-or delete reusable components from the host dashboard. See
+or delete reusable components from the site dashboard. See
 [Reusable components](../screens-and-layouts/overview.md#reusable-components).
 
 ## AI in the canvas

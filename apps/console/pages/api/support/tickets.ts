@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
 
 const MAX_BODY = 5000
 
@@ -26,7 +25,8 @@ const MAX_BODY = 5000
  * messages with staff. Data lives at `supportTickets/{id}` + `messages` —
  * deliberately absent from the Firestore rules (default-deny), so every
  * read/write passes this route: paid-plan gate for subscribers, `staff`
- * claim for the support side. SLAs by tier come later.
+ * claim for the support side. Tickets are org-scoped (AGL-238): keyed by
+ * the caller's organization, whose doc carries the plan.
  */
 export default async function handler(
   req: NextApiRequest,
@@ -43,17 +43,15 @@ export default async function handler(
     const decoded = await app.auth().verifyIdToken(idToken)
     const firestore = app.firestore()
     const isStaff = Boolean(decoded['staff'])
-    // Team members act in the owner tenant (AGL-127).
-    const membership = await resolveTenantPermissions(decoded.uid)
-    const tenantId = membership.ownerUid
+    const resolved = await getOrgForUser(
+      decoded.uid,
+      String(req.query['orgId'] ?? req.body?.orgId ?? '') || null,
+    )
+    const orgId = resolved?.orgId ?? null
 
     // Paid gate for subscriber operations (staff bypasses).
-    const requirePaid = async () => {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const plan = tenantSnapshot.get('plan')
+    const requirePaid = () => {
+      const plan = resolved?.org?.plan
       return Boolean(plan && plan !== 'free')
     }
 
@@ -65,7 +63,11 @@ export default async function handler(
         const ticketSnapshot = await ticketsRef.doc(ticketId).get()
         const ticket = ticketSnapshot.data()
         if (!ticket) return res.status(404).json({ error: 'Unknown ticket' })
-        if (!isStaff && ticket['tenantId'] !== tenantId) {
+        if (
+          !isStaff &&
+          ticket['orgId'] !== orgId &&
+          ticket['tenantId'] !== decoded.uid
+        ) {
           return res.status(403).json({ error: 'Not your ticket' })
         }
         const messages = await ticketsRef
@@ -83,9 +85,10 @@ export default async function handler(
           })),
         })
       }
+      if (!isStaff && !orgId) return res.status(200).json({ tickets: [] })
       const listQuery = isStaff
         ? ticketsRef.orderBy('updatedAt', 'desc').limit(100)
-        : ticketsRef.where('tenantId', '==', tenantId).limit(100)
+        : ticketsRef.where('orgId', '==', orgId).limit(100)
       const snapshot = await listQuery.get()
       return res.status(200).json({
         tickets: snapshot.docs.map((doc) => ({
@@ -98,7 +101,7 @@ export default async function handler(
     }
 
     if (req.method === 'POST') {
-      if (!(await requirePaid())) {
+      if (!requirePaid()) {
         return res.status(403).json({
           error: 'Support tickets are for paid plans — see Billing',
         })
@@ -115,7 +118,7 @@ export default async function handler(
       const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
       const ticketRef = ticketsRef.doc()
       await ticketRef.set({
-        tenantId,
+        orgId,
         subject,
         status: 'open',
         createdAt: now,
@@ -137,7 +140,11 @@ export default async function handler(
       const ticketSnapshot = await ticketsRef.doc(ticketId).get()
       const ticket = ticketSnapshot.data()
       if (!ticket) return res.status(404).json({ error: 'Unknown ticket' })
-      if (!isStaff && ticket['tenantId'] !== tenantId) {
+      if (
+        !isStaff &&
+        ticket['orgId'] !== orgId &&
+        ticket['tenantId'] !== decoded.uid
+      ) {
         return res.status(403).json({ error: 'Not your ticket' })
       }
       const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()

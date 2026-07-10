@@ -56,7 +56,7 @@ import {
 } from 'firebase/firestore'
 import { Divider, Link as MuiLink } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'

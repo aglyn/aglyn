@@ -11,7 +11,7 @@ Your **plan** determines which features you can use and how much of each. Aglyn 
 and shows **usage meters** so you always know where you stand.
 
 :::info Plan availability
-Every host has a plan. **Free**, **Pro**, and **Business** unlock progressively more.
+Every site has a plan. **Free**, **Pro**, and **Business** unlock progressively more.
 :::
 
 ## Tiers & entitlements
@@ -30,7 +30,7 @@ Every host has a plan. **Free**, **Pro**, and **Business** unlock progressively 
 
 ## Seats
 
-- Team and host-member **seats** are metered and enforced per tier.
+- Team and site-member **seats** are metered and enforced per tier.
 - Buy **paid seat add-ons** to grow your team beyond the included seats.
 
 ## Payments

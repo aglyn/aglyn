@@ -6,19 +6,19 @@ description: Where things live in the Aglyn console app bar and navigation.
 
 # The console tour
 
-The **console** is where you manage a host. Here's what each part of the chrome does.
+The **console** is where you manage a site. Here's what each part of the chrome does.
 
-![The console app bar with the host switcher, breadcrumbs, screen switcher, version dropdown, and account menu labeled](/img/console-chrome.svg)
+![The console app bar with the site switcher, breadcrumbs, screen switcher, version dropdown, and account menu labeled](/img/console-chrome.svg)
 
 ## The app bar
 
-- **Host switcher** (left) — jump between the hosts you own, or create a new one.
-- **Breadcrumbs** — show the current host's display name and where you are.
+- **Site switcher** (left) — jump between the sites you own, or create a new one.
+- **Breadcrumbs** — show the current site's display name and where you are.
 - **Screen switcher** — a paginated dropdown for hopping between screens without leaving
   the editor.
 - **Version dropdown** (right, near your avatar) — pick or schedule a
   [version](../screens-and-layouts/overview.md#versions--scheduled-publishing) to view.
-- **Manage menu** — quick access to host-level management actions.
+- **Manage menu** — quick access to site-level management actions.
 - **Account menu** — billing, community profile, and sign-out.
 
 ## Primary navigation
@@ -38,13 +38,13 @@ You can manage a screen (rename, schedule, view raw JSON) from its **detail page
 without opening the editor. When you want to design it, open the
 **[Besigner](../besigner/overview.md)**.
 
-## A host's dashboard
+## A site's dashboard
 
-Opening a host lands you on its dashboard — the primary navigation tabs across the top,
+Opening a site lands you on its dashboard — the primary navigation tabs across the top,
 account/role management, and quick controls for surfaces like the announcement bar and
 promotional popup.
 
-![The Aglyn console host dashboard, showing the primary navigation tabs (Dashboard, Screens, Layouts, Media, Content, Inbox, Contacts, Bookings, Events, Data, Redirects, Workflows, Community), the Users card with the account owner listed, and Announcement bar / Promotional popup quick-edit cards](/img/getting-started/console-dashboard.png)
+![The Aglyn console site dashboard, showing the primary navigation tabs (Dashboard, Screens, Layouts, Media, Content, Inbox, Contacts, Bookings, Events, Data, Redirects, Workflows, Community), the Users card with the account owner listed, and Announcement bar / Promotional popup quick-edit cards](/img/getting-started/console-dashboard.png)
 
 ## Next
 

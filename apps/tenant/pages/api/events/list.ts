@@ -16,7 +16,7 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
@@ -43,13 +43,9 @@ export default async function handler(
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
-    const tenantId = hostSnapshot.get('tenantId') as string | undefined
-    if (tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    {
+      // Plan/quota gates ride the owning org's doc (AGL-238).
+      const tenant = (await getOrgForHost(hostId))?.org
       if (
         tenant?.['plan'] &&
         !checkEntitlement(tenant as any, 'eventCalendar')

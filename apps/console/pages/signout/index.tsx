@@ -21,7 +21,7 @@ import { useNextPageTitle } from '@aglyn/shared-ui-next'
 import { CircularProgress } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect } from 'react'
-import { useAuth } from 'reactfire'
+import { useAuth } from '@aglyn/tenant-feature-instance'
 import AuthFormComponent from '../../components/auth-form.component'
 import AuthenticatingLayout from '../../components/layouts/authenticating.layout'
 

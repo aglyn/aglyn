@@ -47,7 +47,7 @@ import {
   signInWithPopup,
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
-import { useAnalytics, useAuth } from 'reactfire'
+import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../components/auth-form-template.component'
 import AuthFormComponent from '../../components/auth-form.component'

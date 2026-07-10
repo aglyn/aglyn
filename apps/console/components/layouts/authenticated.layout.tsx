@@ -20,7 +20,7 @@ import { SplashScreen, useLoading } from '@aglyn/shared-ui-jsx'
 import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect } from 'react'
-import { useSigninCheck } from 'reactfire'
+import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 
 export interface AuthenticatedLayoutProps {
   children?: JSX.Children

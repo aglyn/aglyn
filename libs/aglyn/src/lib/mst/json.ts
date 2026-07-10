@@ -17,36 +17,15 @@
 
 import { type IAnyType, types as t } from 'mobx-state-tree'
 
-export const JsonPrimitive = t.union<
-  // prettier-ignore
-  undefined,
-  undefined,
-  undefined,
-  // prettier-ignore
-  null,
-  null,
-  null,
-  // prettier-ignore
-  string,
-  string,
-  string,
-  // prettier-ignore
-  number,
-  number,
-  number,
-  // prettier-ignore
-  number,
-  number,
-  number,
-  // prettier-ignore
-  number | Date,
-  number,
-  Date,
-  // prettier-ignore
-  boolean,
-  boolean,
-  boolean
->(t.undefined, t.null, t.string, t.number, t.integer, t.Date, t.boolean)
+export const JsonPrimitive = t.union(
+  t.undefined,
+  t.null,
+  t.string,
+  t.number,
+  t.integer,
+  t.Date,
+  t.boolean,
+)
 export const JsonMap = t.map(
   t.union(
     JsonPrimitive,

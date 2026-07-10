@@ -92,6 +92,10 @@ in `docusaurus.config.ts` (primary `#404C5C`, accent/lines `#00b0ff`). Use them 
 sequences (checkout, booking), pipelines (media, campaigns), and structure (routing,
 plugin sandbox).
 
+> Sequence diagrams draw arrows, message labels, and stick-figure actor names straight
+> on the page canvas, so `src/css/custom.css` re-binds those to Infima's mode-aware
+> text color. If you restyle diagrams, check both color modes.
+
 ### 2. Themed SVG mockups (for UI surfaces)
 
 Hand-built, console-colored SVGs live in `static/img/` (e.g. `besigner-surface.svg`,

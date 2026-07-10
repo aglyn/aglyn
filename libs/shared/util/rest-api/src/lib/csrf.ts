@@ -24,7 +24,7 @@ import {
   HttpStatusCode,
 } from '@aglyn/shared-data-enums'
 import { HttpResponseError } from '@aglyn/shared-util-errors'
-import type { CookieSerializeOptions } from 'cookie'
+import type { SerializeOptions as CookieSerializeOptions } from 'cookie'
 import { sign, unsign } from 'cookie-signature'
 import Tokens from 'csrf'
 import type { NextApiRequest, NextApiResponse } from 'next'

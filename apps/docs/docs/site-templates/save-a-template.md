@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: Save & share a template
-description: Turn a host into a reusable template and install community templates.
+description: Turn a site into a reusable template and install community templates.
 ---
 
 # Save & share a template
@@ -16,11 +16,11 @@ from the community gallery.
 ## Start from a template
 
 Open the **starter template gallery** and install a template. It **instantiates the published
-screens** into a new host so you have a working starting point.
+screens** into a new site so you have a working starting point.
 
-## Save your host as a template
+## Save your site as a template
 
-1. From the host, choose **save as template**.
+1. From the site, choose **save as template**.
 2. Publish it so others can **browse and install** it from the community.
 
 ## Tips

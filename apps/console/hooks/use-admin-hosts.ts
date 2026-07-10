@@ -24,7 +24,7 @@ import {
   type DocumentData,
   type Firestore,
 } from 'firebase/firestore'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const RETRY_DELAY_MS = 400
 const MAX_RETRIES = 5
@@ -48,13 +48,22 @@ export interface AdminHost extends DocumentData {
 export function useAdminHosts(
   firestore: Firestore,
   uid: string | undefined,
+  /**
+   * Workspace scope (AGL-236): the current org's id keeps every host list
+   * inside the selected workspace — without it a member of several orgs
+   * sees all their sites mixed together. Pass `undefined` while the
+   * workspace is still resolving (the hook holds off rather than flash
+   * another org's sites) and `null` for accounts with no org yet.
+   */
+  orgId?: string | null,
 ): { hosts: AdminHost[]; ready: boolean } {
   const [hosts, setHosts] = useState<AdminHost[]>([])
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
     setReady(false)
-    if (!uid) return
+    setHosts([])
+    if (!uid || orgId === undefined) return
 
     let cancelled = false
     let unsubscribe: (() => void) | null = null
@@ -62,9 +71,13 @@ export function useAdminHosts(
     let attempt = 0
 
     const subscribe = () => {
+      // The org membership projection (AGL-233) is the only host
+      // authority (AGL-238); scoping by orgId keeps the query inside the
+      // rules' membership constraint.
       const q = query(
         collection(firestore, 'hosts'),
-        where(`admins.${uid}`, '==', true),
+        where(`memberRoles.${uid}`, 'in', ['admin', 'editor', 'viewer']),
+        ...(orgId ? [where('orgId', '==', orgId)] : []),
       )
       unsubscribe = onSnapshot(
         q,
@@ -97,7 +110,7 @@ export function useAdminHosts(
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }
-  }, [firestore, uid])
+  }, [firestore, uid, orgId])
 
   return { hosts, ready }
 }

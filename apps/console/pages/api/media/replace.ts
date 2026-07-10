@@ -22,6 +22,7 @@ import {
 } from '@aglyn/aglyn'
 import {
   firebaseAdmin,
+  getOrgForHost,
   MEDIA_CDN_VARIANT_WIDTHS,
 } from '@aglyn/tenant-data-admin'
 import { createHash, randomUUID } from 'crypto'
@@ -85,11 +86,11 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
 
     const mediaRef = hostRef.collection('media').doc(mediaId)
@@ -117,10 +118,8 @@ export default async function handler(
     }
 
     const previousBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
-    const tenant =
-      (
-        await firestore.collection('tenants').doc(decoded.uid).get()
-      ).data() ?? {}
+    // Quota rides the owning org's doc (AGL-238).
+    const tenant = (await getOrgForHost(hostId))?.org ?? {}
     if (tenant['plan']) {
       const counterSnapshot = await hostRef
         .collection('counters')

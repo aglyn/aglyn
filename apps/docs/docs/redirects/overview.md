@@ -20,7 +20,7 @@ rename screens or migrate a site.
 - Create, edit, and delete redirect rules from the **redirect manager** page.
 - Rules are **validated** on save, with **chain-loop** and **screen-collision** checks so a
   redirect can't send visitors in circles or shadow a real screen.
-- The tenant enforces redirect rules during route resolution.
+- The published site enforces redirect rules during route resolution.
 
 ## Metrics
 

@@ -31,7 +31,7 @@ import {
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../../constants/route-links'
 import useCommunityActions from '../../hooks/use-community-actions'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'

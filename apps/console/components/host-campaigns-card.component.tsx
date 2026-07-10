@@ -27,8 +27,9 @@ import {
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useHostOrgId from '../hooks/use-host-org-id'
 
 /**
  * Email campaigns (AGL-161): compose + send to leads or site members via
@@ -37,6 +38,12 @@ import useFirestoreCollection from '../hooks/use-firestore-collection'
  */
 export function HostCampaignsCard(props: { hostId: string }) {
   const { hostId } = props
+  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // fallback for hosts not yet org-wired.
+  const hostOrgId = useHostOrgId(hostId)
+  const dataScope = hostOrgId
+    ? (['orgs', hostOrgId] as const)
+    : (['hosts', hostId] as const)
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -49,7 +56,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
         orderBy('sentAt', 'desc'),
         limit(20),
       ),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
 
@@ -57,10 +64,10 @@ export function HostCampaignsCard(props: { hostId: string }) {
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
       query(
-        collection(firestore, 'hosts', hostId, 'contactSegments'),
+        collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
         limit(50),
       ),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>

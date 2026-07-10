@@ -7,18 +7,13 @@
   "targets": {
     "build": {
       "executor": "@nx/rollup:rollup",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/shared/ui/color-picker",
         "tsConfig": "libs/shared/ui/color-picker/tsconfig.lib.json",
         "project": "libs/shared/ui/color-picker/package.json",
         "entryFile": "libs/shared/ui/color-picker/src/index.ts",
-        "external": [
-          "@emotion/react/jsx-runtime",
-          "@aglyn/shared-util-tools"
-        ],
+        "external": ["@emotion/react/jsx-runtime", "@aglyn/shared-util-tools"],
         "rollupConfig": [
           "@nx/react/plugins/bundle-rollup",
           "tools/rollup-external-packages.js",
@@ -39,15 +34,11 @@
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/shared/ui/color-picker"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/ui/color-picker"],
       "options": {
         "jestConfig": "libs/shared/ui/color-picker/jest.config.ts"
       }

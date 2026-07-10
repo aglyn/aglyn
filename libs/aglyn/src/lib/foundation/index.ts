@@ -23,6 +23,7 @@
 // 👇
 
 export * from './definitions/components.types'
+export * from './definitions/organization.types'
 export * from './definitions/shared'
 export {
   ActivityAccess,

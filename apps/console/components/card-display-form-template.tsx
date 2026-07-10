@@ -16,6 +16,7 @@
  */
 
 import {
+  type FormSchema,
   FormSpy,
   type FormTemplateRenderProps,
   useFormApi,
@@ -65,7 +66,7 @@ export const FormCardWrapper = forwardRef<any, CardDisplayProps>(
             )}
           </FormSpy>
         }
-        {...schema.CardDisplayProps}
+        {...(schema as FormSchema).CardDisplayProps}
         {...rest}
       >
         {children}

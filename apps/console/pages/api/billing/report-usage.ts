@@ -62,14 +62,15 @@ async function hostUsage(
 }
 
 /**
- * Monthly usage rollup + metered billing report (AGL-41). Invoke from a
- * scheduler (Vercel cron / GitHub Action) with `x-cron-secret`; per tenant
- * it sums host counters (storage bytes, month page views, month form
- * submissions), prices them at cost × 1.30, writes an audit rollup to
- * `tenants/{id}/usageRollups/{month}`, and — when Stripe is configured —
- * sends one idempotent Billing Meter event (value = billed cents) for
- * tenants with a Stripe customer. Re-runs skip already-reported tenants.
- * Validate rates against a real invoice month before enabling live billing.
+ * Monthly usage rollup + metered billing report (AGL-41, org-keyed since
+ * the AGL-238 cutover). Invoke from a scheduler (Vercel cron / GitHub
+ * Action) with `x-cron-secret`: sums host counters (storage bytes, month
+ * page views, month form submissions) at cost × 1.30, writes audit
+ * rollups per tenant (legacy) and per org, and — when Stripe is
+ * configured — sends one idempotent Billing Meter event per ORG-month
+ * against the org's mirrored Stripe customer. Re-runs skip
+ * already-reported org-months. Validate rates against a real invoice
+ * month before enabling live billing.
  */
 export default async function handler(
   req: NextApiRequest,
@@ -98,40 +99,47 @@ export default async function handler(
     const firestore = firebaseAdmin.app().firestore()
     const hosts = await firestore.collection('hosts').limit(1000).get()
 
-    // Group hosts by owning tenant (host.tenantId; fall back to the first
-    // admin uid for hosts created before the field existed).
-    const byTenant: Record<string, FirebaseFirestore.DocumentReference[]> = {}
+    // Group hosts by org — the sole billing subject (AGL-238; the legacy
+    // per-tenant rollups retired with the tenants collection).
+    const byOrg: Record<string, FirebaseFirestore.DocumentReference[]> = {}
     for (const host of hosts.docs) {
-      const tenantId =
-        host.get('tenantId') ?? Object.keys(host.get('admins') ?? {})[0]
-      if (!tenantId) continue
-      ;(byTenant[tenantId] ??= []).push(host.ref)
+      const orgId = host.get('orgId')
+      if (orgId) (byOrg[orgId] ??= []).push(host.ref)
     }
 
-    const results: Record<string, any> = {}
-    for (const [tenantId, hostRefs] of Object.entries(byTenant)) {
-      const usage = await Promise.all(
-        hostRefs.map((hostRef) => hostUsage(hostRef, month)),
-      )
+    const usageCache = new Map<string, Promise<HostUsageSnapshot>>()
+    const usageFor = (hostRef: FirebaseFirestore.DocumentReference) => {
+      let pending = usageCache.get(hostRef.path)
+      if (!pending) {
+        pending = hostUsage(hostRef, month)
+        usageCache.set(hostRef.path, pending)
+      }
+      return pending
+    }
+
+    // Org rollups + metering (AGL-238 cutover): orgs are the billing
+    // subject — the meter event uses the org's mirrored Stripe customer
+    // and an org-month identifier, idempotent via the usage doc's
+    // reportedAt on our side and the identifier on Stripe's.
+    const orgResults: Record<string, any> = {}
+    for (const [orgId, hostRefs] of Object.entries(byOrg)) {
+      const usage = await Promise.all(hostRefs.map(usageFor))
       const estimate = estimateMonthlyUsageCost(usage)
-      const rollupRef = firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .collection('usageRollups')
+      const usageRef = firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection('usage')
         .doc(month)
-      const existing = await rollupRef.get()
+      const existing = await usageRef.get()
       if (existing.get('reportedAt')) {
-        results[tenantId] = { billedCents: estimate.billedCents, skipped: true }
+        orgResults[orgId] = { billedCents: estimate.billedCents, skipped: true }
         continue
       }
 
       let reported = false
       if (stripeKey && estimate.billedCents > 0) {
-        const tenantSnapshot = await firestore
-          .collection('tenants')
-          .doc(tenantId)
-          .get()
-        const customerId = tenantSnapshot.get('stripeCustomerId')
+        const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
+        const customerId = orgSnapshot.get('stripeCustomerId')
         if (customerId) {
           const response = await fetch(
             'https://api.stripe.com/v1/billing/meter_events',
@@ -143,8 +151,7 @@ export default async function handler(
               },
               body: new URLSearchParams({
                 event_name: meterEventName,
-                // Idempotent per tenant-month on Stripe's side too.
-                identifier: `${tenantId}-${month}`,
+                identifier: `${orgId}-${month}`,
                 'payload[stripe_customer_id]': String(customerId),
                 'payload[value]': String(estimate.billedCents),
               }).toString(),
@@ -155,9 +162,10 @@ export default async function handler(
         }
       }
 
-      await rollupRef.set(
+      await usageRef.set(
         {
           month,
+          hostCount: hostRefs.length,
           storageGb: estimate.storageGb,
           pageViews: estimate.pageViews,
           formSubmissions: estimate.formSubmissions,
@@ -170,9 +178,9 @@ export default async function handler(
         },
         { merge: true },
       )
-      results[tenantId] = { billedCents: estimate.billedCents, reported }
+      orgResults[orgId] = { billedCents: estimate.billedCents, reported }
     }
-    return res.status(200).json({ month, tenants: results })
+    return res.status(200).json({ month, orgs: orgResults })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Rollup failed' })

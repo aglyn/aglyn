@@ -19,7 +19,7 @@ import {
   COMMUNITY_PLATFORM_FEE_PERCENT,
   COMMUNITY_PLATFORM_FEE_PERCENT_FREE_PLAN,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
@@ -80,12 +80,10 @@ export default async function handler(
         .json({ error: 'The publisher has not enabled payouts yet' })
     }
 
-    // Publisher's plan sets the platform share (free plan pays more).
-    const sellerTenant = await firestore
-      .collection('tenants')
-      .doc(listing.profileId)
-      .get()
-    const sellerPlan = sellerTenant.get('plan') ?? 'free'
+    // Publisher's plan sets the platform share (free plan pays more);
+    // it rides the seller's org doc (AGL-238).
+    const sellerOrg = await getOrgForUser(String(listing.profileId))
+    const sellerPlan = sellerOrg?.org?.plan ?? 'free'
     const feePercent =
       sellerPlan === 'free'
         ? COMMUNITY_PLATFORM_FEE_PERCENT_FREE_PLAN

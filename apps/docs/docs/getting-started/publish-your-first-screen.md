@@ -12,7 +12,7 @@ This walks through the core loop: **create → design → publish**.
 
 1. Go to **Screens** and choose **New screen**.
 2. Set a **title** and a URL **slug** (e.g. `about`). Aglyn normalizes the slug and
-   registers it in the host's routing map.
+   registers it in the site's routing map.
 3. Optionally pick a **parent** screen — children inherit a nested URL path
    (`/services/pricing`).
 
@@ -30,7 +30,7 @@ This walks through the core loop: **create → design → publish**.
 1. Use the artboard **light/dark toggle** to check both color schemes.
 2. Save a **version** — you can name it and even schedule it to go live later.
 3. **Publish**. The screen's slug is registered in the routing map and the page goes live
-   on your host's domain.
+   on your site's domain.
 
 :::tip The Live button
 The **Live** button is environment-aware — in production it reflects your published

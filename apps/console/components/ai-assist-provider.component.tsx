@@ -31,7 +31,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
 

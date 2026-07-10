@@ -16,15 +16,20 @@
  */
 
 import {
+  canManageOrg,
   checkQuota,
   createResourceUid,
   isBlockedSubdomain,
   SUBDOMAIN_PATTERN,
   suggestSubdomains,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  ensureOrgForUser,
+  firebaseAdmin,
+  registerOrgHost,
+  resolveOrgMembership,
+} from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
 
 /**
  * Creates a host (user request 2026-07-07 — the hosts page had no create
@@ -67,12 +72,26 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    // Manager permission gate (AGL-108).
-    const membership = await resolveTenantPermissions(decoded.uid)
-    if (!membership.permissions.createHosts) {
+    // Org resolution (AGL-233): hosts belong to an organization. The org
+    // comes from the request (workspace context) or the user's first org,
+    // auto-creating a personal org for brand-new accounts. Creating hosts
+    // is an org admin/owner power.
+    const requestedOrgId = String(req.body?.orgId ?? '') || null
+    const orgMembership = requestedOrgId
+      ? await resolveOrgMembership(decoded.uid, requestedOrgId)
+      : await ensureOrgForUser(decoded.uid, {
+          email: decoded.email ?? null,
+          displayName: (decoded['name'] as string | undefined) ?? null,
+        })
+    if (!orgMembership) {
       return res
         .status(403)
-        .json({ error: 'Your team role does not allow creating hosts' })
+        .json({ error: 'You are not a member of that organization' })
+    }
+    if (!canManageOrg(orgMembership.member.role)) {
+      return res
+        .status(403)
+        .json({ error: 'Your organization role does not allow creating sites' })
     }
     const firestore = firebaseAdmin.app().firestore()
 
@@ -97,15 +116,16 @@ export default async function handler(
         .json({ error: 'That subdomain is taken', suggestions })
     }
 
-    const tenantSnapshot = await firestore
-      .collection('tenants')
-      .doc(decoded.uid)
+    // Site quota rides the org doc (AGL-238), counted per org.
+    const orgSnapshot = await firestore
+      .collection('orgs')
+      .doc(orgMembership.orgId)
       .get()
-    const tenant = tenantSnapshot.data()
+    const tenant = orgSnapshot.data()
     if (tenant?.['plan']) {
       const owned = await firestore
         .collection('hosts')
-        .where(`admins.${decoded.uid}`, '==', true)
+        .where('orgId', '==', orgMembership.orgId)
         .count()
         .get()
       const quota = checkQuota(
@@ -116,8 +136,8 @@ export default async function handler(
       if (!quota.allowed) {
         return res.status(403).json({
           error:
-            `Host limit reached (${quota.limit}) — upgrade or add extra ` +
-            'hosts from Billing',
+            `Site limit reached (${quota.limit}) — upgrade or add extra ` +
+            'sites from Billing',
         })
       }
     }
@@ -129,15 +149,16 @@ export default async function handler(
       .set({
         displayName,
         subdomain,
-        tenantId: decoded.uid,
-        admins: { [decoded.uid]: true },
+        orgId: orgMembership.orgId,
         screens: {},
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
-    return res.status(200).json({ hostId })
+    // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
+    await registerOrgHost(orgMembership.orgId, hostId, subdomain)
+    return res.status(200).json({ hostId, orgId: orgMembership.orgId })
   } catch (error) {
     console.error(error)
-    return res.status(500).json({ error: 'Host creation failed' })
+    return res.status(500).json({ error: 'Site creation failed' })
   }
 }

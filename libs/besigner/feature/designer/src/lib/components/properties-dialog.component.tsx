@@ -21,13 +21,13 @@ import {
   FieldComponentType,
   FormRenderer,
 } from '@aglyn/shared-ui-jsx-forms'
-import type Schema from '@data-driven-forms/react-form-renderer/common-types/schema'
+import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { forwardRef, useCallback } from 'react'
 import CloseableDrawerComponent, {
   type CloseableDrawerProps,
 } from './closeable-drawer.component'
 
-const formSchema: Schema = {
+const formSchema: FormSchema = {
   fields: [
     {
       component: FieldComponentType.TEXT_FIELD,

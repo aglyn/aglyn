@@ -25,15 +25,18 @@ import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import { Button, Typography } from '@mui/material'
 import { useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CreateHostDialog from '../../components/create-host-dialog.component'
 import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
+import OrgInvitesBanner from '../../components/org-invites-banner.component'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
+import orgNavTabItems from '../../constants/org-nav-tabs'
 import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
 import { useAdminHosts } from '../../hooks/use-admin-hosts'
+import { useOrgWorkspace } from '../../hooks/use-org-workspace'
 import useTenantPermissions from '../../hooks/use-tenant-permissions'
 
 function HostInfoItem({ label, value }) {
@@ -74,7 +77,14 @@ function HostInfoItem({ label, value }) {
 function HostsContent() {
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const { hosts: data } = useAdminHosts(firestore, user?.uid)
+  const { currentOrg, loading: orgsLoading } = useOrgWorkspace()
+  // Workspace-scoped (AGL-236): the list shows the selected org's sites
+  // only — a member of several orgs switches workspaces to see the rest.
+  const { hosts: data } = useAdminHosts(
+    firestore,
+    user?.uid,
+    orgsLoading ? undefined : (currentOrg?.$id ?? null),
+  )
   const [creating, setCreating] = useState(false)
   const { permissions } = useTenantPermissions()
 
@@ -82,15 +92,16 @@ function HostsContent() {
     <>
       <NextPageTitle screen={'Settings'} />
       <DashboardLayout
-        navTabItems={[]}
+        navTabItems={orgNavTabItems()}
+        activeTab={buildRoute(Route.HOST_LIST)}
         breadcrumbItems={[
           {
-            children: 'Hosts',
+            children: 'Sites',
             href: buildRoute(Route.MANAGE_ACCOUNT_SETTINGS),
           },
         ]}
         header={{
-          children: 'All Hosts',
+          children: 'All Sites',
           icon: { path: ICON_VARIANT_HOST_GROUP.path },
         }}
         headerRight={
@@ -100,12 +111,14 @@ function HostsContent() {
               color="secondary"
               onClick={() => setCreating(true)}
             >
-              {'Create host'}
+              {'Create site'}
             </Button>
           ) : undefined
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Pending org invites (AGL-234). */}
+          <OrgInvitesBanner />
           <GridItems
             spacing={3}
             items={[
@@ -209,7 +222,7 @@ Hosts.layouts = [
   {
     Component: MainLayout,
     props: {
-      title: 'Hosts',
+      title: 'Sites',
       enableAppBarElevation: true,
     },
   },

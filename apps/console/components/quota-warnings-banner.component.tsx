@@ -25,7 +25,7 @@ import { Alert, Button } from '@mui/material'
 import { collection, doc, getCountFromServer, getDoc } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentTenant from '../hooks/use-current-tenant'
 
@@ -55,8 +55,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const params = useParams<{ hostId?: string }>()
   const hostId = props.hostId ?? params?.hostId
   const firestore = useFirestore()
-  const { data: user } = useUser()
-  const { tenant } = useCurrentTenant()
+  const { tenant, orgId } = useCurrentTenant()
   const [quotas, setQuotas] = useState<QuotaState[]>([])
   const [dismissed, setDismissed] = useState(true)
 
@@ -109,10 +108,10 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, hostId, plan])
 
-  // Tenant-level team seats — the members subcollection is server-readable
-  // only, so the count comes from the team API, cached per session.
+  // Org-level team seats (AGL-238): the org roster is member-readable,
+  // so the seat count is a client aggregate query, cached per session.
   useEffect(() => {
-    if (!plan) return
+    if (!plan || !orgId) return
     let active = true
     const apply = (seats: number) => {
       if (!active) return
@@ -127,27 +126,20 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
       apply(Number(cached))
       return
     }
-    void (async () => {
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch('/api/tenant/members', {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
-        if (!response.ok) return
-        const payload = await response.json()
-        const seats = (payload.members?.length ?? 0) + 1
+    void getCountFromServer(collection(firestore, 'orgs', orgId, 'members'))
+      .then((snapshot) => {
+        const seats = snapshot.data().count
         sessionStorage.setItem(SEATS_KEY, String(seats))
         apply(seats)
-      } catch {
+      })
+      .catch(() => {
         // No seats row on failure; host quotas still render.
-      }
-    })()
+      })
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, plan])
+  }, [firestore, orgId, plan])
 
   // Suspension (AGL-202) outranks everything — not dismissible, shown
   // regardless of plan so pre-billing tenants see it too.

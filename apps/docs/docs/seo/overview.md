@@ -16,12 +16,12 @@ Aglyn emits the right tags, sitemap, and structured data automatically.
 ## Per-screen SEO
 
 Use the **screen-level SEO editor** to set titles, descriptions, and social metadata for
-each page. The tenant site emits these into the page head, deduping descriptions so you
+each page. The published site emits these into the page head, deduping descriptions so you
 never get conflicting tags.
 
 ## Sitemap & robots
 
-Aglyn generates **`sitemap.xml`** and **`robots.txt`** for your host automatically, so
+Aglyn generates **`sitemap.xml`** and **`robots.txt`** for your site automatically, so
 search engines can crawl your site correctly.
 
 ## Social cards

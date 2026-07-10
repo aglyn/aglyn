@@ -244,8 +244,12 @@ export class Timestamp extends FirestoreTimestamp implements ITimestamp {
   /**
    * Returns a JSON-serializable representation of this Timestamp.
    */
-  public toJSON(): { seconds: number; nanoseconds: number } {
-    return { seconds: this.seconds, nanoseconds: this.nanoseconds }
+  public toJSON(): { seconds: number; nanoseconds: number; type: string } {
+    return {
+      seconds: this.seconds,
+      nanoseconds: this.nanoseconds,
+      type: 'firestore/timestamp/1.0',
+    }
   }
 
   /**

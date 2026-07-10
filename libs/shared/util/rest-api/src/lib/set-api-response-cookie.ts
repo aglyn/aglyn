@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import {type CookieSerializeOptions, serialize} from 'cookie'
+import {type SerializeOptions as CookieSerializeOptions, stringifySetCookie} from 'cookie'
 import type {NextApiResponse} from 'next'
 
 
@@ -45,11 +45,14 @@ export function setApiResponseCookie<T>(
       : cookieValue,
   )
 
-  if ('maxAge' in options) {
+  if (options.maxAge !== undefined) {
     options.expires = new Date(Date.now() + options.maxAge)
     options.maxAge /= 1000
   }
-  res.setHeader('Set-Cookie', serialize(cookieName, str, options))
+  res.setHeader(
+    'Set-Cookie',
+    stringifySetCookie({ name: cookieName, value: str, ...options }),
+  )
 }
 
 export default setApiResponseCookie

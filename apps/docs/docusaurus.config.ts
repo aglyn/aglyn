@@ -120,7 +120,7 @@ const config: Config = {
         {
           title: 'Learn',
           items: [
-            { label: 'Getting Started', to: '/getting-started/create-a-host' },
+            { label: 'Getting Started', to: '/getting-started/create-a-site' },
             { label: "What's New", to: '/whats-new' },
           ],
         },

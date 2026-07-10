@@ -19,7 +19,7 @@ import { _isArr, _isNull } from '@aglyn/shared-util-tools'
 import { getDisplayName, noop } from '@aglyn/shared-util-tools'
 import { hoistNonReactStatics } from '@aglyn/shared-util-vendor'
 import { CssBaseline, useMediaQuery } from '@mui/material'
-import { get as getCookie, set as setCookie } from 'js-cookie'
+import Cookies from 'js-cookie'
 import {
   type ComponentType,
   createContext,
@@ -64,7 +64,7 @@ export function useThemeMode() {
 }
 
 function getCookieThemeMode(): ThemeMode {
-  const cookieMode = getCookie(COOKIE_THEME_KEY)
+  const cookieMode = Cookies.get(COOKIE_THEME_KEY)
   if (cookieMode === 'dark' || cookieMode === 'light') {
     return cookieMode
   }
@@ -83,7 +83,7 @@ export function useCookieThemeMode(): [ThemeMode, (mode: ThemeMode) => void] {
   })
 
   const setCookieThemeMode = useCallback((newMode: ThemeMode) => {
-    setCookie(COOKIE_THEME_KEY, newMode, { expires: 365 })
+    Cookies.set(COOKIE_THEME_KEY, newMode, { expires: 365 })
     setMode((prev) => (prev !== newMode ? newMode : prev))
   }, [])
 

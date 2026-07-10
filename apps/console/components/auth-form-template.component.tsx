@@ -23,7 +23,7 @@ import {
 } from '@aglyn/shared-ui-jsx-forms'
 import { Box, Button, FormControl, Grid } from '@mui/material'
 import { forwardRef } from 'react'
-import { useSigninCheck } from 'reactfire'
+import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from './auth-error-alert.component'
 
 export interface AuthFormTemplateComponentProps

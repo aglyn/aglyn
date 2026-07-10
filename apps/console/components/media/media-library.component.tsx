@@ -76,7 +76,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { checkTenantQuota } from '../../constants/entitlements'
 import useCurrentTenant from '../../hooks/use-current-tenant'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'

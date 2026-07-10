@@ -16,7 +16,7 @@ Give visitors a **search box** to find content across your site, including
 ## How it works
 
 - Add the **search box** to a screen.
-- Aglyn provides a tenant **site search page** with a content matcher that searches pages
+- Aglyn provides a built-in **site search page** with a content matcher that searches pages
   and dataset records.
 
 :::note More detailed how-tos coming

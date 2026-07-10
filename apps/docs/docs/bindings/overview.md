@@ -27,7 +27,7 @@ Bindings appear inside text props as tokens:
 
 | Token | Resolves to |
 | --- | --- |
-| `{{name}}` | A host **variable**. |
+| `{{name}}` | A site **variable**. |
 | `{{fn:name(args)}}` | The result of a **function**. |
 | Dataset field bindings | A value from a [dataset](../datasets/overview.md) record. |
 
@@ -48,7 +48,7 @@ and the correct id token is inserted for you.
 
 ## Typed variables
 
-Create **typed host variables** and reference them as `{{name}}` in any prop. Types keep
+Create **typed site variables** and reference them as `{{name}}` in any prop. Types keep
 values consistent across the site.
 
 ## No-code functions
@@ -64,7 +64,7 @@ every screen and prop that references it, so changes are safe.
 
 ## Workflows
 
-Variables and functions compose into **workflows** — multi-step logic triggered by host
+Variables and functions compose into **workflows** — multi-step logic triggered by site
 events. See [Workflows & actions](../workflows-and-actions/overview.md).
 
 ## Related

@@ -19,7 +19,7 @@
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { addDoc, collection } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore, useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 
 /** What an activity entry points at; `id` lets detail pages filter. */
 export interface HostActivityTarget {

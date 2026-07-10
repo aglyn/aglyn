@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import {camelCase, camelCaseTransformMerge} from 'change-case'
+import {camelCase} from 'change-case'
 import type {IconId} from '../types'
 
 
 export function convertIdToModuleName(id: IconId) {
   return camelCase(`mdi-${id}`, {
-    transform: camelCaseTransformMerge,
+    mergeAmbiguousCharacters: true,
   })
 }
 export default convertIdToModuleName

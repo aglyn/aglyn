@@ -16,7 +16,7 @@
  */
 
 import { checkEntitlement } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 export const SITE_EXPORT_FORMAT = 'aglyn-site-export'
@@ -80,19 +80,15 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin') {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
-    const tenantId = hostSnapshot.get('tenantId') as string | undefined
-    if (tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    {
+      // Plan gate rides the owning org's doc (AGL-238).
+      const tenant = (await getOrgForHost(hostId))?.org
       if (tenant?.['plan'] && !checkEntitlement(tenant as any, 'siteExport')) {
         return res
           .status(403)

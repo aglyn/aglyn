@@ -3,13 +3,13 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/silo",
   "projectType": "application",
+  "tags": ["scope:app", "scope:private"],
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "defaultConfiguration": "production",
+      "cache": false,
       "options": {
         "outputPath": "dist/apps/silo"
       },
@@ -18,11 +18,11 @@
         "development": {
           "outputPath": "apps/silo"
         }
-      },
-      "cache": false
+      }
     },
     "serve": {
       "executor": "@nx/next:server",
+      "defaultConfiguration": "development",
       "options": {
         "buildTarget": "silo:build",
         "dev": true,
@@ -37,8 +37,7 @@
           "buildTarget": "silo:build:development",
           "dev": true
         }
-      },
-      "defaultConfiguration": "development"
+      }
     },
     "export": {
       "executor": "@nx/next:export",
@@ -48,13 +47,7 @@
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     }
-  },
-  "tags": [
-    "scope:app",
-    "scope:private"
-  ]
+  }
 }

@@ -55,7 +55,8 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import FeatureGate from '../../../components/feature-gate.component'
 import { useHostId } from '../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
@@ -63,6 +64,7 @@ import MainLayout from '../../../components/layouts/main.layout'
 import hostNavTabItems from '../../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 import useCurrentTenant from '../../../hooks/use-current-tenant'
+import useHostOrgId from '../../../hooks/use-host-org-id'
 import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 const SOURCE_LABELS: Record<ContactSource, string> = {
@@ -87,6 +89,12 @@ const csvEscape = (value: unknown) => {
  */
 const HostContacts: NextPageWithLayout = () => {
   const hostId = useHostId()
+  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // fallback for hosts not yet org-wired.
+  const hostOrgId = useHostOrgId(hostId)
+  const dataScope = hostOrgId
+    ? (['orgs', hostOrgId] as const)
+    : (['hosts', hostId] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -94,8 +102,8 @@ const HostContacts: NextPageWithLayout = () => {
 
   const { data: contactDocs } = useFirestoreCollection<any>(
     () =>
-      query(collection(firestore, 'hosts', hostId, 'contacts'), limit(1000)),
-    [firestore, hostId],
+      query(collection(firestore, dataScope[0], dataScope[1], 'contacts'), limit(1000)),
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const contacts: ContactDoc[] = useMemo(
@@ -111,10 +119,10 @@ const HostContacts: NextPageWithLayout = () => {
   const { data: segmentDocs } = useFirestoreCollection<any>(
     () =>
       query(
-        collection(firestore, 'hosts', hostId, 'contactSegments'),
+        collection(firestore, dataScope[0], dataScope[1], 'contactSegments'),
         limit(50),
       ),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const segments = [...(segmentDocs ?? [])].sort((a, b) =>
@@ -155,7 +163,7 @@ const HostContacts: NextPageWithLayout = () => {
     const name = segmentName.trim().slice(0, 60)
     if (!name || !filterActive) return
     try {
-      await addDoc(collection(firestore, 'hosts', hostId, 'contactSegments'), {
+      await addDoc(collection(firestore, dataScope[0], dataScope[1], 'contactSegments'), {
         name,
         tags: filterSegment.tags ?? [],
         sources: filterSegment.sources ?? [],
@@ -211,7 +219,7 @@ const HostContacts: NextPageWithLayout = () => {
       .catch(() => false)
     if (!confirmed) return
     try {
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'contacts', selectedId))
+      await deleteDoc(doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId))
       setSelectedId(null)
       enqueueSnackbar('Contact deleted', {
         variant: 'success',
@@ -238,7 +246,7 @@ const HostContacts: NextPageWithLayout = () => {
       ),
     ]
     try {
-      await updateDoc(doc(firestore, 'hosts', hostId, 'contacts', selectedId), {
+      await updateDoc(doc(firestore, dataScope[0], dataScope[1], 'contacts', selectedId), {
         tags,
         notes: notesDraft.slice(0, 2000),
       })
@@ -283,174 +291,176 @@ const HostContacts: NextPageWithLayout = () => {
         header={{ children: 'Contacts' }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <CardDisplay header={'Contacts'} contentGutterX contentGutterY>
-            <Stack spacing={2}>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-              >
-                <TextField
-                  size="small"
-                  label="Search"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  sx={{ minWidth: 220 }}
-                />
-                <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-                  {`${contacts.length.toLocaleString()} / ${
-                    Number.isFinite(quota.limit)
-                      ? quota.limit.toLocaleString()
-                      : '∞'
-                  } contacts`}
-                </Typography>
-                <Button size="small" onClick={handleExport} disabled={!visible.length}>
-                  {'Export CSV'}
-                </Button>
-              </Stack>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-              >
-                <TextField
-                  select
-                  size="small"
-                  label="Source"
-                  value={sourceFilter}
-                  onChange={(event) =>
-                    setSourceFilter(event.target.value as any)
-                  }
-                  sx={{ minWidth: 140 }}
+          <FeatureGate flag="release_contacts">
+            <CardDisplay header={'Contacts'} contentGutterX contentGutterY>
+              <Stack spacing={2}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
                 >
-                  <MenuItem value="">{'Any source'}</MenuItem>
-                  {Object.entries(SOURCE_LABELS).map(([value, label]) => (
-                    <MenuItem key={value} value={value}>
-                      {label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <TextField
-                  size="small"
-                  label="Tags"
-                  placeholder="vip, beta"
-                  value={tagFilter}
-                  onChange={(event) => setTagFilter(event.target.value)}
-                  sx={{ minWidth: 160 }}
-                />
-                {filterActive ? (
-                  <>
-                    <TextField
-                      size="small"
-                      label="Segment name"
-                      value={segmentName}
-                      onChange={(event) => setSegmentName(event.target.value)}
-                      sx={{ minWidth: 160 }}
-                    />
-                    <Button
-                      size="small"
-                      disabled={!segmentName.trim()}
-                      onClick={handleSaveSegment}
-                    >
-                      {'Save segment'}
-                    </Button>
-                  </>
-                ) : null}
-                {segments.map((segment: any) => (
-                  <Chip
-                    key={segment.$id}
-                    label={segment.name}
+                  <TextField
                     size="small"
-                    onClick={() => {
-                      setTagFilter((segment.tags ?? []).join(', '))
-                      setSourceFilter(segment.sources?.[0] ?? '')
-                    }}
-                    onDelete={() =>
-                      deleteDoc(
-                        doc(
-                          firestore,
-                          'hosts',
-                          hostId,
-                          'contactSegments',
-                          segment.$id,
-                        ),
-                      )
-                    }
+                    label="Search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    sx={{ minWidth: 220 }}
                   />
-                ))}
-              </Stack>
-              {!quota.allowed ? (
-                <Alert severity="warning">
-                  {'Contact limit reached — new visitors are no longer ' +
-                    'captured. Upgrade in Billing to keep collecting.'}
-                </Alert>
-              ) : null}
-              {contacts.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'No contacts yet — form submissions, member sign-ups, ' +
-                    'orders, and bookings all become contacts automatically.'}
-                </Typography>
-              ) : (
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Contact'}</TableCell>
-                      <TableCell>{'Sources'}</TableCell>
-                      <TableCell>{'Tags'}</TableCell>
-                      <TableCell align="right">{'Last activity'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {visible.map((contact) => (
-                      <TableRow
-                        key={contact.$id}
-                        hover
-                        sx={{ cursor: 'pointer' }}
-                        onClick={() => openContact(contact)}
-                      >
-                        <TableCell>
-                          <Typography variant="body2">
-                            {contact.name || contact.email}
-                          </Typography>
-                          {contact.name ? (
-                            <Typography variant="caption" color="text.secondary">
-                              {contact.email}
-                            </Typography>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Stack direction="row" spacing={0.5}>
-                            {Object.keys(contact.sources ?? {}).map((source) => (
-                              <Chip
-                                key={source}
-                                label={
-                                  SOURCE_LABELS[source as ContactSource] ??
-                                  source
-                                }
-                                size="small"
-                              />
-                            ))}
-                          </Stack>
-                        </TableCell>
-                        <TableCell>
-                          {(contact.tags ?? []).slice(0, 3).join(', ')}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="caption" color="text.secondary">
-                            {contact.interactions?.[0]
-                              ? new Date(
-                                  contact.interactions[0].atMs,
-                                ).toLocaleDateString()
-                              : '—'}
-                          </Typography>
-                        </TableCell>
-                      </TableRow>
+                  <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                    {`${contacts.length.toLocaleString()} / ${
+                      Number.isFinite(quota.limit)
+                        ? quota.limit.toLocaleString()
+                        : '∞'
+                    } contacts`}
+                  </Typography>
+                  <Button size="small" onClick={handleExport} disabled={!visible.length}>
+                    {'Export CSV'}
+                  </Button>
+                </Stack>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+                >
+                  <TextField
+                    select
+                    size="small"
+                    label="Source"
+                    value={sourceFilter}
+                    onChange={(event) =>
+                      setSourceFilter(event.target.value as any)
+                    }
+                    sx={{ minWidth: 140 }}
+                  >
+                    <MenuItem value="">{'Any source'}</MenuItem>
+                    {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
                     ))}
-                  </TableBody>
-                </Table>
-              )}
-            </Stack>
-          </CardDisplay>
+                  </TextField>
+                  <TextField
+                    size="small"
+                    label="Tags"
+                    placeholder="vip, beta"
+                    value={tagFilter}
+                    onChange={(event) => setTagFilter(event.target.value)}
+                    sx={{ minWidth: 160 }}
+                  />
+                  {filterActive ? (
+                    <>
+                      <TextField
+                        size="small"
+                        label="Segment name"
+                        value={segmentName}
+                        onChange={(event) => setSegmentName(event.target.value)}
+                        sx={{ minWidth: 160 }}
+                      />
+                      <Button
+                        size="small"
+                        disabled={!segmentName.trim()}
+                        onClick={handleSaveSegment}
+                      >
+                        {'Save segment'}
+                      </Button>
+                    </>
+                  ) : null}
+                  {segments.map((segment: any) => (
+                    <Chip
+                      key={segment.$id}
+                      label={segment.name}
+                      size="small"
+                      onClick={() => {
+                        setTagFilter((segment.tags ?? []).join(', '))
+                        setSourceFilter(segment.sources?.[0] ?? '')
+                      }}
+                      onDelete={() =>
+                        deleteDoc(
+                          doc(
+                            firestore,
+                            dataScope[0],
+                            dataScope[1],
+                            'contactSegments',
+                            segment.$id,
+                          ),
+                        )
+                      }
+                    />
+                  ))}
+                </Stack>
+                {!quota.allowed ? (
+                  <Alert severity="warning">
+                    {'Contact limit reached — new visitors are no longer ' +
+                      'captured. Upgrade in Billing to keep collecting.'}
+                  </Alert>
+                ) : null}
+                {contacts.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    {'No contacts yet — form submissions, member sign-ups, ' +
+                      'orders, and bookings all become contacts automatically.'}
+                  </Typography>
+                ) : (
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>{'Contact'}</TableCell>
+                        <TableCell>{'Sources'}</TableCell>
+                        <TableCell>{'Tags'}</TableCell>
+                        <TableCell align="right">{'Last activity'}</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {visible.map((contact) => (
+                        <TableRow
+                          key={contact.$id}
+                          hover
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => openContact(contact)}
+                        >
+                          <TableCell>
+                            <Typography variant="body2">
+                              {contact.name || contact.email}
+                            </Typography>
+                            {contact.name ? (
+                              <Typography variant="caption" color="text.secondary">
+                                {contact.email}
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={0.5}>
+                              {Object.keys(contact.sources ?? {}).map((source) => (
+                                <Chip
+                                  key={source}
+                                  label={
+                                    SOURCE_LABELS[source as ContactSource] ??
+                                    source
+                                  }
+                                  size="small"
+                                />
+                              ))}
+                            </Stack>
+                          </TableCell>
+                          <TableCell>
+                            {(contact.tags ?? []).slice(0, 3).join(', ')}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography variant="caption" color="text.secondary">
+                              {contact.interactions?.[0]
+                                ? new Date(
+                                    contact.interactions[0].atMs,
+                                  ).toLocaleDateString()
+                                : '—'}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </Stack>
+            </CardDisplay>
+          </FeatureGate>
         </Container>
       </DashboardLayout>
       <Drawer

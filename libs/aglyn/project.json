@@ -3,7 +3,13 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/aglyn/src",
   "projectType": "library",
-  "tags": ["scope:lib", "scope:aglyn", "scope:data", "scope:feature", "aglyn:framework"],
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "scope:data",
+    "scope:feature",
+    "aglyn:framework"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:swc",
@@ -17,14 +23,14 @@
     },
     "publish": {
       "executor": "nx:run-commands",
-      "options": {
-        "command": "node tools/scripts/publish.mjs aglyn {args.ver} {args.tag}"
-      },
       "dependsOn": [
         {
           "target": "build"
         }
-      ]
+      ],
+      "options": {
+        "command": "node tools/scripts/publish.mjs aglyn {args.ver} {args.tag}"
+      }
     },
     "lint": {
       "executor": "@nx/eslint:lint",

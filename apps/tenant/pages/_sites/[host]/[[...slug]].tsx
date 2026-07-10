@@ -18,12 +18,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
-import { doc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import type { GetStaticPaths, GetStaticProps } from 'next/types'
 import type { ParsedUrlQuery } from 'querystring'
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useFirestoreDocData } from 'reactfire'
 import Head from 'next/head'
 import applyDuePublishSchedule from '../../../utils/apply-publish-schedule'
 import composeScreenNodes from '../../../utils/compose-screen-nodes'
@@ -109,16 +107,6 @@ export const getStaticPaths: GetStaticPaths<StaticPathsCtx> = async (ctx) => {
   }
 }
 
-const useHostRef = (id: string) => {
-  const firestore = useFirestore()
-  return doc(firestore, 'hosts', id)
-}
-
-const useHost = (id: string) => {
-  const ref = useHostRef(id)
-  return useFirestoreDocData(ref, { idField: '$id' })
-}
-
 export const getStaticProps: GetStaticProps<Props> = async (context) => {
   console.debug('!!!!!getStaticProps', context)
 
@@ -152,10 +140,10 @@ export const getStaticProps: GetStaticProps<Props> = async (context) => {
     const hostId = hostRes.host.$id
     const pathsByScreenId = hostRes.host.screens || {}
 
-    // Tenant suspension (AGL-202): staff-suspended tenants stop serving
+    // Org suspension (AGL-202/238): staff-suspended orgs stop serving
     // every path immediately (short revalidate bounds the lag). Loaded
     // once here and reused by the branding/overlay branches below.
-    const tenantRes = await getTenant({ tenantId: hostRes.host.tenantId })
+    const tenantRes = await getTenant({ hostId })
     if ((tenantRes.tenant as any)?.suspendedAt) {
       return {
         props: JSON.parse(

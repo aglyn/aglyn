@@ -35,7 +35,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 

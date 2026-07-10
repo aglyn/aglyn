@@ -3,6 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/admin-e2e/src",
   "projectType": "application",
+  "tags": ["scope:app", "scope:private", "scope:e2e"],
+  "implicitDependencies": ["admin"],
   "targets": {
     "e2e": {
       "executor": "@nx/cypress:cypress",
@@ -20,7 +22,5 @@
       "executor": "@nx/eslint:lint",
       "outputs": ["{options.outputFile}"]
     }
-  },
-  "tags": ["scope:app", "scope:private", "scope:e2e"],
-  "implicitDependencies": ["admin"]
+  }
 }

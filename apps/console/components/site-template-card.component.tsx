@@ -29,7 +29,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useState } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from '@aglyn/tenant-feature-instance'
 
 /**
  * Save-as-template (AGL-137): publishes this host's published screens +

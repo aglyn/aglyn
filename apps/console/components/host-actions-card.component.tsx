@@ -51,9 +51,10 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useHostOrgId from '../hooks/use-host-org-id'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
@@ -87,6 +88,12 @@ function defaultStep(type: HostActionStepType): HostActionStep {
  */
 export function HostActionsCard(props: { hostId: string }) {
   const { hostId } = props
+  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // fallback for hosts not yet org-wired.
+  const hostOrgId = useHostOrgId(hostId)
+  const dataScope = hostOrgId
+    ? (['orgs', hostOrgId] as const)
+    : (['hosts', hostId] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -94,22 +101,22 @@ export function HostActionsCard(props: { hostId: string }) {
 
   const { data: actionDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const { data: workflowDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'workflows'), limit(100)),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const { data: datasetDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'datasets'), limit(100)),
-    [firestore, hostId],
+    () => query(collection(firestore, dataScope[0], dataScope[1], 'datasets'), limit(100)),
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const { data: webhookDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const actions = [...(actionDocs ?? [])]
@@ -224,7 +231,7 @@ export function HostActionsCard(props: { hostId: string }) {
         enabled: event.target.checked,
       })
     },
-    [firestore, hostId],
+    [firestore, hostId, hostOrgId],
   )
 
   return (

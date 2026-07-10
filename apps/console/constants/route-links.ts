@@ -17,12 +17,15 @@
 
 export enum Route {
   MANAGE_ACCOUNT_SETTINGS = '/manage/account',
-  ADMIN_TENANTS = '/admin/tenants',
-  ADMIN_TENANT_DETAIL = '/admin/tenants/[tenantId]',
+  ADMIN_ORGS = '/admin/orgs',
+  ADMIN_ORG_DETAIL = '/admin/orgs/[orgId]',
   ADMIN_OVERVIEW = '/admin/overview',
   ADMIN_AUDIT = '/admin/audit',
   ADMIN_USERS = '/admin/users',
-  MANAGE_BILLING = '/manage/billing',
+  ADMIN_FLAGS = '/admin/flags',
+  ORG_MEDIA = '/org/media',
+  ORG_SETTINGS = '/org/settings',
+  MANAGE_BILLING = '/org/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
   AUTH_SIGN_IN = '/signin',
   AUTH_SIGN_OUT = '/signout',
@@ -33,9 +36,9 @@ export enum Route {
   HOST_COMMUNITY_LISTING = '/[hostId]/community/[listingId]',
   HOST_COMMUNITY_PUBLISHER = '/[hostId]/community/publisher/[profileId]',
   HOST_CONTENT = '/[hostId]/content',
-  MANAGE_COMMUNITY_PROFILE = '/manage/community',
-  MANAGE_TEAM = '/manage/team',
-  MANAGE_SUPPORT = '/manage/support',
+  MANAGE_COMMUNITY_PROFILE = '/org/community',
+  MANAGE_TEAM = '/org/team',
+  MANAGE_SUPPORT = '/org/support',
   HOST_DASHBOARD = '/[hostId]',
   HOST_INBOX = '/[hostId]/inbox',
   HOST_CONTACTS = '/[hostId]/contacts',
@@ -66,11 +69,14 @@ export interface RoutePayload extends Record<keyof any, any> {
     versionId: string
   }
   [Route.HOST_DASHBOARD]: { hostId: string }
-  [Route.ADMIN_TENANTS]: undefined
-  [Route.ADMIN_TENANT_DETAIL]: { tenantId: string }
+  [Route.ADMIN_ORGS]: undefined
+  [Route.ADMIN_ORG_DETAIL]: { orgId: string }
   [Route.ADMIN_OVERVIEW]: undefined
   [Route.ADMIN_AUDIT]: undefined
   [Route.ADMIN_USERS]: undefined
+  [Route.ADMIN_FLAGS]: undefined
+  [Route.ORG_MEDIA]: undefined
+  [Route.ORG_SETTINGS]: undefined
   [Route.HOST_COMMUNITY]: { hostId: string }
   [Route.HOST_COMMUNITY_LISTING]: { hostId: string; listingId: string }
   [Route.HOST_COMMUNITY_PUBLISHER]: { hostId: string; profileId: string }

@@ -1,13 +1,13 @@
 ---
 sidebar_position: 2
 title: Build a workflow
-description: Create a multi-step workflow that runs when a host event fires.
+description: Create a multi-step workflow that runs when a site event fires.
 ---
 
 # Build a workflow
 
 A **workflow** is a sequence of steps that runs automatically when something happens on your
-host. This guide builds one end to end.
+site. This guide builds one end to end.
 
 :::info Plan availability
 **Pro+**. Workflow **runs are metered** per tier.
@@ -20,7 +20,7 @@ describes the outcome (e.g. "Welcome new member").
 
 ## 2. Choose a trigger
 
-Pick the **host event** that starts the workflow — for example a form submission, a new
+Pick the **site event** that starts the workflow — for example a form submission, a new
 member, or an order. The event's data is available to every step that follows.
 
 ## 3. Add steps

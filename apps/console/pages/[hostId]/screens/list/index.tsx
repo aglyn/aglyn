@@ -74,7 +74,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'

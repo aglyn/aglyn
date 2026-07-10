@@ -22,7 +22,7 @@ import {
   type DocumentSnapshot,
   type SnapshotOptions,
 } from 'firebase/firestore'
-import { ReactFireOptions, useFirestore } from 'reactfire'
+import { useFirestore, type FirestoreDocOptions } from './firebase/firebase-services'
 import useDoc from './helpers/use-doc'
 
 export const useScreenRef = ({ hostId, screenId }: { hostId: Aglyn.HostUid; screenId: Aglyn.ScreenUid }) => {
@@ -50,7 +50,7 @@ export const useScreen = (
     hostId: Aglyn.HostUid
     screenId: Aglyn.ScreenUid
   },
-  options?: ReactFireOptions<Aglyn.AglynScreen>,
+  options?: FirestoreDocOptions<Aglyn.AglynScreen>,
 ) => {
   return useDoc(useScreenRef(data), options)
 }

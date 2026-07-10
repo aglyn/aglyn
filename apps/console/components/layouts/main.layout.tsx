@@ -17,6 +17,7 @@
 
 import {
   APP_CONSOLE,
+  ICON_VARIANT_APP_PREFERENCES,
   ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_LEFT,
   ICON_VARIANT_MENU_DOWN,
@@ -65,7 +66,7 @@ import { useColorScheme } from '@mui/material/styles'
 import { Fragment, useMemo } from 'react'
 import { Route } from '../../constants/route-links'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
-import HostSwitcherNavComponent from '../host-switcher-nav.component'
+import OrgSwitcherNav from '../org-switcher-nav.component'
 
 // eslint-disable-next-line react/display-name
 const buildNav = (type?: 'icon' | 'text') => (item, i) => {
@@ -406,16 +407,18 @@ export function MainLayout(props: MainLayoutProps) {
           actionsPrefix={actionsPrefix}
           centerNavigationItems={centerNavigationItems || []}
           customCenter={
-            // Default center nav is the host-switcher dropdown (AGL-36);
-            // pages that pass their own nav items or custom center keep them.
+            // Default center nav is the ORG switcher (AGL-236 — swapped
+            // with the host switcher, which now lives in the secondary
+            // bar); pages passing their own nav items or center keep them.
             customCenter ??
-            (centerNavigationItems ? undefined : <HostSwitcherNavComponent />)
+            (centerNavigationItems ? undefined : <OrgSwitcherNav />)
           }
           appBarSuffix={appBarSuffix}
           quickActions={[
             ...(quickActions || []),
-            // Manage quick menu (AGL-110): Settings/Billing/Community
-            // reachable without opening the avatar menu.
+            // Manage quick menu (AGL-110), trimmed to the user-scoped
+            // pages — Billing/Community/Team/Support live in the org tab
+            // strip now (AGL-236).
             {
               title: 'Manage',
               MenuProps: { dense: true, horizontalOrigin: 'right' },
@@ -423,22 +426,16 @@ export function MainLayout(props: MainLayoutProps) {
               'aria-label': 'manage',
               items: [
                 {
-                  children: 'Settings',
+                  children: 'User settings',
                   component: AppLink,
                   href: Route.MANAGE_USER_SETTINGS,
                   icon: { path: ICON_VARIANT_USER_SETTINGS.path },
                 },
                 {
-                  children: 'Billing',
+                  children: 'Account',
                   component: AppLink,
-                  href: Route.MANAGE_BILLING,
-                  icon: { path: mdiCreditCardOutline.path },
-                },
-                {
-                  children: 'Community profile',
-                  component: AppLink,
-                  href: Route.MANAGE_COMMUNITY_PROFILE,
-                  icon: { path: mdiAccountGroupOutline.path },
+                  href: Route.MANAGE_ACCOUNT_SETTINGS,
+                  icon: { path: ICON_VARIANT_APP_PREFERENCES.path },
                 },
               ],
             },
@@ -501,7 +498,7 @@ export function MainLayout(props: MainLayoutProps) {
                 {
                   children: 'Staff console',
                   component: AppLink,
-                  href: Route.ADMIN_TENANTS,
+                  href: Route.ADMIN_ORGS,
                   icon: { path: ICON_VARIANT_USER_SETTINGS.path },
                 },
                 {

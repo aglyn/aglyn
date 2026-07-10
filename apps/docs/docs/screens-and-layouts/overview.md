@@ -27,7 +27,7 @@ reusable components.
 ## Screens & routing
 
 - Each screen has a **title** and a URL **slug**. Aglyn normalizes slugs and keeps a
-  host **routing map**.
+  site **routing map**.
 - Screens form a **hierarchy**: pick a parent and the child inherits a nested path
   (`/services/pricing`). Changing a slug or parent cascades safe rewrites across the map,
   with cycle guards so you can't create a loop.
@@ -44,7 +44,7 @@ converters, just like screens.
 
 Promote a subtree into a **reusable component** and insert instances anywhere. Instances
 graft the source at render time, so one edit updates them all. Manage (rename / demote /
-delete) reusable components from the host dashboard.
+delete) reusable components from the site dashboard.
 
 ## Versions & scheduled publishing
 

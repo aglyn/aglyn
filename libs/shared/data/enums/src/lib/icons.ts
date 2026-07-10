@@ -53,6 +53,7 @@ import {
   mdiDrag,
   mdiFileTree,
   mdiFilter,
+  mdiFlagVariant,
   mdiFormatAlignCenter,
   mdiFormatAlignJustify,
   mdiFormatAlignLeft,
@@ -191,5 +192,8 @@ export const ICON_VARIANT_TABLET = mdiTablet
 
 // Symbols + Status
 export const ICON_VARIANT_SYMBOL_CONFIRMED = mdiCheck
+// Release-flagged surface marker (AGL-229): staff-only badge on nav tabs
+// and admin flag rows for features hidden from customers.
+export const ICON_VARIANT_SYMBOL_FLAG = mdiFlagVariant
 export const ICON_VARIANT_SYMBOL_MINUS = mdiMinus
 export const ICON_VARIANT_SYMBOL_SECURE = mdiShieldLock

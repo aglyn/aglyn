@@ -32,7 +32,7 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 export interface HostProductsCardProps {

@@ -98,8 +98,8 @@
       "inputs": [
         "default",
         "^default",
-        "{workspaceRoot}/.eslintrc.js",
-        "{workspaceRoot}/tools/eslint-rules/**/*"
+        "{workspaceRoot}/tools/eslint-rules/**/*",
+        "{workspaceRoot}/eslint.config.mjs"
       ],
       "cache": true
     },
@@ -124,7 +124,8 @@
       "!{projectRoot}/src/test-setup.[jt]s",
       "!{projectRoot}/**/*.stories.@(js|jsx|ts|tsx|mdx)",
       "!{projectRoot}/.storybook/**/*",
-      "!{projectRoot}/tsconfig.storybook.json"
+      "!{projectRoot}/tsconfig.storybook.json",
+      "!{projectRoot}/eslint.config.mjs"
     ]
   },
   "useDaemonProcess": true,

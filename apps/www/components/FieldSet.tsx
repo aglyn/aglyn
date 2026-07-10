@@ -23,7 +23,7 @@ import ListItem from '@mui/material/ListItem'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import { ChangeEventHandler } from 'react'
-import { ListChildComponentProps, VariableSizeList } from 'react-window'
+import { List, type RowComponentProps } from 'react-window'
 import { fieldHasError, type Fields } from '../forms'
 
 const useStyles = makeStyles<Theme, Props>((theme: Theme) =>
@@ -46,12 +46,17 @@ const buildOption = (option: Fields.Option, key?: any) => (
   </MenuItem>
 )
 
-function checkboxListRow(props: ListChildComponentProps) {
-  const { index, style, data } = props
-  const { items, field, onUpdate } = data
+type CheckboxListRowProps = RowComponentProps<{
+  items: Fields.Option[]
+  field: Fields.FieldT
+  onUpdate: Props['onUpdate']
+}>
+
+function CheckboxListRow(props: CheckboxListRowProps) {
+  const { index, style, items } = props
   const item = (items ?? [])[index]
   return (
-    <ListItem key={data.value} dense button style={style} onClick={() => {}}>
+    <ListItem dense button style={style} onClick={() => {}}>
       <ListItemIcon>
         <Checkbox
           edge="start"
@@ -129,25 +134,22 @@ export default function FieldSet(props: Props) {
     let row
     switch (field.type) {
       case 'checkbox-multi':
-        row = checkboxListRow
+        row = CheckboxListRow
         break
       default:
-        row = checkboxListRow
+        row = CheckboxListRow
         break
     }
-    const itemSize = (index: number) => 42
     const items = getFieldOptions(field, fields)
     return (
       <div className={classes.wrapper}>
-        <VariableSizeList
-          height={400}
-          width="100%"
-          itemCount={items.length}
-          itemSize={itemSize}
-          itemData={{ items, field, onUpdate }}
-        >
-          {row}
-        </VariableSizeList>
+        <List
+          style={{ height: 400, width: '100%' }}
+          rowComponent={row}
+          rowCount={items.length}
+          rowHeight={42}
+          rowProps={{ items, field, onUpdate }}
+        />
       </div>
     )
   }

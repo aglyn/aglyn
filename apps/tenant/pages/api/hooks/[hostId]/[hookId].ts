@@ -23,7 +23,7 @@ import {
   type HostWorkflow,
   runWorkflow,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -94,13 +94,9 @@ export default async function handler(
 
     // Plan gate (dark-launch rule preserved).
     const hostSnapshot = await hostRef.get()
-    const tenantId = hostSnapshot.get('tenantId') as string | undefined
-    if (tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    {
+      // Plan/quota gates ride the owning org's doc (AGL-238).
+      const tenant = (await getOrgForHost(hostId))?.org
       if (tenant?.['plan'] && !checkEntitlement(tenant as any, 'webhooks')) {
         return res
           .status(403)

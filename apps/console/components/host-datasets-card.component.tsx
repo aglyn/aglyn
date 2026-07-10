@@ -65,12 +65,13 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   checkTenantQuota,
   hasEntitlement,
 } from '../constants/entitlements'
 import useCurrentTenant from '../hooks/use-current-tenant'
+import useHostOrgId from '../hooks/use-host-org-id'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useHostActivityLogger from '../hooks/use-host-activity-logger'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
@@ -87,6 +88,12 @@ export interface HostDatasetsCardProps {
  */
 export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const { hostId } = props
+  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // fallback for hosts not yet org-wired.
+  const hostOrgId = useHostOrgId(hostId)
+  const dataScope = hostOrgId
+    ? (['orgs', hostOrgId] as const)
+    : (['hosts', hostId] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -94,8 +101,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const logActivity = useHostActivityLogger(hostId)
 
   const { data: datasetDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'datasets'), limit(100)),
-    [firestore, hostId],
+    () => query(collection(firestore, dataScope[0], dataScope[1], 'datasets'), limit(100)),
+    [firestore, hostId, hostOrgId],
     { idField: '$id' },
   )
   const datasets = useMemo(
@@ -122,15 +129,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       query(
         collection(
           firestore,
-          'hosts',
-          hostId,
+          dataScope[0],
+          dataScope[1],
           'datasets',
           selected?.$id ?? '-none-',
           'records',
         ),
         limit(500),
       ),
-    [firestore, hostId, selected?.$id],
+    [firestore, hostId, hostOrgId, selected?.$id],
     { idField: '$id' },
   )
   const records = useMemo(
@@ -186,7 +193,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   const handleCreate = useCallback(async () => {
     if (!creator?.name.trim() || creatorFields.length === 0) return
     const id = createResourceUid()
-    await setDoc(doc(firestore, 'hosts', hostId, 'datasets', id), {
+    await setDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', id), {
       displayName: creator.name.trim(),
       fields: creatorFields,
       // Typed model from day one (AGL-178); refine it in the Schema dialog.
@@ -225,7 +232,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         onDelete: 'setNull' as const,
       },
     })
-    await setDoc(doc(firestore, 'hosts', hostId, 'datasets', id), {
+    await setDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', id), {
       displayName: `${a.displayName} ↔ ${b.displayName}`,
       fields: ['aRef', 'bRef'],
       model: {
@@ -259,7 +266,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    await deleteDoc(doc(firestore, 'hosts', hostId, 'datasets', selected.$id))
+    await deleteDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', selected.$id))
     setSelectedId(null)
     enqueueSnackbar('Dataset deleted', { variant: 'success', persist: false })
     logActivity('Deleted dataset', {
@@ -309,8 +316,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           query(
             collection(
               firestore,
-              'hosts',
-              hostId,
+              dataScope[0],
+              dataScope[1],
               'datasets',
               reference.datasetId,
               'records',
@@ -400,8 +407,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     const id = editor.id ?? createResourceUid()
     const recordRef = doc(
       firestore,
-      'hosts',
-      hostId,
+      dataScope[0],
+      dataScope[1],
       'datasets',
       selected.$id,
       'records',
@@ -460,8 +467,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           query(
             collection(
               firestore,
-              'hosts',
-              hostId,
+              dataScope[0],
+              dataScope[1],
               'datasets',
               other.$id,
               'records',
@@ -508,8 +515,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       await deleteDoc(
         doc(
           firestore,
-          'hosts',
-          hostId,
+          dataScope[0],
+          dataScope[1],
           'datasets',
           selected.$id,
           'records',
@@ -616,8 +623,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         batch.set(
           doc(
             firestore,
-            'hosts',
-            hostId,
+            dataScope[0],
+            dataScope[1],
             'datasets',
             selected.$id,
             'records',

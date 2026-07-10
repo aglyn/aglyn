@@ -16,7 +16,7 @@
  */
 
 import { checkEntitlement, checkQuota, createResourceUid } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -56,22 +56,19 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
     const bucket = firebaseAdmin
       .app()
       .storage()
       .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
 
-    const tenantSnapshot = await firestore
-      .collection('tenants')
-      .doc(decoded.uid)
-      .get()
-    const tenant = tenantSnapshot.data() ?? {}
+    // Quota/entitlements ride the owning org's doc (AGL-238).
+    const tenant = (await getOrgForHost(hostId))?.org ?? {}
     const counterRef = hostRef.collection('counters').doc('media')
 
     if (req.method === 'POST') {

@@ -22,9 +22,9 @@ import {
   createResourceUid,
   sanitizeCommunityDefinition,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
+import { resolveOrgPermissions } from '../../../utils/server/org-permissions'
 
 const MAX_TEMPLATE_SCREENS = 25
 
@@ -70,10 +70,10 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const membership = await resolveTenantPermissions(decoded.uid)
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.publishToCommunity) {
       return res.status(403).json({
-        error: 'Your team role does not allow publishing to the community',
+        error: 'Your organization role does not allow publishing to the community',
       })
     }
     const firestore = firebaseAdmin.app().firestore()
@@ -81,18 +81,15 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
 
-    const tenantSnapshot = await firestore
-      .collection('tenants')
-      .doc(decoded.uid)
-      .get()
-    const tenant = tenantSnapshot.data() ?? {}
+    // Plan gate rides the owning org's doc (AGL-238).
+    const tenant = (await getOrgForHost(hostId))?.org ?? {}
     if (
       tenant['plan'] &&
       !checkEntitlement(tenant as any, 'marketplaceSelling')

@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Workflows, Actions & Webhooks
-description: Automate your site — run multi-step workflows on host events, and connect to other systems with webhooks.
+description: Automate your site — run multi-step workflows on site events, and connect to other systems with webhooks.
 ---
 
 # Workflows, Actions & Webhooks
@@ -14,7 +14,7 @@ outside systems.
 
 ```mermaid
 flowchart LR
-  E["Host event<br/>(form submit, order, member)"] --> W["Workflow<br/>(ordered steps)"]
+  E["Site event<br/>(form submit, order, member)"] --> W["Workflow<br/>(ordered steps)"]
   W --> S1[Step 1]
   S1 --> S2[Step 2]
   W --> WH["Outbound webhook<br/>→ external system"]
@@ -27,7 +27,7 @@ flowchart LR
 ## Workflows
 
 - Build workflows on the **workflows page** with a pure step runner.
-- Trigger them from **host events**, and compose [functions and variables](../bindings/overview.md)
+- Trigger them from **site events**, and compose [functions and variables](../bindings/overview.md)
   inside them.
 - Runs are **metered** per tier.
 

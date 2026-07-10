@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin, upsertHostContact } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  resolveOrgMembership,
+  upsertHostContact,
+} from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -106,30 +111,36 @@ export default async function handler(
     ) {
       const tenantId = object?.metadata?.tenantId
       if (tenantId) {
+        // tenantId in legacy metadata is the owner uid; new checkouts also
+        // carry orgId. Orgs are the only billing target (AGL-238).
         const canceled = type === 'customer.subscription.deleted'
         const priceId = object?.items?.data?.[0]?.price?.id
         const plan = canceled
           ? 'free'
           : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
-        await firebaseAdmin
-          .app()
-          .firestore()
-          .collection('tenants')
-          .doc(tenantId)
-          .set(
-            {
-              plan,
-              stripeCustomerId: object?.customer ?? null,
-              subscription: {
-                status: canceled ? 'canceled' : (object?.status ?? 'active'),
-                priceId: object?.items?.data?.[0]?.price?.id ?? null,
-                currentPeriodEnd: object?.current_period_end
-                  ? new Date(object.current_period_end * 1000)
-                  : null,
-              },
-            },
-            { merge: true },
-          )
+        const billing = {
+          plan,
+          stripeCustomerId: object?.customer ?? null,
+          subscription: {
+            status: canceled ? 'canceled' : (object?.status ?? 'active'),
+            priceId: object?.items?.data?.[0]?.price?.id ?? null,
+            currentPeriodEnd: object?.current_period_end
+              ? new Date(object.current_period_end * 1000)
+              : null,
+          },
+        }
+        const orgId =
+          object?.metadata?.orgId ??
+          (await resolveOrgMembership(tenantId))?.orgId ??
+          null
+        if (orgId) {
+          await firebaseAdmin
+            .app()
+            .firestore()
+            .collection('orgs')
+            .doc(String(orgId))
+            .set(billing, { merge: true })
+        }
       }
     }
 
@@ -301,7 +312,8 @@ export default async function handler(
             )
           }
           const hostSnapshot = await hostRef.get()
-          const sellerUid = Object.keys(hostSnapshot.get('admins') ?? {})[0]
+          const sellerUid = (await getOrgForHost(String(hostId)))?.org
+            ?.ownerUid
           if (sellerUid) {
             const seller = await firebaseAdmin
               .app()

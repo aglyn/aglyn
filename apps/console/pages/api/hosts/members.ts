@@ -16,21 +16,26 @@
  */
 
 import { checkSeatQuota, createResourceUid } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  grantHostAccess,
+  revokeHostAccess,
+} from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
+import { resolveOrgPermissions } from '../../../utils/server/org-permissions'
 
 const ROLES = new Set(['viewer', 'editor', 'admin'])
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
- * Host user manager (AGL-107): add/update/remove host members. Server-side
- * because email → auth-uid lookup and the `admins` rules map need the Admin
- * SDK, and member seats are quota-enforced (AGL-112, plan-gated per the
- * dark-launch rule). Members with an existing account get console access
- * via the `admins` map; unknown emails are stored as `invited` and linked
- * when they sign up. Role granularity beyond admin/non-admin is recorded
- * now and enforced with the granular-rules follow-up (AGL-108).
+ * Host user manager (AGL-107, re-keyed to orgs with AGL-238): add/update/
+ * remove per-site collaborators. Under the hood this manages org
+ * membership `hostAccess` — the grant lands in the `memberRoles` rules
+ * projection, which is the security boundary. The host's `members`
+ * subcollection stays as the display roster the card renders (email,
+ * role, invited/active status); member seats stay quota-enforced
+ * (AGL-112, plan-gated per the dark-launch rule, plan from the org doc).
  */
 export default async function handler(
   req: NextApiRequest,
@@ -52,20 +57,27 @@ export default async function handler(
   try {
     const app = firebaseAdmin.app()
     const decoded = await app.auth().verifyIdToken(idToken)
-    // Manager permission gate (AGL-108).
-    const membership = await resolveTenantPermissions(decoded.uid)
-    if (!membership.permissions.manageMembers) {
-      return res
-        .status(403)
-        .json({ error: 'Your team role does not allow managing members' })
-    }
     const firestore = app.firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     const host = hostSnapshot.data()
-    if (!host || host['admins']?.[decoded.uid] !== true) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    // Caller must be a site admin (memberRoles projection) or an org
+    // owner/admin with the manage-members permission.
+    const memberRole = (host?.['memberRoles'] ?? {})[decoded.uid]
+    const orgPermissions = await resolveOrgPermissions(decoded.uid, { hostId })
+    if (
+      !host ||
+      (memberRole !== 'admin' && !orgPermissions.permissions.manageMembers)
+    ) {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
+    const resolved = await getOrgForHost(hostId)
+    if (!resolved) {
+      return res
+        .status(409)
+        .json({ error: 'This site has no organization yet' })
+    }
+    const { orgId, org } = resolved
     const membersRef = hostRef.collection('members')
 
     if (req.method === 'POST') {
@@ -80,24 +92,20 @@ export default async function handler(
         return res.status(400).json({ error: 'Unknown role' })
       }
 
-      const [existing, tenantSnapshot] = await Promise.all([
-        membersRef.where('email', '==', email).limit(1).get(),
-        firestore
-          .collection('tenants')
-          .doc(String(host['tenantId'] ?? ''))
-          .get(),
-      ])
+      const existing = await membersRef
+        .where('email', '==', email)
+        .limit(1)
+        .get()
       if (!existing.empty) {
         return res.status(409).json({ error: 'Already a member' })
       }
 
-      // Seat quota (AGL-112): enforced once the tenant has a plan; addons
+      // Seat quota (AGL-112): enforced once the org has a plan; addons
       // raise the limit up to the hard max, beyond which upgrading is the
       // only path.
-      const tenant = tenantSnapshot.data()
-      if (tenant?.['plan']) {
+      if (org['plan']) {
         const memberCount = (await membersRef.count().get()).data().count
-        const quota = checkSeatQuota(tenant as any, 'members', memberCount)
+        const quota = checkSeatQuota(org as any, 'members', memberCount)
         if (!quota.allowed) {
           return res.status(403).json({
             error: quota.upgradeRequired
@@ -109,13 +117,41 @@ export default async function handler(
         }
       }
 
-      // Known account → active member keyed by uid (and console access for
-      // admins via the rules map); unknown → invited record linked later.
+      // Known account → org membership scoped to this host (projected
+      // into memberRoles for console access); unknown → invited roster
+      // record, linked through the org-invite acceptance flow.
       const authUser = await app
         .auth()
         .getUserByEmail(email)
         .catch(() => null)
       const memberId = authUser?.uid ?? createResourceUid()
+      if (authUser) {
+        await grantHostAccess({
+          orgId,
+          uid: authUser.uid,
+          hostId,
+          role: role as 'viewer' | 'editor' | 'admin',
+          email,
+          displayName: authUser.displayName ?? null,
+          invitedBy: decoded.uid,
+        })
+      } else {
+        // No account yet: an org invite carries the pending host grant;
+        // acceptance applies it and the roster doc flips on next edit.
+        await firestore
+          .collection('orgs')
+          .doc(orgId)
+          .collection('invites')
+          .add({
+            email,
+            role: 'viewer',
+            allHosts: false,
+            hostAccess: { [hostId]: role },
+            invitedBy: decoded.uid,
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+            acceptedAt: null,
+          })
+      }
       await membersRef.doc(memberId).set({
         email,
         role,
@@ -124,9 +160,6 @@ export default async function handler(
         addedBy: decoded.uid,
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
-      if (authUser && role === 'admin') {
-        await hostRef.update({ [`admins.${authUser.uid}`]: true })
-      }
       return res.status(200).json({
         memberId,
         status: authUser ? 'active' : 'invited',
@@ -144,14 +177,12 @@ export default async function handler(
       if (!member) return res.status(404).json({ error: 'Member not found' })
       await membersRef.doc(memberId).update({ role })
       if (member['uid']) {
-        await hostRef.update(
-          role === 'admin'
-            ? { [`admins.${member['uid']}`]: true }
-            : {
-                [`admins.${member['uid']}`]:
-                  firebaseAdmin.firestore.FieldValue.delete(),
-              },
-        )
+        await grantHostAccess({
+          orgId,
+          uid: String(member['uid']),
+          hostId,
+          role: role as 'viewer' | 'editor' | 'admin',
+        })
       }
       return res.status(200).json({ ok: true })
     }
@@ -162,16 +193,13 @@ export default async function handler(
       const memberSnapshot = await membersRef.doc(memberId).get()
       const member = memberSnapshot.data()
       if (!member) return res.status(404).json({ error: 'Member not found' })
-      // The owning tenant account can never be removed from its own host.
-      if (member['uid'] && member['uid'] === host['tenantId']) {
+      // The org owner can never be removed from their own site.
+      if (member['uid'] && member['uid'] === org['ownerUid']) {
         return res.status(400).json({ error: 'The owner cannot be removed' })
       }
       await membersRef.doc(memberId).delete()
       if (member['uid']) {
-        await hostRef.update({
-          [`admins.${member['uid']}`]:
-            firebaseAdmin.firestore.FieldValue.delete(),
-        })
+        await revokeHostAccess(orgId, String(member['uid']), hostId)
       }
       return res.status(200).json({ ok: true })
     }

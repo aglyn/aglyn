@@ -21,9 +21,10 @@ import {
 } from '@aglyn/shared-ui-color-picker'
 import { styled } from '@aglyn/shared-ui-theme'
 import {
+  type ExtendedFieldMeta,
   FormFieldGrid,
   validationError,
-} from '@data-driven-forms/mui-component-mapper'
+} from '../mapper'
 import {
   useFieldApi,
   type UseFieldApiComponentConfig,
@@ -143,7 +144,7 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     } = useFieldApi(props as any)
 
     const id = `color-picker-${useId()}`
-    const invalid = validationError(meta, validateOnMount)
+    const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
     const hasError = Boolean(invalid)
 
     const value = input?.value || defaultValue || ''

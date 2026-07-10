@@ -10,7 +10,7 @@ The **theme builder** controls how your whole site looks — colors, fonts, and 
 schemes — applied consistently across every screen.
 
 :::info Plan availability
-**Free**. Theming is core to every host.
+**Free**. Theming is core to every site.
 :::
 
 ## Edit your theme

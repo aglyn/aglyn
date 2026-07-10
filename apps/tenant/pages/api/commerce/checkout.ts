@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
@@ -75,16 +75,20 @@ export default async function handler(
       return res.status(409).json({ error: 'Sold out' })
     }
 
-    const ownerId =
-      hostSnapshot.get('tenantId') ??
-      Object.keys(hostSnapshot.get('admins') ?? {})[0]
-    const [ownerTenant, ownerProfile] = await Promise.all([
-      firestore.collection('tenants').doc(String(ownerId)).get(),
-      firestore.collection('profiles').doc(String(ownerId)).get(),
-    ])
+    // Seller resolution rides the owning org (AGL-238): plan gate from
+    // the org doc, Stripe account from the owner's community profile.
+    const ownerOrg = await getOrgForHost(hostId)
+    const ownerId = ownerOrg?.org?.ownerUid
+    if (!ownerId) {
+      return res.status(409).json({ error: 'This site cannot sell yet' })
+    }
+    const ownerProfile = await firestore
+      .collection('profiles')
+      .doc(String(ownerId))
+      .get()
     if (
-      ownerTenant.get('plan') &&
-      !Aglyn.checkEntitlement(ownerTenant.data() as any, 'marketplaceSelling')
+      ownerOrg.org.plan &&
+      !Aglyn.checkEntitlement(ownerOrg.org as any, 'marketplaceSelling')
     ) {
       return res.status(403).json({ error: 'Selling is not enabled' })
     }

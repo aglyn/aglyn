@@ -19,7 +19,7 @@ Send an old or alternate URL to the right screen.
 3. Save. The rule is **validated** on save, with **chain-loop** and **screen-collision**
    checks so it can't loop or shadow a real screen.
 
-The tenant enforces redirect rules during route resolution, so the redirect takes effect on
+The published site enforces redirect rules during route resolution, so the redirect takes effect on
 the live site immediately.
 
 ## Read hit metrics

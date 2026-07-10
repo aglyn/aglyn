@@ -3,17 +3,13 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/tenant",
   "projectType": "application",
-  "tags": [
-    "scope:app",
-    "scope:public"
-  ],
+  "tags": ["scope:app", "scope:public"],
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "defaultConfiguration": "production",
+      "cache": false,
       "options": {
         "outputPath": "dist/apps/tenant"
       },
@@ -24,11 +20,11 @@
         "development": {
           "outputPath": "apps/tenant"
         }
-      },
-      "cache": false
+      }
     },
     "serve": {
       "executor": "@nx/next:server",
+      "defaultConfiguration": "development",
       "options": {
         "buildTarget": "tenant:build",
         "dev": true,
@@ -43,8 +39,7 @@
           "buildTarget": "tenant:build:development",
           "dev": true
         }
-      },
-      "defaultConfiguration": "development"
+      }
     },
     "export": {
       "executor": "@nx/next:export",
@@ -54,18 +49,14 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/apps/tenant"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/apps/tenant"],
       "options": {
         "jestConfig": "apps/tenant/jest.config.ts"
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     }
   }
 }

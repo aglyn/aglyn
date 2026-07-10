@@ -26,6 +26,8 @@ export * from './components/textarea.component'
 export * from './components/grid-form-template.component'
 export * from './components/toggle-button.component'
 
+export * from './mapper'
+
 export * from './constants/component-mappers'
 export * from './constants/dynamic-fields'
 export * from './constants/field-configurations'
@@ -37,3 +39,11 @@ export * from './utils/option-is-equal-to-value'
 export * from './utils/validation-message'
 
 export * from './vendor/data-driven-forms'
+
+// Explicit winners for names exported by both the classic components and
+// the MUI-native mapper (or the ddf vendor barrel) — TS2308 otherwise.
+export { type SelectProps } from './components/select.component'
+export { type SwitchProps } from './components/switch.component'
+export { type TextFieldProps } from './components/text-field.component'
+export { type TextareaProps } from './components/textarea.component'
+export { FieldArray } from './vendor/data-driven-forms'

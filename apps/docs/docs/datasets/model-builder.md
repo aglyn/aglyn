@@ -10,14 +10,14 @@ A **model** is the shape of a dataset — its fields and their types. Records ar
 against it, so your data stays clean.
 
 :::info Plan availability
-**Pro**. Free hosts get a limited number of datasets; add-ons raise the cap.
+**Pro**. Free sites get a limited number of datasets; add-ons raise the cap.
 :::
 
 ## Define the model
 
 1. In **Data**, create a dataset and open the **schema dialog**.
 2. Add **typed fields** — text, number, date, reference, and more.
-3. Save. The model is backed by the host's `dod.ts` blueprint at runtime, so records are
+3. Save. The model is backed by the site's `dod.ts` blueprint at runtime, so records are
    validated on the way in.
 
 ## Edit records

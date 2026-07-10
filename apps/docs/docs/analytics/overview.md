@@ -16,7 +16,7 @@ entitlement are **Pro+**.
 
 ## Pageview tracking
 
-A lightweight **pageview beacon** records visits into daily counters. The host dashboard
+A lightweight **pageview beacon** records visits into daily counters. The site dashboard
 shows a **traffic panel** summarizing your site's activity.
 
 ## Insights
@@ -26,7 +26,7 @@ selectable date **ranges**.
 
 ## Per-screen traffic
 
-**Pro+** hosts get a **per-screen traffic panel** on each screen's view page, with
+**Pro+** sites get a **per-screen traffic panel** on each screen's view page, with
 pageviews attributed to the screen and broken down by **referrer** and **device**. Plan
 cards surface analytics as an upsell for lower tiers.
 

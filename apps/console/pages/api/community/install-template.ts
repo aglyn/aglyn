@@ -16,9 +16,9 @@
  */
 
 import { checkQuota, createResourceUid } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
+import { resolveOrgPermissions } from '../../../utils/server/org-permissions'
 
 /**
  * Installs a site template into a host (AGL-137): instantiates the
@@ -49,10 +49,10 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const membership = await resolveTenantPermissions(decoded.uid)
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.installPlugins) {
       return res.status(403).json({
-        error: 'Your team role does not allow installing from the community',
+        error: 'Your organization role does not allow installing from the community',
       })
     }
     const firestore = firebaseAdmin.app().firestore()
@@ -60,11 +60,11 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
 
     const listingRef = firestore
@@ -101,12 +101,8 @@ export default async function handler(
       return res.status(500).json({ error: 'Template version missing' })
     }
 
-    // Plan screen quota (dark-launch rule preserved).
-    const tenantSnapshot = await firestore
-      .collection('tenants')
-      .doc(decoded.uid)
-      .get()
-    const tenant = tenantSnapshot.data()
+    // Plan screen quota via the owning org (dark-launch rule preserved).
+    const tenant = (await getOrgForHost(hostId))?.org
     if (tenant?.['plan']) {
       const count = (
         await hostRef.collection('screens').count().get()

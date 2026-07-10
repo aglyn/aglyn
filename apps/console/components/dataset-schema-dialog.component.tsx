@@ -44,7 +44,8 @@ import {
 } from '@mui/material'
 import { doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import useHostOrgId from '../hooks/use-host-org-id'
 
 /** Types surfaced in the picker; the rest exist for compat, not authoring. */
 const AUTHORABLE_TYPES: DatasetFieldType[] = [
@@ -106,6 +107,12 @@ export interface DatasetSchemaDialogProps {
  */
 export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
   const { hostId, dataset, datasets, recordCount, onClose } = props
+  // Org-shared data root (AGL-237); the host path is the pre-migration
+  // fallback for hosts not yet org-wired.
+  const hostOrgId = useHostOrgId(hostId)
+  const dataScope = hostOrgId
+    ? (['orgs', hostOrgId] as const)
+    : (['hosts', hostId] as const)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -251,7 +258,7 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
         persist: false,
       })
     }
-    await updateDoc(doc(firestore, 'hosts', hostId, 'datasets', dataset.$id), {
+    await updateDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', dataset.$id), {
       model,
       names: {
         singular: names.singular.trim(),

@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import dynamic from 'next/dynamic'
+
+import type { ColorPickerProps } from '../components/color-picker.component'
+import type { IconSelectProps } from '../components/icon-select.component'
+import type { ToggleButtonProps } from '../components/toggle-button.component'
 import type {
   CheckboxProps,
   DatePickerProps,
@@ -26,16 +31,11 @@ import type {
   SliderProps,
   SubFormProps,
   SwitchProps,
-  TabsProps,
-  TextareaProps,
   TextFieldProps,
+  TextareaProps,
   TimePickerProps,
   WizardProps,
-} from '@data-driven-forms/mui-component-mapper'
-import dynamic from 'next/dynamic'
-import type { ColorPickerProps } from '../components/color-picker.component'
-import type { IconSelectProps } from '../components/icon-select.component'
-import type { ToggleButtonProps } from '../components/toggle-button.component'
+} from '../mapper'
 
 export const FieldIconSelect = dynamic<IconSelectProps>(
   () =>
@@ -52,108 +52,48 @@ export const FieldToggleButton = dynamic<ToggleButtonProps>(
     import('../components/toggle-button.component').then((mod) => mod.default),
   { ssr: false },
 )
-export const FieldSelect = dynamic<SelectProps<any>>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/select').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldSelect = dynamic<SelectProps>(() =>
+  import('../mapper/select').then((mod) => mod.default),
 )
-export const FieldSwitch = dynamic<SwitchProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/switch').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldSwitch = dynamic<SwitchProps>(() =>
+  import('../mapper/switch').then((mod) => mod.default),
 )
-export const FieldTextField = dynamic<TextFieldProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/text-field').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldTextField = dynamic<TextFieldProps>(() =>
+  import('../mapper/text-field').then((mod) => mod.default),
 )
-export const FieldTextarea = dynamic<TextareaProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/textarea').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldTextarea = dynamic<TextareaProps>(() =>
+  import('../mapper/textarea').then((mod) => mod.default),
 )
-export const FieldPlainText = dynamic<PlainTextProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/plain-text').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldPlainText = dynamic<PlainTextProps>(() =>
+  import('../mapper/plain-text').then((mod) => mod.default),
 )
-export const FieldSlider = dynamic<SliderProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/slider').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldSlider = dynamic<SliderProps>(() =>
+  import('../mapper/slider').then((mod) => mod.default),
 )
-export const FieldTimePicker = dynamic<TimePickerProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/time-picker').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldTimePicker = dynamic<TimePickerProps>(() =>
+  import('../mapper/time-picker').then((mod) => mod.default),
 )
-export const FieldDatePicker = dynamic<DatePickerProps<any, any>>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/date-picker').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldDatePicker = dynamic<DatePickerProps>(() =>
+  import('../mapper/date-picker').then((mod) => mod.default),
 )
-export const FieldRadio = dynamic<RadioProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/radio').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldRadio = dynamic<RadioProps>(() =>
+  import('../mapper/radio').then((mod) => mod.default),
 )
-export const FieldCheckbox = dynamic<CheckboxProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/checkbox').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldCheckbox = dynamic<CheckboxProps>(() =>
+  import('../mapper/checkbox').then((mod) => mod.default),
 )
-export const FieldFieldArray = dynamic<FieldArrayProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/field-array').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldFieldArray = dynamic<FieldArrayProps>(() =>
+  import('../mapper/field-array').then((mod) => mod.default),
 )
-export const FieldTabs = dynamic<TabsProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/tabs').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldTabs = dynamic(() =>
+  import('../mapper/tabs').then((mod) => mod.default),
 )
-export const FieldWizard = dynamic<WizardProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/wizard').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldWizard = dynamic<WizardProps>(() =>
+  import('../mapper/wizard').then((mod) => mod.default),
 )
-export const FieldDualListSelect = dynamic<DualListSelectProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/dual-list-select').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldDualListSelect = dynamic<DualListSelectProps>(() =>
+  import('../mapper/dual-list-select').then((mod) => mod.default),
 )
-export const FieldSubForm = dynamic<SubFormProps>(
-  () =>
-    import('@data-driven-forms/mui-component-mapper/sub-form').then(
-      (mod) => mod.default,
-    ),
-  // {ssr: false},
+export const FieldSubForm = dynamic<SubFormProps>(() =>
+  import('../mapper/sub-form').then((mod) => mod.default),
 )

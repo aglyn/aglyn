@@ -24,7 +24,7 @@ import {
   resolveTenantEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /** Bounded fan-out per event: at most this many triggered workflows run. */
@@ -72,13 +72,9 @@ export async function runEventWorkflows(
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
     const hostSnapshot = await hostRef.get()
-    const tenantId = hostSnapshot.get('tenantId') as string | undefined
-    if (tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    // Run caps ride the owning org's doc (AGL-238).
+    {
+      const tenant = (await getOrgForHost(hostId))?.org
       if (tenant?.['plan']) {
         const limit = resolveTenantEntitlements(
           tenant as any,

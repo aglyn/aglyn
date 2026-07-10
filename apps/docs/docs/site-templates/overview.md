@@ -18,7 +18,7 @@ scale with your tier.
 
 - Spin up a new site from the **starter template gallery**, which instantiates published
   screens for you.
-- **Save a host as a template**, then browse and install community templates.
+- **Save a site as a template**, then browse and install community templates.
 
 ## Section & block library
 

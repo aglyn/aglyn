@@ -6,7 +6,7 @@ description: Connect your own domain with a self-service wizard and DNS verifica
 
 # Custom Domains
 
-Every host starts on an Aglyn subdomain. When you're ready, connect your **own domain** with
+Every site starts on an Aglyn subdomain. When you're ready, connect your **own domain** with
 a guided, self-service wizard.
 
 :::info Plan availability
@@ -27,5 +27,5 @@ Registrar-specific DNS walkthroughs and troubleshooting are on the way.
 
 ## Related
 
-- [Getting started: create a host](../getting-started/create-a-host.md)
+- [Getting started: create a site](../getting-started/create-a-site.md)
 - [SEO toolkit](../seo/overview.md)

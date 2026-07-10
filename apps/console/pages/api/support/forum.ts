@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
 
 const MAX_BODY = 5000
 const FORUM_CATEGORIES = ['General', 'Building', 'Showcase', 'Feedback']
@@ -44,15 +43,12 @@ export default async function handler(
     const decoded = await app.auth().verifyIdToken(idToken)
     const firestore = app.firestore()
     const isStaff = Boolean(decoded['staff'])
-    const membership = await resolveTenantPermissions(decoded.uid)
 
+    // Paid gate rides the caller's org plan (AGL-238).
     const paid = async () => {
       if (isStaff) return true
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(membership.ownerUid)
-        .get()
-      const plan = tenantSnapshot.get('plan')
+      const resolved = await getOrgForUser(decoded.uid)
+      const plan = resolved?.org?.plan
       return Boolean(plan && plan !== 'free')
     }
     if (!(await paid())) {

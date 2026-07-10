@@ -14,7 +14,7 @@ Publish your site in another language by adding a **locale variant**.
 
 ## Steps
 
-1. Add a **locale** (e.g. `es`, `fr`) to your host.
+1. Add a **locale** (e.g. `es`, `fr`) to your site.
 2. Aglyn creates **locale variants** of your content, sharing the same structure as your
    default language.
 3. Translate the screens' text for that locale.

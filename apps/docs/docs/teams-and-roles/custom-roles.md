@@ -15,7 +15,7 @@ Control what each teammate can do with **roles** — named permission sets — p
 
 ## Create a custom role
 
-1. In the host's role settings, choose **New role**.
+1. In the site's role settings, choose **New role**.
 2. Give it a name and select the **permissions** it grants.
 3. Save, then assign it when you [invite teammates](invite-teammates.md).
 

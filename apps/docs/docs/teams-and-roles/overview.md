@@ -6,7 +6,7 @@ description: Invite teammates with custom roles, and offer members-only areas to
 
 # Teams, Roles & Membership
 
-Aglyn has two kinds of people: your **team** (who build and manage the host) and site
+Aglyn has two kinds of people: your **team** (who build and manage the site) and site
 **members** (visitors who sign up to your site). Both are permission-aware.
 
 :::info Plan availability
@@ -15,11 +15,22 @@ Aglyn has two kinds of people: your **team** (who build and manage the host) and
 
 ## Team roles
 
-- Invite teammates to a host and assign **roles**.
+- Invite teammates to a site and assign **roles**.
 - Create **custom roles** with unique permission sets.
 - Apply **per-member overrides** on top of a role.
 - Permissions are enforced across the console's APIs and surfaces, and team members act in
-  the **owner's** tenant, not their own.
+  the **owner's** organization, not their own.
+
+## Organizations
+
+Aglyn is built around **organization workspaces**: an organization subscribes once, owns
+multiple websites, and shares media, plugins, dynamic data and billing across them. You
+can belong to several organizations with a different role in each (owner, admin, editor,
+viewer), and editors/viewers can be limited to specific sites. Each organization gets a
+Slack-style workspace address (`your-org.aglyn.io`).
+
+Every account operates inside an organization — solo accounts simply get a personal
+workspace automatically. The team features above keep working unchanged.
 
 ## Site membership
 
@@ -29,7 +40,7 @@ Aglyn has two kinds of people: your **team** (who build and manage the host) and
 
 ## Seats
 
-Team and host-member seats are metered and enforced; buy seat add-ons to grow. See
+Team and site-member seats are metered and enforced; buy seat add-ons to grow. See
 [Billing & plans](../billing-and-plans/overview.md).
 
 :::note More detailed how-tos coming

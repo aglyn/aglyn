@@ -16,7 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  orgDataCollectionForHost,
+} from '@aglyn/tenant-data-admin'
 
 /**
  * Fetches the host's datasets with their records for repeatable expansion
@@ -30,13 +33,13 @@ export async function getDatasets(options: {
 }): Promise<Record<string, Aglyn.RepeatableDataset>> {
   const datasets: Record<string, Aglyn.RepeatableDataset> = {}
   try {
-    const firestore = firebaseAdmin.app().firestore()
-    const snapshot = await firestore
-      .collection('hosts')
-      .doc(options.hostId)
-      .collection('datasets')
-      .limit(50)
-      .get()
+    // Datasets are org-scoped (AGL-237); helper falls back to the host
+    // path for hosts not yet org-wired.
+    const datasetsRef = await orgDataCollectionForHost(
+      options.hostId,
+      'datasets',
+    )
+    const snapshot = await datasetsRef.limit(50).get()
     await Promise.all(
       snapshot.docs.map(async (docSnapshot) => {
         const recordsSnapshot = await docSnapshot.ref

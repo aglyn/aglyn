@@ -22,10 +22,10 @@ import {
   pluginArtifactPath,
   validatePluginManifest,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import { createHash } from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
+import { resolveOrgPermissions } from '../../../utils/server/org-permissions'
 
 // Base64 bundle bodies: a small JS plugin bundle, capped generously.
 export const config = { api: { bodyParser: { sizeLimit: '8mb' } } }
@@ -80,19 +80,16 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const membership = await resolveTenantPermissions(decoded.uid)
+    const membership = await resolveOrgPermissions(decoded.uid)
     if (!membership.permissions.publishToCommunity) {
       return res.status(403).json({
-        error: 'Your team role does not allow publishing to the community',
+        error: 'Your organization role does not allow publishing to the community',
       })
     }
     const firestore = firebaseAdmin.app().firestore()
 
-    const tenantSnapshot = await firestore
-      .collection('tenants')
-      .doc(decoded.uid)
-      .get()
-    const tenant = tenantSnapshot.data() ?? {}
+    // Plan gate rides the caller's org doc (AGL-238).
+    const tenant = (await getOrgForUser(decoded.uid))?.org ?? {}
     if (tenant['plan'] && !checkEntitlement(tenant, 'marketplaceSelling')) {
       return res
         .status(403)

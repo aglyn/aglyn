@@ -31,7 +31,8 @@ import {
   runWorkflow,
   sanitizeRecordValues,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  orgDataCollectionForHost, firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { HostEventPayload } from './run-event-workflows'
@@ -75,15 +76,11 @@ export async function runEventActions(
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     const hostSnapshot = await hostRef.get()
-    const tenantId = hostSnapshot.get('tenantId') as string | undefined
-    // Webhook steps take the higher `webhooks` gate (AGL-149).
+    // Webhook steps take the higher `webhooks` gate (AGL-149); plan gates
+    // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
-    if (tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    {
+      const tenant = (await getOrgForHost(hostId))?.org
       if (tenant?.['plan']) {
         if (!checkEntitlement(tenant as any, 'actions')) return alerts
         webhooksAllowed = checkEntitlement(tenant as any, 'webhooks')
@@ -228,8 +225,9 @@ export async function runEventActions(
               stepErrors.push(`webhook "${step.webhookName}" delivery failed`)
             }
           } else if (step.type === 'datasetAppend') {
-            const datasets = await hostRef
-              .collection('datasets')
+            const datasets = await (
+              await orgDataCollectionForHost(hostId, 'datasets')
+            )
               .where('name', '==', step.datasetName.trim())
               .limit(1)
               .get()

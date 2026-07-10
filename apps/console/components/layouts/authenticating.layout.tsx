@@ -25,7 +25,7 @@ import { useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { useSigninCheck } from 'reactfire'
+import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 
 export interface AuthenticatingLayoutProps
   extends Partial<BackgroundImageComponentProps> {

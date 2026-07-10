@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
+import { resolveOrgPermissions } from '../../../utils/server/org-permissions'
 
 /**
  * Installs (or upgrades) a community plugin into a host (AGL-45), pinning a
@@ -52,10 +53,10 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const membership = await resolveTenantPermissions(decoded.uid)
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.installPlugins) {
       return res.status(403).json({
-        error: 'Your team role does not allow installing from the community',
+        error: 'Your organization role does not allow installing from the community',
       })
     }
     const firestore = firebaseAdmin.app().firestore()
@@ -63,11 +64,27 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (!['admin', 'editor'].includes(memberRole)) {
+      return res.status(403).json({ error: 'Not a site admin' })
+    }
+
+    // Org-tier uninstall (AGL-237): org pins are API-managed (rules deny
+    // client writes), so removal comes through here too.
+    if (req.body?.action === 'uninstall' && req.body?.scope === 'org') {
+      const orgId = await resolveOrgIdForHost(hostId)
+      if (!orgId) {
+        return res.status(409).json({ error: 'This site has no organization yet' })
+      }
+      await firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection('installs')
+        .doc(listingId)
+        .delete()
+      return res.status(200).json({ ok: true })
     }
 
     const listingRef = firestore
@@ -118,7 +135,21 @@ export default async function handler(
     }
 
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
-    const installRef = hostRef.collection('installs').doc(listingId)
+    // Install tier (AGL-237): org-extending plugins install once for every
+    // host in the org; host-only plugins stay pinned to the host.
+    const scope = req.body?.scope === 'org' ? 'org' : 'host'
+    let installRef = hostRef.collection('installs').doc(listingId)
+    if (scope === 'org') {
+      const orgId = await resolveOrgIdForHost(hostId)
+      if (!orgId) {
+        return res.status(409).json({ error: 'This site has no organization yet' })
+      }
+      installRef = firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection('installs')
+        .doc(listingId)
+    }
     const existing = await installRef.get()
     await installRef.set(
       {

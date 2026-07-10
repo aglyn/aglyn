@@ -7,7 +7,7 @@ description: Extend Aglyn with sandboxed plugins — install from the marketplac
 # Plugins & Marketplace
 
 **Plugins** extend Aglyn with new components and capabilities. You install them from the
-**community marketplace**, configure them per host, and they run **sandboxed** so they can't
+**community marketplace**, configure them per site, and they run **sandboxed** so they can't
 compromise your site.
 
 ![The Community page in the Aglyn console, showing the Installed plugins and Community components sections](/img/plugins/community-page.png)
@@ -41,7 +41,7 @@ are paid.
 ## Configure
 
 Plugins expose a **settings** field for per-plugin configuration, so the same plugin can
-behave differently on each host.
+behave differently on each site.
 
 ## Publish your own
 

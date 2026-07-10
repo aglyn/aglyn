@@ -16,8 +16,11 @@
  */
 'use client'
 
+import type { OrgRole } from '@aglyn/aglyn'
+import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useUser } from 'reactfire'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import useOrgWorkspace from './use-org-workspace'
 
 export interface TenantPermissions {
   createHosts: boolean
@@ -37,55 +40,100 @@ const ALL_TRUE: TenantPermissions = {
   manageMembers: true,
 }
 
+const EDITOR: TenantPermissions = {
+  createHosts: false,
+  editHosts: true,
+  editBilling: false,
+  publishToCommunity: true,
+  installPlugins: true,
+  manageMembers: false,
+}
+
+const VIEWER: TenantPermissions = {
+  createHosts: false,
+  editHosts: false,
+  editBilling: false,
+  publishToCommunity: false,
+  installPlugins: false,
+  manageMembers: false,
+}
+
+const ROLE_PERMISSIONS: Record<OrgRole, TenantPermissions> = {
+  owner: ALL_TRUE,
+  admin: ALL_TRUE,
+  editor: EDITOR,
+  viewer: VIEWER,
+}
+
 /**
- * Signed-in user's tenant permissions (AGL-108). Owners (any account
- * without a manager-membership record — every account today) resolve to
- * full access; manager members get their recorded flags. Defaults to full
- * access while loading and on failure — the server APIs are the actual
- * enforcement point, this hook only hides/disables surfaces.
+ * Signed-in user's permissions in the current org workspace (AGL-238,
+ * replacing the manager-seat flags from AGL-108): the org role decides.
+ * Accounts without an org yet act as owners (the org is created on first
+ * need). Defaults to full access while loading and on failure — the
+ * server APIs are the actual enforcement point, this hook only
+ * hides/disables surfaces.
  */
 export function useTenantPermissions(): {
   permissions: TenantPermissions
   isOwner: boolean
-  /** Owner uid whose tenant the user acts in (self for owners, AGL-127). */
-  ownerUid: string | undefined
+  /** Org the permissions were resolved in (undefined pre-first-org). */
+  orgId: string | undefined
+  role: OrgRole | undefined
   loaded: boolean
 } {
   const { data: user } = useUser()
+  const firestore = useFirestore()
+  const { currentOrg, loading: orgsLoading } = useOrgWorkspace()
+  const orgId = currentOrg?.$id
   const [state, setState] = useState<{
     permissions: TenantPermissions
     isOwner: boolean
-    ownerUid: string | undefined
+    orgId: string | undefined
+    role: OrgRole | undefined
     loaded: boolean
-  }>({ permissions: ALL_TRUE, isOwner: true, ownerUid: undefined, loaded: false })
+  }>({
+    permissions: ALL_TRUE,
+    isOwner: true,
+    orgId: undefined,
+    role: undefined,
+    loaded: false,
+  })
 
   useEffect(() => {
+    const uid = (user as any)?.uid as string | undefined
+    if (orgsLoading || !uid) return
+    if (!orgId) {
+      // No org yet — fresh account, full access (owner of its future org).
+      setState({
+        permissions: ALL_TRUE,
+        isOwner: true,
+        orgId: undefined,
+        role: undefined,
+        loaded: true,
+      })
+      return
+    }
     let active = true
-    void (async () => {
-      try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (!idToken) return
-        const response = await fetch('/api/tenant/permissions', {
-          headers: { Authorization: `Bearer ${idToken}` },
-        })
-        if (!response.ok) return
-        const payload = await response.json()
+    void getDoc(doc(firestore, 'orgs', orgId, 'members', uid))
+      .then((snapshot) => {
         if (!active) return
+        const role = (snapshot.get('role') ?? 'viewer') as OrgRole
         setState({
-          permissions: { ...ALL_TRUE, ...(payload.permissions ?? {}) },
-          isOwner: payload.isOwner !== false,
-          ownerUid:
-            typeof payload.ownerUid === 'string' ? payload.ownerUid : undefined,
+          permissions: ROLE_PERMISSIONS[role] ?? VIEWER,
+          isOwner: role === 'owner' || role === 'admin',
+          orgId,
+          role,
           loaded: true,
         })
-      } catch {
+      })
+      .catch(() => {
         // Fail open — surfaces stay visible; APIs still enforce.
-      }
-    })()
+        if (active) setState((prev) => ({ ...prev, orgId, loaded: true }))
+      })
     return () => {
       active = false
     }
-  }, [user])
+  }, [user, firestore, orgId, orgsLoading])
 
   return state
 }

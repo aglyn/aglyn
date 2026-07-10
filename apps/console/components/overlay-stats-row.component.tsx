@@ -19,7 +19,7 @@
 import { Typography } from '@mui/material'
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { useFirestore } from 'reactfire'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 
 const DAYS = 14
 

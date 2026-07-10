@@ -16,34 +16,30 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { getOrgForHost } from '@aglyn/tenant-data-admin'
 
 /**
- * Fetches the tenant doc that owns a host (billing/entitlements, AGL-69).
- * Fail-open: on error or a missing doc, `tenant` is null — callers treat
+ * Fetches the billing/suspension doc that owns a host — the organization
+ * since AGL-238 (the org doc mirrors the legacy tenant billing shape, so
+ * the return keeps its historic `tenant` name for the render branches).
+ * Fail-open: on error or a missing org, `tenant` is null — callers treat
  * that as the pre-billing state (all features on).
  */
-export async function getTenant(options: { tenantId?: Aglyn.TenantUid }) {
-  const { tenantId } = options
+export async function getTenant(options: { hostId?: string }) {
+  const { hostId } = options
   const data = {
     tenant: null as Partial<Aglyn.AglynTenant> | null,
     error: null as unknown,
   }
-  if (!tenantId) return data
+  if (!hostId) return data
 
-  await firebaseAdmin
-    .app()
-    .firestore()
-    .collection('tenants')
-    .doc(tenantId)
-    .get()
-    .then((snapshot) => {
-      if (snapshot.exists) data.tenant = snapshot.data() as any
-    })
-    .catch((error) => {
-      console.error(error)
-      data.error = error
-    })
+  try {
+    const resolved = await getOrgForHost(hostId)
+    if (resolved) data.tenant = resolved.org as Partial<Aglyn.AglynTenant>
+  } catch (error) {
+    console.error(error)
+    data.error = error
+  }
 
   return data
 }

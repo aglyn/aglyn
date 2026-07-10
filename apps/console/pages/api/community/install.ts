@@ -18,7 +18,7 @@
 import { createResourceUid } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { resolveTenantPermissions } from '../../../utils/server/tenant-permissions'
+import { resolveOrgPermissions } from '../../../utils/server/org-permissions'
 
 /**
  * Installs (or updates) a community listing into a host (AGL-44/46).
@@ -49,11 +49,11 @@ export default async function handler(
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    // Manager permission gate (AGL-108).
-    const membership = await resolveTenantPermissions(decoded.uid)
+    // Org-role permission gate (AGL-238).
+    const membership = await resolveOrgPermissions(decoded.uid, { hostId })
     if (!membership.permissions.installPlugins) {
       return res.status(403).json({
-        error: 'Your team role does not allow installing from the community',
+        error: 'Your organization role does not allow installing from the community',
       })
     }
     const firestore = firebaseAdmin.app().firestore()
@@ -61,11 +61,11 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown host' })
+      return res.status(404).json({ error: 'Unknown site' })
     }
-    const admins = hostSnapshot.get('admins') ?? {}
-    if (!admins[decoded.uid]) {
-      return res.status(403).json({ error: 'Not a host admin' })
+    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+    if (memberRole !== 'admin' && memberRole !== 'editor') {
+      return res.status(403).json({ error: 'Not a site admin' })
     }
 
     const listingRef = firestore

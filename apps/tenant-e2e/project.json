@@ -3,6 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/tenant-e2e/src",
   "projectType": "application",
+  "tags": ["scope:app", "scope:public", "scope:e2e"],
+  "implicitDependencies": ["tenant"],
   "targets": {
     "e2e": {
       "executor": "@nx/cypress:cypress",
@@ -20,7 +22,5 @@
       "executor": "@nx/eslint:lint",
       "outputs": ["{options.outputFile}"]
     }
-  },
-  "tags": ["scope:app", "scope:public", "scope:e2e"],
-  "implicitDependencies": ["tenant"]
+  }
 }

@@ -20,10 +20,11 @@ import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Stack, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
-import { useUser } from 'reactfire'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../components/layouts/main.layout'
+import adminNavTabItems from '../../../constants/admin-nav-tabs'
 import { buildRoute, Route } from '../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 
@@ -32,7 +33,7 @@ function formatDate(ms: number | null): string {
 }
 
 /**
- * Staff overview (AGL-135): headline metrics, newest tenants, cross-tenant
+ * Staff overview (AGL-135/238): headline metrics, newest organizations,
  * purchase feed, and top usage rollups — read-only over
  * /api/admin/overview (staff-claim gated); mutations stay on the audited
  * Tenants page.
@@ -86,28 +87,7 @@ const AdminOverview: NextPageWithLayout = () => {
     <>
       <NextPageTitle screen={'Overview – Staff'} />
       <DashboardLayout
-        navTabItems={[
-          {
-            id: 'nav-tab-admin-overview',
-            label: 'Overview',
-            href: buildRoute(Route.ADMIN_OVERVIEW),
-          },
-          {
-            id: 'nav-tab-admin-tenants',
-            label: 'Tenants',
-            href: buildRoute(Route.ADMIN_TENANTS),
-          },
-          {
-            id: 'nav-tab-admin-users',
-            label: 'Users',
-            href: buildRoute(Route.ADMIN_USERS),
-          },
-          {
-            id: 'nav-tab-admin-audit',
-            label: 'Audit log',
-            href: buildRoute(Route.ADMIN_AUDIT),
-          },
-        ]}
+        navTabItems={adminNavTabItems()}
         activeTab={buildRoute(Route.ADMIN_OVERVIEW)}
         breadcrumbItems={[
           { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
@@ -135,7 +115,7 @@ const AdminOverview: NextPageWithLayout = () => {
                 {(data.anomalies as any[])
                   .map(
                     (anomaly) =>
-                      `${anomaly.tenantId} (${anomaly.spikes.join('; ')})`,
+                      `${anomaly.orgId} (${anomaly.spikes.join('; ')})`,
                   )
                   .join(' · ')}
               </Alert>
@@ -144,9 +124,9 @@ const AdminOverview: NextPageWithLayout = () => {
               spacing={3}
               items={[
                 ...[
-                  { label: 'Tenants', value: metrics?.tenants },
+                  { label: 'Organizations', value: metrics?.orgs },
                   { label: 'Signups (30d)', value: metrics?.signups30d },
-                  { label: 'Hosts', value: metrics?.hosts },
+                  { label: 'Sites', value: metrics?.hosts },
                   {
                     label: 'MRR estimate',
                     value:
@@ -170,19 +150,19 @@ const AdminOverview: NextPageWithLayout = () => {
                   size: { xs: 12, md: 6 },
                   children: (
                     <CardDisplay
-                      header={'Newest tenants'}
+                      header={'Newest organizations'}
                       contentGutterX
                       contentGutterY
                     >
-                      {(data?.newestTenants ?? []).length === 0 ? (
+                      {(data?.newestOrgs ?? []).length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
-                          {'No tenants yet.'}
+                          {'No organizations yet.'}
                         </Typography>
                       ) : (
                         <Stack spacing={0.5}>
-                          {(data?.newestTenants ?? []).map((tenant: any) => (
+                          {(data?.newestOrgs ?? []).map((org: any) => (
                             <Stack
-                              key={tenant.$id}
+                              key={org.$id}
                               direction="row"
                               sx={{ justifyContent: 'space-between' }}
                             >
@@ -191,14 +171,14 @@ const AdminOverview: NextPageWithLayout = () => {
                                 noWrap
                                 sx={{ maxWidth: '60%' }}
                               >
-                                {tenant.displayName ?? tenant.$id}
+                                {org.name ?? org.slug ?? org.$id}
                               </Typography>
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
                               >
-                                {`${tenant.plan ?? 'no plan'} · ${formatDate(
-                                  tenant.createdAt,
+                                {`${org.plan ?? 'no plan'} · ${formatDate(
+                                  org.createdAt,
                                 )}`}
                               </Typography>
                             </Stack>
@@ -268,7 +248,7 @@ const AdminOverview: NextPageWithLayout = () => {
                         <Stack spacing={0.5}>
                           {(data?.topUsage ?? []).map((usage: any) => (
                             <Stack
-                              key={usage.tenantId}
+                              key={usage.orgId}
                               direction="row"
                               sx={{ justifyContent: 'space-between' }}
                             >
@@ -277,7 +257,7 @@ const AdminOverview: NextPageWithLayout = () => {
                                 noWrap
                                 sx={{ maxWidth: '50%' }}
                               >
-                                {usage.tenantId}
+                                {usage.orgId}
                               </Typography>
                               <Typography
                                 variant="caption"

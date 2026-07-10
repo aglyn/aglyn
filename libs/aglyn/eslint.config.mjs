@@ -1,0 +1,28 @@
+import baseConfig from '../../eslint.config.mjs'
+
+export default [
+  ...baseConfig,
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
+    // Override or add rules here
+    rules: {},
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ExpressionStatement > Literal[value='use client']",
+          message:
+            "No 'use client' directives inside @aglyn/aglyn: the bundler splits a duplicate module graph and the second canvas/emitter singleton renders the tenant site blank (AGL-52).",
+        },
+      ],
+    },
+  },
+  {
+    files: ['**/*.js', '**/*.jsx'],
+    // Override or add rules here
+    rules: {},
+  },
+]

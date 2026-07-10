@@ -21,7 +21,7 @@ import {
   isSelfRedirect,
   normalizeRedirectSource,
 } from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
 export interface ResolvedRedirect {
@@ -48,7 +48,7 @@ const idKey = (value: string) => value.replace(/[.$#[\]/]/g, '_')
  * validation and this floor can disagree; both refuse).
  */
 export async function resolveRedirect(
-  host: { $id: string; tenantId?: string },
+  host: { $id: string },
   requestPath: string,
 ): Promise<ResolvedRedirect | null> {
   try {
@@ -73,13 +73,9 @@ export async function resolveRedirect(
     const rule = match.data() as HostRedirect
     if (!rule.destination || isSelfRedirect(rule)) return null
 
-    // Paid gate — only paid tenants' rules fire (dark-launch tenants pass).
-    if (host.tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(host.tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    // Paid gate — only paid orgs' rules fire (dark-launch orgs pass).
+    {
+      const tenant = (await getOrgForHost(host.$id))?.org
       if (tenant?.['plan'] && !checkEntitlement(tenant as any, 'redirects')) {
         return null
       }

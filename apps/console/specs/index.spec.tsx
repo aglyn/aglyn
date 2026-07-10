@@ -20,6 +20,68 @@ import React from 'react'
 
 import Index from '../pages/[hostId]/index'
 
+// The page tree reads Firebase services from FirebaseServicesProvider, which
+// needs a real firebase app; stub the hooks so the smoke test can render.
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  ...jest.requireActual('@aglyn/tenant-feature-instance'),
+  useAnalytics: () => null,
+  useAuth: () => ({ currentUser: null }),
+  useFirestore: () => ({}),
+  useSigninCheck: () => ({
+    status: 'loading',
+    data: undefined,
+    error: undefined,
+  }),
+  useUser: () => ({ data: undefined }),
+  useUserPhoto: () => undefined,
+  useHost: () => mockDocResult(),
+  useLayout: () => mockDocResult(),
+  useLayoutVersion: () => mockDocResult(),
+}))
+
+jest.mock('firebase/firestore', () => ({
+  ...jest.requireActual('firebase/firestore'),
+  doc: jest.fn(() => ({ path: 'mock/doc' })),
+  collection: jest.fn(() => ({ path: 'mock' })),
+  collectionGroup: jest.fn(() => ({})),
+  query: jest.fn(() => ({})),
+  where: jest.fn(),
+  orderBy: jest.fn(),
+  limit: jest.fn(),
+  onSnapshot: jest.fn(() => () => {}),
+  getDoc: jest.fn(() =>
+    Promise.resolve({ exists: () => false, data: () => undefined }),
+  ),
+  getDocs: jest.fn(() => Promise.resolve({ docs: [], empty: true, size: 0 })),
+}))
+
+jest.mock('@aglyn/shared-ui-snackstack', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-snackstack'),
+  useSnackbar: () => ({
+    enqueueSnackbar: jest.fn(),
+    closeSnackbar: jest.fn(),
+  }),
+}))
+
+jest.mock('@aglyn/shared-ui-jsx', () => ({
+  ...jest.requireActual('@aglyn/shared-ui-jsx'),
+  useConfirmationContext: () => ({ confirm: jest.fn() }),
+}))
+
+function mockDocResult() {
+  return {
+    doc: {
+      status: 'loading',
+      hasEmitted: false,
+      isComplete: false,
+      data: undefined,
+      error: undefined,
+      firstValuePromise: Promise.resolve(),
+    },
+    setDoc: jest.fn(),
+  }
+}
+
 describe('Index', () => {
   it('should render successfully', () => {
     const { baseElement } = render(<Index />)

@@ -34,12 +34,12 @@ function previousMonth(): string {
 }
 
 /**
- * Staff overview (AGL-135): headline metrics (tenants, 30-day signups,
- * MRR estimate from plan base prices + seat/dataset addons, host count),
- * the newest-tenant feed, the cross-tenant purchase feed, and the top
- * usage rollups from the AGL-41 pipeline. Read-only — every mutation
- * stays on the tenants page where it's audited. Gated on the `staff`
- * custom claim, same trust anchor as the Firestore rules.
+ * Staff overview (AGL-135/238): headline metrics (organizations, 30-day
+ * signups, MRR estimate from plan base prices + seat/dataset addons, site
+ * count), the newest-org feed, the marketplace purchase feed, and the top
+ * org usage rollups from the AGL-41 pipeline. Read-only — every mutation
+ * stays on the Organizations page where it's audited. Gated on the
+ * `staff` custom claim, same trust anchor as the Firestore rules.
  */
 export default async function handler(
   req: NextApiRequest,
@@ -62,50 +62,44 @@ export default async function handler(
     const firestore = firebaseAdmin.app().firestore()
     const month = previousMonth()
 
-    const [
-      tenantsSnapshot,
-      hostsCount,
-      purchasesSnapshot,
-      rollupsSnapshot,
-      priorRollupsSnapshot,
-    ] =
-      await Promise.all([
-        firestore
-          .collection('tenants')
-          .orderBy('createdAt', 'desc')
-          .limit(500)
-          .get()
-          // Tenants created before createdAt existed still count.
-          .catch(() => firestore.collection('tenants').limit(500).get()),
-        firestore.collection('hosts').count().get(),
-        firestore
-          .collection('communityPurchases')
-          .orderBy('createdAt', 'desc')
-          .limit(50)
-          .get()
-          .catch(() =>
-            firestore.collection('communityPurchases').limit(50).get(),
-          ),
-        firestore
-          .collectionGroup('usageRollups')
-          .where('month', '==', month)
-          .limit(500)
-          .get()
-          .catch(() => null),
-        firestore
-          .collectionGroup('usageRollups')
-          .where('month', '==', monthBefore(month))
-          .limit(500)
-          .get()
-          .catch(() => null),
-      ])
+    const [orgsSnapshot, hostsCount, purchasesSnapshot] = await Promise.all([
+      firestore
+        .collection('orgs')
+        .orderBy('createdAt', 'desc')
+        .limit(500)
+        .get()
+        // Orgs created before createdAt existed still count.
+        .catch(() => firestore.collection('orgs').limit(500).get()),
+      firestore.collection('hosts').count().get(),
+      firestore
+        .collection('communityPurchases')
+        .orderBy('createdAt', 'desc')
+        .limit(50)
+        .get()
+        .catch(() =>
+          firestore.collection('communityPurchases').limit(50).get(),
+        ),
+    ])
+    // Org usage rollups live at orgs/{orgId}/usage/{month} (AGL-238) —
+    // direct doc gets per fetched org, no collection-group index needed.
+    const priorMonth = monthBefore(month)
+    const usagePairs = await Promise.all(
+      orgsSnapshot.docs.map(async (orgDoc) => {
+        const usageRef = orgDoc.ref.collection('usage')
+        const [current, prior] = await Promise.all([
+          usageRef.doc(month).get(),
+          usageRef.doc(priorMonth).get(),
+        ])
+        return { orgId: orgDoc.id, current, prior }
+      }),
+    )
 
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
     let mrrUsd = 0
     let signups30d = 0
     const planCounts: Record<string, number> = {}
-    const newestTenants: any[] = []
-    for (const doc of tenantsSnapshot.docs) {
+    const newestOrgs: any[] = []
+    for (const doc of orgsSnapshot.docs) {
       const data = doc.data()
       const plan = (data['plan'] ?? '') as TenantPlan | ''
       planCounts[plan || 'none'] = (planCounts[plan || 'none'] ?? 0) + 1
@@ -124,10 +118,11 @@ export default async function handler(
       }
       const createdMs = data['createdAt']?.toMillis?.() ?? null
       if (createdMs && createdMs >= thirtyDaysAgo) signups30d += 1
-      if (newestTenants.length < 20) {
-        newestTenants.push({
+      if (newestOrgs.length < 20) {
+        newestOrgs.push({
           $id: doc.id,
-          displayName: data['displayName'] ?? null,
+          name: data['name'] ?? null,
+          slug: data['slug'] ?? null,
           plan: plan || null,
           createdAt: createdMs,
         })
@@ -147,45 +142,40 @@ export default async function handler(
       }
     })
 
-    // Anomaly flags (AGL-205): tenants whose page views or metered cost
+    // Anomaly flags (AGL-205): orgs whose page views or metered cost
     // jumped >=10x month-over-month — an abuse/runaway early warning.
-    const priorByTenant = new Map<string, { pageViews: number; costUsd: number }>()
-    for (const doc of priorRollupsSnapshot?.docs ?? []) {
-      priorByTenant.set(doc.ref.parent.parent?.id ?? '', {
-        pageViews: Number(doc.get('pageViews') ?? 0),
-        costUsd: Number(doc.get('costUsd') ?? 0),
-      })
-    }
-    const anomalies = (rollupsSnapshot?.docs ?? [])
-      .map((doc) => {
-        const tenantId = doc.ref.parent.parent?.id ?? ''
-        const prior = priorByTenant.get(tenantId)
-        const pageViews = Number(doc.get('pageViews') ?? 0)
-        const costUsd = Number(doc.get('costUsd') ?? 0)
+    const anomalies = usagePairs
+      .map(({ orgId, current, prior }) => {
+        if (!current.exists || !prior.exists) return null
+        const pageViews = Number(current.get('pageViews') ?? 0)
+        const costUsd = Number(current.get('costUsd') ?? 0)
+        const priorPageViews = Number(prior.get('pageViews') ?? 0)
+        const priorCostUsd = Number(prior.get('costUsd') ?? 0)
         const spikes: string[] = []
-        if (prior && prior.pageViews >= 100 && pageViews >= prior.pageViews * 10) {
+        if (priorPageViews >= 100 && pageViews >= priorPageViews * 10) {
           spikes.push(
-            `page views ${prior.pageViews.toLocaleString()} → ${pageViews.toLocaleString()}`,
+            `page views ${priorPageViews.toLocaleString()} → ${pageViews.toLocaleString()}`,
           )
         }
-        if (prior && prior.costUsd >= 1 && costUsd >= prior.costUsd * 10) {
+        if (priorCostUsd >= 1 && costUsd >= priorCostUsd * 10) {
           spikes.push(
-            `metered cost $${prior.costUsd.toFixed(2)} → $${costUsd.toFixed(2)}`,
+            `metered cost $${priorCostUsd.toFixed(2)} → $${costUsd.toFixed(2)}`,
           )
         }
-        return spikes.length ? { tenantId, spikes } : null
+        return spikes.length ? { orgId, spikes } : null
       })
       .filter(Boolean)
       .slice(0, 20)
 
-    const topUsage = (rollupsSnapshot?.docs ?? [])
-      .map((doc) => ({
-        tenantId: doc.ref.parent.parent?.id ?? '',
-        month: doc.get('month'),
-        storageGb: Number(doc.get('storageGb') ?? 0),
-        pageViews: Number(doc.get('pageViews') ?? 0),
-        formSubmissions: Number(doc.get('formSubmissions') ?? 0),
-        costUsd: Number(doc.get('costUsd') ?? 0),
+    const topUsage = usagePairs
+      .filter(({ current }) => current.exists)
+      .map(({ orgId, current }) => ({
+        orgId,
+        month: current.get('month'),
+        storageGb: Number(current.get('storageGb') ?? 0),
+        pageViews: Number(current.get('pageViews') ?? 0),
+        formSubmissions: Number(current.get('formSubmissions') ?? 0),
+        costUsd: Number(current.get('costUsd') ?? 0),
       }))
       .sort((a, b) => b.costUsd - a.costUsd)
       .slice(0, 20)
@@ -193,14 +183,14 @@ export default async function handler(
     return res.status(200).json({
       anomalies,
       metrics: {
-        tenants: tenantsSnapshot.size,
+        orgs: orgsSnapshot.size,
         signups30d,
         hosts: hostsCount.data().count,
         mrrUsd: Math.round(mrrUsd * 100) / 100,
         planCounts,
         rollupMonth: month,
       },
-      newestTenants,
+      newestOrgs,
       purchases,
       topUsage,
     })

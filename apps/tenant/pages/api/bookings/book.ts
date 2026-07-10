@@ -21,7 +21,11 @@ import {
   type HostBookingService,
   isSlotOpen,
 } from '@aglyn/aglyn'
-import { firebaseAdmin, upsertHostContact } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  getOrgForHost,
+  upsertHostContact,
+} from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { emitHostEvent } from '../../../utils/emit-host-event'
@@ -99,13 +103,9 @@ export default async function handler(
     }
 
     // Plan gate (dark-launch rule preserved).
-    const tenantId = hostSnapshot.get('tenantId') as string | undefined
-    if (tenantId) {
-      const tenantSnapshot = await firestore
-        .collection('tenants')
-        .doc(tenantId)
-        .get()
-      const tenant = tenantSnapshot.exists ? tenantSnapshot.data() : undefined
+    {
+      // Plan/quota gates ride the owning org's doc (AGL-238).
+      const tenant = (await getOrgForHost(hostId))?.org
       if (tenant?.['plan'] && !checkEntitlement(tenant as any, 'bookings')) {
         return res
           .status(403)

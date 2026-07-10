@@ -53,7 +53,6 @@
   --ifm-navbar-background-color: #404c5c;
   --ifm-navbar-link-color: rgba(255, 255, 255, 0.9);
   --ifm-navbar-link-hover-color: #00b0ff;
-  --ifm-footer-background-color: #404c5c;
 
   /* Semantic colors from console.theme.ts, wired into admonitions. */
   --ifm-color-info: #1e88e5;
@@ -69,8 +68,11 @@
   --docusaurus-highlighted-code-line-bg: rgba(0, 176, 255, 0.12);
 }
 
-/* Dark scheme — console dark surfaces. */
-[data-theme='dark'] {
+/* Dark scheme — console dark surfaces. Must be `html[data-theme='dark']`, not
+   bare `[data-theme='dark']`: Infima defines its own dark defaults on
+   `html[data-theme='dark']`, which out-specifies the bare attribute selector
+   and would silently win otherwise. */
+html[data-theme='dark'] {
   --ifm-color-primary: #00b0ff;
   --ifm-color-primary-dark: #00a1e6;
   --ifm-color-primary-darker: #0098d9;
@@ -83,9 +85,18 @@
   --ifm-background-surface-color: #2a3440; /* background.paper (dark) */
 
   --ifm-navbar-background-color: #2c3540; /* primary.main (dark) */
-  --ifm-footer-background-color: #202934; /* surface.main (dark) */
 
   --docusaurus-highlighted-code-line-bg: rgba(0, 176, 255, 0.2);
+}
+
+/* The `style: 'dark'` footer defines its own background variable on
+   `.footer--dark`, which beats any :root-level override — scope ours to the
+   same class so the console footer colors actually apply. */
+.footer--dark {
+  --ifm-footer-background-color: #404c5c;
+}
+html[data-theme='dark'] .footer--dark {
+  --ifm-footer-background-color: #202934; /* surface.main (dark) */
 }
 
 /* Material app-bar: subtle elevation under the fixed navbar. */
@@ -118,4 +129,35 @@
   color: #ffffff;
   text-transform: none;
   box-shadow: var(--ifm-global-shadow-lw);
+}
+
+/* Mermaid sequence diagrams draw message arrows, message labels, and the
+   stick-figure actor's name directly on the page canvas (no shape behind them).
+   themeConfig.mermaid paints them white to suit the dark node fills, which
+   vanishes on the light page — bind them to the page's text color instead. */
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] text.messageText,
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] text.actor-man tspan {
+  fill: var(--ifm-font-color-base) !important;
+}
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] [class^='messageLine'] {
+  stroke: var(--ifm-font-color-base) !important;
+}
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] defs marker[id$='arrowhead'] path,
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] defs marker[id$='crosshead'] path,
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] defs marker[id$='filled-head'] path,
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] defs marker[id*='solid'] path {
+  fill: var(--ifm-font-color-base) !important;
+  stroke: var(--ifm-font-color-base) !important;
+}
+.docusaurus-mermaid-container svg[aria-roledescription='sequence'] defs marker[id$='sequencenumber'] circle {
+  fill: var(--ifm-font-color-base) !important;
+}
+
+/* Sequence-diagram lifelines and the stick-figure glyph are stroked with the
+   console border color (#2C3540), which is indistinguishable from the dark
+   page background — restroke them with a visible gray in dark mode only. */
+html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] line.actor-line,
+html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] .actor-man line,
+html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] .actor-man circle {
+  stroke: var(--ifm-color-emphasis-500) !important;
 }

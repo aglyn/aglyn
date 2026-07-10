@@ -11,7 +11,7 @@ designed **503** screen to visitors until you switch it back.
 
 ## Turn it on
 
-1. Enable **maintenance mode** for the host.
+1. Enable **maintenance mode** for the site.
 2. Visitors now see your [503 error screen](error-screens.md) instead of the site.
 3. When you're done, turn maintenance mode off and the site returns.
 

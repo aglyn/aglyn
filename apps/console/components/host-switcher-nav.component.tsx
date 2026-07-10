@@ -22,6 +22,7 @@ import {
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Button,
   Divider,
@@ -33,9 +34,9 @@ import {
 import { useParams } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { type MouseEvent, useCallback, useState } from 'react'
-import { useFirestore, useUser } from 'reactfire'
 import { buildRoute, Route } from '../constants/route-links'
 import { useAdminHosts } from '../hooks/use-admin-hosts'
+import { useOrgWorkspace } from '../hooks/use-org-workspace'
 
 function HostsPlainLink() {
   return (
@@ -46,7 +47,7 @@ function HostsPlainLink() {
       {...({ componentVariant: 'button', nativeButton: false } as any)}
       href={buildRoute(Route.HOST_LIST)}
     >
-      {'Hosts'}
+      {'Sites'}
     </Button>
   )
 }
@@ -73,7 +74,14 @@ function HostSwitcherMenu(props: { uid: string }) {
   const hostId = params?.hostId
   const router = useRouter()
   const firestore = useFirestore()
-  const { hosts } = useAdminHosts(firestore, uid)
+  const { currentOrg, loading: orgsLoading } = useOrgWorkspace()
+  // Workspace-scoped (AGL-236): the switcher lists the selected org's
+  // sites only; undefined holds the query while the workspace resolves.
+  const { hosts } = useAdminHosts(
+    firestore,
+    uid,
+    orgsLoading ? undefined : (currentOrg?.$id ?? null),
+  )
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
 
   const handleOpen = useCallback((event: MouseEvent<HTMLElement>) => {
@@ -84,7 +92,9 @@ function HostSwitcherMenu(props: { uid: string }) {
     (nextHostId: string) => () => {
       setAnchorEl(null)
       if (nextHostId !== hostId) {
-        void router.push(buildRoute(Route.HOST_DASHBOARD, { hostId: nextHostId }))
+        void router.push(
+          buildRoute(Route.HOST_DASHBOARD, { hostId: nextHostId }),
+        )
       }
     },
     [hostId, router],
@@ -95,13 +105,15 @@ function HostSwitcherMenu(props: { uid: string }) {
   }, [router])
 
   const current = (hosts ?? []).find((host: any) => host.$id === hostId)
-  const label = current?.displayName ?? current?.$id ?? 'Hosts'
+  const label = current?.displayName ?? current?.$id ?? 'Sites'
 
   return (
     <>
       <Button
         id="center-nav-hosts"
+        variant="text"
         color="inherit"
+        size="small"
         aria-haspopup="menu"
         aria-expanded={anchorEl ? 'true' : undefined}
         onClick={handleOpen}
@@ -176,7 +188,7 @@ function HostSwitcherMenu(props: { uid: string }) {
         <Divider />
         <MenuItem onClick={handleViewAll}>
           <ListItemText
-            primary="View all hosts"
+            primary="View all sites"
             slotProps={{ primary: { color: 'secondary' } }}
           />
         </MenuItem>

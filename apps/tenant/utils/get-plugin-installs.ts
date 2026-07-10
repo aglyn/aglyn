@@ -16,7 +16,8 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import {
+  resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
  * Resolves a host's pinned plugin installs (AGL-45) into the compose-time
@@ -32,16 +33,36 @@ export async function getPluginInstalls(options: {
   const installs: Record<string, Aglyn.ResolvedPluginInstall> = {}
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const snapshot = await firestore
-      .collection('hosts')
-      .doc(options.hostId)
-      .collection('installs')
-      .limit(50)
-      .get()
-    if (snapshot.empty) return installs
+    // Org-tier installs apply to every host in the org (AGL-237); a
+    // host-level pin of the same listing wins (host docs merge second).
+    const orgId = await resolveOrgIdForHost(options.hostId)
+    const [orgSnapshot, snapshot] = await Promise.all([
+      orgId
+        ? firestore
+            .collection('orgs')
+            .doc(orgId)
+            .collection('installs')
+            .limit(50)
+            .get()
+        : Promise.resolve(null),
+      firestore
+        .collection('hosts')
+        .doc(options.hostId)
+        .collection('installs')
+        .limit(50)
+        .get(),
+    ])
+    const merged = new Map()
+    for (const docSnapshot of orgSnapshot?.docs ?? []) {
+      merged.set(docSnapshot.id, docSnapshot)
+    }
+    for (const docSnapshot of snapshot.docs) {
+      merged.set(docSnapshot.id, docSnapshot)
+    }
+    if (merged.size === 0) return installs
 
     await Promise.all(
-      snapshot.docs.map(async (docSnapshot) => {
+      [...merged.values()].map(async (docSnapshot) => {
         const version = String(docSnapshot.get('version') ?? '')
         const sha256 = String(docSnapshot.get('sha256') ?? '')
         if (!version || !sha256) return

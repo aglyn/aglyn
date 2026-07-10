@@ -23,7 +23,7 @@ drift.
 
 ## Manage
 
-From the host dashboard you can **rename**, **demote** (turn an instance back into normal
+From the site dashboard you can **rename**, **demote** (turn an instance back into normal
 nodes), or **delete** a reusable component.
 
 ## Tips

@@ -3,17 +3,13 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/admin",
   "projectType": "application",
-  "tags": [
-    "scope:app",
-    "scope:private"
-  ],
+  "tags": ["scope:app", "scope:private"],
   "targets": {
     "build": {
       "executor": "@nx/next:build",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "outputs": ["{options.outputPath}"],
       "defaultConfiguration": "production",
+      "cache": false,
       "options": {
         "outputPath": "dist/apps/admin"
       },
@@ -22,11 +18,11 @@
         "development": {
           "outputPath": "apps/admin"
         }
-      },
-      "cache": false
+      }
     },
     "serve": {
       "executor": "@nx/next:server",
+      "defaultConfiguration": "development",
       "options": {
         "buildTarget": "admin:build",
         "dev": true
@@ -40,8 +36,7 @@
           "buildTarget": "admin:build:development",
           "dev": true
         }
-      },
-      "defaultConfiguration": "development"
+      }
     },
     "export": {
       "executor": "@nx/next:export",
@@ -51,18 +46,14 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/apps/admin"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/apps/admin"],
       "options": {
         "jestConfig": "apps/admin/jest.config.ts"
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     }
   }
 }
