@@ -39,6 +39,9 @@ import { relatedHandler } from './server/related'
 import { reservationAvailabilityHandler } from './server/reservation-availability'
 import { gateHandler } from './server/gate'
 import { memberFeedHandler } from './server/member-feed'
+import { membershipAccountHandler } from './server/membership-account'
+import { membershipLogoutHandler } from './server/membership-logout'
+import { membershipWishlistHandler } from './server/membership-wishlist'
 import { reserveHandler } from './server/reserve'
 import { streamHandler } from './server/stream'
 import { subscriptionPortalHandler } from './server/subscription-portal'
@@ -63,6 +66,9 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/stream', streamHandler)
   registerPluginApiRoute('commerce/subscription-portal', subscriptionPortalHandler)
   registerPluginApiRoute('commerce/reviews', reviewsHandler)
+  registerPluginApiRoute('membership/account', membershipAccountHandler)
+  registerPluginApiRoute('membership/logout', membershipLogoutHandler)
+  registerPluginApiRoute('membership/wishlist', membershipWishlistHandler)
 }
 
 // Shared with the (still app-side) membership/account route.

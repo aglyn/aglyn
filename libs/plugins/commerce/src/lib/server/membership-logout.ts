@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { setMemberCookie } from '@aglyn/plugins-commerce/server'
+import type { PluginApiHandler } from '@aglyn/aglyn'
+import { setMemberCookie } from './membership'
 
 /** Member sign-out (AGL-294): clears the session cookie. */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export const membershipLogoutHandler: PluginApiHandler = (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

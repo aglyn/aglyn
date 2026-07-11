@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { readMemberSession } from '@aglyn/plugins-commerce/server'
+import { readMemberSession } from './membership'
 
 /**
  * Member wishlist (AGL-297): product ids on the siteMembers doc.
  * Guests keep theirs in localStorage; the wishlist block merges the
  * local list into the member's on first signed-in read.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const membershipWishlistHandler: PluginApiHandler = async (req, res) => {
   const isPost = req.method === 'POST'
   if (!isPost && req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })

@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { mintDownloadToken } from '@aglyn/plugins-commerce/server'
-import { readMemberSession } from '@aglyn/plugins-commerce/server'
+import { mintDownloadToken } from './download'
+import { readMemberSession } from './membership'
 
 export interface AccountOrderView {
   id: string
@@ -37,10 +37,7 @@ export interface AccountOrderView {
  * the member's email — guest purchases made with the same address show
  * up too, which is what buyers expect.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(
     (req.method === 'GET' ? req.query.hostId : req.body?.hostId) ?? '',
   )
