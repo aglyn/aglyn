@@ -20,6 +20,7 @@ import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as Gate from './components/gate'
+import * as GatedVideo from './components/gated-video'
 import * as NewsletterSignup from './components/newsletter-signup'
 import * as ProductDetail from './components/product-detail'
 import * as ProductGrid from './components/product-grid'
@@ -69,6 +70,11 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: Gate.default,
     schema: Gate.schema,
     presets: Gate.presets,
+  },
+  {
+    component: GatedVideo.default,
+    schema: GatedVideo.schema,
+    presets: GatedVideo.presets,
   },
 ]
 

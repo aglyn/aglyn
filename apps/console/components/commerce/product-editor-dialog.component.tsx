@@ -100,9 +100,9 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   )
   const [draft, setDraft] = useState<Aglyn.HostProduct | null>(null)
   const [slugTouched, setSlugTouched] = useState(false)
-  const [pickerFor, setPickerFor] = useState<'media' | 'seo' | 'digital' | null>(
-    null,
-  )
+  const [pickerFor, setPickerFor] = useState<
+    'media' | 'seo' | 'digital' | 'video' | null
+  >(null)
   // Lazy-init per open; parent remounts via `key` on product change.
   const current: Aglyn.HostProduct =
     draft ??
@@ -699,6 +699,33 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               {'Buyers always download the current files — uploading a new ' +
                 'version re-delivers to everyone.'}
             </Typography>
+            {(current.gatedVideos ?? []).map((video, index) => (
+              <Stack key={index} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                  {`🎬 ${video.title || video.url}`}
+                </Typography>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={() =>
+                    update({
+                      gatedVideos: (current.gatedVideos ?? []).filter(
+                        (_item, itemIndex) => itemIndex !== index,
+                      ),
+                    })
+                  }
+                >
+                  {'✕'}
+                </Button>
+              </Stack>
+            ))}
+            <Button
+              size="small"
+              sx={{ alignSelf: 'flex-start' }}
+              onClick={() => setPickerFor('video')}
+            >
+              {'Add members video'}
+            </Button>
           </>
         ) : null}
 
@@ -763,6 +790,13 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
                   url: media.url,
                   fileName: (media as any).fileName ?? 'download',
                 },
+              ],
+            })
+          } else if (pickerFor === 'video') {
+            update({
+              gatedVideos: [
+                ...(current.gatedVideos ?? []),
+                { url: media.url, title: (media as any).fileName ?? '' },
               ],
             })
           }
