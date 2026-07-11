@@ -171,6 +171,11 @@ export default function BookingsConsolePage({
   (AGL-395): the `booking` canvas component moved out of `plugins-mui` and the
   bookings manager out of the app; the page reads plan limits via the
   `tenant` prop + `checkQuota`.
+- **Redirects** (`libs/plugins/redirects`) — a **console-only** plugin
+  (AGL-395): redirects enforce server-side (ISR), not through a canvas
+  component, so it exports only `registerRedirectsConsole()` and ships no UI
+  bundle — nothing to register in the tenant/besigner. The minimal shape when
+  a feature has console surface but no site component.
 - **Email** (`libs/plugins/email`) — full console relocation (AGL-395): the
   campaigns composer, audience lists, and a dedicated email-screens list moved
   into the plugin and surface as the **Emails** page; the Besigner offers only
