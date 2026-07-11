@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 export interface PublicProductDetail {
   id: string
@@ -43,10 +43,7 @@ export interface PublicProductDetail {
  * needs — variants with per-option prices and stock booleans, never raw
  * counts. Display-only; the charge still prices server-side.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const productHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   const slug = String(req.query.slug ?? '')
   if (!hostId || !slug) {

@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
+import { lazy } from 'react'
 import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as Gate from './components/gate'
@@ -30,6 +31,9 @@ import * as ProductReviews from './components/product-reviews'
 import * as RelatedProducts from './components/related-products'
 import * as Wishlist from './components/wishlist'
 import { BUNDLE_ID } from './constants/bundle-common'
+
+/** Code-split: the Products console page only loads when opened. */
+const CommerceConsolePage = lazy(() => import('./components/commerce-console-page'))
 
 /**
  * Commerce UI feature plugin (AGL-290): the storefront component set,
@@ -121,6 +125,8 @@ export function registerCommerceConsole(): void {
         label: 'Products',
         href: '/products',
         icon: { path: mdiStorefrontOutline.path },
+        header: { title: 'Products', icon: { path: mdiStorefrontOutline.path } },
+        Component: CommerceConsolePage,
       },
     ],
   })

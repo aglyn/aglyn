@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Product reviews (AGL-324). GET returns approved reviews + aggregate;
  * POST submits into the moderation queue, marking `verified` when the
  * email has a paid order containing the product. Pro-plan gated.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const reviewsHandler: PluginApiHandler = async (req, res) => {
   const isPost = req.method === 'POST'
   const hostId = String((isPost ? req.body?.hostId : req.query.hostId) ?? '')
   const productId = String(

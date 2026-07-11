@@ -34,7 +34,7 @@ import {
 import { collection, deleteDoc, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 export interface MemberPostsCardProps {
   hostId: string

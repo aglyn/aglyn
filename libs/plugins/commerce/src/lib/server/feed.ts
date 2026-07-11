@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 function escapeXml(text: string): string {
   return text
@@ -33,10 +33,7 @@ function escapeXml(text: string): string {
  * variant pricing; per-variant feeds can come later). Submit
  * `https://{site}/api/commerce/feed?hostId={id}` in Merchant Center.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const feedHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   if (!hostId) return res.status(400).send('Missing hostId')
   try {

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Related products (AGL-325), best source first: the product's manual
@@ -25,10 +25,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * bought together"), then tag/category neighbors. Returns catalog ids —
  * the block renders them through the ids-filtered catalog API.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const relatedHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   const productId = String(req.query.productId ?? '')
   if (!hostId || !productId) {

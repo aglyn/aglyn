@@ -5669,6 +5669,11 @@
           "source": "plugins-commerce",
           "target": "tenant-feature-instance",
           "type": "static"
+        },
+        {
+          "source": "plugins-commerce",
+          "target": "tenant-data-admin",
+          "type": "static"
         }
       ],
       "plugins-contacts": [

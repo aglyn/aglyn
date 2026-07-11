@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Public reservation availability (AGL-310): resource display info plus
  * the booked/blocked day ranges the calendar greys out. Guest details
  * never leave the server.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const reservationAvailabilityHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   const resourceId = String(req.query.resourceId ?? '')
   if (!hostId || !resourceId) {

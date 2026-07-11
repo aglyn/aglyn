@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Cart checkout (AGL-293): the whole cart in one Stripe Checkout
@@ -26,10 +26,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * platform fee sums per line by product type (AGL-278 ladder), and the
  * webhook creates one multi-line order and clears the cart.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

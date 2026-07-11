@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Commerce Starter checkout (AGL-90): a site visitor buys a product. The
@@ -27,10 +27,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * Selling is gated on the owner's `marketplaceSelling` plan flag
  * (plan-less orgs resolve as free, AGL-247). 501 without Stripe env.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const checkoutHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

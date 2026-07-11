@@ -41,7 +41,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 export interface DiscountsCardProps {
   hostId: string
@@ -369,8 +369,8 @@ export function DiscountsCard(props: DiscountsCardProps) {
             variant="contained"
             color="secondary"
             disabled={
-              (draft?.kind === 'percent' && !(draft?.valuePct! > 0)) ||
-              (draft?.kind === 'fixed' && !(draft?.valueCents! > 0))
+              (draft?.kind === 'percent' && !((draft?.valuePct ?? 0) > 0)) ||
+              (draft?.kind === 'fixed' && !((draft?.valueCents ?? 0) > 0))
             }
             onClick={handleSave}
           >

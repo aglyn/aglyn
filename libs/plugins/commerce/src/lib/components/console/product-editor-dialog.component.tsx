@@ -43,9 +43,11 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
-import MediaPickerDialog from '../media/media-picker-dialog.component'
+import {
+  useFirestore,
+  useFirestoreCollection,
+} from '@aglyn/tenant-feature-instance'
+import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
 
 export interface ProductEditorDialogProps {
   hostId: string
@@ -105,9 +107,16 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   )
   const [draft, setDraft] = useState<Aglyn.HostProduct | null>(null)
   const [slugTouched, setSlugTouched] = useState(false)
-  const [pickerFor, setPickerFor] = useState<
-    'media' | 'seo' | 'digital' | 'video' | null
-  >(null)
+  // The console media browser is provided by the shell (AGL-395); opening it
+  // resolves with the chosen asset (or null if cancelled).
+  const { pickMedia } = useMediaPicker()
+  const pick = useCallback(
+    async (apply: (media: PickedMedia) => void) => {
+      const media = await pickMedia?.()
+      if (media) apply(media)
+    },
+    [pickMedia],
+  )
   // Lazy-init per open; parent remounts via `key` on product change.
   const current: Aglyn.HostProduct =
     draft ??
@@ -381,7 +390,16 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               </IconButton>
             </Box>
           ))}
-          <Button size="small" onClick={() => setPickerFor('media')}>
+          <Button
+            size="small"
+            onClick={() =>
+              void pick((media) =>
+                update({
+                  mediaUrls: [...(current.mediaUrls ?? []), media.url],
+                }),
+              )
+            }
+          >
             {'Add image'}
           </Button>
         </Box>
@@ -692,7 +710,19 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               </Stack>
             ))}
             <Stack direction="row" spacing={2}>
-              <Button size="small" onClick={() => setPickerFor('digital')}>
+              <Button
+                size="small"
+                onClick={() =>
+                  void pick((media) =>
+                    update({
+                      digitalFiles: [
+                        ...(current.digitalFiles ?? []),
+                        { url: media.url, fileName: media.fileName ?? 'download' },
+                      ],
+                    }),
+                  )
+                }
+              >
                 {'Add file (media library)'}
               </Button>
               <TextField
@@ -741,7 +771,16 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <Button
               size="small"
               sx={{ alignSelf: 'flex-start' }}
-              onClick={() => setPickerFor('video')}
+              onClick={() =>
+                void pick((media) =>
+                  update({
+                    gatedVideos: [
+                      ...(current.gatedVideos ?? []),
+                      { url: media.url, title: media.fileName ?? '' },
+                    ],
+                  }),
+                )
+              }
             >
               {'Add members video'}
             </Button>
@@ -786,7 +825,14 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             size="small"
             fullWidth
           />
-          <Button size="small" onClick={() => setPickerFor('seo')}>
+          <Button
+            size="small"
+            onClick={() =>
+              void pick((media) =>
+                update({ seo: { ...current.seo, imageUrl: media.url } }),
+              )
+            }
+          >
             {current.seo?.imageUrl ? 'Change OG image' : 'OG image'}
           </Button>
         </Stack>
@@ -819,36 +865,6 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           {'Save product'}
         </Button>
       </DialogActions>
-      <MediaPickerDialog
-        hostId={hostId}
-        open={pickerFor !== null}
-        onClose={() => setPickerFor(null)}
-        onPick={(media) => {
-          if (pickerFor === 'media') {
-            update({ mediaUrls: [...(current.mediaUrls ?? []), media.url] })
-          } else if (pickerFor === 'seo') {
-            update({ seo: { ...current.seo, imageUrl: media.url } })
-          } else if (pickerFor === 'digital') {
-            update({
-              digitalFiles: [
-                ...(current.digitalFiles ?? []),
-                {
-                  url: media.url,
-                  fileName: (media as any).fileName ?? 'download',
-                },
-              ],
-            })
-          } else if (pickerFor === 'video') {
-            update({
-              gatedVideos: [
-                ...(current.gatedVideos ?? []),
-                { url: media.url, title: (media as any).fileName ?? '' },
-              ],
-            })
-          }
-          setPickerFor(null)
-        }}
-      />
     </Dialog>
   )
 }

@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { mintDownloadToken } from '../commerce/download'
+import { mintDownloadToken } from '@aglyn/plugins-commerce/server'
 import { readMemberSession } from '../../../utils/membership'
 
 export interface AccountOrderView {

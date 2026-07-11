@@ -30,9 +30,9 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../hooks/use-firestore-doc'
-import useHostOrgId from '../../hooks/use-host-org-id'
+import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 
 export interface LocationsCardProps {
   hostId: string

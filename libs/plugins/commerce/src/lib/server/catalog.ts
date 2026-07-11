@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 export interface PublicCatalogItem {
   id: string
@@ -38,10 +38,7 @@ export interface PublicCatalogItem {
  * capped at 100 items per request. Read-only public data; prices here
  * are display-only (charges always come from the docs server-side).
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const catalogHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
   const collectionSlug = String(req.query.collection ?? '')

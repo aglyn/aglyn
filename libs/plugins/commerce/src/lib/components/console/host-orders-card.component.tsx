@@ -34,7 +34,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import OrderDetailDialog from './order-detail-dialog.component'
 
 export interface HostOrdersCardProps {

@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { randomBytes } from 'crypto'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 export interface ResolvedCartLine extends Aglyn.CartLine {
   name: string
@@ -36,10 +36,7 @@ export interface ResolvedCartLine extends Aglyn.CartLine {
  * docs on every read so prices/names never go stale, and unavailable
  * lines surface instead of silently charging.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const cartHandler: PluginApiHandler = async (req, res) => {
   const isPost = req.method === 'POST'
   if (!isPost && req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })

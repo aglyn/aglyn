@@ -23,8 +23,8 @@ import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import useFirestoreDoc from '../../hooks/use-firestore-doc'
-import useHostOrgId from '../../hooks/use-host-org-id'
+import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 
 export interface PaymentsSettingsCardProps {
   hostId: string

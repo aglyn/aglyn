@@ -30,7 +30,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreDoc from '../../hooks/use-firestore-doc'
+import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 
 export interface StoreSettingsCardProps {
   hostId: string

@@ -32,7 +32,7 @@ import {
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 
 export interface HostCouponsCardProps {
   hostId: string

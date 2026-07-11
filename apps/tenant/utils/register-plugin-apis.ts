@@ -16,6 +16,7 @@
  */
 
 import { registerBookingsApi } from '@aglyn/plugins-bookings/server'
+import { registerCommerceApi } from '@aglyn/plugins-commerce/server'
 import { registerEmailApi } from '@aglyn/plugins-email/server'
 import { registerEventsCalendarApi } from '@aglyn/plugins-events-calendar/server'
 import { registerMarketingApi } from '@aglyn/plugins-marketing/server'
@@ -35,6 +36,7 @@ export function registerTenantPluginApis(): void {
   registerMarketingApi()
   registerWorkflowsApi()
   registerBookingsApi()
+  registerCommerceApi()
 }
 
 // Run on import so the registry is ready before the dispatcher resolves.
