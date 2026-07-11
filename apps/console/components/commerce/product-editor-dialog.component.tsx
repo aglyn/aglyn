@@ -41,9 +41,10 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { doc, setDoc } from 'firebase/firestore'
+import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import MediaPickerDialog from '../media/media-picker-dialog.component'
 
 export interface ProductEditorDialogProps {
@@ -78,6 +79,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
   const { hostId, product, open, onClose } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const { data: categoryDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'productCategories'),
+        limit(250),
+      ),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
 
   const lifted = useMemo(
     () => (product ? Aglyn.liftLegacyProduct(product) : null),
@@ -286,6 +296,27 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             />
           )}
         />
+        {(categoryDocs?.length ?? 0) > 0 ? (
+          <Autocomplete
+            multiple
+            options={categoryDocs ?? []}
+            getOptionLabel={(category: any) => category.name}
+            isOptionEqualToValue={(option: any, value: any) =>
+              option.$id === value.$id
+            }
+            value={(categoryDocs ?? []).filter((category: any) =>
+              (current.categoryIds ?? []).includes(category.$id),
+            )}
+            onChange={(_event, picked) =>
+              update({
+                categoryIds: picked.map((category: any) => category.$id),
+              })
+            }
+            renderInput={(params) => (
+              <TextField {...params} label="Categories" size="small" />
+            )}
+          />
+        ) : null}
 
         <Divider textAlign="left">{'Media'}</Divider>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
