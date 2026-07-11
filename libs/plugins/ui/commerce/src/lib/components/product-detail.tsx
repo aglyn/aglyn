@@ -28,6 +28,7 @@ import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { CART_UPDATED_EVENT } from './cart'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-detail'
@@ -96,6 +97,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [activeImage, setActiveImage] = useState(0)
     const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
     const [message, setMessage] = useState('')
+    const [added, setAdded] = useState(false)
 
     const slug = slugProp || slugFromLocation()
 
@@ -141,6 +143,27 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         ) as DetailVariant | undefined
       ) ?? resolved.variants[0]
     }, [resolved, selections])
+
+    // Add to cart (AGL-293) beside instant buy; badge refresh via event.
+    const handleAddToCart = async () => {
+      if (!hostId || !resolved || !variant) return
+      setAdded(false)
+      const response = await fetch('/api/commerce/cart', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostId,
+          action: 'add',
+          productId: resolved.id,
+          variantId: variant.id,
+          quantity,
+        }),
+      }).catch(() => null)
+      if (response?.ok) {
+        setAdded(true)
+        window.dispatchEvent(new Event(CART_UPDATED_EVENT))
+      }
+    }
 
     const handleBuy = async () => {
       if (!hostId || !resolved || !variant || status === 'sending') return
@@ -312,6 +335,15 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               sx={{ width: 80 }}
               slotProps={{ htmlInput: { inputMode: 'numeric' } }}
             />
+            <Button
+              variant="outlined"
+              color="primary"
+              size="large"
+              disabled={!hostId || variant?.soldOut}
+              onClick={handleAddToCart}
+            >
+              {added ? 'Added ✓' : 'Add to cart'}
+            </Button>
             <Button
               variant="contained"
               color="primary"

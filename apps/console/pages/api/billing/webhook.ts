@@ -264,6 +264,188 @@ export default async function handler(
         }
       }
     }
+    // Cart orders (AGL-293): one multi-line order from the cart doc;
+    // clears the cart and decrements each line's stock.
+    if (
+      type === 'checkout.session.completed' &&
+      object?.metadata?.type === 'commerce-cart' &&
+      object?.payment_status === 'paid'
+    ) {
+      const { hostId, cartId, feeCents, couponCode } = object.metadata ?? {}
+      if (hostId && cartId) {
+        const firestore = firebaseAdmin.app().firestore()
+        const hostRef = firestore.collection('hosts').doc(String(hostId))
+        const cartRef = hostRef.collection('carts').doc(String(cartId))
+        const cartSnapshot = await cartRef.get()
+        const cart = (cartSnapshot.data() as Aglyn.HostCart | undefined) ?? {
+          lines: [],
+        }
+        const orderRef = hostRef.collection('orders').doc(String(object.id))
+        const counterRef = hostRef.collection('counters').doc('orders')
+        const productSnapshots = await Promise.all(
+          [...new Set(cart.lines.map((line) => line.productId))].map((id) =>
+            hostRef.collection('products').doc(id).get(),
+          ),
+        )
+        const productsById = new Map(
+          productSnapshots.map((snapshot) => [
+            snapshot.id,
+            snapshot.exists
+              ? Aglyn.liftLegacyProduct(snapshot.data() as any)
+              : null,
+          ]),
+        )
+        const lineItems: Aglyn.OrderLineItem[] = cart.lines
+          .map((line) => {
+            const product = productsById.get(line.productId)
+            if (!product) return null
+            const variant = line.variantId
+              ? product.variants.find((item) => item.id === line.variantId)
+              : product.variants[0]
+            return {
+              productId: line.productId,
+              ...(line.variantId ? { variantId: line.variantId } : {}),
+              name: product.name,
+              ...(variant && Object.keys(variant.options ?? {}).length
+                ? {
+                    variantLabel: Object.values(variant.options ?? {}).join(
+                      ' / ',
+                    ),
+                  }
+                : {}),
+              ...(variant?.sku ? { sku: variant.sku } : {}),
+              productType: product.type,
+              ...(product.supplierId
+                ? { supplierId: product.supplierId }
+                : {}),
+              quantity: line.quantity,
+              unitAmountCents: Math.round(
+                Number(variant?.priceUsd ?? 0) * 100,
+              ),
+            }
+          })
+          .filter(Boolean) as Aglyn.OrderLineItem[]
+        const shipping = object?.shipping_details ?? object?.customer_details
+        await firestore.runTransaction(async (transaction) => {
+          const [existing, counter] = await Promise.all([
+            transaction.get(orderRef),
+            transaction.get(counterRef),
+          ])
+          if (existing.exists) return
+          const number = Number(counter.get('next') ?? 1)
+          transaction.set(counterRef, { next: number + 1 }, { merge: true })
+          const totals = Aglyn.computeOrderTotals(lineItems, {
+            feeCents: Number(feeCents ?? 0),
+            taxCents: Number(object?.total_details?.amount_tax ?? 0),
+            discountCents: Number(
+              object?.total_details?.amount_discount ?? 0,
+            ),
+          })
+          transaction.set(orderRef, {
+            number,
+            status: 'paid',
+            channel: 'online',
+            lineItems,
+            totals: {
+              ...totals,
+              totalCents: Number(object?.amount_total ?? totals.totalCents),
+            },
+            timeline: [{ atMs: Date.now(), event: 'paid' }],
+            paymentIntentId: String(object?.payment_intent ?? '') || null,
+            checkoutSessionId: String(object.id),
+            customerName: object?.customer_details?.name ?? null,
+            customerEmail: object?.customer_details?.email ?? null,
+            ...(shipping?.address
+              ? {
+                  shippingAddress: {
+                    name: shipping?.name ?? undefined,
+                    line1: shipping.address.line1 ?? undefined,
+                    line2: shipping.address.line2 ?? undefined,
+                    city: shipping.address.city ?? undefined,
+                    state: shipping.address.state ?? undefined,
+                    postalCode: shipping.address.postal_code ?? undefined,
+                    country: shipping.address.country ?? undefined,
+                  },
+                }
+              : {}),
+            ...(couponCode ? { couponCode } : {}),
+            amountCents: Number(object?.amount_total ?? 0),
+            feeCents: Number(feeCents ?? 0),
+            createdAtMs: Date.now(),
+            createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          })
+        })
+        await cartRef.delete().catch(() => undefined)
+        // Inventory per line (AGL-281 semantics).
+        for (const line of cart.lines) {
+          const product = productsById.get(line.productId)
+          if (!product) continue
+          const variantId = line.variantId ?? product.variants[0]?.id
+          const tracked = product.variants.some(
+            (variant) =>
+              variant.id === variantId && variant.inventory != null,
+          )
+          if (!variantId || !tracked) continue
+          const variants = Aglyn.adjustVariantInventory(
+            product,
+            variantId,
+            -line.quantity,
+          )
+          await hostRef
+            .collection('products')
+            .doc(line.productId)
+            .set(
+              {
+                variants,
+                inventory: Aglyn.productInventory({ variants }),
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+          await hostRef
+            .collection('inventoryAdjustments')
+            .add({
+              productId: line.productId,
+              variantId,
+              delta: -line.quantity,
+              reason: 'sale',
+              orderId: String(object.id),
+              atMs: Date.now(),
+            } satisfies Aglyn.InventoryAdjustment)
+            .catch(() => undefined)
+        }
+        void notifyHostManagers(String(hostId), {
+          type: 'content.order',
+          title: `New order — $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}`,
+          ...(object?.customer_details?.email
+            ? { body: `From ${object.customer_details.email}` }
+            : {}),
+          link: `/${hostId}/products`,
+        })
+        void upsertHostContact({
+          hostId: String(hostId),
+          email: object?.customer_details?.email,
+          name: object?.customer_details?.name ?? undefined,
+          source: 'order',
+          interaction: {
+            refId: String(object.id),
+            summary: `Placed an order ($${(Number(object?.amount_total ?? 0) / 100).toFixed(2)})`,
+          },
+        })
+        if (couponCode) {
+          await hostRef
+            .collection('coupons')
+            .doc(String(couponCode))
+            .set(
+              {
+                redemptions: firebaseAdmin.firestore.FieldValue.increment(1),
+              },
+              { merge: true },
+            )
+            .catch(() => undefined)
+        }
+      }
+    }
     // Draft orders (AGL-287): the console pre-created the doc; completion
     // flips it to paid, stamps the intent, and decrements stock.
     if (
