@@ -91,7 +91,7 @@ import {
   publishScreenRoute,
   unpublishScreenRoute,
 } from '../../../../../../../constants/screen-publishing'
-import HostActivityCard from '../../../../../../../components/host-activity-card.component'
+import { HostActivityCard } from '@aglyn/plugins-workflows'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useCurrentTenant from '../../../../../../../hooks/use-current-tenant'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'

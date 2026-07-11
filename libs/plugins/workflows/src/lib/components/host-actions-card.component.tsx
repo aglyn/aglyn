@@ -18,6 +18,8 @@
 
 import {
   ACTION_MAX_STEPS,
+  type AglynTenant,
+  checkEntitlement,
   createResourceUid,
   HOST_ACTION_STEP_LABELS,
   isSiteEventType,
@@ -53,11 +55,11 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { hasEntitlement } from '../constants/entitlements'
-import useCurrentTenant from '../hooks/use-current-tenant'
-import useHostOrgId from '../hooks/use-host-org-id'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useHostOrgId,
+} from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
@@ -114,8 +116,11 @@ function defaultStep(type: HostActionStepType): HostActionStep {
  * event, dataset append). Runs server-side via runEventActions; paid
  * feature (`actions` flag, Pro+, `actionRunsPerMonth` metered).
  */
-export function HostActionsCard(props: { hostId: string }) {
-  const { hostId } = props
+export function HostActionsCard(props: {
+  hostId: string
+  tenant?: Partial<AglynTenant>
+}) {
+  const { hostId, tenant } = props
   // Org-shared data root (AGL-237); the host path is the pre-migration
   // fallback for hosts not yet org-wired.
   const hostOrgId = useHostOrgId(hostId)
@@ -125,7 +130,7 @@ export function HostActionsCard(props: { hostId: string }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
+
 
   const { data: actionDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
@@ -232,7 +237,7 @@ export function HostActionsCard(props: { hostId: string }) {
   )
 
   const handleAdd = useCallback(() => {
-    if (!hasEntitlement('actions', tenant)) {
+    if (!checkEntitlement(tenant, 'actions')) {
       return void enqueueSnackbar(
         'The actions builder requires a Pro plan — see Billing to upgrade',
         { variant: 'warning', persist: false },

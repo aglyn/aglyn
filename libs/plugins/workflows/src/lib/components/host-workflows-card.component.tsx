@@ -17,6 +17,9 @@
 'use client'
 
 import {
+  type AglynTenant,
+  checkEntitlement,
+  checkQuota,
   createResourceUid,
   HOST_EVENT_TYPES,
   type HostFunction,
@@ -42,20 +45,23 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
-import useCurrentTenant from '../hooks/use-current-tenant'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import HostActivityCard from './host-activity-card.component'
-import WhereUsedDialog from './where-used-dialog.component'
+import { WhereUsedDialog } from '@aglyn/plugins-logic'
 import {
   fetchWhereUsed,
   summarizeDependents,
   type WhereUsedResult,
-} from '../utils/fetch-where-used'
+} from '@aglyn/plugins-logic'
 
 export interface HostWorkflowsCardProps {
   hostId: string
+  /** Resolved entitlement source for quota checks (AGL-395). */
+  tenant?: Partial<AglynTenant>
 }
 
 interface WorkflowDraft extends HostWorkflow {
@@ -75,7 +81,7 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
+  const { tenant } = props
 
   const { data: workflowDocs } = useFirestoreCollection<any>(
     () =>
@@ -161,13 +167,13 @@ export function HostWorkflowsCard(props: HostWorkflowsCardProps) {
 
   const handleAdd = useCallback(() => {
     // Feature + cap gate (AGL-99); dark-launch for plan-less tenants.
-    if (!hasEntitlement('workflows', tenant)) {
+    if (!checkEntitlement(tenant, 'workflows')) {
       return void enqueueSnackbar(
         'Workflows require a Starter plan — see Billing to upgrade',
         { variant: 'warning', persist: false },
       )
     }
-    const quota = checkTenantQuota(
+    const quota = checkQuota(
       tenant,
       'workflowsPerHost',
       workflows.length,

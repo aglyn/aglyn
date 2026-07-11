@@ -17,6 +17,8 @@
 'use client'
 
 import {
+  type AglynTenant,
+  checkEntitlement,
   createResourceUid,
   WEBHOOK_MAX_PER_HOST,
   WEBHOOK_URL_PATTERN,
@@ -44,11 +46,11 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { hasEntitlement } from '../constants/entitlements'
-import useCurrentTenant from '../hooks/use-current-tenant'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
-import useFirestoreDoc from '../hooks/use-firestore-doc'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useFirestoreDoc,
+} from '@aglyn/tenant-feature-instance'
 
 function generateSecret(): string {
   const bytes = new Uint8Array(24)
@@ -73,12 +75,15 @@ interface WebhookDraft {
  * (`/api/hooks/{hostId}/{hookId}`, secret-verified, run a workflow with
  * the payload in scope). Business tier.
  */
-export function HostWebhooksCard(props: { hostId: string }) {
-  const { hostId } = props
+export function HostWebhooksCard(props: {
+  hostId: string
+  tenant?: Partial<AglynTenant>
+}) {
+  const { hostId, tenant } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
+
 
   const { data: webhookDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'webhooks'), limit(20)),
@@ -114,7 +119,7 @@ export function HostWebhooksCard(props: { hostId: string }) {
   const [draft, setDraft] = useState<WebhookDraft | null>(null)
 
   const handleAdd = useCallback(() => {
-    if (!hasEntitlement('webhooks', tenant)) {
+    if (!checkEntitlement(tenant, 'webhooks')) {
       return void enqueueSnackbar(
         'Webhooks require a Business plan — see Billing to upgrade',
         { variant: 'warning', persist: false },

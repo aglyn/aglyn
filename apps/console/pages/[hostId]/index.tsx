@@ -27,7 +27,7 @@ import HostAnalyticsCard from '../../components/analytics/host-analytics-card.co
 import CampaignGlanceCard from '../../components/dashboard/campaign-glance-card.component'
 import CommerceGlanceCard from '../../components/dashboard/commerce-glance-card.component'
 import NewestSiteUsersCard from '../../components/dashboard/newest-site-users-card.component'
-import HostActivityCard from '../../components/host-activity-card.component'
+import { HostActivityCard } from '@aglyn/plugins-workflows'
 import HostDisplayNameComponent from '../../components/host-display-name.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import hostNavTabItems from '../../constants/host-nav-tabs'
