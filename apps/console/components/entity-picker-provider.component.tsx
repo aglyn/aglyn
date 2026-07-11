@@ -21,6 +21,7 @@ import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useHostOrgId from '../hooks/use-host-org-id'
 
 export interface EntityPickerProviderProps {
   hostId: string
@@ -47,6 +48,12 @@ const toOptions = (
 export function EntityPickerProvider(props: EntityPickerProviderProps) {
   const { hostId, children } = props
   const firestore = useFirestore()
+  // Datasets are org-scoped (AGL-240); resolve the owning org and fall
+  // back to the host path only for pre-migration hosts.
+  const orgId = useHostOrgId(hostId)
+  const dataScope = orgId
+    ? (['orgs', orgId] as const)
+    : (['hosts', hostId] as const)
   const { data: productDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'products'), limit(300)),
     [firestore, hostId],
@@ -68,8 +75,12 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
     { idField: '$id' },
   )
   const { data: datasetDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'datasets'), limit(200)),
-    [firestore, hostId],
+    () =>
+      query(
+        collection(firestore, dataScope[0], dataScope[1], 'datasets'),
+        limit(200),
+      ),
+    [firestore, dataScope[0], dataScope[1]],
     { idField: '$id' },
   )
 
