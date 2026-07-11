@@ -14,42 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-'use client'
-
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
 
 /**
- * The org a host belongs to, resolved from the `hostIndex` mirror
- * (AGL-237). Host-scoped pages use this — NOT the workspace context — so
- * org-shared data stays correct when a multi-org user deep-links into a
- * host outside their selected workspace. Null while loading or for
- * pre-org hosts (callers fall back to host-scoped paths).
+ * Moved to `@aglyn/tenant-feature-instance` (AGL-395) so relocated feature
+ * plugins can share it; this shim keeps the app's import sites working.
  */
-export function useHostOrgId(hostId: string | undefined): string | null {
-  const firestore = useFirestore()
-  const [orgId, setOrgId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!hostId) {
-      setOrgId(null)
-      return undefined
-    }
-    let active = true
-    void getDoc(doc(firestore, 'hostIndex', hostId))
-      .then((snapshot) => {
-        if (active) setOrgId((snapshot.data()?.['orgId'] as string) ?? null)
-      })
-      .catch(() => {
-        if (active) setOrgId(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [firestore, hostId])
-
-  return orgId
-}
-
-export default useHostOrgId
+export {
+  useHostOrgId,
+  useHostOrgId as default,
+} from '@aglyn/tenant-feature-instance'

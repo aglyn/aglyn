@@ -23,6 +23,8 @@ export * from './hooks/firebase/firebase-services'
 export * from './hooks/helpers/use-doc'
 export * from './hooks/helpers/use-modify-doc-callback'
 
+export * from './hooks/use-firestore-collection'
+export * from './hooks/use-host-org-id'
 export * from './hooks/use-host'
 export * from './hooks/use-layout'
 export * from './hooks/use-layout-version'
