@@ -86,6 +86,10 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     delta: string
     reason: Aglyn.InventoryAdjustmentReason
   } | null>(null)
+  const [importing, setImporting] = useState<{
+    text: string
+    parsed: Aglyn.ProductCsvImport | null
+  } | null>(null)
 
   const { data: productDocs } = useFirestoreCollection<any>(
     () =>
@@ -173,6 +177,46 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     [confirm, firestore, hostId, enqueueSnackbar],
   )
 
+  // CSV import/export (AGL-282): Shopify-dialect columns, dry-run first.
+  const handleExport = useCallback(() => {
+    const csv = Aglyn.productsToCsv(products)
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const anchor = document.createElement('a')
+    anchor.href = URL.createObjectURL(blob)
+    anchor.download = `products-${hostId}.csv`
+    anchor.click()
+    URL.revokeObjectURL(anchor.href)
+  }, [products, hostId])
+
+  const handleImportApply = useCallback(async () => {
+    const parsed = importing?.parsed
+    if (!parsed || parsed.products.length === 0) return
+    const existingSlugs = new Set(products.map((product) => product.slug))
+    for (const product of parsed.products) {
+      let slug = product.slug
+      while (existingSlugs.has(slug)) slug = `${product.slug}-${Date.now() % 1000}`
+      existingSlugs.add(slug)
+      await setDoc(
+        doc(firestore, 'hosts', hostId, 'products', Aglyn.createResourceUid()),
+        {
+          ...product,
+          slug,
+          priceUsd: product.variants[0]?.priceUsd ?? 0,
+          inventory: Aglyn.productInventory(product),
+          imageUrl: product.mediaUrls?.[0] ?? null,
+          createdAtMs: Date.now(),
+          updatedAtMs: Date.now(),
+          updatedAt: Timestamp.now(),
+        },
+      )
+    }
+    setImporting(null)
+    enqueueSnackbar(`Imported ${parsed.products.length} products`, {
+      variant: 'success',
+      persist: false,
+    })
+  }, [importing, products, firestore, hostId, enqueueSnackbar])
+
   const handleAdjustSave = useCallback(async () => {
     if (!adjusting) return
     const delta = Math.round(Number(adjusting.delta))
@@ -248,6 +292,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             onClick={() => setCreating(true)}
           >
             {'Add product'}
+          </Button>
+          <Button
+            size="small"
+            onClick={() => setImporting({ text: '', parsed: null })}
+          >
+            {'Import'}
+          </Button>
+          <Button
+            size="small"
+            disabled={products.length === 0}
+            onClick={handleExport}
+          >
+            {'Export'}
           </Button>
         </Stack>
         {products.length === 0 ? (
@@ -348,6 +405,80 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           </Box>
         )}
       </Stack>
+      <Dialog
+        open={Boolean(importing)}
+        onClose={() => setImporting(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{'Import products (CSV)'}</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            {'Shopify-compatible columns (Handle, Title, Option/Variant ' +
+              'columns, Image Src). Paste the file contents or choose a file.'}
+          </Typography>
+          <Button component="label" size="small" sx={{ alignSelf: 'flex-start' }}>
+            {'Choose file'}
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              onChange={async (event) => {
+                const file = event.target.files?.[0]
+                if (!file) return
+                const text = await file.text()
+                setImporting({ text, parsed: Aglyn.parseProductsCsv(text) })
+              }}
+            />
+          </Button>
+          <TextField
+            label="CSV"
+            value={importing?.text ?? ''}
+            onChange={(event) =>
+              setImporting({
+                text: event.target.value,
+                parsed: event.target.value.trim()
+                  ? Aglyn.parseProductsCsv(event.target.value)
+                  : null,
+              })
+            }
+            size="small"
+            multiline
+            minRows={5}
+            maxRows={10}
+          />
+          {importing?.parsed ? (
+            <>
+              <Typography variant="body2">
+                {`Ready to import ${importing.parsed.products.length} products` +
+                  (importing.parsed.errors.length
+                    ? ` — ${importing.parsed.errors.length} rows skipped:`
+                    : '')}
+              </Typography>
+              {importing.parsed.errors.slice(0, 5).map((error) => (
+                <Typography
+                  key={error}
+                  variant="caption"
+                  color="warning.main"
+                >
+                  {error}
+                </Typography>
+              ))}
+            </>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImporting(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={!importing?.parsed?.products.length}
+            onClick={handleImportApply}
+          >
+            {`Import${importing?.parsed?.products.length ? ` ${importing.parsed.products.length}` : ''}`}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={Boolean(adjusting)}
         onClose={() => setAdjusting(null)}
