@@ -45,6 +45,7 @@ import useBesignerAppContext from '../hooks/use-besigner-app-context'
 import useDeleteElementCallback, {
   useDeleteElementsCallback,
 } from '../hooks/use-delete-element-callback'
+import SubtreeJsonDialog from './subtree-json-dialog.component'
 
 export interface NodeContextMenuProps extends PaperProps {
   node: Aglyn.NodeSchema<any>
@@ -65,6 +66,7 @@ export const NodeContextMenu = observer(
     const elementRef = Besigner.refs.get(node?.$id)
     const [moreOpen, setMoreOpen] = useState(false)
     const [moreButton, moreButtonRef] = useState<HTMLButtonElement | null>(null)
+    const [jsonOpen, setJsonOpen] = useState(false)
 
     const closeMore = useCallback(() => setMoreOpen(false), [])
     const openMore = useCallback(() => setMoreOpen(true), [])
@@ -222,6 +224,11 @@ export const NodeContextMenu = observer(
             </ListItemIcon>
             <ListItemText>Shift down</ListItemText>
           </MenuItem>
+          {multi ? null : (
+            <MenuItem onClick={() => setJsonOpen(true)}>
+              <ListItemText inset>Edit JSON</ListItemText>
+            </MenuItem>
+          )}
           <Divider />
           <MenuItem disabled={isRootNode} onClick={handleDuplicateClick}>
             <ListItemIcon>
@@ -244,6 +251,14 @@ export const NodeContextMenu = observer(
             <ListItemText>{multi ? 'Delete selection' : 'Delete'}</ListItemText>
           </MenuItem>
         </MenuList>
+        <SubtreeJsonDialog
+          node={node}
+          open={jsonOpen}
+          onClose={() => {
+            setJsonOpen(false)
+            onAction?.()
+          }}
+        />
       </Paper>
     )
   }),

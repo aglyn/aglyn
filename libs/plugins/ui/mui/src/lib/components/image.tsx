@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiImage } from '@aglyn/shared-data-mdi'
+import { AppLink } from '@aglyn/shared-ui-jsx'
 import Box from '@mui/material/Box'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
@@ -36,7 +37,14 @@ export interface ImageProps {
   height?: string
   /** Border radius in px. */
   radius?: number
+  /** Target screen id — resolved rename-safe like Screen Link (AGL-339). */
+  screenId?: string
+  /** External URL, used only when no `screenId` is set. */
+  href?: string
 }
+
+// Only navigable protocols — mirrors ScreenLink's hardening.
+const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
 
 /**
  * Image element (AGL-74): renders a plain img with fit/size/radius
@@ -44,7 +52,38 @@ export interface ImageProps {
  * visible and selectable in the editor.
  */
 const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
-  const { src, alt, objectFit, width, height, radius, ...rest } = props
+  const {
+    src,
+    alt,
+    objectFit,
+    width,
+    height,
+    radius,
+    screenId,
+    href: externalHref,
+    ...rest
+  } = props
+  // Optional link mode (AGL-339): screen id first (rename-safe), external
+  // URL as fallback; suppressed in the besigner canvas like Screen Link.
+  const { href: resolvedHref, suppressNavigation } =
+    Aglyn.useScreenLink(screenId)
+  const safeExternalHref =
+    externalHref && SAFE_HREF.test(externalHref.trim())
+      ? externalHref.trim()
+      : undefined
+  const linkHref = screenId ? resolvedHref : safeExternalHref
+  const wrapLink = (element: JSX.Element) =>
+    linkHref && !suppressNavigation ? (
+      <AppLink
+        componentVariant="naked"
+        href={linkHref}
+        style={{ display: 'block' }}
+      >
+        {element}
+      </AppLink>
+    ) : (
+      element
+    )
   if (!src) {
     return (
       <Box
@@ -72,7 +111,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
   // without a variant fall back to the original server-side, so a static
   // srcSet is safe for any CDN-form URL.
   const isCdnUrl = src.includes('/api/media/cdn/')
-  return (
+  return wrapLink(
     <Box
       ref={ref}
       component="img"
@@ -96,7 +135,7 @@ const Image = forwardRef<HTMLElement, ImageProps>((props, ref) => {
         objectFit: objectFit || 'cover',
         borderRadius: radius != null ? `${radius}px` : undefined,
       }}
-    />
+    />,
   )
 })
 Image.displayName = 'Image'
@@ -152,6 +191,20 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
       description: 'CSS height, e.g. 240px. Leave empty for auto.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Height',
+    },
+    {
+      name: 'screenId',
+      description:
+        'Optional: navigate to this screen when the image is clicked — ' +
+        'follows the published path like a Screen Link.',
+      component: Aglyn.FieldComponentType.SCREEN_SELECT,
+      label: 'Link to screen',
+    },
+    {
+      name: 'href',
+      description: 'External URL used only when no screen is selected.',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+      label: 'External URL',
     },
   ],
 }

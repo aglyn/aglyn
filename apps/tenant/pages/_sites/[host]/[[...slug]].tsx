@@ -950,9 +950,11 @@ function ExperimentsRunner(props: {
 function AutomationsEngine(props: {
   hostId?: string
   automations: ClientAutomation[]
+  /** Host routing map (screen id → slug) for rename-safe redirects. */
+  screens?: Record<string, string>
   onShowOverlay: (overlayId: string) => void
 }) {
-  const { hostId, automations, onShowOverlay } = props
+  const { hostId, automations, screens, onShowOverlay } = props
   const showOverlayRef = useRef(onShowOverlay)
   showOverlayRef.current = onShowOverlay
 
@@ -1029,7 +1031,18 @@ function AutomationsEngine(props: {
             // eslint-disable-next-line no-new-func
             new Function(step.code)()
           } else if (step.type === 'redirect') {
-            window.location.assign(step.url)
+            // Screen targets resolve through the routing map (AGL-339) so
+            // slug renames never break the interaction; url is the manual
+            // fallback.
+            const screenSlug =
+              (step as any).screenId != null
+                ? screens?.[(step as any).screenId]
+                : undefined
+            const destination =
+              screenSlug != null
+                ? Aglyn.screenRoutePathToUrl(screenSlug)
+                : step.url
+            if (destination) window.location.assign(destination)
           } else if (step.type === 'trackGaEvent') {
             ;(window as any).gtag?.('event', step.eventName, step.params ?? {})
           } else if (step.type === 'siteAlert') {
@@ -1156,7 +1169,13 @@ function AutomationsEngine(props: {
     }
     // Automations are static per pageview (ISR props).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostId, JSON.stringify(automations.map((automation) => automation.id))])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    hostId,
+    screens,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    JSON.stringify(automations.map((automation) => automation.id)),
+  ])
 
   return null
 }
@@ -2202,6 +2221,7 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         <AutomationsEngine
           hostId={props.data?.host?.$id}
           automations={props.clientAutomations}
+          screens={props.data?.host?.screens}
           onShowOverlay={(overlayId) => {
             const overlay = props.automationOverlays?.[overlayId]
             if (overlay) setAutomationOverlay({ id: overlayId, ...overlay })

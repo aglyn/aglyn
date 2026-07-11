@@ -290,17 +290,35 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     const nodeExperiment = (interactions.sectionExperiments ?? []).find(
       (experiment) => experiment.nodeId === node?.$id,
     )
-    const hasSrcAttribute = (rawAttributes ?? []).some(
-      (field: any) => field?.name === 'src',
+    // Media-bearing attributes (AGL-341): every image/media URL field gets
+    // a library browse button; the text field itself stays as the manual
+    // URL escape hatch.
+    const mediaAttributes = useMemo(
+      () =>
+        (rawAttributes ?? []).filter(
+          (field: any) =>
+            field?.component === Aglyn.FieldComponentType.TEXT_FIELD &&
+            typeof field?.name === 'string' &&
+            /^(src|poster)$|(image|logo|avatar|media|thumbnail|photo|background)(Url)?$/i.test(
+              field.name,
+            ),
+        ),
+      [rawAttributes],
     )
-    const handleBrowseMedia = useCallback(() => {
-      onPickMedia?.((url) => {
-        const current = (Aglyn.canvas.toJSON().nodes as Record<string, any>)[
-          node?.$id
-        ]
-        Aglyn.canvas.updateNodeProps(node, { ...current?.props, src: url })
-      })
-    }, [onPickMedia, node])
+    const handleBrowseMedia = useCallback(
+      (propName: string) => () => {
+        onPickMedia?.((url) => {
+          const current = (
+            Aglyn.canvas.toJSON().nodes as Record<string, any>
+          )[node?.$id]
+          Aglyn.canvas.updateNodeProps(node, {
+            ...current?.props,
+            [propName]: url,
+          })
+        })
+      },
+      [onPickMedia, node],
+    )
 
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
@@ -458,18 +476,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     </MuiMenu>
                   </FormControl>
                 ) : null}
-                {onPickMedia && hasSrcAttribute ? (
-                  <FormControl margin="none" fullWidth>
-                    <Button
-                      color="secondary"
-                      onClick={handleBrowseMedia}
-                      sx={{ mt: 2 }}
-                      fullWidth
-                    >
-                      Browse media
-                    </Button>
-                  </FormControl>
-                ) : null}
+                {onPickMedia && mediaAttributes.length
+                  ? mediaAttributes.map((field: any) => (
+                      <FormControl key={field.name} margin="none" fullWidth>
+                        <Button
+                          color="secondary"
+                          onClick={handleBrowseMedia(field.name)}
+                          sx={{ mt: 2 }}
+                          fullWidth
+                        >
+                          {mediaAttributes.length > 1
+                            ? `Browse media — ${field.label ?? field.name}`
+                            : 'Browse media'}
+                        </Button>
+                      </FormControl>
+                    ))
+                  : null}
                 {interactions.onCreateInteraction && node?.$id ? (
                   <FormControl margin="none" fullWidth>
                     {/* Interactions (AGL-258): automations bound to this

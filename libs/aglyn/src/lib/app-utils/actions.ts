@@ -103,7 +103,10 @@ export type HostActionStep =
   | { type: 'toggleClass'; selector: string; className: string }
   | { type: 'showHtml'; html: string }
   | { type: 'runJs'; code: string }
-  | { type: 'redirect'; url: string }
+  // Screen targets are rename-safe (AGL-339): the tenant resolves the
+  // screen id against the host routing map at run time; `url` is the
+  // external/manual fallback.
+  | { type: 'redirect'; url?: string; screenId?: string }
   | {
       type: 'trackGaEvent'
       eventName: string
@@ -270,8 +273,8 @@ export function validateHostAction(action: HostAction): string | null {
     if (step.type === 'runJs' && !step.code?.trim()) {
       return `${label}: enter the JavaScript`
     }
-    if (step.type === 'redirect' && !step.url?.trim()) {
-      return `${label}: enter the destination URL`
+    if (step.type === 'redirect' && !step.url?.trim() && !step.screenId) {
+      return `${label}: pick a screen or enter the destination URL`
     }
     if (step.type === 'trackGaEvent' && !step.eventName?.trim()) {
       return `${label}: name the analytics event`

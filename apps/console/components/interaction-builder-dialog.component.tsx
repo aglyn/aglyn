@@ -87,6 +87,12 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  // Screen picker for redirects (AGL-339): stored by id, rename-safe.
+  const { data: screenDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(200)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
 
   const selector = nodeElementSelector(state.nodeId)
   const [name, setName] = useState<string>(
@@ -355,16 +361,40 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                 </TextField>
               ) : null}
               {step.type === 'redirect' ? (
-                <TextField
-                  label="URL"
-                  value={step.url ?? ''}
-                  onChange={(inputEvent) =>
-                    updateStep(index, { url: inputEvent.target.value })
-                  }
-                  size="small"
-                  sx={{ flex: 1 }}
-                  placeholder="/contact"
-                />
+                <>
+                  <TextField
+                    label="Screen"
+                    value={step.screenId ?? ''}
+                    onChange={(inputEvent) =>
+                      updateStep(index, {
+                        screenId: inputEvent.target.value || undefined,
+                        ...(inputEvent.target.value ? { url: undefined } : {}),
+                      })
+                    }
+                    size="small"
+                    select
+                    sx={{ flex: 1 }}
+                  >
+                    <MenuItem value="">{'Custom URL…'}</MenuItem>
+                    {(screenDocs ?? []).map((screen: any) => (
+                      <MenuItem key={screen.$id} value={screen.$id}>
+                        {screen.displayName ?? screen.slug ?? screen.$id}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  {!step.screenId ? (
+                    <TextField
+                      label="URL"
+                      value={step.url ?? ''}
+                      onChange={(inputEvent) =>
+                        updateStep(index, { url: inputEvent.target.value })
+                      }
+                      size="small"
+                      sx={{ flex: 1 }}
+                      placeholder="/contact"
+                    />
+                  ) : null}
+                </>
               ) : null}
               {step.type === 'trackGaEvent' ? (
                 <TextField
