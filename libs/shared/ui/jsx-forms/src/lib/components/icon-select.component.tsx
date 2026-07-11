@@ -125,6 +125,17 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
   const [icons, allIcons, applyFilter, clearFilter] = useMdiIconsFuzzy()
   const [selected, setSelected] = useState(() => currentValue)
 
+  // Rendering all ~6,600 icons at once froze the panel (AGL-340): cap the
+  // grid and let search narrow the rest.
+  const MAX_RENDERED_ICONS = 240
+  const visibleIcons = useMemo(
+    () =>
+      icons.length > MAX_RENDERED_ICONS
+        ? icons.slice(0, MAX_RENDERED_ICONS)
+        : icons,
+    [icons],
+  )
+
   const [currentIcon, selectedIcon] = useMemo(() => {
     const findIcon = (id: string) => allIcons.find((icon) => icon.id === id)
     const currentIcon = (currentValue && findIcon(currentValue)) || iconUnset
@@ -145,7 +156,7 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
     } else {
       clearFilter()
     }
-  }, 750)
+  }, 300)
   const handleFilterChange = useCallback(
     (e) => {
       const target = e.currentTarget
@@ -267,10 +278,28 @@ const IconSelectComponent = forwardRef<any, IconSelectProps>((props, ref) => {
               GridContainerProps={{ spacing: 1 }}
               GridItemProps={{ size: { xs: 2 } }}
               ListWrapperProps={{ className: classKeys.gridList }}
-              items={icons}
+              items={visibleIcons}
               renderItemContent={renderItemContent}
               {...GridListProps}
             />
+            {icons.length > visibleIcons.length ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', px: 1, pb: 1 }}
+              >
+                {`Showing ${visibleIcons.length} of ${icons.length} icons — search to narrow down.`}
+              </Typography>
+            ) : null}
+            {allIcons.length === 0 ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: 'block', px: 1, pb: 1 }}
+              >
+                {'Loading icon catalog…'}
+              </Typography>
+            ) : null}
           </GridListWrapper>
         </StyledCollapse>
       </Grid>

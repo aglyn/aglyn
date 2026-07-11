@@ -37,7 +37,9 @@ import * as CustomHtml from './components/custom-html'
 import * as ReusableInstance from './components/reusable-instance'
 import * as SearchBox from './components/search-box'
 import * as ScreenLink from './components/screen-link'
+import * as Section from './components/section'
 import * as Stack from './components/stack'
+import * as ThemeModeSwitcher from './components/theme-mode-switcher'
 import * as Toolbar from './components/toolbar'
 import * as Typography from './components/typography'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -85,7 +87,9 @@ export function registerMuiPlugin(): void {
     { component: CommunityPlugin.default, schema: CommunityPlugin.schema, presets: CommunityPlugin.presets },
     { component: CustomHtml.default, schema: CustomHtml.schema, presets: CustomHtml.presets },
     { component: SearchBox.default, schema: SearchBox.schema, presets: SearchBox.presets },
+    { component: Section.default, schema: Section.schema, presets: Section.presets },
     { component: Stack.default, schema: Stack.schema, presets: Stack.presets },
+    { component: ThemeModeSwitcher.default, schema: ThemeModeSwitcher.schema, presets: ThemeModeSwitcher.presets },
   ]
 
   Aglyn.plugins.addDependency({
