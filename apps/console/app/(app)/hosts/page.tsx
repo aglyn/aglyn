@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+'use client'
+
 import {
   ICON_VARIANT_HOST,
   ICON_VARIANT_HOST_GROUP,
@@ -27,17 +29,17 @@ import { Button, Typography } from '@mui/material'
 import { useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import CreateHostDialog from '../../components/create-host-dialog.component'
-import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
-import OrgInvitesBanner from '../../components/org-invites-banner.component'
-import DashboardLayout from '../../components/layouts/dashboard.layout'
-import MainLayout from '../../components/layouts/main.layout'
-import useOrgNavTabItems from '../../hooks/use-org-nav-tabs'
-import { buildRoute, Route } from '../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../constants/shared'
-import { useAdminHosts } from '../../hooks/use-admin-hosts'
-import { useOrgWorkspace } from '../../hooks/use-org-workspace'
-import useTenantPermissions from '../../hooks/use-tenant-permissions'
+import CreateHostDialog from '../../../components/create-host-dialog.component'
+import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
+import OrgInvitesBanner from '../../../components/org-invites-banner.component'
+import DashboardLayout from '../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../components/layouts/main.layout'
+import useOrgNavTabItems from '../../../hooks/use-org-nav-tabs'
+import { buildRoute, Route } from '../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import { useAdminHosts } from '../../../hooks/use-admin-hosts'
+import { useOrgWorkspace } from '../../../hooks/use-org-workspace'
+import useTenantPermissions from '../../../hooks/use-tenant-permissions'
 
 function HostInfoItem({ label, value }) {
   return (
@@ -216,17 +218,5 @@ function Hosts() {
   return <HostsContent />
 }
 Hosts.displayName = 'Page:Hosts'
-Hosts.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Sites',
-      enableAppBarElevation: true,
-    },
-  },
-]
 
 export default Hosts

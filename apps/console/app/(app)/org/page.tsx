@@ -15,17 +15,11 @@
  * limitations under the License.
  */
 
-import type { GetServerSideProps } from 'next'
-import { buildRoute, Route } from '../../constants/route-links'
+import { redirect } from 'next/navigation'
+import { buildRoute, Route } from '../../../constants/route-links'
 
-/**
- * /org has no content of its own — without this page the path would fall
- * through to the [hostId] catch-all as a phantom host (AGL-236).
- */
-export const getServerSideProps: GetServerSideProps = async () => ({
-  redirect: { destination: buildRoute(Route.MANAGE_TEAM), permanent: false },
-})
-
-const OrgIndex = () => null
-OrgIndex.displayName = 'Page:OrgIndex'
-export default OrgIndex
+// /org has no page of its own — redirect to the team roster (was the
+// pages/org/index getServerSideProps redirect).
+export default function OrgIndex() {
+  redirect(buildRoute(Route.MANAGE_TEAM))
+}

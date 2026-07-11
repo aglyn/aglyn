@@ -38,12 +38,12 @@ import { getAuth, signInWithCustomToken } from 'firebase/auth'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
-import adminNavTabItems from '../../../../constants/admin-nav-tabs'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../components/layouts/main.layout'
+import adminNavTabItems from '../../../../../constants/admin-nav-tabs'
+import { buildRoute, Route } from '../../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 
 interface UserDetail {
   user: {
@@ -475,16 +475,5 @@ const AdminUserDetail: NextPageWithLayout = () => {
   )
 }
 AdminUserDetail.displayName = 'Page:AdminUserDetail'
-AdminUserDetail.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'User',
-    },
-  },
-]
 
 export default AdminUserDetail

@@ -38,18 +38,18 @@ import {
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
-import { useRouter } from 'next/router'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
-import OrgActivityCard from '../../../../components/org-activity-card.component'
-import { useAdminHosts } from '../../../../hooks/use-admin-hosts'
-import useOrgNavTabItems from '../../../../hooks/use-org-nav-tabs'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useOrgWorkspace } from '../../../../hooks/use-org-workspace'
+import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../components/layouts/main.layout'
+import OrgActivityCard from '../../../../../components/org-activity-card.component'
+import { useAdminHosts } from '../../../../../hooks/use-admin-hosts'
+import useOrgNavTabItems from '../../../../../hooks/use-org-nav-tabs'
+import { buildRoute, Route } from '../../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import { useOrgWorkspace } from '../../../../../hooks/use-org-workspace'
 
 /**
  * Team member detail (AGL-364): org admins/owners inspect and edit a
@@ -408,9 +408,5 @@ const TeamMemberDetail: NextPageWithLayout = () => {
   )
 }
 TeamMemberDetail.displayName = 'Page:TeamMemberDetail'
-TeamMemberDetail.layouts = [
-  { Component: AuthenticatedLayout },
-  { Component: MainLayout, props: { title: 'Team member' } },
-]
 
 export default TeamMemberDetail

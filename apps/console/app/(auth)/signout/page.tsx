@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+'use client'
+
 import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next'
@@ -22,8 +24,8 @@ import { CircularProgress } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect } from 'react'
 import { useAuth } from '@aglyn/tenant-feature-instance'
-import AuthFormComponent from '../../components/auth-form.component'
-import AuthenticatingLayout from '../../components/layouts/authenticating.layout'
+import AuthFormComponent from '../../../components/auth-form.component'
+import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 
 function SignOut() {
   useNextPageTitle({
@@ -60,13 +62,5 @@ function SignOut() {
   )
 }
 SignOut.displayName = 'Page:SignOut'
-SignOut.layouts = [
-  {
-    Component: AuthenticatingLayout,
-    props: {
-      signingOut: true,
-    },
-  },
-]
 
 export default SignOut

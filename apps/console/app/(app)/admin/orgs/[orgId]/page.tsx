@@ -52,15 +52,15 @@ import {
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
-import adminNavTabItems from '../../../../constants/admin-nav-tabs'
-import MediaUrlField from '../../../../components/media-url-field.component'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
+import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../components/layouts/main.layout'
+import adminNavTabItems from '../../../../../constants/admin-nav-tabs'
+import MediaUrlField from '../../../../../components/media-url-field.component'
+import { buildRoute, Route } from '../../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
 /**
  * Read-only organization detail for staff (AGL-207/238). Support surface
@@ -1022,9 +1022,5 @@ const AdminOrgDetail: NextPageWithLayout = () => {
   )
 }
 AdminOrgDetail.displayName = 'Page:AdminOrgDetail'
-AdminOrgDetail.layouts = [
-  { Component: AuthenticatedLayout },
-  { Component: MainLayout, props: { title: 'Organization – Staff' } },
-]
 
 export default AdminOrgDetail

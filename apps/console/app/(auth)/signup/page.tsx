@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+'use client'
+
 import type { AuthResultError } from '@aglyn/shared-data-enums'
 import { APP_CONSOLE } from '@aglyn/shared-data-enums'
 import {
@@ -48,10 +50,10 @@ import {
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
-import AuthErrorAlertComponent from '../../components/auth-error-alert.component'
-import AuthFormTemplateComponent from '../../components/auth-form-template.component'
-import AuthFormComponent from '../../components/auth-form.component'
-import AuthenticatingLayout from '../../components/layouts/authenticating.layout'
+import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
+import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
+import AuthFormComponent from '../../../components/auth-form.component'
+import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 
 const googleOAuthProvider = new GoogleAuthProvider()
 
@@ -171,10 +173,5 @@ function SignUp() {
   );
 }
 SignUp.displayName = 'Page:SignUp'
-SignUp.layouts = [
-  {
-    Component: AuthenticatingLayout,
-  },
-]
 
 export default SignUp
