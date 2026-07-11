@@ -1,0 +1,59 @@
+{
+  "name": "plugins-ui-events-calendar",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/plugins/ui/events-calendar/src",
+  "projectType": "library",
+  "tags": [
+    "scope:lib",
+    "scope:aglyn",
+    "aglyn:addons"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/rollup:rollup",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/libs/plugins/ui/events-calendar",
+        "tsConfig": "libs/plugins/ui/events-calendar/tsconfig.lib.json",
+        "project": "libs/plugins/ui/events-calendar/package.json",
+        "entryFile": "libs/plugins/ui/events-calendar/src/index.ts",
+        "external": [
+          "react/jsx-runtime"
+        ],
+        "rollupConfig": [
+          "@nx/react/plugins/bundle-rollup",
+          "tools/rollup-external-packages.js",
+          "tools/rollup-suppress-use-client.js",
+          "tools/rollup-skip-typecheck.js"
+        ],
+        "compiler": "swc",
+        "assets": [
+          {
+            "glob": "libs/plugins/ui/events-calendar/README.md",
+            "input": ".",
+            "output": "."
+          }
+        ],
+        "updateBuildableProjectDepsInPackageJson": true,
+        "skipTypeCheck": true
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": [
+        "{workspaceRoot}/coverage/libs/plugins/ui/events-calendar"
+      ],
+      "options": {
+        "jestConfig": "libs/plugins/ui/events-calendar/jest.config.ts"
+      }
+    }
+  }
+}

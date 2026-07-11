@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import { registerCommercePlugin } from '@aglyn/plugins-ui-commerce'
+import { registerEventsCalendarPlugin } from '@aglyn/plugins-ui-events-calendar'
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
 import { NextPageTitle } from '@aglyn/shared-ui-next'
 import {
@@ -38,6 +39,7 @@ import {
 
 registerLegacyMuiPlugin()
 registerCommercePlugin()
+registerEventsCalendarPlugin()
 
 const SUPPRESSED_SCREEN_LINKS = { suppressNavigation: true }
 

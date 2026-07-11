@@ -29,7 +29,6 @@ import * as Blocks from './components/blocks'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
 import * as Booking from './components/booking'
-import * as EventList from './components/event-list'
 import * as Icon from './components/icon'
 import * as LanguageSwitcher from './components/language-switcher'
 import * as Video from './components/video'
@@ -76,7 +75,7 @@ export function registerLegacyMuiPlugin(): void {
     { component: Video.default, schema: Video.schema, presets: Video.presets },
     { component: Icon.default, schema: Icon.schema, presets: Icon.presets },
     { component: Booking.default, schema: Booking.schema, presets: Booking.presets },
-    { component: EventList.default, schema: EventList.schema, presets: EventList.presets },
+    // event-list moved to @aglyn/plugins-ui-events-calendar (AGL-313).
     { component: LanguageSwitcher.default, schema: LanguageSwitcher.schema, presets: LanguageSwitcher.presets },
     { component: ReusableInstance.default, schema: ReusableInstance.schema, presets: ReusableInstance.presets },
     { component: ScreenLink.default, schema: ScreenLink.schema, presets: ScreenLink.presets },

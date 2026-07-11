@@ -32,6 +32,7 @@ export type ReleaseFlagKey =
   | 'release_data_store'
   | 'release_workflows'
   | 'release_redirects'
+  | 'release_commerce_v2'
   | 'release_community'
 
 export interface ReleaseFlagDefinition {

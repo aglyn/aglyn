@@ -41,6 +41,7 @@ import {
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
 import { registerCommercePlugin } from '@aglyn/plugins-ui-commerce'
+import { registerEventsCalendarPlugin } from '@aglyn/plugins-ui-events-calendar'
 import { registerLegacyMuiPlugin } from '@aglyn/plugins-ui-mui'
 import { useHost, useLayout, useLayoutVersion } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
@@ -68,6 +69,7 @@ import useFirestoreCollection from '../../../../../../../hooks/use-firestore-col
 
 registerLegacyMuiPlugin()
 registerCommercePlugin()
+registerEventsCalendarPlugin()
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>

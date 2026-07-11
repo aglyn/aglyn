@@ -49,6 +49,8 @@
       "@aglyn/besigner/*": ["libs/besigner/core/src/lib/*"],
       "@aglyn/tenant-data-admin": ["libs/tenant/data/admin/src/index.ts"],
       "@aglyn/tenant-data-admin/*": ["libs/tenant/data/admin/src/lib/*"],
+      "@aglyn/plugins-ui-events-calendar": ["libs/plugins/ui/events-calendar/src/index.ts"],
+      "@aglyn/plugins-ui-events-calendar/*": ["libs/plugins/ui/events-calendar/src/lib/*"],
       "@aglyn/plugins-ui-commerce": ["libs/plugins/ui/commerce/src/index.ts"],
       "@aglyn/plugins-ui-commerce/*": ["libs/plugins/ui/commerce/src/lib/*"],
       "@aglyn/plugins-ui-mui": ["libs/plugins/ui/mui/src/index.ts"],
