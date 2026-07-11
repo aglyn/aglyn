@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme'
+// Deep import (not the barrel) so this Server Component doesn't pull the
+// theme lib's createContext HOCs into the RSC graph (AGL-405).
+import { getGoogleFontsUrl } from '@aglyn/shared-ui-theme/util/host-theme'
 import type { ReactNode } from 'react'
 import { getHostCached } from './host-data'
 import { HostThemeProviders } from './host-theme-providers'
