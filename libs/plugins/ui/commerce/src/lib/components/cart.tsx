@@ -21,7 +21,9 @@ import Alert from '@mui/material/Alert'
 import Badge from '@mui/material/Badge'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
 import Drawer from '@mui/material/Drawer'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
@@ -76,6 +78,7 @@ function CartLines(props: {
     props
   const [coupon, setCoupon] = useState('')
   const [email, setEmail] = useState('')
+  const [optIn, setOptIn] = useState(false)
   const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
   const [message, setMessage] = useState('')
 
@@ -90,6 +93,7 @@ function CartLines(props: {
         body: JSON.stringify({
           hostId,
           ...(email.trim() ? { email: email.trim() } : {}),
+          ...(optIn ? { marketingOptIn: true } : {}),
           ...(coupon.trim() ? { couponCode: coupon.trim() } : {}),
         }),
       })
@@ -103,7 +107,7 @@ function CartLines(props: {
     } catch {
       setStatus('error')
     }
-  }, [hostId, coupon, email, status])
+  }, [hostId, coupon, email, optIn, status])
 
   if (!cart || cart.lines.length === 0) {
     return (
@@ -198,6 +202,20 @@ function CartLines(props: {
         onChange={(event) => setEmail(event.target.value)}
         size="small"
         helperText="For your receipt and order updates"
+      />
+      <FormControlLabel
+        control={
+          <Checkbox
+            size="small"
+            checked={optIn}
+            onChange={(event) => setOptIn(event.target.checked)}
+          />
+        }
+        label={
+          <Typography variant="caption">
+            {'Email me news and offers'}
+          </Typography>
+        }
       />
       {showCoupon ? (
         <TextField

@@ -42,6 +42,7 @@ export default async function handler(
     typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
   const hostId = String(body.hostId ?? '')
   const email = String(body.email ?? '').trim().toLowerCase().slice(0, 120)
+  const marketingOptIn = Boolean(body.marketingOptIn)
   const couponCode = String(body.couponCode ?? '')
     .trim()
     .toUpperCase()
@@ -243,6 +244,7 @@ export default async function handler(
       .set({
         cartId,
         ...(email ? { email } : {}),
+        ...(marketingOptIn ? { marketingOptIn: true } : {}),
         itemsCents,
         status: 'open',
         createdAtMs: Date.now(),

@@ -42,6 +42,8 @@ export async function upsertHostContact(options: {
   name?: string
   source: ContactSource
   interaction: Omit<ContactInteraction, 'type' | 'atMs'> & { atMs?: number }
+  /** Explicit marketing opt-in (AGL-301) with a consent timestamp. */
+  marketingConsent?: boolean
 }): Promise<void> {
   try {
     const email = normalizeContactEmail(options.email)
@@ -85,6 +87,9 @@ export async function upsertHostContact(options: {
           ...(merged.name ? { name: merged.name } : {}),
           sources: merged.sources,
           interactions: merged.interactions,
+          ...(options.marketingConsent
+            ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+            : {}),
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
@@ -114,6 +119,9 @@ export async function upsertHostContact(options: {
       sources: { [options.source]: true },
       interactions: [interaction],
       tags: [],
+      ...(options.marketingConsent
+        ? { marketingConsent: true, marketingConsentAtMs: Date.now() }
+        : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })

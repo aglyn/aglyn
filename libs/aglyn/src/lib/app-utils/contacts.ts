@@ -23,7 +23,12 @@
  * client-side under the host-admin rules.
  */
 
-export type ContactSource = 'form' | 'member' | 'order' | 'booking'
+export type ContactSource =
+  | 'form'
+  | 'member'
+  | 'order'
+  | 'booking'
+  | 'newsletter'
 
 export interface ContactInteraction {
   type: ContactSource

@@ -376,10 +376,12 @@ export default async function handler(
           })
         })
         await cartRef.delete().catch(() => undefined)
-        // Recoverable checkout closes (AGL-296) so recovery emails stop.
-        await hostRef
-          .collection('checkouts')
-          .doc(String(object.id))
+        // Recoverable checkout closes (AGL-296) so recovery emails stop;
+        // the doc also carries the marketing opt-in (AGL-301).
+        const checkoutRef = hostRef.collection('checkouts').doc(String(object.id))
+        const checkoutSnapshot = await checkoutRef.get().catch(() => null)
+        const marketingOptIn = Boolean(checkoutSnapshot?.get('marketingOptIn'))
+        await checkoutRef
           .set({ status: 'completed', completedAtMs: Date.now() }, { merge: true })
           .catch(() => undefined)
         // Branded receipt (AGL-296): env-gated like every outbound email.
@@ -472,6 +474,7 @@ export default async function handler(
           email: object?.customer_details?.email,
           name: object?.customer_details?.name ?? undefined,
           source: 'order',
+          ...(marketingOptIn ? { marketingConsent: true } : {}),
           interaction: {
             refId: String(object.id),
             summary: `Placed an order ($${(Number(object?.amount_total ?? 0) / 100).toFixed(2)})`,
