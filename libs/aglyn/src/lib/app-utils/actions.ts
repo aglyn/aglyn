@@ -161,6 +161,7 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   showOverlay: 'Show a popup or bar',
   stickyNav: 'Make navigation sticky',
   addClass: 'Add a CSS class',
+  toggleClass: 'Toggle a CSS class',
   removeClass: 'Remove a CSS class',
   showHtml: 'Show custom HTML',
   runJs: 'Run custom JS (Business)',

@@ -50,13 +50,16 @@ export interface InteractionsContextValue {
   /** Screen/section experiments (badges + duplication guard). */
   sectionExperiments?: SectionExperimentRef[]
   /**
-   * Creates a disabled automation bound to the node's element selector;
-   * the editor finishes its steps on the Workflows page.
+   * Opens the interaction builder for a new automation bound to the
+   * node's element selector — trigger, steps, and frequency configure
+   * inline without leaving the besigner (AGL-319).
    */
   onCreateInteraction?: (options: {
     nodeId: string
     event: InteractionTriggerEvent
   }) => void
+  /** Reopens the builder for an existing element automation (AGL-319). */
+  onEditInteraction?: (options: { id: string; nodeId: string }) => void
   /** Creates a draft section experiment targeting the node. */
   onCreateSectionExperiment?: (options: { nodeId: string }) => void
   /** Enables/disables an element automation in place (wave v7). */

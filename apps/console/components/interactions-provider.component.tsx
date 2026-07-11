@@ -19,13 +19,15 @@
 import { createResourceUid, isSiteEventType } from '@aglyn/aglyn'
 import {
   InteractionsContext,
-  nodeElementSelector,
   type InteractionsContextValue,
 } from '@aglyn/besigner-ui'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import InteractionBuilderDialog, {
+  type InteractionBuilderState,
+} from './interaction-builder-dialog.component'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
@@ -38,16 +40,16 @@ export interface InteractionsProviderProps {
 
 /**
  * Feeds the designer's Interactions section (AGL-258) with the host's
- * element-scoped automations and section experiments. Creating an
- * interaction writes a DISABLED action bound to the node's stable
- * `data-aglyn` selector with a placeholder step — the editor finishes
- * and enables it on the Workflows page. Creating a section experiment
- * writes a draft (AGL-253) configured on the Marketing page.
+ * element-scoped automations and section experiments. Creating or
+ * editing an interaction opens the inline builder dialog (AGL-319) —
+ * trigger, actions, and frequency configure right on the canvas and
+ * save enabled. Section experiments still draft to the Marketing page.
  */
 export function InteractionsProvider(props: InteractionsProviderProps) {
   const { hostId, screenId, children } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const [builder, setBuilder] = useState<InteractionBuilderState | null>(null)
 
   const { data: actionDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'actions'), limit(100)),
@@ -126,34 +128,12 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
             })
           })
       },
+      // Fluent builder (AGL-319): configure everything inline.
       onCreateInteraction: ({ nodeId, event }) => {
-        const id = createResourceUid()
-        void setDoc(doc(firestore, 'hosts', hostId, 'actions', id), {
-          name: `Element ${event === 'elementClick' ? 'click' : 'view'} — ${nodeId.slice(0, 8)}`,
-          trigger: { event, selector: nodeElementSelector(nodeId) },
-          steps: [
-            {
-              type: 'siteAlert',
-              message: 'Configure this interaction on the Workflows page',
-              severity: 'info',
-            },
-          ],
-          enabled: false,
-          createdAt: Timestamp.now(),
-        })
-          .then(() =>
-            enqueueSnackbar(
-              'Interaction created (disabled) — finish its steps on the ' +
-                'Workflows page',
-              { variant: 'success', persist: false },
-            ),
-          )
-          .catch((error) => {
-            console.error(error)
-            enqueueSnackbar('Could not create the interaction', {
-              variant: 'error',
-            })
-          })
+        setBuilder({ id: null, nodeId, event })
+      },
+      onEditInteraction: ({ id, nodeId }) => {
+        setBuilder({ id, nodeId, event: 'elementClick' })
       },
       ...(screenId
         ? {
@@ -194,9 +174,22 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
     }
   }, [actionDocs, experimentDocs, firestore, hostId, screenId, enqueueSnackbar])
 
+  const editingDoc = builder?.id
+    ? (actionDocs ?? []).find((action: any) => action.$id === builder.id)
+    : undefined
+
   return (
     <InteractionsContext.Provider value={value}>
       {children}
+      {builder ? (
+        <InteractionBuilderDialog
+          key={builder.id ?? 'new'}
+          hostId={hostId}
+          state={builder}
+          existing={editingDoc}
+          onClose={() => setBuilder(null)}
+        />
+      ) : null}
     </InteractionsContext.Provider>
   )
 }

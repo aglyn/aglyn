@@ -518,6 +518,22 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                             {'off'}
                           </Typography>
                         ) : null}
+                        {/* Fluent builder (AGL-319): edit reopens the
+                            inline dialog — no Workflows detour. */}
+                        {interactions.onEditInteraction && node?.$id ? (
+                          <IconButton
+                            size="small"
+                            aria-label="Edit interaction"
+                            onClick={() =>
+                              interactions.onEditInteraction?.({
+                                id: automation.id,
+                                nodeId: node.$id as string,
+                              })
+                            }
+                          >
+                            {'✎'}
+                          </IconButton>
+                        ) : null}
                         {interactions.onDeleteInteraction ? (
                           <IconButton
                             size="small"
