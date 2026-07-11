@@ -5466,6 +5466,11 @@
           "source": "plugins-marketing",
           "target": "shared-ui-next",
           "type": "static"
+        },
+        {
+          "source": "plugins-marketing",
+          "target": "tenant-data-admin",
+          "type": "static"
         }
       ],
       "plugins-redirects": [
@@ -5539,6 +5544,11 @@
         {
           "source": "plugins-workflows",
           "target": "shared-data-mdi",
+          "type": "static"
+        },
+        {
+          "source": "plugins-workflows",
+          "target": "tenant-data-admin",
           "type": "static"
         }
       ],
@@ -5616,6 +5626,11 @@
         {
           "source": "plugins-bookings",
           "target": "tenant-feature-instance",
+          "type": "static"
+        },
+        {
+          "source": "plugins-bookings",
+          "target": "tenant-data-admin",
           "type": "static"
         }
       ],
@@ -5821,6 +5836,11 @@
         {
           "source": "plugins-email",
           "target": "shared-util-timestamp",
+          "type": "static"
+        },
+        {
+          "source": "plugins-email",
+          "target": "tenant-data-admin",
           "type": "static"
         }
       ],
@@ -6241,6 +6261,21 @@
         {
           "source": "tenant",
           "target": "tenant-feature-instance",
+          "type": "static"
+        },
+        {
+          "source": "tenant",
+          "target": "plugins-email",
+          "type": "static"
+        },
+        {
+          "source": "tenant",
+          "target": "plugins-marketing",
+          "type": "static"
+        },
+        {
+          "source": "tenant",
+          "target": "plugins-workflows",
           "type": "static"
         }
       ],

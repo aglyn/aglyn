@@ -21,18 +21,15 @@ import {
   computeOpenSlots,
   type HostBookingService,
 } from '@aglyn/aglyn'
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Public open-slot listing (AGL-159): visitors browse a service's next
  * open times. Server-side because bookings (names/emails) must never be
  * client-readable — only the derived busy intervals are used here.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+const slotsHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -105,4 +102,9 @@ export default async function handler(
     console.error(error)
     return res.status(500).json({ error: 'Slot lookup failed' })
   }
+}
+
+/** Registers the bookings plugin's public API routes (AGL-396). */
+export function registerBookingsApi(): void {
+  registerPluginApiRoute('bookings/slots', slotsHandler)
 }

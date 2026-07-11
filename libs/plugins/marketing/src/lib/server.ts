@@ -20,9 +20,9 @@ import {
   evaluateAutoWinner,
   type HostExperiment,
 } from '@aglyn/aglyn'
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * Experiment beacon (AGL-252): counts an exposure or conversion on
@@ -30,10 +30,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * fire-and-forget from the page, abTesting-gated, no visitor identity
  * stored server-side (assignment is deterministic client-side).
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+const trackHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -112,4 +109,9 @@ export default async function handler(
     console.error(error)
     return res.status(200).json({ ok: true }) // beacons never error the page
   }
+}
+
+/** Registers the marketing plugin's public API routes (AGL-396). */
+export function registerMarketingApi(): void {
+  registerPluginApiRoute('experiments/track', trackHandler)
 }

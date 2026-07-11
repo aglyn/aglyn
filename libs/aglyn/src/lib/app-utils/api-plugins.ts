@@ -33,8 +33,14 @@
 export interface PluginApiRequest {
   method?: string
   query: Partial<Record<string, string | string[]>>
-  body: unknown
+  // `any` mirrors NextApiRequest.body (parsed JSON/form/text); handlers
+  // validate it themselves, as they did as Next routes.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  body: any
   headers: Partial<Record<string, string | string[]>>
+  cookies: Partial<Record<string, string>>
+  /** Node socket — used for the client IP fallback (`remoteAddress`). */
+  socket: { remoteAddress?: string }
 }
 
 export interface PluginApiResponse {
@@ -42,6 +48,8 @@ export interface PluginApiResponse {
   json(body: unknown): void
   send(body: unknown): void
   setHeader(name: string, value: string | number | readonly string[]): void
+  redirect(url: string): void
+  redirect(status: number, url: string): void
   end(): void
 }
 

@@ -23,10 +23,10 @@ import {
   type HostWorkflow,
   runWorkflow,
 } from '@aglyn/aglyn'
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Best-effort per-instance rate limit (mirrors forms/submit).
 const recentByHook = new Map<string, number[]>()
@@ -58,10 +58,7 @@ function secretsMatch(expected: string, provided: string): boolean {
  * payload's top-level primitives in scope. Business tier (`webhooks`
  * flag); runs bill against the workflow-runs meter like any other run.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+const inboundHookHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -169,4 +166,9 @@ export default async function handler(
     console.error(error)
     return res.status(500).json({ error: 'Webhook failed' })
   }
+}
+
+/** Registers the workflows plugin's public API routes (AGL-396). */
+export function registerWorkflowsApi(): void {
+  registerPluginApiRoute('hooks/[hostId]/[hookId]', inboundHookHandler)
 }

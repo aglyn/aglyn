@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
+import { registerBookingsApi } from '@aglyn/plugins-bookings/server'
+import { registerEmailApi } from '@aglyn/plugins-email/server'
 import { registerEventsCalendarApi } from '@aglyn/plugins-events-calendar/server'
+import { registerMarketingApi } from '@aglyn/plugins-marketing/server'
+import { registerWorkflowsApi } from '@aglyn/plugins-workflows/server'
 
 /**
  * Plugin API routes for the tenant (site-facing) app (AGL-396). Each plugin
@@ -27,6 +31,10 @@ import { registerEventsCalendarApi } from '@aglyn/plugins-events-calendar/server
  */
 export function registerTenantPluginApis(): void {
   registerEventsCalendarApi()
+  registerEmailApi()
+  registerMarketingApi()
+  registerWorkflowsApi()
+  registerBookingsApi()
 }
 
 // Run on import so the registry is ready before the dispatcher resolves.

@@ -15,20 +15,17 @@
  * limitations under the License.
  */
 
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { createHash, createHmac, timingSafeEqual } from 'crypto'
-import type { NextApiRequest, NextApiResponse } from 'next'
 
 /**
  * One-click unsubscribe (AGL-161): the campaign sender embeds an
  * HMAC-signed link; a valid signature writes a suppression entry keyed by
  * the email hash. GET so it works from any mail client; idempotent.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query['hostId'] ?? '')
   const email = String(req.query['email'] ?? '')
     .trim()
@@ -77,4 +74,9 @@ export default async function handler(
     console.error(error)
     return res.status(500).send('Unsubscribe failed — please try again')
   }
+}
+
+/** Registers the email plugin's public API routes (AGL-396). */
+export function registerEmailApi(): void {
+  registerPluginApiRoute('email/unsubscribe', unsubscribeHandler)
 }
