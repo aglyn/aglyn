@@ -146,6 +146,15 @@ if (webhookUrl) {
   )
 }
 
+// POS Pro register add-on (AGL-329).
+const posAddon = await ensurePrice({
+  lookupKey: 'aglyn_pos_register_addon',
+  productName: 'Aglyn POS Pro register',
+  usd: 89,
+  planMetadata: 'addon',
+})
+env['STRIPE_PRICE_POS_REGISTER'] = posAddon.id
+
 console.log('\nAdd these to the console app environment:\n')
 for (const [key, value] of Object.entries(env)) {
   console.log(`${key}=${value}`)

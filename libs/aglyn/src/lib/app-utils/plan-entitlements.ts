@@ -368,6 +368,14 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
  */
 export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
 
+/**
+ * POS Pro register add-on (AGL-329): $89/mo per extra register/location
+ * (Shopify POS Pro parity). Purchased add-ons land as a per-tenant
+ * `posRegisters` entitlement override, which
+ * `resolveTenantEntitlements` already applies over the plan default.
+ */
+export const POS_REGISTER_ADDON_MONTHLY_USD = 89
+
 export interface PlanPricing {
   /** Flat monthly base price in USD (month-to-month billing). */
   basePriceMonthlyUsd: number
