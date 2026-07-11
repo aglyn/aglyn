@@ -63,6 +63,8 @@
       "@aglyn/plugins-commerce/*": ["libs/plugins/commerce/src/lib/*"],
       "@aglyn/plugins-community": ["libs/plugins/community/src/index.ts"],
       "@aglyn/plugins-community/*": ["libs/plugins/community/src/lib/*"],
+      "@aglyn/plugins-contacts": ["libs/plugins/contacts/src/index.ts"],
+      "@aglyn/plugins-contacts/*": ["libs/plugins/contacts/src/lib/*"],
       "@aglyn/plugins-data": ["libs/plugins/data/src/index.ts"],
       "@aglyn/plugins-data/*": ["libs/plugins/data/src/lib/*"],
       "@aglyn/plugins-mui": ["libs/plugins/mui/src/index.ts"],

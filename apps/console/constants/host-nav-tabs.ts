@@ -65,11 +65,8 @@ export function hostNavTabItems(hostId: string) {
     },
     // Inbox (nav + page) now comes from the inbox plugin's ConsoleExtension,
     // served by the generic route (AGL-395).
-    {
-      id: 'nav-tab-contacts',
-      label: 'Contacts',
-      href: buildRoute(Route.HOST_CONTACTS, { hostId }),
-    },
+    // Contacts (nav + page) now comes from the contacts plugin's
+    // ConsoleExtension, served by the generic route (AGL-395).
     // Site users left the dashboard for their own section (AGL-350).
     {
       id: 'nav-tab-users',

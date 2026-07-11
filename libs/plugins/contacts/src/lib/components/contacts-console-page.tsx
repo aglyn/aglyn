@@ -17,19 +17,20 @@
 'use client'
 
 import {
+  checkQuota,
+  type ConsolePluginPageProps,
   type ContactSegment,
   type ContactSource,
-  checkQuota,
   contactMatchesSegment,
   type HostContact,
 } from '@aglyn/aglyn'
-import {
-  CardDisplay,
-  Container,
-  useConfirmationContext,
-} from '@aglyn/shared-ui-jsx'
-import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useHostOrgId,
+} from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -55,17 +56,6 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import FeatureGate from '../../../components/feature-gate.component'
-import { useHostId } from '../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import hostNavTabItems from '../../../constants/host-nav-tabs'
-import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
-import useCurrentTenant from '../../../hooks/use-current-tenant'
-import useHostOrgId from '../../../hooks/use-host-org-id'
-import useFirestoreCollection from '../../../hooks/use-firestore-collection'
 
 const SOURCE_LABELS: Record<ContactSource, string> = {
   form: 'Form',
@@ -88,8 +78,15 @@ const csvEscape = (value: unknown) => {
  * interaction timeline plus tags/notes editing, and CSV export. Available
  * on every plan; the contactsPerHost quota is the upgrade lever.
  */
-const HostContacts: NextPageWithLayout = () => {
-  const hostId = useHostId()
+/**
+ * Contacts CRM (AGL-109 → AGL-395): the unified contacts list, segments,
+ * and profile drawer, owned by the contacts plugin and rendered by the
+ * shell's generic plugin route. The shell applies the `release_contacts`
+ * gate (via the nav tab) and passes the resolved `tenant` doc for the
+ * `contactsPerHost` quota check.
+ */
+export function ContactsConsolePage(props: ConsolePluginPageProps) {
+  const { hostId, tenant } = props
   // Org-shared data root (AGL-237); the host path is the pre-migration
   // fallback for hosts not yet org-wired.
   const hostOrgId = useHostOrgId(hostId)
@@ -99,7 +96,6 @@ const HostContacts: NextPageWithLayout = () => {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
 
   const { data: contactDocs } = useFirestoreCollection<any>(
     () =>
@@ -286,14 +282,7 @@ const HostContacts: NextPageWithLayout = () => {
 
   return (
     <>
-      <NextPageTitle screen={'Contacts'} />
-      <DashboardLayout
-        navTabItems={hostNavTabItems(hostId)}
-        header={{ children: 'Contacts' }}
-      >
-        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <FeatureGate flag="release_contacts">
-            <CardDisplay header={'Contacts'} contentGutterX contentGutterY>
+      <CardDisplay header={'Contacts'} contentGutterX contentGutterY>
               <Stack spacing={2}>
                 <Stack
                   direction="row"
@@ -460,10 +449,7 @@ const HostContacts: NextPageWithLayout = () => {
                   </Table>
                 )}
               </Stack>
-            </CardDisplay>
-          </FeatureGate>
-        </Container>
-      </DashboardLayout>
+      </CardDisplay>
       <Drawer
         anchor="right"
         open={Boolean(selected)}
@@ -539,10 +525,6 @@ const HostContacts: NextPageWithLayout = () => {
     </>
   )
 }
-HostContacts.displayName = 'Page:HostContacts'
-HostContacts.layouts = [
-  { Component: AuthenticatedLayout },
-  { Component: MainLayout, props: { title: 'Contacts' } },
-]
+ContactsConsolePage.displayName = 'ContactsConsolePage'
 
-export default HostContacts
+export default ContactsConsolePage

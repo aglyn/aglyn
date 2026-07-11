@@ -2835,6 +2835,123 @@
           "implicitDependencies": []
         }
       },
+      "plugins-contacts": {
+        "name": "plugins-contacts",
+        "type": "lib",
+        "data": {
+          "root": "libs/plugins/contacts",
+          "targets": {
+            "build": {
+              "dependsOn": [
+                "^build"
+              ],
+              "inputs": [
+                "production",
+                "^production"
+              ],
+              "cache": true,
+              "executor": "@nx/rollup:rollup",
+              "outputs": [
+                "{options.outputPath}"
+              ],
+              "options": {
+                "outputPath": "dist/libs/plugins/contacts",
+                "tsConfig": "libs/plugins/contacts/tsconfig.lib.json",
+                "project": "libs/plugins/contacts/package.json",
+                "entryFile": "libs/plugins/contacts/src/index.ts",
+                "external": [
+                  "react/jsx-runtime"
+                ],
+                "rollupConfig": [
+                  "@nx/react/plugins/bundle-rollup",
+                  "tools/rollup-external-packages.js",
+                  "tools/rollup-suppress-use-client.js",
+                  "tools/rollup-skip-typecheck.js"
+                ],
+                "compiler": "swc",
+                "assets": [
+                  {
+                    "glob": "libs/plugins/contacts/README.md",
+                    "input": ".",
+                    "output": "."
+                  }
+                ],
+                "updateBuildableProjectDepsInPackageJson": true,
+                "skipTypeCheck": true
+              },
+              "configurations": {},
+              "parallelism": true
+            },
+            "lint": {
+              "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/tools/eslint-rules/**/*",
+                "{workspaceRoot}/eslint.config.mjs"
+              ],
+              "cache": true,
+              "executor": "@nx/eslint:lint",
+              "outputs": [
+                "{options.outputFile}"
+              ],
+              "configurations": {},
+              "options": {},
+              "parallelism": true
+            },
+            "test": {
+              "inputs": [
+                "default",
+                "^default",
+                "{workspaceRoot}/jest.preset.js"
+              ],
+              "cache": true,
+              "executor": "@nx/jest:jest",
+              "outputs": [
+                "{workspaceRoot}/coverage/libs/plugins/contacts"
+              ],
+              "options": {
+                "passWithNoTests": true,
+                "jestConfig": "libs/plugins/contacts/jest.config.ts"
+              },
+              "configurations": {
+                "ci": {
+                  "ci": true,
+                  "codeCoverage": true
+                }
+              },
+              "parallelism": true
+            },
+            "nx-release-publish": {
+              "executor": "@nx/js:release-publish",
+              "dependsOn": [
+                "^nx-release-publish"
+              ],
+              "options": {},
+              "configurations": {},
+              "parallelism": true
+            }
+          },
+          "name": "plugins-contacts",
+          "projectType": "library",
+          "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+          "sourceRoot": "libs/plugins/contacts/src",
+          "tags": [
+            "npm:public",
+            "scope:lib",
+            "scope:aglyn",
+            "aglyn:addons"
+          ],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "@aglyn/plugins-contacts",
+              "packageVersion": "0.0.1",
+              "isInPackageManagerWorkspaces": false
+            }
+          },
+          "implicitDependencies": []
+        }
+      },
       "shared-util-http": {
         "name": "shared-util-http",
         "type": "lib",
@@ -5534,6 +5651,33 @@
           "type": "static"
         }
       ],
+      "plugins-contacts": [
+        {
+          "source": "plugins-contacts",
+          "target": "aglyn",
+          "type": "static"
+        },
+        {
+          "source": "plugins-contacts",
+          "target": "shared-ui-jsx",
+          "type": "static"
+        },
+        {
+          "source": "plugins-contacts",
+          "target": "shared-ui-snackstack",
+          "type": "static"
+        },
+        {
+          "source": "plugins-contacts",
+          "target": "tenant-feature-instance",
+          "type": "static"
+        },
+        {
+          "source": "plugins-contacts",
+          "target": "shared-data-mdi",
+          "type": "static"
+        }
+      ],
       "shared-util-http": [
         {
           "source": "shared-util-http",
@@ -5963,6 +6107,11 @@
         {
           "source": "console",
           "target": "plugins-community",
+          "type": "static"
+        },
+        {
+          "source": "console",
+          "target": "plugins-contacts",
           "type": "static"
         },
         {

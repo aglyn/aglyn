@@ -18,6 +18,7 @@
 import { registerBookingsConsole } from '@aglyn/plugins-bookings'
 import { registerCommerceConsole } from '@aglyn/plugins-commerce'
 import { registerCommunityConsole } from '@aglyn/plugins-community'
+import { registerContactsConsole } from '@aglyn/plugins-contacts'
 import { registerDataConsole } from '@aglyn/plugins-data'
 import { registerEmailConsole } from '@aglyn/plugins-email'
 import { registerEventsCalendarConsole } from '@aglyn/plugins-events-calendar'
@@ -52,6 +53,7 @@ export function registerConsolePlugins(): void {
   registerMarketingConsole()
   registerCommunityConsole()
   registerInboxConsole()
+  registerContactsConsole()
 }
 
 // Run on import so the registry is ready by first render.
