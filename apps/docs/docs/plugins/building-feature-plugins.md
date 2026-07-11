@@ -181,6 +181,12 @@ export default function BookingsConsolePage({
   shared tooling — the where-used dialog and its fetch util, plus the
   variable/function cards — which the app's workflows surface and besigner
   ƒx button import from `@aglyn/plugins-logic`. Always-on (not release-flagged).
+- **Community** (`libs/plugins/community`) — console-only, multi-page
+  (AGL-395): the plugin owns the hub page and its cards + `useCommunityActions`,
+  but the listing/publisher **detail** pages stay as app file-routes (nested
+  dynamic segments the single-segment plugin route can't serve) and import the
+  hook from the plugin. It's why `ConsolePluginPageProps` also carries
+  `permissions` (shell-resolved) — the install action gates on `installPlugins`.
 - **Marketing** (`libs/plugins/marketing`) — console-only (AGL-395): the
   at-a-glance rollup, overlay/announcement/popup managers, and A/B testing.
   The first relocated plugin to consume the media browser — the popup image
