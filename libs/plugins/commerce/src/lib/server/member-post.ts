@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { type PluginApiHandler } from '@aglyn/aglyn'
 
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
 
@@ -25,14 +25,11 @@ const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
  * optionally emails the entitled subscribers (product-scoped or all
  * live subscribers) through the env-gated Resend pipeline.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const memberPostHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const authorization = req.headers.authorization ?? ''
+  const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined

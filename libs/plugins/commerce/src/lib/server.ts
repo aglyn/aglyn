@@ -49,6 +49,14 @@ import { reserveHandler } from './server/reserve'
 import { streamHandler } from './server/stream'
 import { subscriptionPortalHandler } from './server/subscription-portal'
 import { reviewsHandler } from './server/reviews'
+import { connectHandler } from './server/connect'
+import { draftOrderHandler } from './server/draft-order'
+import { memberPostHandler } from './server/member-post'
+import { posOrderHandler } from './server/pos-order'
+import { processAbandonedHandler } from './server/process-abandoned'
+import { processRestockHandler } from './server/process-restock'
+import { refundHandler } from './server/refund'
+import { supplierUpdateHandler } from './server/supplier-update'
 
 /** Registers the commerce plugin's storefront API routes. */
 export function registerCommerceApi(): void {
@@ -75,6 +83,23 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('membership/logout', membershipLogoutHandler)
   registerPluginApiRoute('membership/register', membershipRegisterHandler)
   registerPluginApiRoute('membership/wishlist', membershipWishlistHandler)
+}
+
+/**
+ * Registers the commerce plugin's console-side API routes (AGL-396):
+ * merchant/staff operations (Connect onboarding, refunds, draft & POS
+ * orders, member posts) and the scheduler-driven jobs (abandoned-cart,
+ * restock alerts, dropship supplier updates).
+ */
+export function registerCommerceConsoleApi(): void {
+  registerPluginApiRoute('commerce/connect', connectHandler)
+  registerPluginApiRoute('commerce/draft-order', draftOrderHandler)
+  registerPluginApiRoute('commerce/member-post', memberPostHandler)
+  registerPluginApiRoute('commerce/pos-order', posOrderHandler)
+  registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)
+  registerPluginApiRoute('commerce/process-restock', processRestockHandler)
+  registerPluginApiRoute('commerce/refund', refundHandler)
+  registerPluginApiRoute('commerce/supplier-update', supplierUpdateHandler)
 }
 
 // Shared with the (still app-side) membership/account route.

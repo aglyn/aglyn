@@ -16,6 +16,7 @@
  */
 
 import { registerBookingsConsoleApi } from '@aglyn/plugins-bookings/server'
+import { registerCommerceConsoleApi } from '@aglyn/plugins-commerce/server'
 import { registerMarketingConsoleApi } from '@aglyn/plugins-marketing/server'
 
 /**
@@ -29,6 +30,7 @@ import { registerMarketingConsoleApi } from '@aglyn/plugins-marketing/server'
  */
 export function registerConsolePluginApis(): void {
   registerBookingsConsoleApi()
+  registerCommerceConsoleApi()
   registerMarketingConsoleApi()
 }
 

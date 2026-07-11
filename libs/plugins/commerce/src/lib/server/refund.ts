@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { type PluginApiHandler } from '@aglyn/aglyn'
 
 /**
  * Order refunds (AGL-287): full or partial via Stripe, site-admin only
@@ -26,17 +26,14 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * `refunded`; partial refunds accumulate `refundedCents` and stay in
  * the current status.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const refundHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   if (!process.env.STRIPE_SECRET_KEY) {
     return res.status(501).json({ error: 'Payments are not configured.' })
   }
-  const authorization = req.headers.authorization ?? ''
+  const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined

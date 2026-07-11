@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { type PluginApiHandler } from '@aglyn/aglyn'
 
 async function stripe(path: string, params?: URLSearchParams) {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -44,10 +44,7 @@ async function stripe(path: string, params?: URLSearchParams) {
  * publishers. Only the owning org's owner may onboard (payouts land on
  * their account). 501 without Stripe env.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const connectHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -56,7 +53,7 @@ export default async function handler(
       .status(501)
       .json({ error: 'Payments are not configured (STRIPE_SECRET_KEY).' })
   }
-  const authorization = req.headers.authorization ?? ''
+  const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined

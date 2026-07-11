@@ -21,7 +21,7 @@ import {
   getOrgForHost,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { type PluginApiHandler } from '@aglyn/aglyn'
 
 /**
  * POS sale (AGL-312): manager-gated, server-priced. Cash sales create a
@@ -31,14 +31,11 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * later). Inventory decrements per line from the register's location,
  * and sales can post to an open reservation folio instead (AGL-317).
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const posOrderHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const authorization = req.headers.authorization ?? ''
+  const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined

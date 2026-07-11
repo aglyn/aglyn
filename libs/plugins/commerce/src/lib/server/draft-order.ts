@@ -17,7 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { type PluginApiHandler } from '@aglyn/aglyn'
 
 /**
  * Draft orders (AGL-287, Shopify parity): a manager builds an order in
@@ -27,17 +27,14 @@ import type { NextApiRequest, NextApiResponse } from 'next'
  * webhook completion flips the SAME doc to `paid`
  * (metadata type `commerce-draft`).
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const draftOrderHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   if (!process.env.STRIPE_SECRET_KEY) {
     return res.status(501).json({ error: 'Payments are not configured.' })
   }
-  const authorization = req.headers.authorization ?? ''
+  const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined

@@ -17,17 +17,14 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { type PluginApiHandler } from '@aglyn/aglyn'
 
 /**
  * Supplier tracking callback (AGL-289): the routed order carried a
  * per-order token; posting (or GET-ing, for email links) tracking with
  * it fulfills the order. Token-gated — suppliers have no Aglyn account.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const supplierUpdateHandler: PluginApiHandler = async (req, res) => {
   const source = req.method === 'POST' ? { ...req.query, ...(typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body ?? {})) } : req.query
   const hostId = String(source.hostId ?? '')
   const orderId = String(source.orderId ?? '')
