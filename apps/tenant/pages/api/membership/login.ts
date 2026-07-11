@@ -75,6 +75,18 @@ export default async function handler(
     }
     // Event trigger (AGL-128/148).
     await emitHostEvent(hostId, 'memberSignIn', { email })
+    // Cart linkage (AGL-294): stamp the guest cart with the member so
+    // abandoned-cart and analytics can attribute it.
+    const cartId = String(req.cookies?.[`aglyn_cart_${hostId}`] ?? '')
+    if (cartId) {
+      await firestore
+        .collection('hosts')
+        .doc(hostId)
+        .collection('carts')
+        .doc(cartId)
+        .set({ customerId: memberDoc.id }, { merge: true })
+        .catch(() => undefined)
+    }
     setMemberCookie(res, hostId, mintMemberSession(hostId, memberDoc.id))
     return res.status(200).json({ ok: true })
   } catch (error) {

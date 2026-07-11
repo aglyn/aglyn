@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
+import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as ProductDetail from './components/product-detail'
 import * as ProductGrid from './components/product-grid'
@@ -45,6 +46,11 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: Cart.default,
     schema: Cart.schema,
     presets: Cart.presets,
+  },
+  {
+    component: Account.default,
+    schema: Account.schema,
+    presets: Account.presets,
   },
 ]
 

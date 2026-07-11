@@ -1,0 +1,130 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import * as Aglyn from '@aglyn/aglyn'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { readMemberSession } from '../../../utils/membership'
+
+export interface AccountOrderView {
+  id: string
+  number: string
+  status: Aglyn.OrderStatus
+  totalCents: number
+  createdAtMs: number
+  itemsSummary: string
+  tracking?: { carrier?: string; trackingNumber?: string }
+}
+
+/**
+ * Member account (AGL-294): profile + address book + order history for
+ * the signed-in site member (AGL-109 session cookie). Orders match by
+ * the member's email — guest purchases made with the same address show
+ * up too, which is what buyers expect.
+ */
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse,
+) {
+  const hostId = String(
+    (req.method === 'GET' ? req.query.hostId : req.body?.hostId) ?? '',
+  )
+  if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
+  const memberId = readMemberSession(req, hostId)
+  if (!memberId) return res.status(401).json({ error: 'Not signed in' })
+
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const hostRef = firestore.collection('hosts').doc(hostId)
+    const memberRef = hostRef.collection('siteMembers').doc(memberId)
+    const memberSnapshot = await memberRef.get()
+    if (!memberSnapshot.exists) {
+      return res.status(401).json({ error: 'Not signed in' })
+    }
+
+    if (req.method === 'POST') {
+      const displayName = String(req.body?.displayName ?? '').slice(0, 80)
+      const addresses = Array.isArray(req.body?.addresses)
+        ? (req.body.addresses as Aglyn.OrderAddress[]).slice(0, 5).map(
+            (address) => ({
+              name: String(address.name ?? '').slice(0, 80),
+              line1: String(address.line1 ?? '').slice(0, 120),
+              line2: String(address.line2 ?? '').slice(0, 120),
+              city: String(address.city ?? '').slice(0, 80),
+              state: String(address.state ?? '').slice(0, 40),
+              postalCode: String(address.postalCode ?? '').slice(0, 20),
+              country: String(address.country ?? '').slice(0, 2).toUpperCase(),
+            }),
+          )
+        : undefined
+      await memberRef.set(
+        {
+          ...(displayName ? { displayName } : {}),
+          ...(addresses ? { addresses } : {}),
+        },
+        { merge: true },
+      )
+    }
+
+    const email = String(memberSnapshot.get('email') ?? '')
+    const ordersSnapshot = await hostRef
+      .collection('orders')
+      .where('customerEmail', '==', email)
+      .limit(25)
+      .get()
+    const orders: AccountOrderView[] = ordersSnapshot.docs
+      .map((docSnapshot) => {
+        const order = Aglyn.liftLegacyOrder(docSnapshot.data() as any)
+        const latestFulfillment = (order.fulfillments ?? []).slice(-1)[0]
+        return {
+          id: docSnapshot.id,
+          number: Aglyn.formatOrderNumber(order, docSnapshot.id),
+          status: order.status,
+          totalCents:
+            order.totals?.totalCents ?? Number(order.amountCents ?? 0),
+          createdAtMs:
+            order.createdAtMs ??
+            ((docSnapshot.get('createdAt')?.seconds ?? 0) * 1000 || 0),
+          itemsSummary: (order.lineItems ?? [])
+            .map((line) => `${line.quantity}× ${line.name}`)
+            .join(', ')
+            .slice(0, 140),
+          ...(latestFulfillment?.trackingNumber
+            ? {
+                tracking: {
+                  carrier: latestFulfillment.carrier,
+                  trackingNumber: latestFulfillment.trackingNumber,
+                },
+              }
+            : {}),
+        }
+      })
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)
+
+    return res.status(200).json({
+      member: {
+        email,
+        displayName: memberSnapshot.get('displayName') ?? '',
+        addresses: memberSnapshot.get('addresses') ?? [],
+      },
+      orders,
+    })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error: 'Account unavailable' })
+  }
+}
