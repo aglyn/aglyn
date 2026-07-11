@@ -10,6 +10,28 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
+## Ecommerce platform
+
+The biggest wave yet turns every Aglyn site into a full store, competitive
+with Shopify and Squarespace:
+
+- **[Product catalog](commerce/catalog.md)** — variants and options,
+  categories, tags, smart collections, Shopify-compatible CSV import.
+- **Storefront blocks** — product grids with facets, product pages with
+  variant pickers, cart drawer + checkout with wallets, customer accounts,
+  wishlists, newsletter capture. All designable in the besigner.
+- **Digital goods** — secure downloads with automatic update re-delivery,
+  license keys, subscription products, members-only content and video.
+- **[POS & reservations](commerce/pos-and-reservations.md)** — a console
+  register (cash, QR card, room folios) and date-range stays with deposits.
+- **Growth tools** — discounts engine, gift cards, abandoned-cart recovery,
+  verified reviews, related products, back-in-stock alerts, and a commerce
+  analytics dashboard.
+- **[New pricing](billing-and-plans/overview.md)** — Starter $16, Pro $39,
+  Business $99, and the new Advanced $299 (annual), with platform fees that
+  drop to 0% as you upgrade. Existing subscribers keep their current price
+  until they change plans.
+
 ## Latest polish wave
 
 The newest round tightened every marketing, billing, and operations loop:

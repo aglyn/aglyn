@@ -48,6 +48,13 @@
       },
       "description": "Community browsing, publishing and plugin installs.",
       "valueType": "JSON"
+    },
+    "release_commerce_v2": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Commerce v2 wave: catalog, cart/checkout, digital goods, reservations, POS, repriced tiers (AGL-276..331).",
+      "valueType": "JSON"
     }
   },
   "version": {

@@ -100,6 +100,15 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     navTabId: 'nav-tab-redirects',
   },
   {
+    key: 'release_commerce_v2',
+    label: 'Commerce v2',
+    description:
+      'Full ecommerce wave: catalog/variants, cart + checkout, digital ' +
+      'goods, reservations, POS, and the repriced commerce tiers ' +
+      '(AGL-276..331).',
+    defaultEnabled: true,
+  },
+  {
     key: 'release_community',
     label: 'Community marketplace',
     description: 'Community browsing, publishing and plugin installs.',
