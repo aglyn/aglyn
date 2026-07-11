@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+'use client'
+
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -27,18 +29,18 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, query, where } from 'firebase/firestore'
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
-import { useHostId } from '../../../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../../components/layouts/main.layout'
-import hostNavTabItems from '../../../../../constants/host-nav-tabs'
-import { buildRoute, Route } from '../../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
-import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
+import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
+import { useHostId } from '../../../../../../components/host-id-provider'
+import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../../components/layouts/main.layout'
+import hostNavTabItems from '../../../../../../constants/host-nav-tabs'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import useFirestoreCollection from '../../../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../../../hooks/use-firestore-doc'
 
 /**
  * Publisher profile public page (AGL-95): the community profile block and
@@ -46,8 +48,8 @@ import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
  */
 const CommunityPublisher: NextPageWithLayout = () => {
   const hostId = useHostId()
-  const router = useRouter()
-  const profileId = String(router.query.profileId ?? '')
+  const params = useParams<{ profileId: string }>()
+  const profileId = String(params.profileId ?? '')
   const firestore = useFirestore()
 
   const { data: profile, status } = useFirestoreDoc<any>(
@@ -206,16 +208,5 @@ const CommunityPublisher: NextPageWithLayout = () => {
   )
 }
 CommunityPublisher.displayName = 'Page:CommunityPublisher'
-CommunityPublisher.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Publisher',
-    },
-  },
-]
 
 export default CommunityPublisher

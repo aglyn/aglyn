@@ -38,10 +38,10 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { useHostId } from '../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import useFirestoreCollection from '../../../hooks/use-firestore-collection'
+import { useHostId } from '../../../../components/host-id-provider'
+import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import MainLayout from '../../../../components/layouts/main.layout'
+import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 
 interface RegisterLine {
   productId: string
@@ -565,9 +565,5 @@ const HostPos: NextPageWithLayout = () => {
   )
 }
 HostPos.displayName = 'Page:HostPos'
-HostPos.layouts = [
-  { Component: AuthenticatedLayout },
-  { Component: MainLayout, props: { title: 'POS' } },
-]
 
 export default HostPos

@@ -57,19 +57,19 @@ import {
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
-import AuthFormTemplateComponent from '../../../../components/auth-form-template.component'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
-import HostDisplayNameComponent from '../../../../components/host-display-name.component'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import hostNavTabItems from '../../../../constants/host-nav-tabs'
+import AuthErrorAlertComponent from '../../../../../components/auth-error-alert.component'
+import AuthFormTemplateComponent from '../../../../../components/auth-form-template.component'
+import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../components/layouts/main.layout'
+import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
+import { buildRoute, Route } from '../../../../../constants/route-links'
+import hostNavTabItems from '../../../../../constants/host-nav-tabs'
 import {
   CONTENT_MAX_WIDTH,
   TABLE_ROW_HEIGHT,
-} from '../../../../constants/shared'
-import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
+} from '../../../../../constants/shared'
+import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -407,16 +407,5 @@ const formSchema = {
   ],
 }
 Layouts.displayName = 'Page:Layouts'
-Layouts.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Layouts',
-    },
-  },
-]
 
 export default Layouts

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+'use client'
+
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -28,21 +30,21 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, query, where } from 'firebase/firestore'
-import { useRouter } from 'next/router'
+import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import HostDisplayNameComponent from '../../../../components/host-display-name.component'
-import { useHostId } from '../../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
-import hostNavTabItems from '../../../../constants/host-nav-tabs'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
+import { useHostId } from '../../../../../components/host-id-provider'
+import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../components/layouts/main.layout'
+import hostNavTabItems from '../../../../../constants/host-nav-tabs'
+import { buildRoute, Route } from '../../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useCommunityActions } from '@aglyn/plugins-community'
-import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
-import useTenantPermissions from '../../../../hooks/use-tenant-permissions'
+import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
+import useTenantPermissions from '../../../../../hooks/use-tenant-permissions'
 
 /**
  * Community listing detail page (AGL-95): full description, preview image,
@@ -51,8 +53,8 @@ import useTenantPermissions from '../../../../hooks/use-tenant-permissions'
  */
 const CommunityListingDetail: NextPageWithLayout = () => {
   const hostId = useHostId()
-  const router = useRouter()
-  const listingId = String(router.query.listingId ?? '')
+  const params = useParams<{ listingId: string }>()
+  const listingId = String(params.listingId ?? '')
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -313,16 +315,5 @@ const CommunityListingDetail: NextPageWithLayout = () => {
   )
 }
 CommunityListingDetail.displayName = 'Page:CommunityListingDetail'
-CommunityListingDetail.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Community listing',
-    },
-  },
-]
 
 export default CommunityListingDetail

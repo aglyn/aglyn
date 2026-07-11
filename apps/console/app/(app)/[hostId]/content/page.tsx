@@ -57,20 +57,20 @@ import {
 import { Divider, Link as MuiLink } from '@mui/material'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import HostDisplayNameComponent from '../../../components/host-display-name.component'
-import { useHostId } from '../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import { buildRoute, Route } from '../../../constants/route-links'
-import { hasEntitlement } from '../../../constants/entitlements'
-import useCurrentTenant from '../../../hooks/use-current-tenant'
-import hostNavTabItems from '../../../constants/host-nav-tabs'
-import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
-import useFirestoreCollection from '../../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../../hooks/use-firestore-doc'
-import useHostActivityLogger from '../../../hooks/use-host-activity-logger'
-import MediaPickerDialog from '../../../components/media/media-picker-dialog.component'
+import HostDisplayNameComponent from '../../../../components/host-display-name.component'
+import { useHostId } from '../../../../components/host-id-provider'
+import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../components/layouts/main.layout'
+import { buildRoute, Route } from '../../../../constants/route-links'
+import { hasEntitlement } from '../../../../constants/entitlements'
+import useCurrentTenant from '../../../../hooks/use-current-tenant'
+import hostNavTabItems from '../../../../constants/host-nav-tabs'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
+import useHostActivityLogger from '../../../../hooks/use-host-activity-logger'
+import MediaPickerDialog from '../../../../components/media/media-picker-dialog.component'
 
 const slugify = (value: string) =>
   value
@@ -1006,16 +1006,5 @@ const HostContent: NextPageWithLayout = () => {
   )
 }
 HostContent.displayName = 'Page:HostContent'
-HostContent.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Content',
-    },
-  },
-]
 
 export default HostContent

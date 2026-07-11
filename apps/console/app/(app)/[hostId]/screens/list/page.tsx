@@ -75,34 +75,34 @@ import {
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import AuthErrorAlertComponent from '../../../../components/auth-error-alert.component'
-import AuthFormTemplateComponent from '../../../../components/auth-form-template.component'
+import AuthErrorAlertComponent from '../../../../../components/auth-error-alert.component'
+import AuthFormTemplateComponent from '../../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../../components/layouts/main.layout'
-import HostDisplayNameComponent from '../../../../components/host-display-name.component'
-import TemplateGalleryDialog from '../../../../components/templates/template-gallery-dialog.component'
+import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../../components/layouts/main.layout'
+import HostDisplayNameComponent from '../../../../../components/host-display-name.component'
+import TemplateGalleryDialog from '../../../../../components/templates/template-gallery-dialog.component'
 import {
   compareScreenSiblings,
   ScreensHierarchyTableComponent,
   type ScreenHierarchyRow,
   type ScreenMoveRequest,
-} from '../../../../components/screens-hierarchy-table.component'
-import { checkTenantQuota } from '../../../../constants/entitlements'
-import { buildRoute, Route } from '../../../../constants/route-links'
-import { buildScreenLiveUrl } from '../../../../constants/tenant-links'
-import hostNavTabItems from '../../../../constants/host-nav-tabs'
+} from '../../../../../components/screens-hierarchy-table.component'
+import { checkTenantQuota } from '../../../../../constants/entitlements'
+import { buildRoute, Route } from '../../../../../constants/route-links'
+import { buildScreenLiveUrl } from '../../../../../constants/tenant-links'
+import hostNavTabItems from '../../../../../constants/host-nav-tabs'
 import {
   publishScreenRoute,
   syncScreenRouteEntries,
   unpublishScreenRoute,
-} from '../../../../constants/screen-publishing'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import useCurrentTenant from '../../../../hooks/use-current-tenant'
-import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
-import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
-import useHostActivityLogger from '../../../../hooks/use-host-activity-logger'
+} from '../../../../../constants/screen-publishing'
+import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import useCurrentTenant from '../../../../../hooks/use-current-tenant'
+import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
+import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
+import useHostActivityLogger from '../../../../../hooks/use-host-activity-logger'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   (props, ref) => {
@@ -787,16 +787,5 @@ const formSchema = {
   ],
 }
 Screens.displayName = 'Page:Screens'
-Screens.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Screens',
-    },
-  },
-]
 
 export default Screens

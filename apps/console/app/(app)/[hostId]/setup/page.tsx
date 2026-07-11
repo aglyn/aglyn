@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+'use client'
+
 import * as Aglyn from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container, GridItems, useLoading } from '@aglyn/shared-ui-jsx'
@@ -34,25 +36,25 @@ import { logEvent } from 'firebase/analytics'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
-import HostActivityTable from '../../../components/host-activity-table.component'
+import HostActivityTable from '../../../../components/host-activity-table.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import CardDisplayFormTemplate from '../../../components/card-display-form-template'
-import { useHostId } from '../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import CustomDomainCard from '../../../components/custom-domain-card.component'
-import FaviconCard from '../../../components/favicon-card.component'
-import ErrorScreensCard from '../../../components/error-screens-card.component'
-import LanguagesCard from '../../../components/languages-card.component'
-import SiteBackupCard from '../../../components/site-backup-card.component'
-import SiteTemplateCard from '../../../components/site-template-card.component'
-import ThemeEditor from '../../../components/theme-editor/theme-editor.component'
-import HostDisplayNameComponent from '../../../components/host-display-name.component'
-import { buildRoute, Route } from '../../../constants/route-links'
-import hostNavTabItems from '../../../constants/host-nav-tabs'
-import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
-import useHostActivityLogger from '../../../hooks/use-host-activity-logger'
+import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
+import { useHostId } from '../../../../components/host-id-provider'
+import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../components/layouts/main.layout'
+import CustomDomainCard from '../../../../components/custom-domain-card.component'
+import FaviconCard from '../../../../components/favicon-card.component'
+import ErrorScreensCard from '../../../../components/error-screens-card.component'
+import LanguagesCard from '../../../../components/languages-card.component'
+import SiteBackupCard from '../../../../components/site-backup-card.component'
+import SiteTemplateCard from '../../../../components/site-template-card.component'
+import ThemeEditor from '../../../../components/theme-editor/theme-editor.component'
+import HostDisplayNameComponent from '../../../../components/host-display-name.component'
+import { buildRoute, Route } from '../../../../constants/route-links'
+import hostNavTabItems from '../../../../constants/host-nav-tabs'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useHostActivityLogger from '../../../../hooks/use-host-activity-logger'
 
 const basicSchema: FormSchema = {
   id: 'hostDetails',
@@ -529,16 +531,5 @@ const HostSetup: NextPageWithLayout = (props) => {
   )
 }
 HostSetup.displayName = 'Page:HostSetup'
-HostSetup.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Host Setup',
-    },
-  },
-]
 
 export default HostSetup

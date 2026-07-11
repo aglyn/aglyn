@@ -20,18 +20,18 @@ import { ICON_VARIANT_HOME } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { NextPageWithLayout, useNextPageTitle } from '@aglyn/shared-ui-next'
 import { useParams } from 'next/navigation'
-import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../components/layouts/dashboard.layout'
-import MainLayout from '../../components/layouts/main.layout'
-import HostAnalyticsCard from '../../components/analytics/host-analytics-card.component'
-import CampaignGlanceCard from '../../components/dashboard/campaign-glance-card.component'
-import CommerceGlanceCard from '../../components/dashboard/commerce-glance-card.component'
-import NewestSiteUsersCard from '../../components/dashboard/newest-site-users-card.component'
+import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../components/layouts/main.layout'
+import HostAnalyticsCard from '../../../components/analytics/host-analytics-card.component'
+import CampaignGlanceCard from '../../../components/dashboard/campaign-glance-card.component'
+import CommerceGlanceCard from '../../../components/dashboard/commerce-glance-card.component'
+import NewestSiteUsersCard from '../../../components/dashboard/newest-site-users-card.component'
 import { HostActivityCard } from '@aglyn/plugins-workflows'
-import HostDisplayNameComponent from '../../components/host-display-name.component'
-import { buildRoute, Route } from '../../constants/route-links'
-import hostNavTabItems from '../../constants/host-nav-tabs'
-import { CONTENT_MAX_WIDTH } from '../../constants/shared'
+import HostDisplayNameComponent from '../../../components/host-display-name.component'
+import { buildRoute, Route } from '../../../constants/route-links'
+import hostNavTabItems from '../../../constants/host-nav-tabs'
+import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
 
 const Index: NextPageWithLayout = (props) => {
   const params = useParams<{ hostId: string }>()
@@ -115,16 +115,5 @@ const Index: NextPageWithLayout = (props) => {
   )
 }
 Index.displayName = 'Page:Index'
-Index.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'My Dashboard',
-    },
-  },
-]
 
 export default Index

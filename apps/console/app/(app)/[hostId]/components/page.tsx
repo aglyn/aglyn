@@ -19,15 +19,15 @@
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
-import HostComponentsCard from '../../../components/host-components-card.component'
-import HostDisplayNameComponent from '../../../components/host-display-name.component'
-import { useHostId } from '../../../components/host-id-provider'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import hostNavTabItems from '../../../constants/host-nav-tabs'
-import { buildRoute, Route } from '../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import HostComponentsCard from '../../../../components/host-components-card.component'
+import HostDisplayNameComponent from '../../../../components/host-display-name.component'
+import { useHostId } from '../../../../components/host-id-provider'
+import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../components/layouts/main.layout'
+import hostNavTabItems from '../../../../constants/host-nav-tabs'
+import { buildRoute, Route } from '../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /**
  * Components page (AGL-250): reusable components moved off the dashboard —
@@ -64,16 +64,5 @@ const HostComponents: NextPageWithLayout = () => {
   )
 }
 HostComponents.displayName = 'Page:HostComponents'
-HostComponents.layouts = [
-  {
-    Component: AuthenticatedLayout,
-  },
-  {
-    Component: MainLayout,
-    props: {
-      title: 'Components',
-    },
-  },
-]
 
 export default HostComponents

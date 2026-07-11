@@ -20,17 +20,17 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
-import HostAnalyticsCard from '../../../components/analytics/host-analytics-card.component'
-import CampaignGlanceCard from '../../../components/dashboard/campaign-glance-card.component'
-import CommerceGlanceCard from '../../../components/dashboard/commerce-glance-card.component'
-import { useHostId } from '../../../components/host-id-provider'
-import HostDisplayNameComponent from '../../../components/host-display-name.component'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import hostNavTabItems from '../../../constants/host-nav-tabs'
-import { buildRoute, Route } from '../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import HostAnalyticsCard from '../../../../components/analytics/host-analytics-card.component'
+import CampaignGlanceCard from '../../../../components/dashboard/campaign-glance-card.component'
+import CommerceGlanceCard from '../../../../components/dashboard/commerce-glance-card.component'
+import { useHostId } from '../../../../components/host-id-provider'
+import HostDisplayNameComponent from '../../../../components/host-display-name.component'
+import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../components/layouts/main.layout'
+import hostNavTabItems from '../../../../constants/host-nav-tabs'
+import { buildRoute, Route } from '../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /**
  * Analytics deep dive (AGL-352): the full traffic panel plus commerce
@@ -73,9 +73,5 @@ const HostAnalytics: NextPageWithLayout = () => {
   )
 }
 HostAnalytics.displayName = 'Page:HostAnalytics'
-HostAnalytics.layouts = [
-  { Component: AuthenticatedLayout },
-  { Component: MainLayout, props: { title: 'Analytics' } },
-]
 
 export default HostAnalytics

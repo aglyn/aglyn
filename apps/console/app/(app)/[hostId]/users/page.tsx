@@ -20,16 +20,16 @@ import { ICON_VARIANT_USER_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
-import { useHostId } from '../../../components/host-id-provider'
-import HostDisplayNameComponent from '../../../components/host-display-name.component'
-import HostMembersCard from '../../../components/host-members-card.component'
-import AuthenticatedLayout from '../../../components/layouts/authenticated.layout'
-import DashboardLayout from '../../../components/layouts/dashboard.layout'
-import MainLayout from '../../../components/layouts/main.layout'
-import SiteAccountsCard from '../../../components/site-accounts-card.component'
-import hostNavTabItems from '../../../constants/host-nav-tabs'
-import { buildRoute, Route } from '../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../constants/shared'
+import { useHostId } from '../../../../components/host-id-provider'
+import HostDisplayNameComponent from '../../../../components/host-display-name.component'
+import HostMembersCard from '../../../../components/host-members-card.component'
+import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import MainLayout from '../../../../components/layouts/main.layout'
+import SiteAccountsCard from '../../../../components/site-accounts-card.component'
+import hostNavTabItems from '../../../../constants/host-nav-tabs'
+import { buildRoute, Route } from '../../../../constants/route-links'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
 /**
  * Users section (AGL-350): site visitor accounts (searchable, paged)
@@ -70,9 +70,5 @@ const HostUsers: NextPageWithLayout = () => {
   )
 }
 HostUsers.displayName = 'Page:HostUsers'
-HostUsers.layouts = [
-  { Component: AuthenticatedLayout },
-  { Component: MainLayout, props: { title: 'Users' } },
-]
 
 export default HostUsers
