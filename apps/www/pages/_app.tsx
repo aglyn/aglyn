@@ -16,7 +16,10 @@
  */
 
 import { APP_WWW, IS_PRODUCTION } from '@aglyn/shared-data-enums'
-import { _AppComponent, type _AppProps } from '@aglyn/shared-ui-next'
+import {
+  _AppComponent,
+  type _AppProps,
+} from '@aglyn/shared-ui-next/components/_app.component'
 import {
   consoleThemeDark,
   consoleThemeLight,

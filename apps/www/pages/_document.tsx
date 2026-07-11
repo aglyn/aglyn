@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import {_EmotionDocumentComponent, type _EmotionDocumentProps} from '@aglyn/shared-ui-next'
+import {
+  _EmotionDocumentComponent,
+  type _EmotionDocumentProps,
+} from '@aglyn/shared-ui-next/components/_emotion-document.component'
 
 
 export interface _DocumentProps extends _EmotionDocumentProps {}
