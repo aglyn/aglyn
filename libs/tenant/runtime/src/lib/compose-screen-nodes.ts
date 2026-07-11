@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'

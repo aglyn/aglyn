@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022 Aglyn LLC
+ * Copyright 2026 Aglyn LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,14 @@
  * limitations under the License.
  */
 
-// Full app-utils surface = server-safe utils + the client-only React
-// contexts. Split so `@aglyn/aglyn/server` can re-export just `./server`
-// (no `createContext`) for tenant Server Components (AGL-405); this barrel,
-// reached via `@aglyn/aglyn`, keeps both for client consumers unchanged.
-export * from './server'
-export * from './contexts'
+import { cache } from 'react'
+import getHost from '../../../utils/get-host'
+
+/**
+ * Request-deduped host lookup. The `[host]` layout resolves the host for
+ * theming and each page resolves it again for content; wrapping the shared
+ * `getHost` util in React `cache` collapses those into one Firestore read
+ * per render (App Router replacement for a single Pages Router
+ * `getStaticProps`/`getServerSideProps` pass).
+ */
+export const getHostCached = cache((host: string) => getHost({ host }))

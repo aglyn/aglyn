@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import type { Database, DataSnapshot } from 'firebase-admin/database'
 import firebaseAdmin from './firebase-admin'
 

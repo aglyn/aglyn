@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, screenVersionConverter } from '@aglyn/tenant-data-admin'
 
 export async function getScreenVersion(options: {

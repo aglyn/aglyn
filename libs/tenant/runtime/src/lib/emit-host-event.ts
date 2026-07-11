@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HostActionAlert, HostEventType } from '@aglyn/aglyn'
+import type { HostActionAlert, HostEventType } from '@aglyn/aglyn/server'
 import { runEventActions } from './run-event-actions'
 import {
   type HostEventPayload,

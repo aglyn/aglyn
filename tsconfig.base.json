@@ -38,6 +38,7 @@
       "@/tenant/*": ["libs/apps/tenant/*"],
       "@/www/*": ["libs/apps/www/*"],
       "@aglyn/aglyn": ["libs/aglyn/src/index.ts"],
+      "@aglyn/aglyn/server": ["libs/aglyn/src/server.ts"],
       "@aglyn/aglyn-node-renderer": ["libs/aglyn-node-renderer/src/index.ts"],
       "@aglyn/aglyn-node-renderer/*": ["libs/aglyn-node-renderer/src/lib/*"],
       "@aglyn/aglyn/*": ["libs/aglyn/src/lib/*"],

@@ -21,7 +21,7 @@ import {
   mergeContactInteraction,
   normalizeContactEmail,
   resolveTenantEntitlements,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { firebaseAdmin } from './firebase-admin'
 import { getOrgForHost, orgDataCollectionForHost } from './organizations'

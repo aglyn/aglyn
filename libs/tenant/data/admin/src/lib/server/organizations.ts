@@ -33,7 +33,7 @@ import {
   type AglynOrgMember,
   type OrgPermission,
   type OrgRole,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 

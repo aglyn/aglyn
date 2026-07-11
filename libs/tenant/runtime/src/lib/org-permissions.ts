@@ -19,7 +19,7 @@ import {
   type OrgRole,
   resolveRolePermissions,
   type TenantPermissionSet,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import {
   resolveOrgIdForHost,
   resolveOrgMembership,

@@ -15,9 +15,13 @@
  * limitations under the License.
  */
 
-// Full app-utils surface = server-safe utils + the client-only React
-// contexts. Split so `@aglyn/aglyn/server` can re-export just `./server`
-// (no `createContext`) for tenant Server Components (AGL-405); this barrel,
-// reached via `@aglyn/aglyn`, keeps both for client consumers unchanged.
-export * from './server'
-export * from './contexts'
+/**
+ * Server-safe entry point for @aglyn/aglyn (AGL-405). Identical to the main
+ * barrel except it re-exports `app-utils/server` (no client React contexts)
+ * instead of the full `app-utils`, so tenant Server Components can import the
+ * framework's types + pure functions without dragging `createContext` into
+ * the RSC module graph. Client code keeps using `@aglyn/aglyn`.
+ */
+export * from './lib/aglyn'
+export * from './lib/app-utils/server'
+export * from './lib/foundation'

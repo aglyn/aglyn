@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 // Initializes the firebase-admin default app (cert credential, RTDB URL,
 // service account, AppCheck) on module load.
 import '@aglyn/shared-util-fbserver'

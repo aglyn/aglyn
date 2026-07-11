@@ -18,7 +18,7 @@
 import {
   isPluginNetworkAllowed,
   PLUGIN_FETCH_MAX_BODY_BYTES,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { firebaseAdmin } from './firebase-admin'
 

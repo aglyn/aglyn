@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { notificationMuted, type AglynNotification } from '@aglyn/aglyn'
+import { notificationMuted, type AglynNotification } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 import { listOrgMembers } from './organizations'

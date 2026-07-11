@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type * as Aglyn from '@aglyn/aglyn'
+import type * as Aglyn from '@aglyn/aglyn/server'
 import { getOrgForHost } from '@aglyn/tenant-data-admin'
 
 /**

@@ -31,7 +31,7 @@ import {
   resolveTenantEntitlements,
   runWorkflow,
   sanitizeRecordValues,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgForHost,

@@ -20,7 +20,7 @@ import {
   type HostRedirect,
   matchRedirect,
   normalizeRedirectSource,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
