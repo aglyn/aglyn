@@ -996,14 +996,20 @@ function AutomationsEngine(props: {
     const runClientSteps = (automation: ClientAutomation) => {
       for (const step of automation.steps) {
         try {
-          if (step.type === 'addClass' || step.type === 'removeClass') {
-            document
-              .querySelectorAll(step.selector)
-              .forEach((element) =>
-                step.type === 'addClass'
-                  ? element.classList.add(step.className)
-                  : element.classList.remove(step.className),
-              )
+          if (
+            step.type === 'addClass' ||
+            step.type === 'removeClass' ||
+            step.type === 'toggleClass'
+          ) {
+            document.querySelectorAll(step.selector).forEach((element) => {
+              if (step.type === 'addClass') {
+                element.classList.add(step.className)
+              } else if (step.type === 'removeClass') {
+                element.classList.remove(step.className)
+              } else {
+                element.classList.toggle(step.className)
+              }
+            })
           } else if (step.type === 'stickyNav') {
             const target = document.querySelector(
               step.selector?.trim() || 'header, nav',

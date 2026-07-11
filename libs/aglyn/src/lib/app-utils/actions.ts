@@ -96,8 +96,11 @@ export type HostActionStep =
   // tenant automations engine; the server executor skips them.
   | { type: 'showOverlay'; overlayId?: string; overlayName?: string }
   | { type: 'stickyNav'; selector?: string }
+  // Selectors accept CSS or a node id via [data-node-id="…"] — the
+  // besigner element picker emits the latter (AGL-314/319).
   | { type: 'addClass'; selector: string; className: string }
   | { type: 'removeClass'; selector: string; className: string }
+  | { type: 'toggleClass'; selector: string; className: string }
   | { type: 'showHtml'; html: string }
   | { type: 'runJs'; code: string }
   | { type: 'redirect'; url: string }
@@ -120,6 +123,7 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'stickyNav',
     'addClass',
     'removeClass',
+    'toggleClass',
     'showHtml',
     'runJs',
     'redirect',
@@ -251,7 +255,11 @@ export function validateHostAction(action: HostAction): string | null {
       return `${label}: pick a webhook`
     }
     // Client + server steps (AGL-257).
-    if (step.type === 'addClass' || step.type === 'removeClass') {
+    if (
+      step.type === 'addClass' ||
+      step.type === 'removeClass' ||
+      step.type === 'toggleClass'
+    ) {
       if (!step.selector?.trim()) return `${label}: enter a CSS selector`
       if (!step.className?.trim()) return `${label}: enter the class name`
     }
