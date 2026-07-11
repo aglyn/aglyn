@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   LinearProgress,
@@ -44,8 +44,12 @@ interface DayStat {
  * writes, plus top pages, top referrers, and a device split. Explicitly
  * not a GA replacement — Setup accepts a GA measurement id for that.
  */
-export function HostAnalyticsCard(props: { hostId: string }) {
-  const { hostId } = props
+export function HostAnalyticsCard(props: {
+  hostId: string
+  /** "View details" link, shown on the dashboard glance (AGL-352). */
+  viewAllHref?: string
+}) {
+  const { hostId, viewAllHref } = props
   const firestore = useFirestore()
   const [days, setDays] = useState<DayStat[] | null>(null)
   const [range, setRange] = useState(14)
@@ -132,6 +136,12 @@ export function HostAnalyticsCard(props: { hostId: string }) {
       contentGutterY
       HeaderProps={{
         action: (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          {viewAllHref ? (
+            <AppLink href={viewAllHref} componentVariant="naked">
+              {'View details'}
+            </AppLink>
+          ) : null}
           <TextField
             select
             size="small"
@@ -146,6 +156,7 @@ export function HostAnalyticsCard(props: { hostId: string }) {
             <MenuItem value={30}>{'30 days'}</MenuItem>
             <MenuItem value={90}>{'90 days'}</MenuItem>
           </TextField>
+          </Stack>
         ),
       }}
     >

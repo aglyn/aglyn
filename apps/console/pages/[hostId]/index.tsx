@@ -24,9 +24,11 @@ import AuthenticatedLayout from '../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
 import MainLayout from '../../components/layouts/main.layout'
 import HostAnalyticsCard from '../../components/analytics/host-analytics-card.component'
+import CampaignGlanceCard from '../../components/dashboard/campaign-glance-card.component'
+import CommerceGlanceCard from '../../components/dashboard/commerce-glance-card.component'
+import NewestSiteUsersCard from '../../components/dashboard/newest-site-users-card.component'
 import HostActivityCard from '../../components/host-activity-card.component'
 import HostDisplayNameComponent from '../../components/host-display-name.component'
-import HostMembersCard from '../../components/host-members-card.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import hostNavTabItems from '../../constants/host-nav-tabs'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
@@ -54,24 +56,46 @@ const Index: NextPageWithLayout = (props) => {
         <GridItems
           spacing={3}
           items={[
+            // Glanceable widgets (AGL-352/353): summaries only — the
+            // Users and Analytics sections own the deep views. Feature
+            // widgets (commerce, campaigns) hide until the host uses them.
             {
               size: {
                 xs: 12,
                 md: 6,
               },
-              children: <HostMembersCard hostId={hostId} />,
+              children: (
+                <HostAnalyticsCard
+                  hostId={hostId}
+                  viewAllHref={buildRoute(Route.HOST_ANALYTICS, { hostId })}
+                />
+              ),
             },
             {
               size: {
                 xs: 12,
                 md: 6,
               },
-              children: <HostAnalyticsCard hostId={hostId} />,
+              children: <NewestSiteUsersCard hostId={hostId} />,
+            },
+            {
+              size: {
+                xs: 12,
+                md: 6,
+              },
+              children: <CommerceGlanceCard hostId={hostId} />,
+            },
+            {
+              size: {
+                xs: 12,
+                md: 6,
+              },
+              children: <CampaignGlanceCard hostId={hostId} />,
             },
             // Announcement bar + popup moved to /marketing (AGL-251);
             // components, products, variables and functions to their own
             // pages (AGL-250); workflows to /workflows (AGL-128); datasets
-            // to /data (AGL-132).
+            // to /data (AGL-132); site users to /users (AGL-350).
             {
               size: {
                 xs: 12,

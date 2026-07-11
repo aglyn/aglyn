@@ -66,6 +66,18 @@ export function hostNavTabItems(hostId: string) {
       label: 'Contacts',
       href: buildRoute(Route.HOST_CONTACTS, { hostId }),
     },
+    // Site users left the dashboard for their own section (AGL-350).
+    {
+      id: 'nav-tab-users',
+      label: 'Users',
+      href: buildRoute(Route.HOST_USERS, { hostId }),
+    },
+    // Analytics deep dive (AGL-352); the dashboard keeps the glance card.
+    {
+      id: 'nav-tab-analytics',
+      label: 'Analytics',
+      href: buildRoute(Route.HOST_ANALYTICS, { hostId }),
+    },
     {
       id: 'nav-tab-bookings',
       label: 'Bookings',
