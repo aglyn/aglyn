@@ -102,11 +102,35 @@ function buildMetadata(props: Props): Metadata {
       ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
       : undefined
 
+  // hreflang alternates (AGL-164): the Pages Router emitted `<link
+  // rel="alternate" hreflang>` from the inert <Head>; the App Router routes
+  // them through `alternates.languages`. Variants resolve through the
+  // routing map so slug renames stay correct; the current screen registers
+  // under its own locale (or x-default).
+  const localeVariants = screen?.localeVariants as
+    | Record<string, string>
+    | undefined
+  const languages: Record<string, string> = {}
+  if (canonicalBase && localeVariants) {
+    for (const [locale, variantId] of Object.entries(localeVariants)) {
+      const variantPath = host?.screens?.[variantId]
+      if (variantPath != null) {
+        languages[locale] = `${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`
+      }
+    }
+    if (canonical) languages[screen?.locale || 'x-default'] = canonical
+  }
+  const hasLanguages = Object.keys(languages).length > 0
+  const alternates = {
+    ...(canonical ? { canonical } : {}),
+    ...(hasLanguages ? { languages } : {}),
+  }
+
   return {
     title: fullTitle,
     ...(description ? { description } : {}),
     ...(noindex ? { robots: { index: false, follow: true } } : {}),
-    ...(canonical ? { alternates: { canonical } } : {}),
+    ...(canonical || hasLanguages ? { alternates } : {}),
     openGraph: {
       title: fullTitle,
       ...(description ? { description } : {}),
@@ -120,6 +144,98 @@ function buildMetadata(props: Props): Metadata {
       ...(socialImage ? { images: [socialImage] } : {}),
     },
   }
+}
+
+/**
+ * Structured data (AGL-143). The Metadata API has no JSON-LD slot, so the
+ * Pages Router `<Head>` `<script type="application/ld+json">` blocks (inert
+ * under the App Router) are rebuilt here and rendered server-side in the page
+ * body: an `Article` for content entries, otherwise a `WebSite` for the host
+ * plus a `BreadcrumbList` for nested screen paths. Gated surfaces (membership,
+ * maintenance, members-only) emit nothing, matching the old markup.
+ */
+function buildJsonLd(props: Props): string[] {
+  if (props.membershipPage || props.maintenanceFallback || props.memberScreen) {
+    return []
+  }
+  const host = props.data?.host as any
+  const canonicalBase = host?.cname
+    ? `https://${host.cname}`
+    : host?.subdomain
+      ? `https://${host.subdomain}.aglyn.app`
+      : undefined
+  const publisher = host?.seo?.entity?.name
+    ? {
+        '@type':
+          host.seo.entity.type === Aglyn.HostEntityType.PERSON
+            ? 'Person'
+            : 'Organization',
+        name: host.seo.entity.name,
+      }
+    : undefined
+
+  // Content entry → Article.
+  if (props.content) {
+    const entry = (props.content as any).entry
+    if (!entry) return []
+    return [
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: entry.title,
+        ...(entry.excerpt && { description: entry.excerpt }),
+        ...(entry.coverImage && { image: [entry.coverImage] }),
+        ...(entry.publishedAt?.seconds && {
+          datePublished: new Date(
+            entry.publishedAt.seconds * 1000,
+          ).toISOString(),
+        }),
+        ...(entry.updatedAt?.seconds && {
+          dateModified: new Date(entry.updatedAt.seconds * 1000).toISOString(),
+        }),
+        ...(publisher && { author: publisher }),
+      }),
+    ]
+  }
+
+  // Screen render → WebSite (+ BreadcrumbList for nested paths).
+  const ld: string[] = []
+  const screen = props.data?.screen?.data as any
+  const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
+  if (canonicalBase) {
+    ld.push(
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: siteTitle ?? host?.displayName ?? 'Site',
+        url: canonicalBase,
+        ...(host?.seo?.entity?.name && {
+          publisher: {
+            ...publisher,
+            ...(host.seo.entity.logo && { logo: host.seo.entity.logo }),
+          },
+        }),
+      }),
+    )
+  }
+  const screenPath = screen?.$id ? host?.screens?.[screen.$id] : undefined
+  const segments =
+    typeof screenPath === 'string' ? screenPath.split('/').filter(Boolean) : []
+  if (canonicalBase && segments.length > 1) {
+    ld.push(
+      JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: segments.map((segment, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          name: segment,
+          item: `${canonicalBase}/${segments.slice(0, index + 1).join('/')}`,
+        })),
+      }),
+    )
+  }
+  return ld
 }
 
 export async function generateMetadata({
@@ -146,5 +262,19 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
     if (statusCode === 301 || statusCode === 308) permanentRedirect(destination)
     redirect(destination)
   }
-  return <CatchAllClient {...result.props} />
+  const jsonLd = buildJsonLd(result.props)
+  return (
+    <>
+      {jsonLd.map((json, index) => (
+        <script
+          key={index}
+          type="application/ld+json"
+          // Server-rendered structured data; the payload is built from
+          // trusted host/screen fields and JSON.stringify-escaped.
+          dangerouslySetInnerHTML={{ __html: json }}
+        />
+      ))}
+      <CatchAllClient {...result.props} />
+    </>
+  )
 }

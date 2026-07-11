@@ -909,27 +909,6 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
       : undefined
 
-  // BreadcrumbList (AGL-143) for nested screen paths (a/b/c).
-  const breadcrumbSegments =
-    typeof screenPath === 'string'
-      ? screenPath.split('/').filter(Boolean)
-      : []
-  const breadcrumbLd =
-    canonicalBase && breadcrumbSegments.length > 1
-      ? JSON.stringify({
-          '@context': 'https://schema.org',
-          '@type': 'BreadcrumbList',
-          itemListElement: breadcrumbSegments.map((segment, index) => ({
-            '@type': 'ListItem',
-            position: index + 1,
-            name: segment,
-            item: `${canonicalBase}/${breadcrumbSegments
-              .slice(0, index + 1)
-              .join('/')}`,
-          })),
-        })
-      : null
-
   const site = useMemo(() => ({ hostId: host?.$id }), [host?.$id])
 
   // Password-protected screens render an unlock form; the composed nodes
@@ -1188,41 +1167,6 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
                   ).toISOString()}
                 />
               ) : null}
-              <script
-                key="ld-article"
-                type="application/ld+json"
-                dangerouslySetInnerHTML={{
-                  __html: JSON.stringify({
-                    '@context': 'https://schema.org',
-                    '@type': 'Article',
-                    headline: entry.title,
-                    ...(entry.excerpt && { description: entry.excerpt }),
-                    ...((entry as any).coverImage && {
-                      image: [(entry as any).coverImage],
-                    }),
-                    ...(entry.publishedAt?.seconds && {
-                      datePublished: new Date(
-                        entry.publishedAt.seconds * 1000,
-                      ).toISOString(),
-                    }),
-                    ...((entry as any).updatedAt?.seconds && {
-                      dateModified: new Date(
-                        (entry as any).updatedAt.seconds * 1000,
-                      ).toISOString(),
-                    }),
-                    ...(host?.seo?.entity?.name && {
-                      author: {
-                        '@type':
-                          host.seo.entity.type ===
-                          Aglyn.HostEntityType.PERSON
-                            ? 'Person'
-                            : 'Organization',
-                        name: host.seo.entity.name,
-                      },
-                    }),
-                  }),
-                }}
-              />
             </>
           ) : null}
         </Head>
@@ -1359,68 +1303,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           name="twitter:card"
           content={socialImage ? 'summary_large_image' : 'summary'}
         />
-        {/* Structured data (AGL-143): WebSite + host entity, and
-            breadcrumbs for nested paths. Event schema arrives with the
-            Event Calendar add-on (AGL-145). */}
-        {canonicalBase ? (
-          <script
-            key="ld-website"
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                '@context': 'https://schema.org',
-                '@type': 'WebSite',
-                name: siteTitle ?? host?.displayName ?? 'Site',
-                url: canonicalBase,
-                ...(host?.seo?.entity?.name && {
-                  publisher: {
-                    '@type':
-                      host.seo.entity.type === Aglyn.HostEntityType.PERSON
-                        ? 'Person'
-                        : 'Organization',
-                    name: host.seo.entity.name,
-                    ...(host.seo.entity.logo && {
-                      logo: host.seo.entity.logo,
-                    }),
-                  },
-                }),
-              }),
-            }}
-          />
-        ) : null}
-        {breadcrumbLd ? (
-          <script
-            key="ld-breadcrumbs"
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: breadcrumbLd }}
-          />
-        ) : null}
-        {/* hreflang alternates (AGL-164): variants resolve through the
-            routing map, so slug renames stay correct. */}
-        {canonicalBase && screenLocaleVariants
-          ? Object.entries(
-              screenLocaleVariants as Record<string, string>,
-            ).map(([locale, variantId]) => {
-              const variantPath = host?.screens?.[variantId]
-              if (variantPath == null) return null
-              return (
-                <link
-                  key={`alt-${locale}`}
-                  rel="alternate"
-                  hrefLang={locale}
-                  href={`${canonicalBase}${Aglyn.screenRoutePathToUrl(variantPath)}`}
-                />
-              )
-            })
-          : null}
-        {canonicalBase && screenLocaleVariants && canonical ? (
-          <link
-            key="alt-self"
-            rel="alternate"
-            hrefLang={screenLocale || 'x-default'}
-            href={canonical}
-          />
-        ) : null}
+        {/* Structured data (WebSite/BreadcrumbList) and hreflang alternates
+            (AGL-143/164) now render server-side from the route's
+            `buildJsonLd` + `generateMetadata.alternates` (page.tsx) — the
+            Metadata API has no JSON-LD slot and `next/head` is inert here. */}
         {canonical ? (
           <link key="canonical" rel="canonical" href={canonical} />
         ) : null}
