@@ -30,19 +30,22 @@ import {
   Avatar,
   Button,
   Chip,
+  FormControlLabel,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useRouter } from 'next/router'
 import { useCallback, useEffect, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import OrgActivityCard from '../../../../components/org-activity-card.component'
+import { useAdminHosts } from '../../../../hooks/use-admin-hosts'
 import useOrgNavTabItems from '../../../../hooks/use-org-nav-tabs'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -64,10 +67,15 @@ const TeamMemberDetail: NextPageWithLayout = () => {
   const { confirm } = useConfirmationContext()
   const canManage = canManageOrg(currentOrg?.role)
 
+  const firestore = useFirestore()
+  const { hosts } = useAdminHosts(firestore, user?.uid, currentOrg?.$id ?? null)
   const [member, setMember] = useState<any | null>(null)
   const [loadingMember, setLoadingMember] = useState(true)
   const [role, setRole] = useState('viewer')
   const [title, setTitle] = useState('')
+  // Per-host access (AGL-388): restrict a member to specific sites.
+  const [allHosts, setAllHosts] = useState(true)
+  const [hostAccess, setHostAccess] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
 
   const loadMember = useCallback(async () => {
@@ -87,6 +95,8 @@ const TeamMemberDetail: NextPageWithLayout = () => {
       if (found) {
         setRole(found.role ?? 'viewer')
         setTitle(found.title ?? '')
+        setAllHosts(found.allHosts !== false)
+        setHostAccess({ ...(found.hostAccess ?? {}) })
       }
     } catch (error) {
       console.error(error)
@@ -120,12 +130,15 @@ const TeamMemberDetail: NextPageWithLayout = () => {
     if (!member || busy) return
     setBusy(true)
     try {
+      // Admin/owner roles span every site; editor/viewer honor the
+      // per-host restriction (AGL-388).
+      const roleSpansAll = role === 'admin' || role === 'owner'
       await request({
         action: 'upsert',
         uid: member.$id,
         role,
-        allHosts: member.allHosts === true,
-        hostAccess: member.hostAccess ?? {},
+        allHosts: roleSpansAll ? true : allHosts,
+        hostAccess: roleSpansAll || allHosts ? {} : hostAccess,
         title: title.trim() || null,
       })
       enqueueSnackbar('Member updated', { variant: 'success', persist: false })
@@ -138,7 +151,17 @@ const TeamMemberDetail: NextPageWithLayout = () => {
     } finally {
       setBusy(false)
     }
-  }, [member, busy, role, title, request, loadMember, enqueueSnackbar])
+  }, [
+    member,
+    busy,
+    role,
+    title,
+    allHosts,
+    hostAccess,
+    request,
+    loadMember,
+    enqueueSnackbar,
+  ])
 
   const handleRemove = useCallback(async () => {
     if (!member) return
@@ -245,6 +268,92 @@ const TeamMemberDetail: NextPageWithLayout = () => {
                         size="small"
                         placeholder="e.g. Marketing lead"
                       />
+                      {/* Per-host access (AGL-388): admins/owners span all
+                          sites; editor/viewer can be restricted so they
+                          only see and work on the sites granted here. */}
+                      {role === 'admin' ? (
+                        <Alert severity="info">
+                          {'Admins have access to every site in the ' +
+                            'organization.'}
+                        </Alert>
+                      ) : (
+                        <Stack spacing={0.5}>
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={allHosts}
+                                onChange={(event) =>
+                                  setAllHosts(event.target.checked)
+                                }
+                              />
+                            }
+                            label="Access to all sites"
+                          />
+                          {!allHosts ? (
+                            <Stack spacing={0.5} sx={{ pl: 1 }}>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {'Grant access to specific sites — the ' +
+                                  'member only sees these.'}
+                              </Typography>
+                              {(hosts ?? []).map((host: any) => {
+                                const current = hostAccess[host.$id]
+                                return (
+                                  <Stack
+                                    key={host.$id}
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ alignItems: 'center' }}
+                                  >
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ flex: 1, minWidth: 0 }}
+                                      noWrap
+                                    >
+                                      {host.displayName ?? host.$id}
+                                    </Typography>
+                                    <TextField
+                                      select
+                                      size="small"
+                                      value={current ?? ''}
+                                      onChange={(event) =>
+                                        setHostAccess((prev) => {
+                                          const next = { ...prev }
+                                          if (event.target.value) {
+                                            next[host.$id] = event.target.value
+                                          } else {
+                                            delete next[host.$id]
+                                          }
+                                          return next
+                                        })
+                                      }
+                                      sx={{ minWidth: 130 }}
+                                    >
+                                      <MenuItem value="">{'No access'}</MenuItem>
+                                      <MenuItem value="editor">
+                                        {'Editor'}
+                                      </MenuItem>
+                                      <MenuItem value="viewer">
+                                        {'Viewer'}
+                                      </MenuItem>
+                                    </TextField>
+                                  </Stack>
+                                )
+                              })}
+                              {(hosts ?? []).length === 0 ? (
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {'No sites yet.'}
+                                </Typography>
+                              ) : null}
+                            </Stack>
+                          ) : null}
+                        </Stack>
+                      )}
                       <Stack direction="row" spacing={1}>
                         <Button
                           variant="contained"

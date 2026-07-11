@@ -16,8 +16,9 @@
  */
 'use client'
 
+import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
-import { Box, Tab } from '@mui/material'
+import { Tab, useMediaQuery, useTheme } from '@mui/material'
 import { useRouter } from 'next/router'
 import { useSearchParams } from 'next/navigation'
 import { type ReactNode, type SyntheticEvent, useCallback, useState } from 'react'
@@ -30,17 +31,24 @@ export interface HubTab {
 
 export interface HubTabsProps {
   tabs: HubTab[]
+  /** Left nav card header (defaults to "Navigation"). */
+  navHeader?: string
 }
 
 /**
- * Hub tab strip (AGL-354/355/356): the host-setup tab pattern as a
- * shared component. The active tab mirrors into the `?tab=` query param
- * (shallow replace) so hub views deep-link and survive back/forward.
+ * Hub tab strip (AGL-354/382): the host-setup two-column pattern as a
+ * shared component — a left "Navigation" CardDisplay with a vertical
+ * TabList, content on the right. Collapses to horizontal tabs on small
+ * screens. The active tab mirrors into the `?tab=` query param (shallow
+ * replace) so hub views deep-link and survive back/forward; panels are
+ * kept mounted so content and its data subscriptions are always present.
  */
 export function HubTabs(props: HubTabsProps) {
-  const { tabs } = props
+  const { tabs, navHeader = 'Navigation' } = props
   const router = useRouter()
   const searchParams = useSearchParams()
+  const theme = useTheme()
+  const stacked = useMediaQuery(theme.breakpoints.down('sm'))
   const requestedTab = searchParams?.get('tab')
   const [tab, setTab] = useState(
     tabs.some((item) => item.id === requestedTab)
@@ -52,10 +60,7 @@ export function HubTabs(props: HubTabsProps) {
     (event: SyntheticEvent, value: string) => {
       setTab(value)
       void router.replace(
-        {
-          pathname: router.pathname,
-          query: { ...router.query, tab: value },
-        },
+        { pathname: router.pathname, query: { ...router.query, tab: value } },
         undefined,
         { shallow: true },
       )
@@ -65,26 +70,54 @@ export function HubTabs(props: HubTabsProps) {
 
   return (
     <TabContext value={tab}>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <TabList
-          onChange={handleChange}
-          variant="scrollable"
-          allowScrollButtonsMobile
-        >
-          {tabs.map((item) => (
-            <Tab key={item.id} value={item.id} label={item.label} />
-          ))}
-        </TabList>
-      </Box>
-      {tabs.map((item) => (
-        // keepMounted: inactive panels stay in the DOM (hidden). This
-        // matches the pre-tab single-page behavior — content and its data
-        // subscriptions are present regardless of the active tab, so
-        // deep-links, in-page search, and e2e canaries all still work.
-        <TabPanel key={item.id} value={item.id} keepMounted sx={{ px: 0 }}>
-          {item.content}
-        </TabPanel>
-      ))}
+      <GridItems
+        spacing={3}
+        items={[
+          {
+            size: { xs: 12, sm: 3 },
+            children: (
+              <CardDisplay header={navHeader}>
+                <TabList
+                  orientation={stacked ? 'horizontal' : 'vertical'}
+                  variant={stacked ? 'scrollable' : 'standard'}
+                  allowScrollButtonsMobile
+                  textColor="secondary"
+                  indicatorColor="secondary"
+                  onChange={handleChange}
+                  sx={{
+                    ['.MuiTab-root']: {
+                      alignItems: stacked ? 'center' : 'start',
+                      maxWidth: 'unset',
+                      textTransform: 'none',
+                    },
+                  }}
+                >
+                  {tabs.map((item) => (
+                    <Tab key={item.id} value={item.id} label={item.label} />
+                  ))}
+                </TabList>
+              </CardDisplay>
+            ),
+          },
+          {
+            size: { xs: 12, sm: 9 },
+            children: (
+              <>
+                {tabs.map((item) => (
+                  <TabPanel
+                    key={item.id}
+                    value={item.id}
+                    keepMounted
+                    sx={{ padding: 'unset' }}
+                  >
+                    {item.content}
+                  </TabPanel>
+                ))}
+              </>
+            ),
+          },
+        ]}
+      />
     </TabContext>
   )
 }
