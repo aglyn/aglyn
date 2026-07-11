@@ -418,6 +418,106 @@ export default async function handler(
             : {}),
           link: `/${hostId}/products`,
         })
+        // Dropship routing (AGL-289): paid lines with a supplier notify
+        // it (signed webhook and/or email) and stash a callback token so
+        // the supplier can post tracking back. Plan-gated; failures never
+        // fail the webhook.
+        void (async () => {
+          try {
+            const routedOrg = await getOrgForHost(String(hostId))
+            if (
+              !Aglyn.checkEntitlement(routedOrg?.org as any, 'dropshipRouting')
+            ) {
+              return
+            }
+            const routedProduct = await hostRef
+              .collection('products')
+              .doc(String(productId))
+              .get()
+            const supplierId = routedProduct.get('supplierId')
+            if (!supplierId) return
+            const supplierSnapshot = await hostRef
+              .collection('suppliers')
+              .doc(String(supplierId))
+              .get()
+            const supplier = supplierSnapshot.data() as
+              | Aglyn.HostSupplier
+              | undefined
+            if (!supplier) return
+            const supplierToken = createHmac(
+              'sha256',
+              process.env.STRIPE_SECRET_KEY ?? 'aglyn',
+            )
+              .update(`${hostId}:${object.id}:${supplierId}`)
+              .digest('hex')
+              .slice(0, 32)
+            const orderReference = hostRef
+              .collection('orders')
+              .doc(String(object.id))
+            await orderReference.set(
+              {
+                supplierToken,
+                timeline: firebaseAdmin.firestore.FieldValue.arrayUnion({
+                  atMs: Date.now(),
+                  event: 'routed',
+                  detail: `Sent to supplier ${supplier.name}`,
+                }),
+              },
+              { merge: true },
+            )
+            const payload = {
+              hostId: String(hostId),
+              orderId: String(object.id),
+              productId: String(productId),
+              productName: String(routedProduct.get('name') ?? 'Product'),
+              quantity: 1,
+              customerEmail: object?.customer_details?.email ?? null,
+              shippingName: object?.customer_details?.name ?? null,
+              updateUrl:
+                `https://${req.headers.host}/api/commerce/supplier-update` +
+                `?hostId=${hostId}&orderId=${object.id}&token=${supplierToken}`,
+            }
+            if (supplier.webhookUrl) {
+              const body = JSON.stringify(payload)
+              const signature = createHmac(
+                'sha256',
+                supplier.webhookSecret ?? '',
+              )
+                .update(body)
+                .digest('hex')
+              await fetch(supplier.webhookUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-aglyn-signature': signature,
+                },
+                body,
+              }).catch(() => undefined)
+            }
+            const resendKeyForSupplier = process.env.RESEND_API_KEY
+            const supplierEmailFrom = process.env.USAGE_EMAIL_FROM
+            if (supplier.email && resendKeyForSupplier && supplierEmailFrom) {
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${resendKeyForSupplier}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  from: supplierEmailFrom,
+                  to: [supplier.email],
+                  subject: `New order to fulfill: ${payload.productName}`,
+                  text:
+                    `${payload.quantity}× ${payload.productName}\n` +
+                    `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
+                    `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
+                }),
+              }).catch(() => undefined)
+            }
+          } catch (routingError) {
+            console.error('Dropship routing failed', routingError)
+          }
+        })()
         // Contacts ingestion (AGL-197): buyers become contacts.
         void upsertHostContact({
           hostId: String(hostId),

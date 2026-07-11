@@ -66,6 +66,19 @@ export interface InventoryLocation {
   address?: string
 }
 
+/**
+ * `hosts/{hostId}/suppliers/{id}` doc (AGL-289): where dropshipped
+ * order lines route on payment. Email and webhook are both optional but
+ * one must be set for routing to do anything; webhook payloads are
+ * HMAC-SHA256-signed with `webhookSecret`.
+ */
+export interface HostSupplier {
+  name: string
+  email?: string
+  webhookUrl?: string
+  webhookSecret?: string
+}
+
 /** `hosts/{hostId}/products/{id}` doc. */
 export interface HostProduct {
   name: string

@@ -88,6 +88,11 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  const { data: supplierDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'suppliers'), limit(50)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
 
   const lifted = useMemo(
     () => (product ? Aglyn.liftLegacyProduct(product) : null),
@@ -260,6 +265,26 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <MenuItem value="active">{'Active'}</MenuItem>
             <MenuItem value="archived">{'Archived'}</MenuItem>
           </TextField>
+          {(supplierDocs?.length ?? 0) > 0 ? (
+            <TextField
+              label="Supplier"
+              value={current.supplierId ?? ''}
+              onChange={(event) =>
+                update({ supplierId: event.target.value || undefined })
+              }
+              size="small"
+              select
+              sx={{ minWidth: 160 }}
+              helperText="Routes paid orders"
+            >
+              <MenuItem value="">{'None (self-fulfilled)'}</MenuItem>
+              {(supplierDocs ?? []).map((supplier: any) => (
+                <MenuItem key={supplier.$id} value={supplier.$id}>
+                  {supplier.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
         </Stack>
         <TextField
           label="Description"
