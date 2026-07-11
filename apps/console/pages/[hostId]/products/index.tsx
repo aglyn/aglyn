@@ -22,6 +22,7 @@ import { NextPageTitle, NextPageWithLayout } from '@aglyn/shared-ui-next'
 import CatalogOrganizationCard from '../../../components/commerce/catalog-organization-card.component'
 import HostCouponsCard from '../../../components/commerce/host-coupons-card.component'
 import HostOrdersCard from '../../../components/commerce/host-orders-card.component'
+import PaymentsSettingsCard from '../../../components/commerce/payments-settings-card.component'
 import ProductsHubCard from '../../../components/commerce/products-hub-card.component'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
 import { useHostId } from '../../../components/host-id-provider'
@@ -74,6 +75,10 @@ const HostProducts: NextPageWithLayout = () => {
               {
                 size: { xs: 12, md: 6 },
                 children: <HostCouponsCard hostId={hostId} />,
+              },
+              {
+                size: { xs: 12, md: 6 },
+                children: <PaymentsSettingsCard hostId={hostId} />,
               },
               {
                 size: { xs: 12 },

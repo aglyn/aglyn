@@ -130,10 +130,14 @@ export default async function handler(
       )
       appliedCoupon = couponCode
     }
-    const feeCents = Math.max(
-      1,
-      Math.round((amountCents * Aglyn.COMMERCE_PLATFORM_FEE_PERCENT) / 100),
+    // Platform fee (AGL-284): per-plan ladder from the entitlement matrix
+    // (AGL-278) by product type — 0% plans genuinely charge no fee.
+    const feePct = Aglyn.resolveTransactionFeePct(
+      ownerOrg.org as any,
+      lifted.type ?? 'physical',
     )
+    const feeCents =
+      feePct > 0 ? Math.max(1, Math.round((amountCents * feePct) / 100)) : 0
     const referer = String(req.headers.referer ?? '')
     const origin = `https://${req.headers.host}`
     const backUrl = referer.startsWith('http') ? referer : origin
@@ -147,7 +151,10 @@ export default async function handler(
       'line_items[0][price_data][product_data][name]': String(
         product.name ?? 'Product',
       ).slice(0, 120),
-      'payment_intent_data[application_fee_amount]': String(feeCents),
+      // Stripe rejects a zero application fee — omit it on 0% plans.
+      ...(feeCents > 0
+        ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }
+        : {}),
       'payment_intent_data[transfer_data][destination]': String(accountId),
       success_url: `${backUrl}${separator}order=success`,
       cancel_url: `${backUrl}${separator}order=canceled`,

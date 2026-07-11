@@ -124,6 +124,25 @@ export interface HostCollection {
   order?: number
 }
 
+/**
+ * Payment-provider seam (AGL-284): checkout/session creation goes
+ * through a provider id so PayPal (etc.) can slot in without reworking
+ * callers. Stripe is the only implementation today; store settings
+ * (AGL-295) will carry the selection when a second provider exists.
+ */
+export type PaymentProviderId = 'stripe'
+
+export interface PaymentCheckoutRequest {
+  provider: PaymentProviderId
+  hostId: string
+  amountCents: number
+  feeCents: number
+  productName: string
+  successUrl: string
+  cancelUrl: string
+  metadata?: Record<string, string>
+}
+
 /** Variant ceiling per product (Shopify parity). */
 export const COMMERCE_MAX_VARIANTS = 100
 export const COMMERCE_MAX_OPTIONS = 3
