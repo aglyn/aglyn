@@ -18,6 +18,16 @@ Every site has a plan. **Free**, **Pro**, and **Business** unlock progressively 
 
 ## Tiers & entitlements
 
+| Plan | Billed annually | Month-to-month | Commerce |
+|---|---|---|---|
+| Free | $0 | $0 | Build & publish only — no selling |
+| Starter | $16/mo | $25/mo | Sell up to 100 products; 2% fee on physical, 7% on digital sales |
+| Pro | $39/mo | $56/mo | 2,500 products, 0% physical / 5% digital fees, POS, abandoned-cart recovery, reviews, dropshipping |
+| Business | $99/mo | $139/mo | 10,000 products, 0% / 2% fees, subscriptions & paywalls, gift cards |
+
+Transaction fees are Aglyn platform fees on storefront sales, separate from
+Stripe's payment-processing fees. Upgrading is the way to reduce them.
+
 - Each tier maps to a set of **entitlements** and quota limits.
 - The runtime enforces them with `checkEntitlement` and `checkQuota`, so gated features are
   consistent across the console and the live site.
@@ -56,7 +66,8 @@ Every site has a plan. **Free**, **Pro**, and **Business** unlock progressively 
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the
 same Stripe integration.
 
-- **Annual billing** — a toggle on the plan cards; annual plans include two months free.
+- **Annual billing** — a toggle on the plan cards; annual billing is the discounted
+  headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).
 - **Plan switches** on an active subscription show a **prorated preview** of today's
   charge before you confirm, and apply in place (no second checkout).
 - **Cancel any time** — the subscription runs to the end of the paid period; a warning

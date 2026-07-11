@@ -127,6 +127,24 @@ export interface TenantFeatureFlags {
   mediaCdn?: boolean
   /** Announcement bar + promotional popups (AGL-195/196). */
   marketingOverlays?: boolean
+  /** Full storefront commerce: catalog, cart, checkout (AGL-278). */
+  commerce?: boolean
+  /** Console point-of-sale mode (AGL-312). */
+  pos?: boolean
+  /** Recurring storefront subscription products (AGL-303). */
+  storefrontSubscriptions?: boolean
+  /** Entitlement-gated screens/sections/video paywalls (AGL-309). */
+  contentGating?: boolean
+  /** Gift cards & store credit (AGL-322). */
+  giftCards?: boolean
+  /** Verified-buyer product reviews (AGL-324). */
+  productReviews?: boolean
+  /** Abandoned checkout recovery emails (AGL-323). */
+  abandonedCart?: boolean
+  /** Dropship supplier routing on paid orders (AGL-289). */
+  dropshipRouting?: boolean
+  /** Commerce analytics dashboard (AGL-327). */
+  commerceAnalytics?: boolean
 }
 
 /**
@@ -223,6 +241,16 @@ export interface TenantEntitlements {
   /** @deprecated Legacy host-keyed override (pre-AGL-240); resolved into
    * `maxDatasetsPerOrg` by `resolveTenantEntitlements`. */
   maxDatasetsPerHost?: number
+  /** Catalog products per host (AGL-278). */
+  productsPerHost?: number
+  /** Inventory locations per host (AGL-286). */
+  inventoryLocations?: number
+  /** Concurrent POS registers (AGL-312); add-ons raise it (AGL-329). */
+  posRegisters?: number
+  /** Platform fee % on physical storefront sales (Connect app fee). */
+  transactionFeePhysicalPct?: number
+  /** Platform fee % on digital storefront sales (Connect app fee). */
+  transactionFeeDigitalPct?: number
   features?: TenantFeatureFlags
 }
 

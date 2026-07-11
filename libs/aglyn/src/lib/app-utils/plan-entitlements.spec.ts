@@ -25,6 +25,7 @@ import {
   PLAN_ENTITLEMENTS,
   PLAN_PRICING,
   resolveTenantEntitlements,
+  resolveTransactionFeePct,
   UNLIMITED,
 } from './plan-entitlements'
 import type { TenantPlan } from '../foundation'
@@ -114,10 +115,11 @@ describe('plan entitlements', () => {
     expect(result.remaining).toBe(UNLIMITED)
   })
 
-  it('pins the AGL-68 pricing model', () => {
+  it('pins the AGL-278 pricing model (Squarespace/Shopify parity)', () => {
     expect(PLAN_PRICING).toEqual({
       free: {
         basePriceMonthlyUsd: 0,
+        basePriceAnnualMonthlyUsd: 0,
         extraHostMonthlyUsd: null,
         extraSeatMonthlyUsd: null,
         extraMemberMonthlyUsd: null,
@@ -125,7 +127,8 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: null,
       },
       starter: {
-        basePriceMonthlyUsd: 19,
+        basePriceMonthlyUsd: 25,
+        basePriceAnnualMonthlyUsd: 16,
         extraHostMonthlyUsd: 10,
         extraSeatMonthlyUsd: 5,
         extraMemberMonthlyUsd: 3,
@@ -133,7 +136,8 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
       },
       pro: {
-        basePriceMonthlyUsd: 49,
+        basePriceMonthlyUsd: 56,
+        basePriceAnnualMonthlyUsd: 39,
         extraHostMonthlyUsd: 8,
         extraSeatMonthlyUsd: 4,
         extraMemberMonthlyUsd: 2,
@@ -141,7 +145,8 @@ describe('plan entitlements', () => {
         extraDataGbMonthlyUsd: 0.25,
       },
       business: {
-        basePriceMonthlyUsd: 149,
+        basePriceMonthlyUsd: 139,
+        basePriceAnnualMonthlyUsd: 99,
         extraHostMonthlyUsd: 5,
         extraSeatMonthlyUsd: 3,
         extraMemberMonthlyUsd: 1,
@@ -302,5 +307,70 @@ describe('plan entitlements', () => {
     const free = checkDataStorageQuota({ plan: 'free' } as any, 1)
     expect(free.allowed).toBe(false)
     expect(free.overageRateUsd).toBeNull()
+  })
+
+  it('gates commerce features per the AGL-278 matrix', () => {
+    const table: Array<[TenantPlan, any, boolean]> = [
+      ['free', 'commerce', false],
+      ['starter', 'commerce', true],
+      ['starter', 'pos', false],
+      ['pro', 'pos', true],
+      ['pro', 'abandonedCart', true],
+      ['pro', 'giftCards', false],
+      ['pro', 'storefrontSubscriptions', false],
+      ['business', 'storefrontSubscriptions', true],
+      ['business', 'contentGating', true],
+      ['business', 'giftCards', true],
+    ]
+    for (const [plan, feature, expected] of table) {
+      expect(checkEntitlement({ plan } as any, feature)).toBe(expected)
+    }
+  })
+
+  it('caps products per host by plan (AGL-278)', () => {
+    expect(checkQuota({ plan: 'free' } as any, 'productsPerHost', 0).allowed)
+      .toBe(false)
+    const starter = checkQuota(
+      { plan: 'starter' } as any,
+      'productsPerHost',
+      99,
+    )
+    expect(starter.allowed).toBe(true)
+    expect(starter.remaining).toBe(1)
+    expect(
+      checkQuota({ plan: 'starter' } as any, 'productsPerHost', 100).allowed,
+    ).toBe(false)
+  })
+
+  it('resolves transaction fees by plan and product type (AGL-278)', () => {
+    expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'physical'))
+      .toBe(2)
+    expect(resolveTransactionFeePct({ plan: 'starter' } as any, 'digital'))
+      .toBe(7)
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'physical'))
+      .toBe(0)
+    expect(resolveTransactionFeePct({ plan: 'pro' } as any, 'service'))
+      .toBe(5)
+    expect(resolveTransactionFeePct({ plan: 'business' } as any, 'digital'))
+      .toBe(2)
+    // Canceled subscriptions resolve to free — which cannot sell at all.
+    expect(
+      resolveTransactionFeePct(
+        {
+          plan: 'business',
+          subscription: { status: 'canceled' },
+        } as any,
+        'digital',
+      ),
+    ).toBe(0)
+  })
+
+  it('prices the AGL-278 table (annual headline, monthly billing)', () => {
+    expect(PLAN_PRICING.starter.basePriceAnnualMonthlyUsd).toBe(16)
+    expect(PLAN_PRICING.starter.basePriceMonthlyUsd).toBe(25)
+    expect(PLAN_PRICING.pro.basePriceAnnualMonthlyUsd).toBe(39)
+    expect(PLAN_PRICING.pro.basePriceMonthlyUsd).toBe(56)
+    expect(PLAN_PRICING.business.basePriceAnnualMonthlyUsd).toBe(99)
+    expect(PLAN_PRICING.business.basePriceMonthlyUsd).toBe(139)
   })
 })

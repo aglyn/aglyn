@@ -69,6 +69,11 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     maxDatasetsPerOrg: 0,
     recordsPerDataset: 0,
     dataStorageMbPerOrg: 0,
+    productsPerHost: 0,
+    inventoryLocations: 1,
+    posRegisters: 0,
+    transactionFeePhysicalPct: 0,
+    transactionFeeDigitalPct: 0,
     features: {
       abTesting: false,
       versioning: false,
@@ -91,6 +96,15 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
       screenAnalytics: false,
       mediaCdn: false,
       marketingOverlays: false,
+      commerce: false,
+      pos: false,
+      storefrontSubscriptions: false,
+      contentGating: false,
+      giftCards: false,
+      productReviews: false,
+      abandonedCart: false,
+      dropshipRouting: false,
+      commerceAnalytics: false,
     },
   },
   starter: {
@@ -118,6 +132,11 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
     dataStorageMbPerOrg: 1024,
+    productsPerHost: 100,
+    inventoryLocations: 1,
+    posRegisters: 0,
+    transactionFeePhysicalPct: 2,
+    transactionFeeDigitalPct: 7,
     features: {
       abTesting: false,
       versioning: false,
@@ -140,6 +159,15 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
       screenAnalytics: false,
       mediaCdn: true,
       marketingOverlays: true,
+      commerce: true,
+      pos: false,
+      storefrontSubscriptions: false,
+      contentGating: false,
+      giftCards: false,
+      productReviews: false,
+      abandonedCart: false,
+      dropshipRouting: false,
+      commerceAnalytics: false,
     },
   },
   pro: {
@@ -167,6 +195,11 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     maxDatasetsPerOrg: 50,
     recordsPerDataset: 10000,
     dataStorageMbPerOrg: 5120,
+    productsPerHost: 2500,
+    inventoryLocations: 2,
+    posRegisters: 1,
+    transactionFeePhysicalPct: 0,
+    transactionFeeDigitalPct: 5,
     features: {
       abTesting: false,
       versioning: true,
@@ -189,6 +222,15 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
       screenAnalytics: true,
       mediaCdn: true,
       marketingOverlays: true,
+      commerce: true,
+      pos: true,
+      storefrontSubscriptions: false,
+      contentGating: false,
+      giftCards: false,
+      productReviews: true,
+      abandonedCart: true,
+      dropshipRouting: true,
+      commerceAnalytics: true,
     },
   },
   business: {
@@ -216,6 +258,11 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
     maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
     dataStorageMbPerOrg: 25600,
+    productsPerHost: 10000,
+    inventoryLocations: 4,
+    posRegisters: 2,
+    transactionFeePhysicalPct: 0,
+    transactionFeeDigitalPct: 2,
     features: {
       abTesting: true,
       versioning: true,
@@ -238,6 +285,15 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
       screenAnalytics: true,
       mediaCdn: true,
       marketingOverlays: true,
+      commerce: true,
+      pos: true,
+      storefrontSubscriptions: true,
+      contentGating: true,
+      giftCards: true,
+      productReviews: true,
+      abandonedCart: true,
+      dropshipRouting: true,
+      commerceAnalytics: true,
     },
   },
 }
@@ -250,8 +306,13 @@ export const PLAN_ENTITLEMENTS: Record<TenantPlan, ResolvedTenantEntitlements> =
 export const EVENT_CALENDAR_ADDON_MONTHLY_USD = 9
 
 export interface PlanPricing {
-  /** Flat monthly base price in USD. */
+  /** Flat monthly base price in USD (month-to-month billing). */
   basePriceMonthlyUsd: number
+  /**
+   * Effective per-month price when billed annually (AGL-278): the
+   * Squarespace/Shopify-parity headline number. Charged as ×12 up front.
+   */
+  basePriceAnnualMonthlyUsd: number
   /**
    * Monthly price per host beyond `hostLimit` (AGL-68); null when the plan
    * cannot buy extra hosts.
@@ -289,6 +350,7 @@ export interface PlanPricing {
 export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
   free: {
     basePriceMonthlyUsd: 0,
+    basePriceAnnualMonthlyUsd: 0,
     extraHostMonthlyUsd: null,
     extraSeatMonthlyUsd: null,
     extraMemberMonthlyUsd: null,
@@ -296,7 +358,8 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: null,
   },
   starter: {
-    basePriceMonthlyUsd: 19,
+    basePriceMonthlyUsd: 25,
+    basePriceAnnualMonthlyUsd: 16,
     extraHostMonthlyUsd: 10,
     extraSeatMonthlyUsd: 5,
     extraMemberMonthlyUsd: 3,
@@ -304,7 +367,8 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
   },
   pro: {
-    basePriceMonthlyUsd: 49,
+    basePriceMonthlyUsd: 56,
+    basePriceAnnualMonthlyUsd: 39,
     extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 4,
     extraMemberMonthlyUsd: 2,
@@ -312,7 +376,8 @@ export const PLAN_PRICING: Record<TenantPlan, PlanPricing> = {
     extraDataGbMonthlyUsd: 0.25,
   },
   business: {
-    basePriceMonthlyUsd: 149,
+    basePriceMonthlyUsd: 139,
+    basePriceAnnualMonthlyUsd: 99,
     extraHostMonthlyUsd: 5,
     extraSeatMonthlyUsd: 3,
     extraMemberMonthlyUsd: 1,
@@ -385,6 +450,24 @@ export function resolveTenantEntitlements(
     ...merged,
     features: { ...defaults.features, ...featureOverrides },
   }
+}
+
+/**
+ * Platform transaction fee % for a storefront sale (AGL-278): resolved
+ * from the effective plan (with per-tenant overrides) by product type.
+ * Digital and service sales use the digital rate; AGL-307 turns this into
+ * the Stripe Connect `application_fee_amount` at charge time.
+ */
+export function resolveTransactionFeePct(
+  tenant: Partial<AglynTenant> | null | undefined,
+  productType: 'physical' | 'digital' | 'service',
+): number {
+  const entitlements = resolveTenantEntitlements(tenant)
+  const pct =
+    productType === 'physical'
+      ? entitlements.transactionFeePhysicalPct
+      : entitlements.transactionFeeDigitalPct
+  return Number.isFinite(pct) && pct > 0 ? pct : 0
 }
 
 /** True when the tenant's plan (or overrides) enables the boolean feature. */
