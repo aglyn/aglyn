@@ -21,6 +21,7 @@ import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as ProductDetail from './components/product-detail'
 import * as ProductGrid from './components/product-grid'
+import * as Wishlist from './components/wishlist'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -51,6 +52,11 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: Account.default,
     schema: Account.schema,
     presets: Account.presets,
+  },
+  {
+    component: Wishlist.default,
+    schema: Wishlist.schema,
+    presets: Wishlist.presets,
   },
 ]
 

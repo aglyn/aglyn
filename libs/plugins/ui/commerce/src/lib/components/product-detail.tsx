@@ -29,6 +29,7 @@ import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { CART_UPDATED_EVENT } from './cart'
+import { readLocalWishlist, toggleWishlist } from './wishlist'
 
 // Component ids are persisted in screen documents; never rename.
 export const ID: Aglyn.ComponentId = 'product-detail'
@@ -98,8 +99,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [status, setStatus] = useState<'idle' | 'sending' | 'error'>('idle')
     const [message, setMessage] = useState('')
     const [added, setAdded] = useState(false)
+    const [wishlisted, setWishlisted] = useState(false)
 
     const slug = slugProp || slugFromLocation()
+
+    useEffect(() => {
+      if (hostId && resolvedId) {
+        setWishlisted(readLocalWishlist(hostId).includes(resolvedId))
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hostId, detail])
 
     useEffect(() => {
       if (!hostId || !slug) return
@@ -128,6 +137,8 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
       }
     }, [hostId, slug])
 
+    const resolvedId =
+      hostId && detail && detail !== 'missing' ? detail.id : null
     const resolved: Detail | null = hostId
       ? detail === 'missing'
         ? null
@@ -295,6 +306,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             {variant?.soldOut ? (
               <Chip label="Sold out" size="small" variant="outlined" />
             ) : null}
+            <Button
+              size="small"
+              onClick={async () => {
+                if (hostId && resolved.id !== 'sample') {
+                  setWishlisted(await toggleWishlist(hostId, resolved.id))
+                }
+              }}
+            >
+              {wishlisted ? '♥ Saved' : '♡ Save'}
+            </Button>
           </Box>
           {resolved.options.map((option) => (
             <TextField

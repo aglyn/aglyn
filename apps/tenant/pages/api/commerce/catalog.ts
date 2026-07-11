@@ -47,6 +47,11 @@ export default async function handler(
   const collectionSlug = String(req.query.collection ?? '')
   const categorySlug = String(req.query.category ?? '')
   const tag = String(req.query.tag ?? '')
+  const ids = String(req.query.ids ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .slice(0, 100)
   const sort = String(req.query.sort ?? 'name')
   const max = Math.min(100, Math.max(1, Number(req.query.limit ?? 24)))
 
@@ -104,6 +109,13 @@ export default async function handler(
         (product.tags ?? []).includes(tag),
       )
     }
+    // Wishlist rendering (AGL-297): explicit id list, given order.
+    if (ids.length) {
+      const order = new Map(ids.map((id, index) => [id, index]))
+      products = products
+        .filter((product) => order.has(product.$id))
+        .sort((a, b) => (order.get(a.$id) ?? 0) - (order.get(b.$id) ?? 0))
+    }
     if (sort === 'price-asc' || sort === 'price-desc') {
       products.sort((a, b) => {
         const [minA] = Aglyn.productPriceRange(a)
@@ -112,7 +124,10 @@ export default async function handler(
       })
     } else if (sort === 'newest') {
       products.sort((a, b) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
-    } else if (!collection || (collection.data() as any).mode !== 'manual') {
+    } else if (
+      !ids.length &&
+      (!collection || (collection.data() as any).mode !== 'manual')
+    ) {
       products.sort((a, b) => a.name.localeCompare(b.name))
     }
 
