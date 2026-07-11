@@ -18,7 +18,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import composeScreenNodes from '../../../utils/compose-screen-nodes'
 import getScreen from '../../../utils/get-screen'
-import { readMemberSession } from '../../../utils/membership'
+import { readMemberSession } from '@aglyn/plugins-commerce/server'
 
 /**
  * Members-only screen content (AGL-109): like the AGL-87 unlock API, the

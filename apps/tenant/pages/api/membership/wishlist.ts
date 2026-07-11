@@ -17,7 +17,7 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { readMemberSession } from '../../../utils/membership'
+import { readMemberSession } from '@aglyn/plugins-commerce/server'
 
 /**
  * Member wishlist (AGL-297): product ids on the siteMembers doc.

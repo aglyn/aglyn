@@ -22,7 +22,7 @@ import {
   mintMemberSession,
   setMemberCookie,
   verifyMemberPassword,
-} from '../../../utils/membership'
+} from '@aglyn/plugins-commerce/server'
 
 // Best-effort per-instance brute-force damper (mirrors AGL-87 unlock).
 const attemptsByIp = new Map<string, number[]>()

@@ -16,7 +16,7 @@
  */
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { setMemberCookie } from '../../../utils/membership'
+import { setMemberCookie } from '@aglyn/plugins-commerce/server'
 
 /** Member sign-out (AGL-294): clears the session cookie. */
 export default function handler(req: NextApiRequest, res: NextApiResponse) {

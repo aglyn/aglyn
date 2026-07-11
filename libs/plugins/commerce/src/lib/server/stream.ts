@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import * as Aglyn from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { readMemberSession } from '../../../utils/membership'
+import { readMemberSession } from './membership'
 import { checkMemberEntitlement } from './gate'
 
 const TTL_MS = 15 * 60 * 1000
@@ -37,10 +37,7 @@ function sign(hostId: string, productId: string, video: number, exp: number) {
  * signature redirects to the media — shared links die within 15
  * minutes, and the mint step is the server-enforced gate.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const streamHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(
     (req.method === 'POST' ? req.body?.hostId : req.query.hostId) ?? '',
   )

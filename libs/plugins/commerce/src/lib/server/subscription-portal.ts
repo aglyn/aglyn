@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { readMemberSession } from '../../../utils/membership'
+import { readMemberSession } from './membership'
 
 /**
  * Subscriber self-service (AGL-303): opens the Stripe Billing Portal for
@@ -25,10 +25,7 @@ import { readMemberSession } from '../../../utils/membership'
  * payment method). Member-gated; the portal customer is matched by the
  * member's email through the recorded subscription doc.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
+import type { PluginApiHandler } from '@aglyn/aglyn'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { readMemberSession } from '../../../utils/membership'
+import { readMemberSession } from './membership'
 import { checkMemberEntitlement } from './gate'
 
 /**
@@ -26,10 +26,7 @@ import { checkMemberEntitlement } from './gate'
  * that product's entitlement. Server-enforced; bodies never reach
  * non-members.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export const memberFeedHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
   const memberId = readMemberSession(req, hostId)

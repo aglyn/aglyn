@@ -37,7 +37,11 @@ import { notifyRestockHandler } from './server/notify-restock'
 import { productHandler } from './server/product'
 import { relatedHandler } from './server/related'
 import { reservationAvailabilityHandler } from './server/reservation-availability'
+import { gateHandler } from './server/gate'
+import { memberFeedHandler } from './server/member-feed'
 import { reserveHandler } from './server/reserve'
+import { streamHandler } from './server/stream'
+import { subscriptionPortalHandler } from './server/subscription-portal'
 import { reviewsHandler } from './server/reviews'
 
 /** Registers the commerce plugin's storefront API routes. */
@@ -54,8 +58,16 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/related', relatedHandler)
   registerPluginApiRoute('commerce/reservation-availability', reservationAvailabilityHandler)
   registerPluginApiRoute('commerce/reserve', reserveHandler)
+  registerPluginApiRoute('commerce/gate', gateHandler)
+  registerPluginApiRoute('commerce/member-feed', memberFeedHandler)
+  registerPluginApiRoute('commerce/stream', streamHandler)
+  registerPluginApiRoute('commerce/subscription-portal', subscriptionPortalHandler)
   registerPluginApiRoute('commerce/reviews', reviewsHandler)
 }
 
 // Shared with the (still app-side) membership/account route.
 export { mintDownloadToken } from './server/download'
+
+// Site-member session primitives, shared with the (still app-side)
+// membership/* routes until those migrate too (AGL-396).
+export * from './server/membership'

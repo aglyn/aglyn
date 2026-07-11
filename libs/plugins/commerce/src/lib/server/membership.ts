@@ -21,7 +21,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'crypto'
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn'
 
 /**
  * Site membership primitives (AGL-109): visitor accounts per host with
@@ -90,7 +90,7 @@ export function memberCookieName(hostId: string): string {
 }
 
 export function setMemberCookie(
-  res: NextApiResponse,
+  res: PluginApiResponse,
   hostId: string,
   token: string | null,
 ): void {
@@ -103,7 +103,7 @@ export function setMemberCookie(
 }
 
 export function readMemberSession(
-  req: NextApiRequest,
+  req: PluginApiRequest,
   hostId: string,
 ): string | null {
   const raw = req.cookies?.[memberCookieName(hostId)]

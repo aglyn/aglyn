@@ -22,7 +22,7 @@ import {
   hashMemberPassword,
   mintMemberSession,
   setMemberCookie,
-} from '../../../utils/membership'
+} from '@aglyn/plugins-commerce/server'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
