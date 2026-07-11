@@ -121,13 +121,21 @@ export function registerEventsCalendarConsole(): void {
 }
 ```
 
-The page component receives `ConsolePluginPageProps` — `{ hostId, entitled }`
-— so it stays free of console-app hooks:
+The page component receives `ConsolePluginPageProps` — `{ hostId, entitled,
+tenant }` — so it stays free of console-app hooks. `tenant` is the resolved
+org billing doc the shell already loaded, so the page can run its own
+`checkEntitlement`/`checkQuota` (e.g. per-plan limits) without the app's
+org/session hooks:
 
 ```tsx
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import { checkQuota, type ConsolePluginPageProps } from '@aglyn/aglyn'
 
-export default function EventsConsolePage({ hostId, entitled }: ConsolePluginPageProps) {
+export default function BookingsConsolePage({
+  hostId,
+  entitled,
+  tenant,
+}: ConsolePluginPageProps) {
+  const quota = checkQuota(tenant, 'servicesPerHost', services.length)
   // …authenticated Firestore reads/writes scoped to hostId
 }
 ```
@@ -159,6 +167,10 @@ export default function EventsConsolePage({ hostId, entitled }: ConsolePluginPag
 
 - **Events calendar** (`libs/plugins/events-calendar`) — the reference: its
   whole console page lives in the plugin (AGL-313/394).
+- **Bookings** (`libs/plugins/bookings`) — the second full extraction
+  (AGL-395): the `booking` canvas component moved out of `plugins-mui` and the
+  bookings manager out of the app; the page reads plan limits via the
+  `tenant` prop + `checkQuota`.
 - **Email** (`libs/plugins/email`) — full console relocation (AGL-395): the
   campaigns composer, audience lists, and a dedicated email-screens list moved
   into the plugin and surface as the **Emails** page; the Besigner offers only
