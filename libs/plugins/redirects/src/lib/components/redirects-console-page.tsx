@@ -17,6 +17,8 @@
 'use client'
 
 import {
+  checkQuota,
+  type ConsolePluginPageProps,
   createResourceUid,
   isSelfRedirect,
   matchRedirect,
@@ -53,11 +55,11 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { checkTenantQuota, hasEntitlement } from '../constants/entitlements'
-import useCurrentTenant from '../hooks/use-current-tenant'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
-import useFirestoreDoc from '../hooks/use-firestore-doc'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useFirestoreDoc,
+} from '@aglyn/tenant-feature-instance'
 
 interface RedirectDraft {
   id: string | null
@@ -77,13 +79,11 @@ interface RedirectDraft {
  * (`redirects` flag + `redirectsPerHost` quota); rules take effect on the
  * site within ~30 seconds (AGL-155 ISR window).
  */
-export function HostRedirects(props: { hostId: string }) {
-  const { hostId } = props
+export function RedirectsConsolePage(props: ConsolePluginPageProps) {
+  const { hostId, entitled, tenant } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
-  const entitled = hasEntitlement('redirects', tenant)
 
   const { data: redirectDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'redirects'), limit(200)),
@@ -151,7 +151,7 @@ export function HostRedirects(props: { hostId: string }) {
         { variant: 'warning', persist: false },
       )
     }
-    const quota = checkTenantQuota(tenant, 'redirectsPerHost', redirects.length)
+    const quota = checkQuota(tenant, 'redirectsPerHost', redirects.length)
     if (!quota.allowed) {
       return void enqueueSnackbar(
         `Redirect limit reached (${quota.limit}) — upgrade in Billing`,
@@ -531,6 +531,6 @@ export function HostRedirects(props: { hostId: string }) {
     </CardDisplay>
   )
 }
-HostRedirects.displayName = 'HostRedirects'
+RedirectsConsolePage.displayName = 'RedirectsConsolePage'
 
-export default HostRedirects
+export default RedirectsConsolePage
