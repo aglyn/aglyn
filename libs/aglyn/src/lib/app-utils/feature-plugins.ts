@@ -37,6 +37,7 @@
 
 import { runInAction } from 'mobx'
 import type { TenantFeatureFlags } from '../foundation'
+import type { ComponentType } from 'react'
 import type { Plugin, PluginId } from '../plugin-manager/plugin-manager'
 import type { ComponentSchema, MdiIconProps, PresetSchema } from '../types/nodes'
 
@@ -116,11 +117,41 @@ export function defineUiFeatureBundle(
   }
 }
 
+/**
+ * Props every plugin-contributed console page receives from the shell's
+ * generic host route. The shell owns auth + chrome + flag gating and
+ * passes the resolved host and entitlement state in, so plugin pages stay
+ * free of console-app hooks.
+ */
+export interface ConsolePluginPageProps {
+  hostId: string
+  /** True when the tenant holds the extension's `featureFlag` entitlement. */
+  entitled: boolean
+}
+
+export type ConsolePluginPage = ComponentType<ConsolePluginPageProps>
+
 export interface ConsoleNavItem {
   label: string
-  /** Console route, host-relative (e.g. '/manage/events'). */
+  /**
+   * Host-relative console route (e.g. '/events'). The shell mounts it
+   * under the active host ('/[hostId]/events') via its generic plugin
+   * route, so the same string keys both the nav link and the page.
+   */
   href: string
   icon?: MdiIconProps
+  /**
+   * Release-flag nav-tab id (e.g. 'nav-tab-events'). Lets the shell apply
+   * the same staff-preview gating hardcoded tabs get; omit for always-on.
+   */
+  navTabId?: string
+  /**
+   * Page body rendered by the shell's generic host route. When present,
+   * the plugin owns the whole surface — no core page file needed.
+   */
+  Component?: ConsolePluginPage
+  /** Dashboard header for the plugin page (title + icon). */
+  header?: { title: string; icon?: MdiIconProps }
 }
 
 export interface ConsoleDashboardCard {
@@ -163,4 +194,43 @@ export function unregisterConsoleExtension(pluginId: PluginId): void {
 /** Registration-ordered extensions; the console shell filters by flag. */
 export function listConsoleExtensions(): ConsoleExtension[] {
   return Array.from(consoleExtensions.values())
+}
+
+/** A nav item flattened with its owning extension's id + entitlement flag. */
+export interface ConsoleNavEntry extends ConsoleNavItem {
+  pluginId: PluginId
+  featureFlag?: keyof TenantFeatureFlags
+}
+
+/**
+ * Every registered nav item, flattened for the shell's nav strip. The
+ * shell appends these to its static tabs, so a plugin adds a menu item
+ * by registering here — no edit to the console's nav constants.
+ */
+export function listConsoleNavItems(): ConsoleNavEntry[] {
+  return listConsoleExtensions().flatMap((extension) =>
+    (extension.navItems ?? []).map((navItem) => ({
+      ...navItem,
+      pluginId: extension.pluginId,
+      featureFlag: extension.featureFlag,
+    })),
+  )
+}
+
+/**
+ * Resolves a host-relative href (e.g. '/events') to the extension + nav
+ * item that owns a renderable page for it. The shell's generic host route
+ * uses this to render plugin pages without a per-plugin page file.
+ */
+export function resolveConsolePluginPage(
+  href: string,
+): { extension: ConsoleExtension; navItem: ConsoleNavItem } | undefined {
+  for (const extension of consoleExtensions.values()) {
+    for (const navItem of extension.navItems ?? []) {
+      if (navItem.Component && navItem.href === href) {
+        return { extension, navItem }
+      }
+    }
+  }
+  return undefined
 }

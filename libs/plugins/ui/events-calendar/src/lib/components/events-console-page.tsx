@@ -16,10 +16,11 @@
  */
 'use client'
 
-import { createResourceUid } from '@aglyn/aglyn'
+import { createResourceUid, type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -36,15 +37,12 @@ import {
   collection,
   doc,
   limit,
+  onSnapshot,
   query,
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { hasEntitlement } from '../constants/entitlements'
-import useCurrentTenant from '../hooks/use-current-tenant'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+import { useCallback, useEffect, useState } from 'react'
 
 interface EventDraft {
   id: string | null
@@ -56,6 +54,73 @@ interface EventDraft {
   description: string
   coverImage: string
   status: 'draft' | 'published'
+}
+
+interface EventRecord {
+  $id: string
+  title?: string
+  startsAtMs?: number
+  endsAtMs?: number
+  location?: string
+  organizer?: string
+  description?: string
+  coverImage?: string
+  status?: 'draft' | 'published'
+  deletedAt?: unknown
+}
+
+const RETRY_DELAY_MS = 400
+const MAX_RETRIES = 5
+
+/**
+ * A host's events, subscribed with a raw `onSnapshot` (plus retry) rather
+ * than the console app's `useFirestoreCollection` — the lib can't reach
+ * app hooks. The retry recovers the one transient `permission-denied` this
+ * read can hit right after sign-in, before Firestore's credential provider
+ * has attached the user's ID token.
+ */
+function useHostEvents(hostId: string): EventRecord[] {
+  const firestore = useFirestore()
+  const [events, setEvents] = useState<EventRecord[]>([])
+
+  useEffect(() => {
+    if (!hostId) return
+    let cancelled = false
+    let unsubscribe: (() => void) | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let attempt = 0
+
+    const subscribe = () => {
+      unsubscribe = onSnapshot(
+        query(collection(firestore, 'hosts', hostId, 'events'), limit(200)),
+        (snapshot) => {
+          if (cancelled) return
+          attempt = 0
+          setEvents(
+            snapshot.docs.map(
+              (record) => ({ $id: record.id, ...record.data() }) as EventRecord,
+            ),
+          )
+        },
+        (error) => {
+          if (cancelled || attempt >= MAX_RETRIES) {
+            console.error(error)
+            return
+          }
+          attempt += 1
+          timer = setTimeout(subscribe, RETRY_DELAY_MS)
+        },
+      )
+    }
+    subscribe()
+    return () => {
+      cancelled = true
+      if (unsubscribe) unsubscribe()
+      if (timer) clearTimeout(timer)
+    }
+  }, [firestore, hostId])
+
+  return events
 }
 
 /** datetime-local ↔ epoch-ms without timezone surprises. */
@@ -70,27 +135,23 @@ function toLocalInput(ms: number | null | undefined): string {
 }
 
 /**
- * Events manager (AGL-145): the Event Calendar add-on's console surface —
- * events with schedule/location/organizer/cover, draft/published status.
- * Gated by the paid `eventCalendar` entitlement ($9/mo add-on); visitors
- * see published events through the Event List canvas element.
+ * Events manager (AGL-145 → AGL-394): the Event Calendar add-on's console
+ * surface, now owned by the plugin so the console shell renders it through
+ * the ConsoleExtension registry rather than a hardcoded page. Events carry
+ * schedule/location/organizer/cover and a draft/published status; visitors
+ * see published events through the Event List canvas element. The shell
+ * resolves the `eventCalendar` entitlement and passes it as `entitled`.
  */
-export function HostEventsCard(props: { hostId: string }) {
-  const { hostId } = props
+export function EventsConsolePage(props: ConsolePluginPageProps) {
+  const { hostId, entitled } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
-  const entitled = hasEntitlement('event-calendar', tenant)
 
-  const { data: eventDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'events'), limit(200)),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const events = [...(eventDocs ?? [])]
-    .filter((event: any) => !event.deletedAt)
-    .sort((a: any, b: any) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0))
+  const eventDocs = useHostEvents(hostId)
+  const events = eventDocs
+    .filter((event) => !event.deletedAt)
+    .sort((a, b) => (b.startsAtMs ?? 0) - (a.startsAtMs ?? 0))
 
   const [draft, setDraft] = useState<EventDraft | null>(null)
 
@@ -144,7 +205,7 @@ export function HostEventsCard(props: { hostId: string }) {
   }, [draft, firestore, hostId, enqueueSnackbar])
 
   const handleDelete = useCallback(
-    (event: any) => async () => {
+    (event: EventRecord) => async () => {
       const confirmed = await confirm({
         title: 'Delete this event?',
         description: `"${event.title}" disappears from your site.`,
@@ -177,7 +238,7 @@ export function HostEventsCard(props: { hostId: string }) {
                 'screen — published events render with SEO Event markup.'}
             </Typography>
           ) : (
-            events.map((event: any) => (
+            events.map((event) => (
               <Stack
                 key={event.$id}
                 direction="row"
@@ -194,7 +255,7 @@ export function HostEventsCard(props: { hostId: string }) {
                     {event.title}
                   </Typography>
                   <Typography variant="caption" color="text.secondary" noWrap>
-                    {new Date(event.startsAtMs).toLocaleString()}
+                    {new Date(event.startsAtMs ?? 0).toLocaleString()}
                     {event.location ? ` · ${event.location}` : ''}
                   </Typography>
                 </Stack>
@@ -374,6 +435,6 @@ export function HostEventsCard(props: { hostId: string }) {
     </CardDisplay>
   )
 }
-HostEventsCard.displayName = 'HostEventsCard'
+EventsConsolePage.displayName = 'EventsConsolePage'
 
-export default HostEventsCard
+export default EventsConsolePage

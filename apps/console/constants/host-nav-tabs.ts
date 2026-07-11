@@ -15,15 +15,22 @@
  * limitations under the License.
  */
 
+import { listConsoleNavItems } from '@aglyn/aglyn'
 import { buildRoute, Route } from './route-links'
 
 /**
  * The host dashboard's tab strip, previously copy-pasted into every
  * host-scoped page (extracted with the Community tab, AGL-44). Ids are
  * stable — DashboardLayout keys the active tab on them.
+ *
+ * Plugin-contributed tabs (AGL-394) are spliced in from the
+ * ConsoleExtension registry, so a feature plugin adds a menu item without
+ * editing this file. They inherit the release-flag gating in
+ * DashboardLayout via their `navTabId`. The Events tab now arrives this
+ * way from the events-calendar plugin.
  */
 export function hostNavTabItems(hostId: string) {
-  return [
+  const staticTabs = [
     {
       id: 'nav-tab-dashboard',
       label: 'Dashboard',
@@ -84,11 +91,6 @@ export function hostNavTabItems(hostId: string) {
       href: buildRoute(Route.HOST_BOOKINGS, { hostId }),
     },
     {
-      id: 'nav-tab-events',
-      label: 'Events',
-      href: buildRoute(Route.HOST_EVENTS, { hostId }),
-    },
-    {
       id: 'nav-tab-data',
       label: 'Data',
       href: buildRoute(Route.HOST_DATA, { hostId }),
@@ -128,6 +130,25 @@ export function hostNavTabItems(hostId: string) {
       label: 'Setup',
       href: buildRoute(Route.HOST_SETUP, { hostId }),
     },
+  ]
+
+  // Plugin-contributed tabs from the ConsoleExtension registry. The href
+  // is host-relative ('/events'); mount it under the active host. Ids fall
+  // back to the navTabId so DashboardLayout's release-flag gating applies.
+  const pluginTabs = listConsoleNavItems().map((item) => ({
+    id: item.navTabId ?? `nav-plugin-${item.href.replace(/[^\w]+/g, '-')}`,
+    label: item.label,
+    href: `/${hostId}${item.href}`,
+  }))
+  if (!pluginTabs.length) return staticTabs
+
+  // Splice plugin tabs into the Events tab's former slot, after Bookings.
+  const anchor = staticTabs.findIndex((tab) => tab.id === 'nav-tab-bookings')
+  if (anchor === -1) return [...staticTabs, ...pluginTabs]
+  return [
+    ...staticTabs.slice(0, anchor + 1),
+    ...pluginTabs,
+    ...staticTabs.slice(anchor + 1),
   ]
 }
 

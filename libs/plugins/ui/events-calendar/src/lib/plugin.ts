@@ -17,8 +17,16 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
+import { lazy } from 'react'
 import * as EventList from './components/event-list'
 import { BUNDLE_ID } from './constants/bundle-common'
+
+/**
+ * The console page is code-split: the shell registers the extension at app
+ * load for the nav strip, but the manager UI only loads when a user opens
+ * the Events page (the shell's plugin route wraps it in Suspense).
+ */
+const EventsConsolePage = lazy(() => import('./components/events-console-page'))
 
 /**
  * Events Calendar feature plugin (AGL-313): the reference extraction of
@@ -37,14 +45,36 @@ export const EVENTS_CALENDAR_BUNDLE: Aglyn.FeatureBundleEntry[] = [
   },
 ]
 
-export function registerEventsCalendarPlugin(): void {
+/**
+ * Console half only: registers the Events nav item + page + dashboard card
+ * in the ConsoleExtension registry. Safe to call at console app load — it
+ * pulls no besigner/canvas code (the page is lazy). The shell renders the
+ * nav item and, through its generic plugin route, the page — so the Events
+ * surface exists without any edit to the console's own nav or page files.
+ */
+export function registerEventsCalendarConsole(): void {
   Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Events Calendar',
     featureFlag: 'eventCalendar',
-    navItems: [{ label: 'Events', href: '/events' }],
+    navItems: [
+      {
+        label: 'Events',
+        href: '/events',
+        // Reuse the existing release-flag nav-tab so staff-preview gating
+        // is unchanged now that the tab comes from the plugin (AGL-394).
+        navTabId: 'nav-tab-events',
+        icon: { path: mdiCalendarMonthOutline.path },
+        header: { title: 'Events', icon: { path: mdiCalendarMonthOutline.path } },
+        Component: EventsConsolePage,
+      },
+    ],
     dashboardCards: [{ cardId: 'events-upcoming', title: 'Upcoming events' }],
   })
+}
+
+export function registerEventsCalendarPlugin(): void {
+  registerEventsCalendarConsole()
   if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
   Aglyn.plugins.addDependency(
     Aglyn.defineUiFeatureBundle(

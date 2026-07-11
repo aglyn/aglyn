@@ -32,6 +32,9 @@ import { Fragment } from 'react'
 import HostIdProvider from '../components/host-id-provider'
 import FirebaseAppLayout from '../components/layouts/firebase-app.layout'
 import OsfaTooltip from '../components/osfa-tooltip'
+// Populate the ConsoleExtension registry (nav items + plugin pages) before
+// any nav renders, so plugins extend the console shell (AGL-394).
+import '../constants/register-console-plugins'
 import '../public/_static/styles/styles.css'
 
 // enableStaticRendering(true)

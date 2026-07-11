@@ -57,7 +57,8 @@ export enum Route {
   HOST_COMPONENTS = '/[hostId]/components',
   HOST_MARKETING = '/[hostId]/marketing',
   HOST_BOOKINGS = '/[hostId]/bookings',
-  HOST_EVENTS = '/[hostId]/events',
+  // Events now come from the events-calendar plugin, served by the generic
+  // `[hostId]/[pluginSlug]` route (AGL-394) — no dedicated enum needed.
   HOST_REDIRECTS = '/[hostId]/redirects',
   HOST_USERS = '/[hostId]/users',
   HOST_ANALYTICS = '/[hostId]/analytics',
@@ -111,7 +112,6 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_COMPONENTS]: { hostId: string }
   [Route.HOST_MARKETING]: { hostId: string }
   [Route.HOST_BOOKINGS]: { hostId: string }
-  [Route.HOST_EVENTS]: { hostId: string }
   [Route.HOST_REDIRECTS]: { hostId: string }
   [Route.HOST_USERS]: { hostId: string }
   [Route.HOST_ANALYTICS]: { hostId: string }

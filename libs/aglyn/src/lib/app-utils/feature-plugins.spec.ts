@@ -18,8 +18,10 @@
 import {
   defineUiFeatureBundle,
   listConsoleExtensions,
+  listConsoleNavItems,
   MUI_BUNDLE_ID,
   registerConsoleExtension,
+  resolveConsolePluginPage,
   unregisterConsoleExtension,
   type ComponentRegistrar,
 } from './feature-plugins'
@@ -117,5 +119,41 @@ describe('console extension registry', () => {
     registerConsoleExtension({ pluginId: 'x', displayName: 'X' })
     unregisterConsoleExtension('x')
     expect(listConsoleExtensions()).toHaveLength(0)
+  })
+
+  it('flattens nav items with their owning plugin id and flag', () => {
+    registerConsoleExtension({
+      pluginId: 'events-calendar',
+      displayName: 'Events',
+      featureFlag: 'eventCalendar',
+      navItems: [
+        { label: 'Events', href: '/events', navTabId: 'nav-tab-events' },
+      ],
+    })
+    const [navItem] = listConsoleNavItems()
+    expect(navItem).toMatchObject({
+      label: 'Events',
+      href: '/events',
+      pluginId: 'events-calendar',
+      featureFlag: 'eventCalendar',
+    })
+  })
+
+  it('resolves a page only for a nav item that has a Component', () => {
+    const Page = () => null
+    registerConsoleExtension({
+      pluginId: 'events-calendar',
+      displayName: 'Events',
+      featureFlag: 'eventCalendar',
+      navItems: [
+        { label: 'No page', href: '/no-page' },
+        { label: 'Events', href: '/events', Component: Page },
+      ],
+    })
+    expect(resolveConsolePluginPage('/no-page')).toBeUndefined()
+    expect(resolveConsolePluginPage('/missing')).toBeUndefined()
+    const resolved = resolveConsolePluginPage('/events')
+    expect(resolved?.extension.pluginId).toBe('events-calendar')
+    expect(resolved?.navItem.Component).toBe(Page)
   })
 })
