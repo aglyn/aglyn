@@ -289,6 +289,7 @@ export default async function handler(
         ...(email ? { email } : {}),
         ...(marketingOptIn ? { marketingOptIn: true } : {}),
         itemsCents,
+        resumeUrl: backUrl,
         status: 'open',
         createdAtMs: Date.now(),
       })
