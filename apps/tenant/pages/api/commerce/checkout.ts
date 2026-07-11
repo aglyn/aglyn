@@ -143,6 +143,25 @@ export default async function handler(
     const backUrl = referer.startsWith('http') ? referer : origin
     const separator = backUrl.includes('?') ? '&' : '?'
 
+    // Taxes (AGL-285): Stripe Tax when the host opted in; manual mode
+    // taxes by store origin here (destination-based arrives with our own
+    // checkout, AGL-296). Exempt products skip both.
+    const storeSettings = await hostRef
+      .collection('settings')
+      .doc('store')
+      .get()
+    const taxSettings = (storeSettings.get('tax') ?? {}) as Aglyn.TaxSettings
+    const useStripeTax = taxSettings.mode === 'stripe' && !lifted.taxExempt
+    let taxCents = 0
+    let taxLabel = ''
+    if (taxSettings.mode === 'manual' && !lifted.taxExempt) {
+      const rate = Aglyn.resolveTaxRate(taxSettings, taxSettings.origin ?? {})
+      if (rate && !taxSettings.pricesIncludeTax) {
+        taxCents = Aglyn.computeTaxCents(amountCents, rate.pct)
+        taxLabel = rate.label || `Tax (${rate.pct}%)`
+      }
+    }
+
     const params = new URLSearchParams({
       mode: 'payment',
       'line_items[0][quantity]': '1',
@@ -151,6 +170,18 @@ export default async function handler(
       'line_items[0][price_data][product_data][name]': String(
         product.name ?? 'Product',
       ).slice(0, 120),
+      ...(taxCents > 0
+        ? {
+            'line_items[1][quantity]': '1',
+            'line_items[1][price_data][currency]': 'usd',
+            'line_items[1][price_data][unit_amount]': String(taxCents),
+            'line_items[1][price_data][product_data][name]': taxLabel.slice(
+              0,
+              120,
+            ),
+          }
+        : {}),
+      ...(useStripeTax ? { 'automatic_tax[enabled]': 'true' } : {}),
       // Stripe rejects a zero application fee — omit it on 0% plans.
       ...(feeCents > 0
         ? { 'payment_intent_data[application_fee_amount]': String(feeCents) }

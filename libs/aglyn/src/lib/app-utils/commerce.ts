@@ -74,6 +74,8 @@ export interface HostProduct {
   supplierId?: string
   /** Out-of-stock behavior (AGL-281): deny (default) or allow backorder. */
   oversellPolicy?: 'deny' | 'backorder'
+  /** Never taxed regardless of tax settings (AGL-285). */
+  taxExempt?: boolean
   /** Tracked-total at/below this alerts host managers (AGL-281). */
   lowStockThreshold?: number
   createdAtMs?: number

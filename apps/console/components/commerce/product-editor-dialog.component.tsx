@@ -550,6 +550,19 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <MenuItem value="backorder">{'Keep selling (backorder)'}</MenuItem>
           </TextField>
           <TextField
+            label="Tax"
+            value={current.taxExempt ? 'exempt' : 'taxable'}
+            onChange={(event) =>
+              update({ taxExempt: event.target.value === 'exempt' })
+            }
+            size="small"
+            select
+            sx={{ minWidth: 120 }}
+          >
+            <MenuItem value="taxable">{'Taxable'}</MenuItem>
+            <MenuItem value="exempt">{'Tax exempt'}</MenuItem>
+          </TextField>
+          <TextField
             label="Low-stock alert at"
             value={current.lowStockThreshold ?? ''}
             placeholder="Off"
