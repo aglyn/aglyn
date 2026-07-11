@@ -51,6 +51,7 @@ import {
 import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../components/host-display-name.component'
+import HubTabs from '../../../components/hub-tabs.component'
 import HostCampaignsCard from '../../../components/host-campaigns-card.component'
 import { useHostId } from '../../../components/host-id-provider'
 import HostOrdersCard from '../../../components/commerce/host-orders-card.component'
@@ -186,12 +187,18 @@ const HostInbox: NextPageWithLayout = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <CardDisplay
-            header={'Form Submissions'}
-            contentGutterX
-            contentGutterY
-            contentBordered="all"
-          >
+          <HubTabs
+            tabs={[
+              {
+                id: 'submissions',
+                label: 'Submissions',
+                content: (
+                  <CardDisplay
+                    header={'Form Submissions'}
+                    contentGutterX
+                    contentGutterY
+                    contentBordered="all"
+                  >
           {submissions.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               {'No form submissions yet. Add a Contact Form element to a ' +
@@ -273,14 +280,20 @@ const HostInbox: NextPageWithLayout = () => {
               </TableBody>
             </Table>
           )}
-          </CardDisplay>
-          <Stack spacing={3} sx={{ mt: 3 }}>
-            <CardDisplay
-              header={'Site Members & Leads'}
-              contentGutterX
-              contentGutterY
-              contentBordered="all"
-            >
+                  </CardDisplay>
+                ),
+              },
+              {
+                id: 'contacts',
+                label: 'Members & leads',
+                content: (
+                  <Stack spacing={3}>
+                    <CardDisplay
+                      header={'Site Members & Leads'}
+                      contentGutterX
+                      contentGutterY
+                      contentBordered="all"
+                    >
               {siteMembers.length === 0 && leads.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   {'No members yet — visitors can join at /signup on your ' +
@@ -353,12 +366,18 @@ const HostInbox: NextPageWithLayout = () => {
                   </TableBody>
                 </Table>
               )}
-            </CardDisplay>
-            <HostOrdersCard hostId={hostId} />
-          </Stack>
-          <div style={{ marginTop: 24 }}>
-            <HostCampaignsCard hostId={hostId} />
-          </div>
+                    </CardDisplay>
+                    <HostOrdersCard hostId={hostId} />
+                  </Stack>
+                ),
+              },
+              {
+                id: 'campaigns',
+                label: 'Campaigns',
+                content: <HostCampaignsCard hostId={hostId} />,
+              },
+            ]}
+          />
         </Container>
       </DashboardLayout>
       <Dialog
