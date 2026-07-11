@@ -155,6 +155,51 @@ export default function BookingsConsolePage({
    under `Suspense`, and applies the release-flag `FeatureGate`. Named routes
    (setup, media, …) still win over this dynamic segment.
 
+## The server half (API routes)
+
+A feature's server logic — Next.js API routes backed by firebase-admin —
+moves into its plugin the same way, through the **API-route registry**
+(AGL-396), the server counterpart to the ConsoleExtension registry.
+
+```ts
+// libs/plugins/{feature}/src/lib/server.ts — a SEPARATE entry point that
+// pulls in firebase-admin; never re-export it from the client barrel.
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+
+const listHandler: PluginApiHandler = async (req, res) => {
+  // req/res are structural (not `next`) types, so the plugin stays
+  // framework-light; NextApiRequest/Response satisfy them.
+  res.status(200).json({ events: [] })
+}
+
+export function registerEventsCalendarApi(): void {
+  registerPluginApiRoute('events/list', listHandler)
+}
+```
+
+Each Next app ships **one catch-all dispatcher** — `pages/api/[...pluginApi].ts`
+— that imports a server-only registration module (`register*PluginApis()`)
+and resolves the request path against the registry:
+
+```ts
+import { resolvePluginApiRoute } from '@aglyn/aglyn'
+import '../../utils/register-plugin-apis' // side-effect registration
+export default async function handler(req, res) {
+  const slug = req.query['pluginApi']
+  const route = resolvePluginApiRoute(Array.isArray(slug) ? slug.join('/') : '')
+  if (!route) return res.status(404).json({ error: 'Not found' })
+  return route(req, res)
+}
+```
+
+Named API routes win over the catch-all, so **URLs are preserved**: to
+migrate `/api/events/list`, delete the named route file and register the
+handler — the dispatcher serves the same URL. Import the plugin's `/server`
+entry **only** from the dispatcher's registration module (server code); the
+client barrel must never pull it in, or firebase-admin leaks into the browser
+bundle. Reference: `libs/plugins/events-calendar/src/lib/server.ts`.
+
 ## Project setup
 
 - Tag new plugin libs like the mui plugin: `["scope:lib", "scope:aglyn",
