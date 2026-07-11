@@ -21,6 +21,7 @@ import * as Account from './components/account'
 import * as Cart from './components/cart'
 import * as Gate from './components/gate'
 import * as GatedVideo from './components/gated-video'
+import * as MemberFeed from './components/member-feed'
 import * as NewsletterSignup from './components/newsletter-signup'
 import * as ProductDetail from './components/product-detail'
 import * as ProductGrid from './components/product-grid'
@@ -75,6 +76,11 @@ export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
     component: GatedVideo.default,
     schema: GatedVideo.schema,
     presets: GatedVideo.presets,
+  },
+  {
+    component: MemberFeed.default,
+    schema: MemberFeed.schema,
+    presets: MemberFeed.presets,
   },
 ]
 
