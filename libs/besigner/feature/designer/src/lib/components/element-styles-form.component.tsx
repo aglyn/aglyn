@@ -63,6 +63,7 @@ import {
 import { Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
+  Chip,
   FormHelperText,
   FormLabel,
   ToggleButton,
@@ -74,8 +75,16 @@ import FormControl from '@mui/material/FormControl'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, type SyntheticEvent, useCallback, useMemo } from 'react'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
+import {
+  deviceFlagToBreakpoint,
+  readSxValue,
+  writeSxValue,
+} from '../utils/responsive-sx'
 import { Accordion } from './accordion-list.component'
+import CustomCssForm from './custom-css-form.component'
+import ElementClassesField from './element-classes-field.component'
 import { ElementPropsFormTemplate } from './element-props-form.component'
 
 const stylesSchema = (presetColors: string[]) => ({
@@ -834,61 +843,119 @@ const ElementStylesForm = observer(
       return stylesSchema(values)
     }, [siteTheme])
 
+    // Breakpoint-scoped editing (AGL-333): when the artboard preview is a
+    // device size, style edits write into that breakpoint's slice of the
+    // responsive sx value; fluid preview edits the base.
+    const [devicePreview] = useAglynBesignerFlag('devicePreview')
+    const activeBreakpoint = deviceFlagToBreakpoint(devicePreview)
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
-    const handleElementSave = useCallback(
-      (values) => {
+
+    /**
+     * Merges style values into node.sx at the active breakpoint scope.
+     * Unchanged values are skipped so effective (inherited) readings never
+     * get pinned into a breakpoint slice by round-tripping through a form.
+     */
+    const applyStyleValues = useCallback(
+      (partial: Record<string, unknown>) => {
         action(() => {
-          if (node) {
-            node.sx = { ...values }
+          if (!node) return
+          let sx = { ...(node.sx ?? {}) } as Record<string, any>
+          for (const [key, value] of Object.entries(partial)) {
+            const normalized = value === '' ? undefined : value
+            if (readSxValue(sx, key, activeBreakpoint) === normalized) continue
+            sx = writeSxValue(sx, key, normalized, activeBreakpoint)
           }
+          node.sx = sx as any
         })()
       },
-      [node],
+      [node, activeBreakpoint],
+    )
+
+    // Effective scalar values at the active breakpoint — feeds the form
+    // and controls; responsive objects resolve to their active slice.
+    const effectiveValues = useMemo(() => {
+      const out: Record<string, any> = {}
+      for (const key of Object.keys((nodeSx ?? {}) as Record<string, any>)) {
+        const value = readSxValue(
+          nodeSx as Record<string, any>,
+          key,
+          activeBreakpoint,
+        )
+        if (value !== undefined && typeof value !== 'object') out[key] = value
+      }
+      return out
+    }, [nodeSx, activeBreakpoint])
+
+    const handleElementSave = useCallback(
+      (values: Record<string, unknown>) => {
+        const keys = new Set([
+          ...Object.keys(values ?? {}),
+          ...Object.keys(effectiveValues),
+        ])
+        const partial: Record<string, unknown> = {}
+        for (const key of keys) partial[key] = (values as any)?.[key]
+        applyStyleValues(partial)
+      },
+      [applyStyleValues, effectiveValues],
     )
 
     const handleBoxStylerChange = useCallback(
       (dimensions: Measurements) => {
-        handleElementSave({
-          ...nodeSx,
-          ...dimensions,
-        })
+        applyStyleValues(dimensions as Record<string, unknown>)
       },
-      [nodeSx, handleElementSave],
+      [applyStyleValues],
     )
 
     const boxMeasurements = {
-      marginTop: nodeSx?.['marginTop'] ?? undefined,
-      marginLeft: nodeSx?.['marginLeft'] ?? undefined,
-      marginRight: nodeSx?.['marginRight'] ?? undefined,
-      marginBottom: nodeSx?.['marginBottom'] ?? undefined,
-      paddingTop: nodeSx?.['paddingTop'] ?? undefined,
-      paddingLeft: nodeSx?.['paddingLeft'] ?? undefined,
-      paddingRight: nodeSx?.['paddingRight'] ?? undefined,
-      paddingBottom: nodeSx?.['paddingBottom'] ?? undefined,
+      marginTop: effectiveValues['marginTop'] ?? undefined,
+      marginLeft: effectiveValues['marginLeft'] ?? undefined,
+      marginRight: effectiveValues['marginRight'] ?? undefined,
+      marginBottom: effectiveValues['marginBottom'] ?? undefined,
+      paddingTop: effectiveValues['paddingTop'] ?? undefined,
+      paddingLeft: effectiveValues['paddingLeft'] ?? undefined,
+      paddingRight: effectiveValues['paddingRight'] ?? undefined,
+      paddingBottom: effectiveValues['paddingBottom'] ?? undefined,
     }
 
     const handleTextAlignChange = useCallback(
       (e, value: string) => {
-        handleElementSave({
-          ...nodeSx,
-          textAlign: value || undefined,
-        })
+        applyStyleValues({ textAlign: value || undefined })
       },
-      [nodeSx, handleElementSave],
+      [applyStyleValues],
     )
 
     const handleFlexboxChange = useCallback(
       (name: string) => (e, value: string) => {
-        handleElementSave({
-          ...nodeSx,
-          [name]: value || undefined,
-        })
+        applyStyleValues({ [name]: value || undefined })
       },
-      [nodeSx, handleElementSave],
+      [applyStyleValues],
     )
 
     return (
       <>
+        <Container gutterY={[1]} dense>
+          <Tooltip
+            title={
+              activeBreakpoint
+                ? `Edits apply from the ${activeBreakpoint.toUpperCase()} ` +
+                  'breakpoint up. Switch the artboard preview to Fluid ' +
+                  'Responsive to edit the base styles.'
+                : 'Edits apply at every screen size. Switch the artboard ' +
+                  'preview to a device size to style that breakpoint only.'
+            }
+          >
+            <Chip
+              size="small"
+              color={activeBreakpoint ? 'secondary' : 'default'}
+              label={
+                activeBreakpoint
+                  ? `Styling breakpoint: ${activeBreakpoint.toUpperCase()}`
+                  : 'Styling: all screen sizes'
+              }
+            />
+          </Tooltip>
+        </Container>
         <Container gutterY={[2]} dense>
           <BoxStyler
             measurements={boxMeasurements}
@@ -977,10 +1044,15 @@ const ElementStylesForm = observer(
             componentMapper={componentMapper}
             onCancel={handleFormCancel}
             onSubmit={handleElementSave}
-            initialValues={nodeSx}
+            initialValues={effectiveValues}
             schema={schema}
             {...rest}
           />
+
+          <Accordion summary="Classes & custom CSS" sx={{ mt: 2 }}>
+            <ElementClassesField node={node} />
+            <CustomCssForm node={node} breakpoint={activeBreakpoint} />
+          </Accordion>
 
           <FormControl margin="none" fullWidth>
             <Button

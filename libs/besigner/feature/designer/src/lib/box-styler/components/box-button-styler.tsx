@@ -17,11 +17,18 @@
 
 import type { Measurement } from '@aglyn/shared-data-enums'
 import { alpha, darken } from '@aglyn/shared-ui-theme'
-import { ButtonBase, Collapse, lighten, styled } from '@mui/material'
+import {
+  ButtonBase,
+  Collapse,
+  lighten,
+  Stack,
+  styled,
+  Typography,
+} from '@mui/material'
 import { emphasize } from '@mui/system/colorManipulator'
 import { type ComponentProps, forwardRef, useCallback, useState } from 'react'
 import type { Measurements } from '../types'
-import Legend, { LegendItem } from './legend'
+import DimensionControl from './dimension-control'
 
 export type { Measurements }
 
@@ -367,51 +374,76 @@ const StyledWrapper = styled('div')(({ theme }) => {
   },
 }})
 
+/** Human labels for the collapse editor's title (AGL-334). */
+const SIDE_LABELS: Record<keyof Measurements, string> = {
+  marginTop: 'Margin top',
+  marginRight: 'Margin right',
+  marginBottom: 'Margin bottom',
+  marginLeft: 'Margin left',
+  paddingTop: 'Padding top',
+  paddingRight: 'Padding right',
+  paddingBottom: 'Padding bottom',
+  paddingLeft: 'Padding left',
+}
+
 export interface BoxButtonStylerProps
   extends Omit<ComponentProps<typeof StyledWrapper>, 'onChange'> {
   measurements?: Measurements
   size?: { width?: Measurement; height: Measurement }
-  onChange?: (measurements?: Measurements) => void
+  /** Scope label rendered in the editor ('each' | 'axis' | 'all'). */
+  scope?: string
+  onChange?: (
+    key: keyof Measurements,
+  ) => (dimension: Measurement) => void
 }
 
 export const BoxButtonStyler = forwardRef<any, BoxButtonStylerProps>(
   (props, ref) => {
-    const { measurements, size, onChange, ...rest } = props
+    const { measurements, size, scope, onChange, ...rest } = props
     const { width, height } = { ...size }
-    const [editing, setEditing] = useState(false)
+    const [editing, setEditing] = useState<keyof Measurements | null>(null)
 
-    const handleChange = useCallback(
-      (key: keyof Measurements) => (dimension: Measurement) => {
-        const res = { ...measurements, [key]: dimension }
-        onChange && onChange(res)
-      },
-      [onChange, measurements],
+    const handleSelect = useCallback(
+      (key: keyof Measurements) => () =>
+        setEditing((prev) => (prev === key ? null : key)),
+      [],
+    )
+
+    const sideButton = (key: keyof Measurements, abbr: string) => (
+      <ButtonBase
+        className={`${key.startsWith('margin') ? 'marginButton' : 'paddingButton'} ${key}`}
+        onClick={handleSelect(key)}
+        aria-label={SIDE_LABELS[key]}
+        sx={editing === key ? { outline: '2px solid', outlineOffset: -2 } : undefined}
+      >
+        {measurements?.[key] ?? abbr}
+      </ButtonBase>
     )
 
     return (
       <>
         <StyledWrapper ref={ref} {...rest}>
-          <ButtonBase className="marginButton marginTop">mt</ButtonBase>
-          <ButtonBase className="marginButton marginLeft">ml</ButtonBase>
+          {sideButton('marginTop', 'mt')}
+          {sideButton('marginLeft', 'ml')}
 
           <div className="paddingContainer">
-            <ButtonBase className="paddingButton paddingTop">pt</ButtonBase>
-            <ButtonBase className="paddingButton paddingLeft">pl</ButtonBase>
+            {sideButton('paddingTop', 'pt')}
+            {sideButton('paddingLeft', 'pl')}
 
             <div className="contents">
               <div>Contents</div>
             </div>
 
-            <ButtonBase className="paddingButton paddingRight">pr</ButtonBase>
-            <ButtonBase className="paddingButton paddingBottom">pb</ButtonBase>
+            {sideButton('paddingRight', 'pr')}
+            {sideButton('paddingBottom', 'pb')}
 
             <div className="label padding">
               <div className="arrow"></div>
               {'Padding'}
             </div>
           </div>
-          <ButtonBase className="marginButton marginRight">mr</ButtonBase>
-          <ButtonBase className="marginButton marginBottom">mb</ButtonBase>
+          {sideButton('marginRight', 'mr')}
+          {sideButton('marginBottom', 'mb')}
 
           <div className="label margin">
             <div className="arrow"></div>
@@ -419,16 +451,24 @@ export const BoxButtonStyler = forwardRef<any, BoxButtonStylerProps>(
           </div>
         </StyledWrapper>
 
-        <Legend
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', justifyContent: 'space-around', mt: 1, mb: 2 }}
-        >
-          <LegendItem item={'margin'} />
-          <LegendItem item={'padding'} />
-          <LegendItem item={'contents'} />
-        </Legend>
-        <Collapse in={editing}></Collapse>
+        <Collapse in={Boolean(editing)}>
+          {editing ? (
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center', mt: 1 }}
+            >
+              <Typography variant="caption" sx={{ flex: 1 }}>
+                {SIDE_LABELS[editing]}
+                {scope && scope !== 'each' ? ` (${scope})` : ''}
+              </Typography>
+              <DimensionControl
+                dimension={(measurements?.[editing] as string) ?? ''}
+                onChange={onChange?.(editing)}
+              />
+            </Stack>
+          ) : null}
+        </Collapse>
       </>
     )
   },

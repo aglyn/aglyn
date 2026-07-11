@@ -15,8 +15,17 @@
  * limitations under the License.
  */
 
-import type { Measurement } from '@aglyn/shared-data-enums'
-import { forwardRef, useCallback } from 'react'
+import {
+  buildCssMeasurement,
+  type Measurement,
+} from '@aglyn/shared-data-enums'
+import {
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import { forwardRef, useCallback, useState } from 'react'
 import Box, { type BoxProps } from './components/box'
 import BoxButtonStyler from './components/box-button-styler'
 import Contents from './components/contents'
@@ -27,8 +36,39 @@ import type { Measurements } from './types'
 
 export type { Measurements }
 
-const BTN_SIZE = 20
-const HEIGHT = 200
+/** How an edit fans out across the box sides (AGL-334). */
+export type BoxScope = 'each' | 'axis' | 'all'
+
+const MARGIN_KEYS = [
+  'marginTop',
+  'marginRight',
+  'marginBottom',
+  'marginLeft',
+] as const
+const PADDING_KEYS = [
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+] as const
+
+/** The keys an edit to `key` writes, given the active scope. */
+export function boxScopeKeys(
+  key: keyof Measurements,
+  scope: BoxScope,
+): Array<keyof Measurements> {
+  const group = key.startsWith('margin') ? MARGIN_KEYS : PADDING_KEYS
+  if (scope === 'all') return [...group]
+  if (scope === 'axis') {
+    const vertical = key.endsWith('Top') || key.endsWith('Bottom')
+    return group.filter((item) =>
+      vertical
+        ? item.endsWith('Top') || item.endsWith('Bottom')
+        : item.endsWith('Left') || item.endsWith('Right'),
+    )
+  }
+  return [key]
+}
 
 export interface BoxStylerProps extends Omit<BoxProps, 'onChange'> {
   measurements?: Measurements
@@ -41,18 +81,65 @@ export const BoxStyler = forwardRef<any, BoxStylerProps>((
   { measurements, width, height, onChange, ...rest }: BoxStylerProps,
   ref,
 ) => {
+  const [scope, setScope] = useState<BoxScope>('each')
 
   const handleChange = useCallback(
     (key: keyof Measurements) => (dimension: Measurement) => {
-      const res: Measurements = Object.assign({}, measurements, { [key]: dimension })
+      // Persist CSS strings, never {value, unit} objects — sx consumers
+      // (MUI, the tenant runtime) only understand CSS values (AGL-334).
+      const css = buildCssMeasurement(dimension)
+      const res: Measurements = { ...measurements }
+      for (const target of boxScopeKeys(key, scope)) {
+        res[target] = css as any
+      }
       onChange?.(res)
     },
-    [onChange, measurements],
+    [onChange, measurements, scope],
   )
 
   return (
     <>
-      <BoxButtonStyler />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 1,
+        }}
+      >
+        <Typography variant="caption" color="text.secondary">
+          {'Apply to'}
+        </Typography>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={scope}
+          onChange={(event, value) => value && setScope(value)}
+        >
+          <ToggleButton value="each" sx={{ px: 1, py: 0.25 }}>
+            <Tooltip title="Each side individually">
+              <span>{'Side'}</span>
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="axis" sx={{ px: 1, py: 0.25 }}>
+            <Tooltip title="Vertical or horizontal pair together">
+              <span>{'Axis'}</span>
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="all" sx={{ px: 1, py: 0.25 }}>
+            <Tooltip title="All four sides together">
+              <span>{'All'}</span>
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
+      <BoxButtonStyler
+        measurements={measurements}
+        scope={scope}
+        onChange={handleChange}
+      />
+
       <Box ref={ref} {...rest}>
         <MarginStyler
           onChange={handleChange}
