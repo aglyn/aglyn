@@ -85,6 +85,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     variantId: string
     delta: string
     reason: Aglyn.InventoryAdjustmentReason
+    locationId: string
   } | null>(null)
   const [importing, setImporting] = useState<{
     text: string
@@ -94,6 +95,12 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const { data: productDocs } = useFirestoreCollection<any>(
     () =>
       query(collection(firestore, 'hosts', hostId, 'products'), limit(500)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  // Locations (AGL-286): the stock dialog buckets deltas when they exist.
+  const { data: locationDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'locations'), limit(25)),
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -225,6 +232,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       adjusting.product,
       adjusting.variantId,
       delta,
+      adjusting.locationId || undefined,
     )
     await updateDoc(
       doc(firestore, 'hosts', hostId, 'products', adjusting.product.$id),
@@ -240,6 +248,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       variantId: adjusting.variantId,
       delta,
       reason: adjusting.reason,
+      ...(adjusting.locationId ? { locationId: adjusting.locationId } : {}),
       atMs: Date.now(),
     } satisfies Aglyn.InventoryAdjustment)
     setAdjusting(null)
@@ -375,6 +384,12 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                                 )?.id ?? product.variants[0].id,
                               delta: '',
                               reason: 'restock',
+                              locationId:
+                                (locationDocs ?? []).find(
+                                  (location: any) => location.isDefault,
+                                )?.$id ??
+                                (locationDocs ?? [])[0]?.$id ??
+                                '',
                             })
                           }
                         >
@@ -507,6 +522,25 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
                 </MenuItem>
               ))}
           </TextField>
+          {(locationDocs?.length ?? 0) > 1 ? (
+            <TextField
+              label="Location"
+              value={adjusting?.locationId ?? ''}
+              onChange={(event) =>
+                setAdjusting((prev) =>
+                  prev ? { ...prev, locationId: event.target.value } : prev,
+                )
+              }
+              size="small"
+              select
+            >
+              {(locationDocs ?? []).map((location: any) => (
+                <MenuItem key={location.$id} value={location.$id}>
+                  {location.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
           <TextField
             label="Change"
             placeholder="+10 or -3"

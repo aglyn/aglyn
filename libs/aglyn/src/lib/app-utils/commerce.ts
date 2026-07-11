@@ -50,8 +50,20 @@ export interface ProductVariant {
   weightGrams?: number
   /** null/undefined = untracked; 0 = sold out (matches AGL-96). */
   inventory?: number | null
+  /**
+   * Per-location stock (AGL-286); `inventory` stays the summed
+   * denormalization. Absent = single default location.
+   */
+  inventoryByLocation?: Record<string, number>
   /** Media-library image URL shown when this variant is selected. */
   imageUrl?: string
+}
+
+/** `hosts/{hostId}/locations/{id}` doc (AGL-286). */
+export interface InventoryLocation {
+  name: string
+  isDefault?: boolean
+  address?: string
 }
 
 /** `hosts/{hostId}/products/{id}` doc. */
@@ -272,18 +284,62 @@ export function canPurchase(
  * Applies a stock delta to one variant, flooring at zero (race-window
  * sales can't drive the display negative), and returns the new variants
  * array — callers persist it plus the `productInventory` denormalization.
+ * With `locationId`, the delta lands in that location's bucket and the
+ * flat `inventory` re-sums across locations (AGL-286).
  */
 export function adjustVariantInventory(
   product: Pick<HostProduct, 'variants'>,
   variantId: string,
   delta: number,
+  locationId?: string,
 ): ProductVariant[] {
   return (product.variants ?? []).map((variant) => {
     if (variant.id !== variantId || variant.inventory == null) return variant
+    if (locationId && variant.inventoryByLocation) {
+      const buckets = {
+        ...variant.inventoryByLocation,
+        [locationId]: Math.max(
+          0,
+          Number(variant.inventoryByLocation[locationId] ?? 0) + delta,
+        ),
+      }
+      return {
+        ...variant,
+        inventoryByLocation: buckets,
+        inventory: Object.values(buckets).reduce(
+          (sum, count) => sum + Number(count),
+          0,
+        ),
+      }
+    }
     return {
       ...variant,
       inventory: Math.max(0, Number(variant.inventory) + delta),
     }
+  })
+}
+
+/**
+ * Moves stock between two locations of a tracked variant (AGL-286).
+ * Quantity clamps to what the source location holds; the flat total is
+ * unchanged by construction.
+ */
+export function transferVariantInventory(
+  product: Pick<HostProduct, 'variants'>,
+  variantId: string,
+  fromLocationId: string,
+  toLocationId: string,
+  quantity: number,
+): ProductVariant[] {
+  return (product.variants ?? []).map((variant) => {
+    if (variant.id !== variantId || variant.inventory == null) return variant
+    const buckets = { ...(variant.inventoryByLocation ?? {}) }
+    const available = Math.max(0, Number(buckets[fromLocationId] ?? 0))
+    const moved = Math.min(available, Math.max(0, Math.round(quantity)))
+    if (moved === 0) return variant
+    buckets[fromLocationId] = available - moved
+    buckets[toLocationId] = Math.max(0, Number(buckets[toLocationId] ?? 0)) + moved
+    return { ...variant, inventoryByLocation: buckets }
   })
 }
 

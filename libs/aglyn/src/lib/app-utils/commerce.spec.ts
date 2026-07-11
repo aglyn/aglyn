@@ -26,6 +26,7 @@ import {
   matchesCollection,
   productInventory,
   productPriceRange,
+  transferVariantInventory,
   validateCollection,
   validateProduct,
   type HostCollection,
@@ -235,6 +236,46 @@ describe('inventory (AGL-281)', () => {
     expect(restocked.find((v: any) => v.id === 'b').inventory).toBe(5)
     const untouched = adjustVariantInventory(tracked, 'c', -1)
     expect(untouched.find((v: any) => v.id === 'c').inventory).toBeUndefined()
+  })
+
+  it('adjusts per-location buckets and re-sums the flat total (AGL-286)', () => {
+    const multiLocation = product({
+      variants: [
+        {
+          id: 'a',
+          priceUsd: 10,
+          inventory: 5,
+          inventoryByLocation: { main: 3, store: 2 },
+        },
+      ],
+    })
+    const adjusted = adjustVariantInventory(multiLocation, 'a', -2, 'main')
+    expect(adjusted[0].inventoryByLocation).toEqual({ main: 1, store: 2 })
+    expect(adjusted[0].inventory).toBe(3)
+  })
+
+  it('transfers between locations without changing the total', () => {
+    const multiLocation = product({
+      variants: [
+        {
+          id: 'a',
+          priceUsd: 10,
+          inventory: 5,
+          inventoryByLocation: { main: 3, store: 2 },
+        },
+      ],
+    })
+    const moved = transferVariantInventory(multiLocation, 'a', 'main', 'store', 99)
+    expect(moved[0].inventoryByLocation).toEqual({ main: 0, store: 5 })
+    // Untracked variants and empty sources are no-ops.
+    const untouched = transferVariantInventory(
+      product(),
+      'default',
+      'x',
+      'y',
+      1,
+    )
+    expect(untouched[0].inventoryByLocation).toBeUndefined()
   })
 
   it('isLowStock compares tracked totals to the threshold', () => {
