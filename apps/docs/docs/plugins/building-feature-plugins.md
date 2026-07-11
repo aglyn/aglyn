@@ -176,6 +176,11 @@ export default function BookingsConsolePage({
   component, so it exports only `registerRedirectsConsole()` and ships no UI
   bundle — nothing to register in the tenant/besigner. The minimal shape when
   a feature has console surface but no site component.
+- **Logic** (`libs/plugins/logic`) — console-only (AGL-395): variables +
+  no-code functions and the reference-integrity audit. It also *exports*
+  shared tooling — the where-used dialog and its fetch util, plus the
+  variable/function cards — which the app's workflows surface and besigner
+  ƒx button import from `@aglyn/plugins-logic`. Always-on (not release-flagged).
 - **Data** (`libs/plugins/data`) — console-only, and dual-surfaced (AGL-395):
   the datasets editor is served both as the host `/data` plugin page and,
   because datasets are org-scoped, imported directly by the org `/org/data`
