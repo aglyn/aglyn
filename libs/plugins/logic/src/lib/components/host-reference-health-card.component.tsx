@@ -21,9 +21,11 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
-import useHostOrgId from '../hooks/use-host-org-id'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useHostOrgId,
+} from '@aglyn/tenant-feature-instance'
 
 export interface HostReferenceHealthCardProps {
   hostId: string

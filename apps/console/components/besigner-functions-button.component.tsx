@@ -26,8 +26,8 @@ import {
   Tooltip,
 } from '@mui/material'
 import { useState } from 'react'
-import HostFunctionsCard from './host-functions-card.component'
-import HostVariablesCard from './host-variables-card.component'
+import { HostFunctionsCard, HostVariablesCard } from '@aglyn/plugins-logic'
+import useCurrentTenant from '../hooks/use-current-tenant'
 
 export interface BesignerFunctionsButtonProps {
   hostId: string
@@ -41,6 +41,7 @@ export interface BesignerFunctionsButtonProps {
 export function BesignerFunctionsButton(props: BesignerFunctionsButtonProps) {
   const { hostId } = props
   const [open, setOpen] = useState(false)
+  const { tenant } = useCurrentTenant()
   return (
     <>
       <Tooltip title="Variables & functions">
@@ -63,8 +64,8 @@ export function BesignerFunctionsButton(props: BesignerFunctionsButtonProps) {
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
-          <HostVariablesCard hostId={hostId} />
-          <HostFunctionsCard hostId={hostId} />
+          <HostVariablesCard hostId={hostId} tenant={tenant} />
+          <HostFunctionsCard hostId={hostId} tenant={tenant} />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>{'Close'}</Button>

@@ -17,6 +17,8 @@
 'use client'
 
 import {
+  type AglynTenant,
+  checkQuota,
   createResourceUid,
   formatVariableValue,
   HOST_VARIABLE_TYPE_LABELS,
@@ -41,10 +43,11 @@ import {
 } from '@mui/material'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { checkTenantQuota } from '../constants/entitlements'
-import useCurrentTenant from '../hooks/use-current-tenant'
-import useFirestoreCollection from '../hooks/use-firestore-collection'
+import {
+  useFirestore,
+  useFirestoreCollection,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import WhereUsedDialog from './where-used-dialog.component'
 import {
   fetchWhereUsed,
@@ -54,6 +57,8 @@ import {
 
 export interface HostVariablesCardProps {
   hostId: string
+  /** Resolved entitlement source for quota checks (AGL-395). */
+  tenant?: Partial<AglynTenant>
 }
 
 interface VariableDraft {
@@ -152,7 +157,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { tenant } = useCurrentTenant()
+  const { tenant } = props
   // Where-used dependents dialog (AGL-187).
   const [usage, setUsage] = useState<{
     name: string
@@ -343,7 +348,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
           sx={{ alignSelf: 'flex-start' }}
           onClick={() => {
             // Plan cap (AGL-99): dark-launch — plan-less tenants uncapped.
-            const quota = checkTenantQuota(
+            const quota = checkQuota(
               tenant,
               'variablesPerHost',
               variables.length,

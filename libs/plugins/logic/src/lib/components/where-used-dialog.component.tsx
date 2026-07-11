@@ -26,8 +26,23 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { buildRoute, Route } from '../constants/route-links'
 import type { WhereUsedResult } from '../utils/fetch-where-used'
+
+/**
+ * Besigner deep-links for a scanned screen/layout version. The routes live
+ * in the console app's table; the patterns are stable, so the plugin builds
+ * them directly rather than importing app-only route constants.
+ */
+const screenBesignerHref = (
+  hostId: string,
+  screenId: string,
+  versionId: string,
+) => `/${hostId}/screens/${screenId}/versions/${versionId}/besigner`
+const layoutBesignerHref = (
+  hostId: string,
+  layoutId: string,
+  versionId: string,
+) => `/${hostId}/layouts/${layoutId}/versions/${versionId}/besigner`
 
 export interface WhereUsedDialogProps {
   hostId: string
@@ -57,17 +72,9 @@ export function WhereUsedDialog(props: WhereUsedDialogProps) {
             {usage?.result.dependents.map((dependent) => {
               const href =
                 dependent.versionId && dependent.type === 'screen'
-                  ? buildRoute(Route.SCREEN_BESIGNER, {
-                      hostId,
-                      screenId: dependent.id,
-                      versionId: dependent.versionId,
-                    })
+                  ? screenBesignerHref(hostId, dependent.id, dependent.versionId)
                   : dependent.versionId && dependent.type === 'layout'
-                    ? buildRoute(Route.LAYOUT_BESIGNER, {
-                        hostId,
-                        layoutId: dependent.id,
-                        versionId: dependent.versionId,
-                      })
+                    ? layoutBesignerHref(hostId, dependent.id, dependent.versionId)
                     : null
               return (
                 <Stack
