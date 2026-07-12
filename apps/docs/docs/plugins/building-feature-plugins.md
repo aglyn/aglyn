@@ -164,7 +164,11 @@ moves into its plugin the same way, through the **API-route registry**
 ```ts
 // libs/plugins/{feature}/src/lib/server.ts — a SEPARATE entry point that
 // pulls in firebase-admin; never re-export it from the client barrel.
-import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
+// Import from `@aglyn/aglyn/server` (context-free), NOT the `@aglyn/aglyn`
+// barrel: the tenant's dispatcher is an App Router route handler, whose
+// module graph forbids `createContext`, and the full barrel re-exports the
+// client React contexts (AGL-405/408).
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 const listHandler: PluginApiHandler = async (req, res) => {
@@ -178,19 +182,26 @@ export function registerEventsCalendarApi(): void {
 }
 ```
 
-Each Next app ships **one catch-all dispatcher** — `pages/api/[...pluginApi].ts`
-— that imports a server-only registration module (`register*PluginApis()`)
-and resolves the request path against the registry:
+Each Next app ships **one catch-all dispatcher** that imports a server-only
+registration module (`register*PluginApis()`) and resolves the request path
+against the registry. The tenant is on the **App Router** (`app/api/[...pluginApi]/route.ts`),
+the console is still on the **Pages Router** (`pages/api/[...pluginApi].ts`);
+both work off the same registry, and the same `PluginApiHandler` runs
+unchanged in either. The App Router dispatcher runs the handler through the
+`runLegacyHandler` adapter (`@aglyn/aglyn/server`, AGL-407), which bridges the
+Web `Request`/`Response` to the framework-light `(req,res)` contract:
 
 ```ts
-import { resolvePluginApiRoute } from '@aglyn/aglyn'
-import '../../utils/register-plugin-apis' // side-effect registration
-export default async function handler(req, res) {
-  const slug = req.query['pluginApi']
-  const route = resolvePluginApiRoute(Array.isArray(slug) ? slug.join('/') : '')
-  if (!route) return res.status(404).json({ error: 'Not found' })
-  return route(req, res)
+// app/api/[...pluginApi]/route.ts (tenant)
+import { resolvePluginApiRoute, runLegacyHandler } from '@aglyn/aglyn/server'
+import '../../../utils/register-plugin-apis' // side-effect registration
+async function dispatch(request, { params }) {
+  const { pluginApi } = await params
+  const route = resolvePluginApiRoute((pluginApi ?? []).join('/'))
+  if (!route) return Response.json({ error: 'Not found' }, { status: 404 })
+  return runLegacyHandler(route, request, { pluginApi }) // handler unchanged
 }
+export { dispatch as GET, dispatch as POST, dispatch as PUT, dispatch as PATCH, dispatch as DELETE }
 ```
 
 Named API routes win over the catch-all, so **URLs are preserved**: to
@@ -202,18 +213,17 @@ bundle. Reference: `libs/plugins/events-calendar/src/lib/server.ts`.
 
 **Both Next apps carry a dispatcher.** The tenant (site-facing) app registers
 via `registerTenantPluginApis`; the console (authoring) app has its own
-`pages/api/[...pluginApi]` + `registerConsolePluginApis`, and plugins expose a
-separate `register*ConsoleApi()` for console-only handlers (staff/merchant
-ops, cron jobs) so each app registers only what it serves. A migrated route
-keeps its `/api/...` URL in whichever app owned it.
+dispatcher + `registerConsolePluginApis`, and plugins expose a separate
+`register*ConsoleApi()` for console-only handlers (staff/merchant ops, cron
+jobs) so each app registers only what it serves. A migrated route keeps its
+`/api/...` URL in whichever app owned it.
 
-**Body-parsing exceptions stay app-side.** The dispatcher is one route file,
-so its single `config` governs body parsing for every handler it serves.
-Routes that need a different policy — a webhook reading the **raw body** for
-signature verification (`bodyParser: false`), or an upload needing a raised
-`sizeLimit` — can't be expressed per-registered-route, so they remain named
-app routes. `email/events` (Svix), `community/publish-plugin` (8 MB bundle),
-and `community/preview-image` (3 MB image) are the current exceptions.
+**Raw-body / per-route exceptions.** On the App Router a handler reads the raw
+body directly (`request.text()`/`arrayBuffer()`), so webhooks and uploads need
+no special config. On the console's Pages Router dispatcher, one shared
+`config` governs body parsing, so a route needing `bodyParser: false` (a Svix
+webhook like `email/events`) or a raised `sizeLimit` (`community/publish-plugin`
+8 MB, `community/preview-image` 3 MB) stays a named app route there.
 
 ### Shared server runtime (`@aglyn/tenant-runtime`)
 
@@ -237,8 +247,16 @@ are reference consumers.
 
 ## Project setup
 
-- Tag new plugin libs like the mui plugin: `["scope:lib", "scope:aglyn",
-  "aglyn:addons"]` — module-boundary lint rules then apply unchanged.
+- Tag new plugin libs with **exactly** `["aglyn:addons"]` — nothing else
+  (AGL-409). This single tag is a plugin's whole module-boundary identity: as
+  a dependency *target* no core scope's allowlist reaches it, so `nx lint`
+  rejects any core lib importing `@aglyn/plugins-*` (the app can run without
+  the plugin). As a *source*, the `aglyn:addons` rule still lets a plugin
+  import any lib and other plugins. Do NOT add `scope:lib`/`scope:aglyn` back —
+  that reopens the hole (every lib carries `scope:lib`).
+- Plugins are wired in only at the app composition root
+  (`apps/*/utils/register-plugin-apis.ts` and `register-console-plugins`);
+  core libs and app feature code must never import a plugin.
 - Plugin libs may import `@aglyn/plugins-mui` for primitives; nothing may
   import a feature plugin from `@aglyn/plugins-mui` (that direction is the
   anti-pattern this rule exists to stop).
