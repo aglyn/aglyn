@@ -184,15 +184,14 @@ export function registerEventsCalendarApi(): void {
 
 Each Next app ships **one catch-all dispatcher** that imports a server-only
 registration module (`register*PluginApis()`) and resolves the request path
-against the registry. The tenant is on the **App Router** (`app/api/[...pluginApi]/route.ts`),
-the console is still on the **Pages Router** (`pages/api/[...pluginApi].ts`);
-both work off the same registry, and the same `PluginApiHandler` runs
-unchanged in either. The App Router dispatcher runs the handler through the
+against the registry. Both apps are on the **App Router**
+(`app/api/[...pluginApi]/route.ts`, AGL-408/410); the same `PluginApiHandler`
+runs unchanged in either. The dispatcher runs the handler through the
 `runLegacyHandler` adapter (`@aglyn/aglyn/server`, AGL-407), which bridges the
 Web `Request`/`Response` to the framework-light `(req,res)` contract:
 
 ```ts
-// app/api/[...pluginApi]/route.ts (tenant)
+// app/api/[...pluginApi]/route.ts (both apps)
 import { resolvePluginApiRoute, runLegacyHandler } from '@aglyn/aglyn/server'
 import '../../../utils/register-plugin-apis' // side-effect registration
 async function dispatch(request, { params }) {
@@ -218,12 +217,19 @@ dispatcher + `registerConsolePluginApis`, and plugins expose a separate
 jobs) so each app registers only what it serves. A migrated route keeps its
 `/api/...` URL in whichever app owned it.
 
-**Raw-body / per-route exceptions.** On the App Router a handler reads the raw
-body directly (`request.text()`/`arrayBuffer()`), so webhooks and uploads need
-no special config. On the console's Pages Router dispatcher, one shared
-`config` governs body parsing, so a route needing `bodyParser: false` (a Svix
-webhook like `email/events`) or a raised `sizeLimit` (`community/publish-plugin`
-8 MB, `community/preview-image` 3 MB) stays a named app route there.
+**Raw-body routes.** On the App Router a handler reads the raw body directly
+(`request.text()`/`arrayBuffer()`), so webhooks (Stripe `billing/webhook`,
+Svix `email/events`) and size-capped uploads need no `bodyParser` config —
+the old Pages Router `export const config` exceptions are gone; byte caps
+are enforced in-handler.
+
+**Build-time evaluation gotcha (AGL-410).** App Router route modules are
+evaluated during `next build` (page-data collection) — unlike Pages API
+routes, which never were. Module-scope side effects in a route's import
+graph must therefore tolerate a credential-less build: the firebase-admin
+init in `@aglyn/shared-util-fbserver` skips when the full credential is
+absent, and server libs must resolve Firestore/RTDB/Auth handles lazily
+inside functions, never at module scope.
 
 ### Shared server runtime (`@aglyn/tenant-runtime`)
 
