@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { createHash, createHmac, timingSafeEqual } from 'crypto'

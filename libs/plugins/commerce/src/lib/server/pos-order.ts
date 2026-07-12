@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgForHost,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
  * POS sale (AGL-312): manager-gated, server-priced. Cash sales create a

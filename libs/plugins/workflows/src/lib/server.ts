@@ -22,8 +22,8 @@ import {
   type HostWebhook,
   type HostWorkflow,
   runWorkflow,
-} from '@aglyn/aglyn'
-import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'

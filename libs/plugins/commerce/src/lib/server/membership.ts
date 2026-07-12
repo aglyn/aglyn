@@ -21,7 +21,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'crypto'
-import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn'
+import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
 
 /**
  * Site membership primitives (AGL-109): visitor accounts per host with

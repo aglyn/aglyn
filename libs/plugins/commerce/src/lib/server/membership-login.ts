@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn'
+import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import {

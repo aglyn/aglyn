@@ -25,8 +25,8 @@ import {
   resolveMergeTags,
   type EmailRenderProduct,
   type HostExperiment,
-} from '@aglyn/aglyn'
-import { type PluginApiHandler } from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   orgDataCollectionForHost,
   firebaseAdmin,

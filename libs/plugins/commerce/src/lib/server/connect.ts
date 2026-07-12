@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 async function stripe(path: string, params?: URLSearchParams) {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
  * Order refunds (AGL-287): full or partial via Stripe, site-admin only

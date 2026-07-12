@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyHostManagers } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
  * Supplier tracking callback (AGL-289): the routed order carried a

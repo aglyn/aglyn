@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 const REMIND_AFTER_MS = 60 * 60 * 1000
 const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000

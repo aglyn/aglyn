@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn'
+import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { setMemberCookie } from './membership'
 
 /** Member sign-out (AGL-294): clears the session cookie. */

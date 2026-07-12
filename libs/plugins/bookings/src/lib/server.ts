@@ -22,8 +22,8 @@ import {
   computeOpenSlots,
   type HostBookingService,
   isSlotOpen,
-} from '@aglyn/aglyn'
-import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
+import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,
   getOrgForHost,

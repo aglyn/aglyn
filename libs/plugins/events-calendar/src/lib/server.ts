@@ -29,7 +29,7 @@ import {
   isSiteEventType,
   registerPluginApiRoute,
   type PluginApiHandler,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { runSingleAction } from '@aglyn/tenant-runtime'
 

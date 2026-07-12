@@ -25,7 +25,7 @@
  * (server-only) API dispatcher registration.
  */
 
-import { registerPluginApiRoute } from '@aglyn/aglyn'
+import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { cartCheckoutHandler } from './server/cart-checkout'
 import { cartHandler } from './server/cart'
 import { catalogHandler } from './server/catalog'

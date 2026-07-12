@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn'
+import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { readMemberSession } from './membership'
