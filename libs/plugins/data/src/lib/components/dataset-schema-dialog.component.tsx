@@ -20,6 +20,8 @@ import {
   DATASET_FIELD_PATTERN,
   DATASET_FIELD_TYPE_LABELS,
   DATASET_FIELD_TYPES,
+  getCustomFieldType,
+  listCustomFieldTypes,
   type DatasetFieldDefinition,
   type DatasetFieldType,
   type DatasetModel,
@@ -439,19 +441,37 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
             select
             size="small"
             label="Type"
-            value={editorDefinition?.type ?? 'text'}
+            value={
+              editorDefinition?.customType
+                ? `custom:${editorDefinition.customType}`
+                : (editorDefinition?.type ?? 'text')
+            }
             onChange={(event) =>
-              setFieldEditor((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      definition: {
-                        ...prev.definition,
-                        type: event.target.value as DatasetFieldType,
-                      },
-                    }
-                  : prev,
-              )
+              setFieldEditor((prev) => {
+                if (!prev) return prev
+                const selected = event.target.value
+                // Custom field types (AGL-434): ride a base storage type
+                // and stamp customType so the record editor + validators
+                // pick up the plugin behavior.
+                if (selected.startsWith('custom:')) {
+                  const fieldType = getCustomFieldType(selected.slice(7))
+                  if (!fieldType) return prev
+                  return {
+                    ...prev,
+                    definition: {
+                      ...prev.definition,
+                      type: fieldType.baseType as DatasetFieldType,
+                      customType: fieldType.name,
+                    },
+                  }
+                }
+                const definition = {
+                  ...prev.definition,
+                  type: selected as DatasetFieldType,
+                }
+                delete definition.customType
+                return { ...prev, definition }
+              })
             }
           >
             {(fieldEditor?.fieldId &&
@@ -462,6 +482,14 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
             ).map((type) => (
               <MenuItem key={type} value={type}>
                 {DATASET_FIELD_TYPE_LABELS[type]}
+              </MenuItem>
+            ))}
+            {listCustomFieldTypes().map((fieldType) => (
+              <MenuItem
+                key={`custom:${fieldType.name}`}
+                value={`custom:${fieldType.name}`}
+              >
+                {`${fieldType.label} (${fieldType.pluginId})`}
               </MenuItem>
             ))}
           </TextField>

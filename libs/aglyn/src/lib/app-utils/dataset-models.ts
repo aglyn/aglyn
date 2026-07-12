@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { validateCustomFieldValue } from '../plugin-manager/custom-fields'
+
 /**
  * Dataset models (AGL-177): the runtime promotion of the type-level
  * blueprint in `libs/shared/data/types/src/lib/dod.ts` (kept as the
@@ -94,6 +96,11 @@ export interface DatasetFieldDefinition {
   /** Display name; doubles as the binding key for `{{item.name}}`. */
   name: string
   type: DatasetFieldType
+  /**
+   * Plugin-declared custom type riding this base type (AGL-434) — see
+   * plugin-manager/custom-fields. Unknown names degrade to the base type.
+   */
+  customType?: string
   description?: string
   required?: boolean
   /** Default applied by editors when creating documents; never coerced. */
@@ -267,6 +274,17 @@ export function validateDocument(
       case 'nil':
         break
     }
+  }
+  // Custom field types (AGL-434): plugin validators run after the base
+  // checks, only on fields that passed them.
+  for (const fieldId of model.order) {
+    const field = model.fields[fieldId]
+    if (!field?.customType || errors[fieldId]) continue
+    const customError = validateCustomFieldValue(
+      field.customType,
+      values[fieldId],
+    )
+    if (customError) errors[fieldId] = `${field.name}: ${customError}`
   }
   return errors
 }

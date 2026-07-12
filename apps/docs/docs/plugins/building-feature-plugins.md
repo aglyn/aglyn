@@ -196,6 +196,14 @@ template + the catalog entry).
 - **Billing webhook hooks** — `registerBillingWebhookHandler` receives the
   platform Stripe events (commerce orders, booking payments, marketplace
   purchases live in their plugins).
+- **Custom field types** (AGL-434) — `registerCustomFieldType({name,
+  pluginId, label, baseType, Input, validate})` adds a named field type to
+  the dataset schema editor, riding an existing storage type (text/bool/
+  int32/float/map — no new storage primitives). The record editor mounts
+  your `Input`; your `validate` runs after the base checks on both client
+  and server. Register the pure-data half from `/server` too (the AGL-428
+  pattern) so imports/writes validate without a client. Reference adopter:
+  community's `rating`.
 - **Bootstrap phase** (AGL-429) — export `bootstrap<Surface>()`
   (`bootstrapConsole`, `bootstrapSite`, …) next to your register fn and the
   loader calls it after EVERY plugin in the batch has registered — the

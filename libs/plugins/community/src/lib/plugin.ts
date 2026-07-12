@@ -23,6 +23,8 @@ import { AiAssistProvider } from './components/ai-assist-provider.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import { CommunityListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { RATING_FIELD } from './model/rating-field'
+import RatingInput from './components/rating-input.component'
 
 /** Code-split: the Community console page only loads when opened. */
 const CommunityConsolePage = lazy(
@@ -39,6 +41,8 @@ const CommunityConsolePage = lazy(
  * segments) that import this plugin's shared `useCommunityActions`.
  */
 export function registerCommunityConsole(): void {
+  // Custom field type (AGL-434): rating rides int32 with a starred input.
+  PluginSdk.registerCustomFieldType({ ...RATING_FIELD, Input: RatingInput })
   PluginSdk.registerConsoleExtension({
     // AI assist (AGL-89/419): mounted by the shell around every console
     // page; besigner consumes AiAssistContext from besigner-ui.

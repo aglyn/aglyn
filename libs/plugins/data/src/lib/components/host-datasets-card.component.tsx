@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type AglynTenant, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, createResourceUid, datasetValueToInput, deriveModelFromFields, effectiveDatasetModel, formatDatasetValue, parseDatasetFields, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument } from '@aglyn/aglyn'
+import { type AglynTenant, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, createResourceUid, datasetValueToInput, deriveModelFromFields, effectiveDatasetModel, formatDatasetValue, parseDatasetFields, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
 import { datasetRecordsToCsv, mapImportColumns, parseImportRows, serializeDatasetValue } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -958,6 +958,30 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               sx: index === 0 ? { mt: 1 } : undefined,
               onChange: (event: { target: { value: string } }) =>
                 setValue(event.target.value),
+            }
+            // Custom field types (AGL-434): the declaring plugin's Input
+            // takes over; values stay in input form (strings) so the
+            // existing coerce/validate pipeline is unchanged.
+            const customFieldType = getCustomFieldType(field.customType)
+            if (customFieldType?.Input) {
+              const CustomInput = customFieldType.Input
+              return (
+                <Stack key={fieldId} sx={index === 0 ? { mt: 1 } : undefined}>
+                  <CustomInput
+                    value={value}
+                    label={common.label}
+                    onChange={(next) => setValue(String(next ?? ''))}
+                  />
+                  {(error || field.description) ? (
+                    <Typography
+                      variant="caption"
+                      color={error ? 'error' : 'text.secondary'}
+                    >
+                      {error || field.description}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              )
             }
             // Typed inputs per FT.Tag (AGL-179).
             if (field.type === 'bool') {

@@ -18,6 +18,7 @@
 import {
   registerBillingWebhookHandler,
   registerPluginApiRoute,
+  registerCustomFieldType,
 } from '@aglyn/aglyn/server'
 import { communityBillingWebhookHandler } from './server/billing-webhook'
 import { aiAssistHandler } from './server/ai-assist'
@@ -27,6 +28,7 @@ import { connectHandler } from './server/connect'
 import { installHandler } from './server/install'
 import { installPluginHandler } from './server/install-plugin'
 import { listingVersionsHandler } from './server/listing-versions'
+import { RATING_FIELD } from './model/rating-field'
 import { installTemplateHandler } from './server/install-template'
 import { publishHandler } from './server/publish'
 import { publishTemplateHandler } from './server/publish-template'
@@ -40,6 +42,9 @@ import { publishTemplateHandler } from './server/publish-template'
  * bodyParser limits.
  */
 export function registerCommunityConsoleApi(): void {
+  // Server side of the rating custom field (AGL-434): validators run
+  // on import/write paths even when no client loaded the plugin.
+  registerCustomFieldType(RATING_FIELD)
   registerPluginApiRoute('community/checkout', checkoutHandler)
   registerPluginApiRoute('community/connect', connectHandler)
   registerPluginApiRoute('community/install', installHandler)

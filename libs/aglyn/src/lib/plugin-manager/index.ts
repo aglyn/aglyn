@@ -18,6 +18,7 @@
 export { default } from './plugin-manager'
 export * from './plugin-manager'
 export * from './billing-webhook-hooks'
+export * from './custom-fields'
 export * from './enabled-plugins'
 export * from './install-presets'
 export * from './plugin-config'
