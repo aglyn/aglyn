@@ -41,4 +41,10 @@ export const TENANT_PLUGIN_MANIFEST: PluginLoadManifest = [
     register: {"site":"registerEventsCalendarPlugin"},
     load: () => import('@aglyn/plugins-events-calendar'),
   },
+  {
+    id: 'marketing',
+    apiPrefixes: ["campaigns","experiments"],
+    register: {"site":"registerMarketingPlugin"},
+    load: () => import('@aglyn/plugins-marketing'),
+  },
 ]

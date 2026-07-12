@@ -17,6 +17,8 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import * as PluginSdk from '@aglyn/aglyn'
+import { registerSiteRuntime } from '@aglyn/aglyn'
+import { MarketingSiteRuntime } from './components/site-runtime'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -49,5 +51,18 @@ export function registerMarketingConsole(): void {
         Component: MarketingConsolePage,
       },
     ],
+  })
+}
+
+/**
+ * Site half (AGL-419): the overlays/experiments/automations runtime the
+ * tenant page renders generically — reads back the slices the plugin's
+ * server enricher wrote. Registered via the loader's 'site' surface.
+ */
+export function registerMarketingPlugin(): void {
+  registerSiteRuntime({
+    pluginId: 'marketing',
+    runtimeId: 'marketing-site-runtime',
+    Component: MarketingSiteRuntime,
   })
 }

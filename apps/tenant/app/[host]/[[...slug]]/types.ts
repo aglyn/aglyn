@@ -23,38 +23,6 @@ import type { CollectionContent } from '../../../utils/get-collection-content'
  * (unchanged from the former `getStaticProps` `Props`, AGL-398). Shared by
  * `load-page-data`, `page`, and `catch-all-client`.
  */
-/**
- * Wire-contract copies of the marketing plugin's page contributions
- * (AGL-418): the enricher (plugins-marketing/server) produces these
- * shapes; the page runtime consumes them. Kept structurally identical —
- * the app may not import plugin types, so the contract is duplicated
- * deliberately (AGL-419 replaces the client consumers with plugin-owned
- * site runtimes and an opaque bag).
- */
-export interface ClientAutomation {
-  id: string
-  event: string
-  selector?: string
-  threshold?: number
-  oncePerVisitor?: boolean
-  oncePerSession?: boolean
-  cooldownMinutes?: number
-  steps: Array<Record<string, any> & { type: string; overlayId?: string }>
-  hasServerSteps: boolean
-}
-
-export interface ScreenExperiment {
-  id: string
-  target: 'screen' | 'section'
-  status: string
-  nodeId?: string
-  winnerVariantId?: string
-  endAtMs?: number
-  goal?: { event: string; filter?: string }
-  variants: Array<{ id: string; weight?: number; versionId?: string }>
-  payloads: Record<string, Record<string, any> | null>
-}
-
 export interface Props {
   data: {
     host?: Aglyn.AglynHost
@@ -73,53 +41,12 @@ export interface Props {
    * server-side; `contentHash` keys the visitor's dismissal so edits
    * re-show the bar. Null when disabled or not entitled.
    */
-  announcementBar?: {
-    text: string
-    href?: string
-    backgroundColor?: string
-    textColor?: string
-    dismissible?: boolean
-    contentHash: string
-    /** Marketing-hub overlay doc id for per-overlay stats (AGL-271). */
-    overlayId?: string
-  } | null
   /**
-   * Promotional popup (AGL-196): copy binding-resolved server-side; the
-   * client owns trigger timing, the schedule window re-check (ISR pages
-   * cache up to 60s), and localStorage frequency capping.
+   * Plugin page contributions (AGL-418/419): enricher-written slices the
+   * plugin site runtimes read back (announcementBar, popup, experiments,
+   * clientAutomations, automationOverlays, ...). Opaque to the app.
    */
-  popup?: {
-    headline?: string
-    body: string
-    imageUrl?: string
-    ctaLabel?: string
-    ctaHref?: string
-    trigger: 'delay' | 'scroll' | 'exit'
-    triggerValue: number
-    frequencyDays: number
-    collectEmail?: boolean
-    startAtMs?: number
-    endAtMs?: number
-    contentHash: string
-    /** Marketing-hub overlay doc id for per-overlay stats (AGL-271). */
-    overlayId?: string
-  } | null
-  /**
-   * Screen/section A/B experiments for this screen (AGL-253): the client
-   * runner assigns a variant per visitor, swaps the composed tree, and
-   * beacons exposures/conversions.
-   */
-  experiments?: ScreenExperiment[]
-  /**
-   * Site-event automations for this page (AGL-256): the client engine
-   * arms triggers, runs client steps, and dispatches server steps.
-   */
-  clientAutomations?: ClientAutomation[]
-  /** Overlay payloads referenced by showOverlay steps, by overlay id. */
-  automationOverlays?: Record<
-    string,
-    { kind: 'bar' | 'popup'; bar?: any; popup?: any }
-  > | null
+  [pluginContribution: string]: unknown
   /** Collection list/entry payload when the path is content, not a screen. */
   content?: CollectionContent
   /** Password-protected screen: nodes withheld until unlock (AGL-87). */

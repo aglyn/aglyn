@@ -70,7 +70,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   {
     id: 'marketing',
     apiPrefixes: ["campaigns","experiments"],
-    register: {"console":"registerMarketingConsole"},
+    register: {"console":"registerMarketingConsole","site":"registerMarketingPlugin"},
     load: () => import('@aglyn/plugins-marketing'),
   },
   {

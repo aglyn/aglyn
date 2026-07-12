@@ -25,20 +25,8 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * server steps exist (fired actions then dispatch to
  * /api/events/dispatch). Fail-open: errors return an empty list.
  */
-export interface ClientAutomation {
-  id: string
-  event: Aglyn.SiteEventType
-  selector?: string
-  threshold?: number
-  /** Fire at most once per visitor (AGL-266). */
-  oncePerVisitor?: boolean
-  /** Fire at most once per browser session (AGL-274). */
-  oncePerSession?: boolean
-  /** Minimum minutes between fires for the same visitor (AGL-274). */
-  cooldownMinutes?: number
-  steps: Aglyn.HostActionStep[]
-  hasServerSteps: boolean
-}
+export type { ClientAutomation } from '../model/site-contract'
+import type { ClientAutomation } from '../model/site-contract'
 
 export async function getClientAutomations(options: {
   hostId: string

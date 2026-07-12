@@ -30,18 +30,8 @@ import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
  * whole-tree swap is equivalent and avoids subtree surgery on the
  * client. `nodeId` stays as besigner metadata.
  */
-export interface ScreenExperiment {
-  id: string
-  target: 'screen' | 'section'
-  status: MarketingModel.ExperimentStatus
-  nodeId?: string
-  winnerVariantId?: string
-  /** Past this the client runner serves the default (AGL-273). */
-  endAtMs?: number
-  goal?: { event: string; filter?: string }
-  variants: Array<{ id: string; weight?: number; versionId?: string }>
-  payloads: Record<string, Record<string, any> | null>
-}
+export type { ScreenExperiment } from '../model/site-contract'
+import type { ScreenExperiment } from '../model/site-contract'
 
 export async function getScreenExperiments(options: {
   hostId: string

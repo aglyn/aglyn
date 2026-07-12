@@ -105,7 +105,8 @@
       "register": {
         "console": "registerMarketingConsole",
         "tenantApi": "registerMarketingApi",
-        "consoleApi": "registerMarketingConsoleApi"
+        "consoleApi": "registerMarketingConsoleApi",
+        "site": "registerMarketingPlugin"
       },
       "apiPrefixes": [
         "campaigns",

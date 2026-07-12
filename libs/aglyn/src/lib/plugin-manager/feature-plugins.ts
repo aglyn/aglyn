@@ -184,6 +184,22 @@ export interface ConsoleDashboardCard {
 export interface ConsoleSettingsSection {
   sectionId: string
   title: string
+  /** Rendered inside the org/host settings surface when present (AGL-419). */
+  Component?: ComponentType<ConsolePluginPageProps>
+}
+
+/**
+ * A component a plugin renders into a NAMED console slot (AGL-419) — e.g.
+ * 'hostActivity' (dashboard + editor view), 'dashboardCard',
+ * 'besignerFunctions'. The shell owns placement and passes
+ * {@link ConsolePluginPageProps}; the plugin owns the UI.
+ */
+export interface ConsoleWidget {
+  slot: string
+  widgetId: string
+  title?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  Component: ComponentType<any>
 }
 
 /**
@@ -199,6 +215,14 @@ export interface ConsoleExtension {
   navItems?: ConsoleNavItem[]
   dashboardCards?: ConsoleDashboardCard[]
   settingsSections?: ConsoleSettingsSection[]
+  /** Slot-addressed components the shell renders in place (AGL-419). */
+  widgets?: ConsoleWidget[]
+  /**
+   * App-level providers the shell mounts around every console page
+   * (AGL-419) — e.g. the community plugin's AI-assist provider.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  providers?: Array<ComponentType<any>>
 }
 
 const consoleExtensions = new Map<PluginId, ConsoleExtension>()
@@ -254,4 +278,28 @@ export function resolveConsolePluginPage(
     }
   }
   return undefined
+}
+
+/** Widgets registered for a slot, across every extension (AGL-419). */
+export function listConsoleWidgets(
+  slot: string,
+): Array<{ extension: ConsoleExtension; widget: ConsoleWidget }> {
+  const out: Array<{ extension: ConsoleExtension; widget: ConsoleWidget }> = []
+  for (const extension of consoleExtensions.values()) {
+    for (const widget of extension.widgets ?? []) {
+      if (widget.slot === slot) out.push({ extension, widget })
+    }
+  }
+  return out
+}
+
+/** Providers registered by every extension, in registration order. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function listConsoleProviders(): Array<ComponentType<any>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out: Array<ComponentType<any>> = []
+  for (const extension of consoleExtensions.values()) {
+    out.push(...(extension.providers ?? []))
+  }
+  return out
 }
