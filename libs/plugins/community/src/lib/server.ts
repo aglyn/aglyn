@@ -26,6 +26,7 @@ import { checkoutHandler } from './server/checkout'
 import { connectHandler } from './server/connect'
 import { installHandler } from './server/install'
 import { installPluginHandler } from './server/install-plugin'
+import { listingVersionsHandler } from './server/listing-versions'
 import { installTemplateHandler } from './server/install-template'
 import { publishHandler } from './server/publish'
 import { publishTemplateHandler } from './server/publish-template'
@@ -44,6 +45,7 @@ export function registerCommunityConsoleApi(): void {
   registerPluginApiRoute('community/install', installHandler)
   registerPluginApiRoute('community/install-plugin', installPluginHandler)
   registerPluginApiRoute('community/install-template', installTemplateHandler)
+  registerPluginApiRoute('community/listing-versions', listingVersionsHandler)
   registerPluginApiRoute('community/publish', publishHandler)
   registerPluginApiRoute('community/publish-template', publishTemplateHandler)
   // Relocated console routes (AGL-418): URLs preserved via the dispatcher.
