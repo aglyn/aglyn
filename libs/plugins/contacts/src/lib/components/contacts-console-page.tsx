@@ -17,7 +17,7 @@
 'use client'
 
 import { checkQuota, type ContactSegment, type ContactSource, contactMatchesSegment, type HostContact } from '@aglyn/aglyn'
-import { type ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {

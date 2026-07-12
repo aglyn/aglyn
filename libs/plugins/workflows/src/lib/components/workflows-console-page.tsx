@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubTabs } from '@aglyn/shared-ui-next'
 import HostActionsCard from './host-actions-card.component'
 import HostWebhooksCard from './host-webhooks-card.component'

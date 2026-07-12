@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { HubTabs } from '@aglyn/shared-ui-next'
 import CampaignsCard from './campaigns-card'
 import EmailScreensCard from './email-screens-card'

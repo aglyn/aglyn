@@ -17,3 +17,5 @@
 
 export { default } from './plugin-manager'
 export * from './plugin-manager'
+export * from './feature-plugins'
+export * from './plugin-bridge'

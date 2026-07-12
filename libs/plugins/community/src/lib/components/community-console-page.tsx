@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { Stack } from '@mui/material'
 import CommunityBrowse from './community-browse.component'
 import HostPluginsCard from './host-plugins-card.component'

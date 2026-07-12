@@ -42,15 +42,15 @@ hit.
 
 ## The UI half
 
-Build a bundle with `defineUiFeatureBundle` from `@aglyn/plugins-sdk` (the
-plugin SDK, AGL-414) and register
+Build a bundle with `defineUiFeatureBundle` from `@aglyn/aglyn` (the
+plugin-manager registration API, AGL-415) and register
 it the same way the mui bundle registers itself. The bundle automatically
 declares a dependency on the `mui` bundle, so primitives and theming load
 first.
 
 ```ts
 import * as Aglyn from '@aglyn/aglyn'
-import { defineUiFeatureBundle } from '@aglyn/plugins-sdk'
+import { defineUiFeatureBundle } from '@aglyn/aglyn'
 import * as EventList from './components/event-list'
 
 export const BUNDLE_ID = 'events-calendar'
@@ -96,7 +96,7 @@ it under the active host, wires the breadcrumb/header, resolves the
 `featureFlag` entitlement, and passes it in as `entitled`.
 
 ```ts
-import { registerConsoleExtension } from '@aglyn/plugins-sdk'
+import { registerConsoleExtension } from '@aglyn/aglyn'
 import { lazy } from 'react'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 
@@ -131,7 +131,7 @@ org/session hooks:
 
 ```tsx
 import { checkQuota } from '@aglyn/aglyn'
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 
 export default function BookingsConsolePage({
   hostId,

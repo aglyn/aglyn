@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubTabs } from '@aglyn/shared-ui-next'
 import CatalogOrganizationCard from './console/catalog-organization-card.component'

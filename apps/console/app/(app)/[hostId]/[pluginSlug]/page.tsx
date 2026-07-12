@@ -17,7 +17,7 @@
 'use client'
 
 import { checkEntitlement, RELEASE_FLAGS, type ReleaseFlagKey } from '@aglyn/aglyn'
-import { resolveConsolePluginPage } from '@aglyn/plugins-sdk'
+import { resolveConsolePluginPage } from '@aglyn/aglyn'
 import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'

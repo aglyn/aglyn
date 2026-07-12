@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import HostFunctionsCard from './host-functions-card.component'
 import HostReferenceHealthCard from './host-reference-health-card.component'

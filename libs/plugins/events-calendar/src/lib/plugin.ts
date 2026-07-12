@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/plugins-sdk'
+import * as PluginSdk from '@aglyn/aglyn'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import * as EventList from './components/event-list'

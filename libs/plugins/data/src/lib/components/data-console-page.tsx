@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { Alert, Button, Stack } from '@mui/material'
 import HostDatasetsCard from './host-datasets-card.component'
 

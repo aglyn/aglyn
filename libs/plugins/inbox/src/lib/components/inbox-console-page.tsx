@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/plugins-sdk'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CampaignsCard as HostCampaignsCard } from '@aglyn/plugins-email'
 import { HostOrdersCard } from '@aglyn/plugins-commerce'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'

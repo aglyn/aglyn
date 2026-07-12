@@ -74,8 +74,6 @@
       "@aglyn/plugins-mui/*": ["libs/plugins/mui/src/lib/*"],
       "@aglyn/plugins-workflows": ["libs/plugins/workflows/src/index.ts"],
       "@aglyn/plugins-workflows/*": ["libs/plugins/workflows/src/lib/*"],
-      "@aglyn/plugins-sdk": ["libs/plugins/sdk/src/index.ts"],
-      "@aglyn/plugins-sdk/*": ["libs/plugins/sdk/src/lib/*"],
       "@aglyn/plugins-redirects": ["libs/plugins/redirects/src/index.ts"],
       "@aglyn/plugins-redirects/*": ["libs/plugins/redirects/src/lib/*"],
       "@aglyn/shared-data-enums": ["libs/shared/data/enums/src/index.ts"],

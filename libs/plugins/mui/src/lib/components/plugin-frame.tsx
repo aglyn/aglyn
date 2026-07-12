@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/plugins-sdk'
+import * as PluginSdk from '@aglyn/aglyn'
 import Box from '@mui/material/Box'
 import {
   forwardRef,

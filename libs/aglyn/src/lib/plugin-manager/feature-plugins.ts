@@ -39,16 +39,14 @@
  */
 
 import { runInAction } from 'mobx'
+import type { TenantPermissions } from '../app-utils/org-permissions'
+import type { AglynTenant, TenantFeatureFlags } from '../foundation'
 import type {
-  AglynTenant,
   ComponentSchema,
   MdiIconProps,
-  Plugin,
-  PluginId,
   PresetSchema,
-  TenantFeatureFlags,
-  TenantPermissions,
-} from '@aglyn/aglyn'
+} from '../types/nodes'
+import type { Plugin, PluginId } from './plugin-manager'
 import type { ComponentType } from 'react'
 
 /** The mui bundle id every UI feature bundle depends on. */
