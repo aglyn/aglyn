@@ -96,9 +96,20 @@ async function signIn(apiKey) {
 function chromeExecutable() {
   if (process.env.E2E_CHROME_PATH) return { executablePath: process.env.E2E_CHROME_PATH }
   if (process.platform === 'darwin') {
-    return {
-      executablePath:
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    // First installed Chrome flavor wins — a Chrome update/uninstall must
+    // not break the suite (it did once: only Beta was installed).
+    const candidates = [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta',
+      '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    ]
+    for (const executablePath of candidates) {
+      try {
+        readFileSync(executablePath)
+        return { executablePath }
+      } catch {
+        // Not installed — try the next flavor.
+      }
     }
   }
   return { channel: 'chrome' }
