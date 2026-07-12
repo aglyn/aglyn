@@ -15,10 +15,16 @@
  * limitations under the License.
  */
 
+import { runLegacyHandler } from '@aglyn/aglyn/server'
 import { servePluginFetch } from '@aglyn/tenant-data-admin'
 
+export const dynamic = 'force-dynamic'
+
 /**
- * Host-mediated plugin fetch on the published tenant site (AGL-191).
- * Allowlist-gated; see `servePluginFetch` for the contract.
+ * Host-mediated plugin fetch (AGL-191). Shared node-style handler mounted in
+ * both apps; runs here through the App Router adapter so it stays unchanged
+ * on the console's Pages Router. Allowlist-gated; see `servePluginFetch`.
  */
-export default servePluginFetch
+export async function POST(request: Request): Promise<Response> {
+  return runLegacyHandler(servePluginFetch, request)
+}

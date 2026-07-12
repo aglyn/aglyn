@@ -15,39 +15,37 @@
  * limitations under the License.
  */
 
-import type { NextApiRequest, NextApiResponse } from 'next'
-import getCollectionContent from '../../utils/get-collection-content'
-import getHost from '../../utils/get-host'
+import getCollectionContent from '../../../utils/get-collection-content'
+import getHost from '../../../utils/get-host'
+
+export const dynamic = 'force-dynamic'
 
 const escapeXml = (value: string) =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
  * RSS feed for a content collection (AGL-81):
  * `/api/collections-rss?host={subdomain|cname}&collection={slug}`.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
-  const host = String(req.query['host'] ?? '')
-  const collectionSlug = String(req.query['collection'] ?? '')
+export async function GET(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const host = url.searchParams.get('host') ?? ''
+  const collectionSlug = url.searchParams.get('collection') ?? ''
   if (!host || !collectionSlug) {
-    return res.status(400).send('Missing host or collection')
+    return new Response('Missing host or collection', { status: 400 })
   }
   const hostRes = await getHost({ host })
-  if (hostRes.error || !hostRes.host) return res.status(404).send('Not found')
+  if (hostRes.error || !hostRes.host) {
+    return new Response('Not found', { status: 404 })
+  }
 
   const content = await getCollectionContent({
     hostId: hostRes.host.$id,
     collectionSlug,
   })
-  if (!content.collection) return res.status(404).send('Not found')
+  if (!content.collection) return new Response('Not found', { status: 404 })
 
-  const base = `https://${String(req.headers['host'] ?? host)}`
+  const base = `https://${request.headers.get('host') ?? host}`
   const items = content.entries
     .map(
       (entry) =>
@@ -74,7 +72,11 @@ export default async function handler(
     items +
     '\n</channel></rss>\n'
 
-  res.setHeader('Content-Type', 'application/rss+xml')
-  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate')
-  return res.status(200).send(xml)
+  return new Response(xml, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/rss+xml',
+      'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+    },
+  })
 }

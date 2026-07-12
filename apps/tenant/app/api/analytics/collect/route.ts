@@ -16,14 +16,17 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { FieldValue } from 'firebase-admin/firestore'
-import type { NextApiRequest, NextApiResponse } from 'next'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { FieldValue } from 'firebase-admin/firestore'
+
+export const dynamic = 'force-dynamic'
 
 /** Firestore map keys can't be parsed as field paths on read anyway, but
  * keep them tame: strip characters that complicate querying/exporting. */
 const pathKey = (path: string) =>
   (path || '/').slice(0, 200).replace(/[.$#[\]]/g, '_')
+
+const noContent = () => new Response(null, { status: 204 })
 
 /**
  * Privacy-friendly pageview collector (AGL-82): no cookies, no user ids —
@@ -31,20 +34,14 @@ const pathKey = (path: string) =>
  * (and later the AGL-41 metering pipeline) reads. Fire-and-forget from a
  * sendBeacon, so errors just 204.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+export async function POST(request: Request): Promise<Response> {
   try {
-    const body =
-      typeof req.body === 'string' ? JSON.parse(req.body) : (req.body ?? {})
+    const raw = await request.text()
+    const body = raw ? (JSON.parse(raw) as Record<string, any>) : {}
     const hostId = String(body.hostId ?? '')
     const path = String(body.path ?? '/')
     const screenId = String(body.screenId ?? '')
-    if (!hostId || hostId.length > 64) return res.status(204).end()
+    if (!hostId || hostId.length > 64) return noContent()
 
     // Overlay events (AGL-200): impressions/dismissals/clicks for the
     // announcement bar and popup count into the same day doc under an
@@ -95,7 +92,7 @@ export default async function handler(
             .catch(() => undefined)
         }
       }
-      return res.status(204).end()
+      return noContent()
     }
 
     // Referrer host (AGL-138): external sources only — same-host and
@@ -104,17 +101,17 @@ export default async function handler(
     try {
       const referrer = String(body.referrer ?? '')
       if (referrer) {
-        const url = new URL(referrer)
-        const requestHost = String(req.headers.host ?? '')
-        if (url.host && url.host !== requestHost) {
-          referrerHost = url.host.slice(0, 100).replace(/[.$#[\]]/g, '_')
+        const referrerUrl = new URL(referrer)
+        const requestHost = String(request.headers.get('host') ?? '')
+        if (referrerUrl.host && referrerUrl.host !== requestHost) {
+          referrerHost = referrerUrl.host.slice(0, 100).replace(/[.$#[\]]/g, '_')
         }
       }
     } catch {
       // Ignore junk referrers.
     }
     // Coarse device class from the UA (AGL-138) — no fingerprinting.
-    const userAgent = String(req.headers['user-agent'] ?? '')
+    const userAgent = String(request.headers.get('user-agent') ?? '')
     const device = /ipad|tablet/i.test(userAgent)
       ? 'tablet'
       : /mobi|android|iphone/i.test(userAgent)
@@ -171,5 +168,5 @@ export default async function handler(
   } catch (error) {
     console.error(error)
   }
-  return res.status(204).end()
+  return noContent()
 }

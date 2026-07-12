@@ -15,16 +15,19 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn/server'
+import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
-  orgDataCollectionForHost, firebaseAdmin, getOrgForHost ,
+  firebaseAdmin,
+  getOrgForHost,
   notifyHostManagers,
+  orgDataCollectionForHost,
+  upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { extractEmailFromFields } from '@aglyn/aglyn'
-import { upsertHostContact } from '@aglyn/tenant-data-admin'
-import { FieldValue } from 'firebase-admin/firestore'
-import type { NextApiRequest, NextApiResponse } from 'next'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { FieldValue } from 'firebase-admin/firestore'
+
+export const dynamic = 'force-dynamic'
 
 const MAX_FIELDS = 20
 const MAX_PAYLOAD_CHARS = 10000
@@ -37,13 +40,13 @@ const RATE_MAX = 10
 
 function rateLimited(ip: string): boolean {
   const now = Date.now()
-  const hits = (recentByIp.get(ip) ?? []).filter(
-    (t) => now - t < RATE_WINDOW_MS,
-  )
+  const hits = (recentByIp.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS)
   hits.push(now)
   recentByIp.set(ip, hits)
   return hits.length > RATE_MAX
 }
+
+const json = (body: unknown, status = 200) => Response.json(body, { status })
 
 /**
  * Lead-capture submissions endpoint (AGL-76): validates the target host,
@@ -52,18 +55,13 @@ function rateLimited(ip: string): boolean {
  * inbox. Writes go through the admin SDK, so client rules never allow
  * arbitrary submission writes.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-  const { hostId, formName, dataset, path, fields, website } = req.body ?? {}
+export async function POST(request: Request): Promise<Response> {
+  const payload = (await request.json().catch(() => ({}))) as Record<string, any>
+  const { hostId, formName, dataset, path, fields, website } = payload
 
   // Honeypot filled → pretend success so bots learn nothing.
   if (typeof website === 'string' && website.trim()) {
-    return res.status(200).json({ received: true })
+    return json({ received: true })
   }
   if (
     typeof hostId !== 'string' ||
@@ -75,13 +73,13 @@ export default async function handler(
     Object.keys(fields).length > MAX_FIELDS ||
     JSON.stringify(fields).length > MAX_PAYLOAD_CHARS
   ) {
-    return res.status(400).json({ error: 'Invalid submission' })
+    return json({ error: 'Invalid submission' }, 400)
   }
   const ip = String(
-    req.headers['x-forwarded-for'] ?? req.socket.remoteAddress ?? 'unknown',
+    request.headers.get('x-forwarded-for') ?? 'unknown',
   ).split(',')[0]
   if (rateLimited(ip)) {
-    return res.status(429).json({ error: 'Too many submissions' })
+    return json({ error: 'Too many submissions' }, 429)
   }
 
   try {
@@ -89,7 +87,7 @@ export default async function handler(
     const hostRef = firestore.collection('hosts').doc(hostId)
     const hostSnapshot = await hostRef.get()
     if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown site' })
+      return json({ error: 'Unknown site' }, 404)
     }
 
     // Monthly quota by the owning tenant's plan (dark-launch: tenants
@@ -107,7 +105,7 @@ export default async function handler(
       const counterSnapshot = await counterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)
       if (used >= limit) {
-        return res.status(429).json({ error: 'Submission limit reached' })
+        return json({ error: 'Submission limit reached' }, 429)
       }
     }
 
@@ -155,9 +153,7 @@ export default async function handler(
           .get()
         const datasetDoc = datasetsSnapshot.docs[0]
         if (datasetDoc && !datasetDoc.get('deletedAt')) {
-          const declaredFields: string[] = Array.isArray(
-            datasetDoc.get('fields'),
-          )
+          const declaredFields: string[] = Array.isArray(datasetDoc.get('fields'))
             ? datasetDoc.get('fields')
             : []
           const values = Aglyn.sanitizeRecordValues(
@@ -186,10 +182,7 @@ export default async function handler(
         console.error('form dataset append failed', error)
       }
     }
-    await counterRef.set(
-      { [monthKey]: FieldValue.increment(1) },
-      { merge: true },
-    )
+    await counterRef.set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
     // Event trigger (AGL-128/148): field values join the automation
     // scope; action-produced site alerts ride back to the visitor.
     // In-app notification to the site's managers (AGL-259).
@@ -204,9 +197,9 @@ export default async function handler(
       path: String(path ?? '').slice(0, 500),
       ...sanitizedFields,
     })
-    return res.status(200).json({ received: true, alerts })
+    return json({ received: true, alerts })
   } catch (error) {
     console.error(error)
-    return res.status(500).json({ error: 'Submission failed' })
+    return json({ error: 'Submission failed' }, 500)
   }
 }

@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
-import type { NextApiRequest, NextApiResponse } from 'next'
-import getHost from '../../utils/get-host'
+import { screenRoutePathToUrl } from '@aglyn/aglyn/server'
+import getHost from '../../../utils/get-host'
+
+export const dynamic = 'force-dynamic'
 
 const escapeXml = (value: string) =>
   value
@@ -31,22 +32,24 @@ const escapeXml = (value: string) =>
  * `{tenant-site}/sitemap.xml` here with the resolved tenant host. URLs come
  * from the host routing map — exactly the published screens.
  */
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export async function GET(request: Request): Promise<Response> {
+  const url = new URL(request.url)
   const host = String(
-    req.headers['x-aglyn-tenant-host'] ?? req.query['host'] ?? '',
+    request.headers.get('x-aglyn-tenant-host') ??
+      url.searchParams.get('host') ??
+      '',
   )
-  if (!host) return res.status(400).send('Missing host')
+  if (!host) return new Response('Missing host', { status: 400 })
 
   const hostRes = await getHost({ host })
-  if (hostRes.error || !hostRes.host) return res.status(404).send('Not found')
+  if (hostRes.error || !hostRes.host) {
+    return new Response('Not found', { status: 404 })
+  }
 
-  const requestHost = String(req.headers['host'] ?? host)
+  const requestHost = String(request.headers.get('host') ?? host)
   const base = `https://${requestHost}`
   const urls = Object.values(hostRes.host.screens ?? {})
-    .map((path) => `${base}${Aglyn.screenRoutePathToUrl(path)}`)
+    .map((path) => `${base}${screenRoutePathToUrl(path)}`)
     .sort()
 
   // Commerce URLs (AGL-299): active product + collection pages join the
@@ -81,12 +84,14 @@ export default async function handler(
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    urls
-      .map((url) => `  <url><loc>${escapeXml(url)}</loc></url>`)
-      .join('\n') +
+    urls.map((item) => `  <url><loc>${escapeXml(item)}</loc></url>`).join('\n') +
     '\n</urlset>\n'
 
-  res.setHeader('Content-Type', 'application/xml')
-  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate')
-  return res.status(200).send(xml)
+  return new Response(xml, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/xml',
+      'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+    },
+  })
 }

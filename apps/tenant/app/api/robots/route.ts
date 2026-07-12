@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-import type { NextApiRequest, NextApiResponse } from 'next'
+export const dynamic = 'force-dynamic'
 
 /**
  * Per-host robots.txt (SEO Toolkit): the middleware rewrites
  * `{tenant-site}/robots.txt` here. Allows everything and points crawlers at
  * the host's sitemap.
  */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  const requestHost = String(req.headers['host'] ?? '')
-  res.setHeader('Content-Type', 'text/plain')
-  res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate')
-  return res
-    .status(200)
-    .send(
-      'User-agent: *\nAllow: /\n' +
-        (requestHost ? `Sitemap: https://${requestHost}/sitemap.xml\n` : ''),
-    )
+export function GET(request: Request): Response {
+  const requestHost = request.headers.get('host') ?? ''
+  return new Response(
+    'User-agent: *\nAllow: /\n' +
+      (requestHost ? `Sitemap: https://${requestHost}/sitemap.xml\n` : ''),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain',
+        'Cache-Control': 's-maxage=3600, stale-while-revalidate',
+      },
+    },
+  )
 }
