@@ -61,3 +61,24 @@ storage access is provided by the bridge.
 with the separate plugin project. It is version-pinned here as the contract
 the host `PluginFrame` and the `plugin-manifest`/`plugin-bridge` libs are
 written against.
+
+## Trusted realm tier (AGL-420)
+
+Listings a staff member has reviewed and **signed** (`trust: 'realm'` on
+the version doc) skip the iframe and load INTO the app realm — first-party
+grade extensions installed from the marketplace. See
+[`docs/PLUGIN_LOADING.md`](../../docs/PLUGIN_LOADING.md) for the full trust
+chain (sha256 content pinning + platform Ed25519 signature, verified
+client- and server-side before a byte executes).
+
+- **`realm/rollup.config.mjs`** — the build template. Realm bundles import
+  nothing: `react`, `react/jsx-runtime`, and `@aglyn/aglyn` compile to
+  lookups on `globalThis.__AGLYN_PLUGIN_HOST__`, which each app composes
+  from its own bundle's singletons.
+- **`realm/demo/`** — a minimal realm plugin (console widget in the
+  `hostActivity` slot). Build with
+  `cd realm/demo && npx rollup -c ../rollup.config.mjs`.
+
+The authoring contract: export `register(host)` for client surfaces and/or
+`registerApi()` for server handler bundles (the latter load only behind
+`PLUGIN_REMOTE_SERVER=enabled` plus a per-deploy allowlist).

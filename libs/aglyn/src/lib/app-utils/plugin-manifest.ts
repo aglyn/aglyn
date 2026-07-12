@@ -61,6 +61,13 @@ export interface PluginListingVersion {
   version: string
   /** Content hash of the artifact bundle (integrity check at load). */
   sha256: string
+  /**
+   * Trust tier (AGL-420): 'realm' = staff-reviewed + platform-signed,
+   * may load into the app realm; anything else stays in the sandboxed
+   * PluginFrame. Staff-writable only.
+   */
+  trust?: string
+  /** Ed25519 signature (base64) over the sha256 hex (AGL-420). */
   signature?: string
   changelog?: string
   createdAtMs?: number
@@ -72,6 +79,9 @@ export interface PluginInstall {
   listingId: string
   version: string
   sha256: string
+  /** Mirrored trust tier + signature at install time (AGL-420). */
+  trust?: string
+  signature?: string
   installedAtMs?: number
   updatedAtMs?: number
   entitlementRef?: string

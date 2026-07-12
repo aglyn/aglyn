@@ -22,6 +22,7 @@ import {
   runLegacyHandler,
 } from '@aglyn/aglyn/server'
 import { getOrgForHost } from '@aglyn/tenant-data-admin'
+import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
 export const dynamic = 'force-dynamic'
@@ -38,6 +39,10 @@ async function dispatch(
   { params }: { params: Promise<{ pluginApi?: string[] }> },
 ): Promise<Response> {
   await loader.ensureAll(['tenantApi'])
+  // Remote server bundles (AGL-420): no-op unless PLUGIN_REMOTE_SERVER is
+  // explicitly enabled; signed + allowlisted bundles register alongside the
+  // first-party handlers above.
+  await ensureRemoteServerBundles()
   const { pluginApi } = await params
   const path = Array.isArray(pluginApi) ? pluginApi.join('/') : ''
 

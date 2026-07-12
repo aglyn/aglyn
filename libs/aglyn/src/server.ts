@@ -29,3 +29,4 @@ export * from './lib/foundation'
 // exposed ONLY through this `/server` entry — never re-exported by the full
 // `@aglyn/aglyn` barrel (which client code bundles).
 export * from './lib/app-utils/api-adapter'
+export * from './lib/plugin-manager/realm-server'

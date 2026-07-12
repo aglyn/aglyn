@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getRealmPluginInstalls } from '@aglyn/tenant-data-admin'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
@@ -419,6 +419,17 @@ export const loadPageData = cache(
       screen: screenRes.screen,
     })
 
+    // Trusted-realm marketplace plugins (AGL-420): the workspace's install
+    // pins joined server-side with the staff-only trust grants; the client
+    // loads them post-hydration. Fail-open to none — a lookup error can't
+    // take the page down.
+    const realmPlugins = await getRealmPluginInstalls({ hostId }).catch(
+      (error) => {
+        console.error('realm plugin lookup failed:', error)
+        return []
+      },
+    )
+
     const props = {
       data: JSON.parse(
         JSON.stringify({
@@ -434,6 +445,7 @@ export const loadPageData = cache(
       // Plugin switchboard (AGL-416/417): which site plugins the client
       // loads before rendering the canvas.
       enabledPlugins: Aglyn.resolveEnabledPlugins(tenantRes.tenant as never),
+      ...(realmPlugins.length ? { realmPlugins } : {}),
       showBranding,
       ...enriched,
     }

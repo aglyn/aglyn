@@ -31,6 +31,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { loadSiteRealmPlugins } from '../../../utils/realm-plugins.client'
 import { sitePluginLoader } from '../../../utils/site-plugin-loader'
 import type { Props } from './types'
 
@@ -45,6 +46,22 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ['site'],
     ),
   )
+
+  // Trusted-realm marketplace plugins (AGL-420): additive runtimes loaded
+  // AFTER hydration (never blocking first paint); the tick re-renders so a
+  // runtime registered by a remote bundle mounts without a navigation.
+  const [, setRealmTick] = useState(0)
+  const realmKey = (props.realmPlugins ?? [])
+    .map((install) => `${install.listingId}@${install.version}`)
+    .join(',')
+  useEffect(() => {
+    if (!realmKey) return
+    void loadSiteRealmPlugins(props.realmPlugins).then(() =>
+      setRealmTick((tick) => tick + 1),
+    )
+    // realmKey captures the install list's identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realmKey])
 
   // const props = { data: exampleData }
   const nodes = props.nodes

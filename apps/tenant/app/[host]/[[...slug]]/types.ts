@@ -34,6 +34,11 @@ export interface Props {
   nodes: Record<Aglyn.NodeId, Aglyn.NodeSchema> | null
   /** Org-enabled site plugins the client must load pre-canvas (AGL-417). */
   enabledPlugins?: string[]
+  /**
+   * Trusted-realm marketplace installs (AGL-420): sha-pinned, staff-signed
+   * bundles the client loads into the app realm after hydration.
+   */
+  realmPlugins?: Aglyn.RealmPluginInstall[]
   /** Free-tier "Made with Aglyn" badge (AGL-69, removeBranding gate). */
   showBranding?: boolean
   /**

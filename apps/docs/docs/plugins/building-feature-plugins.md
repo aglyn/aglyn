@@ -186,6 +186,33 @@ per-request org gate (a disabled plugin's API 404s for that workspace).
   platform Stripe events (commerce orders, booking payments, marketplace
   purchases live in their plugins).
 
+## Remote bundles: the trusted realm tier (AGL-420)
+
+Marketplace plugins normally run sandboxed in the cross-origin
+`PluginFrame`. Listings a staff member has reviewed and **signed**
+(`trust: 'realm'` + an Ed25519 signature over the bundle's sha256 on the
+version doc) instead load INTO the app realm and use every registry above —
+first-party-grade extensions installed per workspace, no repo change.
+
+- Build with `tools/plugin-loader/realm/rollup.config.mjs`: your `react`,
+  `react/jsx-runtime`, and `@aglyn/aglyn` imports compile to lookups on
+  `globalThis.__AGLYN_PLUGIN_HOST__` (the app's own singletons), so the
+  emitted bundle imports nothing. Export `register(host)` for client
+  surfaces; `registerApi()` for server handlers.
+- Publish through the community pipeline, install (pins `{version,
+  sha256}`), then staff grant trust via `POST /api/admin/sign-plugin`.
+- The console loads an org's realm installs before the shell renders;
+  published sites load them post-hydration (additive runtimes — first
+  paint never waits on a marketplace CDN). Every load verifies the sha256
+  pin and the platform signature and fails closed; `revocations` is the
+  hard kill switch.
+- Server handler bundles are additionally gated by
+  `PLUGIN_REMOTE_SERVER=enabled` + a per-deploy
+  `PLUGIN_REMOTE_SERVER_BUNDLES` allowlist, default off everywhere.
+
+Full trust chain, env matrix, and walkthrough: `docs/PLUGIN_LOADING.md` in
+the repo; a runnable demo lives at `tools/plugin-loader/realm/demo`.
+
 ## The server half (API routes)
 
 A feature's server logic — Next.js API routes backed by firebase-admin —
@@ -291,9 +318,9 @@ are reference consumers.
   the plugin). As a *source*, the `aglyn:addons` rule still lets a plugin
   import any lib and other plugins. Do NOT add `scope:lib`/`scope:aglyn` back —
   that reopens the hole (every lib carries `scope:lib`).
-- Plugins are wired in only at the app composition root
-  (`apps/*/utils/register-plugin-apis.ts` and `register-console-plugins`);
-  core libs and app feature code must never import a plugin.
+- Plugins are wired in only through the generated loader manifests
+  (`plugins.config.json` → `plugins.*.generated.ts`, AGL-417); core libs
+  and app feature code must never import a plugin.
 - Plugin libs may import `@aglyn/plugins-mui` for primitives; nothing may
   import a feature plugin from `@aglyn/plugins-mui` (that direction is the
   anti-pattern this rule exists to stop).
