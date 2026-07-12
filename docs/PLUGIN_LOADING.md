@@ -148,12 +148,17 @@ re-signing every granted version, then swapping the public key everywhere.
 
 1. Author builds with the realm rollup template; entry exports
    `register(host)` (client) and/or `registerApi()` (server).
-2. Publish through the community pipeline (`community/publish-plugin`) —
+2. Verify locally: `node tools/scripts/verify-plugin-bundle.mjs
+   dist/plugin.bundle.mjs` (AGL-426) — entry exports, self-containment,
+   forbidden APIs, size. The publish API runs the SAME checks
+   (`checkPluginBundle`) and 422s with the problem list, so local and
+   server verdicts never drift.
+3. Publish through the community pipeline (`community/publish-plugin`) —
    content-addressed upload + version doc with sha256.
-3. Workspace installs (pin) the listing; org enables it.
-4. Staff review, then `POST /api/admin/sign-plugin`
+4. Workspace installs (pin) the listing; org enables it.
+5. Staff review, then `POST /api/admin/sign-plugin`
    `{listingId, version}` (super staff; audited). Revoke trust with
    `{action: 'revoke'}`; hard-kill with a `revocations/{listingId}` doc.
-5. Next console visit / site render loads the bundle through the chain
+6. Next console visit / site render loads the bundle through the chain
    above. For server handlers, additionally flip the two env switches on
    the specific deployment.

@@ -17,7 +17,9 @@
 
 import {
   checkEntitlement,
+  checkPluginBundle,
   createResourceUid,
+  MAX_PLUGIN_BUNDLE_BYTES,
   type PluginApiHandler,
   pluginArtifactPath,
   validatePluginManifest,
@@ -114,6 +116,18 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     const bundle = Buffer.from(bundleBase64, 'base64')
     if (!bundle.length || bundle.length > MAX_BUNDLE_BYTES) {
       return res.status(413).json({ error: 'Bundle is empty or too large' })
+    }
+    // Static verification (AGL-426): the same checks as the local
+    // `verify-plugin-bundle.mjs`, so a bundle that passes there publishes
+    // here. Entry exports, self-containment, forbidden APIs, size.
+    const verification = checkPluginBundle(bundle.toString('utf8'), {
+      maxBytes: MAX_PLUGIN_BUNDLE_BYTES,
+    })
+    if (!verification.ok) {
+      return res.status(422).json({
+        error: 'Bundle failed verification',
+        problems: verification.problems,
+      })
     }
     const sha256 = createHash('sha256')
       .update(new Uint8Array(bundle))
