@@ -19,7 +19,10 @@ import {
   loadRemoteServerBundles,
   remoteServerBundlesEnabled,
 } from '@aglyn/aglyn/server'
-import { resolveCommunityPluginVersion } from '@aglyn/tenant-data-admin'
+import {
+  firebaseAdmin,
+  resolveCommunityPluginVersion,
+} from '@aglyn/tenant-data-admin'
 
 /**
  * Remote SERVER handler bundles for the plugin API dispatcher (AGL-420).
@@ -43,8 +46,28 @@ export async function ensureRemoteServerBundles(): Promise<void> {
     )
     return
   }
-  await loadRemoteServerBundles({
+  const loaded = await loadRemoteServerBundles({
     resolveVersion: resolveCommunityPluginVersion,
     artifactsBase,
   })
+  // Audit trail (AGL-437): every remote server bundle this process runs
+  // is on the record — once per process (the loader caches).
+  if (loaded.length && !audited) {
+    audited = true
+    const firestore = firebaseAdmin.app().firestore()
+    for (const bundle of loaded) {
+      await firestore
+        .collection('adminAudit')
+        .add({
+          actorUid: 'system',
+          action: 'plugins.remoteServer.load',
+          target: `communityListings/${bundle.listingId}/pluginVersions/${bundle.version}`,
+          after: { sha256: bundle.sha256, app: 'tenant' },
+          at: new Date(),
+        })
+        .catch(() => undefined)
+    }
+  }
 }
+
+let audited = false

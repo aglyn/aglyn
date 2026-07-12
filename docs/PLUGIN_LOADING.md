@@ -148,8 +148,17 @@ per-request org gate applies to them too.
 | `NEXT_PUBLIC_PLUGIN_DEV_BUNDLES` | client, **dev only** | `id=http://localhost:PORT/plugin.bundle.mjs,...` — loads UNVERIFIED bundles for the local authoring loop (AGL-427). The code path is compiled out of production builds and refuses non-localhost URLs; never set it anywhere shared. Pair with `npm run watch` in the realm template and refresh. |
 
 Generate the key pair with
-`node tools/scripts/generate-plugin-trust-key.mjs`. Rotating the key means
-re-signing every granted version, then swapping the public key everywhere.
+`node tools/scripts/generate-plugin-trust-key.mjs`. Rotation runbook
+(AGL-437), in this order so nothing stops loading mid-swap:
+
+1. Generate the new pair (keep the old private key until the end).
+2. `PLUGIN_TRUST_PRIVATE_KEY=<new> node
+   tools/scripts/resign-realm-plugins.mjs` — re-signs every
+   `trust: 'realm'` version doc (use `--dry-run` first).
+3. Deploy the new PUBLIC key to every runtime
+   (`PLUGIN_TRUST_PUBLIC_KEY` + `NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY`).
+4. Swap the console's `PLUGIN_TRUST_PRIVATE_KEY` to the new key and
+   destroy the old one.
 
 ## Performance guardrails (AGL-436)
 

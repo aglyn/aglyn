@@ -153,6 +153,27 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'Publishing to the community requires a Pro plan' })
     }
 
+    // Publish rate limit (AGL-437): a runaway or abusive publisher can't
+    // flood the artifacts bucket/review queue — 20 publishes per UTC day.
+    const dayKey = new Date().toISOString().slice(0, 10)
+    const limiterRef = firestore
+      .collection('profiles')
+      .doc(decoded.uid)
+      .collection('meta')
+      .doc('publishWindow')
+    const allowed = await firestore.runTransaction(async (transaction) => {
+      const window = (await transaction.get(limiterRef)).data() ?? {}
+      const count = window.dayKey === dayKey ? Number(window.count ?? 0) : 0
+      if (count >= 20) return false
+      transaction.set(limiterRef, { dayKey, count: count + 1 })
+      return true
+    })
+    if (!allowed) {
+      return res
+        .status(429)
+        .json({ error: 'Daily publish limit reached — try again tomorrow' })
+    }
+
     const profileSnapshot = await firestore
       .collection('profiles')
       .doc(decoded.uid)

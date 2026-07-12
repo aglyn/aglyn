@@ -62,31 +62,38 @@ export interface RemoteServerBundleSource {
   artifactsBase: string
 }
 
-let loadedPromise: Promise<void> | undefined
+let loadedPromise: Promise<LoadedServerBundle[]> | undefined
 
 export function remoteServerBundlesEnabled(): boolean {
   return process.env.PLUGIN_REMOTE_SERVER === 'enabled'
 }
 
+export interface LoadedServerBundle {
+  listingId: string
+  version: string
+  sha256: string
+}
+
 export async function loadRemoteServerBundles(
   source: RemoteServerBundleSource,
-): Promise<void> {
-  if (!remoteServerBundlesEnabled()) return
+): Promise<LoadedServerBundle[]> {
+  if (!remoteServerBundlesEnabled()) return []
   if (!loadedPromise) {
     loadedPromise = (async () => {
+      const loaded: LoadedServerBundle[] = []
       const publicKey = process.env.PLUGIN_TRUST_PUBLIC_KEY
       if (!publicKey) {
         console.error(
           'PLUGIN_REMOTE_SERVER is enabled but PLUGIN_TRUST_PUBLIC_KEY is ' +
             'not set — refusing to load any remote server bundle.',
         )
-        return
+        return loaded
       }
       const allowlist = (process.env.PLUGIN_REMOTE_SERVER_BUNDLES ?? '')
         .split(',')
         .map((entry) => entry.trim())
         .filter(Boolean)
-      if (!allowlist.length) return
+      if (!allowlist.length) return loaded
       const cacheDir = mkdtempSync(join(tmpdir(), 'aglyn-realm-'))
 
       for (const entry of allowlist) {
@@ -132,11 +139,13 @@ export async function loadRemoteServerBundles(
             throw new Error('bundle exports no registerApi()')
           }
           registerApi()
+          loaded.push({ listingId, version, sha256: pinned.sha256 })
           console.info(`remote server bundle loaded: ${entry}`)
         } catch (error) {
           console.error(`remote server bundle ${entry} skipped:`, error)
         }
       }
+      return loaded
     })()
   }
   return loadedPromise

@@ -28,3 +28,26 @@ markup, requests, or storage. Verdicts below; fixes shipped in the same PR.
    the `html` prop) — sanitizer currently runs at commit time only.
 3. Screen-link resolved hrefs come from the host routing map (slug-derived,
    safe by construction).
+
+## Realm-tier plugins threat model (AGL-437 addendum)
+
+The trusted-realm tier (AGL-420) intentionally trades the iframe sandbox
+for full app-realm access on STAFF-SIGNED bundles. What keeps that honest:
+
+- **Trust chain**: content-addressed artifact + pinned sha256 + Ed25519
+  signature over the sha (fail-closed) + `revocations` kill switch + host
+  ABI generation check. Every link verified before a byte executes, on
+  both the client (blob import) and server (temp-file import) paths.
+- **Blast-radius controls**: realm grants are super-staff only and
+  adminAudit'd; remote SERVER bundles additionally need the per-deploy
+  env master switch + explicit allowlist, and every server load writes an
+  adminAudit event (`plugins.remoteServer.load`) with the sha and app.
+- **Publisher-side friction**: static verification (entry exports,
+  self-containment, forbidden APIs, size) enforced by the publish API and
+  re-run in the staff review queue; 20 publishes/publisher/day.
+- **Residual risk**: a signed bundle IS first-party-grade code — review
+  before signing is the real control. The static verifier reduces
+  reviewer load; it is not a sandbox. Rotation:
+  `tools/scripts/generate-plugin-trust-key.mjs` →
+  `tools/scripts/resign-realm-plugins.mjs` → swap public keys
+  (docs/PLUGIN_LOADING.md has the order-of-operations).
