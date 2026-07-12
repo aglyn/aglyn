@@ -8,7 +8,10 @@ description: What organization, workspace, tenant, host, and site each mean — 
 
 Aglyn's vocabulary grew through a couple of migrations, so several words
 name the same thing at different layers. This page is the canonical map
-(codified in AGL-443).
+(codified in AGL-443). For definitions of every product term — screens,
+nodes, plugins, workflows, and the rest — see the
+[Term reference](term-reference.md); this page is specifically the ruling
+on the four contested words.
 
 ## The hierarchy
 
