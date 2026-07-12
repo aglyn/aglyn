@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import * as MarketingModel from '@aglyn/plugins-marketing/model'
 import * as CommerceModel from '@aglyn/plugins-commerce/model'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
@@ -548,7 +549,7 @@ export const loadPageData = cache(
     // win over the legacy single announcementBar/popup host fields.
     const overlayPath = `/${path.replace(/^\/+/, '')}`.replace(/\/{2,}/g, '/')
     const overlayDocs = overlaysEntitled ? await getOverlays({ hostId }) : []
-    const activeOverlays = Aglyn.resolveActiveOverlays(overlayDocs, {
+    const activeOverlays = MarketingModel.resolveActiveOverlays(overlayDocs, {
       path: overlayPath,
     })
     const barConfig: Aglyn.HostAnnouncementBar | undefined = activeOverlays.bar

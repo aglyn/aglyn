@@ -16,19 +16,8 @@
  */
 'use client'
 
-import {
-  type AglynTenant,
-  checkEntitlement,
-  compareVariants,
-  createResourceUid,
-  HOST_EVENT_TYPES,
-  SITE_EVENT_TYPES,
-  summarizeVariantStats,
-  validateExperiment,
-  type ExperimentTarget,
-  type ExperimentVariant,
-  type HostExperiment,
-} from '@aglyn/aglyn'
+import { type AglynTenant, checkEntitlement, createResourceUid, HOST_EVENT_TYPES, SITE_EVENT_TYPES } from '@aglyn/aglyn'
+import { compareVariants, summarizeVariantStats, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'

@@ -18,7 +18,7 @@
 import type {
   HostAnnouncementBar,
   HostPopup,
-} from '../foundation/definitions/workspace.types'
+} from '@aglyn/aglyn'
 
 /**
  * Marketing hub overlays (AGL-251): multiple announcement bars and

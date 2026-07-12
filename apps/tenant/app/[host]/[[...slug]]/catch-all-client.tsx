@@ -18,6 +18,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import * as MarketingModel from '@aglyn/plugins-marketing/model'
 import { AglynNodeRenderer } from '@aglyn/aglyn-node-renderer'
 import { registerBookingsPlugin } from '@aglyn/plugins-bookings'
 import { registerCommercePlugin } from '@aglyn/plugins-commerce'
@@ -99,7 +100,7 @@ function ExperimentsRunner(props: {
     } catch {
       return undefined // No storage (privacy mode) — serve the default.
     }
-    const variant = Aglyn.assignExperimentVariant(
+    const variant = MarketingModel.assignExperimentVariant(
       { status: experiment.status, variants: experiment.variants,
         ...(experiment.winnerVariantId
           ? { winnerVariantId: experiment.winnerVariantId }

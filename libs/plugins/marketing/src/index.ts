@@ -17,3 +17,4 @@
 
 export * from './lib/constants/bundle-common'
 export * from './lib/plugin'
+export * from './lib/model'

@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import * as MarketingModel from '@aglyn/plugins-marketing/model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
@@ -25,7 +26,7 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  */
 export async function getOverlays(options: {
   hostId: string
-}): Promise<Array<Aglyn.HostOverlay & { $id: string }>> {
+}): Promise<Array<MarketingModel.HostOverlay & { $id: string }>> {
   try {
     const snapshot = await firebaseAdmin
       .app()
@@ -37,7 +38,7 @@ export async function getOverlays(options: {
       .get()
     return snapshot.docs.map((doc) => ({
       $id: doc.id,
-      ...(doc.data() as Aglyn.HostOverlay),
+      ...(doc.data() as MarketingModel.HostOverlay),
     }))
   } catch (error) {
     console.error(error)

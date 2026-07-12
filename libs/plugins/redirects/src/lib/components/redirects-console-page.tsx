@@ -16,18 +16,8 @@
  */
 'use client'
 
-import {
-  checkQuota,
-  type ConsolePluginPageProps,
-  createResourceUid,
-  isSelfRedirect,
-  matchRedirect,
-  normalizeRedirectDestination,
-  normalizeRedirectSource,
-  REDIRECT_DEFAULT_PRIORITY,
-  validateRedirectRule,
-  REDIRECT_STATUS_CODES,
-} from '@aglyn/aglyn'
+import { checkQuota, type ConsolePluginPageProps, createResourceUid } from '@aglyn/aglyn'
+import { isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'

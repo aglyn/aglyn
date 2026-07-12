@@ -16,12 +16,8 @@
  */
 'use client'
 
-import {
-  checkQuota,
-  type ConsolePluginPageProps,
-  createResourceUid,
-  type HostBookingService,
-} from '@aglyn/aglyn'
+import { checkQuota, type ConsolePluginPageProps, createResourceUid } from '@aglyn/aglyn'
+import { type HostBookingService } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'

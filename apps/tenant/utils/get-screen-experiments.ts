@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import * as MarketingModel from '@aglyn/plugins-marketing/model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 
@@ -32,7 +33,7 @@ import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 export interface ScreenExperiment {
   id: string
   target: 'screen' | 'section'
-  status: Aglyn.ExperimentStatus
+  status: MarketingModel.ExperimentStatus
   nodeId?: string
   winnerVariantId?: string
   /** Past this the client runner serves the default (AGL-273). */
@@ -59,7 +60,7 @@ export async function getScreenExperiments(options: {
       .limit(10)
       .get()
     for (const doc of snapshot.docs) {
-      const experiment = doc.data() as Aglyn.HostExperiment
+      const experiment = doc.data() as MarketingModel.HostExperiment
       if ((experiment as any).deletedAt) continue
       if (experiment.target !== 'screen' && experiment.target !== 'section') {
         continue
@@ -74,7 +75,7 @@ export async function getScreenExperiments(options: {
       const payloads: Record<string, Record<string, any> | null> = {}
       for (const variant of (experiment.variants ?? []).slice(
         0,
-        Aglyn.EXPERIMENT_MAX_VARIANTS,
+        MarketingModel.EXPERIMENT_MAX_VARIANTS,
       )) {
         const versionId = variant.versionId?.trim()
         if (!versionId || versionId === publishedVersionId) {

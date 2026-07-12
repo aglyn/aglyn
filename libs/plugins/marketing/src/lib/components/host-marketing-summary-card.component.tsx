@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { overlayActiveAt } from '@aglyn/aglyn'
+import { overlayActiveAt } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'

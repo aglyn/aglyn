@@ -16,13 +16,8 @@
  */
 'use client'
 
-import {
-  type AglynTenant,
-  checkEntitlement,
-  createResourceUid,
-  overlayActiveAt,
-  type HostOverlay,
-} from '@aglyn/aglyn'
+import { type AglynTenant, checkEntitlement, createResourceUid } from '@aglyn/aglyn'
+import { overlayActiveAt, type HostOverlay } from '../model'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,

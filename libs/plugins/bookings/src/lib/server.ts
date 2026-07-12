@@ -15,14 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  type BookedInterval,
-  BOOKING_MAX_DAYS_AHEAD,
-  checkEntitlement,
-  computeOpenSlots,
-  type HostBookingService,
-  isSlotOpen,
-} from '@aglyn/aglyn/server'
+import { checkEntitlement } from '@aglyn/aglyn/server'
+import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isSlotOpen } from './model'
 import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   firebaseAdmin,

@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 
-import {
-  checkEntitlement,
-  evaluateAutoWinner,
-  type HostExperiment,
-} from '@aglyn/aglyn/server'
+import { checkEntitlement } from '@aglyn/aglyn/server'
+import { evaluateAutoWinner, type HostExperiment } from './model'
 import { registerPluginApiRoute, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'

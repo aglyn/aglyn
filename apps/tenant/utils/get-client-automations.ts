@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import * as MarketingModel from '@aglyn/plugins-marketing/model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
@@ -64,7 +65,7 @@ export async function getClientAutomations(options: {
       const pathPattern = action.trigger?.pathPattern?.trim()
       if (
         pathPattern &&
-        !Aglyn.overlayMatchesPath({ pathPatterns: [pathPattern] }, options.path)
+        !MarketingModel.overlayMatchesPath({ pathPatterns: [pathPattern] }, options.path)
       ) {
         continue
       }

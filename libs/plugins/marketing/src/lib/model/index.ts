@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-export * from './lib/constants/bundle-common'
-export * from './lib/components/email-blocks'
-export * from './lib/plugin'
-// Console surfaces consumed directly by the app (e.g. inbox Campaigns tab).
-export { default as CampaignsCard } from './lib/components/campaigns-card'
-export { default as OrgListsCard } from './lib/components/lists-card'
-export { default as EmailScreensCard } from './lib/components/email-screens-card'
-export * from './lib/model'
+/**
+ * Marketing domain model (AGL-412): overlays + experiments relocated from core app-utils.
+ * Context-free — importable by client components, /server handlers, and
+ * other plugins/apps via `@aglyn/plugins-marketing/model`.
+ */
+export * from './overlays'
+export * from './experiments'

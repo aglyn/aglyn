@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { assignExperimentVariant, type HostExperiment } from '@aglyn/aglyn/server'
+import { assignExperimentVariant, type HostExperiment } from '@aglyn/plugins-marketing/model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
