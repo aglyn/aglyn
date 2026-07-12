@@ -94,10 +94,15 @@ const config: Config = {
       },
     },
     navbar: {
-      title: 'Aglyn Docs',
+      // The wordmark carries the name (AGL-449), so no navbar title text.
+      // The console-themed navbar is dark slate in BOTH color modes, so
+      // both modes use the light-word variant (aglyn-docs-logo.svg is the
+      // dark-word one for light surfaces elsewhere).
       logo: {
-        alt: 'Aglyn',
-        src: 'img/logo.svg',
+        alt: 'Aglyn Documentation',
+        src: 'img/aglyn-docs-logo-dark.svg',
+        height: 24,
+        width: 220,
       },
       items: [
         {

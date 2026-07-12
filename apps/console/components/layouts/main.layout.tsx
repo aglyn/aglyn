@@ -30,6 +30,7 @@ import {
   mdiCreditCardOutline,
 } from '@aglyn/shared-data-mdi'
 import {
+  AglynBesignerLogoFull,
   AglynConsoleLogoFull,
   AppLink,
   type AppLinkProps,
@@ -250,7 +251,11 @@ const TopAppBar = (props: TopAppBarProps) => {
                       md: theme.typography.pxToRem(20),
                     })
                   }}>
-                  <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                  {besigner ? (
+                    <AglynBesignerLogoFull sx={{ height: 24, width: 'auto' }} />
+                  ) : (
+                    <AglynConsoleLogoFull sx={{ height: 24, width: 'auto' }} />
+                  )}
                   {appBarSuffix && (
                     <Typography
                       component="span"
@@ -401,6 +406,7 @@ export function MainLayout(props: MainLayoutProps) {
         }, ...(Array.isArray(rest.sx) ? rest.sx : [rest.sx])]}>
         <TopAppBar
           enableAppBarElevation={enableAppBarElevation}
+          besigner={besigner}
           backButton={backButton}
           centerPrefix={centerPrefix}
           centerNavigationItems={centerNavigationItems || []}
