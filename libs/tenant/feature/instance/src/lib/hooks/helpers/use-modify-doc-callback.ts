@@ -17,12 +17,22 @@
 
 import {
   type DocumentReference,
+  serverTimestamp,
   setDoc,
   type SetOptions,
   type UpdateData,
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback } from 'react'
+
+/**
+ * Every UI write stamps `updatedAt` (AGL-455) — the "last updated" columns
+ * read it, and callers historically forgot it. Spread order lets a caller's
+ * explicit `updatedAt` win (backfills, imports).
+ */
+function stampUpdatedAt<D extends object>(data: D): D {
+  return { updatedAt: serverTimestamp(), ...data }
+}
 
 
 export type UpdateDocCallback<T> = (data: UpdateData<T>) => Promise<void>
@@ -49,14 +59,19 @@ const typedUpdateDoc = updateDoc as <T>(
 export function useUpdateDocCallback<T>(
   ref: DocumentReference<T>,
 ): UpdateDocCallback<T> {
-  return useCallback((data: UpdateData<T>) => typedUpdateDoc(ref, data), [ref])
+  return useCallback(
+    (data: UpdateData<T>) =>
+      typedUpdateDoc(ref, stampUpdatedAt(data as object) as UpdateData<T>),
+    [ref],
+  )
 }
 
 export function useSetDocCallback<T>(
   ref: DocumentReference<T>,
 ): SetDocCallback<T> {
   return useCallback(
-    (data: Partial<T>, options?: SetOptions) => setDoc(ref, data, options),
+    (data: Partial<T>, options?: SetOptions) =>
+      setDoc(ref, stampUpdatedAt(data as object) as Partial<T>, options ?? {}),
     [ref],
   )
 }
