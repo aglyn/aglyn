@@ -29,9 +29,36 @@ import '../public/_static/styles/styles.css'
  * `_EmotionDocumentComponent`); the global client provider stack lives in
  * `./providers`.
  */
+const SOCIAL_CARD = '/_static/images/social/aglyn-console-social-card.png'
+
+// Resolves the relative og:image above to an absolute URL for crawlers. The
+// console apex is `app.aglyn.io` (see middleware); override via env per deploy.
+const SITE_URL = process.env.NEXT_PUBLIC_CONSOLE_URL ?? 'https://app.aglyn.io'
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: { default: APP_CONSOLE.TITLE ?? 'Aglyn', template: '%s · Aglyn' },
   description: APP_CONSOLE.DESCRIPTION,
+  openGraph: {
+    title: APP_CONSOLE.TITLE,
+    description: APP_CONSOLE.DESCRIPTION,
+    siteName: 'Aglyn',
+    type: 'website',
+    images: [
+      {
+        url: SOCIAL_CARD,
+        width: 1200,
+        height: 630,
+        alt: 'Aglyn Console',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: APP_CONSOLE.TITLE,
+    description: APP_CONSOLE.DESCRIPTION,
+    images: [SOCIAL_CARD],
+  },
 }
 
 export const viewport: Viewport = {

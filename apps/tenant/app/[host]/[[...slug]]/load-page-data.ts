@@ -47,7 +47,15 @@ export const loadPageData = cache(
 
   try {
     const { params } = context
-    const path = ((params.slug || ['/']) as string[]).join('/')
+    // Root of the optional catch-all: the App Router page passes `slug ?? []`,
+    // so the home page arrives as an EMPTY ARRAY (not undefined). An empty
+    // array is truthy, so the old `slug || ['/']` guard left `path` as `''`
+    // and the `'/'` routing-map entry never matched — every home page 404'd.
+    // Collapse an empty (or missing) slug to the root path explicitly.
+    const slugSegments = (params.slug ?? []) as string[]
+    const path = slugSegments.length
+      ? slugSegments.join('/')
+      : Aglyn.SCREEN_ROOT_PATH
     const host = (params.host || 'tenant') as string
 
     /*==========================================
