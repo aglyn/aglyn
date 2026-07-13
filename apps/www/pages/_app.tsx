@@ -42,6 +42,10 @@ if (!app) {
         },
   )
 }
+// Absolute URL so crawlers (which don't run our JS) can resolve the card.
+const SOCIAL_CARD =
+  'https://aglyn.com/_static/images/social/aglyn-www-social-card.png'
+
 const withThemeProvider = createWithThemeProvider({
   theme: [consoleThemeLight, consoleThemeDark],
 })
@@ -68,6 +72,17 @@ function _App<Props, InitialProps>(props: _AppProps<Props, InitialProps>) {
       ]}
       headChildren={
         <Fragment>
+          <meta property="og:type" content="website" />
+          <meta property="og:site_name" content="Aglyn" />
+          <meta property="og:title" content={APP_WWW.TITLE} />
+          <meta property="og:description" content={APP_WWW.DESCRIPTION} />
+          <meta property="og:image" content={SOCIAL_CARD} />
+          <meta property="og:image:width" content="1200" />
+          <meta property="og:image:height" content="630" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={APP_WWW.TITLE} />
+          <meta name="twitter:description" content={APP_WWW.DESCRIPTION} />
+          <meta name="twitter:image" content={SOCIAL_CARD} />
           {!IS_PRODUCTION ? null : (
             <Fragment>
               <HsEmbedScript />
