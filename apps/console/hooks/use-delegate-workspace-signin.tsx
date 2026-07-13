@@ -21,6 +21,8 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import {
   buildDelegatedSignInUrl,
+  clearDelegationBounces,
+  recordDelegationBounce,
   shouldDelegateSignIn,
 } from '../utils/auth-delegation'
 
@@ -51,7 +53,10 @@ export function useDelegateWorkspaceSignIn(
 
   useEffect(() => {
     if (!delegating || status === 'loading') return
-    if (signInCheckResult?.signedIn) return // silent sign-in won — layout routes
+    if (signInCheckResult?.signedIn) {
+      clearDelegationBounces() // signed in — the round-trip succeeded
+      return // silent sign-in won — layout routes
+    }
     if (started.current) return
     started.current = true
     void (async () => {
@@ -62,6 +67,16 @@ export function useDelegateWorkspaceSignIn(
         if (response.ok) return
       } catch {
         // No reachable session — fall through and delegate.
+      }
+      // Circuit breaker: if we keep coming back still session-less, stop
+      // rather than loop forever (should never trip once the auth host
+      // mints the cookie before returning — AGL-466).
+      if (!recordDelegationBounce()) {
+        console.error(
+          '[auth] workspace sign-in delegation bounced repeatedly without a ' +
+            'session — stopping to avoid a redirect loop.',
+        )
+        return
       }
       const returnPath = next || '/'
       window.location.assign(

@@ -18,6 +18,8 @@
 import {
   authSignInHost,
   buildDelegatedSignInUrl,
+  clearDelegationBounces,
+  recordDelegationBounce,
   shouldDelegateSignIn,
 } from './auth-delegation'
 
@@ -80,5 +82,37 @@ describe('buildDelegatedSignInUrl', () => {
 
   it('exposes the auth host', () => {
     expect(authSignInHost()).toBe('auth.aglyn.io')
+  })
+})
+
+describe('delegation loop breaker', () => {
+  afterEach(() => {
+    window.sessionStorage.clear()
+    jest.restoreAllMocks()
+  })
+
+  it('allows redirects up to the cap, then stops', () => {
+    expect(recordDelegationBounce()).toBe(true) // 1
+    expect(recordDelegationBounce()).toBe(true) // 2
+    expect(recordDelegationBounce()).toBe(true) // 3 (cap)
+    expect(recordDelegationBounce()).toBe(false) // 4 — loop broken
+  })
+
+  it('clears the counter on a successful sign-in', () => {
+    recordDelegationBounce()
+    recordDelegationBounce()
+    clearDelegationBounces()
+    expect(recordDelegationBounce()).toBe(true) // counting restarts
+  })
+
+  it('resets after the window elapses so a later attempt is not blocked', () => {
+    const now = 2_000_000
+    jest.spyOn(Date, 'now').mockReturnValue(now)
+    recordDelegationBounce()
+    recordDelegationBounce()
+    recordDelegationBounce()
+    expect(recordDelegationBounce()).toBe(false) // capped within the window
+    ;(Date.now as jest.Mock).mockReturnValue(now + 30_001)
+    expect(recordDelegationBounce()).toBe(true) // window elapsed — fresh count
   })
 })
