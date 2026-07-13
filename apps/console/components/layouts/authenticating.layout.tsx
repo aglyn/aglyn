@@ -57,6 +57,37 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     if (requireEmailVerification && !emailVerified)
       return void router.push('/validate-email')
 
+    // Delegated cross-origin return (AGL-465/466): the workspace subdomain
+    // signs in silently from the shared __session cookie, so that cookie
+    // MUST exist before we hand back — otherwise its check 401s and it
+    // bounces the user to the auth host again: a redirect loop. Mint it and
+    // AWAIT before the hard navigation, which would otherwise abort the
+    // in-flight mint. A same-origin '/' return keeps the client-nav path
+    // (no race — the mint stays in flight).
+    if (/^https?:\/\//.test(continueUrl)) {
+      let active = true
+      void (async () => {
+        try {
+          const user = signInCheckResult?.user
+          if (user) {
+            const idToken = await user.getIdToken()
+            await fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${idToken}` },
+            })
+          }
+        } catch {
+          // Even a failed mint must not strand the user on the auth host.
+        }
+        if (active && typeof window !== 'undefined') {
+          window.location.assign(continueUrl)
+        }
+      })()
+      return () => {
+        active = false
+      }
+    }
+
     return void pushContinued('/')
   }, [
     authLoading,
@@ -67,6 +98,7 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     requireEmailVerification,
     router,
     signedIn,
+    signInCheckResult,
   ])
 
   return (

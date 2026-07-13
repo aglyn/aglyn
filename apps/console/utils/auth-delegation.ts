@@ -54,6 +54,41 @@ export function authSignInHost(workspaceDomain = WORKSPACE_DOMAIN): string {
 }
 
 /**
+ * Loop breaker (AGL-466). The delegation round-trip should land the user
+ * back signed-in; if it keeps returning session-less, stop rather than
+ * bounce forever. Counts bounces within a short window and returns false
+ * once the cap is hit. Cleared on a successful sign-in.
+ */
+const BOUNCE_KEY = 'aglyn:signin-delegation-bounces'
+const BOUNCE_LIMIT = 3
+const BOUNCE_WINDOW_MS = 30_000
+
+export function recordDelegationBounce(): boolean {
+  try {
+    const now = Date.now()
+    const raw = window.sessionStorage.getItem(BOUNCE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as { at: number; n: number }) : null
+    const within = parsed && now - parsed.at < BOUNCE_WINDOW_MS
+    const n = (within ? parsed.n : 0) + 1
+    window.sessionStorage.setItem(
+      BOUNCE_KEY,
+      JSON.stringify({ at: within ? parsed.at : now, n }),
+    )
+    return n <= BOUNCE_LIMIT
+  } catch {
+    return true // storage unavailable — don't block a legitimate redirect
+  }
+}
+
+export function clearDelegationBounces(): void {
+  try {
+    window.sessionStorage.removeItem(BOUNCE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * True when `host` is an org workspace subdomain that should hand
  * interactive sign-in off to the auth host: within the workspace domain,
  * a single subdomain label, and not a reserved platform/auth label.
