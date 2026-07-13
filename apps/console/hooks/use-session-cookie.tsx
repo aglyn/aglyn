@@ -20,6 +20,10 @@ import { FIREBASE_AUTH_EMULATOR_ENABLED } from '@aglyn/shared-data-enums'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import { signInWithCustomToken, signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
+import {
+  clearInteractiveSignIn,
+  consumeInteractiveSignIn,
+} from '../utils/interactive-signin'
 
 /**
  * Cross-subdomain session sync (AGL-236). Firebase client auth is
@@ -69,13 +73,32 @@ export function useSessionCookie(): void {
         hadUser.current = true
 
         if (isInitialState) {
-          // Restored from this origin's persistence — defer to the shared
-          // cookie, but only an EXPLICIT sign-out elsewhere (tombstone) or
-          // a revocation may end this session. A merely absent/expired
-          // cookie is ambiguous — a mint that raced a hard navigation, the
-          // 14-day TTL lapsing, a blocked fetch — and treating it as
-          // sign-out was the "logged in for 2-10 seconds, then kicked out"
-          // bug (AGL-463). For those, re-mint from the live local session.
+          // The mobile Google flow (signInWithRedirect) completes on a
+          // fresh page load, so an interactive sign-in surfaces here as an
+          // "initial state" — indistinguishable from a persistence restore.
+          // If the user just signed in on this tab, MINT the shared cookie
+          // rather than validating a stale one; otherwise a leftover
+          // `signed-out` tombstone reads as "signed out elsewhere" and logs
+          // them back out ~seconds after login (AGL-463).
+          if (consumeInteractiveSignIn()) {
+            mintedForUid.current = user.uid
+            try {
+              const idToken = await user.getIdToken()
+              await fetch('/api/auth/session', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${idToken}` },
+              })
+            } catch {
+              // Mint is best-effort; this origin stays signed in.
+            }
+            return
+          }
+          // Genuine restore — defer to the shared cookie, but only an
+          // EXPLICIT sign-out elsewhere (tombstone) or a revocation may end
+          // this session. A merely absent/expired cookie is ambiguous — a
+          // mint that raced a hard navigation, the 14-day TTL lapsing, a
+          // blocked fetch — so re-mint from the live local session instead
+          // of signing out.
           try {
             const response = await fetch('/api/auth/session')
             if (!active || response.ok || response.status !== 401) return
@@ -97,7 +120,10 @@ export function useSessionCookie(): void {
           return
         }
         if (!wasSignedIn && mintedForUid.current !== user.uid) {
-          // Interactive sign-in on this origin → share the session.
+          // Interactive sign-in on this origin (no reload — popup/email) →
+          // share the session. The redirect marker is consumed here too so
+          // a same-tab flow can't leave it set for a later restore.
+          clearInteractiveSignIn()
           mintedForUid.current = user.uid
           try {
             const idToken = await user.getIdToken()

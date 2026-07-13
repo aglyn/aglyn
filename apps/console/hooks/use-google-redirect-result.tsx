@@ -33,12 +33,16 @@ import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
 export function useGoogleRedirectResult(
   eventName: 'login' | 'sign_up',
   onError: (error: AuthResultError) => void,
+  enabled = true,
 ): void {
   const auth = useAuth()
   const analytics = useAnalytics()
   const resolved = useRef(false)
 
   useEffect(() => {
+    // Disabled on delegating hosts (AGL-465): getRedirectResult would frame
+    // the auth iframe, which a workspace subdomain can't — it must delegate.
+    if (!enabled) return
     if (resolved.current) return
     resolved.current = true
     let active = true
@@ -64,7 +68,7 @@ export function useGoogleRedirectResult(
     return () => {
       active = false
     }
-  }, [analytics, auth, eventName, onError])
+  }, [analytics, auth, eventName, onError, enabled])
 }
 
 export default useGoogleRedirectResult

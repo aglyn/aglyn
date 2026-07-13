@@ -39,12 +39,36 @@ export type UseContinueUrlResponse = [
 export const ContinueParamName = 'continue'
 export const continueParam = (value: string) => `${ContinueParamName}=${value}`
 
+const WORKSPACE_DOMAIN =
+  process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.io'
+
 /**
- * Only same-app relative paths may be continued to — anything absolute or
- * protocol-relative would make the post-auth redirect an open redirect.
+ * Same-site absolute returns (AGL-465): the auth host signs a user in and
+ * must redirect back to the {org}.<workspaceDomain> subdomain they started
+ * from, which is a cross-origin URL. Allow it only when the host is within
+ * the workspace domain over https, so this stays first-party and never
+ * becomes an open redirect.
+ */
+const isSameSiteAbsoluteUrl = (url: string): boolean => {
+  try {
+    const { protocol, hostname } = new URL(url)
+    if (protocol !== 'https:') return false
+    return (
+      hostname === WORKSPACE_DOMAIN ||
+      hostname.endsWith(`.${WORKSPACE_DOMAIN}`)
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Only same-app relative paths, or same-site absolute URLs within the
+ * workspace domain (AGL-465), may be continued to — anything else absolute
+ * or protocol-relative would make the post-auth redirect an open redirect.
  */
 const isSafeContinueUrl = (url: string): boolean =>
-  url.startsWith('/') && !url.startsWith('//')
+  (url.startsWith('/') && !url.startsWith('//')) || isSameSiteAbsoluteUrl(url)
 
 export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
   const router = useRouter()
@@ -70,7 +94,15 @@ export function useContinueUrlDecoded(): UseContinueUrlDecodedResponse {
         scroll?: boolean
       },
     ): void => {
-      return router.push(continueUrl || url, options)
+      const target = continueUrl || url
+      // A same-site absolute return (AGL-465) is cross-origin — the App
+      // Router's client navigation can't cross origins, so hand it to the
+      // browser. Relative paths keep the SPA transition.
+      if (/^https?:\/\//.test(target)) {
+        if (typeof window !== 'undefined') window.location.assign(target)
+        return
+      }
+      return router.push(target, options)
     },
     [router, continueUrl],
   )
