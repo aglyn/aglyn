@@ -47,6 +47,7 @@ import {
   GoogleAuthProvider,
   setPersistence,
   signInWithPopup,
+  signInWithRedirect,
 } from 'firebase/auth'
 import { useCallback, useState } from 'react'
 import { useAnalytics, useAuth } from '@aglyn/tenant-feature-instance'
@@ -54,6 +55,8 @@ import AuthErrorAlertComponent from '../../../components/auth-error-alert.compon
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
+import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
+import isMobileBrowser from '../../../utils/is-mobile-browser'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
 
 const googleOAuthProvider = new GoogleAuthProvider()
@@ -78,6 +81,9 @@ function SignUp() {
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
   const analytics = useAnalytics()
+  // Mobile browsers sign in via redirect (AGL-462); this completes the
+  // round-trip when Google sends the user back here.
+  useGoogleRedirectResult('sign_up', setError)
 
   const handleSignUp = useCallback(
     async (values?: any) => {
@@ -98,7 +104,12 @@ function SignUp() {
               values[FIELD_SCHEMA_PASSWORD.name],
             )
           }
-          return signInWithPopup(firebaseAuth, googleOAuthProvider)
+          // Mobile popups become tabs whose result never reaches the SDK
+          // (AGL-462) — the redirect flow is the only reliable path there.
+          // The overlay stays queued until the browser navigates away.
+          return isMobileBrowser()
+            ? signInWithRedirect(firebaseAuth, googleOAuthProvider)
+            : signInWithPopup(firebaseAuth, googleOAuthProvider)
         })
         .then((user) => {
           logEvent(analytics, 'sign_up', {

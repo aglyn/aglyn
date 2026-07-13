@@ -21,6 +21,27 @@ export const RECAPTCHA_API_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_PUBLIC_KEY
 export const FIREBASE_CLIENT_APP_NAME = 'DEFAULT_AGLYN'
 
 /**
+ * On deployed workspace hosts the auth helpers are reverse-proxied under
+ * this origin's /__/* (console next.config rewrite, AGL-462), so the
+ * OAuth redirect/popup handshake stays same-site — a cross-origin
+ * *.firebaseapp.com authDomain gets its storage partitioned away by
+ * mobile Safari/Chrome and the sign-in result never reaches the app.
+ * Localhost, previews, and the emulator keep the configured domain.
+ */
+function resolveFirebaseAuthDomain(): string | undefined {
+  const configured = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+  if (typeof window === 'undefined') return configured
+  if (process.env['FIREBASE_AUTH_EMULATOR_ENABLED'] === 'true') {
+    return configured
+  }
+  const workspaceDomain = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.io'
+  const { hostname } = window.location
+  const onWorkspaceDomain =
+    hostname === workspaceDomain || hostname.endsWith(`.${workspaceDomain}`)
+  return onWorkspaceDomain ? window.location.host : configured
+}
+
+/**
  * Firebase client-side configuration assembled directly from NEXT_PUBLIC_*
  * environment variables so that Next.js webpack DefinePlugin substitutes
  * them at build time and no intermediate constant indirection can carry a
@@ -28,7 +49,7 @@ export const FIREBASE_CLIENT_APP_NAME = 'DEFAULT_AGLYN'
  */
 export const fbClientAppOptions: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  authDomain: resolveFirebaseAuthDomain(),
   databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,

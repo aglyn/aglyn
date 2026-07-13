@@ -30,6 +30,22 @@ module.exports = withAglyn({
   env: {
     AGLYN_SILOED_HOST: process.env.AGLYN_SILOED_HOST,
   },
+  // Same-origin Firebase auth helpers (AGL-462): OAuth redirect/popup
+  // return legs break under third-party storage partitioning when the
+  // authDomain is cross-origin (*.firebaseapp.com), which is why Google
+  // sign-in from a mobile browser never completed. Proxying /__/* lets
+  // the client use window.location.host as authDomain (see
+  // resolveFirebaseAuthDomain) so the whole handshake stays same-site.
+  async rewrites() {
+    const project = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    if (!project) return []
+    return [
+      {
+        source: '/__/:path*',
+        destination: `https://${project}.firebaseapp.com/__/:path*`,
+      },
+    ]
+  },
   // Manage → Org section move (AGL-236): old bookmarks keep working.
   async redirects() {
     return [
