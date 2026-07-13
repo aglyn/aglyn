@@ -38,6 +38,10 @@ const PRODUCTION_DOMAINS = [
   'aglyn.com',
   'app.aglyn.com',
   'app.aglyn.io',
+  // Dedicated OAuth origin (AGL-462/465): the Firebase auth helper iframe
+  // is served here, so it must be able to frame itself (frame-ancestors).
+  'auth.aglyn.com',
+  'auth.aglyn.io',
   'cdn.aglyn.com',
   'cdn.aglyn.io',
   'cname.aglyn.com',

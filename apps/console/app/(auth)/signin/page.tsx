@@ -36,7 +36,8 @@ import {
   MdiIcon,
 } from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
-import { Button, Divider, Stack, Typography } from '@mui/material'
+import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
+import { Button, CircularProgress, Divider, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
@@ -52,6 +53,7 @@ import AuthErrorAlertComponent from '../../../components/auth-error-alert.compon
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
+import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
@@ -73,9 +75,12 @@ function SignIn() {
   const firebaseAuth = useAuth()
   const [error, setError] = useState<AuthResultError>(null)
   const analytics = useAnalytics()
+  // Org workspace subdomains can't run OAuth — hand sign-in to the auth
+  // host and skip the local form/redirect-result entirely (AGL-465).
+  const delegating = useDelegateWorkspaceSignIn('signin')
   // Mobile browsers sign in via redirect (AGL-462); this completes the
   // round-trip when Google sends the user back here.
-  useGoogleRedirectResult('login', setError)
+  useGoogleRedirectResult('login', setError, !delegating)
 
   const handleSignIn = useCallback(
     async (values?: any) => {
@@ -136,6 +141,21 @@ function SignIn() {
   const handleGoogleButtonClick = useCallback(async () => {
     await handleSignIn()
   }, [handleSignIn])
+
+  if (delegating) {
+    // Bouncing to the auth host (AGL-465) — no local form or OAuth here.
+    return (
+      <AuthFormComponent
+        headingTop={'Redirecting'}
+        headingBottom={'Taking you to sign in'}
+        headingBottomProps={{
+          sx: { pb: 4 },
+          component: LoadingTextComponent,
+        }}
+        headingAfter={<CircularProgress color="secondary" />}
+      />
+    )
+  }
 
   return (
     <AuthFormComponent
