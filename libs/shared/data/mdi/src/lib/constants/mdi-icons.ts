@@ -37,8 +37,8 @@ let loadPromise: Promise<Map<IconId, Icon>> | null = null
  * in a given bundler.
  */
 async function loadFromBarrel(): Promise<Map<IconId, Icon>> {
-  const module = await import('../../../generated/6.5.95/mdi-icons')
-  for (const value of Object.values(module as Record<string, unknown>)) {
+  const barrel = await import('../../../generated/6.5.95/mdi-icons')
+  for (const value of Object.values(barrel as Record<string, unknown>)) {
     if (
       _isObj(value) &&
       _hasOwnProperty('path', value) &&

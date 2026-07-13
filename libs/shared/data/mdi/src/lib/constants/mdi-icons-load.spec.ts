@@ -1,4 +1,4 @@
-import { loadMdiIcons } from '@aglyn/shared-data-mdi'
+import { loadMdiIcons } from './mdi-icons'
 describe('loadMdiIcons', () => {
   it('loads the catalog', async () => {
     const icons = await loadMdiIcons()
