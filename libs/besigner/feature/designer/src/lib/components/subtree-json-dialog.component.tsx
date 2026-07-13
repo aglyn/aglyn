@@ -16,17 +16,9 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { JsonEditor } from '@aglyn/shared-ui-json-editor'
 import { toJS } from 'mobx'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 
 export interface SubtreeJsonDialogProps {
   node?: Aglyn.NodeSchema<any> | null
@@ -95,98 +87,82 @@ const collectSubtreeIds = (
   return out
 }
 
+/** The parsed draft with the root's identity pinned back on (AGL-338). */
+const withRootIdentity = (
+  value: unknown,
+  node: Aglyn.NodeSchema<any>,
+): NestedNode => {
+  const parsed = structuredClone(value) as NestedNode
+  // The root keeps its identity — the parent's child list references it.
+  parsed.$id = node.$id
+  parsed['parentId'] = node.parentId
+  return parsed
+}
+
 /**
  * Edit the JSON of a single element and its children (AGL-338), instead
- * of the whole screen document. Apply validates, keeps the node's
+ * of the whole screen document — through the SAME editor as the Edit
+ * menu's raw JSON dialog (AGL-457). Save validates, keeps the node's
  * identity (so the parent's child list stays intact), and replaces the
  * subtree in one undoable step.
  */
 export function SubtreeJsonDialog(props: SubtreeJsonDialogProps) {
   const { node, open, onClose } = props
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!open || !node) return
-    const nested = Aglyn.canvas.makeNested(node as any)
-    setDraft(JSON.stringify(nested, null, 2))
-    setError(null)
-  }, [open, node])
+  const nested = useMemo(
+    () => (open && node ? Aglyn.canvas.makeNested(node as any) : undefined),
+    [open, node],
+  )
 
-  const handleApply = useCallback(() => {
-    if (!node) return
-    let parsed: NestedNode
-    try {
-      parsed = JSON.parse(draft)
-    } catch (parseError: any) {
-      setError(parseError?.message ?? 'Invalid JSON')
-      return
-    }
-    // The root keeps its identity — the parent's child list references it.
-    parsed.$id = node.$id
-    parsed['parentId'] = node.parentId
-    const problem = validateSubtree(parsed)
-    if (problem) {
-      setError(problem)
-      return
-    }
-    mintMissingIds(parsed)
+  const handleValidate = useCallback(
+    (value: unknown) => {
+      if (!node) return 'No element selected'
+      return validateSubtree(withRootIdentity(value, node))
+    },
+    [node],
+  )
 
-    // Full-map rebuild: drop the old subtree's descendants, splice in the
-    // new flat nodes, and apply as one undoable replacement.
-    const map = {
-      ...(toJS(Aglyn.canvas.toJSON().nodes) as Record<
-        string,
-        Aglyn.NodeSchema<any>
-      >),
-    }
-    for (const staleId of collectSubtreeIds(map, node.$id)) {
-      delete map[staleId]
-    }
-    const flat = (Aglyn.canvas.constructor as any).denormalizeNodes(
-      [parsed],
-      node.parentId!,
-      {},
-    )
-    Object.assign(map, flat)
-    Aglyn.canvas.applyNodes(map as any)
-    onClose()
-  }, [node, draft, onClose])
+  const handleSave = useCallback(
+    (_event: unknown, value: unknown) => {
+      if (!node) return
+      const parsed = withRootIdentity(value, node)
+      mintMissingIds(parsed)
+
+      // Full-map rebuild: drop the old subtree's descendants, splice in the
+      // new flat nodes, and apply as one undoable replacement.
+      const map = {
+        ...(toJS(Aglyn.canvas.toJSON().nodes) as Record<
+          string,
+          Aglyn.NodeSchema<any>
+        >),
+      }
+      for (const staleId of collectSubtreeIds(map, node.$id)) {
+        delete map[staleId]
+      }
+      const flat = (Aglyn.canvas.constructor as any).denormalizeNodes(
+        [parsed],
+        node.parentId!,
+        {},
+      )
+      Object.assign(map, flat)
+      Aglyn.canvas.applyNodes(map as any)
+    },
+    [node],
+  )
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{'Edit element JSON'}</DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          {'This element and its children only — the rest of the screen is ' +
-            'untouched. Apply replaces the subtree (undo restores it).'}
-        </Typography>
-        <TextField
-          multiline
-          minRows={16}
-          maxRows={28}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value)
-            setError(null)
-          }}
-          error={Boolean(error)}
-          helperText={error ?? undefined}
-          slotProps={{
-            htmlInput: {
-              style: { fontFamily: 'monospace', fontSize: 12 },
-              spellCheck: false,
-            },
-          }}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{'Cancel'}</Button>
-        <Button variant="contained" onClick={handleApply}>
-          {'Apply'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <JsonEditor
+      open={open}
+      title="Edit element JSON"
+      description={
+        'This element and its children only — the rest of the screen is ' +
+        'untouched. Save replaces the subtree (undo restores it).'
+      }
+      defaultValue={nested as any}
+      validate={handleValidate}
+      onSave={handleSave}
+      onClose={onClose}
+    />
   )
 }
 SubtreeJsonDialog.displayName = 'SubtreeJsonDialog'

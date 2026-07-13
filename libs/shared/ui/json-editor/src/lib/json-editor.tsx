@@ -58,19 +58,38 @@ type OnSave = {
 }['bivarianceHack']
 
 export interface JsonEditorProps
-  extends Omit<DialogProps, 'defaultValue'> {
+  extends Omit<DialogProps, 'defaultValue' | 'title'> {
   defaultValue?: CodeMirrorProps['defaultValue']
   onSave?: OnSave
   onClose?: OnClose
+  /** Dialog title; defaults to the classic "Raw JSON". */
+  title?: React.ReactNode
+  /** Optional hint rendered under the title (e.g. subtree scope note). */
+  description?: React.ReactNode
+  /**
+   * Pre-save check (AGL-457): return an error message to keep the dialog
+   * open and surface it instead of saving.
+   */
+  validate?: (value: iJSON) => string | null | undefined
 }
 
 const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
   (props, ref) => {
-    const { onClose, onSave, defaultValue, open, ...rest } = props
+    const {
+      onClose,
+      onSave,
+      defaultValue,
+      open,
+      title = 'Raw JSON',
+      description,
+      validate,
+      ...rest
+    } = props
     const [data, setData] = useState(
       JSON.stringify(defaultValue || {}, null, 2),
     )
     const [warnOpen, setWarnOpen] = useState(true)
+    const [saveError, setSaveError] = useState<string | null>(null)
     const closeWarn = useCallback(() => setWarnOpen(false), [])
 
     useEffect(() => {
@@ -91,19 +110,35 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
 
     const handleChange = useCallback((value: any) => {
       setData(value)
+      setSaveError(null)
     }, [])
     const handleClose = useCallback<OnClose>(
       (event, reason) => {
+        setSaveError(null)
         onClose && onClose(event, reason)
       },
       [onClose],
     )
     const handleSave = useCallback(
       (event: any) => {
-        onSave && onSave(event, parsedValue)
+        // Parse the raw text directly so malformed JSON blocks the save
+        // with an error instead of silently saving `{}` (AGL-457).
+        let value: iJSON
+        try {
+          value = JSON.parse(data)
+        } catch (parseError: any) {
+          setSaveError(parseError?.message ?? 'Invalid JSON')
+          return
+        }
+        const problem = validate?.(value)
+        if (problem) {
+          setSaveError(problem)
+          return
+        }
+        onSave && onSave(event, value)
         handleClose(event, 'saveClick')
       },
-      [onSave, handleClose, parsedValue],
+      [onSave, handleClose, data, validate],
     )
 
     return (
@@ -116,8 +151,18 @@ const JsonEditorRaw = forwardRef<any, JsonEditorProps>(
         // keepMounted
         {...rest}
       >
-        <DialogTitle>Raw JSON</DialogTitle>
+        <DialogTitle>{title}</DialogTitle>
         <DialogContent sx={{ position: 'relative', p: 0 }}>
+          {description ? (
+            <Box sx={{ px: 3, pb: 1, color: 'text.secondary' }}>
+              {description}
+            </Box>
+          ) : null}
+          {saveError ? (
+            <Alert severity="error" sx={{ mx: 3, mb: 1 }}>
+              {saveError}
+            </Alert>
+          ) : null}
           <When condition={open}>
             <If condition={warnOpen}>
               <Then>
