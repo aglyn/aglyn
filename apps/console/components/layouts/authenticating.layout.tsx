@@ -21,7 +21,7 @@ import {
   type BackgroundImageComponentProps,
 } from '@aglyn/shared-ui-jsx'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
-import { useContinueUrl } from '@aglyn/shared-util-next'
+import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
@@ -40,19 +40,27 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
   const authLoading = status === 'loading'
   const signedIn = signInCheckResult?.signedIn === true
   const emailVerified = signInCheckResult?.user?.emailVerified
-  const [, , pushContinued] = useContinueUrl()
+  const [, continueUrl, pushContinued] = useContinueUrl()
 
   useEffect(() => {
     if (authLoading) return void 0
     if (signedIn && signingOut) return void 0
     if (!signedIn && !signingOut) return void 0
-    if (signingOut) return void router.push('/signin')
+    if (signingOut)
+      // Forward the continue param so an idle-expired session resumes on
+      // the page it left off after re-authenticating (AGL-464).
+      return void router.push(
+        continueUrl
+          ? `/signin?${continueParam(encodeURIComponent(continueUrl))}`
+          : '/signin',
+      )
     if (requireEmailVerification && !emailVerified)
       return void router.push('/validate-email')
 
     return void pushContinued('/')
   }, [
     authLoading,
+    continueUrl,
     emailVerified,
     signingOut,
     pushContinued,

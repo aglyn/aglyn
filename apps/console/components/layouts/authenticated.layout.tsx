@@ -21,6 +21,7 @@ import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
+import useIdleLogout from '../../hooks/use-idle-logout'
 import ImpersonationBanner from '../impersonation-banner.component'
 
 export interface AuthenticatedLayoutProps {
@@ -39,6 +40,8 @@ function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   const emailVerified = signInCheckResult?.user?.emailVerified
   const invalidAuth =
     authLoading || !signedIn || (requireEmailVerification && !emailVerified)
+  // Idle session expiry (AGL-464) — armed only while signed in.
+  useIdleLogout(signedIn)
 
   useEffect(() => {
     if (authLoading) return void 0

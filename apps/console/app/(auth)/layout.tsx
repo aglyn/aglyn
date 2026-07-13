@@ -16,13 +16,23 @@
  */
 'use client'
 
+import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 import AuthenticatingLayout from '../../components/layouts/authenticating.layout'
 
 /**
  * The signed-out shell (App Router route group, AGL-401): signin/signup/
  * signout all used `[AuthenticatingLayout]` in their Pages Router `.layouts`.
+ * The Pages Router signout page passed `signingOut` as a layout prop; the
+ * route group has no per-page props, so derive it from the pathname —
+ * without it the layout treats a still-signed-in /signout visit as a
+ * completed login and bounces it to the continue URL before signOut runs.
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
-  return <AuthenticatingLayout>{children}</AuthenticatingLayout>
+  const pathname = usePathname()
+  return (
+    <AuthenticatingLayout signingOut={pathname?.startsWith('/signout')}>
+      {children}
+    </AuthenticatingLayout>
+  )
 }
