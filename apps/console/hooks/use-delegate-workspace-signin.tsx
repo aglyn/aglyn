@@ -26,6 +26,7 @@ import {
   recordDelegationBounce,
   shouldDelegateSignIn,
 } from '../utils/auth-delegation'
+import isMobileBrowser from '../utils/is-mobile-browser'
 
 /**
  * Workspace-subdomain sign-in delegation (AGL-465). On an org subdomain,
@@ -52,7 +53,9 @@ export function useDelegateWorkspaceSignIn(
   const delegating = useMemo(
     () =>
       typeof window !== 'undefined' &&
-      shouldDelegateSignIn(window.location.host),
+      shouldDelegateSignIn(window.location.host, {
+        isMobile: isMobileBrowser(),
+      }),
     [],
   )
 

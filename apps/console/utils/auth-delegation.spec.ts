@@ -50,6 +50,24 @@ describe('shouldDelegateSignIn', () => {
   it('does not delegate deeper nested hosts (not a single org label)', () => {
     expect(shouldDelegateSignIn('a.b.aglyn.io')).toBe(false)
   })
+
+  describe('on mobile', () => {
+    const mobile = { isMobile: true }
+    it('delegates apex/platform hosts too (cross-origin authDomain breaks redirect)', () => {
+      expect(shouldDelegateSignIn('app.aglyn.io', mobile)).toBe(true)
+      expect(shouldDelegateSignIn('console.aglyn.io', mobile)).toBe(true)
+      expect(shouldDelegateSignIn('aglyn-org.aglyn.io', mobile)).toBe(true)
+    })
+    it('never delegates the auth host itself (same-origin OAuth)', () => {
+      expect(shouldDelegateSignIn('auth.aglyn.io', mobile)).toBe(false)
+    })
+    it('still signs in locally off-workspace (previews/localhost)', () => {
+      expect(shouldDelegateSignIn('localhost:4200', mobile)).toBe(false)
+      expect(shouldDelegateSignIn('app-aglyn-abc.vercel.app', mobile)).toBe(
+        false,
+      )
+    })
+  })
 })
 
 describe('buildDelegatedSignInUrl', () => {

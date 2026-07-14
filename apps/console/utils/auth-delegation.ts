@@ -89,19 +89,29 @@ export function clearDelegationBounces(): void {
 }
 
 /**
- * True when `host` is an org workspace subdomain that should hand
- * interactive sign-in off to the auth host: within the workspace domain,
- * a single subdomain label, and not a reserved platform/auth label.
- * The bare apex, `app.`, `auth.`, previews, and localhost all return false
- * (they sign in locally).
+ * Whether `host` should hand interactive sign-in off to the auth host.
+ *
+ * - `auth.<domain>`, previews, and localhost always sign in locally.
+ * - On MOBILE, every other workspace host delegates (AGL-468): interactive
+ *   OAuth only completes same-origin on the auth host, and a cross-origin
+ *   `authDomain` breaks `signInWithRedirect` under mobile storage
+ *   partitioning — so `app.<domain>` can't run it locally either.
+ * - On DESKTOP, only dynamic org workspace subdomains delegate (their host
+ *   is unauthorizable/unframeable); apex/platform hosts (`app.`, `console.`,
+ *   the bare apex) sign in locally via popup.
  */
 export function shouldDelegateSignIn(
   host: string,
-  workspaceDomain = WORKSPACE_DOMAIN,
+  opts: { isMobile?: boolean; workspaceDomain?: string } = {},
 ): boolean {
+  const workspaceDomain = opts.workspaceDomain ?? WORKSPACE_DOMAIN
   const hostname = host.split(':')[0]
+  const onWorkspaceDomain =
+    hostname === workspaceDomain || hostname.endsWith(`.${workspaceDomain}`)
+  if (!onWorkspaceDomain) return false
+  if (hostname === authSignInHost(workspaceDomain)) return false
+  if (opts.isMobile) return true
   if (hostname === workspaceDomain) return false
-  if (!hostname.endsWith(`.${workspaceDomain}`)) return false
   const label = hostname.slice(0, -(workspaceDomain.length + 1))
   if (label.includes('.')) return false // deeper nesting is not an org host
   return !RESERVED_LABELS.has(label)
