@@ -37,7 +37,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import { useNextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { LoadingTextComponent } from '@aglyn/shared-ui-jsx'
-import { Button, CircularProgress, Divider, Stack, Typography } from '@mui/material'
+import { Button, CircularProgress, Divider, Link, Stack, Typography } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import {
   browserLocalPersistence,
@@ -55,6 +55,7 @@ import AuthFormComponent from '../../../components/auth-form.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
 import useDelegateWorkspaceSignIn from '../../../hooks/use-delegate-workspace-signin'
 import useGoogleRedirectResult from '../../../hooks/use-google-redirect-result'
+import { authSignInHost } from '../../../utils/auth-delegation'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import guardPopupLoading from '../../../utils/popup-loading-guard'
@@ -77,10 +78,10 @@ function SignIn() {
   const analytics = useAnalytics()
   // Org workspace subdomains can't run OAuth — hand sign-in to the auth
   // host and skip the local form/redirect-result entirely (AGL-465).
-  const delegating = useDelegateWorkspaceSignIn('signin')
+  const delegation = useDelegateWorkspaceSignIn('signin')
   // Mobile browsers sign in via redirect (AGL-462); this completes the
   // round-trip when Google sends the user back here.
-  useGoogleRedirectResult('login', setError, !delegating)
+  useGoogleRedirectResult('login', setError, delegation === 'off')
 
   const handleSignIn = useCallback(
     async (values?: any) => {
@@ -142,7 +143,7 @@ function SignIn() {
     await handleSignIn()
   }, [handleSignIn])
 
-  if (delegating) {
+  if (delegation === 'redirecting') {
     // Bouncing to the auth host (AGL-465) — no local form or OAuth here.
     return (
       <AuthFormComponent
@@ -153,6 +154,23 @@ function SignIn() {
           component: LoadingTextComponent,
         }}
         headingAfter={<CircularProgress color="secondary" />}
+      />
+    )
+  }
+  if (delegation === 'stopped') {
+    // Delegation kept coming back session-less (AGL-467) — surface an escape
+    // instead of an endless spinner.
+    return (
+      <AuthFormComponent
+        headingTop={'Sign-in didn’t complete'}
+        headingBottom={'We couldn’t establish your session on this workspace.'}
+        paperAfter={
+          <Typography component="div" variant="body2">
+            <Link href={`https://${authSignInHost()}/signin`}>
+              {'Sign in again'}
+            </Link>
+          </Typography>
+        }
       />
     )
   }

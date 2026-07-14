@@ -86,9 +86,26 @@ async function handler(request: Request): Promise<Response> {
       if (!idToken) {
         return Response.json({ error: 'Unauthenticated' }, { status: 401 })
       }
-      const sessionCookie = await auth.createSessionCookie(idToken, {
-        expiresIn: SESSION_TTL_MS,
-      })
+      let sessionCookie: string
+      try {
+        sessionCookie = await auth.createSessionCookie(idToken, {
+          expiresIn: SESSION_TTL_MS,
+        })
+      } catch (error) {
+        // AGL-467: a mint failure here strands the delegated cross-subdomain
+        // hand-off (no cookie → workspace bounces back). Log it explicitly.
+        console.error(
+          '[auth/session] POST mint failed',
+          JSON.stringify({
+            code: (error as { code?: string })?.code,
+            message: (error as { message?: string })?.message,
+          }),
+        )
+        return Response.json(
+          { error: 'Mint failed', reason: 'mint-failed' },
+          { status: 401 },
+        )
+      }
       return jsonWithCookie(
         { ok: true },
         200,
@@ -120,6 +137,17 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ token }, { status: 200 })
       } catch (error) {
         const code = (error as { code?: string })?.code ?? ''
+        // AGL-467: surface WHY the exchange failed. A `createCustomToken`
+        // failure here (vs. a verify failure) breaks cross-subdomain silent
+        // sign-in specifically, and was invisible because it was folded into
+        // a generic 401.
+        console.error(
+          '[auth/session] GET exchange failed',
+          JSON.stringify({
+            code,
+            message: (error as { message?: string })?.message,
+          }),
+        )
         const reason =
           code === 'auth/session-cookie-revoked'
             ? 'revoked'
@@ -149,6 +177,14 @@ async function handler(request: Request): Promise<Response> {
     // Unexpected failures (admin SDK init, malformed request) — report
     // unauthenticated without touching the cookie; the client treats
     // reasonless 401s as re-mintable.
+    console.error(
+      '[auth/session] handler error',
+      JSON.stringify({
+        method: request.method,
+        code: (error as { code?: string })?.code,
+        message: (error as { message?: string })?.message,
+      }),
+    )
     return Response.json(
       { error: 'Session invalid', reason: 'invalid' },
       { status: 401 },

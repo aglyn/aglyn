@@ -17,7 +17,7 @@
 'use client'
 
 import { useContinueUrlDecoded } from '@aglyn/shared-util-next'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import {
   buildDelegatedSignInUrl,
@@ -37,12 +37,15 @@ import {
  * `useSessionCookie`'s silent sign-in signs the user in here instead, so
  * this defers rather than redirecting.
  */
+export type WorkspaceDelegationState = 'off' | 'redirecting' | 'stopped'
+
 export function useDelegateWorkspaceSignIn(
   page: 'signin' | 'signup',
-): boolean {
+): WorkspaceDelegationState {
   const { status, data: signInCheckResult } = useSigninCheck()
   const [next] = useContinueUrlDecoded()
   const started = useRef(false)
+  const [stopped, setStopped] = useState(false)
 
   const delegating = useMemo(
     () =>
@@ -68,14 +71,16 @@ export function useDelegateWorkspaceSignIn(
       } catch {
         // No reachable session — fall through and delegate.
       }
-      // Circuit breaker: if we keep coming back still session-less, stop
-      // rather than loop forever (should never trip once the auth host
-      // mints the cookie before returning — AGL-466).
+      // Circuit breaker: if we keep coming back still session-less, stop and
+      // surface an error rather than loop or hang on the spinner forever
+      // (AGL-467). Should never trip once the auth host mints the cookie
+      // before returning.
       if (!recordDelegationBounce()) {
         console.error(
           '[auth] workspace sign-in delegation bounced repeatedly without a ' +
             'session — stopping to avoid a redirect loop.',
         )
+        setStopped(true)
         return
       }
       const returnPath = next || '/'
@@ -85,7 +90,8 @@ export function useDelegateWorkspaceSignIn(
     })()
   }, [delegating, status, signInCheckResult, next, page])
 
-  return delegating
+  if (!delegating) return 'off'
+  return stopped ? 'stopped' : 'redirecting'
 }
 
 export default useDelegateWorkspaceSignIn

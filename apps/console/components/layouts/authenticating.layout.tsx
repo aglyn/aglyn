@@ -25,7 +25,7 @@ import { continueParam, useContinueUrl } from '@aglyn/shared-util-next'
 import { Stack } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { useSigninCheck } from '@aglyn/tenant-feature-instance'
+import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 
 export interface AuthenticatingLayoutProps
   extends Partial<BackgroundImageComponentProps> {
@@ -36,6 +36,7 @@ export interface AuthenticatingLayoutProps
 function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
   const { children, sx, requireEmailVerification, signingOut, ...rest } = props
   const router = useRouter()
+  const auth = useAuth()
   const { status, data: signInCheckResult } = useSigninCheck()
   const authLoading = status === 'loading'
   const signedIn = signInCheckResult?.signedIn === true
@@ -67,17 +68,31 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
     if (/^https?:\/\//.test(continueUrl)) {
       let active = true
       void (async () => {
+        // Use the live SDK user (auth.currentUser) — the most reliable
+        // source of a fresh ID token; signInCheckResult.user can lag. Force
+        // a token refresh, and confirm the mint returned before handing off
+        // so the workspace's silent sign-in has a cookie to read (AGL-467).
+        const user = auth.currentUser ?? signInCheckResult?.user ?? null
+        if (!user) {
+          // Signed-in but no user object yet — wait for the next tick
+          // rather than hand off with no cookie.
+          return
+        }
         try {
-          const user = signInCheckResult?.user
-          if (user) {
-            const idToken = await user.getIdToken()
-            await fetch('/api/auth/session', {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${idToken}` },
-            })
+          const idToken = await user.getIdToken(true)
+          const response = await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${idToken}` },
+          })
+          if (!response.ok) {
+            console.error(
+              '[auth] delegated mint failed before hand-off',
+              response.status,
+              await response.text().catch(() => ''),
+            )
           }
-        } catch {
-          // Even a failed mint must not strand the user on the auth host.
+        } catch (error) {
+          console.error('[auth] delegated mint threw before hand-off', error)
         }
         if (active && typeof window !== 'undefined') {
           window.location.assign(continueUrl)
@@ -90,6 +105,7 @@ function AuthenticatingLayout(props: AuthenticatingLayoutProps) {
 
     return void pushContinued('/')
   }, [
+    auth,
     authLoading,
     continueUrl,
     emailVerified,
