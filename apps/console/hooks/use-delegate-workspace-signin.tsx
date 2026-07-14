@@ -17,8 +17,9 @@
 'use client'
 
 import { useContinueUrlDecoded } from '@aglyn/shared-util-next'
+import { signInWithCustomToken } from 'firebase/auth'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSigninCheck } from '@aglyn/tenant-feature-instance'
+import { useAuth, useSigninCheck } from '@aglyn/tenant-feature-instance'
 import {
   buildDelegatedSignInUrl,
   clearDelegationBounces,
@@ -42,6 +43,7 @@ export type WorkspaceDelegationState = 'off' | 'redirecting' | 'stopped'
 export function useDelegateWorkspaceSignIn(
   page: 'signin' | 'signup',
 ): WorkspaceDelegationState {
+  const auth = useAuth()
   const { status, data: signInCheckResult } = useSigninCheck()
   const [next] = useContinueUrlDecoded()
   const started = useRef(false)
@@ -58,23 +60,49 @@ export function useDelegateWorkspaceSignIn(
     if (!delegating || status === 'loading') return
     if (signInCheckResult?.signedIn) {
       clearDelegationBounces() // signed in — the round-trip succeeded
-      return // silent sign-in won — layout routes
+      return // layout routes to the continue URL
     }
     if (started.current) return
     started.current = true
+    let active = true
     void (async () => {
-      try {
-        // A live shared session means silent sign-in will land here; don't
-        // bounce the user out to the auth host for nothing.
-        const response = await fetch('/api/auth/session')
-        if (response.ok) return
-      } catch {
-        // No reachable session — fall through and delegate.
+      // Establish the session from the shared cookie OURSELVES rather than
+      // leaning on useSessionCookie's one-shot silent sign-in, which bails
+      // on the first 401 and never retries — on a delegated return the
+      // cookie can land a beat late, so that one-shot misses it and the
+      // splash hangs forever (AGL-467). Retry briefly, and when the exchange
+      // yields a token, sign in directly.
+      for (let attempt = 0; active && attempt < 6; attempt++) {
+        try {
+          const response = await fetch('/api/auth/session')
+          if (response.ok) {
+            const payload = await response.json().catch(() => null)
+            if (payload?.token && active && !auth.currentUser) {
+              try {
+                await signInWithCustomToken(auth, payload.token)
+              } catch (error) {
+                console.error(
+                  '[auth] workspace custom-token sign-in failed',
+                  error,
+                )
+              }
+            }
+            clearDelegationBounces()
+            return // signedIn flips → layout routes
+          }
+          const payload = await response.json().catch(() => null)
+          // Absent cookies can still be propagating after the hand-off;
+          // anything else (signed-out tombstone, invalid) won't heal by
+          // waiting — go delegate now.
+          if (payload?.reason !== 'absent') break
+        } catch {
+          // network hiccup — retry
+        }
+        await new Promise((resolve) => setTimeout(resolve, 400))
       }
+      if (!active) return
       // Circuit breaker: if we keep coming back still session-less, stop and
-      // surface an error rather than loop or hang on the spinner forever
-      // (AGL-467). Should never trip once the auth host mints the cookie
-      // before returning.
+      // surface an error rather than loop or hang on the spinner forever.
       if (!recordDelegationBounce()) {
         console.error(
           '[auth] workspace sign-in delegation bounced repeatedly without a ' +
@@ -88,7 +116,10 @@ export function useDelegateWorkspaceSignIn(
         buildDelegatedSignInUrl(window.location.origin, returnPath, page),
       )
     })()
-  }, [delegating, status, signInCheckResult, next, page])
+    return () => {
+      active = false
+    }
+  }, [auth, delegating, status, signInCheckResult, next, page])
 
   if (!delegating) return 'off'
   return stopped ? 'stopped' : 'redirecting'
