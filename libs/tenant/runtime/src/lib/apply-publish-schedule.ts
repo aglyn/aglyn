@@ -16,7 +16,8 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { checkEntitlement } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /**
@@ -37,6 +38,15 @@ export async function applyDuePublishSchedule(options: {
   const schedule = parent.publishSchedule
   const publishAtMs = (schedule?.publishAt?.seconds ?? 0) * 1000
   if (schedule?.status !== 'pending' || publishAtMs > Date.now()) {
+    return parent.versionId
+  }
+
+  // Plan gate (AGL-471): the console gates *writing* a schedule on the
+  // scheduledPublishing entitlement, but this executor is the authority —
+  // a schedule written directly to Firestore must not auto-publish on an
+  // unentitled plan. Left pending, it applies if the org later upgrades.
+  const tenant = (await getOrgForHost(hostId))?.org ?? {}
+  if (!checkEntitlement(tenant, 'scheduledPublishing')) {
     return parent.versionId
   }
 

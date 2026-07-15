@@ -160,7 +160,9 @@ async function handler(request: Request): Promise<Response> {
       // Storage quota applies to every org; a plan-less org resolves as
       // `free` (250 MB cap), not unmetered.
       const usedMb = (usedBytes + buffer.length) / (1024 * 1024)
-      const quota = checkQuota(tenant, 'storagePerHostMb', usedMb - 1)
+      // usedMb includes the incoming file; ceil-1 allows exactly up to the
+      // integer MB cap and no further (AGL-471 off-by-one).
+      const quota = checkQuota(tenant, 'storagePerHostMb', Math.ceil(usedMb) - 1)
       if (!quota.allowed) {
         return Response.json({
           error: `Storage limit reached (${quota.limit} MB)`,

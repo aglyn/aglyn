@@ -18,6 +18,7 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   canManageOrg,
+  checkSeatQuota,
   createResourceUid,
   type HostAccessRole,
   isOrgRole,
@@ -139,6 +140,28 @@ async function handler(request: Request): Promise<Response> {
           hostAccess[hostId] = hostRole as HostAccessRole
         }
       }
+      // Manager-seat quota (AGL-471): fail the invite early when the org
+      // has no seat left (members + pending invites); accept re-checks.
+      {
+        const orgRef = firestore.collection('orgs').doc(orgId)
+        const [orgSnapshot, memberCount, pendingInvites] = await Promise.all([
+          orgRef.get(),
+          orgRef.collection('members').count().get(),
+          invitesRef.where('acceptedAt', '==', null).count().get(),
+        ])
+        const used =
+          memberCount.data().count + pendingInvites.data().count
+        const quota = checkSeatQuota(orgSnapshot.data() as any, 'managers', used)
+        if (!quota.allowed) {
+          return Response.json({
+            error: quota.upgradeRequired
+              ? `Team seat limit reached (${quota.limit}) — upgrade your ` +
+                'plan to invite more members'
+              : `Team seats full (${quota.limit}) — add seats for ` +
+                `$${quota.addonPriceUsd}/mo each from Billing`,
+          }, { status: 403 })
+        }
+      }
       const inviteId = createResourceUid()
       await invitesRef.doc(inviteId).set({
         email,
@@ -219,6 +242,38 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({
           error: 'This invite is for a different (or unverified) email',
         }, { status: 403 })
+      }
+      // Manager-seat quota (AGL-471): accept is where the seat is actually
+      // consumed — authoritative re-check (already-members re-accepting
+      // don't add a seat, but the upsert is idempotent for them anyway).
+      const existingMember = await firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection('members')
+        .doc(decoded.uid)
+        .get()
+      if (!existingMember.exists) {
+        const [orgSnapshot, memberCount] = await Promise.all([
+          firestore.collection('orgs').doc(orgId).get(),
+          firestore
+            .collection('orgs')
+            .doc(orgId)
+            .collection('members')
+            .count()
+            .get(),
+        ])
+        const quota = checkSeatQuota(
+          orgSnapshot.data() as any,
+          'managers',
+          memberCount.data().count,
+        )
+        if (!quota.allowed) {
+          return Response.json({
+            error:
+              `This organization is out of team seats (${quota.limit}) — ` +
+              'ask its owner to add seats or upgrade from Billing',
+          }, { status: 403 })
+        }
       }
       await upsertOrgMember({
         orgId,

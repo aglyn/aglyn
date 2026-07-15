@@ -124,7 +124,13 @@ async function handler(request: Request): Promise<Response> {
       // Quota against the NEW total (swap the old bytes for the new).
       const projected = usedBytes - previousBytes + buffer.length
       const usedMb = projected / (1024 * 1024)
-      const quota = checkQuota(tenant as any, 'storagePerHostMb', usedMb - 1)
+      // usedMb includes the replacement bytes; ceil-1 allows exactly up to
+      // the integer MB cap and no further (AGL-471 off-by-one).
+      const quota = checkQuota(
+        tenant as any,
+        'storagePerHostMb',
+        Math.ceil(usedMb) - 1,
+      )
       if (!quota.allowed) {
         return Response.json({ error: `Storage limit reached (${quota.limit} MB)` }, { status: 403 })
       }
