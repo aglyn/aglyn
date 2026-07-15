@@ -255,13 +255,23 @@ service cloud.firestore {
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc
       // itself too — which would let editors delete the host through
-      // this write rule (caught by rules-tests, AGL-235). Screens/layouts
-      // are excluded so their dedicated blocks above own create.
+      // this write rule (caught by rules-tests, AGL-235).
       match /{subcollection}/{document=**} {
         allow read: if isStaff() || isHostAdmin(hostId);
-        allow write: if (isStaff() ||
-          (canWriteHostContent(hostId) && !hostOrgSuspended(hostId))) &&
-          !(subcollection in ['screens', 'layouts']);
+        // Quota-governed collections are created via /api/hosts/resources
+        // ONLY (AGL-473) — the route enforces the per-plan quota (and the
+        // feature entitlement, where paid) server-side. These flat
+        // collections have no client-written subcollections, so denying
+        // client `create` by name is safe. Screens/layouts also appear
+        // here — their dedicated blocks above own create; excluding them
+        // from update/delete too keeps this catch-all from re-granting.
+        allow create: if isStaff() ||
+          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+            !(subcollection in ['screens', 'layouts', 'variables',
+              'functions', 'workflows']));
+        allow update, delete: if isStaff() ||
+          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+            !(subcollection in ['screens', 'layouts']));
       }
     }
 

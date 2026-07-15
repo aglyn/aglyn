@@ -103,6 +103,7 @@ beforeEach(async () => {
       memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor', [VIEWER]: 'viewer' },
     })
     await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), { name: 'Home' })
+    await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
     // Suspension write-block (AGL-238): host owned by a suspended org.
     await setDoc(doc(db, 'orgs', SUSPENDED_ORG), {
       name: 'Frozen', slug: 'frozen', ownerUid: OWNER,
@@ -214,9 +215,23 @@ describe('hosts', () => {
     await assertSucceeds(
       setDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'), { nodes: {} }),
     )
-    // Non-screen/layout subcollections keep client create this phase.
+    // Quota-governed logic collections are API-create-only too (AGL-473):
+    // editors cannot create, but can update/delete existing docs.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-new'), { name: 'v' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'functions', 'fn-new'), { name: 'f' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'workflows', 'wf-new'), { name: 'w' }),
+    )
     await assertSucceeds(
-      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-1'), { name: 'v' }),
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-1'), { value: '2' }),
+    )
+    // A not-yet-migrated host collection keeps client create this phase.
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'redirects', 'r-new'), { from: '/a' }),
     )
     await assertSucceeds(
       updateDoc(doc(authed(EDITOR), 'hosts', HOST), { displayName: 'Renamed' }),
