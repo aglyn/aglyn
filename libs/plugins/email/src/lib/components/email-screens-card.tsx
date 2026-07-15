@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Typography } from '@mui/material'
 import {
@@ -46,6 +47,7 @@ const besignerHref = (hostId: string, screenId: string, versionId: string) =>
 export function EmailScreensCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -63,11 +65,17 @@ export function EmailScreensCard(props: { hostId: string }) {
 
   const handleCreate = async () => {
     try {
-      const { screenId, versionId } = await createEmailScreen(firestore, hostId)
+      const { screenId, versionId } = await createEmailScreen(
+        firestore,
+        hostId,
+        createHostResource,
+      )
       void router.push(besignerHref(hostId, screenId, versionId))
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('Creating the email failed', { variant: 'error' })
+      enqueueSnackbar(error?.message ?? 'Creating the email failed', {
+        variant: 'error',
+      })
     }
   }
 

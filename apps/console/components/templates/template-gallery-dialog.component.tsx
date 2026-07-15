@@ -43,7 +43,11 @@ import {
   where,
 } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
 import { checkOrgQuota } from '../../constants/entitlements'
 import { publishScreenRoute } from '../../constants/screen-publishing'
 import {
@@ -76,6 +80,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { queueLoading } = useLoading()
   const { org } = useCurrentOrg()
   const { data: user } = useUser()
+  const createHostResource = useHostResourceApi()
 
   // Community site templates (AGL-137): published bundles with previews.
   const { data: templateListings } = useFirestoreCollection<any>(
@@ -164,34 +169,37 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           while (used.has(slug)) slug = `${screen.slug}-${attempt++}`
           used.add(slug)
 
-          await Promise.all([
-            setDoc(doc(firestore, 'hosts', hostId, 'screens', screenId), {
+          // Screen doc rides the quota-enforcing resources API (AGL-473,
+          // server stamps timestamps); the version stays client-written.
+          await createHostResource({
+            hostId,
+            resource: 'screen',
+            id: screenId,
+            data: {
               displayName: screen.displayName,
               ...(screen.description && { description: screen.description }),
               ...(screen.seo && { seo: screen.seo }),
               versionId,
+            },
+          })
+          await setDoc(
+            doc(
+              firestore,
+              'hosts',
+              hostId,
+              'screens',
+              screenId,
+              'versions',
+              versionId,
+            ),
+            {
+              screenId,
+              displayName: 'Initial version',
+              nodes: screen.nodes,
               createdAt: timestamp,
               updatedAt: timestamp,
-            }),
-            setDoc(
-              doc(
-                firestore,
-                'hosts',
-                hostId,
-                'screens',
-                screenId,
-                'versions',
-                versionId,
-              ),
-              {
-                screenId,
-                displayName: 'Initial version',
-                nodes: screen.nodes,
-                createdAt: timestamp,
-                updatedAt: timestamp,
-              },
-            ),
-          ])
+            },
+          )
           await publishScreenRoute(firestore, { hostId, screenId }, slug)
         }
         enqueueSnackbar(
@@ -201,9 +209,9 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           { variant: 'success', persist: false },
         )
         onClose()
-      } catch (error) {
+      } catch (error: any) {
         console.error(error)
-        enqueueSnackbar('An error has occurred', {
+        enqueueSnackbar(error?.message ?? 'An error has occurred', {
           variant: 'error',
           allowDuplicate: true,
         })
@@ -217,6 +225,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       existingSlugs,
       firestore,
       hostId,
+      createHostResource,
       queueLoading,
       enqueueSnackbar,
       onClose,

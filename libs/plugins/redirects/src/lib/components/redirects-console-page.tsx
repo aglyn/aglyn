@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkQuota, createResourceUid } from '@aglyn/aglyn'
+import { checkQuota } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { isSelfRedirect, matchRedirect, normalizeRedirectDestination, normalizeRedirectSource, REDIRECT_DEFAULT_PRIORITY, validateRedirectRule, REDIRECT_STATUS_CODES } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -50,6 +50,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 
 interface RedirectDraft {
@@ -73,6 +74,7 @@ interface RedirectDraft {
 export function RedirectsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled, org } = props
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
@@ -231,41 +233,46 @@ export function RedirectsConsolePage(props: ConsolePluginPageProps) {
         { variant: 'info', persist: false },
       )
     }
-    try {
-      const id = draft.id ?? createResourceUid()
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'redirects', id),
-        {
-          source,
-          destination,
-          statusCode: (REDIRECT_STATUS_CODES as readonly number[]).includes(
-            draft.statusCode,
-          )
-            ? draft.statusCode
-            : 302,
-          kind,
-          priority: Number.isFinite(Number(draft.priority))
-            ? Number(draft.priority)
-            : REDIRECT_DEFAULT_PRIORITY,
-          enabled: true,
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
-        },
-        { merge: true },
+    const fields = {
+      source,
+      destination,
+      statusCode: (REDIRECT_STATUS_CODES as readonly number[]).includes(
+        draft.statusCode,
       )
+        ? draft.statusCode
+        : 302,
+      kind,
+      priority: Number.isFinite(Number(draft.priority))
+        ? Number(draft.priority)
+        : REDIRECT_DEFAULT_PRIORITY,
+      enabled: true,
+    }
+    try {
+      if (draft.id) {
+        // Edit stays client-direct (no quota consumed).
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'redirects', draft.id),
+          { ...fields, updatedAt: Timestamp.now() },
+          { merge: true },
+        )
+      } else {
+        // New redirect rides the quota-enforcing resources API (AGL-473) —
+        // it also re-checks the `redirects` entitlement server-side.
+        await createHostResource({ hostId, resource: 'redirect', data: fields })
+      }
       setDraft(null)
       enqueueSnackbar('Redirect saved — live within ~30 seconds', {
         variant: 'success',
         persist: false,
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [draft, redirects, host, firestore, hostId, enqueueSnackbar])
+  }, [draft, redirects, host, firestore, hostId, createHostResource, enqueueSnackbar])
 
   const handleToggle = useCallback(
     (redirect: any) => async (event: { target: { checked: boolean } }) => {

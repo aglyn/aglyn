@@ -74,7 +74,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
@@ -124,6 +124,7 @@ function Screens(props) {
     setQuickDrawerOpen(false)
   }, [])
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   // The hierarchy table renders the whole tree, so no page-sized query: a
   // paginated slice could orphan children whose parent fell off the page.
   const { status, data } = useFirestoreCollection<any>(
@@ -204,12 +205,12 @@ function Screens(props) {
         }
       }
 
+      // createdAt/updatedAt are stamped server-side by the resources API
+      // (AGL-473) — client Timestamps don't survive the JSON hop.
       const newValues = {
         ...fields,
         ...(path && { slug: path }),
         versionId: newVersionId,
-        createdAt: timestamp,
-        updatedAt: timestamp,
       }
       const newVersionValue = {
         screenId: newId,
@@ -223,21 +224,29 @@ function Screens(props) {
           },
         },
       }
-      await Promise.all([
-        setDoc(doc(firestore, 'hosts', hostId, 'screens', newId), newValues),
-        setDoc(
-          doc(
-            firestore,
-            'hosts',
-            hostId,
-            'screens',
-            newId,
-            'versions',
-            newVersionId,
+      // Screen doc rides the quota-enforcing resources API (AGL-473);
+      // the first version doc stays client-written (versions aren't
+      // quota-governed and remain editor-writable in rules).
+      await createHostResource({
+        hostId,
+        resource: 'screen',
+        id: newId,
+        data: newValues,
+      })
+        .then(() =>
+          setDoc(
+            doc(
+              firestore,
+              'hosts',
+              hostId,
+              'screens',
+              newId,
+              'versions',
+              newVersionId,
+            ),
+            newVersionValue,
           ),
-          newVersionValue,
-        ),
-      ])
+        )
         .then(() =>
           path
             ? publishScreenRoute(firestore, { hostId, screenId: newId }, path)
@@ -253,7 +262,7 @@ function Screens(props) {
         .catch((error) => {
           console.error(error)
           setError({ ...error })
-          enqueueSnackbar('An error has occurred', {
+          enqueueSnackbar(error?.message ?? 'An error has occurred', {
             variant: 'error',
             allowDuplicate: true,
           })
@@ -273,6 +282,7 @@ function Screens(props) {
       enqueueSnackbar,
       org,
       screens.length,
+      createHostResource,
       logActivity,
     ],
   )

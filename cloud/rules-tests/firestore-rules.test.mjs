@@ -103,6 +103,7 @@ beforeEach(async () => {
       memberRoles: { [OWNER]: 'admin', [EDITOR]: 'editor', [VIEWER]: 'viewer' },
     })
     await setDoc(doc(db, 'hosts', HOST, 'screens', 'screen-1'), { name: 'Home' })
+    await setDoc(doc(db, 'hosts', HOST, 'variables', 'var-1'), { name: 'v', value: '1' })
     // Suspension write-block (AGL-238): host owned by a suspended org.
     await setDoc(doc(db, 'orgs', SUSPENDED_ORG), {
       name: 'Frozen', slug: 'frozen', ownerUid: OWNER,
@@ -193,11 +194,48 @@ describe('hosts', () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'hosts', HOST)))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'hosts', HOST, 'screens', 'screen-1')))
     await assertFails(
-      setDoc(doc(authed(VIEWER), 'hosts', HOST, 'screens', 'screen-2'), { name: 'No' }),
+      updateDoc(doc(authed(VIEWER), 'hosts', HOST, 'screens', 'screen-1'), { name: 'No' }),
+    )
+    // Screen/layout DOC creates are API-only (AGL-473) — even editors
+    // cannot create directly; updates/deletes on existing docs still work.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-2'), { name: 'New' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'layouts', 'layout-2'), { name: 'New' }),
     )
     await assertSucceeds(
-      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-2'), { name: 'Yes' }),
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1'), { name: 'Yes' }),
     )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1')),
+    )
+    // Versions (and other screen subcollections) stay editor-writable —
+    // they aren't quota-governed.
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'screen-1', 'versions', 'v1'), { nodes: {} }),
+    )
+    // Quota-governed logic collections are API-create-only too (AGL-473):
+    // editors cannot create, but can update/delete existing docs.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-new'), { name: 'v' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'functions', 'fn-new'), { name: 'f' }),
+    )
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'workflows', 'wf-new'), { name: 'w' }),
+    )
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-1'), { value: '2' }),
+    )
+    // Commerce/bookings/redirects/reusable-components collections are
+    // API-create-only too (reusable components render on the live site).
+    for (const coll of ['services', 'redirects', 'locations', 'products', 'components']) {
+      await assertFails(
+        setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
+      )
+    }
     await assertSucceeds(
       updateDoc(doc(authed(EDITOR), 'hosts', HOST), { displayName: 'Renamed' }),
     )
@@ -254,8 +292,24 @@ describe('org-shared data (AGL-237)', () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
     await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'datasets', 'ds1')))
-    await assertSucceeds(
+    // Dataset/record CREATES are API-only (AGL-473) — the console route
+    // enforces quotas server-side; even editors cannot create directly.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds2'), { name: 'New' }),
+    )
+    await assertFails(
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r2'), { a: 2 }),
+    )
+    // Updates and deletes stay editor-writable — they don't consume quota.
+    await assertSucceeds(
+      setDoc(
+        doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1'),
+        { a: 3 },
+        { merge: true },
+      ),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')),
     )
     await assertSucceeds(
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
