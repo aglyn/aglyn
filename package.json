@@ -59,6 +59,7 @@
     "profile:nx-run-console:serve:development": "cargo instruments -t time --bin nx run console:serve:development profile",
     "postinstall": "patch-package",
     "test:rules": "bash tools/scripts/test-rules.sh",
+    "test:eslint-rules": "node tools/eslint-rules/no-plan-gated-entitlement.test.mjs",
     "typecheck": "node tools/scripts/typecheck.mjs"
   },
   "dependencies": {

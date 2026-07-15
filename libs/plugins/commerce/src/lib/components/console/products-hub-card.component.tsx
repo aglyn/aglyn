@@ -51,6 +51,8 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
 
 export interface ProductsHubCardProps {
@@ -69,13 +71,21 @@ const STATUS_COLOR: Record<string, 'default' | 'success' | 'warning'> = {
  * Products hub v1 (AGL-279): the catalog manager replacing the Commerce
  * Starter card — search + status filter over `hosts/{hostId}/products`,
  * full editor dialog, duplicate, archive/activate, soft delete (past
- * order rows keep resolving). Product cap enforced per plan (AGL-278) by
- * the storefront APIs; the hub shows the count.
+ * order rows keep resolving). Product cap (`productsPerHost`, AGL-278)
+ * gated here on create/duplicate/import (AGL-471); server-side
+ * enforcement of the client-write path rides AGL-473.
  */
 export function ProductsHubCard(props: ProductsHubCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  // Product cap (AGL-471): per-plan `productsPerHost`, same pattern as
+  // locations. Console-side gate; server enforcement rides AGL-473.
+  const orgId = useHostOrgId(hostId)
+  const { data: org } = useFirestoreDoc<any>(
+    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
+    [firestore, orgId],
+  )
   const { confirm } = useConfirmationContext()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -146,8 +156,21 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [productDocs, search, statusFilter])
 
+  // Cap against ALL live products, not the filtered view (AGL-471).
+  const productCount = useMemo(
+    () => (productDocs ?? []).filter((product: any) => !product.deletedAt).length,
+    [productDocs],
+  )
+  const productQuota = Aglyn.checkQuota(org, 'productsPerHost', productCount)
+
   const handleDuplicate = useCallback(
     (product: ProductRow) => async () => {
+      if (!productQuota.allowed) {
+        return void enqueueSnackbar(
+          `Your plan includes ${productQuota.limit} products — upgrade for more`,
+          { variant: 'info', persist: false },
+        )
+      }
       const id = Aglyn.createResourceUid()
       const { $id: _sourceId, ...copy } = product
       await setDoc(doc(firestore, 'hosts', hostId, 'products', id), {
@@ -164,7 +187,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         persist: false,
       })
     },
-    [firestore, hostId, enqueueSnackbar],
+    [firestore, hostId, enqueueSnackbar, productQuota],
   )
 
   const handleStatus = useCallback(
@@ -213,6 +236,19 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const handleImportApply = useCallback(async () => {
     const parsed = importing?.parsed
     if (!parsed || parsed.products.length === 0) return
+    // Batch-aware cap (AGL-471): the whole import must fit the plan.
+    const batchQuota = Aglyn.checkQuota(
+      org,
+      'productsPerHost',
+      productCount + parsed.products.length - 1,
+    )
+    if (!batchQuota.allowed) {
+      return void enqueueSnackbar(
+        `This import needs ${parsed.products.length} product slots — your ` +
+          `plan allows ${batchQuota.limit}. See Billing to upgrade.`,
+        { variant: 'info', persist: false },
+      )
+    }
     const existingSlugs = new Set(products.map((product) => product.slug))
     for (const product of parsed.products) {
       let slug = product.slug
@@ -237,7 +273,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [importing, products, firestore, hostId, enqueueSnackbar])
+  }, [importing, products, firestore, hostId, enqueueSnackbar, org, productCount])
 
   const handleAdjustSave = useCallback(async () => {
     if (!adjusting) return
@@ -313,7 +349,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             variant="contained"
             color="secondary"
             size="small"
-            onClick={() => setCreating(true)}
+            onClick={() => {
+              if (!productQuota.allowed) {
+                return void enqueueSnackbar(
+                  `Your plan includes ${productQuota.limit} products — ` +
+                    'upgrade for more',
+                  { variant: 'info', persist: false },
+                )
+              }
+              setCreating(true)
+            }}
           >
             {'Add product'}
           </Button>

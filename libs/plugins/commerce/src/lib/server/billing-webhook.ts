@@ -540,7 +540,19 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         // Gift card issuance (AGL-322): each purchased gift-card line
         // mints a code for its unit price and emails it to the buyer.
-        for (const line of lineItems) {
+        // Defense in depth (AGL-470): checkout already blocks gift-card
+        // sales without the Business entitlement; re-check here so a doc
+        // edited between checkout and webhook can't mint codes.
+        const giftCardLines = lineItems.filter(
+          (line) => productsById.get(line.productId)?.giftCard,
+        )
+        const giftCardsEntitled =
+          giftCardLines.length > 0 &&
+          Aglyn.checkEntitlement(
+            (await getOrgForHost(String(hostId)))?.org as any,
+            'giftCards',
+          )
+        for (const line of giftCardsEntitled ? giftCardLines : []) {
           const lineProduct = productsById.get(line.productId)
           if (!lineProduct?.giftCard) continue
           for (let unit = 0; unit < line.quantity; unit += 1) {

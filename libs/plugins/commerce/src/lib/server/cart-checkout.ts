@@ -69,7 +69,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     if (!ownerId) {
       return res.status(409).json({ error: 'This site cannot sell yet' })
     }
-    if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'marketplaceSelling')) {
+    // Storefront selling is the `commerce` entitlement (Starter+) — not
+    // `marketplaceSelling`, which gates the community marketplace (AGL-470).
+    if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'commerce')) {
       return res.status(403).json({ error: 'Selling is not enabled' })
     }
     const ownerProfile = await firestore
@@ -111,6 +113,15 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
       if (!variant || !CommerceModel.canPurchase(product, variant.id, line.quantity)) {
         throw Object.assign(new Error('unavailable'), {
           visible: `"${product.name}" is sold out`,
+        })
+      }
+      // Gift cards are a Business+ entitlement, checked per sale (AGL-470).
+      if (
+        product.giftCard &&
+        !Aglyn.checkEntitlement(ownerOrg.org as any, 'giftCards')
+      ) {
+        throw Object.assign(new Error('unavailable'), {
+          visible: `"${product.name}" is not available on this store's plan`,
         })
       }
       const unitCents = Math.round(Number(variant.priceUsd) * 100)

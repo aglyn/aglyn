@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { checkEntitlement, type PluginApiHandler } from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import {
   COMMUNITY_COMPONENT_ID_ALLOWLIST,
   sanitizeCommunityDefinition,
@@ -68,7 +68,17 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
   }
 
   try {
-    await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+
+    // Plan gate (AGL-469): AI assist is a Pro+ entitlement with real token
+    // cost — resolve the caller's org and check it server-side; a plan-less
+    // org resolves as `free` and is denied.
+    const tenant = (await getOrgForUser(decoded.uid))?.org ?? {}
+    if (!checkEntitlement(tenant, 'aiAssist')) {
+      return res
+        .status(403)
+        .json({ error: 'AI assist requires a Pro plan' })
+    }
 
     // Generate section (AGL-169): a constrained-JSON node subtree over the
     // community component allowlist; the response passes the same
