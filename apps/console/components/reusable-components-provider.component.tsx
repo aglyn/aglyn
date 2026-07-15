@@ -21,7 +21,6 @@ import { ComponentPromotionContext } from '@aglyn/besigner-ui'
 import { mdiPackageVariant } from '@aglyn/shared-data-mdi'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Button,
   Dialog,
@@ -30,9 +29,12 @@ import {
   DialogTitle,
   TextField,
 } from '@mui/material'
-import { collection, doc, getDoc, limit, query, setDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, limit, query } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useFirestore,
+  useHostResourceApi,
+} from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -70,6 +72,7 @@ export function ReusableComponentsProvider(
 ) {
   const { hostId, children } = props
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
   const { org } = useCurrentOrg()
@@ -140,15 +143,18 @@ export function ReusableComponentsProvider(
         definitionNodes[id] =
           id === node.$id ? { ...plain, parentId: null } : plain
       }
-      const refId = Aglyn.createResourceUid()
-      const timestamp = Timestamp.now()
-      await setDoc(doc(firestore, 'hosts', hostId, 'components', refId), {
-        displayName: name || 'Component',
-        ...(description && { description }),
-        rootId: node.$id,
-        nodes: definitionNodes,
-        createdAt: timestamp,
-        updatedAt: timestamp,
+      // Creation rides the resources API (AGL-473): reusable components
+      // render on the live site, so the Starter+ entitlement is enforced
+      // server-side, not just by hiding the promote button.
+      await createHostResource({
+        hostId,
+        resource: 'reusableComponent',
+        data: {
+          displayName: name || 'Component',
+          ...(description && { description }),
+          rootId: node.$id,
+          nodes: definitionNodes,
+        },
       })
       // The source element stays as-is on the canvas (AGL-64): the editor
       // renders instances as empty placeholders (definitions graft on the
@@ -159,9 +165,9 @@ export function ReusableComponentsProvider(
         `Saved "${name}" — insert it anywhere from Your components`,
         { variant: 'success', persist: false },
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
@@ -172,6 +178,7 @@ export function ReusableComponentsProvider(
     promoteNode,
     name,
     description,
+    createHostResource,
     firestore,
     hostId,
     queueLoading,

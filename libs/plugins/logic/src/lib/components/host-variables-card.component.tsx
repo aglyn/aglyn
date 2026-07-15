@@ -19,7 +19,6 @@
 import {
   type AglynOrgBilling,
   checkQuota,
-  createResourceUid,
   formatVariableValue,
   HOST_VARIABLE_TYPE_LABELS,
   type HostVariable,
@@ -46,6 +45,7 @@ import { useCallback, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostResourceApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import WhereUsedDialog from './where-used-dialog.component'
@@ -155,6 +155,7 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
+  const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org } = props
@@ -204,34 +205,38 @@ export function HostVariablesCard(props: HostVariablesCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!draft || !validName || nameTaken) return
+    const fields = {
+      name: draft.name,
+      type: draft.type,
+      value: draft.value,
+      workflowId: draft.workflowId.trim(),
+      workflowName: draft.workflowName.trim(),
+    }
     try {
-      const id = draft.id ?? createResourceUid()
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'variables', id),
-        {
-          name: draft.name,
-          type: draft.type,
-          value: draft.value,
-          workflowId: draft.workflowId.trim(),
-          workflowName: draft.workflowName.trim(),
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
-        },
-        { merge: true },
-      )
+      if (draft.id) {
+        // Edit stays client-direct (no quota consumed).
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'variables', draft.id),
+          { ...fields, updatedAt: Timestamp.now() },
+          { merge: true },
+        )
+      } else {
+        // New variable rides the quota-enforcing resources API (AGL-473).
+        await createHostResource({ hostId, resource: 'variable', data: fields })
+      }
       setDraft(null)
       enqueueSnackbar(
         `Saved — use {{${draft.name}}} in any text to bind it`,
         { variant: 'success', persist: false },
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [draft, validName, nameTaken, firestore, hostId, enqueueSnackbar])
+  }, [draft, validName, nameTaken, firestore, hostId, createHostResource, enqueueSnackbar])
 
   const handleShowUsage = useCallback(
     (variable: any) => async () => {

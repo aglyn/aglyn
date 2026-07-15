@@ -56,7 +56,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from '../../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../../components/auth-form-template.component'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
@@ -92,6 +92,7 @@ function Layouts(props) {
   }, [])
   const [pageSize, setPageSize] = useState<number>(5)
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const { status, data } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'layouts'), limit(pageSize)),
     [firestore, hostId, pageSize],
@@ -120,12 +121,13 @@ function Layouts(props) {
       const newVersionId = createResourceUid()
       const slotNodeId = createResourceUid()
       const timestamp = Timestamp.now()
+      // createdAt/updatedAt are stamped server-side by the resources API
+      // (AGL-473) — client Timestamps don't survive the JSON hop. This
+      // also enforces sharedLayoutsPerHost, previously ungated here.
       const newValues = {
         ...values,
         versionId: newVersionId,
         versions: [newVersionId],
-        createdAt: timestamp,
-        updatedAt: timestamp,
       }
       // Seed with a single LayoutSlot so bound screens have a graft point
       // from the first save.
@@ -148,25 +150,32 @@ function Layouts(props) {
           },
         },
       }
-      await Promise.all([
-        setDoc(doc(firestore, 'hosts', hostId, 'layouts', newId), newValues),
-        setDoc(
-          doc(
-            firestore,
-            'hosts',
-            hostId,
-            'layouts',
-            newId,
-            'versions',
-            newVersionId,
+      // Layout doc rides the quota-enforcing resources API (AGL-473);
+      // the seeded first version stays client-written.
+      await createHostResource({
+        hostId,
+        resource: 'layout',
+        id: newId,
+        data: newValues,
+      })
+        .then(() =>
+          setDoc(
+            doc(
+              firestore,
+              'hosts',
+              hostId,
+              'layouts',
+              newId,
+              'versions',
+              newVersionId,
+            ),
+            newVersionValue,
           ),
-          newVersionValue,
-        ),
-      ])
+        )
         .catch((error) => {
           console.error(error)
           setError({ ...error })
-          enqueueSnackbar('An error has occurred', {
+          enqueueSnackbar(error?.message ?? 'An error has occurred', {
             variant: 'error',
             allowDuplicate: true,
           })
@@ -183,6 +192,7 @@ function Layouts(props) {
       firestore,
       hostId,
       handleFormClose,
+      createHostResource,
       enqueueSnackbar,
     ],
   )

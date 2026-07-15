@@ -16,7 +16,6 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -47,6 +46,7 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 import { type PickedMedia, useMediaPicker } from '@aglyn/aglyn'
 
@@ -81,6 +81,7 @@ function comboLabel(options: Record<string, string> | undefined): string {
 export function ProductEditorDialog(props: ProductEditorDialogProps) {
   const { hostId, product, open, onClose } = props
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { data: categoryDocs } = useFirestoreCollection<any>(
     () =>
@@ -197,36 +198,45 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
 
   const handleSave = useCallback(async () => {
     if (!current.name.trim() || error) return
+    const primaryVariant = current.variants[0]
+    // JSON-safe base (no Firestore Timestamp — it won't survive the API
+    // hop); millis fields are what the checkout + Product block read.
+    const base = {
+      ...current,
+      name: current.name.trim().slice(0, 120),
+      slug: current.slug || CommerceModel.commerceSlug(current.name),
+      priceUsd: primaryVariant?.priceUsd ?? 0,
+      inventory: CommerceModel.productInventory(current),
+      imageUrl: current.mediaUrls?.[0] ?? current.imageUrl ?? null,
+      updatedAtMs: Date.now(),
+    }
     try {
-      const id = product?.$id ?? Aglyn.createResourceUid()
-      const primaryVariant = current.variants[0]
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'products', id),
-        {
-          ...current,
-          name: current.name.trim().slice(0, 120),
-          slug: current.slug || CommerceModel.commerceSlug(current.name),
-          // Legacy denormalization: the AGL-90 checkout + Product block
-          // read these flat fields.
-          priceUsd: primaryVariant?.priceUsd ?? 0,
-          inventory: CommerceModel.productInventory(current),
-          imageUrl: current.mediaUrls?.[0] ?? current.imageUrl ?? null,
-          updatedAtMs: Date.now(),
-          ...(product ? {} : { createdAtMs: Date.now() }),
-          updatedAt: Timestamp.now(),
-        },
-        { merge: false },
-      )
+      if (product) {
+        // Edit stays client-direct (no quota consumed); full replace.
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'products', product.$id),
+          { ...base, updatedAt: Timestamp.now() },
+          { merge: false },
+        )
+      } else {
+        // New product rides the quota-enforcing resources API (AGL-473) —
+        // it re-checks the `commerce` entitlement and productsPerHost.
+        await createHostResource({
+          hostId,
+          resource: 'product',
+          data: { ...base, createdAtMs: Date.now() },
+        })
+      }
       onClose()
       enqueueSnackbar('Product saved', { variant: 'success', persist: false })
-    } catch (saveError) {
+    } catch (saveError: any) {
       console.error(saveError)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(saveError?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [current, error, product, firestore, hostId, onClose, enqueueSnackbar])
+  }, [current, error, product, firestore, hostId, createHostResource, onClose, enqueueSnackbar])
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>

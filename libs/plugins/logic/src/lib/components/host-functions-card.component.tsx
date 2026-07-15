@@ -19,7 +19,6 @@
 import {
   type AglynOrgBilling,
   checkQuota,
-  createResourceUid,
   evaluateHostFunction,
   type FunctionComparator,
   type FunctionValueType,
@@ -49,6 +48,7 @@ import { useCallback, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostResourceApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import WhereUsedDialog from './where-used-dialog.component'
@@ -114,6 +114,7 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
+  const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org } = props
@@ -174,30 +175,31 @@ export function HostFunctionsCard(props: HostFunctionsCardProps) {
 
   const handleSave = useCallback(async () => {
     if (!draft || !draft.name.trim() || nameTaken) return
+    const { id: draftId, ...definition } = draft
+    const fields = { ...definition, name: draft.name.trim().slice(0, 60) }
     try {
-      const id = draft.id ?? createResourceUid()
-      const { id: _ignored, ...definition } = draft
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'functions', id),
-        {
-          ...definition,
-          name: draft.name.trim().slice(0, 60),
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
-        },
-        { merge: true },
-      )
+      if (draftId) {
+        // Edit stays client-direct (no quota consumed).
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'functions', draftId),
+          { ...fields, updatedAt: Timestamp.now() },
+          { merge: true },
+        )
+      } else {
+        // New function rides the quota-enforcing resources API (AGL-473).
+        await createHostResource({ hostId, resource: 'function', data: fields })
+      }
       setDraft(null)
       setTestResult(null)
       enqueueSnackbar('Function saved', { variant: 'success', persist: false })
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [draft, nameTaken, firestore, hostId, enqueueSnackbar])
+  }, [draft, nameTaken, firestore, hostId, createHostResource, enqueueSnackbar])
 
   const handleShowUsage = useCallback(
     (definition: any) => async () => {

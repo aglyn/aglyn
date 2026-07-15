@@ -34,6 +34,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
+  useHostResourceApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 
@@ -59,6 +60,7 @@ export function HostCampaignsCard(props: { hostId: string }) {
     ? (['orgs', hostOrgId] as const)
     : (['hosts', hostId] as const)
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -150,15 +152,19 @@ export function HostCampaignsCard(props: { hostId: string }) {
 
   const handleCreateTemplate = useCallback(async () => {
     try {
-      const { screenId, versionId } = await createEmailScreen(firestore, hostId)
+      const { screenId, versionId } = await createEmailScreen(
+        firestore,
+        hostId,
+        createHostResource,
+      )
       void router.push(besignerHref(hostId, screenId, versionId))
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('Creating the email template failed', {
+      enqueueSnackbar(error?.message ?? 'Creating the email template failed', {
         variant: 'error',
       })
     }
-  }, [firestore, hostId, router, enqueueSnackbar])
+  }, [firestore, hostId, createHostResource, router, enqueueSnackbar])
 
   const handleTestSend = useCallback(async () => {
     if (busy) return
