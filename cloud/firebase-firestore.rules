@@ -268,7 +268,8 @@ service cloud.firestore {
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
-              'functions', 'workflows']));
+              'functions', 'workflows', 'services', 'redirects',
+              'locations', 'products']));
         allow update, delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts']));

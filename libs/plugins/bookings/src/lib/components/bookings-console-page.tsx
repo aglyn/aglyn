@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { checkQuota, createResourceUid } from '@aglyn/aglyn'
+import { checkQuota } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -45,6 +45,7 @@ import { useCallback, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostResourceApi,
 } from '@aglyn/tenant-feature-instance'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -94,6 +95,7 @@ interface ServiceDraft {
 export function BookingsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled, org } = props
   const firestore = useFirestore()
+  const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
@@ -158,37 +160,42 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
       const parsed = parseWindows(text)
       if (parsed.length) windows[weekday] = parsed
     })
+    const fields = {
+      name: draft.name.trim().slice(0, 80),
+      durationMinutes: Math.max(
+        5,
+        Math.min(480, Math.round(Number(draft.durationMinutes) || 30)),
+      ),
+      priceUsd: Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
+      timezone: draft.timezone.trim() || 'UTC',
+      ...(draft.description.trim() && {
+        description: draft.description.trim().slice(0, 500),
+      }),
+      windows,
+    }
     try {
-      const id = draft.id ?? createResourceUid()
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'services', id),
-        {
-          name: draft.name.trim().slice(0, 80),
-          durationMinutes: Math.max(
-            5,
-            Math.min(480, Math.round(Number(draft.durationMinutes) || 30)),
-          ),
-          priceUsd: Math.max(0, Math.round(Number(draft.priceUsd) || 0)),
-          timezone: draft.timezone.trim() || 'UTC',
-          ...(draft.description.trim() && {
-            description: draft.description.trim().slice(0, 500),
-          }),
-          windows,
-          updatedAt: Timestamp.now(),
-          ...(draft.id ? {} : { createdAt: Timestamp.now() }),
-        },
-        { merge: true },
-      )
+      if (draft.id) {
+        // Edit stays client-direct (no quota consumed).
+        await setDoc(
+          doc(firestore, 'hosts', hostId, 'services', draft.id),
+          { ...fields, updatedAt: Timestamp.now() },
+          { merge: true },
+        )
+      } else {
+        // New service rides the quota-enforcing resources API (AGL-473) —
+        // it also re-checks the `bookings` entitlement server-side.
+        await createHostResource({ hostId, resource: 'service', data: fields })
+      }
       setDraft(null)
       enqueueSnackbar('Service saved', { variant: 'success', persist: false })
-    } catch (error) {
+    } catch (error: any) {
       console.error(error)
-      enqueueSnackbar('An error has occurred', {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
         variant: 'error',
         allowDuplicate: true,
       })
     }
-  }, [draft, firestore, hostId, enqueueSnackbar])
+  }, [draft, firestore, hostId, createHostResource, enqueueSnackbar])
 
   const handleDeleteService = useCallback(
     (service: any) => async () => {

@@ -34,6 +34,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useHostOrgId } from '@aglyn/tenant-feature-instance'
+import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 
 export interface LocationsCardProps {
   hostId: string
@@ -50,6 +51,7 @@ export function LocationsCard(props: LocationsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const createHostResource = useHostResourceApi()
   const orgId = useHostOrgId(hostId)
   const { data: org } = useFirestoreDoc<any>(
     () => doc(firestore, 'orgs', orgId ?? '-pending-'),
@@ -74,15 +76,24 @@ export function LocationsCard(props: LocationsCardProps) {
         { variant: 'info', persist: false },
       )
     }
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'locations', Aglyn.createResourceUid()),
-      {
-        name: name.trim().slice(0, 80),
-        ...(locations.length === 0 ? { isDefault: true } : {}),
-      } satisfies CommerceModel.InventoryLocation,
-    )
-    setName('')
-  }, [name, quota, locations.length, firestore, hostId, enqueueSnackbar])
+    try {
+      // Creation rides the quota-enforcing resources API (AGL-473).
+      await createHostResource({
+        hostId,
+        resource: 'location',
+        data: {
+          name: name.trim().slice(0, 80),
+          ...(locations.length === 0 ? { isDefault: true } : {}),
+        } satisfies CommerceModel.InventoryLocation,
+      })
+      setName('')
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Could not add location', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
+  }, [name, quota, locations.length, hostId, createHostResource, enqueueSnackbar])
 
   const handleDelete = useCallback(
     (location: any) => async () => {

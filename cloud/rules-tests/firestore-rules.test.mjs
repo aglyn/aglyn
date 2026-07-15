@@ -229,10 +229,12 @@ describe('hosts', () => {
     await assertSucceeds(
       updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'variables', 'var-1'), { value: '2' }),
     )
-    // A not-yet-migrated host collection keeps client create this phase.
-    await assertSucceeds(
-      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'redirects', 'r-new'), { from: '/a' }),
-    )
+    // Commerce/bookings/redirects collections are API-create-only too.
+    for (const coll of ['services', 'redirects', 'locations', 'products']) {
+      await assertFails(
+        setDoc(doc(authed(EDITOR), 'hosts', HOST, coll, 'new-doc'), { name: 'x' }),
+      )
+    }
     await assertSucceeds(
       updateDoc(doc(authed(EDITOR), 'hosts', HOST), { displayName: 'Renamed' }),
     )

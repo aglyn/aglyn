@@ -45,7 +45,6 @@ import {
   doc,
   limit,
   query,
-  setDoc,
   updateDoc,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
@@ -53,6 +52,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useHostOrgId } from '@aglyn/tenant-feature-instance'
+import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
 
 export interface ProductsHubCardProps {
@@ -81,6 +81,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const { enqueueSnackbar } = useSnackbar()
   // Product cap (AGL-471): per-plan `productsPerHost`, same pattern as
   // locations. Console-side gate; server enforcement rides AGL-473.
+  const createHostResource = useHostResourceApi()
   const orgId = useHostOrgId(hostId)
   const { data: org } = useFirestoreDoc<any>(
     () => doc(firestore, 'orgs', orgId ?? '-pending-'),
@@ -171,23 +172,33 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           { variant: 'info', persist: false },
         )
       }
-      const id = Aglyn.createResourceUid()
       const { $id: _sourceId, ...copy } = product
-      await setDoc(doc(firestore, 'hosts', hostId, 'products', id), {
-        ...copy,
-        name: `${product.name} (copy)`,
-        slug: CommerceModel.commerceSlug(`${product.slug}-copy`),
-        status: 'draft',
-        createdAtMs: Date.now(),
-        updatedAtMs: Date.now(),
-        updatedAt: Timestamp.now(),
-      })
-      enqueueSnackbar('Product duplicated as draft', {
-        variant: 'success',
-        persist: false,
-      })
+      try {
+        // Duplicate is a create — rides the quota-enforcing API (AGL-473).
+        await createHostResource({
+          hostId,
+          resource: 'product',
+          data: {
+            ...copy,
+            name: `${product.name} (copy)`,
+            slug: CommerceModel.commerceSlug(`${product.slug}-copy`),
+            status: 'draft',
+            createdAtMs: Date.now(),
+            updatedAtMs: Date.now(),
+          },
+        })
+        enqueueSnackbar('Product duplicated as draft', {
+          variant: 'success',
+          persist: false,
+        })
+      } catch (error: any) {
+        enqueueSnackbar(error?.message ?? 'Could not duplicate product', {
+          variant: 'warning',
+          persist: false,
+        })
+      }
     },
-    [firestore, hostId, enqueueSnackbar, productQuota],
+    [hostId, createHostResource, enqueueSnackbar, productQuota],
   )
 
   const handleStatus = useCallback(
@@ -250,30 +261,39 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       )
     }
     const existingSlugs = new Set(products.map((product) => product.slug))
-    for (const product of parsed.products) {
-      let slug = product.slug
-      while (existingSlugs.has(slug)) slug = `${product.slug}-${Date.now() % 1000}`
-      existingSlugs.add(slug)
-      await setDoc(
-        doc(firestore, 'hosts', hostId, 'products', Aglyn.createResourceUid()),
-        {
-          ...product,
-          slug,
-          priceUsd: product.variants[0]?.priceUsd ?? 0,
-          inventory: CommerceModel.productInventory(product),
-          imageUrl: product.mediaUrls?.[0] ?? null,
-          createdAtMs: Date.now(),
-          updatedAtMs: Date.now(),
-          updatedAt: Timestamp.now(),
-        },
-      )
+    try {
+      // Each create rides the quota-enforcing API (AGL-473); the batch cap
+      // above short-circuits before we start, so this loop stays bounded.
+      for (const product of parsed.products) {
+        let slug = product.slug
+        while (existingSlugs.has(slug)) slug = `${product.slug}-${Date.now() % 1000}`
+        existingSlugs.add(slug)
+        await createHostResource({
+          hostId,
+          resource: 'product',
+          data: {
+            ...product,
+            slug,
+            priceUsd: product.variants[0]?.priceUsd ?? 0,
+            inventory: CommerceModel.productInventory(product),
+            imageUrl: product.mediaUrls?.[0] ?? null,
+            createdAtMs: Date.now(),
+            updatedAtMs: Date.now(),
+          },
+        })
+      }
+    } catch (error: any) {
+      return void enqueueSnackbar(error?.message ?? 'Import failed', {
+        variant: 'warning',
+        persist: false,
+      })
     }
     setImporting(null)
     enqueueSnackbar(`Imported ${parsed.products.length} products`, {
       variant: 'success',
       persist: false,
     })
-  }, [importing, products, firestore, hostId, enqueueSnackbar, org, productCount])
+  }, [importing, products, hostId, createHostResource, enqueueSnackbar, org, productCount])
 
   const handleAdjustSave = useCallback(async () => {
     if (!adjusting) return
