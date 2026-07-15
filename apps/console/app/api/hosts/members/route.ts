@@ -97,10 +97,10 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Already a member' }, { status: 409 })
       }
 
-      // Seat quota (AGL-112): enforced once the org has a plan; addons
-      // raise the limit up to the hard max, beyond which upgrading is the
-      // only path.
-      if (org['plan']) {
+      // Seat quota (AGL-112): enforced for every org — a plan-less org
+      // resolves as `free`, not unmetered. Addons raise the limit up to the
+      // hard max, beyond which upgrading is the only path.
+      {
         const memberCount = (await membersRef.count().get()).data().count
         const quota = checkSeatQuota(org as any, 'members', memberCount)
         if (!quota.allowed) {

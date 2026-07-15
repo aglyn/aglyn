@@ -7,6 +7,12 @@ import eslintPluginMobx from 'eslint-plugin-mobx'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import eslintPluginTsdoc from 'eslint-plugin-tsdoc'
+import noPlanGatedEntitlement from './tools/eslint-rules/no-plan-gated-entitlement.mjs'
+
+// Local rules that guard Aglyn-specific invariants (not published as a plugin).
+const aglynPlugin = {
+  rules: { 'no-plan-gated-entitlement': noPlanGatedEntitlement },
+}
 
 // Mirrors the legacy eslintrc "overrides" semantics: each nx preset only
 // applies to the extension block that extended it, so a later block cannot
@@ -68,11 +74,15 @@ export default [
       'react-hooks': reactHooksPlugin,
       'jsx-a11y': jsxA11yPlugin,
       import: importPlugin,
+      aglyn: aglynPlugin,
     },
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     rules: {
+      // A plan-less org resolves as `free`; never gate a paid feature on the
+      // presence of the `plan` field (AGL-46x free-tier leak regression guard).
+      'aglyn/no-plan-gated-entitlement': 'error',
       'mobx/exhaustive-make-observable': 'off',
       'mobx/unconditional-make-observable': 'off',
       'mobx/missing-make-observable': 'off',

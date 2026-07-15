@@ -97,8 +97,29 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       .collection('profiles')
       .doc(String(ownerId))
       .get()
-    if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'marketplaceSelling')) {
+    // Storefront selling is the `commerce` entitlement (Starter+) — not
+    // `marketplaceSelling`, which gates the community marketplace (AGL-470).
+    if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'commerce')) {
       return res.status(403).json({ error: 'Selling is not enabled' })
+    }
+    // Tiered product types (AGL-470): recurring subscriptions and gift
+    // cards are Business+ entitlements, checked per sale — the product doc
+    // alone must not unlock them.
+    if (
+      lifted.subscription &&
+      !Aglyn.checkEntitlement(ownerOrg.org as any, 'storefrontSubscriptions')
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Subscription products require a Business plan' })
+    }
+    if (
+      product.giftCard &&
+      !Aglyn.checkEntitlement(ownerOrg.org as any, 'giftCards')
+    ) {
+      return res
+        .status(403)
+        .json({ error: 'Gift cards require a Business plan' })
     }
     const accountId = ownerProfile.get('stripeAccountId')
     if (!accountId || !ownerProfile.get('stripeChargesEnabled')) {

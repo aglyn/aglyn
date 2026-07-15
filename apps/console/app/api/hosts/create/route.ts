@@ -115,7 +115,9 @@ async function handler(request: Request): Promise<Response> {
       .doc(orgMembership.orgId)
       .get()
     const tenant = orgSnapshot.data()
-    if (tenant?.['plan']) {
+    {
+      // Enforced for every org — a plan-less org resolves as `free`
+      // (hostLimit 1), not unmetered.
       const owned = await firestore
         .collection('hosts')
         .where('orgId', '==', orgMembership.orgId)

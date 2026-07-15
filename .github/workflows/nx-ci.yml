@@ -32,4 +32,8 @@ jobs:
       # and is the only type gate (builds transpile with swc, no type-check).
       - run: npm run typecheck
 
+      # Self-test the local ESLint guard rules (not part of the nx graph, so
+      # run explicitly on every CI run — never affected-scoped).
+      - run: npm run test:eslint-rules
+
       - run: npx nx affected -t lint test build --parallel=3

@@ -98,9 +98,10 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       return res.status(500).json({ error: 'Template version missing' })
     }
 
-    // Plan screen quota via the owning org (dark-launch rule preserved).
+    // Screen quota via the owning org — enforced for every org, since a
+    // plan-less org resolves as `free` (not unmetered).
     const tenant = (await getOrgForHost(hostId))?.org
-    if (tenant?.['plan']) {
+    {
       const count = (
         await hostRef.collection('screens').count().get()
       ).data().count
