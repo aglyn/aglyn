@@ -303,6 +303,49 @@ describe('plan entitlements', () => {
     }
   })
 
+  it('denies a plan-less org (the created-org default) every gated path', () => {
+    // `createOrganization` writes an org doc with NO `plan` field. Several
+    // routes used to gate as `if (org.plan && !checkEntitlement(...))`, which
+    // skipped the gate entirely for these plan-less orgs. The invariant those
+    // routes now rely on: a plan-less org resolves as `free` and is denied.
+    // Regression guard for the five leaked paths (siteExport, videoMedia,
+    // mediaCdn, marketplaceSelling, storage quota).
+    const created = { name: 'Acme', slug: 'acme', ownerUid: 'u1', hosts: {} } as any
+
+    // Sanity: this is the plan-less shape, resolving as free.
+    expect(created.plan).toBeUndefined()
+    expect(resolveEffectivePlan(created)).toBe('free')
+
+    // hosts/export + hosts/import
+    expect(checkEntitlement(created, 'siteExport')).toBe(false)
+    // media/upload + media/upload-url
+    expect(checkEntitlement(created, 'videoMedia')).toBe(false)
+    // media/upload + media/replace
+    expect(checkEntitlement(created, 'mediaCdn')).toBe(false)
+    // community publish / publish-plugin / publish-template
+    expect(checkEntitlement(created, 'marketplaceSelling')).toBe(false)
+
+    // Quotas: the free caps apply — a plan-less org is NOT unmetered.
+    // media/upload storage (250 MB)
+    const atCap = checkQuota(created, 'storagePerHostMb', 250)
+    expect(atCap.limit).toBe(250)
+    expect(atCap.allowed).toBe(false)
+    expect(checkQuota(created, 'storagePerHostMb', 0).allowed).toBe(true)
+    // hosts/create (hostLimit 1) — a plan-less org already has 1 host.
+    expect(checkQuota(created, 'hostLimit', 1).allowed).toBe(false)
+    // community/install-template (screensPerHost 5)
+    expect(checkQuota(created, 'screensPerHost', 5).allowed).toBe(false)
+    // hosts/members seat quota (free members cap is 1, no addons)
+    const seats = checkSeatQuota(created, 'members', 1)
+    expect(seats.allowed).toBe(false)
+    expect(seats.upgradeRequired).toBe(true)
+
+    // A per-org override still grants access (the intended escape hatch for
+    // internal/staff workspaces — not the absent-plan hole).
+    const override = { ...created, entitlements: { features: { siteExport: true } } }
+    expect(checkEntitlement(override, 'siteExport')).toBe(true)
+  })
+
   it('checkDataStorageQuota meters overage on paid plans, blocks on free (AGL-240)', () => {
     // Starter includes 1 GB; 1.5 GB used → 0.5 GB overage at $0.25/GB.
     const starter = checkDataStorageQuota({ plan: 'starter' } as any, 1536)
