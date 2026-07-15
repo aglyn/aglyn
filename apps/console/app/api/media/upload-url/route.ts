@@ -88,10 +88,12 @@ async function handler(request: Request): Promise<Response> {
           }MB`,
         }, { status: 413 })
       }
-      if (tenant['plan'] && !checkEntitlement(tenant as any, 'videoMedia')) {
+      if (!checkEntitlement(tenant as any, 'videoMedia')) {
         return Response.json({ error: 'Video uploads require a Pro plan' }, { status: 403 })
       }
-      if (tenant['plan']) {
+      {
+        // Storage quota applies to every org; a plan-less org resolves as
+        // `free` (250 MB cap), not unmetered.
         const counterSnapshot = await counterRef.get()
         const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
         const usedMb = (usedBytes + sizeBytes) / (1024 * 1024)
@@ -146,7 +148,9 @@ async function handler(request: Request): Promise<Response> {
       await file.delete().catch(() => undefined)
       return Response.json({ error: 'Uploaded object rejected' }, { status: 415 })
     }
-    if (tenant['plan']) {
+    {
+      // Storage quota applies to every org; a plan-less org resolves as
+      // `free` (250 MB cap), not unmetered.
       const counterSnapshot = await counterRef.get()
       const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
       const usedMb = (usedBytes + actualBytes) / (1024 * 1024)

@@ -113,7 +113,9 @@ async function handler(request: Request): Promise<Response> {
     const previousBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
     // Quota rides the owning org's doc (AGL-238).
     const tenant = scope.billing
-    if (tenant['plan']) {
+    {
+      // Storage quota applies to every org; a plan-less org resolves as
+      // `free` (250 MB cap), not unmetered.
       const counterSnapshot = await scope.scopeRef
         .collection('counters')
         .doc('media')
@@ -164,7 +166,7 @@ async function handler(request: Request): Promise<Response> {
       .update(new Uint8Array(buffer))
       .digest('hex')
       .slice(0, 16)
-    const cdnAllowed = !tenant['plan'] || checkEntitlement(tenant, 'mediaCdn')
+    const cdnAllowed = checkEntitlement(tenant, 'mediaCdn')
     const variants: number[] = []
     if (cdnAllowed && contentType !== 'image/svg+xml') {
       try {
