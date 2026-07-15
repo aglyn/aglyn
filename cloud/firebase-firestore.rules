@@ -99,12 +99,18 @@ service cloud.firestore {
           orgMember().role in ['owner', 'admin', 'editor'] &&
           orgNotSuspended();
       }
+      // Dataset/record CREATES are API-only (AGL-473): the console route
+      // enforces the dataStore entitlement and dataset/record quotas
+      // server-side. Updates and deletes stay editor-writable — they
+      // don't consume quota.
       match /datasets/{datasetId} {
         allow read: if isStaff() || isOrgMember();
-        allow write: if isStaff() || canWriteOrgData();
+        allow create: if isStaff();
+        allow update, delete: if isStaff() || canWriteOrgData();
         match /records/{recordId} {
           allow read: if isStaff() || isOrgMember();
-          allow write: if isStaff() || canWriteOrgData();
+          allow create: if isStaff();
+          allow update, delete: if isStaff() || canWriteOrgData();
         }
       }
       match /contacts/{contactId} {

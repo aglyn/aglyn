@@ -254,8 +254,24 @@ describe('org-shared data (AGL-237)', () => {
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')))
     await assertSucceeds(getDoc(doc(authed(VIEWER), 'orgs', ORG, 'contacts', 'c1')))
     await assertFails(getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'datasets', 'ds1')))
-    await assertSucceeds(
+    // Dataset/record CREATES are API-only (AGL-473) — the console route
+    // enforces quotas server-side; even editors cannot create directly.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds2'), { name: 'New' }),
+    )
+    await assertFails(
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r2'), { a: 2 }),
+    )
+    // Updates and deletes stay editor-writable — they don't consume quota.
+    await assertSucceeds(
+      setDoc(
+        doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1'),
+        { a: 3 },
+        { merge: true },
+      ),
+    )
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1', 'records', 'r1')),
     )
     await assertSucceeds(
       setDoc(doc(authed(EDITOR), 'orgs', ORG, 'contacts', 'c2'), { email: 'n@y.z' }),
