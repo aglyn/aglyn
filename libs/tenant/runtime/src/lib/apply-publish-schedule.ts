@@ -45,8 +45,8 @@ export async function applyDuePublishSchedule(options: {
   // scheduledPublishing entitlement, but this executor is the authority —
   // a schedule written directly to Firestore must not auto-publish on an
   // unentitled plan. Left pending, it applies if the org later upgrades.
-  const tenant = (await getOrgForHost(hostId))?.org ?? {}
-  if (!checkEntitlement(tenant, 'scheduledPublishing')) {
+  const org = (await getOrgForHost(hostId))?.org ?? {}
+  if (!checkEntitlement(org, 'scheduledPublishing')) {
     return parent.versionId
   }
 

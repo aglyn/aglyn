@@ -33,7 +33,7 @@ const WorkflowsConsolePage = lazy(
  * a canvas element, so there is no UI bundle. The console half declares the
  * Workflows nav + page through the ConsoleExtension registry, gated by the
  * `workflows` entitlement (the Actions/Webhooks tabs run their own per-plan
- * checks off the passed `tenant`). Depends on `@aglyn/plugins-logic` for the
+ * checks off the passed `org`). Depends on `@aglyn/plugins-logic` for the
  * shared where-used tooling.
  */
 export function registerWorkflowsConsole(): void {

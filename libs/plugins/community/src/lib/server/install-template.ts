@@ -100,13 +100,13 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
 
     // Screen quota via the owning org — enforced for every org, since a
     // plan-less org resolves as `free` (not unmetered).
-    const tenant = (await getOrgForHost(hostId))?.org
+    const org = (await getOrgForHost(hostId))?.org
     {
       const count = (
         await hostRef.collection('screens').count().get()
       ).data().count
       const quota = checkQuota(
-        tenant as any,
+        org as any,
         'screensPerHost',
         count + screens.length - 1,
       )

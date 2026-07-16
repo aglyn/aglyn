@@ -77,10 +77,10 @@ async function handler(request: Request): Promise<Response> {
     if (!orgSnapshot.exists) {
       return Response.json({ error: 'Unknown organization' }, { status: 404 })
     }
-    const tenant = orgSnapshot.data() as any
+    const org = orgSnapshot.data() as any
 
     if (action === 'create-dataset') {
-      if (!checkEntitlement(tenant, 'dataStore')) {
+      if (!checkEntitlement(org, 'dataStore')) {
         return Response.json({
           error: 'Datasets require a Starter plan or higher',
         }, { status: 403 })
@@ -95,7 +95,7 @@ async function handler(request: Request): Promise<Response> {
       const datasetCount = (
         await orgRef.collection('datasets').count().get()
       ).data().count
-      const quota = checkDatasetQuota(tenant, datasetCount)
+      const quota = checkDatasetQuota(org, datasetCount)
       if (!quota.allowed) {
         return Response.json({
           error: quota.upgradeRequired
@@ -146,7 +146,7 @@ async function handler(request: Request): Promise<Response> {
         if (Object.keys(errors).length) {
           return Response.json({ error: 'Record failed validation', errors }, { status: 400 })
         }
-        const quota = checkQuota(tenant, 'recordsPerDataset', recordCount)
+        const quota = checkQuota(org, 'recordsPerDataset', recordCount)
         if (!quota.allowed) {
           return Response.json({
             error: `Record limit reached (${quota.limit}) — upgrade in Billing`,
@@ -171,7 +171,7 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'No records to import' }, { status: 400 })
       }
       const quota = checkQuota(
-        tenant,
+        org,
         'recordsPerDataset',
         recordCount + rows.length - 1,
       )

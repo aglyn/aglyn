@@ -66,7 +66,7 @@ async function handler(request: Request): Promise<Response> {
       .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
 
     // Quota/entitlements ride the owning org's doc (AGL-238).
-    const tenant = scope.billing
+    const org = scope.billing
     const counterRef = scope.scopeRef.collection('counters').doc('media')
 
     if (method === 'POST') {
@@ -88,7 +88,7 @@ async function handler(request: Request): Promise<Response> {
           }MB`,
         }, { status: 413 })
       }
-      if (!checkEntitlement(tenant as any, 'videoMedia')) {
+      if (!checkEntitlement(org as any, 'videoMedia')) {
         return Response.json({ error: 'Video uploads require a Pro plan' }, { status: 403 })
       }
       {
@@ -100,7 +100,7 @@ async function handler(request: Request): Promise<Response> {
         // usedMb includes the incoming file; ceil-1 allows exactly up to
         // the integer MB cap and no further (AGL-471 off-by-one).
         const quota = checkQuota(
-          tenant as any,
+          org as any,
           'storagePerHostMb',
           Math.ceil(usedMb) - 1,
         )
@@ -163,7 +163,7 @@ async function handler(request: Request): Promise<Response> {
       // usedMb includes the finalized object; ceil-1 allows exactly up to
       // the integer MB cap and no further (AGL-471 off-by-one).
       const quota = checkQuota(
-        tenant as any,
+        org as any,
         'storagePerHostMb',
         Math.ceil(usedMb) - 1,
       )

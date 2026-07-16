@@ -99,8 +99,8 @@ async function handler(request: Request): Promise<Response> {
     }
     {
       // Plan gate rides the owning org's doc (AGL-238).
-      const tenant = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(tenant as any, 'siteExport')) {
+      const org = (await getOrgForHost(hostId))?.org
+      if (!checkEntitlement(org as any, 'siteExport')) {
         return Response.json({ error: 'Site restore requires a Pro plan' }, { status: 403 })
       }
     }

@@ -59,7 +59,11 @@ export const AuthErrorMessage: Partial<Record<AuthCode, string>> = {
     'New email is not verified. Check your email to verify.',
   [AuthErrorCodes.EMAIL_EXISTS]:
     'Account with email already exists. Sign in instead.',
+  [AuthErrorCodes.EXPIRED_OOB_CODE]:
+    'This link has expired. Request a new password reset link and try again.',
   [AuthErrorCodes.EXPIRED_POPUP_REQUEST]: 'Request timeout. Try again.',
+  [AuthErrorCodes.INVALID_OOB_CODE]:
+    'This link is invalid or has already been used. Request a new password reset link.',
   [AuthErrorCodes.INTERNAL_ERROR]: 'An internal error occurred.',
   [AuthErrorCodes.INVALID_API_KEY]: 'Invalid API key.',
   [AuthErrorCodes.INVALID_AUTH]:

@@ -112,7 +112,7 @@ async function handler(request: Request): Promise<Response> {
 
     const previousBytes = Number(mediaSnapshot.get('sizeBytes') ?? 0)
     // Quota rides the owning org's doc (AGL-238).
-    const tenant = scope.billing
+    const org = scope.billing
     {
       // Storage quota applies to every org; a plan-less org resolves as
       // `free` (250 MB cap), not unmetered.
@@ -127,7 +127,7 @@ async function handler(request: Request): Promise<Response> {
       // usedMb includes the replacement bytes; ceil-1 allows exactly up to
       // the integer MB cap and no further (AGL-471 off-by-one).
       const quota = checkQuota(
-        tenant as any,
+        org as any,
         'storagePerHostMb',
         Math.ceil(usedMb) - 1,
       )
@@ -172,7 +172,7 @@ async function handler(request: Request): Promise<Response> {
       .update(new Uint8Array(buffer))
       .digest('hex')
       .slice(0, 16)
-    const cdnAllowed = checkEntitlement(tenant, 'mediaCdn')
+    const cdnAllowed = checkEntitlement(org, 'mediaCdn')
     const variants: number[] = []
     if (cdnAllowed && contentType !== 'image/svg+xml') {
       try {

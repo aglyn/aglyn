@@ -37,9 +37,9 @@ const idKey = (value: string) => value.replace(/[.$#[\]/]/g, '_')
  * least one hit in a revalidation window", not per-request accuracy.
  * Middleware-accurate counting stays open as a later upgrade.
  *
- * Paid gating: when the host has enabled rules but the owning tenant's
+ * Paid gating: when the host has enabled rules but the owning org's
  * plan lacks the `redirects` flag (downgrade with leftover rules), the
- * rules stop firing — the tenant read only happens when rules exist.
+ * rules stop firing — the org read only happens when rules exist.
  * Loop guard: self-redirects never execute even if stored (console
  * validation and this floor can disagree; both refuse).
  */
@@ -72,8 +72,8 @@ export async function resolveRedirect(
 
     // Paid gate — only paid orgs' rules fire (dark-launch orgs pass).
     {
-      const tenant = (await getOrgForHost(host.$id))?.org
-      if (!checkEntitlement(tenant as any, 'redirects')) {
+      const org = (await getOrgForHost(host.$id))?.org
+      if (!checkEntitlement(org as any, 'redirects')) {
         return null
       }
     }

@@ -270,11 +270,11 @@ export async function performCampaignSend(
   const counterRef = hostRef.collection('counters').doc('emailSends')
   {
     // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
-    const tenant = (await getOrgForHost(hostId))?.org
+    const org = (await getOrgForHost(hostId))?.org
     const counterSnapshot = await counterRef.get()
     const used = Number(counterSnapshot.get(monthKey) ?? 0)
     const quota = checkQuota(
-      tenant as any,
+      org as any,
       'emailSendsPerMonth',
       used + sendable.length - 1,
     )

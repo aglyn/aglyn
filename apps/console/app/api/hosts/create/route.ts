@@ -114,7 +114,7 @@ async function handler(request: Request): Promise<Response> {
       .collection('orgs')
       .doc(orgMembership.orgId)
       .get()
-    const tenant = orgSnapshot.data()
+    const org = orgSnapshot.data()
     {
       // Enforced for every org — a plan-less org resolves as `free`
       // (hostLimit 1), not unmetered.
@@ -124,7 +124,7 @@ async function handler(request: Request): Promise<Response> {
         .count()
         .get()
       const quota = checkQuota(
-        tenant as any,
+        org as any,
         'hostLimit',
         owned.data().count,
       )

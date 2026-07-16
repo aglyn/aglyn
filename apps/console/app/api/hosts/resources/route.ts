@@ -140,11 +140,11 @@ async function handler(request: Request): Promise<Response> {
     // Quota/entitlements ride the owning org's doc (AGL-238); suspension
     // mirrors the rules' hostOrgSuspended (fail-open for pre-org hosts).
     const ownerOrg = await getOrgForHost(hostId)
-    const tenant = (ownerOrg?.org ?? {}) as any
-    if (tenant.suspendedAt != null) {
+    const org = (ownerOrg?.org ?? {}) as any
+    if (org.suspendedAt != null) {
       return Response.json({ error: 'This workspace is suspended' }, { status: 403 })
     }
-    if (resource.entitlement && !checkEntitlement(tenant, resource.entitlement)) {
+    if (resource.entitlement && !checkEntitlement(org, resource.entitlement)) {
       return Response.json({
         error: `This feature is not included in your plan — see Billing`,
       }, { status: 403 })
@@ -153,7 +153,7 @@ async function handler(request: Request): Promise<Response> {
     const collectionRef = hostRef.collection(resource.collection)
     if (resource.quotaKey) {
       const used = (await collectionRef.count().get()).data().count
-      const quota = checkQuota(tenant, resource.quotaKey as any, used)
+      const quota = checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {
         return Response.json({
           error:

@@ -420,14 +420,14 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             .update(`download:${hostId}:${object.id}`)
             .digest('hex')
             .slice(0, 32)
-          const tenantOrigin = String(
+          const siteOrigin = String(
             object?.success_url ?? '',
           ).replace(/\/\?.*$|\?.*$/, '')
           const downloadLines = lineItems
             .filter((line) => line.productType === 'digital')
             .map(
               (line) =>
-                `Download ${line.name}: ${tenantOrigin}/api/commerce/download` +
+                `Download ${line.name}: ${siteOrigin}/api/commerce/download` +
                 `?hostId=${hostId}&orderId=${object.id}` +
                 `&productId=${line.productId}&token=${downloadToken}`,
             )

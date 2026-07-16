@@ -81,8 +81,8 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Plan gate rides the owning org's doc (AGL-238).
-    const tenant = (await getOrgForHost(hostId))?.org ?? {}
-    if (!checkEntitlement(tenant as any, 'marketplaceSelling')) {
+    const org = (await getOrgForHost(hostId))?.org ?? {}
+    if (!checkEntitlement(org as any, 'marketplaceSelling')) {
       return res.status(403).json({
         error: 'Publishing to the community requires a Pro plan',
       })

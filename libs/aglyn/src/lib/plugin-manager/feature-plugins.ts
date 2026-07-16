@@ -133,7 +133,7 @@ export function defineUiFeatureBundle(
  */
 export interface ConsolePluginPageProps {
   hostId: string
-  /** True when the tenant holds the extension's `featureFlag` entitlement. */
+  /** True when the org holds the extension's `featureFlag` entitlement. */
   entitled: boolean
   /**
    * The ORG billing doc (`orgs/{orgId}`) the shell already loaded to
@@ -198,9 +198,9 @@ export interface ConsoleSettingsSection {
 export const CONSOLE_WIDGET_SLOTS = {
   /** Host dashboard + screen view activity column. Props: hostId. */
   hostActivity: 'hostActivity',
-  /** Host dashboard commerce summary. Props: hostId, tenant. */
+  /** Host dashboard commerce summary. Props: hostId, org. */
   commerceGlance: 'commerceGlance',
-  /** Org Data page body. Props: orgId, tenant. */
+  /** Org Data page body. Props: orgId, org. */
   orgData: 'orgData',
   /** Besigner functions (ƒx) panel. Props: hostId. */
   besignerFunctions: 'besignerFunctions',
@@ -208,11 +208,11 @@ export const CONSOLE_WIDGET_SLOTS = {
   communityListing: 'communityListing',
   /** Plugins & add-ons hub installs section. Props: hostId. */
   orgAddons: 'orgAddons',
-  /** Bottom of the host dashboard. Props: hostId, tenant. (AGL-433) */
+  /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */
   dashboardFooter: 'dashboardFooter',
-  /** Org settings page, below the tabbed cards. Props: orgId, tenant. */
+  /** Org settings page, below the tabbed cards. Props: orgId, org. */
   orgSettings: 'orgSettings',
-  /** Host setup page, below the built-in cards. Props: hostId, tenant. */
+  /** Host setup page, below the built-in cards. Props: hostId, org. */
   hostSettings: 'hostSettings',
   /** Staff admin org detail (staff-only surfaces). Props: orgId. */
   adminOrgDetail: 'adminOrgDetail',

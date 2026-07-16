@@ -73,8 +73,8 @@ export const aiAssistHandler: PluginApiHandler = async (req, res) => {
     // Plan gate (AGL-469): AI assist is a Pro+ entitlement with real token
     // cost — resolve the caller's org and check it server-side; a plan-less
     // org resolves as `free` and is denied.
-    const tenant = (await getOrgForUser(decoded.uid))?.org ?? {}
-    if (!checkEntitlement(tenant, 'aiAssist')) {
+    const org = (await getOrgForUser(decoded.uid))?.org ?? {}
+    if (!checkEntitlement(org, 'aiAssist')) {
       return res
         .status(403)
         .json({ error: 'AI assist requires a Pro plan' })

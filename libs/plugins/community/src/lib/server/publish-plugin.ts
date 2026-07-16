@@ -146,8 +146,8 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
 
     // Plan gate rides the caller's org doc (AGL-238).
-    const tenant = (await getOrgForUser(decoded.uid))?.org ?? {}
-    if (!checkEntitlement(tenant, 'marketplaceSelling')) {
+    const org = (await getOrgForUser(decoded.uid))?.org ?? {}
+    if (!checkEntitlement(org, 'marketplaceSelling')) {
       return res
         .status(403)
         .json({ error: 'Publishing to the community requires a Pro plan' })

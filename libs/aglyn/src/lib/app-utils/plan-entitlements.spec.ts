@@ -47,12 +47,12 @@ describe('plan entitlements', () => {
     ).toBe(true)
   })
 
-  it('applies per-tenant overrides key-by-key', () => {
-    const tenant = {
+  it('applies per-org overrides key-by-key', () => {
+    const org = {
       plan: 'free',
       entitlements: { hostLimit: 10, features: { versioning: true } },
     } as any
-    const resolved = resolveOrgEntitlements(tenant)
+    const resolved = resolveOrgEntitlements(org)
     expect(resolved.hostLimit).toBe(10)
     expect(resolved.features.versioning).toBe(true)
     // untouched defaults survive
@@ -61,14 +61,14 @@ describe('plan entitlements', () => {
   })
 
   it('checkQuota gates at the limit and never reports negative remaining', () => {
-    const tenant = { plan: 'free' } as any
-    expect(checkQuota(tenant, 'hostLimit', 0)).toEqual({
+    const org = { plan: 'free' } as any
+    expect(checkQuota(org, 'hostLimit', 0)).toEqual({
       allowed: true,
       limit: 1,
       remaining: 1,
     })
-    expect(checkQuota(tenant, 'hostLimit', 1).allowed).toBe(false)
-    expect(checkQuota(tenant, 'hostLimit', 5).remaining).toBe(0)
+    expect(checkQuota(org, 'hostLimit', 1).allowed).toBe(false)
+    expect(checkQuota(org, 'hostLimit', 5).remaining).toBe(0)
   })
 
   it('pins the AGL-67 tier table', () => {
@@ -110,8 +110,8 @@ describe('plan entitlements', () => {
   })
 
   it('treats UNLIMITED quotas as always allowed', () => {
-    const tenant = { plan: 'business' } as any
-    const result = checkQuota(tenant, 'screensPerHost', 100000)
+    const org = { plan: 'business' } as any
+    const result = checkQuota(org, 'screensPerHost', 100000)
     expect(result.allowed).toBe(true)
     expect(result.remaining).toBe(UNLIMITED)
   })
@@ -223,11 +223,11 @@ describe('plan entitlements', () => {
   })
 
   it('checkDatasetQuota counts purchased addon datasets up to the max (AGL-132/240)', () => {
-    const tenant = { plan: 'starter', seatAddons: { datasets: 2 } } as any
-    const quota = checkDatasetQuota(tenant, 4)
+    const org = { plan: 'starter', seatAddons: { datasets: 2 } } as any
+    const quota = checkDatasetQuota(org, 4)
     expect(quota.limit).toBe(5)
     expect(quota.allowed).toBe(true)
-    expect(checkDatasetQuota(tenant, 5).allowed).toBe(false)
+    expect(checkDatasetQuota(org, 5).allowed).toBe(false)
     // Hard max: starter caps at 10 org datasets no matter how many addons.
     const maxed = { plan: 'starter', seatAddons: { datasets: 99 } } as any
     expect(checkDatasetQuota(maxed, 0).limit).toBe(10)

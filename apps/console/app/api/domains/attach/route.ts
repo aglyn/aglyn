@@ -66,8 +66,8 @@ async function handler(request: Request): Promise<Response> {
 
     // Plan gate (AGL-469): custom domains are a Starter+ entitlement; a
     // plan-less org resolves as `free` and is denied.
-    const tenant = (await getOrgForHost(hostId))?.org ?? {}
-    if (!checkEntitlement(tenant, 'customDomain')) {
+    const org = (await getOrgForHost(hostId))?.org ?? {}
+    if (!checkEntitlement(org, 'customDomain')) {
       return Response.json({
         error: 'Custom domains require a Starter plan',
       }, { status: 403 })

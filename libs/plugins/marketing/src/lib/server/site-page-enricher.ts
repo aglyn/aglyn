@@ -34,7 +34,7 @@ import getOverlays from './get-overlays'
 export const marketingSitePageEnricher: SitePageEnricher = async ({
   hostId,
   host,
-  tenant,
+  org,
   path,
   screenId,
   screen,
@@ -42,7 +42,7 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
   // Marketing overlays (AGL-195/196/247): marketingOverlays-gated on the
   // effective plan (plan-less = free = no overlays); binding tokens
   // resolve server-side so the client ships plain text.
-  const overlaysEntitled = Aglyn.resolveOrgEntitlements(tenant).features
+  const overlaysEntitled = Aglyn.resolveOrgEntitlements(org).features
     .marketingOverlays
   const contentHash = (value: string) => {
     let hash = 0
@@ -125,19 +125,19 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
 
   // Site-event automations (AGL-256): actions-gated; runJs steps are
   // business-gated (webhooks flag marks the tier).
-  const actionsEntitled = Aglyn.resolveOrgEntitlements(tenant).features
+  const actionsEntitled = Aglyn.resolveOrgEntitlements(org).features
     .actions
   const clientAutomations: ClientAutomation[] = actionsEntitled
     ? await getClientAutomations({
         hostId,
         path: overlayPath,
-        allowJs: Aglyn.resolveOrgEntitlements(tenant).features.webhooks,
+        allowJs: Aglyn.resolveOrgEntitlements(org).features.webhooks,
       })
     : []
   // Screen/section experiments (AGL-253): Business-gated; composing a
   // tree per divergent variant is bounded (≤4) and ISR-cached.
   const experiments: ScreenExperiment[] =
-    Aglyn.resolveOrgEntitlements(tenant).features.abTesting &&
+    Aglyn.resolveOrgEntitlements(org).features.abTesting &&
     screenId &&
     screen
       ? await getScreenExperiments({ hostId, screenId, screen })

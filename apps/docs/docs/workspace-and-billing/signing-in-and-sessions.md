@@ -17,6 +17,32 @@ knowing about, especially if you work across devices or multiple organization wo
   Google, sign in there, and land back on the console already authenticated. (Mobile
   browsers can't reliably hand a popup's result back to the opening page.)
 
+## Resetting your password
+
+Forgot your password? From the sign-in screen, choose **Account recovery** and enter your
+email. We email you a secure reset link, then walk you through the rest:
+
+1. **Request** — enter your email on the account recovery screen and submit. We always show
+   the same "check your email" confirmation, whether or not an account exists for that
+   address (so the screen can't be used to probe who has an account).
+2. **Email** — open the message and follow the reset link. Links expire after a short
+   while and can only be used once.
+3. **Choose a new password** — the link opens the reset screen, which confirms whose
+   account it's for and asks for a new password (entered twice). Password rules match the
+   sign-up screen.
+4. **Done** — once saved, head back to the sign-in screen and sign in with your new
+   password.
+
+If a link has expired or was already used, the reset screen offers to send a fresh one.
+
+:::note Self-hosting
+Password reset uses Firebase's out-of-band email action flow. Point the Firebase console
+action URL (**Authentication → Templates → Password reset → edit → Customize action URL**)
+at `https://<your-console-domain>/reset-password` so the emailed link opens the console's
+own reset screen instead of Firebase's default page. The console domain must be listed
+under **Authentication → Settings → Authorized domains**.
+:::
+
 ## One session across workspaces
 
 Signing in on the main console signs you in to every `{org}` workspace subdomain too — the

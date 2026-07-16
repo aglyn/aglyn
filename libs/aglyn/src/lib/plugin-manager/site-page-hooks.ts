@@ -41,7 +41,7 @@ export interface SitePageContext {
   host: any
   /** The org billing doc (entitlement source); undefined pre-billing. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tenant?: any
+  org?: any
   /** Request path, '/a/b' form ('/' for the site root). */
   path: string
   slugSegments: string[]

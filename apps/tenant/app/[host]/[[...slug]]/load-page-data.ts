@@ -155,7 +155,7 @@ export const loadPageData = cache(
     const redirectRule = await Aglyn.resolveSiteRedirect({
       hostId,
       host: hostRes.host,
-      tenant: orgRes.org,
+      org: orgRes.org,
       path,
       slugSegments: [...(slug ?? [])],
     })
@@ -194,7 +194,7 @@ export const loadPageData = cache(
       const resolved = await Aglyn.resolveSitePage({
         hostId,
         host: hostRes.host,
-        tenant: orgRes.org,
+        org: orgRes.org,
         path,
         slugSegments: [...(slug ?? [])],
       })
@@ -438,7 +438,7 @@ export const loadPageData = cache(
     const enriched = await Aglyn.runSitePageEnrichers({
       hostId,
       host: hostRes.host,
-      tenant: orgRes.org,
+      org: orgRes.org,
       path,
       slugSegments: [...(slug ?? [])],
       screenId,

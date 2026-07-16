@@ -31,7 +31,7 @@ const ContactsConsolePage = lazy(
  * segments live in Firestore and have no canvas element, so there is no UI
  * bundle. The console half declares the Contacts nav + page through the
  * ConsoleExtension registry (release_contacts gate via the nav tab); the
- * page reads the `contactsPerHost` quota off the shell-passed `tenant`.
+ * page reads the `contactsPerHost` quota off the shell-passed `org`.
  */
 export function registerContactsConsole(): void {
   PluginSdk.registerConsoleExtension({

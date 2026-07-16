@@ -143,15 +143,15 @@ async function handler(request: Request): Promise<Response> {
     }
 
     // Server-side quota: counter bytes + this file against the plan limit
-    // (no enforcement until the tenant has an explicit plan — AGL-38 gate).
+    // (no enforcement until the org has an explicit plan — AGL-38 gate).
     const counterSnapshot = await scopeRef
       .collection('counters')
       .doc('media')
       .get()
     const usedBytes = Number(counterSnapshot.get('bytes') ?? 0)
     // Quota/entitlements ride the owning org's doc (AGL-238).
-    const tenant = scope.billing
-    if ((isVideo || isPdf) && !checkEntitlement(tenant, 'videoMedia')) {
+    const org = scope.billing
+    if ((isVideo || isPdf) && !checkEntitlement(org, 'videoMedia')) {
       return Response.json({
         error: 'Video and file uploads require a Pro plan',
       }, { status: 403 })
@@ -162,7 +162,7 @@ async function handler(request: Request): Promise<Response> {
       const usedMb = (usedBytes + buffer.length) / (1024 * 1024)
       // usedMb includes the incoming file; ceil-1 allows exactly up to the
       // integer MB cap and no further (AGL-471 off-by-one).
-      const quota = checkQuota(tenant, 'storagePerHostMb', Math.ceil(usedMb) - 1)
+      const quota = checkQuota(org, 'storagePerHostMb', Math.ceil(usedMb) - 1)
       if (!quota.allowed) {
         return Response.json({
           error: `Storage limit reached (${quota.limit} MB)`,
@@ -209,7 +209,7 @@ async function handler(request: Request): Promise<Response> {
     // Paid gate (AGL-175 pricing): free workspaces serve raw storage URLs.
     // A plan-less org resolves as `free` (no CDN); overrides can still grant
     // it. `mediaCdn` is a Starter+ entitlement.
-    const cdnAllowed = checkEntitlement(tenant, 'mediaCdn')
+    const cdnAllowed = checkEntitlement(org, 'mediaCdn')
     const variants: number[] = []
     if (cdnAllowed && isImage && contentType !== 'image/svg+xml') {
       try {

@@ -34,7 +34,7 @@ const MarketingConsolePage = lazy(
  * element of their own, so there is no UI bundle. The console half declares
  * the Marketing nav + page through the ConsoleExtension registry (always-on;
  * the surface itself is not release-flagged — its overlays/A-B cards run
- * their own per-plan checks off the passed `tenant`). The popup image picker
+ * their own per-plan checks off the passed `org`). The popup image picker
  * uses the shell's media browser via `useMediaPicker`.
  */
 export function registerMarketingConsole(): void {

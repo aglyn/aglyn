@@ -90,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
       return json({ error: 'Unknown site' }, 404)
     }
 
-    // Monthly quota by the owning tenant's plan (dark-launch: tenants
+    // Monthly quota by the owning org's plan (dark-launch: orgs
     // without a plan are uncapped, matching every other gate).
     // Plan/quota gates ride the owning org's doc (AGL-238).
     const orgBilling = (await getOrgForHost(hostId))?.org
@@ -98,9 +98,9 @@ export async function POST(request: Request): Promise<Response> {
     const counterRef = hostRef.collection('counters').doc('formSubmissions')
     {
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
-      const tenant = orgBilling
+      const org = orgBilling
       const limit = Aglyn.resolveOrgEntitlements(
-        tenant as any,
+        org as any,
       ).formSubmissionsPerMonth
       const counterSnapshot = await counterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)

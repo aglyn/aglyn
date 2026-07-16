@@ -353,7 +353,7 @@ import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 
 /**
  * ${label} console page. Receives {@link ConsolePluginPageProps}:
- * hostId, entitled, tenant (org billing doc), permissions.
+ * hostId, entitled, org (org billing doc), permissions.
  */
 export default function ${pascal}ConsolePage(props: ConsolePluginPageProps) {
   return (

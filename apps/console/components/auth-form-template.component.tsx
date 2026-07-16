@@ -56,7 +56,7 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
                   variant="contained"
                   fullWidth
                 >
-                  Next
+                  {(schema as { submitLabel?: string }).submitLabel ?? 'Next'}
                 </Button>
               </FormControl>
             </Box>

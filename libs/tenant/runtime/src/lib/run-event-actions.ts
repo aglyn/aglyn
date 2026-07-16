@@ -451,11 +451,11 @@ export async function runEventActions(
     let webhooksAllowed = true
     {
       // Plan-less orgs resolve as free (AGL-247) — gates always run.
-      const tenant = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(tenant as any, 'actions')) return alerts
-      webhooksAllowed = checkEntitlement(tenant as any, 'webhooks')
+      const org = (await getOrgForHost(hostId))?.org
+      if (!checkEntitlement(org as any, 'actions')) return alerts
+      webhooksAllowed = checkEntitlement(org as any, 'webhooks')
       const limit = resolveOrgEntitlements(
-        tenant as any,
+        org as any,
       ).actionRunsPerMonth
       const counterSnapshot = await runCounterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)
@@ -526,11 +526,11 @@ export async function runSingleAction(
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')
     let webhooksAllowed = true
     {
-      const tenant = (await getOrgForHost(hostId))?.org
-      if (!checkEntitlement(tenant as any, 'actions')) return alerts
-      webhooksAllowed = checkEntitlement(tenant as any, 'webhooks')
+      const org = (await getOrgForHost(hostId))?.org
+      if (!checkEntitlement(org as any, 'actions')) return alerts
+      webhooksAllowed = checkEntitlement(org as any, 'webhooks')
       const limit = resolveOrgEntitlements(
-        tenant as any,
+        org as any,
       ).actionRunsPerMonth
       const counterSnapshot = await runCounterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)

@@ -71,17 +71,17 @@ export async function runEventWorkflows(
       if (data?.name) workflowMap[data.name] = data
     }
 
-    // Monthly run cap by the owning tenant's plan (AGL-165) — dark-launch
+    // Monthly run cap by the owning org's plan (AGL-165) — dark-launch
     // rule: workspaces without a plan are uncapped, like every other gate.
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('workflowRuns')
     const hostSnapshot = await hostRef.get()
     // Run caps ride the owning org's doc (AGL-238).
     {
-      const tenant = (await getOrgForHost(hostId))?.org
+      const org = (await getOrgForHost(hostId))?.org
       // Plan-less orgs resolve as free (AGL-247) — the cap always runs.
       const limit = resolveOrgEntitlements(
-        tenant as any,
+        org as any,
       ).workflowRunsPerMonth
       const counterSnapshot = await runCounterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)
