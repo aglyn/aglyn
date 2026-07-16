@@ -62,12 +62,21 @@ async function handler(request: Request): Promise<Response> {
         .limit(100)
         .get()
       let emailSends = 0
+      // Run caps (AGL-477): the runtime silently stops workflow/action
+      // automation at the monthly cap; surface it here so the owner learns
+      // why automations went quiet, once per threshold per month.
+      let workflowRuns = 0
+      let actionRuns = 0
       for (const host of hosts.docs) {
-        const counter = await host.ref
-          .collection('counters')
-          .doc('emailSends')
-          .get()
-        emailSends += Number(counter.get(month) ?? 0)
+        const [emailCounter, workflowCounter, actionCounter] =
+          await Promise.all([
+            host.ref.collection('counters').doc('emailSends').get(),
+            host.ref.collection('counters').doc('workflowRuns').get(),
+            host.ref.collection('counters').doc('actionRuns').get(),
+          ])
+        emailSends += Number(emailCounter.get(month) ?? 0)
+        workflowRuns += Number(workflowCounter.get(month) ?? 0)
+        actionRuns += Number(actionCounter.get(month) ?? 0)
       }
 
       // Org datasets: count + approximate storage from the rollup the
@@ -103,6 +112,18 @@ async function handler(request: Request): Promise<Response> {
           label: 'data storage',
           used: dataStorageMb,
           limit: entitlements.dataStorageMbPerOrg,
+        },
+        {
+          key: 'workflowRuns',
+          label: 'monthly workflow runs',
+          used: workflowRuns,
+          limit: entitlements.workflowRunsPerMonth,
+        },
+        {
+          key: 'actionRuns',
+          label: 'monthly automation runs',
+          used: actionRuns,
+          limit: entitlements.actionRunsPerMonth,
         },
       ]
 
