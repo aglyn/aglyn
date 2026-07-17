@@ -35,10 +35,10 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { getAuth, signInWithCustomToken } from 'firebase/auth'
+import { signInWithCustomToken } from 'firebase/auth'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
@@ -86,6 +86,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ uid: string }>()
   const uid = params?.uid
   const { data: user } = useUser()
+  const auth = useAuth()
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<UserDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -182,13 +183,15 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
       }
       // Replaces THIS browser session with the target account; the
       // impersonation banner (claims.impersonatedBy) offers the exit.
-      await signInWithCustomToken(getAuth(), payload.token)
+      // Use the named-app auth instance (useAuth) — bare getAuth() resolves
+      // the '[DEFAULT]' app, which this app never registers.
+      await signInWithCustomToken(auth, payload.token)
       window.location.assign('/')
     } catch (error) {
       console.error(error)
       enqueueSnackbar('Impersonation failed', { variant: 'error' })
     }
-  }, [uid, user, enqueueSnackbar])
+  }, [uid, user, auth, enqueueSnackbar])
 
   return (
     <>

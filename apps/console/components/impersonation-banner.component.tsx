@@ -17,9 +17,9 @@
 'use client'
 
 import { Alert, Button } from '@mui/material'
-import { getAuth, signOut } from 'firebase/auth'
+import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 
 /**
  * Impersonation banner (AGL-246): pinned warning whenever the session was
@@ -28,6 +28,7 @@ import { useUser } from '@aglyn/tenant-feature-instance'
  */
 export function ImpersonationBanner() {
   const { data: user } = useUser()
+  const auth = useAuth()
   const [impersonatedBy, setImpersonatedBy] = useState<string | null>(null)
 
   useEffect(() => {
@@ -62,9 +63,9 @@ export function ImpersonationBanner() {
           color="inherit"
           size="small"
           onClick={() => {
-            void signOut(getAuth()).then(() =>
-              window.location.assign('/signin'),
-            )
+            // Named-app auth instance (useAuth) — bare getAuth() resolves the
+            // '[DEFAULT]' app, which this app never registers.
+            void signOut(auth).then(() => window.location.assign('/signin'))
           }}
         >
           {'Exit impersonation'}

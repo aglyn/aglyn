@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
@@ -40,7 +41,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { getAuth, signInWithCustomToken } from 'firebase/auth'
+import { signInWithCustomToken } from 'firebase/auth'
 import {
   collection,
   doc,
@@ -52,7 +53,7 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
@@ -76,6 +77,8 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const orgId = params?.orgId ?? ''
   const { data: user } = useUser()
   const firestore = useFirestore()
+  const auth = useAuth()
+  const { enqueueSnackbar } = useSnackbar()
   const [isStaff, setIsStaff] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -375,11 +378,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         body: JSON.stringify({ uid: org.ownerUid }),
       })
       const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload.token) return
-      await signInWithCustomToken(getAuth(), payload.token)
+      if (!response.ok || !payload.token) {
+        return void enqueueSnackbar(payload?.error ?? 'Impersonation failed', {
+          variant: 'warning',
+          persist: false,
+        })
+      }
+      // Replaces THIS browser session with the owner account; the
+      // impersonation banner (claims.impersonatedBy) offers the exit.
+      // Use the named-app auth instance (useAuth) — bare getAuth() resolves
+      // the '[DEFAULT]' app, which this app never registers.
+      await signInWithCustomToken(auth, payload.token)
       window.location.assign('/')
     } catch (error) {
       console.error(error)
+      enqueueSnackbar('Impersonation failed', { variant: 'error' })
     }
   }
 
