@@ -10,7 +10,9 @@ Beyond your team, your **site visitors** can become **members** — and you can 
 certain screens to signed-in members only.
 
 :::info Plan availability
-**Paid**.
+**Business** and above. Members-only screens, gated video, and the content
+paywall need the content-gating feature; on lower plans (or if a
+subscription lapses) gated content is not served.
 :::
 
 ![A site's users page](/img/teams-and-roles/host-users-page.png)

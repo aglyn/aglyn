@@ -18,11 +18,25 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { readMemberSession } from './membership'
 
 /** Subscription statuses that grant access (trialing pays later). */
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
+
+/**
+ * Is the HOST's org on a plan that includes the content paywall (AGL-481)?
+ * `contentGating` is a Business+ feature, but the member paywall used to be
+ * enforced on the visitor's purchase alone — so any plan (or a lapsed
+ * Business org) could run members-only content. This gates the feature at
+ * the org level; a plan-less/lapsed org resolves as `free` and fails
+ * closed (gated content is refused, never served open). Re-resolved per
+ * request, so a downgrade takes effect within the revalidate window.
+ */
+export async function hostHasContentGating(hostId: string): Promise<boolean> {
+  const org = (await getOrgForHost(hostId))?.org
+  return Aglyn.checkEntitlement(org as any, 'contentGating')
+}
 
 /**
  * Entitlement check (AGL-309): is the signed-in member entitled to
@@ -36,6 +50,11 @@ export async function checkMemberEntitlement(
   memberEmail: string,
   productId: string | 'any',
 ): Promise<boolean> {
+  // Org-level gate (AGL-481): the paywall feature itself is Business+. If
+  // the host's plan doesn't include it, no visitor is "entitled" — fail
+  // closed rather than serve gated content on a plan that didn't pay for
+  // gating.
+  if (!(await hostHasContentGating(hostId))) return false
   const firestore = firebaseAdmin.app().firestore()
   const hostRef = firestore.collection('hosts').doc(hostId)
   const subscriptions = await hostRef

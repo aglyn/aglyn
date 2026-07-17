@@ -18,6 +18,7 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
+import { hostHasContentGating } from './gate'
 import { readMemberSession } from './membership'
 
 /**
@@ -37,6 +38,13 @@ export const membershipContentHandler: PluginApiHandler = async (req, res) => {
   const memberId = readMemberSession(req, hostId)
   if (!memberId) return res.status(401).json({ error: 'Sign in required' })
   try {
+    // Org-level gate (AGL-481): members-only screens are a Business+
+    // feature. If the host's plan doesn't include content gating, the
+    // protected node tree is never served — fail closed. (These nodes
+    // never ship in static HTML, so this endpoint is the runtime gate.)
+    if (!(await hostHasContentGating(hostId))) {
+      return res.status(403).json({ error: 'Members-only content is unavailable' })
+    }
     const screenRes = await getScreen({ hostId, screenId })
     if (!screenRes.screen) {
       return res.status(404).json({ error: 'Unknown screen' })
