@@ -213,7 +213,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
     const accepted = await confirm({
       title: 'Delete this organization?',
       description:
-        `After a 7-day hold, ${currentOrg.orgName}'s sites, files, and data ` +
+        "After a 7-day hold, this organization's sites, files, and data " +
         'are permanently erased — a final export is produced first. You can ' +
         'cancel any time during the hold.',
       confirmationText: 'Request deletion',
@@ -258,6 +258,11 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
 
   // Org profile fields (AGL-363), prefilled from the org doc.
   const { org } = useCurrentOrg()
+  // Name to type in the delete confirmation (AGL-485). The org-scope
+  // projection's `orgName` isn't always populated, so fall back to the org
+  // doc name, then the slug — always something real to type.
+  const orgDisplayName =
+    (org as any)?.name || currentOrg?.orgName || currentOrg?.slug || ''
   const [profile, setProfile] = useState({
     logoUrl: '',
     contactEmail: '',
@@ -622,7 +627,7 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                       'anything you want to keep first.'}
                   </Typography>
                   <TextField
-                    label={`Type "${currentOrg.orgName}" to confirm`}
+                    label={`Type "${orgDisplayName}" to confirm`}
                     value={deleteConfirmText}
                     disabled={busy}
                     onChange={(event) => setDeleteConfirmText(event.target.value)}
@@ -632,7 +637,9 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                     color="error"
                     variant="contained"
                     disabled={
-                      busy || deleteConfirmText.trim() !== currentOrg.orgName
+                      busy ||
+                      !orgDisplayName ||
+                      deleteConfirmText.trim() !== orgDisplayName
                     }
                     onClick={() => void handleRequestDeletion()}
                     sx={{ alignSelf: 'flex-start' }}
