@@ -47,6 +47,7 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
+import { collection, getCountFromServer } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import BillingPlanCardsComponent, {
@@ -119,6 +120,42 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     [user, orgId, enqueueSnackbar],
   )
 
+  // Pre-downgrade check (AGL-483): resources that would exceed the target
+  // plan. Downgrades never delete anything, but the user should know what
+  // they'll be over before confirming. Counts sites (already loaded),
+  // team members, and datasets (cheap org-scoped counts).
+  const overLimitSummary = useCallback(
+    async (targetPlan: OrgPlan): Promise<string[]> => {
+      const target = PLAN_ENTITLEMENTS[targetPlan]
+      if (!target || !orgId) return []
+      const [memberCount, datasetCount] = await Promise.all([
+        getCountFromServer(collection(firestore, 'orgs', orgId, 'members'))
+          .then((snapshot) => snapshot.data().count)
+          .catch(() => 0),
+        getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
+          .then((snapshot) => snapshot.data().count)
+          .catch(() => 0),
+      ])
+      const over: string[] = []
+      const siteCount = hosts?.length ?? 0
+      if (siteCount > target.hostLimit) {
+        over.push(`${siteCount} sites (${targetPlan} includes ${target.hostLimit})`)
+      }
+      if (memberCount > target.managersPerOrg) {
+        over.push(
+          `${memberCount} team members (${targetPlan} includes ${target.managersPerOrg})`,
+        )
+      }
+      if (datasetCount > target.maxDatasetsPerOrg) {
+        over.push(
+          `${datasetCount} datasets (${targetPlan} includes ${target.maxDatasetsPerOrg})`,
+        )
+      }
+      return over
+    },
+    [firestore, orgId, hosts],
+  )
+
   // Stripe Billing Portal (AGL-275): payment methods, receipts, tax ids.
   const handleOpenPortal = useCallback(async () => {
     const dequeue = queueLoading()
@@ -130,8 +167,24 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     }
   }, [subscriptionRequest, queueLoading])
 
-  // Cancel/resume (AGL-269).
+  // Cancel/resume (AGL-269). Canceling gets a data-impact confirm (AGL-483):
+  // at period end the org resolves to Free; over-limit resources persist.
   const handleCancelToggle = useCallback(async () => {
+    if (!cancelAtPeriodEnd) {
+      const over = await overLimitSummary('free')
+      const accepted = await confirm({
+        title: 'Cancel subscription?',
+        description:
+          'Your plan runs until the end of the paid period, then this ' +
+          'organization moves to the Free plan. Nothing is deleted' +
+          (over.length ? ` — but you'll be over Free on: ${over.join('; ')}` : '') +
+          '. You can resume any time before it ends.',
+        confirmationText: 'Cancel subscription',
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!accepted) return
+    }
     const dequeue = queueLoading()
     try {
       const payload = await subscriptionRequest({
@@ -152,7 +205,14 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       dequeue()
     }
-  }, [cancelAtPeriodEnd, subscriptionRequest, queueLoading, enqueueSnackbar])
+  }, [
+    cancelAtPeriodEnd,
+    overLimitSummary,
+    confirm,
+    subscriptionRequest,
+    queueLoading,
+    enqueueSnackbar,
+  ])
 
   const handleUpgrade = useCallback(
     (targetPlan: OrgPlan) => async () => {
@@ -167,6 +227,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
             plan: targetPlan,
           })
           if (!preview) return
+          const over = await overLimitSummary(targetPlan)
           const accepted = await confirm({
             title: `Switch to ${targetPlan}?`,
             description:
@@ -175,7 +236,13 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 preview.periodEnd
                   ? new Date(preview.periodEnd).toLocaleDateString()
                   : 'at period end'
-              }.`,
+              }.` +
+              (over.length
+                ? ` Heads up — you'll be over the ${targetPlan} plan on: ` +
+                  `${over.join('; ')}. Nothing is deleted and these keep ` +
+                  "working, but you can't add more until you're back under " +
+                  'the limit.'
+                : ''),
             confirmationText: 'Switch plan',
           })
             .then(() => true)
@@ -229,6 +296,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
       interval,
       subscriptionActive,
       org?.plan,
+      overLimitSummary,
       subscriptionRequest,
       confirm,
       queueLoading,
