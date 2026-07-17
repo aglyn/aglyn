@@ -74,6 +74,15 @@ export const E2E_EMAIL = 'e2e@aglyn.test'
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const orgId = E2E_UID // Org doc id = owner uid, matching real signups.
 
+// Second org owned by a NON-staff user (AGL-357 regression). The primary
+// org above is owned by the staff account, so staff impersonation of its
+// owner always 400s ("Staff accounts cannot be impersonated") — the
+// success path can only be exercised against an org whose owner has no
+// staff claim, which this fixture provides.
+export const E2E_OWNER_UID = 'e2e-nonstaff-owner'
+export const E2E_OWNER_EMAIL = 'owner@aglyn.test'
+const ownerOrgId = E2E_OWNER_UID
+
 try {
   await auth.getUser(E2E_UID)
   // Converge on re-runs: the password may have changed between seeds.
@@ -91,6 +100,25 @@ try {
   })
 }
 await auth.setCustomUserClaims(E2E_UID, { staff: true })
+
+// Non-staff org owner (impersonation target). Explicitly clears claims on
+// re-runs so it can never accidentally carry `staff`.
+try {
+  await auth.getUser(E2E_OWNER_UID)
+  await auth.updateUser(E2E_OWNER_UID, {
+    password: E2E_PASSWORD,
+    emailVerified: true,
+  })
+} catch {
+  await auth.createUser({
+    uid: E2E_OWNER_UID,
+    email: E2E_OWNER_EMAIL,
+    password: E2E_PASSWORD,
+    emailVerified: true,
+    displayName: 'E2E Org Owner',
+  })
+}
+await auth.setCustomUserClaims(E2E_OWNER_UID, {})
 
 const now = FieldValue.serverTimestamp()
 let written = 0
@@ -149,6 +177,41 @@ await put(firestore.collection('hosts').doc(hostId), {
 })
 const hostRef = firestore.collection('hosts').doc(hostId)
 const orgRef = firestore.collection('orgs').doc(orgId)
+
+// ── Non-staff-owned org (impersonation success path) ────────────────────────
+// Minimal but complete: the org doc + both membership mirrors, enough for
+// the staff Organization Detail page to render and mint a token for the
+// non-staff owner. No host/host-scoped fixtures — this org exists only to
+// exercise the impersonation happy path.
+await put(firestore.collection('orgs').doc(ownerOrgId), {
+  name: 'E2E Client Co',
+  ownerUid: E2E_OWNER_UID,
+  plan: 'business',
+  subscription: { status: 'active' },
+  createdAt: now,
+})
+await put(
+  firestore
+    .collection('orgs')
+    .doc(ownerOrgId)
+    .collection('members')
+    .doc(E2E_OWNER_UID),
+  {
+    email: E2E_OWNER_EMAIL,
+    displayName: 'E2E Org Owner',
+    role: 'owner',
+    status: 'active',
+    createdAt: now,
+  },
+)
+await put(
+  firestore
+    .collection('users')
+    .doc(E2E_OWNER_UID)
+    .collection('orgs')
+    .doc(ownerOrgId),
+  { name: 'E2E Client Co', role: 'owner', createdAt: now },
+)
 
 // ── Org-scoped data (AGL-237/239): datasets, contacts, lists ───────────────
 const teamDataset = orgRef.collection('datasets').doc('seed-team')
@@ -538,5 +601,7 @@ await put(
 
 console.log(
   `Done — ${written} docs. user=${E2E_EMAIL} (uid ${E2E_UID}, staff) ` +
-    `org=${orgId} host=${hostId} project=${projectId}`,
+    `org=${orgId} host=${hostId} project=${projectId}. ` +
+    `Non-staff owner=${E2E_OWNER_EMAIL} (uid ${E2E_OWNER_UID}) ` +
+    `org=${ownerOrgId} (impersonation success path).`,
 )

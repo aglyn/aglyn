@@ -75,6 +75,12 @@ emulator-host env vars** so it can never touch production):
   claim; the password satisfies the sign-in form's client-side policy).
 - Org `e2e-owner` — business plan, active subscription (all entitlements
   unlock), owner member, `users/{uid}/orgs` workspace mirror.
+- Auth user `owner@aglyn.test` / `E2e-Password-1` (uid `e2e-nonstaff-owner`,
+  **no** `staff` claim) + Org `e2e-nonstaff-owner` (business plan, owner
+  member, workspace mirror, no host). Because the primary org's owner is the
+  staff account, staff impersonation of *its* owner always 400s; this org's
+  non-staff owner is the only fixture that exercises the impersonation
+  success path (AGL-357).
 - Host `demo` — `orgId`, `memberRoles`, `hostIndex` mirror.
 - Org-scoped: `datasets` (Team + records), `contacts`, `lists`.
 - Host-scoped: root-level media (with `createdAt`), bookings (with
