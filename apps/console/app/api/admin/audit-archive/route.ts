@@ -16,6 +16,7 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 const RETENTION_DAYS = 90
@@ -40,14 +41,14 @@ const ERASURE_HOLD_DAYS = 7
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
-  if (method !== 'POST') {
+  if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) {
     return Response.json({ error: 'Audit archival is not configured (CRON_SECRET).' }, { status: 501 })
   }
-  if (headers['x-cron-secret'] !== cronSecret) {
+  if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 
@@ -160,4 +161,4 @@ async function handler(request: Request): Promise<Response> {
 }
 
 export const dynamic = 'force-dynamic'
-export { handler as POST }
+export { handler as GET, handler as POST }
