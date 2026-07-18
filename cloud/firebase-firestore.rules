@@ -367,7 +367,16 @@ service cloud.firestore {
     match /communityListings/{listingId} {
       allow read: if true;
       allow create: if false;
-      allow update, delete: if isStaff() ||
+      // Owners toggle metadata (deletedAt un/republish) client-side, but
+      // must NOT touch server-managed fields (AGL-503): installCount is
+      // incremented by the install API (ranking integrity), priceUsd gates
+      // purchases, and profileId is the ownership key. Delete stays open to
+      // the owner; staff moderate anything.
+      allow update: if isStaff() ||
+        (isSignedIn() && resource.data.profileId == request.auth.uid &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['installCount', 'priceUsd', 'profileId']));
+      allow delete: if isStaff() ||
         (isSignedIn() && resource.data.profileId == request.auth.uid);
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/community/install, which
