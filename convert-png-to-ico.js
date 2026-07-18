@@ -17,7 +17,11 @@
 
 const fs = require('fs')
 const path = require('path')
-const toIco = require('to-ico')
+// png-to-ico@3 is ESM (`type: module`); under CommonJS `require` the
+// converter is exposed on `.default`. Tolerate both shapes so the script
+// keeps working whichever interop Node applies.
+const pngToIcoMod = require('png-to-ico')
+const pngToIco = pngToIcoMod.default || pngToIcoMod
 
 const staticDir = path.join(__dirname, 'static')
 const join = (file) => path.join(staticDir, file)
@@ -36,7 +40,7 @@ async function convertFiles(files) {
       console.log('Reading file:', name)
       const file = await fs.readFileSync(name)
       console.log('Converting png to ico:', name)
-      await toIco([file])
+      await pngToIco(file)
         .then(async (buf) => {
           console.log('Writing file:', `${name} => ${out}`)
           await fs.writeFileSync(out, buf)
