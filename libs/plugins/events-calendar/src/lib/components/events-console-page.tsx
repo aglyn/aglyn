@@ -226,10 +226,24 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
   return (
     <CardDisplay header={'Events'} contentGutterX contentGutterY>
       {!entitled ? (
-        <Alert severity="info">
-          {'The Event Calendar is a paid add-on ($9/mo per site, supported ' +
-            'directly by Aglyn). Ask support to enable it — self-serve ' +
-            'checkout is coming.'}
+        <Alert
+          severity="info"
+          action={
+            // Self-serve enable (AGL-530): the Billing add-ons card sells
+            // it; plain href since plugin components can't import console
+            // routing.
+            <Button
+              size="small"
+              color="inherit"
+              href="/org/billing#addons"
+            >
+              {'Enable in Billing'}
+            </Button>
+          }
+        >
+          {'The Event Calendar is a paid add-on ($9/mo for your whole ' +
+            'workspace, supported directly by Aglyn). Enable it from ' +
+            'Billing → Add-ons.'}
         </Alert>
       ) : (
         <Stack spacing={1}>

@@ -180,9 +180,12 @@ export interface OrgEntitlements {
 }
 
 /**
- * Paid addon seats (AGL-112) purchased on top of the plan's included seats.
- * The effective seat limit is `included + purchased`, clamped to the plan's
- * hard max — beyond the max the tenant must upgrade.
+ * Paid addon quantities (AGL-112/524) purchased on top of the plan's
+ * included allowances, billed as items on the org's Stripe subscription.
+ * Seat/dataset kinds resolve as `included + purchased` clamped to the
+ * plan's hard max — beyond the max the org must upgrade. Purchases only
+ * count while the subscription is alive (they bill on it); staff grants
+ * live on `entitlements` overrides instead, so the two never collide.
  */
 export interface OrgSeatAddons {
   /** Extra tenant-manager seats. */
@@ -191,6 +194,12 @@ export interface OrgSeatAddons {
   members?: number
   /** Extra org datasets (AGL-132/240); billed monthly per dataset. */
   datasets?: number
+  /** Extra sites beyond the plan's `hostLimit` (AGL-68/524). */
+  hosts?: number
+  /** Extra POS registers beyond the plan's `posRegisters` (AGL-329/524). */
+  posRegisters?: number
+  /** Event Calendar org-wide toggle, 0/1 (AGL-145/524). */
+  eventCalendar?: number
 }
 
 export interface OrgSubscription {

@@ -10,7 +10,15 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## Designer & email wave (newest)
+## Self-serve add-ons (newest)
+
+- **[Add-ons](workspace-and-billing/billing-and-plans/add-ons.md)** — buy manager and
+  member seats, extra datasets, extra sites, POS registers, and the Event Calendar
+  straight from **Billing → Add-ons**: prorated previews before every change, hard caps
+  where your plan tops out, and quantities that re-price automatically on plan switches.
+  No more asking support to enable an add-on.
+
+## Designer & email wave
 
 - **[Responsive styling](building-sites/besigner/responsive-styling.md)** — the artboard
   preview mode now scopes style edits per breakpoint (XS–XL), the box

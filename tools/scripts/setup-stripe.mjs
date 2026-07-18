@@ -40,11 +40,12 @@ const webhookUrl =
 // Mirrors PLAN_PRICING (AGL-278/306/307). The v2 lookup keys leave the
 // original aglyn_{plan} prices untouched, so existing subscriptions are
 // grandfathered at their old price until the tenant changes plans.
+// Add-on unit prices (AGL-525) mirror the extra*MonthlyUsd columns.
 const PLANS = [
-  { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 10 },
-  { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 8 },
-  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 5 },
-  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 4 },
+  { plan: 'starter', name: 'Aglyn Starter', usd: 25, yearlyUsd: 16 * 12, extraHostUsd: 10, extraSeatUsd: 5, extraMemberUsd: 3, extraDatasetUsd: 2 },
+  { plan: 'pro', name: 'Aglyn Pro', usd: 56, yearlyUsd: 39 * 12, extraHostUsd: 8, extraSeatUsd: 4, extraMemberUsd: 2, extraDatasetUsd: 2 },
+  { plan: 'business', name: 'Aglyn Business', usd: 139, yearlyUsd: 99 * 12, extraHostUsd: 5, extraSeatUsd: 3, extraMemberUsd: 1, extraDatasetUsd: 1 },
+  { plan: 'advanced', name: 'Aglyn Advanced', usd: 399, yearlyUsd: 299 * 12, extraHostUsd: 4, extraSeatUsd: 2, extraMemberUsd: 1, extraDatasetUsd: 1 },
 ]
 
 async function stripe(path, params) {
@@ -101,8 +102,34 @@ async function ensurePrice({
   return price
 }
 
+/**
+ * Monthly + yearly price pair for an add-on (AGL-525): add-ons attach to
+ * the org's one subscription, and Stripe allows a single interval per
+ * subscription, so annual orgs need `_yearly` variants (×12, no discount).
+ */
+async function ensureAddonPair({ lookupBase, productName, usd, planMetadata }) {
+  const monthly = await ensurePrice({
+    lookupKey: lookupBase,
+    productName,
+    usd,
+    planMetadata,
+  })
+  const yearly = await ensurePrice({
+    lookupKey: `${lookupBase}_yearly`,
+    productName,
+    usd: usd * 12,
+    planMetadata,
+    interval: 'year',
+    productId: monthly.product,
+  })
+  return { monthly, yearly }
+}
+
 const env = {}
-for (const { plan, name, usd, yearlyUsd, extraHostUsd } of PLANS) {
+for (const {
+  plan, name, usd, yearlyUsd,
+  extraHostUsd, extraSeatUsd, extraMemberUsd, extraDatasetUsd,
+} of PLANS) {
   const base = await ensurePrice({
     lookupKey: `aglyn_${plan}_v2`,
     productName: name,
@@ -119,13 +146,24 @@ for (const { plan, name, usd, yearlyUsd, extraHostUsd } of PLANS) {
     productId: base.product,
   })
   env[`STRIPE_PRICE_${plan.toUpperCase()}_YEARLY`] = yearly.id
-  const extra = await ensurePrice({
-    lookupKey: `aglyn_${plan}_extra_host`,
-    productName: `${name} — extra host`,
-    usd: extraHostUsd,
-    planMetadata: plan,
-  })
-  env[`STRIPE_PRICE_${plan.toUpperCase()}_EXTRA_HOST`] = extra.id
+  // Per-plan add-ons (AGL-68/112/132): env names match
+  // apps/console/utils/server/billing-addons.ts.
+  const addons = [
+    ['extra_host', 'extra host', extraHostUsd, 'EXTRA_HOST'],
+    ['extra_seat', 'extra manager seat', extraSeatUsd, 'EXTRA_SEAT'],
+    ['extra_member', 'extra member seat', extraMemberUsd, 'EXTRA_MEMBER'],
+    ['extra_dataset', 'extra dataset', extraDatasetUsd, 'EXTRA_DATASET'],
+  ]
+  for (const [slug, label, addonUsd, envKey] of addons) {
+    const pair = await ensureAddonPair({
+      lookupBase: `aglyn_${plan}_${slug}`,
+      productName: `${name} — ${label}`,
+      usd: addonUsd,
+      planMetadata: plan,
+    })
+    env[`STRIPE_PRICE_${plan.toUpperCase()}_${envKey}`] = pair.monthly.id
+    env[`STRIPE_PRICE_${plan.toUpperCase()}_${envKey}_YEARLY`] = pair.yearly.id
+  }
 }
 
 if (webhookUrl) {
@@ -146,14 +184,25 @@ if (webhookUrl) {
   )
 }
 
-// POS Pro register add-on (AGL-329).
-const posAddon = await ensurePrice({
-  lookupKey: 'aglyn_pos_register_addon',
+// Flat add-ons priced the same on every plan: POS Pro registers
+// (AGL-329) and the org-wide Event Calendar toggle (AGL-145/524).
+const posAddon = await ensureAddonPair({
+  lookupBase: 'aglyn_pos_register_addon',
   productName: 'Aglyn POS Pro register',
   usd: 89,
   planMetadata: 'addon',
 })
-env['STRIPE_PRICE_POS_REGISTER'] = posAddon.id
+env['STRIPE_PRICE_POS_REGISTER'] = posAddon.monthly.id
+env['STRIPE_PRICE_POS_REGISTER_YEARLY'] = posAddon.yearly.id
+
+const eventCalendarAddon = await ensureAddonPair({
+  lookupBase: 'aglyn_event_calendar_addon',
+  productName: 'Aglyn Event Calendar',
+  usd: 9,
+  planMetadata: 'addon',
+})
+env['STRIPE_PRICE_EVENT_CALENDAR'] = eventCalendarAddon.monthly.id
+env['STRIPE_PRICE_EVENT_CALENDAR_YEARLY'] = eventCalendarAddon.yearly.id
 
 console.log('\nAdd these to the console app environment:\n')
 for (const [key, value] of Object.entries(env)) {
@@ -161,5 +210,6 @@ for (const [key, value] of Object.entries(env)) {
 }
 console.log(
   '\nSTRIPE_SECRET_KEY=(the key you used)\n' +
-    'Done — the Billing page Upgrade buttons will create live checkouts.',
+    'Done — the Billing page Upgrade buttons and the Add-ons card will ' +
+    'hit live prices.',
 )

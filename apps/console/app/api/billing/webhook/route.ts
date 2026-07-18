@@ -19,6 +19,9 @@ import { runBillingWebhookHandlers } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+import {
+  addonQuantitiesFromItems,
+} from '../../../../utils/server/billing-addons'
 
 /** Verifies a `Stripe-Signature` header against the signing secret. */
 function verifyStripeSignature(
@@ -64,10 +67,15 @@ function verifyStripeSignature(
  */
 function planFromPriceId(priceId: string | undefined): string | undefined {
   if (!priceId) return undefined
-  if (priceId === process.env.STRIPE_PRICE_STARTER) return 'starter'
-  if (priceId === process.env.STRIPE_PRICE_PRO) return 'pro'
-  if (priceId === process.env.STRIPE_PRICE_BUSINESS) return 'business'
-  if (priceId === process.env.STRIPE_PRICE_ADVANCED) return 'advanced'
+  for (const plan of ['starter', 'pro', 'business', 'advanced']) {
+    const key = `STRIPE_PRICE_${plan.toUpperCase()}`
+    if (
+      priceId === process.env[key] ||
+      priceId === process.env[`${key}_YEARLY`]
+    ) {
+      return plan
+    }
+  }
   return undefined
 }
 
@@ -135,16 +143,27 @@ async function handler(request: Request): Promise<Response> {
       const orgId = object?.metadata?.orgId
       if (orgId) {
         const canceled = type === 'customer.subscription.deleted'
-        const priceId = object?.items?.data?.[0]?.price?.id
+        const items: any[] = object?.items?.data ?? []
+        // With add-on items on the subscription (AGL-526), items[0] is no
+        // longer necessarily the plan item — find the one whose price maps
+        // to a plan; metadata.plan (set at checkout/switch) still wins.
+        const planItem = items.find(
+          (item: any) => planFromPriceId(item?.price?.id),
+        ) ?? items[0]
+        const priceId = planItem?.price?.id
         const plan = canceled
           ? 'free'
           : (object?.metadata?.plan ?? planFromPriceId(priceId) ?? 'free')
         const billing = {
           plan,
           stripeCustomerId: object?.customer ?? null,
+          // Add-on quantities sync from the items (AGL-527): Stripe is
+          // the source of truth; explicit zeros make removals, dashboard
+          // edits, and full cancellations all converge.
+          seatAddons: addonQuantitiesFromItems(canceled ? [] : items),
           subscription: {
             status: canceled ? 'canceled' : (object?.status ?? 'active'),
-            priceId: object?.items?.data?.[0]?.price?.id ?? null,
+            priceId: priceId ?? null,
             currentPeriodEnd: object?.current_period_end
               ? new Date(object.current_period_end * 1000)
               : null,

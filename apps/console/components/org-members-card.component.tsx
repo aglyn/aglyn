@@ -49,7 +49,9 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope } from '../hooks/use-org-scope'
 
@@ -97,6 +99,10 @@ export function OrgMembersCard() {
   )
   const orgId = currentOrg?.$id
   const canManage = canManageOrg(currentOrg?.role)
+  // Manager-seat quota hint (AGL-530): the roster counts against
+  // managersPerOrg; extra seats sell on the Billing add-ons card.
+  const { org } = useCurrentOrg()
+  const seatQuota = checkOrgSeatQuota(org, 'managers', members.length)
   // An org admin sees every org host via the memberRoles projection, so
   // this doubles as the org host directory for the access editor.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
@@ -193,6 +199,19 @@ export function OrgMembersCard() {
           {'Owners and admins manage the whole organization; editors and ' +
             'viewers can be limited to specific sites.'}
         </Typography>
+        {Number.isFinite(seatQuota.limit) ? (
+          <Typography variant="caption" color="text.secondary">
+            {`${members.length} of ${seatQuota.limit} manager seats used`}
+            {seatQuota.upgradeRequired ? (
+              ' — upgrade for more'
+            ) : seatQuota.addonPriceUsd != null ? (
+              <>
+                {` — extra seats $${seatQuota.addonPriceUsd}/mo in `}
+                <MuiLink href="/org/billing#addons">{'Billing'}</MuiLink>
+              </>
+            ) : null}
+          </Typography>
+        ) : null}
         {canManage ? (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
             <TextField

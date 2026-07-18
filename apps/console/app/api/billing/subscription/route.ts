@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginRequestFromWeb, type OrgPlan } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -23,6 +23,12 @@ import {
   memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import {
+  addonKindFromPriceId,
+  addonPriceId,
+  addonQuantitiesFromItems,
+  type AddonKind,
+} from '../../../../utils/server/billing-addons'
 
 const PRICE_ENV: Record<string, string | undefined> = {
   starter: process.env.STRIPE_PRICE_STARTER,
@@ -78,7 +84,9 @@ async function activeSubscription(
  *   via Stripe's upcoming-invoice preview
  * - `switch`   → updates the subscription item to the target plan's
  *   price with prorations (an existing subscription never goes through
- *   Checkout again). 501 without Stripe env.
+ *   Checkout again); per-plan add-on items re-price to the target plan
+ *   in the same update, dropping kinds it doesn't sell (AGL-528).
+ *   501 without Stripe env.
  * - `portal`   → a Stripe Billing Portal session URL (AGL-275) for
  *   payment-method management; works even without an active
  *   subscription so past-due orgs can fix their card.
@@ -187,25 +195,57 @@ async function handler(request: Request): Promise<Response> {
     if (!targetPrice) {
       return Response.json({ error: 'Unknown target plan' }, { status: 400 })
     }
-    const itemId = subscription.items?.data?.[0]?.id
+    const items: any[] = subscription.items?.data ?? []
+    // The base plan item is the one no add-on price claims (AGL-528) —
+    // with add-on items on the subscription it need not be items[0].
+    const planItem =
+      items.find((item: any) => !addonKindFromPriceId(item?.price?.id)) ??
+      items[0]
+    const itemId = planItem?.id
+
+    // Per-plan add-on items (seats/members/datasets/hosts) re-price to
+    // the target plan in the same update (AGL-528); kinds the target
+    // doesn't sell are dropped and reported. Flat add-ons re-resolve too
+    // so they follow the base interval (PRICE_ENV targets are monthly).
+    const itemChanges: Array<Array<[string, string]>> = [
+      [['id', String(itemId)], ['price', targetPrice]],
+    ]
+    const dropped: AddonKind[] = []
+    for (const item of items) {
+      const kind = addonKindFromPriceId(item?.price?.id)
+      if (!kind) continue
+      const target = addonPriceId(kind, targetPlan as OrgPlan, 'month')
+      if (target === item?.price?.id) continue
+      if (target) {
+        itemChanges.push([['id', String(item.id)], ['price', target]])
+      } else {
+        itemChanges.push([['id', String(item.id)], ['deleted', 'true']])
+        dropped.push(kind)
+      }
+    }
 
     if (action === 'switch') {
+      const params = new URLSearchParams({
+        proration_behavior: 'create_prorations',
+        'metadata[plan]': targetPlan,
+        'metadata[orgId]': orgId,
+      })
+      itemChanges.forEach((change, index) => {
+        for (const [key, value] of change) {
+          params.set(`items[${index}][${key}]`, value)
+        }
+      })
       const updated = await stripeRequest(
         secretKey,
         'POST',
         `subscriptions/${subscription.id}`,
-        new URLSearchParams({
-          'items[0][id]': String(itemId),
-          'items[0][price]': targetPrice,
-          proration_behavior: 'create_prorations',
-          'metadata[plan]': targetPlan,
-          'metadata[orgId]': orgId,
-        }),
+        params,
       )
       // Mirror immediately; the webhook confirms on the next event.
       await org.ref.set(
         {
           plan: targetPlan,
+          seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
           subscription: {
             status: updated.status ?? subscription.status,
             priceId: targetPrice,
@@ -213,16 +253,27 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
-      return Response.json({ ok: true, plan: targetPlan }, { status: 200 })
+      return Response.json({
+        ok: true,
+        plan: targetPlan,
+        droppedAddons: dropped,
+      }, { status: 200 })
     }
 
+    const itemsQuery = itemChanges
+      .map((change, index) =>
+        change
+          .map(([key, value]) =>
+            `&subscription_items[${index}][${key}]=` +
+              encodeURIComponent(value))
+          .join(''))
+      .join('')
     const preview = await stripeRequest(
       secretKey,
       'GET',
       `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
         `&subscription=${encodeURIComponent(subscription.id)}` +
-        `&subscription_items[0][id]=${encodeURIComponent(String(itemId))}` +
-        `&subscription_items[0][price]=${encodeURIComponent(targetPrice)}` +
+        itemsQuery +
         `&subscription_proration_behavior=create_prorations`,
     )
     return Response.json({
@@ -231,6 +282,7 @@ async function handler(request: Request): Promise<Response> {
       periodEnd: preview?.period_end
         ? new Date(preview.period_end * 1000).toISOString()
         : null,
+      droppedAddons: dropped,
     }, { status: 200 })
   } catch (error) {
     console.error(error)

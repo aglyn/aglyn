@@ -225,12 +225,15 @@ export function HostMembersCard(props: HostMembersCardProps) {
         </Stack>
         {Number.isFinite(seatQuota.limit) ? (
           <Typography variant="caption" color="text.secondary">
-            {`${members.length} of ${seatQuota.limit} member seats used` +
-              (seatQuota.upgradeRequired
-                ? ' — upgrade for more'
-                : seatQuota.addonPriceUsd != null
-                  ? ` — extra seats $${seatQuota.addonPriceUsd}/mo (Billing)`
-                  : '')}
+            {`${members.length} of ${seatQuota.limit} member seats used`}
+            {seatQuota.upgradeRequired ? (
+              ' — upgrade for more'
+            ) : seatQuota.addonPriceUsd != null ? (
+              <>
+                {` — extra seats $${seatQuota.addonPriceUsd}/mo in `}
+                <Link href="/org/billing#addons">{'Billing'}</Link>
+              </>
+            ) : null}
           </Typography>
         ) : null}
         <Table size="small">

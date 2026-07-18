@@ -82,7 +82,7 @@ export function RegistersCard(props: RegistersCardProps) {
           ? 'POS registers require the Pro plan or above — see Billing'
           : `Your plan includes ${quota.limit} register${
               quota.limit === 1 ? '' : 's'
-            } — add the register add-on in Billing for more`,
+            } — add more from Billing → Add-ons ($89/mo each)`,
         { variant: 'info', persist: false },
       )
     }

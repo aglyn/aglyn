@@ -49,7 +49,9 @@ Stripe's payment-processing fees. Upgrading is the way to reduce them.
 ## Seats
 
 - Team and site-member **seats** are metered and enforced per tier.
-- Buy **paid seat add-ons** to grow your team beyond the included seats.
+- Buy **paid seat add-ons** to grow your team beyond the included seats —
+  self-serve from [Billing → Add-ons](add-ons.md), alongside extra sites,
+  datasets, POS registers, and the Event Calendar.
 
 ## Organization data
 
@@ -57,9 +59,9 @@ Stripe's payment-processing fees. Upgrading is the way to reduce them.
   organization, not individual sites.
 - Each paid tier includes a number of datasets and an included **data storage** size
   (Starter 1 GB, Pro 5 GB, Business 25 GB).
-- Extra datasets are a monthly **add-on** ($2/mo on Starter and Pro, $1/mo on Business);
-  storage beyond the included size is **metered overage** at $0.25 per GB-month on your
-  monthly invoice.
+- Extra datasets are a monthly **[add-on](add-ons.md)** ($2/mo on Starter and Pro, $1/mo
+  on Business); storage beyond the included size is **metered overage** at $0.25 per
+  GB-month on your monthly invoice.
 
 ## Payments
 
@@ -81,5 +83,6 @@ same Stripe integration.
 
 ## Related
 
+- [Add-ons](add-ons.md)
 - [Teams, roles & membership](../teams-and-roles/overview.md)
 - [Analytics](../../marketing-and-automation/analytics/overview.md)
