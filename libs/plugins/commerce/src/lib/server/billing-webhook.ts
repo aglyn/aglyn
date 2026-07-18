@@ -304,12 +304,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           })
           .filter(Boolean) as CommerceModel.OrderLineItem[]
         const shipping = object?.shipping_details ?? object?.customer_details
-        await firestore.runTransaction(async (transaction) => {
+        const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
             transaction.get(counterRef),
           ])
-          if (existing.exists) return
+          if (existing.exists) return false
           const number = Number(counter.get('next') ?? 1)
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
           const totals = CommerceModel.computeOrderTotals(lineItems, {
@@ -352,7 +352,13 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             createdAtMs: Date.now(),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
+          return true
         })
+        // Redelivery/replay guard (AGL-498): only fulfil when the order was
+        // just created. A duplicate delivery finds it already there and skips
+        // the non-idempotent effects below (inventory / coupon / gift-card
+        // decrements) that would otherwise double-apply.
+        if (!created) return
         await cartRef.delete().catch(() => undefined)
         // Recoverable checkout closes (AGL-296) so recovery emails stop;
         // the doc also carries the marketing opt-in (AGL-301).
@@ -703,12 +709,12 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         const snapshotName = String(
           productForSnapshot.get('name') ?? 'Product',
         )
-        await firestore.runTransaction(async (transaction) => {
+        const created = await firestore.runTransaction(async (transaction) => {
           const [existing, counter] = await Promise.all([
             transaction.get(orderRef),
             transaction.get(counterRef),
           ])
-          if (existing.exists) return
+          if (existing.exists) return false
           const number = Number(counter.get('next') ?? 1)
           transaction.set(counterRef, { next: number + 1 }, { merge: true })
           transaction.set(orderRef, {
@@ -750,7 +756,11 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             ...(couponCode ? { couponCode } : {}),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           })
+          return true
         })
+        // Redelivery guard (AGL-498): skip the notification + fulfilment side
+        // effects when this order already existed.
+        if (!created) return
         // In-app order notification (wave v6): host managers see sales
         // in the bell, not just the owner's email.
         void notifyHostManagers(String(hostId), {
