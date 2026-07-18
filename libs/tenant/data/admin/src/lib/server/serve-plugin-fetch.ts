@@ -19,10 +19,50 @@ import {
   isPluginNetworkAllowed,
   PLUGIN_FETCH_MAX_BODY_BYTES,
 } from '@aglyn/aglyn/server'
+import { lookup } from 'dns/promises'
+import { isIPv4, isIPv6 } from 'net'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { firebaseAdmin } from './firebase-admin'
 
 const FETCH_TIMEOUT_MS = 8000
+
+/** True for loopback / private / link-local / CGNAT / ULA addresses. */
+function isPrivateIp(ip: string): boolean {
+  if (isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number)
+    if (a === 0 || a === 10 || a === 127) return true
+    if (a === 169 && b === 254) return true // link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
+    return false
+  }
+  if (isIPv6(ip)) {
+    const low = ip.toLowerCase()
+    if (low === '::1' || low === '::') return true
+    if (low.startsWith('fc') || low.startsWith('fd')) return true // ULA
+    if (low.startsWith('fe80')) return true // link-local
+    if (low.startsWith('::ffff:')) return isPrivateIp(low.slice(7)) // v4-mapped
+    return false
+  }
+  return true // unparseable → refuse
+}
+
+/**
+ * SSRF hardening (AGL-515): even an https, allowlisted origin can resolve to
+ * an internal address (a plugin author pointing DNS at 127.0.0.1 / the cloud
+ * metadata endpoint). Resolve the host and refuse if ANY address is private.
+ * (Does not fully close DNS-rebinding TOCTOU — pinning the resolved IP is a
+ * follow-up — but blocks the static internal-target case.)
+ */
+async function resolvesToPublicIp(hostname: string): Promise<boolean> {
+  try {
+    const addresses = await lookup(hostname, { all: true })
+    return addresses.length > 0 && addresses.every((a) => !isPrivateIp(a.address))
+  } catch {
+    return false
+  }
+}
 
 /**
  * Host-mediated plugin fetch (AGL-191). The sandboxed plugin can't reach
@@ -89,6 +129,12 @@ export async function servePluginFetch(
       res
         .status(403)
         .json({ ok: false, status: 0, error: 'URL not in allowlist' })
+      return
+    }
+    if (!(await resolvesToPublicIp(new URL(url).hostname))) {
+      res
+        .status(403)
+        .json({ ok: false, status: 0, error: 'URL resolves to a non-public address' })
       return
     }
 
