@@ -102,6 +102,19 @@ describe('matchRedirect (v2, AGL-375)', () => {
     })
   })
 
+  it('rejects catastrophic-backtracking regexes but keeps normal ones (AGL-505)', () => {
+    // Nested quantifiers (star height > 1) are the ReDoS sources.
+    expect(compileRedirectRegex('(a+)+')).toBeNull()
+    expect(compileRedirectRegex('([a-z]*)*')).toBeNull()
+    expect(compileRedirectRegex('((\\d+))+')).toBeNull()
+    expect(compileRedirectRegex('/old/(.*)+')).toBeNull()
+    expect(validateRedirectRule({ kind: 'regex', source: '(a+)+', destination: '/x' })).not.toBeNull()
+    // Ordinary redirect patterns still compile.
+    expect(compileRedirectRegex('/product/(\\d+)')).not.toBeNull()
+    expect(compileRedirectRegex('/old/(.*)')).not.toBeNull()
+    expect(compileRedirectRegex('^/blog/[a-z0-9-]+$')).not.toBeNull()
+  })
+
   it('honors priority order and skips disabled rules', () => {
     const rules = [
       {

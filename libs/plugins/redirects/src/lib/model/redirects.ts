@@ -51,14 +51,71 @@ export const REDIRECT_DEFAULT_PRIORITY = 100
 const REGEX_SOURCE_MAX = 200
 
 /**
+ * Heuristic ReDoS guard (AGL-505): reject a quantifier applied to a group
+ * that itself contains a quantifier (star height > 1) — `(a+)+`, `([a-z]*)*`,
+ * `((\d+))+` — the classic exponential-backtracking patterns. Host redirect
+ * regexes run at request time on the shared tenant server, so one malicious
+ * pattern + a crafted path could stall the event loop for every tenant. Not
+ * exhaustive (overlapping alternations slip through), but it blocks the
+ * exponential cases; normal patterns like `^/blog/([0-9]+)$` are unaffected.
+ */
+function hasNestedQuantifier(pattern: string): boolean {
+  const isQuantifier = (ch: string | undefined) =>
+    ch === '*' || ch === '+' || ch === '{'
+  // Per-depth flag: did the group opened at this depth contain a quantifier?
+  const groupHadQuantifier: boolean[] = []
+  let escaped = false
+  let inClass = false
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (ch === '\\') {
+      escaped = true
+      continue
+    }
+    if (inClass) {
+      if (ch === ']') inClass = false
+      continue
+    }
+    if (ch === '[') {
+      inClass = true
+      continue
+    }
+    if (ch === '(') {
+      groupHadQuantifier.push(false)
+      continue
+    }
+    if (ch === ')') {
+      const inner = groupHadQuantifier.pop() ?? false
+      const nextIsQuant = isQuantifier(pattern[i + 1])
+      if (inner && nextIsQuant) return true
+      // A group that contained a quantifier makes its parent count as
+      // containing one too, so `((a+))+` is still caught.
+      if ((inner || nextIsQuant) && groupHadQuantifier.length > 0) {
+        groupHadQuantifier[groupHadQuantifier.length - 1] = true
+      }
+      continue
+    }
+    if (isQuantifier(ch) && groupHadQuantifier.length > 0) {
+      groupHadQuantifier[groupHadQuantifier.length - 1] = true
+    }
+  }
+  return false
+}
+
+/**
  * Compiles a regex rule's source, anchored to the whole path unless the
- * author anchored it themselves. Returns null for invalid patterns —
- * callers reject at save and skip at match, so a bad pattern can never
- * take a site down.
+ * author anchored it themselves. Returns null for invalid OR ReDoS-unsafe
+ * patterns — callers reject at save and skip at match, so a bad pattern can
+ * never take a site down.
  */
 export function compileRedirectRegex(source: string): RegExp | null {
   const pattern = String(source ?? '').trim()
   if (!pattern || pattern.length > REGEX_SOURCE_MAX) return null
+  if (hasNestedQuantifier(pattern)) return null
   try {
     const anchored =
       (pattern.startsWith('^') ? '' : '^') +
