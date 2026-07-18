@@ -19,7 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 
 /**
  * Signing secret for commerce tokens (AGL-509). A dedicated env var with NO
@@ -35,14 +35,42 @@ export function tokenSigningSecret(): string {
   return secret
 }
 
-/**
- * Order-scoped download token (AGL-302); no expiry — limits gate use.
- */
-export function mintDownloadToken(hostId: string, orderId: string): string {
+/** Download links expire 90 days after minting (AGL-514). */
+const DOWNLOAD_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
+function signDownload(hostId: string, orderId: string, exp: number): string {
   return createHmac('sha256', tokenSigningSecret())
-    .update(`download:${hostId}:${orderId}`)
+    .update(`download:${hostId}:${orderId}:${exp}`)
     .digest('hex')
     .slice(0, 32)
+}
+
+/**
+ * Order-scoped download token (AGL-302). Carries an embedded expiry (AGL-514)
+ * so a leaked receipt link doesn't grant perpetual re-download; the per-order
+ * download limit still bounds use within the window. Format: `${expMs}.${sig}`.
+ */
+export function mintDownloadToken(hostId: string, orderId: string): string {
+  const exp = Date.now() + DOWNLOAD_TOKEN_TTL_MS
+  return `${exp}.${signDownload(hostId, orderId, exp)}`
+}
+
+/** Constant-time verify of a download token, including its expiry. */
+export function verifyDownloadToken(
+  hostId: string,
+  orderId: string,
+  token: string,
+): boolean {
+  const dot = token.indexOf('.')
+  if (dot <= 0) return false
+  const exp = Number(token.slice(0, dot))
+  const sig = token.slice(dot + 1)
+  if (!Number.isFinite(exp) || Date.now() > exp) return false
+  const expected = signDownload(hostId, orderId, exp)
+  const a = Buffer.from(sig)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
 }
 
 /**
@@ -60,8 +88,8 @@ export const downloadHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || !orderId || !token || !productId) {
     return res.status(400).send('Missing parameters')
   }
-  if (token !== mintDownloadToken(hostId, orderId)) {
-    return res.status(403).send('Invalid download link')
+  if (!verifyDownloadToken(hostId, orderId, token)) {
+    return res.status(403).send('Invalid or expired download link')
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
