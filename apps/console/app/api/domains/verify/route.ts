@@ -16,6 +16,11 @@
  */
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import {
+  emailUnverifiedResponse,
+  firebaseAdmin,
+  isImpersonationSession,
+} from '@aglyn/tenant-data-admin'
 import { promises as dns } from 'dns'
 
 const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/i
@@ -28,6 +33,24 @@ const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/i
  * pass so the flow remains testable.
  */
 async function handler(request: Request): Promise<Response> {
+  // Require an authenticated console user (AGL-513): this backs the
+  // connect-a-domain wizard, not a public DNS lookup service.
+  const authorization = request.headers.get('authorization') ?? ''
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : ''
+  if (!idToken) {
+    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    if (!decoded.email_verified && !isImpersonationSession(decoded)) {
+      return emailUnverifiedResponse()
+    }
+  } catch {
+    return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  }
+
   const { query } = await pluginRequestFromWeb(request)
   const domain = String(query['domain'] ?? '')
     .trim()

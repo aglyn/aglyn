@@ -69,8 +69,12 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     setChecking(true)
     const dequeue = queueLoading()
     try {
+      const idToken = await (user as any)?.getIdToken?.()
       const verifyResponse = await fetch(
         `/api/domains/verify?domain=${encodeURIComponent(value)}`,
+        idToken
+          ? { headers: { Authorization: `Bearer ${idToken}` } }
+          : undefined,
       )
       const verify = await verifyResponse.json()
       if (!verifyResponse.ok) {
