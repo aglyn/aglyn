@@ -19,7 +19,11 @@
 // the admin console check (AGL-42). Run locally with admin credentials:
 //
 //   FIREBASE_PROJECT_ID=… FIREBASE_CLIENT_EMAIL=… FIREBASE_PRIVATE_KEY=… \
-//     node tools/scripts/set-staff-claim.mjs <uid-or-email> [--remove]
+//     node tools/scripts/set-staff-claim.mjs <uid-or-email> [--role=super|support] [--remove]
+//
+// The role is set EXPLICITLY (AGL-495): the admin routes fail closed and
+// treat a missing staffRole as least-privileged `support`, so a grant must
+// name the role. Defaults to `support`; pass --role=super for full access.
 //
 // The user must sign out/in (or force-refresh the ID token) for the claim
 // to take effect on the client.
@@ -27,9 +31,19 @@
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 
-const [, , identifier, flag] = process.argv
+const args = process.argv.slice(2)
+const identifier = args.find((a) => !a.startsWith('--'))
+const remove = args.includes('--remove')
+const roleArg = args.find((a) => a.startsWith('--role='))
+const staffRole = roleArg ? roleArg.slice('--role='.length) : 'support'
 if (!identifier) {
-  console.error('Usage: node tools/scripts/set-staff-claim.mjs <uid-or-email> [--remove]')
+  console.error(
+    'Usage: node tools/scripts/set-staff-claim.mjs <uid-or-email> [--role=super|support] [--remove]',
+  )
+  process.exit(1)
+}
+if (!remove && !['super', 'support'].includes(staffRole)) {
+  console.error(`Invalid --role "${staffRole}" (expected super or support)`)
   process.exit(1)
 }
 
@@ -50,13 +64,21 @@ const user = identifier.includes('@')
   ? await auth.getUserByEmail(identifier)
   : await auth.getUser(identifier)
 
-const remove = flag === '--remove'
 const claims = { ...(user.customClaims ?? {}) }
-if (remove) delete claims.staff
-else claims.staff = true
+if (remove) {
+  delete claims.staff
+  delete claims.staffRole
+} else {
+  claims.staff = true
+  claims.staffRole = staffRole
+}
 
 await auth.setCustomUserClaims(user.uid, claims)
 console.log(
-  `${remove ? 'Removed staff claim from' : 'Granted staff claim to'} ${user.uid} (${user.email ?? 'no email'})`,
+  `${
+    remove
+      ? 'Removed staff claim from'
+      : `Granted staff claim (role: ${staffRole}) to`
+  } ${user.uid} (${user.email ?? 'no email'})`,
 )
 console.log('The user must refresh their ID token (sign out/in) to pick it up.')

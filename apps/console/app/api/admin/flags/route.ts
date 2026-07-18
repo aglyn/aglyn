@@ -56,7 +56,7 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded['staff']) {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
-    const actorRole = String(decoded['staffRole'] ?? 'super')
+    const actorRole = String(decoded['staffRole'] ?? 'support')
     const remoteConfig = firebaseAdmin.app().remoteConfig()
 
     if (method === 'GET') {

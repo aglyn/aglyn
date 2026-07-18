@@ -109,7 +109,10 @@ try {
     displayName: 'E2E Owner',
   })
 }
-await auth.setCustomUserClaims(E2E_UID, { staff: true })
+// Explicit super role (AGL-495): admin routes now fail closed and treat a
+// missing staffRole as `support`, so the e2e staff user must name `super`
+// to exercise super-only admin flows.
+await auth.setCustomUserClaims(E2E_UID, { staff: true, staffRole: 'super' })
 
 // Non-staff org owner (impersonation target). Explicitly clears claims on
 // re-runs so it can never accidentally carry `staff`.
