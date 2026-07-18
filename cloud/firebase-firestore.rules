@@ -47,15 +47,19 @@ service cloud.firestore {
       // identity keys out of reach. Members with the admin role may
       // rename the org; nothing else is client-writable.
       allow create, delete: if false;
+      // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
+      // the install API after entitlement + kill-switch checks (AGL-501) —
+      // it must stay out of every client-writable branch, or an admin can
+      // enable gated/paid plugins for free.
       allow update: if isSuperStaff() ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts',
+            ['slug', 'ownerUid', 'hosts', 'enabledPlugins',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
-             'seatAddons', 'stripeCustomerId', 'subscription',
+             'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
 
       // The roster is visible to the whole org (names/emails are
