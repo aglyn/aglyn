@@ -1,13 +1,20 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Media files are public site assets (tenant pages embed the URLs).
-    // Writes are denied entirely (AGL-85): uploads and deletes go through
-    // the console's /api/media/upload route (Admin SDK bypasses rules),
-    // which enforces auth, host-admin membership, and the storage quota.
+    // All access is denied at the rules layer — every legitimate path
+    // bypasses rules, so a rule grant is unnecessary and only widens the
+    // attack surface:
+    //   - Public site media is served via per-object
+    //     `firebaseStorageDownloadTokens` URLs (the token grants read and
+    //     bypasses rules); tenant pages embed those URLs.
+    //   - Uploads/deletes and all server reads (e.g. adminAudit-archive/,
+    //     plugin artifacts) go through Admin SDK routes, which also bypass
+    //     rules and enforce auth, membership, and the storage quota (AGL-85).
+    // A blanket `allow read: if true` here does nothing for the tokenized
+    // media case but exposes the staff audit archives and plugin bundles
+    // in the same bucket to anyone who guesses an object path — so deny.
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if false;
+      allow read, write: if false;
     }
   }
 }
