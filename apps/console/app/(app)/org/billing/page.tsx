@@ -321,36 +321,56 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
     ],
   )
 
-  // Invoice history (AGL-248), billing.view-gated server-side.
+  // Invoice history (AGL-248, AGL-534), billing.view-gated server-side.
+  // Cursor-paginated; "Load more" appends older invoices.
   const [invoices, setInvoices] = useState<Array<{
     id: string
     number: string | null
     status: string | null
     amountDueCents: number
+    totalCents: number
     currency: string
+    created: string | null
+    paidAt: string | null
     periodEnd: string | null
     hostedInvoiceUrl: string | null
+    invoicePdf: string | null
+    receiptUrl: string | null
   }> | null>(null)
-  useEffect(() => {
-    if (!orgId || !user || (permissionsLoaded && !can('billing.view'))) return
-    let active = true
-    void (async () => {
+  const [invoicesHasMore, setInvoicesHasMore] = useState(false)
+  const [invoiceCursor, setInvoiceCursor] = useState<string | null>(null)
+  const [invoicesLoading, setInvoicesLoading] = useState(false)
+  const fetchInvoices = useCallback(
+    async (cursor?: string | null) => {
+      if (!orgId || !user) return
+      setInvoicesLoading(true)
       try {
         const idToken = await (user as any)?.getIdToken?.()
         const response = await fetch(
-          `/api/billing/invoices?orgId=${encodeURIComponent(orgId)}`,
+          `/api/billing/invoices?orgId=${encodeURIComponent(orgId)}` +
+            (cursor ? `&startingAfter=${encodeURIComponent(cursor)}` : ''),
           { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
         if (!response.ok) return
         const payload = await response.json()
-        if (active) setInvoices(payload.invoices ?? [])
+        setInvoices((previous) =>
+          cursor
+            ? [...(previous ?? []), ...(payload.invoices ?? [])]
+            : (payload.invoices ?? []),
+        )
+        setInvoicesHasMore(payload.hasMore === true)
+        setInvoiceCursor(payload.nextCursor ?? null)
       } catch {
-        // The card keeps its loading state on failure.
+        // The card keeps its current state on failure.
+      } finally {
+        setInvoicesLoading(false)
       }
-    })()
-    return () => {
-      active = false
-    }
+    },
+    [orgId, user],
+  )
+  useEffect(() => {
+    if (!orgId || !user || (permissionsLoaded && !can('billing.view'))) return
+    void fetchInvoices()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, user, permissionsLoaded])
 
@@ -543,46 +563,102 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         {'No invoices yet.'}
                       </Typography>
                     ) : (
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Invoice'}</TableCell>
-                            <TableCell>{'Status'}</TableCell>
-                            <TableCell>{'Amount'}</TableCell>
-                            <TableCell>{'Period end'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {invoices.map((invoice) => (
-                            <TableRow key={invoice.id}>
-                              <TableCell>
-                                {invoice.hostedInvoiceUrl ? (
-                                  <a
-                                    href={invoice.hostedInvoiceUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    {invoice.number ?? invoice.id}
-                                  </a>
-                                ) : (
-                                  (invoice.number ?? invoice.id)
-                                )}
-                              </TableCell>
-                              <TableCell>{invoice.status ?? '—'}</TableCell>
-                              <TableCell>
-                                {`$${(invoice.amountDueCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
-                              </TableCell>
-                              <TableCell>
-                                {invoice.periodEnd
-                                  ? new Date(
-                                      invoice.periodEnd,
-                                    ).toLocaleDateString()
-                                  : '—'}
-                              </TableCell>
+                      <>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>{'Invoice'}</TableCell>
+                              <TableCell>{'Date'}</TableCell>
+                              <TableCell>{'Status'}</TableCell>
+                              <TableCell>{'Amount'}</TableCell>
+                              <TableCell align="right">{'Documents'}</TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHead>
+                          <TableBody>
+                            {invoices.map((invoice) => (
+                              <TableRow key={invoice.id}>
+                                <TableCell>
+                                  {invoice.number ?? invoice.id}
+                                </TableCell>
+                                <TableCell>
+                                  {invoice.created
+                                    ? new Date(
+                                        invoice.created,
+                                      ).toLocaleDateString()
+                                    : '—'}
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={invoice.status ?? '—'}
+                                    size="small"
+                                    variant="outlined"
+                                    color={
+                                      invoice.status === 'paid'
+                                        ? 'success'
+                                        : invoice.status === 'open'
+                                          ? 'warning'
+                                          : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {`$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Stack
+                                    direction="row"
+                                    spacing={1.5}
+                                    sx={{ justifyContent: 'flex-end' }}
+                                  >
+                                    {invoice.hostedInvoiceUrl ? (
+                                      <Link
+                                        href={invoice.hostedInvoiceUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        variant="body2"
+                                      >
+                                        {'View'}
+                                      </Link>
+                                    ) : null}
+                                    {invoice.invoicePdf ? (
+                                      <Link
+                                        href={invoice.invoicePdf}
+                                        variant="body2"
+                                      >
+                                        {'PDF'}
+                                      </Link>
+                                    ) : null}
+                                    {invoice.receiptUrl ? (
+                                      <Link
+                                        href={invoice.receiptUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        variant="body2"
+                                      >
+                                        {'Receipt'}
+                                      </Link>
+                                    ) : null}
+                                  </Stack>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {invoicesHasMore ? (
+                          <Box sx={{ textAlign: 'center', mt: 1 }}>
+                            <Button
+                              size="small"
+                              color="secondary"
+                              disabled={invoicesLoading}
+                              onClick={() => void fetchInvoices(invoiceCursor)}
+                            >
+                              {invoicesLoading
+                                ? 'Loading…'
+                                : 'Load older invoices'}
+                            </Button>
+                          </Box>
+                        ) : null}
+                      </>
                     )}
                   </CardDisplay>
                 ),

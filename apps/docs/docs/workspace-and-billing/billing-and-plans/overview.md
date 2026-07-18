@@ -74,7 +74,11 @@ same Stripe integration.
   charge before you confirm, and apply in place (no second checkout).
 - **Cancel any time** — the subscription runs to the end of the paid period; a warning
   chip shows the end date and you can resume before it hits.
-- **Invoice history** with **opens into Stripe-hosted invoices** from the billing page.
+- **Invoices & receipts** — the billing page's **Billing history** table lists every
+  invoice with its date, status, and amount. Each row links to the **Stripe-hosted
+  invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
+  it's paid — everything you need for expense reports and bookkeeping. Older invoices
+  load on demand.
 - **Manage payment methods** opens the Stripe **Billing Portal** — update cards, view
   receipts, and set tax details there. It works even after a subscription lapses.
 - If a payment fails, the console shows a **past-due banner** during Stripe's retry
