@@ -583,17 +583,26 @@ export class CanvasManager {
     index = NaN,
   ): NodeSchema<any> {
     if (!preset) throw new Error('Invalid preset')
-    if (!parent) throw new Error('Invalid parent node')
+    // Attach to the live node in this canvas. A caller-supplied object
+    // that is not in the node map (a stale reference — or historically the
+    // console INSERT menu's click event) would otherwise get the child id
+    // pushed onto ITS `nodes` array while the child lands in the map as a
+    // detached node: absent from the hierarchy, the canvas, and saves
+    // (AGL-537). Fail loud instead of corrupting the tree.
+    const target = parent?.$id != null ? this.getNode(parent.$id) : undefined
+    if (!target) throw new Error('Invalid parent node')
     this.saveHistory()
     const presetJS = toJS(preset)
     const duplicate = this.createDuplicateNode(presetJS.data)
-    duplicate.parentId = parent.$id
+    duplicate.parentId = target.$id
     const parsed = this.processNodesToDenormalized(duplicate)
-    this.setNodes(parsed, true)
 
+    // Register the subtree and append the child id in one action so
+    // observers never see the intermediate detached state.
     runInAction(() => {
-      if (isNaN(index)) (parent.nodes ||= []).push(duplicate.$id)
-      else (parent.nodes ||= []).splice(index, 0, duplicate.$id)
+      this.setNodes(parsed, true)
+      if (isNaN(index)) (target.nodes ||= []).push(duplicate.$id)
+      else (target.nodes ||= []).splice(index, 0, duplicate.$id)
     })
 
     return this.getNode(duplicate.$id)!

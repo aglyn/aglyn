@@ -356,7 +356,13 @@ function LayoutBesignerPage(props) {
                   path: ICON_VARIANT_MODIFY_ADD.path,
                 },
                 children: 'New Element',
-                onClick: handleAddElementClick,
+                // Capture the current selection as the insert target when
+                // the picker opens. Passing the callback directly handed the
+                // menu click event in as `parent`, which both detached the
+                // created node from the tree and broke placement-constraint
+                // validation (AGL-537).
+                onClick: () =>
+                  handleAddElementClick(Besigner.focus.getLastSelected()),
               },
             ],
           },

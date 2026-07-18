@@ -244,6 +244,109 @@ describe('Aglyn: Screen Manager', () => {
     })
   })
 
+  describe('addNodeFromPreset (AGL-537)', () => {
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+
+    const makePreset = (componentId: string, children: string[] = []) =>
+      ({
+        $id: `preset-${componentId}`,
+        type: NodeType.PRESET,
+        data: {
+          $id: 'seed',
+          type: NodeType.NODE,
+          componentId,
+          pluginId: 'test-plugin',
+          props: {},
+          sx: {},
+          nodes: children.map((childComponentId, i) => ({
+            $id: `seed-child-${i}`,
+            type: NodeType.NODE,
+            componentId: childComponentId,
+            pluginId: 'test-plugin',
+            props: {},
+            sx: {},
+            nodes: [] as NodeSchemaNested[],
+          })),
+        },
+      }) as any
+
+    /** Node ids present in the map but referenced by no parent's `nodes`. */
+    const collectOrphans = (canvas: CanvasManager): NodeId[] => {
+      const referenced = new Set<NodeId>([NODE_ROOT_ID])
+      for (const node of canvas.nodes.values()) {
+        for (const id of node.nodes ?? []) referenced.add(id)
+      }
+      return [...canvas.nodes.keys()].filter((id) => !referenced.has(id))
+    }
+
+    it('creates the node and appends it to the root in the same update', () => {
+      const canvas = makeCanvas()
+      const root = canvas.getNode(NODE_ROOT_ID)!
+
+      const node = canvas.addNodeFromPreset(makePreset('appbar'), root)
+
+      expect(node).toBeTruthy()
+      expect(node.parentId).toBe(NODE_ROOT_ID)
+      expect(canvas.getNode(NODE_ROOT_ID)!.nodes).toContain(node.$id)
+      expect(collectOrphans(canvas)).toEqual([])
+    })
+
+    it('inserts into a selected container and registers preset children', () => {
+      const canvas = makeCanvas()
+      const container = canvas.getNode('child2')!
+
+      const node = canvas.addNodeFromPreset(
+        makePreset('appbar', ['toolbar']),
+        container,
+      )
+
+      expect(node.parentId).toBe('child2')
+      expect(canvas.getNode('child2')!.nodes).toContain(node.$id)
+      // The preset's default child is grafted and attached too.
+      expect(node.nodes).toHaveLength(1)
+      expect(canvas.getNode(node.nodes![0])?.parentId).toBe(node.$id)
+      // The root only ever gained its original children.
+      expect(canvas.getNode(NODE_ROOT_ID)!.nodes).toEqual([
+        'child1',
+        'child2',
+      ])
+      expect(collectOrphans(canvas)).toEqual([])
+    })
+
+    it('resolves a stale parent reference to the live canvas node', () => {
+      const canvas = makeCanvas()
+      // A detached copy that only shares the id with the live node — e.g. a
+      // node object retained across a canvas reload.
+      const stale = { $id: 'child2' } as any
+
+      const node = canvas.addNodeFromPreset(makePreset('appbar'), stale)
+
+      expect(canvas.getNode('child2')!.nodes).toContain(node.$id)
+      expect(stale.nodes).toBeUndefined()
+      expect(collectOrphans(canvas)).toEqual([])
+    })
+
+    it('refuses a parent that is not a live canvas node instead of orphaning', () => {
+      const canvas = makeCanvas()
+      const before = canvas.nodes.size
+      // The shape of the historical bug: a menu click event handed in as
+      // the parent (truthy, but not a node).
+      const clickEvent = { type: 'click', currentTarget: {} } as any
+
+      expect(() =>
+        canvas.addNodeFromPreset(makePreset('appbar'), clickEvent),
+      ).toThrow('Invalid parent node')
+
+      expect(canvas.nodes.size).toBe(before)
+      expect('nodes' in clickEvent).toBe(false)
+      expect(collectOrphans(canvas)).toEqual([])
+    })
+  })
+
   describe('applyNodes history', () => {
     it('makes a raw-json replacement undoable and redoable', () => {
       const canvas = new CanvasManager(undefined as any)
