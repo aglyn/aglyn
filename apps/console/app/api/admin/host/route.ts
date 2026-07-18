@@ -54,7 +54,7 @@ async function handler(request: Request): Promise<Response> {
       return emailUnverifiedResponse()
     }
     if (!decoded['staff']) return Response.json({ error: 'Staff only' }, { status: 403 })
-    const actorRole = String(decoded['staffRole'] ?? 'super')
+    const actorRole = String(decoded['staffRole'] ?? 'support')
     if (actorRole !== 'super') {
       return Response.json({ error: 'Requires the super staff role' }, { status: 403 })
     }

@@ -28,12 +28,23 @@
  * Returns false when CRON_SECRET is unset so an unconfigured deploy can't be
  * triggered.
  */
+import { timingSafeEqual } from 'crypto'
+
+// Constant-time string equality (AGL-512) so secret checks don't leak via
+// response-timing. Length is compared first (not itself secret).
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  if (ab.length !== bb.length) return false
+  return timingSafeEqual(new Uint8Array(ab), new Uint8Array(bb))
+}
+
 export function isCronAuthorized(
   headers: Partial<Record<string, string>>,
 ): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
-  if (headers.authorization === `Bearer ${secret}`) return true
-  if (headers['x-cron-secret'] === secret) return true
+  if (safeEqual(headers.authorization ?? '', `Bearer ${secret}`)) return true
+  if (safeEqual(headers['x-cron-secret'] ?? '', secret)) return true
   return false
 }

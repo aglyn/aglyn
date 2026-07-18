@@ -76,16 +76,35 @@ async function resolveOrgSlug(
 }
 
 export async function middleware(request: NextRequest) {
+  // Per-request CSP nonce (AGL-518). Next reads it from the request
+  // Content-Security-Policy header and stamps it on the scripts it emits;
+  // `strict-dynamic` then trusts the chunks those scripts load. Shipped
+  // REPORT-ONLY so the browser reports violations without blocking — flip to
+  // enforcing by renaming the response header to `Content-Security-Policy`
+  // (after confirming reports are clean and noncing any inline scripts, e.g.
+  // the GA snippet). Layers over the enforcing object-src/base-uri/
+  // frame-ancestors CSP already set in with-aglyn.nextjs.config.js.
+  const nonce = crypto.randomUUID().replace(/-/g, '')
+  const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-nonce', nonce)
+  requestHeaders.set('Content-Security-Policy', csp)
+  const pass = () => {
+    const res = NextResponse.next({ request: { headers: requestHeaders } })
+    res.headers.set('Content-Security-Policy-Report-Only', csp)
+    return res
+  }
+
   if (!WORKSPACE_DOMAIN || !PROJECT_ID || !API_KEY) {
-    return NextResponse.next()
+    return pass()
   }
   const hostname = (request.headers.get('host') ?? '').split(':')[0]
   if (hostname === WORKSPACE_DOMAIN || !hostname.endsWith(`.${WORKSPACE_DOMAIN}`)) {
-    return NextResponse.next()
+    return pass()
   }
   const slug = hostname.slice(0, -(WORKSPACE_DOMAIN.length + 1))
   if (slug.includes('.') || APEX_LABELS.has(slug)) {
-    return NextResponse.next()
+    return pass()
   }
   const verdict = await resolveOrgSlug(slug)
   if (verdict.movedTo) {
@@ -94,7 +113,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(moved, 308)
   }
   if (verdict.known) {
-    return NextResponse.next()
+    return pass()
   }
   const apex = request.nextUrl.clone()
   apex.hostname = `app.${WORKSPACE_DOMAIN}`

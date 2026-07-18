@@ -20,6 +20,7 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  memberHasOrgPermission,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
 
@@ -86,6 +87,14 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'No workspace to bill' }, { status: 403 })
     }
     const orgId = orgMembership.orgId
+    // Opening a checkout session commits the org to a plan/charge, so it is
+    // billing.manage-gated (AGL-511) like subscription management — not just
+    // any-member as before.
+    if (
+      !(await memberHasOrgPermission(orgId, orgMembership.member, 'billing.manage'))
+    ) {
+      return Response.json({ error: 'billing.manage required' }, { status: 403 })
+    }
     const origin = headers.origin ?? `https://${headers.host}`
 
     const params = new URLSearchParams({

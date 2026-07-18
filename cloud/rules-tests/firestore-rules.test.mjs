@@ -368,4 +368,146 @@ describe('staff RBAC on org billing keys (AGL-206/238)', () => {
   })
 })
 
+// Pre-release hardening: field-level guards added by the security audit
+// (AGL-493/494/501/502/503/508). Each proves the guard denies the abusive
+// write/read while leaving the legitimate one intact.
+describe('pre-release hardening guards', () => {
+  const LISTING = 'listing-1'
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // Publisher profile owned by OWNER (H3, M6 seed).
+      await setDoc(doc(db, 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner',
+      })
+      // Secret-/PII-bearing host subcollections (M5).
+      await setDoc(doc(db, 'hosts', HOST, 'webhooks', 'wh1'), {
+        url: 'https://hook.example', secret: 'sh',
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'orders', 'o1'), {
+        total: 100, email: 'buyer@x.z',
+      })
+      // Host plugin install pin (M11).
+      await setDoc(doc(db, 'hosts', HOST, 'installs', 'p1'), {
+        version: '1.0.0', sha256: 'abc',
+      })
+      // Community listing owned by OWNER with server-managed fields (M6).
+      await setDoc(doc(db, 'communityListings', LISTING), {
+        profileId: OWNER, name: 'Plugin', installCount: 5, priceUsd: 10,
+      })
+    })
+  })
+
+  it('editors/admins cannot rewrite host identity keys; staff can (AGL-493)', async () => {
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), { memberRoles: { [EDITOR]: 'admin' } }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'hosts', HOST), {
+        memberRoles: { [OWNER]: 'admin', [OUTSIDER]: 'admin' },
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), { orgId: 'org-fake' }),
+    )
+    // Content updates still work; staff may still adjust the projection.
+    await assertSucceeds(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST), { displayName: 'Renamed' }),
+    )
+    await assertSucceeds(
+      updateDoc(doc(authed(STAFF, { staff: true }), 'hosts', HOST), {
+        memberRoles: { [OWNER]: 'admin' },
+      }),
+    )
+  })
+
+  it('profile owner cannot set Stripe payout fields; metadata is fine (AGL-494)', async () => {
+    await assertSucceeds(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', bio: 'hi',
+      }),
+    )
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', stripeChargesEnabled: true,
+      }),
+    )
+    await assertFails(
+      setDoc(doc(authed(OWNER), 'profiles', OWNER), {
+        handle: 'owner-pub', displayName: 'Owner', stripeAccountId: 'acct_x',
+      }),
+    )
+    // A brand-new profile likewise can't smuggle the payout fields in on create.
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'profiles', EDITOR), {
+        handle: 'ed-pub', displayName: 'Ed', stripeAccountId: 'acct_y',
+      }),
+    )
+    await assertSucceeds(
+      setDoc(doc(authed(EDITOR), 'profiles', EDITOR), {
+        handle: 'ed-pub', displayName: 'Ed',
+      }),
+    )
+  })
+
+  it('org admins cannot self-enable plugins; super staff can (AGL-501)', async () => {
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { enabledPlugins: ['paid'] }),
+    )
+    await assertFails(
+      updateDoc(
+        doc(authed(STAFF, { staff: true, staffRole: 'billing' }), 'orgs', ORG),
+        { enabledPlugins: ['paid'] },
+      ),
+    )
+    await assertSucceeds(
+      updateDoc(
+        doc(authed(STAFF, { staff: true, staffRole: 'super' }), 'orgs', ORG),
+        { enabledPlugins: ['paid'] },
+      ),
+    )
+  })
+
+  it('webhook secrets and order PII are hidden from viewers (AGL-502)', async () => {
+    await assertSucceeds(getDoc(doc(authed(EDITOR), 'hosts', HOST, 'webhooks', 'wh1')))
+    await assertSucceeds(getDoc(doc(authed(OWNER), 'hosts', HOST, 'orders', 'o1')))
+    await assertFails(getDoc(doc(authed(VIEWER), 'hosts', HOST, 'webhooks', 'wh1')))
+    await assertFails(getDoc(doc(authed(VIEWER), 'hosts', HOST, 'orders', 'o1')))
+    // A non-secret subcollection stays viewer-readable (catch-all unchanged).
+    await assertSucceeds(getDoc(doc(authed(VIEWER), 'hosts', HOST, 'variables', 'var-1')))
+  })
+
+  it('listing owner cannot tamper server-managed fields (AGL-503)', async () => {
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { deletedAt: new Date() }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { installCount: 9999 }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { priceUsd: 0 }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { profileId: OUTSIDER }),
+    )
+    // Non-owners still can't touch someone else's listing.
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'communityListings', LISTING), { deletedAt: new Date() }),
+    )
+  })
+
+  it('host install pins are create/update API-only but client-deletable (AGL-508)', async () => {
+    await assertFails(
+      setDoc(doc(authed(EDITOR), 'hosts', HOST, 'installs', 'p2'), { version: '2.0.0' }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'installs', 'p1'), { version: '9.0.0' }),
+    )
+    // Uninstall (delete) stays a client action for editors/admins.
+    await assertSucceeds(
+      deleteDoc(doc(authed(EDITOR), 'hosts', HOST, 'installs', 'p1')),
+    )
+  })
+})
+
 assert.ok(true)

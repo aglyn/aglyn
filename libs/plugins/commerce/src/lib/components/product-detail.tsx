@@ -323,7 +323,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
         {structuredData ? (
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+            dangerouslySetInnerHTML={{ __html: Aglyn.safeJsonLd(structuredData) }}
           />
         ) : null}
         <Box sx={{ flex: 1, minWidth: 0 }}>

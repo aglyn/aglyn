@@ -47,15 +47,19 @@ service cloud.firestore {
       // identity keys out of reach. Members with the admin role may
       // rename the org; nothing else is client-writable.
       allow create, delete: if false;
+      // `enabledPlugins` is the runtime plugin switchboard, written ONLY by
+      // the install API after entitlement + kill-switch checks (AGL-501) —
+      // it must stay out of every client-writable branch, or an admin can
+      // enable gated/paid plugins for free.
       allow update: if isSuperStaff() ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['slug', 'ownerUid', 'hosts',
+            ['slug', 'ownerUid', 'hosts', 'enabledPlugins',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt'])) ||
         (canManageOrg() && orgNotSuspended() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'hosts', 'plan', 'entitlements',
-             'seatAddons', 'stripeCustomerId', 'subscription',
+             'enabledPlugins', 'seatAddons', 'stripeCustomerId', 'subscription',
              'suspendedAt', 'suspendedReason', 'erasureRequestedAt']));
 
       // The roster is visible to the whole org (names/emails are
@@ -219,9 +223,16 @@ service cloud.firestore {
       // checks org role + quota + subdomain uniqueness with the Admin SDK.
       allow create: if false;
       // The host doc carries live directories (screens, layouts), so
-      // editors update it too; deletion is admin-only.
+      // editors update it too; deletion is admin-only. Editors must NOT be
+      // able to rewrite the identity/projection keys: `memberRoles` is the
+      // access list (self-escalation / add-outsider / lock-out-owner),
+      // `orgId` gates suspension, and `admins`/`hosts` are legacy/ownership.
+      // Those keys are Admin-SDK-only (org APIs bypass rules); staff keep
+      // full control for tooling.
       allow update: if isStaff() ||
-        (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
+        (canWriteHostContent(hostId) && !hostOrgSuspended(hostId) &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['memberRoles', 'orgId', 'admins', 'hosts']));
       allow delete: if isStaff() ||
         (hostMemberRole(hostId) == 'admin' && !hostOrgSuspended(hostId));
       // Screen/layout DOC creates are API-only (AGL-473): /api/hosts/
@@ -252,12 +263,25 @@ service cloud.firestore {
             (canWriteHostContent(hostId) && !hostOrgSuspended(hostId));
         }
       }
+      // Secret-/PII-bearing subcollections are carved out of the viewer-
+      // readable catch-all below (AGL-502): `webhooks` docs hold an HMAC
+      // signing secret + target URL, and `orders` hold customer PII/payment
+      // data — reads are admin/editor only, never viewer. Writes fall through
+      // to the catch-all (the console manages webhooks client-side; orders
+      // are server-written), so only the READ is tightened here.
+      match /webhooks/{webhookId} {
+        allow read: if isStaff() || canWriteHostContent(hostId);
+      }
+      match /orders/{orderId} {
+        allow read: if isStaff() || canWriteHostContent(hostId);
+      }
       // The extra {subcollection} segment matters: a bare {document=**}
       // matches ZERO or more segments in rules v2, i.e. the host doc
       // itself too — which would let editors delete the host through
       // this write rule (caught by rules-tests, AGL-235).
       match /{subcollection}/{document=**} {
-        allow read: if isStaff() || isHostAdmin(hostId);
+        allow read: if isStaff() ||
+          (isHostAdmin(hostId) && !(subcollection in ['webhooks', 'orders']));
         // Quota-governed collections are created via /api/hosts/resources
         // ONLY (AGL-473) — the route enforces the per-plan quota (and the
         // feature entitlement, where paid) server-side. These flat
@@ -265,12 +289,19 @@ service cloud.firestore {
         // client `create` by name is safe. Screens/layouts also appear
         // here — their dedicated blocks above own create; excluding them
         // from update/delete too keeps this catch-all from re-granting.
+        // `installs` (plugin pins) are create/update API-only (AGL-508): the
+        // install route enforces entitlement + purchase + kill-switch before
+        // writing the pin; only DELETE (uninstall) stays client-side, so
+        // update/delete is split to allow the console's uninstall.
         allow create: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
-              'locations', 'products', 'components', 'registers']));
-        allow update, delete: if isStaff() ||
+              'locations', 'products', 'components', 'registers', 'installs']));
+        allow update: if isStaff() ||
+          ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
+            !(subcollection in ['screens', 'layouts', 'installs']));
+        allow delete: if isStaff() ||
           ((canWriteHostContent(hostId) && !hostOrgSuspended(hostId)) &&
             !(subcollection in ['screens', 'layouts']));
       }
@@ -305,14 +336,28 @@ service cloud.firestore {
     // and names are length-capped here since any owner writes client-side.
     match /profiles/{profileUid} {
       allow read: if true;
-      allow write: if (isStaff() ||
-          (isSignedIn() && request.auth.uid == profileUid)) &&
-        request.resource.data.handle is string &&
-        request.resource.data.handle.size() >= 3 &&
-        request.resource.data.handle.size() <= 30 &&
-        request.resource.data.handle.matches('[a-z0-9][a-z0-9-]*') &&
-        request.resource.data.displayName is string &&
-        request.resource.data.displayName.size() <= 80;
+      // handle/displayName are length-capped since the owner writes client
+      // side. `stripeAccountId` (payout destination) and `stripeChargesEnabled`
+      // (payments-enabled gate) are set ONLY server-side after Connect
+      // onboarding/KYC and are trusted by every checkout path — the client
+      // must never set or change them (block on create, freeze on update).
+      function profileFieldsValid() {
+        return request.resource.data.handle is string &&
+          request.resource.data.handle.size() >= 3 &&
+          request.resource.data.handle.size() <= 30 &&
+          request.resource.data.handle.matches('[a-z0-9][a-z0-9-]*') &&
+          request.resource.data.displayName is string &&
+          request.resource.data.displayName.size() <= 80;
+      }
+      function profileOwner() {
+        return isStaff() || (isSignedIn() && request.auth.uid == profileUid);
+      }
+      allow create: if profileOwner() && profileFieldsValid() &&
+        !request.resource.data.keys()
+          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+      allow update: if profileOwner() && profileFieldsValid() &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
     }
 
     // Listings are public reads. Creates and version snapshots happen ONLY
@@ -322,7 +367,16 @@ service cloud.firestore {
     match /communityListings/{listingId} {
       allow read: if true;
       allow create: if false;
-      allow update, delete: if isStaff() ||
+      // Owners toggle metadata (deletedAt un/republish) client-side, but
+      // must NOT touch server-managed fields (AGL-503): installCount is
+      // incremented by the install API (ranking integrity), priceUsd gates
+      // purchases, and profileId is the ownership key. Delete stays open to
+      // the owner; staff moderate anything.
+      allow update: if isStaff() ||
+        (isSignedIn() && resource.data.profileId == request.auth.uid &&
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['installCount', 'priceUsd', 'profileId']));
+      allow delete: if isStaff() ||
         (isSignedIn() && resource.data.profileId == request.auth.uid);
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/community/install, which

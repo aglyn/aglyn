@@ -149,7 +149,7 @@ const EventList = forwardRef<HTMLDivElement, EventListProps>((props, ref) => {
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
+              __html: Aglyn.safeJsonLd({
                 '@context': 'https://schema.org',
                 '@type': 'Event',
                 name: event.title,

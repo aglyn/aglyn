@@ -43,17 +43,22 @@ jobs:
     steps:
       - name: Resolve route from the firing schedule
         id: route
+        # Pass event fields through env rather than inlining ${{ }} into the
+        # shell, so nothing can be interpreted as script (AGL-521).
+        env:
+          FIRED_SCHEDULE: ${{ github.event.schedule }}
+          DISPATCH_PATH: ${{ github.event.inputs.path }}
         run: |
-          case "${{ github.event.schedule }}" in
+          case "$FIRED_SCHEDULE" in
             '0 2 * * *') path=/api/billing/report-usage ;;
             '0 3 * * *') path=/api/admin/audit-archive ;;
             '0 4 * * *') path=/api/admin/run-erasures ;;
             '0 8 * * *') path=/api/billing/usage-alerts ;;
             '0 6 1 * *') path=/api/billing/usage-email ;;
-            *) path='${{ github.event.inputs.path }}' ;;
+            *) path="$DISPATCH_PATH" ;;
           esac
           if [ -z "$path" ]; then
-            echo "No route resolved (schedule='${{ github.event.schedule }}')" >&2
+            echo "No route resolved (schedule='$FIRED_SCHEDULE')" >&2
             exit 1
           fi
           echo "path=$path" >> "$GITHUB_OUTPUT"

@@ -19,8 +19,11 @@ import getAllowedHeaders from './get-allowed-headers'
 import getOriginHeadersFromRequest from './get-origin-headers-from-request'
 import type { CorsOptions } from './types'
 
+// Deny-by-default (AGL-520): callers must opt into an origin or allowlist
+// rather than inheriting `*`, so this helper can never silently expose an
+// authenticated endpoint cross-origin.
 const defaultOptions: CorsOptions = {
-  origin: '*',
+  origin: false,
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   preflightContinue: false,
   optionsSuccessStatus: HttpStatusCode.NO_CONTENT,
@@ -67,7 +70,15 @@ export async function corsHandleResponse(
   originHeaders.forEach(mergeHeaders)
 
   if (opts.credentials) {
-    headers.set('Access-Control-Allow-Credentials', 'true')
+    // Never pair credentials with a wildcard origin (AGL-520): browsers
+    // reject it, and honoring it would be a serious cross-origin leak.
+    if (opts.origin === '*') {
+      console.error(
+        'CORS: refusing Access-Control-Allow-Credentials with origin "*"',
+      )
+    } else {
+      headers.set('Access-Control-Allow-Credentials', 'true')
+    }
   }
 
   const exposed = Array.isArray(opts.exposedHeaders)

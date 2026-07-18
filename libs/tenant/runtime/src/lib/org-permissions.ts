@@ -52,10 +52,11 @@ const NONE: OrgPermissionSet = resolveRolePermissions('viewer')
  * Org-role permission resolver (AGL-238, replacing the manager-seat
  * resolver from AGL-108): the user's role in the relevant org decides the
  * permission flags. Accounts with no org yet resolve as owners with full
- * access — the org is created on first need — and lookup errors fail OPEN
- * for the same reason the old resolver did: these flags are a product-tier
- * boundary, not the security boundary (host access rides the memberRoles
- * rules projection; org APIs re-check membership server-side).
+ * access — the org is created on first need. A lookup error fails CLOSED
+ * when a specific org/host was targeted (AGL-506) — routes like hosts/members
+ * OR these flags into an auth decision, so a transient error must not hand
+ * out manageMembers. Only the context-free fresh-account case keeps the
+ * owner default.
  */
 export async function resolveOrgPermissions(
   uid: string,
@@ -81,7 +82,19 @@ export async function resolveOrgPermissions(
       permissions: resolveRolePermissions(ORG_ROLE_PERMISSION_BASE[role]),
     }
   } catch (error) {
-    console.error('org-permissions resolve failed (failing open)', error)
+    // Fail CLOSED when a specific org/host was targeted (AGL-506): a lookup
+    // error must never grant full permissions for a real org. Only the
+    // context-free fresh-account case keeps the owner default.
+    if (context.orgId || context.hostId) {
+      console.error('org-permissions resolve failed (failing closed)', error)
+      return {
+        orgId: context.orgId ?? null,
+        role: null,
+        isOwner: false,
+        permissions: NONE,
+      }
+    }
+    console.error('org-permissions resolve failed (no org targeted)', error)
     return { orgId: null, role: null, isOwner: true, permissions: ALL_TRUE }
   }
 }

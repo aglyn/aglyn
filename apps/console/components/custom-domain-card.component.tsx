@@ -69,8 +69,12 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
     setChecking(true)
     const dequeue = queueLoading()
     try {
+      const idToken = await (user as any)?.getIdToken?.()
       const verifyResponse = await fetch(
         `/api/domains/verify?domain=${encodeURIComponent(value)}`,
+        idToken
+          ? { headers: { Authorization: `Bearer ${idToken}` } }
+          : undefined,
       )
       const verify = await verifyResponse.json()
       if (!verifyResponse.ok) {
@@ -92,8 +96,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       }
       await updateDoc(doc(firestore, 'hosts', hostId), { cname: value })
       // Vercel attachment provisions SSL; 501 means the platform env isn't
-      // configured yet — DNS side is done either way.
-      const idToken = await (user as any)?.getIdToken?.()
+      // configured yet — DNS side is done either way (reuses idToken above).
       const attachResponse = await fetch('/api/domains/attach', {
         method: 'POST',
         headers: {

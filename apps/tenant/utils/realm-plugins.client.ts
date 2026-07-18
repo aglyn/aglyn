@@ -56,6 +56,10 @@ export async function loadSiteRealmPlugins(
  */
 async function loadDevRealmBundles(): Promise<void> {
   if (process.env.NODE_ENV === 'production') return
+  // Explicit opt-in (AGL-516): NODE_ENV alone is a fragile guard for an
+  // UNVERIFIED import() path, so also require a deliberate dev flag — a
+  // NODE_ENV!=production preview build can't silently enable it.
+  if (process.env.NEXT_PUBLIC_PLUGIN_DEV !== 'enabled') return
   const configured = process.env.NEXT_PUBLIC_PLUGIN_DEV_BUNDLES ?? ''
   if (!configured) return
   Aglyn.setRealmPluginHost({ React, jsxRuntime, aglyn: Aglyn })

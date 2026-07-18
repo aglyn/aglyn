@@ -178,10 +178,22 @@ export async function loadRealmPlugins(
   options: LoadRealmPluginsOptions,
 ): Promise<void> {
   const host = (globalThis as Record<string, unknown>)[HOST_GLOBAL]
+  const realmInstalls = installs.filter((install) => install.trust === 'realm')
+  // Fail closed (AGL-507): without the trust public key we cannot verify
+  // bundle signatures, so refuse to load any realm plugin rather than fall
+  // back to sha256-only — mirroring the mandatory server-side key check
+  // (realm-server.ts). Silently degrading here contradicted the documented
+  // "verification is MANDATORY and fails closed" contract.
+  if (realmInstalls.length > 0 && !options.publicKeyBase64) {
+    console.error(
+      `realm plugins: refusing to load ${realmInstalls.length} bundle(s) — ` +
+        'NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY is not configured, so signatures ' +
+        'cannot be verified',
+    )
+    return
+  }
   await Promise.all(
-    installs
-      .filter((install) => install.trust === 'realm')
-      .map((install) => {
+    realmInstalls.map((install) => {
         const key = `${install.listingId}@${install.version}`
         let promise = loaded.get(key)
         if (!promise) {

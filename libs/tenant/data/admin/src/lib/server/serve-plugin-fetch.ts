@@ -19,10 +19,54 @@ import {
   isPluginNetworkAllowed,
   PLUGIN_FETCH_MAX_BODY_BYTES,
 } from '@aglyn/aglyn/server'
+import { lookup } from 'dns/promises'
+import { isIPv4, isIPv6 } from 'net'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { Agent } from 'undici'
 import { firebaseAdmin } from './firebase-admin'
 
 const FETCH_TIMEOUT_MS = 8000
+
+/** True for loopback / private / link-local / CGNAT / ULA addresses. */
+function isPrivateIp(ip: string): boolean {
+  if (isIPv4(ip)) {
+    const [a, b] = ip.split('.').map(Number)
+    if (a === 0 || a === 10 || a === 127) return true
+    if (a === 169 && b === 254) return true // link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    if (a === 100 && b >= 64 && b <= 127) return true // CGNAT
+    return false
+  }
+  if (isIPv6(ip)) {
+    const low = ip.toLowerCase()
+    if (low === '::1' || low === '::') return true
+    if (low.startsWith('fc') || low.startsWith('fd')) return true // ULA
+    if (low.startsWith('fe80')) return true // link-local
+    if (low.startsWith('::ffff:')) return isPrivateIp(low.slice(7)) // v4-mapped
+    return false
+  }
+  return true // unparseable → refuse
+}
+
+/**
+ * SSRF hardening (AGL-515): even an https, allowlisted origin can resolve to
+ * an internal address (a plugin author pointing DNS at 127.0.0.1 / the cloud
+ * metadata endpoint). Resolve the host and return a single validated PUBLIC
+ * address to pin the connection to (null if any resolved address is private).
+ * Pinning the exact IP the fetch connects to closes the DNS-rebinding TOCTOU —
+ * the name can't re-resolve to an internal target between check and connect.
+ */
+async function resolvePublicIp(hostname: string): Promise<string | null> {
+  try {
+    const addresses = await lookup(hostname, { all: true })
+    if (!addresses.length) return null
+    if (addresses.some((a) => isPrivateIp(a.address))) return null
+    return addresses[0].address
+  } catch {
+    return null
+  }
+}
 
 /**
  * Host-mediated plugin fetch (AGL-191). The sandboxed plugin can't reach
@@ -91,19 +135,45 @@ export async function servePluginFetch(
         .json({ ok: false, status: 0, error: 'URL not in allowlist' })
       return
     }
+    const pinnedIp = await resolvePublicIp(new URL(url).hostname)
+    if (!pinnedIp) {
+      res
+        .status(403)
+        .json({ ok: false, status: 0, error: 'URL resolves to a non-public address' })
+      return
+    }
 
+    // Pin the socket to the address we just validated (AGL-515): a custom
+    // undici lookup forces the connection to `pinnedIp`, so the name can't be
+    // rebound to an internal target between the check above and the connect.
+    // TLS SNI / certificate validation still use the original hostname.
+    const family = isIPv6(pinnedIp) ? 6 : 4
+    const dispatcher = new Agent({
+      connect: {
+        lookup: (_host, options, cb) =>
+          options && options.all
+            ? cb(null, [{ address: pinnedIp, family }])
+            : cb(null, pinnedIp, family),
+      },
+    })
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    // `dispatcher` is an undici extension not in the DOM RequestInit type;
+    // assigning to a variable first avoids the object-literal excess-property
+    // check while still passing it through to the (undici) global fetch.
+    const requestInit = {
+      method,
+      signal: controller.signal,
+      dispatcher,
+      headers: { Accept: 'application/json, text/*;q=0.9, */*;q=0.1' },
+      ...(method === 'POST' && requestBody ? { body: requestBody } : {}),
+    }
     let upstream: Response
     try {
-      upstream = await fetch(url, {
-        method,
-        signal: controller.signal,
-        headers: { Accept: 'application/json, text/*;q=0.9, */*;q=0.1' },
-        ...(method === 'POST' && requestBody ? { body: requestBody } : {}),
-      })
+      upstream = await fetch(url, requestInit)
     } finally {
       clearTimeout(timeout)
+      await dispatcher.close().catch(() => undefined)
     }
 
     const text = await upstream.text()

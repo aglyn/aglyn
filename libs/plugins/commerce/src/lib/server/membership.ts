@@ -95,7 +95,12 @@ export function setMemberCookie(
   token: string | null,
 ): void {
   const name = memberCookieName(hostId)
-  const base = `${name}=${token ?? ''}; Path=/; HttpOnly; SameSite=Lax`
+  // Secure in production (AGL-500): the member session is an HMAC-signed
+  // credential, so it must never travel over plaintext HTTP on a tenant
+  // custom domain. Omit only in local dev (http://localhost), matching the
+  // console __session cookie.
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
+  const base = `${name}=${token ?? ''}; Path=/; HttpOnly; SameSite=Lax${secure}`
   res.setHeader(
     'Set-Cookie',
     token ? `${base}; Max-Age=${30 * 24 * 60 * 60}` : `${base}; Max-Age=0`,

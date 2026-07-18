@@ -96,25 +96,24 @@ const SAFE_DOMAINS = !IS_PRODUCTION
 
 const SECURITY_HEADERS = [
   /**
-   * This header indicates whether the site should be allowed to be displayed
-   * within an iframe. This can prevent against clickjacking attacks. This
-   * header has been superseded by CSP's frame-ancestors option, which has
-   * better support in modern browsers.
+   * X-Frame-Options dropped (AGL-518): `allow-from <multiple urls>` is not a
+   * valid value (allow-from never supported multiple origins and is
+   * deprecated), so modern browsers ignored it entirely — it provided no
+   * protection. Clickjacking is controlled by CSP frame-ancestors below.
    */
-  {
-    key: 'X-Frame-Options',
-    value: `allow-from ${SAFE_URLS.join(' ')}`,
-  },
 
   /**
-   * This header helps prevent cross-site scripting (XSS), clickjacking and
-   * other code injection attacks. Content Security Policy (CSP) can specify
-   * allowed origins for content including scripts, stylesheets, images, fonts,
-   * objects, media (audio, video), iframes, and more.
+   * Content Security Policy. `frame-ancestors` is the clickjacking allowlist;
+   * `object-src 'none'` kills <object>/<embed> plugin-XSS; `base-uri 'self'`
+   * blocks <base>-tag hijacking of relative URLs (AGL-518). A nonce-based
+   * `script-src` is a larger follow-up — it needs per-request nonce middleware
+   * or Next would break on its own inline hydration scripts.
    */
   {
     key: 'Content-Security-Policy',
-    value: `frame-ancestors ${SAFE_URLS.join(' ')}`,
+    value:
+      `object-src 'none'; base-uri 'self'; ` +
+      `frame-ancestors ${SAFE_URLS.join(' ')}`,
   },
 
   /**

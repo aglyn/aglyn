@@ -27,7 +27,8 @@ import {
   mdiFormatText,
 } from '@aglyn/shared-data-mdi'
 import Typography, { type TypographyProps } from '@mui/material/Typography'
-import { forwardRef } from 'react'
+import DOMPurify from 'dompurify'
+import { forwardRef, useMemo } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { FIELD_TEXT_CONTENT } from '../constants/field-presets'
 import { generatePresetId } from '../utils/generate-preset-id'
@@ -153,21 +154,40 @@ export const presets: Aglyn.PresetSchema[] = [
 
 /**
  * Typography that renders rich text (AGL-54): when the node carries an
- * `html` prop (sanitized at commit time by the inline editor's allowlist),
- * it renders as innerHTML; otherwise plain `children`. Only host admins can
- * write node props, so stored markup carries the site owner's own trust.
+ * `html` prop it renders as innerHTML; otherwise plain `children`.
+ *
+ * The `html` prop is re-sanitized on EVERY render (AGL-497). The inline
+ * editor sanitizes at commit, but screen node props are written directly via
+ * the Firebase client SDK, so a host editor can plant arbitrary `html`
+ * (bypassing the editor) that would execute on the public site AND in the
+ * besigner canvas on console.aglyn.io. DOMPurify is DOM-based, so it paints
+ * on hydrate (SSR yields empty), matching custom-html.
  */
+function sanitizeTypographyHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'base', 'style'],
+    FORBID_ATTR: ['srcdoc', 'formaction'],
+    ALLOW_DATA_ATTR: false,
+  })
+}
+
 const AglynTypography = forwardRef<
   HTMLElement,
   TypographyProps & { html?: string }
 >(function AglynTypography(props, ref) {
   const { html, children, ...rest } = props
-  if (typeof html === 'string' && html) {
+  const sanitized = useMemo(() => {
+    if (typeof html !== 'string' || !html) return null
+    if (typeof window === 'undefined') return '' // SSR paints on hydrate.
+    return sanitizeTypographyHtml(html)
+  }, [html])
+  if (sanitized !== null) {
     return (
       <Typography
         ref={ref}
         {...rest}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: sanitized }}
       />
     )
   }

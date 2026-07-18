@@ -180,7 +180,7 @@ function buildJsonLd(props: Props): string[] {
     const entry = (props.content as any).entry
     if (!entry) return []
     return [
-      JSON.stringify({
+      Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'Article',
         headline: entry.title,
@@ -205,7 +205,7 @@ function buildJsonLd(props: Props): string[] {
   const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
   if (canonicalBase) {
     ld.push(
-      JSON.stringify({
+      Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'WebSite',
         name: siteTitle ?? host?.displayName ?? 'Site',
@@ -224,7 +224,7 @@ function buildJsonLd(props: Props): string[] {
     typeof screenPath === 'string' ? screenPath.split('/').filter(Boolean) : []
   if (canonicalBase && segments.length > 1) {
     ld.push(
-      JSON.stringify({
+      Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: segments.map((segment, index) => ({
@@ -270,8 +270,9 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
         <script
           key={index}
           type="application/ld+json"
-          // Server-rendered structured data; the payload is built from
-          // trusted host/screen fields and JSON.stringify-escaped.
+          // Server-rendered structured data. Built from editor-authored
+          // host/screen fields, so it MUST use safeJsonLd (not JSON.stringify)
+          // — the latter leaves `</script>` intact and breaks out (AGL-496).
           dangerouslySetInnerHTML={{ __html: json }}
         />
       ))}

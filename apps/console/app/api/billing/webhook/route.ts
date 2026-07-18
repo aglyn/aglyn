@@ -32,6 +32,16 @@ function verifyStripeSignature(
   const timestamp = parts['t']
   const signature = parts['v1']
   if (!timestamp || !signature) return false
+  // Replay window (AGL-499): reject deliveries whose signed timestamp is more
+  // than 5 minutes from now — matching Stripe's constructEvent default — so a
+  // captured, once-valid payload cannot be replayed indefinitely.
+  const timestampSeconds = Number(timestamp)
+  if (
+    !Number.isFinite(timestampSeconds) ||
+    Math.abs(Date.now() / 1000 - timestampSeconds) > 300
+  ) {
+    return false
+  }
   const expected = createHmac('sha256', secret)
     .update(`${timestamp}.${payload.toString('utf8')}`)
     .digest('hex')
@@ -90,11 +100,33 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
+  let event: any
   try {
-    const event = JSON.parse(payload.toString('utf8'))
-    const type = String(event?.type ?? '')
-    const object = event?.data?.object ?? {}
+    event = JSON.parse(payload.toString('utf8'))
+  } catch {
+    return Response.json({ error: 'Invalid payload' }, { status: 400 })
+  }
+  const type = String(event?.type ?? '')
+  const object = event?.data?.object ?? {}
 
+  // Idempotency (AGL-498): claim the Stripe event id before running any side
+  // effects so a redelivery (or a replayed request) can't re-apply the
+  // non-idempotent handlers (inventory / gift-card / coupon decrements).
+  // create() is atomic, so a concurrent duplicate loses the race; on failure
+  // below we delete the marker so Stripe's retry still re-runs.
+  const eventId = String(event?.id ?? '')
+  const eventRef = eventId
+    ? firebaseAdmin.app().firestore().collection('stripeEvents').doc(eventId)
+    : null
+  if (eventRef) {
+    try {
+      await eventRef.create({ type, receivedAt: new Date() })
+    } catch {
+      return Response.json({ received: true, duplicate: true }, { status: 200 })
+    }
+  }
+
+  try {
     if (
       type === 'customer.subscription.created' ||
       type === 'customer.subscription.updated' ||
@@ -180,6 +212,9 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ received: true }, { status: 200 })
   } catch (error) {
     console.error(error)
+    // Let Stripe retry: drop the idempotency marker so the redelivery isn't
+    // skipped as a duplicate (AGL-498).
+    if (eventRef) await eventRef.delete().catch(() => undefined)
     return Response.json({ error: 'Webhook handling failed' }, { status: 500 })
   }
 }

@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import DOMPurify from 'dompurify'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import type { SiteRuntimeProps } from '@aglyn/aglyn'
 import * as MarketingModel from '../model'
@@ -263,7 +264,15 @@ function AutomationsEngine(props: {
             }
           } else if (step.type === 'showHtml') {
             const container = document.createElement('div')
-            container.innerHTML = step.html
+            // Sanitize (AGL-504): unlike runJs, showHtml is NOT dropped by the
+            // JS entitlement gate, so raw innerHTML would let any automations-
+            // tier author execute event-handler attributes (<img onerror>).
+            container.innerHTML = DOMPurify.sanitize(step.html, {
+              USE_PROFILES: { html: true },
+              FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'base'],
+              FORBID_ATTR: ['srcdoc', 'formaction'],
+              ALLOW_DATA_ATTR: false,
+            })
             document.body.appendChild(container)
           } else if (step.type === 'runJs') {
             // Business-gated server-side (dropped from props otherwise);

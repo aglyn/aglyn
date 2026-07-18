@@ -235,7 +235,23 @@ export const middleware: NextMiddleware = (req, event) => {
     'req.nextUrl.pathname=',
     req.nextUrl.pathname,
   )
-  const response = NextResponse.rewrite(new URL(rewrite, req.url))
+  // Per-request CSP nonce (AGL-518) on the rendered page. Next reads it from
+  // the request Content-Security-Policy header and stamps its scripts;
+  // `strict-dynamic` trusts the chunks they load. Shipped REPORT-ONLY so the
+  // browser reports violations without blocking — flip to enforcing by
+  // renaming the response header to `Content-Security-Policy` once reports are
+  // clean (in particular, confirm the realm-plugin blob-imports load under
+  // strict-dynamic). Layers over the enforcing frame-ancestors/object-src CSP
+  // already set in with-aglyn.nextjs.config.js.
+  const nonce = crypto.randomUUID().replace(/-/g, '')
+  const csp = `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+  const cspHeaders = new Headers(req.headers)
+  cspHeaders.set('x-nonce', nonce)
+  cspHeaders.set('Content-Security-Policy', csp)
+  const response = NextResponse.rewrite(new URL(rewrite, req.url), {
+    request: { headers: cspHeaders },
+  })
+  response.headers.set('Content-Security-Policy-Report-Only', csp)
   const overrideParam = req.nextUrl.searchParams.get(TENANT_HOST_PARAM)
   if (overrideParam) {
     response.cookies.set(TENANT_HOST_COOKIE, overrideParam, { path: '/' })

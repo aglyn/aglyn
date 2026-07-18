@@ -21,7 +21,16 @@ import {
   runPluginJobs,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
+
+// Constant-time secret check (AGL-512) so auth doesn't leak via timing.
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a)
+  const bb = Buffer.from(b)
+  if (ab.length !== bb.length) return false
+  return timingSafeEqual(new Uint8Array(ab), new Uint8Array(bb))
+}
 
 /**
  * Plugin job runner (AGL-435): the deployment's scheduler (cloud cron,
@@ -40,7 +49,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 501 },
     )
   }
-  if (request.headers.get('x-plugin-jobs-secret') !== secret) {
+  if (!safeEqual(request.headers.get('x-plugin-jobs-secret') ?? '', secret)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
 

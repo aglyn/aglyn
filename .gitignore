@@ -70,4 +70,3 @@ vite.config.*.timestamp*
 .nx/polygraph
 .nx/self-healing
 .vercel
-.env*

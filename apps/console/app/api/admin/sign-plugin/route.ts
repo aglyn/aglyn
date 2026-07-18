@@ -60,7 +60,7 @@ async function handler(request: Request): Promise<Response> {
     if (!decoded['staff']) {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
-    if (String(decoded['staffRole'] ?? 'super') !== 'super') {
+    if (String(decoded['staffRole'] ?? 'support') !== 'super') {
       return Response.json({ error: 'Requires the super staff role' }, { status: 403 })
     }
 
