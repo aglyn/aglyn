@@ -83,6 +83,13 @@
       },
       "description": "Variables, no-code functions, and reference health.",
       "valueType": "JSON"
+    },
+    "release_addon_store": {
+      "defaultValue": {
+        "value": "{\"enabled\": true, \"rolloutPercent\": 0}"
+      },
+      "description": "Self-serve add-on purchases on the Billing page: seats, datasets, extra sites, POS registers, Event Calendar.",
+      "valueType": "JSON"
     }
   },
   "version": {

@@ -238,6 +238,57 @@ describe('plan entitlements', () => {
     )
   })
 
+  it('folds purchased host/register/event-calendar add-ons into resolution (AGL-524)', () => {
+    // Extra sites raise hostLimit on top of plan defaults.
+    const withHosts = { plan: 'starter', seatAddons: { hosts: 2 } } as any
+    expect(resolveOrgEntitlements(withHosts).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.starter.hostLimit + 2,
+    )
+    expect(checkQuota(withHosts, 'hostLimit', 2).allowed).toBe(true)
+    // POS registers stack on the plan's included registers.
+    const withRegisters = { plan: 'pro', seatAddons: { posRegisters: 3 } } as any
+    expect(resolveOrgEntitlements(withRegisters).posRegisters).toBe(1 + 3)
+    // Event Calendar: quantity ≥ 1 switches the org-wide feature on.
+    const withEvents = { plan: 'starter', seatAddons: { eventCalendar: 1 } } as any
+    expect(checkEntitlement(withEvents, 'eventCalendar')).toBe(true)
+    expect(checkEntitlement({ plan: 'starter' } as any, 'eventCalendar')).toBe(
+      false,
+    )
+    // Add-on purchases stack on top of staff entitlement overrides.
+    const stacked = {
+      plan: 'starter',
+      entitlements: { hostLimit: 5 },
+      seatAddons: { hosts: 1 },
+    } as any
+    expect(resolveOrgEntitlements(stacked).hostLimit).toBe(6)
+  })
+
+  it('stops counting purchased add-ons on dead subscriptions (AGL-524)', () => {
+    const dead = {
+      plan: 'pro',
+      subscription: { status: 'canceled' },
+      seatAddons: { hosts: 3, posRegisters: 2, eventCalendar: 1, managers: 2 },
+    } as any
+    // Add-ons bill on the subscription — a dead one takes them with it.
+    expect(resolveOrgEntitlements(dead).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.free.hostLimit,
+    )
+    expect(resolveOrgEntitlements(dead).posRegisters).toBe(0)
+    expect(checkEntitlement(dead, 'eventCalendar')).toBe(false)
+    expect(checkSeatQuota(dead, 'managers', 0).purchased).toBe(0)
+    // Dunning grace: past_due keeps them, matching resolveEffectivePlan.
+    const pastDue = { ...dead, subscription: { status: 'past_due' } }
+    expect(resolveOrgEntitlements(pastDue).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.pro.hostLimit + 3,
+    )
+    expect(checkSeatQuota(pastDue, 'managers', 0).purchased).toBe(2)
+    // No subscription state at all keeps staff-set quantities (comped).
+    const comped = { plan: 'pro', seatAddons: { hosts: 1 } } as any
+    expect(resolveOrgEntitlements(comped).hostLimit).toBe(
+      PLAN_ENTITLEMENTS.pro.hostLimit + 1,
+    )
+  })
+
   it('resolves legacy per-host dataset overrides into org keys (AGL-240)', () => {
     const legacy = {
       plan: 'starter',

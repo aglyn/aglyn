@@ -171,6 +171,23 @@ const specs = [
     name: 'billing',
     path: '/org/billing',
     expects: ['Manage payment methods', 'Cancel subscription'],
+    // Annual toggle (AGL-532): flipping it swaps every plan card to the
+    // annual headline price (Starter $25/mo -> $16/mo billed yearly).
+    interact: async (page) => {
+      await page.waitForSelector('text=$25', {
+        timeout: TIMEOUT_MS,
+        state: 'attached',
+      })
+      await page.click('text=Monthly billing (switch for 2 months free)')
+      await page.waitForSelector('text=/month, billed yearly', {
+        timeout: TIMEOUT_MS,
+        state: 'attached',
+      })
+      await page.waitForSelector('text=$16', {
+        timeout: TIMEOUT_MS,
+        state: 'attached',
+      })
+    },
   },
   {
     // Notifications: the seeded billing.usage entry (wave v5 taxonomy)
@@ -268,6 +285,9 @@ for (const spec of specs) {
         state: 'attached',
       })
     }
+    // Optional interaction step (AGL-532): specs can drive the page and
+    // assert the outcome beyond static text presence.
+    if (spec.interact) await spec.interact(page)
     console.log(
       `PASS  ${spec.name.padEnd(10)} ${spec.path} (${Date.now() - started}ms)`,
     )

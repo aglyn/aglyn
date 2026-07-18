@@ -38,6 +38,7 @@ export type ReleaseFlagKey =
   | 'release_email'
   | 'release_inbox'
   | 'release_logic'
+  | 'release_addon_store'
 
 export interface ReleaseFlagDefinition {
   key: ReleaseFlagKey
@@ -150,6 +151,14 @@ export const RELEASE_FLAGS: readonly ReleaseFlagDefinition[] = [
     description: 'Variables, no-code functions, and reference health.',
     defaultEnabled: true,
     navTabId: 'nav-tab-logic',
+  },
+  {
+    key: 'release_addon_store',
+    label: 'Add-on store',
+    description:
+      'Self-serve add-on purchases on the Billing page: seats, datasets, ' +
+      'extra sites, POS registers, Event Calendar (AGL-524..531).',
+    defaultEnabled: true,
   },
 ]
 

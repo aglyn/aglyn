@@ -96,6 +96,11 @@ const FEATURE_ROWS: Array<{
 export interface BillingPlanCardsProps {
   /** The tenant's current plan; undefined when no plan is assigned yet. */
   plan: OrgPlan | undefined
+  /**
+   * Billing interval from the page's monthly/annual toggle (AGL-532):
+   * 'year' shows the discounted annual headline price on every card.
+   */
+  interval?: 'month' | 'year'
   onSelect: (plan: OrgPlan) => void
 }
 
@@ -106,7 +111,7 @@ export interface BillingPlanCardsProps {
  * upgrade; lower tiers get a Downgrade CTA.
  */
 export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
-  const { plan, onSelect } = props
+  const { plan, interval = 'month', onSelect } = props
   const currentIndex = plan ? PLAN_ORDER.indexOf(plan) : -1
   const recommendedIndex =
     currentIndex >= 0 && currentIndex < PLAN_ORDER.length - 1
@@ -153,10 +158,16 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   sx={{ alignItems: 'baseline', my: 1 }}
                 >
                   <Typography variant="h4" component="span">
-                    {`$${pricing.basePriceMonthlyUsd}`}
+                    {`$${
+                      interval === 'year'
+                        ? pricing.basePriceAnnualMonthlyUsd
+                        : pricing.basePriceMonthlyUsd
+                    }`}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {'/month'}
+                    {interval === 'year' && tier !== 'free'
+                      ? '/month, billed yearly'
+                      : '/month'}
                   </Typography>
                 </Stack>
                 <Typography

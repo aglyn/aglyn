@@ -34,6 +34,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
+  Box,
   Button,
   Chip,
   FormControlLabel,
@@ -50,11 +51,15 @@ import {
 import { collection, getCountFromServer } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import BillingAddonsCardComponent, {
+  ADDON_LABELS,
+} from '../../../../components/billing/billing-addons-card.component'
 import BillingPlanCardsComponent, {
   PLAN_LABELS,
 } from '../../../../components/billing/billing-plan-cards.component'
 import BillingMeteredEstimateComponent from '../../../../components/billing/billing-metered-estimate.component'
 import BillingUsageComponent from '../../../../components/billing/billing-usage.component'
+import { useReleaseFlag } from '../../../../hooks/use-release-flags'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
@@ -78,6 +83,16 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
   const { confirm } = useConfirmationContext()
   // Annual billing (AGL-269): checkout maps to the *_YEARLY price ids.
   const [interval, setInterval] = useState<'month' | 'year'>('month')
+  // The toggle starts on the live subscription's interval (AGL-532) so
+  // annual orgs see their real prices and switches keep their interval.
+  const subscriptionInterval = (org?.subscription as any)?.interval
+  useEffect(() => {
+    if (subscriptionInterval === 'year' || subscriptionInterval === 'month') {
+      setInterval(subscriptionInterval)
+    }
+  }, [subscriptionInterval])
+  // Self-serve add-on purchases (AGL-529), release-gated.
+  const addonStore = useReleaseFlag('release_addon_store')
 
   // Workspace-scoped (AGL-236): meters cover the selected org's sites.
   const { hosts } = useOrgHosts(firestore, user?.uid, orgId)
@@ -225,6 +240,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           const preview = await subscriptionRequest({
             action: 'preview',
             plan: targetPlan,
+            interval,
           })
           if (!preview) return
           const over = await overLimitSummary(targetPlan)
@@ -251,6 +267,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
           const switched = await subscriptionRequest({
             action: 'switch',
             plan: targetPlan,
+            interval,
           })
           if (switched) {
             enqueueSnackbar(`Plan switched to ${targetPlan}`, {
@@ -476,7 +493,10 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       >
                         {`Add-ons: ${Object.entries(org.seatAddons)
                           .filter(([, count]) => Number(count) > 0)
-                          .map(([kind, count]) => `${count} ${kind}`)
+                          .map(([kind, count]) =>
+                            kind === 'eventCalendar'
+                              ? ADDON_LABELS[kind]
+                              : `${count} ${ADDON_LABELS[kind] ?? kind}`)
                           .join(', ')}`}
                       </Typography>
                     ) : null}
@@ -567,6 +587,27 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                   </CardDisplay>
                 ),
               },
+              ...(addonStore.visible
+                ? [{
+                    size: { xs: 12 },
+                    children: (
+                      // Self-serve add-ons (AGL-529); #addons anchors the
+                      // point-of-need upsell links (AGL-530).
+                      <Box id="addons">
+                        <CardDisplay
+                          header={'Add-ons'}
+                          contentGutterX
+                          contentGutterY
+                        >
+                          <BillingAddonsCardComponent
+                            orgId={orgId}
+                            canManage={can('billing.manage')}
+                          />
+                        </CardDisplay>
+                      </Box>
+                    ),
+                  }]
+                : []),
               {
                 size: { xs: 12 },
                 children: (
@@ -593,6 +634,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                 children: (
                   <BillingPlanCardsComponent
                     plan={org?.plan as OrgPlan | undefined}
+                    interval={interval}
                     onSelect={(tier) =>
                       permissions.editBilling
                         ? void handleUpgrade(tier)()

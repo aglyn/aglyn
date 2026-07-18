@@ -20,6 +20,7 @@ import type {
   OrgEntitlements,
   OrgFeatureFlags,
   OrgPlan,
+  OrgSeatAddons,
 } from '../foundation'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
@@ -495,40 +496,75 @@ function resolvePlan(org: Partial<AglynOrgBilling> | null | undefined) {
 }
 
 /**
+ * Purchased add-on quantities that currently apply (AGL-524): add-ons
+ * bill as items on the org's Stripe subscription, so a dead subscription
+ * (the `resolveEffectivePlan` set) stops them counting until the webhook
+ * restores it. Orgs with no subscription state keep staff-set quantities
+ * (comped add-ons predating self-serve billing).
+ */
+function resolvePurchasedAddons(
+  org: Partial<AglynOrgBilling> | null | undefined,
+): OrgSeatAddons {
+  const status = org?.subscription?.status
+  if (status && DEAD_SUBSCRIPTION_STATUSES.has(status)) return {}
+  return org?.seatAddons ?? {}
+}
+
+/**
  * Effective entitlements for an org: plan defaults with the org doc's
- * per-key overrides applied (features merge key-by-key too). Missing or
- * unknown plans resolve as `free`.
+ * per-key overrides applied (features merge key-by-key too), then
+ * purchased add-ons stacked on top (AGL-524): `seatAddons.hosts` raises
+ * `hostLimit`, `seatAddons.posRegisters` raises `posRegisters`, and
+ * `seatAddons.eventCalendar` switches the `eventCalendar` feature on.
+ * (Seat/dataset add-ons instead fold in at `checkSeatQuota` /
+ * `checkDatasetQuota`, where the per-plan hard max clamps them.)
+ * Missing or unknown plans resolve as `free`.
  */
 export function resolveOrgEntitlements(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): ResolvedOrgEntitlements {
   const defaults = PLAN_ENTITLEMENTS[resolvePlan(org)]
   const overrides = org?.entitlements
-  if (!overrides) return defaults
-  const {
-    features: featureOverrides,
-    datasetsPerHost: legacyDatasets,
-    maxDatasetsPerHost: legacyMaxDatasets,
-    ...quotaOverrides
-  } = overrides
-  const merged = { ...defaults }
-  for (const [key, value] of Object.entries(quotaOverrides)) {
-    if (typeof value === 'number') (merged as any)[key] = value
+  let resolved = defaults
+  if (overrides) {
+    const {
+      features: featureOverrides,
+      datasetsPerHost: legacyDatasets,
+      maxDatasetsPerHost: legacyMaxDatasets,
+      ...quotaOverrides
+    } = overrides
+    const merged = { ...defaults }
+    for (const [key, value] of Object.entries(quotaOverrides)) {
+      if (typeof value === 'number') (merged as any)[key] = value
+    }
+    // Pre-AGL-240 override docs keyed datasets per host; resolve them into
+    // the org keys unless an org-keyed override is present.
+    if (typeof legacyDatasets === 'number' && overrides.datasetsPerOrg == null) {
+      merged.datasetsPerOrg = legacyDatasets
+    }
+    if (
+      typeof legacyMaxDatasets === 'number' &&
+      overrides.maxDatasetsPerOrg == null
+    ) {
+      merged.maxDatasetsPerOrg = legacyMaxDatasets
+    }
+    resolved = {
+      ...merged,
+      features: { ...defaults.features, ...featureOverrides },
+    }
   }
-  // Pre-AGL-240 override docs keyed datasets per host; resolve them into
-  // the org keys unless an org-keyed override is present.
-  if (typeof legacyDatasets === 'number' && overrides.datasetsPerOrg == null) {
-    merged.datasetsPerOrg = legacyDatasets
-  }
-  if (
-    typeof legacyMaxDatasets === 'number' &&
-    overrides.maxDatasetsPerOrg == null
-  ) {
-    merged.maxDatasetsPerOrg = legacyMaxDatasets
-  }
+  const purchased = resolvePurchasedAddons(org)
+  const extraHosts = Math.max(0, purchased.hosts ?? 0)
+  const extraRegisters = Math.max(0, purchased.posRegisters ?? 0)
+  const eventCalendar = (purchased.eventCalendar ?? 0) >= 1
+  if (!extraHosts && !extraRegisters && !eventCalendar) return resolved
   return {
-    ...merged,
-    features: { ...defaults.features, ...featureOverrides },
+    ...resolved,
+    hostLimit: resolved.hostLimit + extraHosts,
+    posRegisters: resolved.posRegisters + extraRegisters,
+    features: eventCalendar
+      ? { ...resolved.features, eventCalendar: true }
+      : resolved.features,
   }
 }
 
@@ -612,7 +648,7 @@ export function checkSeatQuota(
     kind === 'managers'
       ? pricing.extraSeatMonthlyUsd
       : pricing.extraMemberMonthlyUsd
-  const purchased = Math.max(0, org?.seatAddons?.[kind] ?? 0)
+  const purchased = Math.max(0, resolvePurchasedAddons(org)[kind] ?? 0)
   const limit = Math.min(included + purchased, maxSeats)
   return {
     allowed: currentUsage < limit,
@@ -668,7 +704,7 @@ export function checkDatasetQuota(
   const included = entitlements.datasetsPerOrg
   const maxDatasets = entitlements.maxDatasetsPerOrg
   const addonPriceUsd = pricing.extraDatasetMonthlyUsd
-  const purchased = Math.max(0, org?.seatAddons?.datasets ?? 0)
+  const purchased = Math.max(0, resolvePurchasedAddons(org).datasets ?? 0)
   const limit = Math.min(included + purchased, maxDatasets)
   return {
     allowed: currentUsage < limit,
