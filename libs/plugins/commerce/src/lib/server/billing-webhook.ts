@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import * as CommerceModel from '../model'
+import { mintDownloadToken, tokenSigningSecret } from './download'
 
 /**
  * Assigns unassigned license keys for a digital product (AGL-308):
@@ -411,15 +412,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               )
             })
             .join('\n')
-          // Digital delivery links (AGL-302), same token recipe the
-          // tenant download endpoint verifies.
-          const downloadToken = createHmac(
-            'sha256',
-            process.env.STRIPE_SECRET_KEY ?? 'aglyn',
-          )
-            .update(`download:${hostId}:${object.id}`)
-            .digest('hex')
-            .slice(0, 32)
+          // Digital delivery links (AGL-302); reuse the canonical mint the
+          // tenant download endpoint verifies so the secret can never drift.
+          const downloadToken = mintDownloadToken(hostId, String(object.id))
           const siteOrigin = String(
             object?.success_url ?? '',
           ).replace(/\/\?.*$|\?.*$/, '')
@@ -792,10 +787,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               | CommerceModel.HostSupplier
               | undefined
             if (!supplier) return
-            const supplierToken = createHmac(
-              'sha256',
-              process.env.STRIPE_SECRET_KEY ?? 'aglyn',
-            )
+            const supplierToken = createHmac('sha256', tokenSigningSecret())
               .update(`${hostId}:${object.id}:${supplierId}`)
               .digest('hex')
               .slice(0, 32)

@@ -22,12 +22,24 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 
 /**
+ * Signing secret for commerce tokens (AGL-509). A dedicated env var with NO
+ * fallback: the previous `STRIPE_SECRET_KEY ?? 'aglyn'` recipe made download
+ * and supplier tokens forgeable on any deploy that had not set the Stripe key
+ * (payloads like `download:${hostId}:${orderId}` are guessable). Fails closed.
+ */
+export function tokenSigningSecret(): string {
+  const secret = process.env.TOKEN_SIGNING_SECRET
+  if (!secret) {
+    throw new Error('TOKEN_SIGNING_SECRET is not configured')
+  }
+  return secret
+}
+
+/**
  * Order-scoped download token (AGL-302); no expiry — limits gate use.
- * Keyed off STRIPE_SECRET_KEY because both the tenant app (serving) and
- * the console webhook (emailing links) hold it.
  */
 export function mintDownloadToken(hostId: string, orderId: string): string {
-  return createHmac('sha256', process.env.STRIPE_SECRET_KEY ?? 'aglyn')
+  return createHmac('sha256', tokenSigningSecret())
     .update(`download:${hostId}:${orderId}`)
     .digest('hex')
     .slice(0, 32)
