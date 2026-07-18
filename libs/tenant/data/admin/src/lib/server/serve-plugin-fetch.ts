@@ -22,6 +22,7 @@ import {
 import { lookup } from 'dns/promises'
 import { isIPv4, isIPv6 } from 'net'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { Agent } from 'undici'
 import { firebaseAdmin } from './firebase-admin'
 
 const FETCH_TIMEOUT_MS = 8000
@@ -51,16 +52,19 @@ function isPrivateIp(ip: string): boolean {
 /**
  * SSRF hardening (AGL-515): even an https, allowlisted origin can resolve to
  * an internal address (a plugin author pointing DNS at 127.0.0.1 / the cloud
- * metadata endpoint). Resolve the host and refuse if ANY address is private.
- * (Does not fully close DNS-rebinding TOCTOU — pinning the resolved IP is a
- * follow-up — but blocks the static internal-target case.)
+ * metadata endpoint). Resolve the host and return a single validated PUBLIC
+ * address to pin the connection to (null if any resolved address is private).
+ * Pinning the exact IP the fetch connects to closes the DNS-rebinding TOCTOU —
+ * the name can't re-resolve to an internal target between check and connect.
  */
-async function resolvesToPublicIp(hostname: string): Promise<boolean> {
+async function resolvePublicIp(hostname: string): Promise<string | null> {
   try {
     const addresses = await lookup(hostname, { all: true })
-    return addresses.length > 0 && addresses.every((a) => !isPrivateIp(a.address))
+    if (!addresses.length) return null
+    if (addresses.some((a) => isPrivateIp(a.address))) return null
+    return addresses[0].address
   } catch {
-    return false
+    return null
   }
 }
 
@@ -131,25 +135,45 @@ export async function servePluginFetch(
         .json({ ok: false, status: 0, error: 'URL not in allowlist' })
       return
     }
-    if (!(await resolvesToPublicIp(new URL(url).hostname))) {
+    const pinnedIp = await resolvePublicIp(new URL(url).hostname)
+    if (!pinnedIp) {
       res
         .status(403)
         .json({ ok: false, status: 0, error: 'URL resolves to a non-public address' })
       return
     }
 
+    // Pin the socket to the address we just validated (AGL-515): a custom
+    // undici lookup forces the connection to `pinnedIp`, so the name can't be
+    // rebound to an internal target between the check above and the connect.
+    // TLS SNI / certificate validation still use the original hostname.
+    const family = isIPv6(pinnedIp) ? 6 : 4
+    const dispatcher = new Agent({
+      connect: {
+        lookup: (_host, options, cb) =>
+          options && options.all
+            ? cb(null, [{ address: pinnedIp, family }])
+            : cb(null, pinnedIp, family),
+      },
+    })
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+    // `dispatcher` is an undici extension not in the DOM RequestInit type;
+    // assigning to a variable first avoids the object-literal excess-property
+    // check while still passing it through to the (undici) global fetch.
+    const requestInit = {
+      method,
+      signal: controller.signal,
+      dispatcher,
+      headers: { Accept: 'application/json, text/*;q=0.9, */*;q=0.1' },
+      ...(method === 'POST' && requestBody ? { body: requestBody } : {}),
+    }
     let upstream: Response
     try {
-      upstream = await fetch(url, {
-        method,
-        signal: controller.signal,
-        headers: { Accept: 'application/json, text/*;q=0.9, */*;q=0.1' },
-        ...(method === 'POST' && requestBody ? { body: requestBody } : {}),
-      })
+      upstream = await fetch(url, requestInit)
     } finally {
       clearTimeout(timeout)
+      await dispatcher.close().catch(() => undefined)
     }
 
     const text = await upstream.text()
