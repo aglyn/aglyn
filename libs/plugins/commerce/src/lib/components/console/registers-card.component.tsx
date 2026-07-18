@@ -20,7 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
+import { Button, Chip, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { collection, deleteDoc, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import {
@@ -68,6 +68,9 @@ export function RegistersCard(props: RegistersCardProps) {
   )
   const locations = locationDocs ?? []
   const quota = Aglyn.checkQuota(org, 'posRegisters', registers.length)
+  // Registers beyond the plan cap (e.g. after a downgrade) can't transact —
+  // pos-order.ts blocks them by creation rank (AGL-482); mirror that here.
+  const withinCap = CommerceModel.registersWithinCap(registers, quota.limit)
   const [name, setName] = useState('')
   const [locationId, setLocationId] = useState('')
 
@@ -133,26 +136,37 @@ export function RegistersCard(props: RegistersCardProps) {
               'POS sale is tagged with its register for end-of-day takings.'}
           </Typography>
         ) : (
-          registers.map((register: any) => (
-            <Stack
-              key={register.$id}
-              direction="row"
-              spacing={1}
-              sx={{ alignItems: 'center' }}
-            >
-              <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                {register.name}
-                {register.locationId && locationName(register.locationId) ? (
-                  <Typography component="span" variant="caption" color="text.secondary">
-                    {` · ${locationName(register.locationId)}`}
-                  </Typography>
+          registers.map((register: any) => {
+            const overCap = !withinCap.has(register.$id)
+            return (
+              <Stack
+                key={register.$id}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', opacity: overCap ? 0.6 : 1 }}
+              >
+                <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                  {register.name}
+                  {register.locationId && locationName(register.locationId) ? (
+                    <Typography component="span" variant="caption" color="text.secondary">
+                      {` · ${locationName(register.locationId)}`}
+                    </Typography>
+                  ) : null}
+                </Typography>
+                {overCap ? (
+                  <Chip
+                    label="Over plan limit"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                  />
                 ) : null}
-              </Typography>
-              <Button size="small" color="error" onClick={handleDelete(register)}>
-                {'Remove'}
-              </Button>
-            </Stack>
-          ))
+                <Button size="small" color="error" onClick={handleDelete(register)}>
+                  {'Remove'}
+                </Button>
+              </Stack>
+            )
+          })
         )}
         <Stack direction="row" spacing={1}>
           <TextField

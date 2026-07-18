@@ -22,7 +22,9 @@ per till or device that takes in-person payments. Give each a name (and,
 if you use inventory locations, the location it sells from). Every POS sale
 is tagged with its register so you can reconcile end-of-day takings per
 till. Your plan caps how many registers you can run; add more with the
-register add-on in Billing.
+register add-on in Billing. If you downgrade below your register count, the
+extra registers (newest first) stop taking payments and show **Over plan
+limit** until you remove them or upgrade again — none are deleted.
 
 ## The register
 

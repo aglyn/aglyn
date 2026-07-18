@@ -26,6 +26,7 @@ import {
   matchesCollection,
   productInventory,
   productPriceRange,
+  registersWithinCap,
   transferVariantInventory,
   validateCollection,
   validateProduct,
@@ -314,5 +315,39 @@ describe('validateCollection', () => {
     expect(
       validateCollection({ name: 'X', slug: 'x', mode: 'smart', rules: [] }),
     ).toMatch(/rule/)
+  })
+})
+
+describe('registersWithinCap (AGL-482)', () => {
+  const reg = (id: string, sec: number) => ({
+    $id: id,
+    createdAt: { toMillis: () => sec * 1000 },
+  })
+
+  it('keeps the oldest N registers by creation order', () => {
+    const registers = [reg('c', 3), reg('a', 1), reg('b', 2)]
+    expect([...registersWithinCap(registers, 2)]).toEqual(['a', 'b'])
+    expect([...registersWithinCap(registers, 1)]).toEqual(['a'])
+  })
+
+  it('returns all when cap covers the count (and for Infinity)', () => {
+    const registers = [reg('a', 1), reg('b', 2)]
+    expect(registersWithinCap(registers, 2).size).toBe(2)
+    expect(registersWithinCap(registers, 5).size).toBe(2)
+    expect(registersWithinCap(registers, Infinity).size).toBe(2)
+  })
+
+  it('excludes everything when the cap is 0', () => {
+    expect(registersWithinCap([reg('a', 1)], 0).size).toBe(0)
+  })
+
+  it('breaks ties by id so the ranking is stable', () => {
+    const registers = [reg('b', 1), reg('a', 1)]
+    expect([...registersWithinCap(registers, 1)]).toEqual(['a'])
+  })
+
+  it('treats a missing createdAt as oldest (0)', () => {
+    const registers = [reg('new', 5), { $id: 'legacy' } as any]
+    expect([...registersWithinCap(registers, 1)]).toEqual(['legacy'])
   })
 })

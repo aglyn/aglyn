@@ -188,8 +188,81 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
+  // Self-serve org deletion (AGL-485): owner-only. Sets the erasure flag;
+  // the actual hard-delete runs via the guarded staff pipeline after the
+  // 7-day hold and is cancelable until then.
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const deleteRequest = async (action: 'request' | 'cancel') => {
+    const idToken = await (user as any)?.getIdToken?.()
+    const response = await fetch('/api/orgs/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify({ orgId: currentOrg?.$id, action }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload?.error ?? 'Request failed')
+    }
+    return response.json()
+  }
+  const handleRequestDeletion = async () => {
+    if (!currentOrg || busy) return
+    const accepted = await confirm({
+      title: 'Delete this organization?',
+      description:
+        "After a 7-day hold, this organization's sites, files, and data " +
+        'are permanently erased — a final export is produced first. You can ' +
+        'cancel any time during the hold.',
+      confirmationText: 'Request deletion',
+      confirmationButtonProps: { color: 'error' },
+    })
+      .then(() => true)
+      .catch(() => false)
+    if (!accepted) return
+    setBusy(true)
+    try {
+      await deleteRequest('request')
+      setDeleteConfirmText('')
+      enqueueSnackbar(
+        'Deletion requested — your data is erased after a 7-day hold. ' +
+          'Cancel here to keep the organization.',
+        { variant: 'success' },
+      )
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Could not request deletion', {
+        variant: 'error',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const handleCancelDeletion = async () => {
+    if (!currentOrg || busy) return
+    setBusy(true)
+    try {
+      await deleteRequest('cancel')
+      enqueueSnackbar('Deletion canceled — your organization is safe.', {
+        variant: 'success',
+      })
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'Could not cancel deletion', {
+        variant: 'error',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Org profile fields (AGL-363), prefilled from the org doc.
   const { org } = useCurrentOrg()
+  // Name to type in the delete confirmation (AGL-485). The org-scope
+  // projection's `orgName` isn't always populated, so fall back to the org
+  // doc name, then the slug — always something real to type.
+  const orgDisplayName =
+    (org as any)?.name || currentOrg?.orgName || currentOrg?.slug || ''
   const [profile, setProfile] = useState({
     logoUrl: '',
     contactEmail: '',
@@ -511,6 +584,70 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                   </Button>
                 </Stack>
               </Stack>
+            </CardDisplay>
+                        ),
+                      },
+                    ]
+                  : []),
+                ...(currentOrg && isOwner
+                  ? [
+                      {
+                        id: 'danger',
+                        label: 'Delete',
+                        content: (
+            <CardDisplay
+              header={'Delete organization'}
+              contentGutterX
+              contentGutterY
+              sx={{ mt: 3 }}
+            >
+              {org?.erasureRequestedAt ? (
+                <Stack spacing={2} sx={{ maxWidth: 480 }}>
+                  <Alert severity="warning">
+                    {'This organization is scheduled for deletion. After a ' +
+                      '7-day hold, all of its sites, files, and data are ' +
+                      'permanently erased. Cancel now to keep it.'}
+                  </Alert>
+                  <Button
+                    variant="outlined"
+                    disabled={busy}
+                    onClick={() => void handleCancelDeletion()}
+                    sx={{ alignSelf: 'flex-start' }}
+                  >
+                    {'Cancel deletion'}
+                  </Button>
+                </Stack>
+              ) : (
+                <Stack spacing={2} sx={{ maxWidth: 480 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Permanently delete this organization and everything in ' +
+                      'it — sites, files, datasets, and members. Nothing is ' +
+                      'removed for 7 days (a final export is produced and you ' +
+                      'can cancel), then erasure is irreversible. Export ' +
+                      'anything you want to keep first.'}
+                  </Typography>
+                  <TextField
+                    label={`Type "${orgDisplayName}" to confirm`}
+                    value={deleteConfirmText}
+                    disabled={busy}
+                    onChange={(event) => setDeleteConfirmText(event.target.value)}
+                    size="small"
+                  />
+                  <Button
+                    color="error"
+                    variant="contained"
+                    disabled={
+                      busy ||
+                      !orgDisplayName ||
+                      deleteConfirmText.trim() !== orgDisplayName
+                    }
+                    onClick={() => void handleRequestDeletion()}
+                    sx={{ alignSelf: 'flex-start' }}
+                  >
+                    {'Delete organization'}
+                  </Button>
+                </Stack>
+              )}
             </CardDisplay>
                         ),
                       },

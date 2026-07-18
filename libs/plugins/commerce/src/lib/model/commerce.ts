@@ -88,6 +88,25 @@ export interface PosRegister {
 }
 
 /**
+ * The register ids within the plan's `posRegisters` cap (AGL-482), ranked
+ * by creation order — the same ordering `pos-order.ts` enforces at sale
+ * time. Registers beyond the cap (e.g. after a Business→Pro downgrade) are
+ * excluded so the console/POS can dim or hide them instead of surfacing a
+ * checkout 403. `cap` of `Infinity` returns all.
+ */
+export function registersWithinCap(
+  registers: Array<{ $id: string; createdAt?: any }>,
+  cap: number,
+): Set<string> {
+  const createdMs = (r: { createdAt?: any }) =>
+    r.createdAt?.toMillis?.() ?? r.createdAt?.seconds ?? 0
+  const ranked = [...registers].sort(
+    (a, b) => createdMs(a) - createdMs(b) || a.$id.localeCompare(b.$id),
+  )
+  return new Set(ranked.slice(0, Math.max(0, cap)).map((r) => r.$id))
+}
+
+/**
  * `hosts/{hostId}/suppliers/{id}` doc (AGL-289): where dropshipped
  * order lines route on payment. Email and webhook are both optional but
  * one must be set for routing to do anything; webhook payloads are

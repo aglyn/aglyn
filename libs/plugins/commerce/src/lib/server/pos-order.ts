@@ -71,20 +71,35 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         .status(403)
         .json({ error: 'POS requires the Pro plan or above' })
     }
-    // Register attribution (AGL-472): a sale must run through a named
-    // register that exists on this host. Registers are created through the
-    // quota-enforcing resources route, so requiring one here is what makes
-    // the `posRegisters` cap real — a host can't transact past its plan's
-    // register count by opening more browser tabs.
+    // Register attribution + cap (AGL-472/482): a sale must run through a
+    // named register that exists on this host. Creation is quota-gated by
+    // the resources route, but that's creation-only — a paid→paid
+    // downgrade (e.g. Business 2 → Pro 1) would otherwise keep every
+    // existing register transacting. So re-check the cap at sale time:
+    // rank the host's registers by creation order and refuse any whose
+    // rank is beyond the plan's `posRegisters` limit. Deterministic and
+    // self-healing — no data is deleted, and re-upgrading restores them.
     if (!registerId) {
       return res.status(400).json({ error: 'Missing registerId' })
     }
-    const registerSnapshot = await hostRef
-      .collection('registers')
-      .doc(registerId)
-      .get()
-    if (!registerSnapshot.exists) {
+    const registerDocs = (
+      await hostRef.collection('registers').get()
+    ).docs
+      .map((doc) => ({
+        id: doc.id,
+        createdAtMs: doc.get('createdAt')?.toMillis?.() ?? 0,
+      }))
+      .sort((a, b) => a.createdAtMs - b.createdAtMs || a.id.localeCompare(b.id))
+    const rank = registerDocs.findIndex((r) => r.id === registerId)
+    if (rank < 0) {
       return res.status(404).json({ error: 'Unknown register' })
+    }
+    if (!Aglyn.checkQuota(ownerOrg?.org as any, 'posRegisters', rank).allowed) {
+      return res.status(403).json({
+        error:
+          'This register is over your plan’s limit — remove extra ' +
+          'registers or upgrade in Billing to use it.',
+      })
     }
 
     // Server pricing per line.

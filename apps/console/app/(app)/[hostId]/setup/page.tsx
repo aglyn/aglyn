@@ -51,6 +51,7 @@ import ErrorScreensCard from '../../../../components/error-screens-card.componen
 import LanguagesCard from '../../../../components/languages-card.component'
 import SiteBackupCard from '../../../../components/site-backup-card.component'
 import SiteTemplateCard from '../../../../components/site-template-card.component'
+import DeleteSiteCard from '../../../../components/delete-site-card.component'
 import ThemeEditor from '../../../../components/theme-editor/theme-editor.component'
 import HostDisplayNameComponent from '../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -493,6 +494,9 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                               </div>
                               <div style={{ marginTop: 24 }}>
                                 <SiteTemplateCard hostId={hostId} />
+                              </div>
+                              <div style={{ marginTop: 24 }}>
+                                <DeleteSiteCard hostId={hostId} />
                               </div>
                             </>
                           ) : null}
