@@ -1,0 +1,82 @@
+name: Scheduled console crons
+
+# Drives the console's scheduled routes (AGL-490). The console, tenant, and
+# www Vercel projects all deploy from the repo root, so a shared /vercel.json
+# crons block would fire on all three (the console-only paths 404 on the
+# others). Instead we POST the console's production URL directly, scoped to
+# just the console, using the routes' x-cron-secret auth path.
+#
+# Requires:
+#   - secret  CRON_SECRET       — same value as the console Vercel env var
+#   - var     CONSOLE_BASE_URL   — optional; defaults to https://app.aglyn.io
+#
+# Every `schedule` entry triggers this one workflow; `github.event.schedule`
+# carries the cron string that fired, which the job maps to a route. Note
+# GitHub only runs scheduled workflows from the default branch.
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # report-usage   — daily 02:00 UTC
+    - cron: '0 3 * * *' # audit-archive  — daily 03:00 UTC
+    - cron: '0 4 * * *' # run-erasures   — daily 04:00 UTC
+    - cron: '0 8 * * *' # usage-alerts   — daily 08:00 UTC
+    - cron: '0 6 1 * *' # usage-email    — monthly, 1st at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      path:
+        description: 'Route to trigger manually (e.g. /api/admin/run-erasures)'
+        required: true
+        type: choice
+        options:
+          - /api/billing/report-usage
+          - /api/admin/audit-archive
+          - /api/admin/run-erasures
+          - /api/billing/usage-alerts
+          - /api/billing/usage-email
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve route from the firing schedule
+        id: route
+        run: |
+          case "${{ github.event.schedule }}" in
+            '0 2 * * *') path=/api/billing/report-usage ;;
+            '0 3 * * *') path=/api/admin/audit-archive ;;
+            '0 4 * * *') path=/api/admin/run-erasures ;;
+            '0 8 * * *') path=/api/billing/usage-alerts ;;
+            '0 6 1 * *') path=/api/billing/usage-email ;;
+            *) path='${{ github.event.inputs.path }}' ;;
+          esac
+          if [ -z "$path" ]; then
+            echo "No route resolved (schedule='${{ github.event.schedule }}')" >&2
+            exit 1
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: POST the console cron route
+        env:
+          BASE_URL: ${{ vars.CONSOLE_BASE_URL || 'https://app.aglyn.io' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          ROUTE: ${{ steps.route.outputs.path }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET secret is not set on this repo" >&2
+            exit 1
+          fi
+          url="${BASE_URL}${ROUTE}"
+          echo "POST $url"
+          code=$(curl -sS --max-time 300 -o /tmp/cron-body -w '%{http_code}' \
+            -X POST "$url" -H "x-cron-secret: ${CRON_SECRET}")
+          echo "HTTP $code"
+          echo "--- response ---"
+          cat /tmp/cron-body || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "Cron route returned $code (expected 200)" >&2
+            exit 1
+          fi
