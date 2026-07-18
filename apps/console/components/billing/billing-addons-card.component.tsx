@@ -178,21 +178,40 @@ export default function BillingAddonsCardComponent({
     async (row: AddonRow, quantity: number) => {
       if (!state) return
       setBusy(true)
-      const dequeue = queueLoading()
       try {
-        const preview = await addonsRequest({
-          action: 'preview',
-          kind: row.kind,
-          quantity,
-        })
+        // The loading overlay must drop BEFORE the confirm dialog opens —
+        // it sits above the dialog and swallows the Confirm click
+        // (AGL-535); handleUpgrade on the page dequeues the same way.
+        const dequeuePreview = queueLoading()
+        let preview: any
+        try {
+          preview = await addonsRequest({
+            action: 'preview',
+            kind: row.kind,
+            quantity,
+          })
+        } finally {
+          dequeuePreview()
+        }
         if (!preview) return
         const unitUsd = state.catalog[row.kind]?.unitUsd ?? 0
         const monthlyUsd = quantity * (unitUsd ?? 0)
+        // The true cost of this change: proration lines only (AGL-535) —
+        // upcoming.amount_due is the whole next invoice, and nothing is
+        // charged today with create_prorations.
+        const prorationCents = Number(
+          preview.prorationCents ?? preview.amountDueCents ?? 0,
+        )
+        const currency = String(preview.currency ?? 'usd').toUpperCase()
+        const prorationUsd = (Math.abs(prorationCents) / 100).toFixed(2)
         const accepted = await confirm({
           title: `${row.label}: ${quantity}?`,
           description:
-            `Prorated charge today: $${((preview.amountDueCents ?? 0) / 100).toFixed(2)} ` +
-            `${String(preview.currency ?? 'usd').toUpperCase()}. Ongoing: ` +
+            (prorationCents >= 0
+              ? `Prorated for the rest of this period: $${prorationUsd} ` +
+                `${currency}, billed on your next invoice. Ongoing: `
+              : `Unused time credits $${prorationUsd} ${currency} back ` +
+                'on your next invoice. Ongoing: ') +
             (quantity === 0
               ? 'nothing — this add-on is removed.'
               : `$${monthlyUsd}/mo` +
@@ -205,29 +224,33 @@ export default function BillingAddonsCardComponent({
           .then(() => true)
           .catch(() => false)
         if (!accepted) return
-        const applied = await addonsRequest({
-          action: 'set',
-          kind: row.kind,
-          quantity,
-        })
-        if (applied?.quantities) {
-          setState((previous) =>
-            previous
-              ? { ...previous, quantities: applied.quantities }
-              : previous)
-          setDrafts((previous) => {
-            const next = { ...previous }
-            delete next[row.kind]
-            return next
+        const dequeueSet = queueLoading()
+        try {
+          const applied = await addonsRequest({
+            action: 'set',
+            kind: row.kind,
+            quantity,
           })
-          enqueueSnackbar(`${row.label} updated`, {
-            variant: 'success',
-            persist: false,
-          })
+          if (applied?.quantities) {
+            setState((previous) =>
+              previous
+                ? { ...previous, quantities: applied.quantities }
+                : previous)
+            setDrafts((previous) => {
+              const next = { ...previous }
+              delete next[row.kind]
+              return next
+            })
+            enqueueSnackbar(`${row.label} updated`, {
+              variant: 'success',
+              persist: false,
+            })
+          }
+        } finally {
+          dequeueSet()
         }
       } finally {
         setBusy(false)
-        dequeue()
       }
     },
     [state, addonsRequest, confirm, queueLoading, enqueueSnackbar],

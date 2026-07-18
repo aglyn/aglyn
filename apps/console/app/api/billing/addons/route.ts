@@ -271,8 +271,19 @@ async function handler(request: Request): Promise<Response> {
           query +
           '&subscription_proration_behavior=create_prorations',
       )
+      // amount_due is the WHOLE next invoice (renewal included); the cost
+      // of this change is its proration lines — negative on removals
+      // (credit). Nothing is charged today with create_prorations
+      // (AGL-535).
+      const prorationCents = (preview?.lines?.data ?? [])
+        .filter((line: any) => line?.proration)
+        .reduce(
+          (sum: number, line: any) => sum + Number(line?.amount ?? 0),
+          0,
+        )
       return Response.json({
         amountDueCents: preview?.amount_due ?? 0,
+        prorationCents,
         currency: preview?.currency ?? 'usd',
       }, { status: 200 })
     }
