@@ -167,16 +167,42 @@ for (const {
 }
 
 if (webhookUrl) {
-  const endpoint = await stripe('webhook_endpoints', {
-    url: webhookUrl,
-    'enabled_events[]': 'customer.subscription.created',
-    'enabled_events[1]': 'customer.subscription.updated',
-    'enabled_events[2]': 'customer.subscription.deleted',
-    // Marketplace purchases (AGL-46).
-    'enabled_events[3]': 'checkout.session.completed',
-  })
-  env['STRIPE_WEBHOOK_SECRET'] = endpoint.secret
-  console.log(`+ webhook endpoint ${endpoint.id} → ${webhookUrl}`)
+  // Reuse an existing endpoint for the URL: Stripe returns the signing
+  // secret only at creation, so recreating would orphan the deployed
+  // STRIPE_WEBHOOK_SECRET (delete the endpoint in the dashboard to
+  // rotate). Events are indexed [0..n] — mixing `[]` with `[1]`.. is
+  // rejected by Stripe's form parser (AGL-533).
+  const endpoints = await stripe('webhook_endpoints?limit=100')
+  const existing = (endpoints.data ?? []).find(
+    (endpoint) => endpoint.url === webhookUrl,
+  )
+  if (existing) {
+    console.log(
+      `= webhook endpoint ${existing.id} already covers ${webhookUrl} — ` +
+        'keeping the deployed STRIPE_WEBHOOK_SECRET',
+    )
+  } else {
+    const events = [
+      'customer.subscription.created',
+      'customer.subscription.updated',
+      'customer.subscription.deleted',
+      // Marketplace purchases (AGL-46).
+      'checkout.session.completed',
+      // Billing notifications (AGL-259): invoice availability + dunning.
+      'invoice.finalized',
+      'invoice.paid',
+      'invoice.payment_failed',
+    ]
+    const endpoint = await stripe(
+      'webhook_endpoints',
+      Object.fromEntries([
+        ['url', webhookUrl],
+        ...events.map((event, index) => [`enabled_events[${index}]`, event]),
+      ]),
+    )
+    env['STRIPE_WEBHOOK_SECRET'] = endpoint.secret
+    console.log(`+ webhook endpoint ${endpoint.id} → ${webhookUrl}`)
+  }
 } else {
   console.log(
     '~ no --webhook-url given: create the endpoint later and set ' +
