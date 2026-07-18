@@ -28,6 +28,21 @@ const pathKey = (path: string) =>
 
 const noContent = () => new Response(null, { status: 204 })
 
+// Best-effort per-instance rate limit (AGL-510): this endpoint is
+// unauthenticated and fires host automations via emitHostEvent, so cap bursts
+// from a spoofed hostId. Instances are ephemeral, so this only blunts spikes.
+const recentByIp = new Map<string, number[]>()
+const RATE_WINDOW_MS = 60_000
+const RATE_MAX = 120
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now()
+  const hits = (recentByIp.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS)
+  hits.push(now)
+  recentByIp.set(ip, hits)
+  return hits.length > RATE_MAX
+}
+
 /**
  * Privacy-friendly pageview collector (AGL-82): no cookies, no user ids —
  * one increment per view into a per-day counter doc the console dashboard
@@ -35,6 +50,10 @@ const noContent = () => new Response(null, { status: 204 })
  * sendBeacon, so errors just 204.
  */
 export async function POST(request: Request): Promise<Response> {
+  const ip = String(request.headers.get('x-forwarded-for') ?? 'unknown')
+    .split(',')[0]
+    .trim()
+  if (rateLimited(ip)) return noContent()
   try {
     const raw = await request.text()
     const body = raw ? (JSON.parse(raw) as Record<string, any>) : {}
