@@ -47,3 +47,17 @@ Notes:
   builds all four projects as production deployments.
 - One-off deploys without a push: create a deployment from a Git reference in the Vercel dashboard
   (Deployments → Create Deployment), or `vercel deploy` from the CLI.
+
+## After every production promote: verify the aliases (AGL-542)
+
+The tenant wildcard (`*.aglyn.app`) has repeatedly stayed aliased to a stale deployment after a
+promote — usually because a tenant-scoped `vercel` command ran outside `apps/tenant` and the root
+`.vercel/repo.json` (which maps every directory to `app-aglyn-io`) silently redirected it to the
+console project. Verify (and repair) with:
+
+```bash
+node tools/deploy/verify-production-aliases.mjs        # verify; exit 1 if any domain is stale
+node tools/deploy/verify-production-aliases.mjs --fix  # promote the newest Ready deploy when stale
+```
+
+Full runbook: `apps/docs/docs/operations/verify-production-aliases.md`.

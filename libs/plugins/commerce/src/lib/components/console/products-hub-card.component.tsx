@@ -162,7 +162,16 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     () => (productDocs ?? []).filter((product: any) => !product.deletedAt).length,
     [productDocs],
   )
-  const productQuota = Aglyn.checkQuota(org, 'productsPerHost', productCount)
+  // Gate only once the org doc has loaded: an unresolved org reads as the
+  // free tier's 0-product cap, which swallowed every Add/Duplicate click.
+  // The resources API (AGL-473) stays the authoritative cap on create.
+  const productQuota = useMemo(
+    () =>
+      org
+        ? Aglyn.checkQuota(org, 'productsPerHost', productCount)
+        : { allowed: true, limit: Aglyn.UNLIMITED, remaining: Aglyn.UNLIMITED },
+    [org, productCount],
+  )
 
   const handleDuplicate = useCallback(
     (product: ProductRow) => async () => {
@@ -248,12 +257,14 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     const parsed = importing?.parsed
     if (!parsed || parsed.products.length === 0) return
     // Batch-aware cap (AGL-471): the whole import must fit the plan.
-    const batchQuota = Aglyn.checkQuota(
-      org,
-      'productsPerHost',
-      productCount + parsed.products.length - 1,
-    )
-    if (!batchQuota.allowed) {
+    const batchQuota = org
+      ? Aglyn.checkQuota(
+          org,
+          'productsPerHost',
+          productCount + parsed.products.length - 1,
+        )
+      : null
+    if (batchQuota && !batchQuota.allowed) {
       return void enqueueSnackbar(
         `This import needs ${parsed.products.length} product slots — your ` +
           `plan allows ${batchQuota.limit}. See Billing to upgrade.`,

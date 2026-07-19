@@ -115,6 +115,16 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         })),
     [productDocs],
   )
+  // Content collections (AGL-81) live in the same `hosts/{hostId}/collections`
+  // subcollection (displayName, no name/mode); only name-bearing commerce
+  // docs belong in this list.
+  const commerceCollections: CollectionRow[] = useMemo(
+    () =>
+      [...(collectionDocs ?? [])].filter(
+        (row: any) => typeof row.name === 'string' && row.name.trim(),
+      ),
+    [collectionDocs],
+  )
 
   // Categories ordered as a walked tree: parents before children.
   const categories: Array<CategoryRow & { depth: number }> = useMemo(() => {
@@ -328,7 +338,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
 
         <Divider sx={{ my: 1 }} />
         <Typography variant="subtitle2">{'Collections'}</Typography>
-        {(collectionDocs ?? []).map((row: CollectionRow) => (
+        {commerceCollections.map((row) => (
           <Stack
             key={row.$id}
             direction="row"
@@ -342,7 +352,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
                 variant="caption"
                 color="text.secondary"
               >
-                {` · ${row.mode} · ${collectionCount(row)} products`}
+                {` · ${row.mode ?? 'manual'} · ${collectionCount(row)} products`}
               </Typography>
             </Typography>
             <Button
@@ -351,8 +361,8 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
                 setCollectionDraft({
                   id: row.$id,
                   name: row.name,
-                  slug: row.slug,
-                  mode: row.mode,
+                  slug: row.slug ?? '',
+                  mode: row.mode ?? 'manual',
                   productIds: row.productIds ?? [],
                   rules: row.rules ?? [],
                   matchAll: row.matchAll !== false,
