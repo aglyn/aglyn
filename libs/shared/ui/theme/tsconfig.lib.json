@@ -13,8 +13,8 @@
       "@aglyn/shared-util-tools/*": ["../../../../libs/shared/util/tools/src/lib/*"],
       "@aglyn/shared-util-vendor": ["../../../../libs/shared/util/vendor/src/index.ts"],
       "@aglyn/shared-util-vendor/*": ["../../../../libs/shared/util/vendor/src/lib/*"],
-      "@aglyn/shared-data-operators": ["../../../../dist/libs/shared/data/operators"],
-      "@aglyn/shared-data-types": ["../../../../dist/libs/shared/data/types"]
+      "@aglyn/shared-data-types": ["../../../../libs/shared/data/types/src/index.ts"],
+      "@aglyn/shared-data-types/*": ["../../../../libs/shared/data/types/src/lib/*"]
     }
   },
   "files": ["../../../../node_modules/@nx/react/typings/cssmodule.d.ts", "../../../../node_modules/@nx/react/typings/image.d.ts"],
