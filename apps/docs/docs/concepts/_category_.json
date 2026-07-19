@@ -1,12 +1,12 @@
 {
   "label": "Concepts",
-  "position": 3,
+  "position": 4,
   "collapsible": true,
   "collapsed": true,
   "link": {
     "type": "generated-index",
     "slug": "/concepts",
     "title": "Concepts",
-    "description": "How Aglyn fits together \u2014 the vocabulary, the naming conventions, and the mental model behind organizations, sites, and the node tree."
+    "description": "How Aglyn fits together — the vocabulary, the naming conventions, and the mental model behind organizations, sites, and the node tree."
   }
 }

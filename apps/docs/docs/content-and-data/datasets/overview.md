@@ -27,15 +27,15 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Pro**. Free sites get a limited number of datasets; Pro and above raise the cap, and
-extra-dataset add-ons are available.
+**Starter** and above. Free plans have no data store; higher tiers raise the dataset
+and record caps, and extra-dataset add-ons are available.
 :::
 
 ## Model builder
 
 Define a model in the schema dialog with **typed fields** (text, number, date, reference,
-and more). The model comes from the site's `dod.ts` blueprint at runtime, so records are
-validated against it.
+and more). The model is stored on the dataset itself, and records are validated against
+it on every server-side write.
 
 ## Typed documents
 

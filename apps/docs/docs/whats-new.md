@@ -1,5 +1,5 @@
 ---
-sidebar_position: 11
+sidebar_position: 12
 slug: /whats-new
 title: What's New
 description: The features Aglyn shipped most recently, grouped by area with links into the docs.

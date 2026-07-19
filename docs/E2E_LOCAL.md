@@ -143,6 +143,19 @@ Re-run it after UI changes so the docs never drift:
 E2E_BASE_URL=http://localhost:4200 node tools/e2e/capture-docs-screenshots.mjs
 ```
 
+`tools/e2e/capture-docs-shots.mjs` (AGL-554) does the same for the docs
+**Guides** section (`apps/docs/static/img/guides/`), but flow-driven: it
+seeds guide fixtures on top of `seed:e2e` (a typed survey dataset, a
+published survey screen, storefront products across the billing modes,
+orders, a site member), then walks the guide flows — including a real
+survey submission and member sign-up on the tenant dev server:
+
+```bash
+# needs BOTH dev servers: serve:console:emulated (4200) + serve:tenant:emulated (4500)
+FIRESTORE_EMULATOR_HOST=localhost:8082 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 \
+  node tools/e2e/capture-docs-shots.mjs   # --only=<out-substring>, --no-seed
+```
+
 ## Adding specs
 
 Add rows to the `specs` table in `tools/e2e/console.e2e.mjs` — a path plus

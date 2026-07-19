@@ -1,0 +1,12 @@
+{
+  "label": "Guides",
+  "position": 3,
+  "collapsible": true,
+  "collapsed": false,
+  "link": {
+    "type": "generated-index",
+    "slug": "/guides",
+    "title": "Guides",
+    "description": "End-to-end walkthroughs that string whole features together: build a survey, model your data, run a store, and open member accounts."
+  }
+}

@@ -10,7 +10,7 @@ Datasets **round-trip** through CSV and JSON, so you can edit data in bulk elsew
 bring it back.
 
 :::info Plan availability
-**Pro**.
+**Starter** and above (datasets need the data store).
 :::
 
 ![The data page toolbar carries import and export](/img/datasets/data-page.png)
