@@ -721,6 +721,13 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                       <MuiMenuItem value="elementClick">
                         {'When clicked…'}
                       </MuiMenuItem>
+                      {/* Hover choreography (AGL-562). */}
+                      <MuiMenuItem value="elementHoverEnter">
+                        {'When hovered…'}
+                      </MuiMenuItem>
+                      <MuiMenuItem value="elementHoverLeave">
+                        {'When hover ends…'}
+                      </MuiMenuItem>
                       <MuiMenuItem value="elementVisible">
                         {'When scrolled into view…'}
                       </MuiMenuItem>

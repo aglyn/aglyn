@@ -16,9 +16,12 @@
  */
 
 import {
+  CLIENT_ACTION_STEP_TYPES,
   evaluateTriggerCondition,
   type HostAction,
+  HOST_ACTION_STEP_LABELS,
   isCustomEventName,
+  isSiteEventType,
   validateHostAction,
   WEBHOOK_URL_PATTERN,
 } from './actions'
@@ -85,6 +88,80 @@ describe('validateHostAction', () => {
         steps: [{ type: 'datasetAppend', datasetName: '' }],
       }),
     ).toMatch(/Step 1/)
+  })
+})
+
+describe('nav-menu interactions surface (AGL-562)', () => {
+  it('treats hover enter/leave as element-scoped site events', () => {
+    for (const event of ['elementHoverEnter', 'elementHoverLeave']) {
+      expect(isSiteEventType(event)).toBe(true)
+      expect(
+        validateHostAction({ ...base, trigger: { event } }),
+      ).toMatch(/selector/)
+      expect(
+        validateHostAction({
+          ...base,
+          trigger: { event, selector: '[data-aglyn="leaf:n1"]' },
+        }),
+      ).toBeNull()
+    }
+  })
+
+  it('requires a target for element show/hide steps', () => {
+    for (const type of [
+      'showElement',
+      'hideElement',
+      'toggleElement',
+    ] as const) {
+      expect(
+        validateHostAction({ ...base, steps: [{ type, selector: ' ' }] }),
+      ).toMatch(/Step 1/)
+      expect(
+        validateHostAction({
+          ...base,
+          steps: [{ type, selector: '[data-aglyn="leaf:n1"]' }],
+        }),
+      ).toBeNull()
+    }
+  })
+
+  it('accepts drawer commands with and without an explicit target', () => {
+    for (const type of ['openDrawer', 'closeDrawer', 'toggleDrawer'] as const) {
+      expect(validateHostAction({ ...base, steps: [{ type }] })).toBeNull()
+      expect(
+        validateHostAction({
+          ...base,
+          steps: [{ type, drawerNodeId: 'node-9' }],
+        }),
+      ).toBeNull()
+    }
+  })
+
+  it('classifies the new UI steps as client steps with labels', () => {
+    for (const type of [
+      'showElement',
+      'hideElement',
+      'toggleElement',
+      'openDrawer',
+      'closeDrawer',
+      'toggleDrawer',
+    ] as const) {
+      expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(true)
+      expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()
+    }
+  })
+
+  it('accepts the every-time repeat flag on the trigger', () => {
+    expect(
+      validateHostAction({
+        ...base,
+        trigger: {
+          event: 'elementClick',
+          selector: '.menu-button',
+          everyTime: true,
+        },
+      }),
+    ).toBeNull()
   })
 })
 

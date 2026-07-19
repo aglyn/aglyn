@@ -64,8 +64,10 @@ import { Container, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
   Chip,
+  FormControlLabel,
   FormHelperText,
   FormLabel,
+  Switch,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -74,7 +76,13 @@ import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
 import { action } from 'mobx'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, type SyntheticEvent, useCallback, useMemo } from 'react'
+import {
+  type ChangeEvent,
+  forwardRef,
+  type SyntheticEvent,
+  useCallback,
+  useMemo,
+} from 'react'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 import {
@@ -88,6 +96,12 @@ import {
   pickStyleValues,
   styleGroupFieldNames,
 } from '../utils/style-field-groups'
+import {
+  readHiddenBands,
+  VISIBILITY_BAND_LABELS,
+  VISIBILITY_BANDS,
+  writeHiddenBand,
+} from '../utils/visibility-styles'
 import { Accordion } from './accordion-list.component'
 import CustomCssForm from './custom-css-form.component'
 import ElementClassesField from './element-classes-field.component'
@@ -957,6 +971,25 @@ const ElementStylesForm = observer(
       [applyStyleValues],
     )
 
+    // Responsive visibility (AGL-562): band toggles write display:none
+    // under range-scoped media keys — independent of the artboard's
+    // breakpoint scope, since each band is absolute.
+    const hiddenBands = readHiddenBands(nodeSx as Record<string, any>)
+    const handleVisibilityChange = useCallback(
+      (band: (typeof VISIBILITY_BANDS)[number]) =>
+        (event: ChangeEvent<HTMLInputElement>) => {
+          action(() => {
+            if (!node) return
+            node.sx = writeHiddenBand(
+              (node.sx ?? {}) as Record<string, any>,
+              band,
+              event.target.checked,
+            ) as any
+          })()
+        },
+      [node],
+    )
+
     return (
       <>
         <Container gutterY={[1]} dense>
@@ -1021,6 +1054,31 @@ const ElementStylesForm = observer(
             onChange={handleFlexboxChange(justifySelf.name)}
             schema={justifySelf}
           />
+        </Accordion>
+
+        {/* Responsive visibility (AGL-562): hide the element on whole
+            device bands — e.g. hide the desktop link cluster on mobile
+            and show a menu button instead. */}
+        <Accordion summary="Visibility" sx={{ mb: 2 }}>
+          {VISIBILITY_BANDS.map((band) => (
+            <FormControlLabel
+              key={band}
+              control={
+                <Switch
+                  size="small"
+                  checked={hiddenBands.includes(band)}
+                  onChange={handleVisibilityChange(band)}
+                />
+              }
+              label={VISIBILITY_BAND_LABELS[band]}
+              sx={{ display: 'flex', mb: 0.5 }}
+            />
+          ))}
+          <FormHelperText>
+            {'Hidden bands apply on the live site at those screen widths. ' +
+              'The canvas preview follows your browser window width, so ' +
+              'resize the window (or publish) to see the effect.'}
+          </FormHelperText>
         </Accordion>
 
         <Container gutterY={[2]} dense>

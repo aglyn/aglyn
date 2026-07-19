@@ -36,6 +36,8 @@ export interface ClientAutomation {
   oncePerSession?: boolean
   /** Minimum minutes between fires for the same visitor (AGL-274). */
   cooldownMinutes?: number
+  /** Fire on every occurrence, not once per pageview (AGL-562). */
+  everyTime?: boolean
   steps: HostActionStep[]
   hasServerSteps: boolean
 }

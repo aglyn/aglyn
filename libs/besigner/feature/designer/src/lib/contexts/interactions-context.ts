@@ -43,6 +43,9 @@ export type InteractionTriggerEvent =
   | 'elementClick'
   | 'elementVisible'
   | 'scrollToElement'
+  // Hover choreography (AGL-562): mega menus, drawers, show/hide.
+  | 'elementHoverEnter'
+  | 'elementHoverLeave'
 
 export interface InteractionsContextValue {
   /** The host's site-event automations (for per-element listing). */

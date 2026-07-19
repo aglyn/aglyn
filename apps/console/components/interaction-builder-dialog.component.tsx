@@ -55,6 +55,13 @@ export interface InteractionBuilderDialogProps {
 type StepDraft = Record<string, any> & { type: string }
 
 const STEP_TYPES: Array<{ value: string; label: string }> = [
+  // Element & drawer choreography (AGL-562) — the nav-menu headliners.
+  { value: 'toggleElement', label: 'Show/hide an element' },
+  { value: 'showElement', label: 'Show an element' },
+  { value: 'hideElement', label: 'Hide an element' },
+  { value: 'toggleDrawer', label: 'Open/close a drawer' },
+  { value: 'openDrawer', label: 'Open a drawer' },
+  { value: 'closeDrawer', label: 'Close a drawer' },
   { value: 'toggleClass', label: 'Toggle a class' },
   { value: 'addClass', label: 'Append a class' },
   { value: 'removeClass', label: 'Remove a class' },
@@ -64,6 +71,14 @@ const STEP_TYPES: Array<{ value: string; label: string }> = [
   { value: 'redirect', label: 'Go to a URL' },
   { value: 'trackGaEvent', label: 'Track an analytics event' },
 ]
+
+/** Human phrasing for the default interaction name per trigger. */
+const TRIGGER_PHRASES: Record<string, string> = {
+  elementClick: 'clicked',
+  elementHoverEnter: 'hovered',
+  elementHoverLeave: 'hover ends',
+  elementVisible: 'seen',
+}
 
 /**
  * Fluent interaction builder (AGL-319): the whole trigger + actions +
@@ -96,19 +111,26 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
 
   const selector = nodeElementSelector(state.nodeId)
   const [name, setName] = useState<string>(
-    existing?.name ?? `When ${state.event === 'elementClick' ? 'clicked' : 'seen'} — ${state.nodeId.slice(0, 8)}`,
+    existing?.name ?? `When ${TRIGGER_PHRASES[state.event] ?? 'seen'} — ${state.nodeId.slice(0, 8)}`,
   )
   const [event, setEvent] = useState<string>(
     existing?.trigger?.event ?? state.event,
   )
+  // New interactions default to every occurrence (AGL-562): menu and
+  // drawer choreography only makes sense repeatable; existing docs keep
+  // their stored frequency.
   const [frequency, setFrequency] = useState<string>(
-    existing?.trigger?.oncePerVisitor
-      ? 'visitor'
-      : existing?.trigger?.oncePerSession
-        ? 'session'
-        : existing?.trigger?.cooldownMinutes
-          ? 'cooldown'
-          : 'always',
+    existing
+      ? existing.trigger?.oncePerVisitor
+        ? 'visitor'
+        : existing.trigger?.oncePerSession
+          ? 'session'
+          : existing.trigger?.cooldownMinutes
+            ? 'cooldown'
+            : existing.trigger?.everyTime
+              ? 'every'
+              : 'always'
+      : 'every',
   )
   const [cooldownMinutes, setCooldownMinutes] = useState<number>(
     existing?.trigger?.cooldownMinutes ?? 60,
@@ -130,11 +152,49 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
 
   const candidate = useMemo(() => {
     const trigger: Record<string, unknown> = { event, selector }
+    if (frequency === 'every') trigger.everyTime = true
     if (frequency === 'session') trigger.oncePerSession = true
     if (frequency === 'visitor') trigger.oncePerVisitor = true
     if (frequency === 'cooldown') trigger.cooldownMinutes = cooldownMinutes
     return { name, trigger, steps, enabled: true }
   }, [name, event, selector, frequency, cooldownMinutes, steps])
+
+  // Canvas element targets for the show/hide + drawer steps (AGL-562):
+  // the same live-canvas resolution the props panel's NODE_SELECT uses.
+  const canvasNodes = useMemo(
+    () => (Aglyn.canvas.toJSON().nodes ?? {}) as Record<string, any>,
+    [],
+  )
+  const elementTargetOptions = useMemo(
+    () =>
+      Object.entries(canvasNodes)
+        .filter(([id]) => Boolean(id))
+        .map(([id, node]) => {
+          const displayName =
+            Aglyn.components.getSchema(node?.componentId)?.displayName ??
+            node?.componentId ??
+            'Element'
+          const text =
+            typeof node?.props?.children === 'string'
+              ? node.props.children.trim().slice(0, 24)
+              : ''
+          return {
+            value: nodeElementSelector(id),
+            nodeId: id,
+            componentId: String(node?.componentId ?? ''),
+            label: `${displayName}${text ? ` "${text}"` : ''} · ${id.slice(0, 6)}`,
+          }
+        })
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [canvasNodes],
+  )
+  const drawerTargetOptions = useMemo(
+    () =>
+      elementTargetOptions.filter(
+        (option) => option.componentId === 'muiDrawer',
+      ),
+    [elementTargetOptions],
+  )
 
   const problem = Aglyn.validateHostAction(candidate as any)
 
@@ -156,6 +216,39 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               element.classList.remove(step.className)
             } else element.classList.toggle(step.className)
           })
+      } else if (
+        step.type === 'showElement' ||
+        step.type === 'hideElement' ||
+        step.type === 'toggleElement'
+      ) {
+        // Element choreography (AGL-562): try the live DOM; the canvas
+        // shadow root is closed, so a zero-match run explains itself.
+        Aglyn.ensureElementHiddenStyle()
+        const touched = Aglyn.applyElementVisibility(
+          step.type === 'showElement'
+            ? 'show'
+            : step.type === 'hideElement'
+              ? 'hide'
+              : 'toggle',
+          String(step.selector || selector),
+        )
+        if (!touched) {
+          enqueueSnackbar(
+            `"${STEP_TYPES.find((entry) => entry.value === step.type)?.label}" runs on the live site`,
+            { variant: 'info', persist: false },
+          )
+        }
+      } else if (
+        step.type === 'openDrawer' ||
+        step.type === 'closeDrawer' ||
+        step.type === 'toggleDrawer'
+      ) {
+        // Canvas drawers render inline (not command-driven) while
+        // editing, so the command only shows on the live site.
+        enqueueSnackbar(
+          `"${STEP_TYPES.find((entry) => entry.value === step.type)?.label}" runs on the live site`,
+          { variant: 'info', persist: false },
+        )
       } else if (step.type === 'siteAlert') {
         enqueueSnackbar(step.message || '(empty message)', {
           variant: (step.severity as any) || 'info',
@@ -212,6 +305,13 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
             sx={{ minWidth: 200 }}
           >
             <MenuItem value="elementClick">{'This element is clicked'}</MenuItem>
+            {/* Hover choreography (AGL-562). */}
+            <MenuItem value="elementHoverEnter">
+              {'This element is hovered'}
+            </MenuItem>
+            <MenuItem value="elementHoverLeave">
+              {'The pointer leaves this element'}
+            </MenuItem>
             <MenuItem value="elementVisible">
               {'This element scrolls into view'}
             </MenuItem>
@@ -224,7 +324,9 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
             select
             sx={{ minWidth: 170 }}
           >
-            <MenuItem value="always">{'Every time'}</MenuItem>
+            {/* Repeatable firing (AGL-562) vs the legacy once-per-view. */}
+            <MenuItem value="every">{'Every time'}</MenuItem>
+            <MenuItem value="always">{'Once per page view'}</MenuItem>
             <MenuItem value="session">{'Once per session'}</MenuItem>
             <MenuItem value="visitor">{'Once per visitor'}</MenuItem>
             <MenuItem value="cooldown">{'With a cooldown'}</MenuItem>
@@ -262,6 +364,7 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     overlayId: undefined,
                     url: undefined,
                     eventName: undefined,
+                    drawerNodeId: undefined,
                     selector: step.selector ?? selector,
                   })
                 }
@@ -275,6 +378,68 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                   </MenuItem>
                 ))}
               </TextField>
+              {['showElement', 'hideElement', 'toggleElement'].includes(
+                step.type,
+              ) ? (
+                // Element target (AGL-562): the canvas element picker,
+                // persisted as the node's stable data-aglyn selector.
+                <TextField
+                  label="Element"
+                  value={String(step.selector ?? selector)}
+                  onChange={(inputEvent) =>
+                    updateStep(index, { selector: inputEvent.target.value })
+                  }
+                  size="small"
+                  select
+                  sx={{ flex: 1 }}
+                >
+                  {elementTargetOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.nodeId === state.nodeId
+                        ? `This element · ${option.label}`
+                        : option.label}
+                    </MenuItem>
+                  ))}
+                  {elementTargetOptions.every(
+                    (option) => option.value !== String(step.selector ?? selector),
+                  ) ? (
+                    <MenuItem value={String(step.selector ?? selector)}>
+                      {'Custom selector'}
+                    </MenuItem>
+                  ) : null}
+                </TextField>
+              ) : null}
+              {['openDrawer', 'closeDrawer', 'toggleDrawer'].includes(
+                step.type,
+              ) ? (
+                // Drawer target (AGL-562): drawers on this canvas; empty
+                // addresses the page's first drawer.
+                <TextField
+                  label="Drawer"
+                  value={step.drawerNodeId ?? ''}
+                  onChange={(inputEvent) =>
+                    updateStep(index, {
+                      drawerNodeId: inputEvent.target.value || undefined,
+                    })
+                  }
+                  size="small"
+                  select
+                  sx={{ flex: 1 }}
+                  helperText={
+                    drawerTargetOptions.length
+                      ? undefined
+                      : 'No drawer on this screen yet — add one from the ' +
+                        'Navigation group'
+                  }
+                >
+                  <MenuItem value="">{'First drawer on the page'}</MenuItem>
+                  {drawerTargetOptions.map((option) => (
+                    <MenuItem key={option.nodeId} value={option.nodeId}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : null}
               {['toggleClass', 'addClass', 'removeClass'].includes(step.type) ? (
                 <>
                   <TextField

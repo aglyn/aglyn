@@ -55,6 +55,20 @@ Every group writes through the same responsive pipeline, so the active
 breakpoint scope applies — and each group saves only its own
 properties, never touching values you set elsewhere.
 
+## Visibility per device band
+
+The **Visibility** accordion hides the selected element on whole device
+bands — **mobile** (under 600px), **tablet** (600–899px), and
+**desktop** (900px and up). Bands are range-scoped rather than
+mobile-first, so hiding one band never changes the element's display on
+the others — the classic "hide the link cluster on mobile, show a menu
+button instead" swap is two toggles
+([menus & navigation](../menus-and-navigation/overview.md)).
+
+Band visibility applies at real viewport widths: the canvas follows your
+browser window, so resize the window (or open the published site) to see
+it take effect.
+
 ## Custom classes
 
 Every element accepts **Classes** (chips input under *Classes & custom

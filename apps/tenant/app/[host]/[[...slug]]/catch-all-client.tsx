@@ -562,6 +562,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           </>
         ) : null}
       </Head>
+      {/* Shared hidden class (AGL-562): ships in the SSR HTML so
+          elements authors start hidden (interaction show/hide targets)
+          paint hidden from the first frame — no flash before the
+          automations engine hydrates. The besigner canvas deliberately
+          omits this rule so hidden elements stay editable. */}
+      <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
       {/* Plugin site runtimes (AGL-419): experiment runners, automation
           engines, overlays — each registered from its plugin's site
           surface and reading back the page-props slices its own server

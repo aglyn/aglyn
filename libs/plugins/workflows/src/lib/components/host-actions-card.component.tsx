@@ -21,6 +21,7 @@ import {
   type AglynOrgBilling,
   checkEntitlement,
   createResourceUid,
+  ELEMENT_SCOPED_SITE_EVENTS,
   HOST_ACTION_STEP_LABELS,
   isSiteEventType,
   SITE_EVENT_TYPES,
@@ -93,6 +94,15 @@ function defaultStep(type: HostActionStepType): HostActionStep {
     case 'addClass':
     case 'removeClass':
       return { type, selector: '', className: '' }
+    // Element show/hide + drawer commands (AGL-562).
+    case 'showElement':
+    case 'hideElement':
+    case 'toggleElement':
+      return { type, selector: '' }
+    case 'openDrawer':
+    case 'closeDrawer':
+    case 'toggleDrawer':
+      return { type }
     case 'showHtml':
       return { type, html: '' }
     case 'runJs':
@@ -329,6 +339,7 @@ export function HostActionsCard(props: {
         ...(Number(draft.trigger.cooldownMinutes) >= 1
           ? { cooldownMinutes: Number(draft.trigger.cooldownMinutes) }
           : {}),
+        ...(draft.trigger.everyTime === true ? { everyTime: true } : {}),
         // Structured payload condition (AGL-557): built even when the
         // field is still blank so validateHostAction surfaces the miss.
         ...(draft.conditionOp
@@ -370,6 +381,7 @@ export function HostActionsCard(props: {
               Number(draft.trigger.cooldownMinutes) >= 1
                 ? Number(draft.trigger.cooldownMinutes)
                 : null,
+            everyTime: draft.trigger.everyTime === true,
             condition: candidate.trigger.condition ?? null,
           },
           updatedAt: Timestamp.now(),
@@ -471,6 +483,7 @@ export function HostActionsCard(props: {
                     pathPattern: action.trigger?.pathPattern ?? '',
                     oncePerVisitor: action.trigger?.oncePerVisitor === true,
                     oncePerSession: action.trigger?.oncePerSession === true,
+                    everyTime: action.trigger?.everyTime === true,
                     ...(Number(action.trigger?.cooldownMinutes) >= 1
                       ? {
                           cooldownMinutes: Number(
@@ -654,7 +667,7 @@ export function HostActionsCard(props: {
           {isSiteEventType(draft?.trigger.event ?? '') ? (
             // Site-event config (AGL-256): what/where the trigger watches.
             <Stack direction="row" spacing={1}>
-              {['scrollToElement', 'elementClick', 'elementVisible'].includes(
+              {(ELEMENT_SCOPED_SITE_EVENTS as readonly string[]).includes(
                 draft?.trigger.event ?? '',
               ) ? (
                 <TextField
@@ -727,7 +740,9 @@ export function HostActionsCard(props: {
                       ? 'session'
                       : Number(draft?.trigger.cooldownMinutes) >= 1
                         ? 'cooldown'
-                        : ''
+                        : draft?.trigger.everyTime
+                          ? 'every'
+                          : ''
                 }
                 onChange={(event) => {
                   const mode = event.target.value
@@ -735,6 +750,9 @@ export function HostActionsCard(props: {
                     ...previous,
                     trigger: {
                       ...previous.trigger,
+                      // Every occurrence (AGL-562): repeatable UI
+                      // choreography (menu/drawer toggles).
+                      everyTime: mode === 'every',
                       oncePerVisitor: mode === 'visitor',
                       oncePerSession: mode === 'session',
                       cooldownMinutes:
@@ -748,6 +766,9 @@ export function HostActionsCard(props: {
                 }}
               >
                 <MenuItem value="">{'Every matching pageview'}</MenuItem>
+                <MenuItem value="every">
+                  {'Every occurrence (repeatable)'}
+                </MenuItem>
                 <MenuItem value="session">{'Once per session'}</MenuItem>
                 <MenuItem value="visitor">{'Once per visitor'}</MenuItem>
                 <MenuItem value="cooldown">{'With a cooldown'}</MenuItem>
@@ -1070,6 +1091,53 @@ export function HostActionsCard(props: {
                     sx={{ width: 150 }}
                   />
                 </>
+              ) : step.type === 'showElement' ||
+                step.type === 'hideElement' ||
+                step.type === 'toggleElement' ? (
+                // Element choreography (AGL-562). The besigner's builder
+                // offers an element picker; here the CSS selector is the
+                // escape hatch (node targets use [data-aglyn="leaf:…"]).
+                <TextField
+                  label="CSS selector"
+                  placeholder='[data-aglyn="leaf:…"] or .my-class'
+                  value={(step as any).selector ?? ''}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) =>
+                        index2 === index
+                          ? { ...s, selector: event.target.value }
+                          : s,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ flex: 1 }}
+                />
+              ) : step.type === 'openDrawer' ||
+                step.type === 'closeDrawer' ||
+                step.type === 'toggleDrawer' ? (
+                <TextField
+                  label="Drawer node id (optional)"
+                  placeholder="Empty = the page's first drawer"
+                  value={(step as any).drawerNodeId ?? ''}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) =>
+                        index2 === index
+                          ? {
+                              ...s,
+                              drawerNodeId:
+                                event.target.value || undefined,
+                            }
+                          : s,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ flex: 1 }}
+                />
               ) : step.type === 'showHtml' || step.type === 'runJs' ? (
                 <TextField
                   label={step.type === 'showHtml' ? 'HTML' : 'JavaScript'}

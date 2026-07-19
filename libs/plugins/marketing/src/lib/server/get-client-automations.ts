@@ -84,6 +84,9 @@ export async function getClientAutomations(options: {
         ...(Number(action.trigger?.cooldownMinutes) >= 1
           ? { cooldownMinutes: Number(action.trigger?.cooldownMinutes) }
           : {}),
+        // Repeatable UI choreography (AGL-562): menu/drawer interactions
+        // fire on every occurrence instead of once per pageview.
+        ...(action.trigger?.everyTime === true ? { everyTime: true } : {}),
         steps: clientSteps,
         hasServerSteps,
       })

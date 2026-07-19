@@ -7,9 +7,17 @@ import {
 } from './components/blocks'
 import { schema as container } from './components/container'
 import {
+  drawerSchema as drawer,
+  drawerToggleSchema as drawerToggle,
+} from './components/drawer'
+import {
   formFieldSchema as formField,
   formSchema as form,
 } from './components/form'
+import {
+  megaMenuSchema as megaMenu,
+  navMenuSchema as navMenu,
+} from './components/nav-menu'
 import { schema as functionWidget } from './components/function-widget'
 import { schema as image } from './components/image'
 import { schema as layoutSlot } from './components/layout-slot'
@@ -37,9 +45,13 @@ const PERSISTED_COMPONENT_IDS = [
   'muiAppBar',
   'muiButton',
   'muiContainer',
+  'muiDrawer',
+  'muiDrawerToggle',
   'muiList',
   'muiListItem',
   'muiListItemText',
+  'muiMegaMenu',
+  'muiNavMenu',
   'muiScreenLink',
   'muiStack',
   'muiToolbar',
@@ -66,8 +78,12 @@ describe('plugins-mui', () => {
     const schemas = [
       appBar,
       button,
+      drawer,
+      drawerToggle,
       form,
       formField,
+      megaMenu,
+      navMenu,
       functionWidget,
       image,
       container,

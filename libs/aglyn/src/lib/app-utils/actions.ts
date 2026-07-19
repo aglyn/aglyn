@@ -35,9 +35,22 @@ export const SITE_EVENT_TYPES = [
   'scrollToElement',
   'elementClick',
   'elementVisible',
+  // Hover choreography (AGL-562): delegated enter/leave on the trigger
+  // selector — the nav-menu/drawer show-hide building blocks.
+  'elementHoverEnter',
+  'elementHoverLeave',
   'exitIntent',
   'timeOnPage',
   'pageVisit',
+] as const
+
+/** Site events that watch a specific element and need a selector. */
+export const ELEMENT_SCOPED_SITE_EVENTS = [
+  'scrollToElement',
+  'elementClick',
+  'elementVisible',
+  'elementHoverEnter',
+  'elementHoverLeave',
 ] as const
 
 export type SiteEventType = (typeof SITE_EVENT_TYPES)[number]
@@ -129,6 +142,13 @@ export interface HostActionTrigger {
    * `oncePerVisitor` is set.
    */
   cooldownMinutes?: number
+  /**
+   * Fire on EVERY occurrence instead of once per pageview (AGL-562) —
+   * required for repeatable UI choreography (menu toggles, drawer
+   * open/close, hover show/hide). Site events only; the explicit
+   * per-session/visitor/cooldown caps above still win when set.
+   */
+  everyTime?: boolean
 }
 
 export type HostActionStep =
@@ -153,6 +173,19 @@ export type HostActionStep =
   | { type: 'addClass'; selector: string; className: string }
   | { type: 'removeClass'; selector: string; className: string }
   | { type: 'toggleClass'; selector: string; className: string }
+  // Element show/hide choreography (AGL-562): sugar over the shared
+  // hidden class (see element-ui.ts) so authors never type class names.
+  // The besigner target picker emits the node's stable data-aglyn
+  // selector; any CSS selector works.
+  | { type: 'showElement'; selector: string }
+  | { type: 'hideElement'; selector: string }
+  | { type: 'toggleElement'; selector: string }
+  // Drawer commands (AGL-562): delivered to muiDrawer instances over the
+  // window event bus keyed by node id; an empty target addresses the
+  // page's first drawer.
+  | { type: 'openDrawer'; drawerNodeId?: string }
+  | { type: 'closeDrawer'; drawerNodeId?: string }
+  | { type: 'toggleDrawer'; drawerNodeId?: string }
   | { type: 'showHtml'; html: string }
   | { type: 'runJs'; code: string }
   // Screen targets are rename-safe (AGL-339): the tenant resolves the
@@ -179,6 +212,12 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'addClass',
     'removeClass',
     'toggleClass',
+    'showElement',
+    'hideElement',
+    'toggleElement',
+    'openDrawer',
+    'closeDrawer',
+    'toggleDrawer',
     'showHtml',
     'runJs',
     'redirect',
@@ -218,6 +257,12 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   addClass: 'Add a CSS class',
   toggleClass: 'Toggle a CSS class',
   removeClass: 'Remove a CSS class',
+  showElement: 'Show an element',
+  hideElement: 'Hide an element',
+  toggleElement: 'Show/hide an element',
+  openDrawer: 'Open a drawer',
+  closeDrawer: 'Close a drawer',
+  toggleDrawer: 'Open/close a drawer',
   showHtml: 'Show custom HTML',
   runJs: 'Run custom JS (Business)',
   redirect: 'Redirect the visitor',
@@ -252,9 +297,9 @@ export function validateHostAction(action: HostAction): string | null {
   ) {
     return 'Custom event names are 2–40 letters, digits, dashes'
   }
-  // Site-event trigger config (AGL-256).
+  // Site-event trigger config (AGL-256; hover events AGL-562).
   if (
-    ['scrollToElement', 'elementClick', 'elementVisible'].includes(event) &&
+    (ELEMENT_SCOPED_SITE_EVENTS as readonly string[]).includes(event) &&
     !action.trigger?.selector?.trim()
   ) {
     return 'This trigger needs a CSS selector'
@@ -331,6 +376,16 @@ export function validateHostAction(action: HostAction): string | null {
     ) {
       if (!step.selector?.trim()) return `${label}: enter a CSS selector`
       if (!step.className?.trim()) return `${label}: enter the class name`
+    }
+    // Element show/hide steps (AGL-562) always target a selector; drawer
+    // commands may omit the target (the page's first drawer answers).
+    if (
+      (step.type === 'showElement' ||
+        step.type === 'hideElement' ||
+        step.type === 'toggleElement') &&
+      !step.selector?.trim()
+    ) {
+      return `${label}: pick the element to show or hide`
     }
     if (step.type === 'showHtml' && !step.html?.trim()) {
       return `${label}: enter the HTML`

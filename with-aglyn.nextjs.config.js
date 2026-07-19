@@ -235,10 +235,24 @@ const AGLYN_CONFIG = {
   devIndicators: false,
 
   experimental: {
-    workerThreads: true,
+    /**
+     * Off since AGL-563: each worker carries its own V8 heap, and on
+     * Vercel's 2-core/8GB builders the multiplied memory OOM-killed the
+     * console build with no meaningful parallelism to show for it.
+     */
+    workerThreads: false,
+
+    /** Trades some build speed for a smaller webpack heap (AGL-563). */
+    webpackMemoryOptimizations: true,
 
     /**
      * required to stop the FATAL heap crash
+     *
+     * Deliberately KEPT despite Next's "not recommended to modify"
+     * warning (AGL-563 audit): the transpilePackages block below exists
+     * to make MUI's ESM/CJS interop correct under esmExternals:false —
+     * removing this resurrects the "TypeError: m is not a function"
+     * collect-page-data crashes (see the Vercel build fix history).
      */
     esmExternals: false,
 

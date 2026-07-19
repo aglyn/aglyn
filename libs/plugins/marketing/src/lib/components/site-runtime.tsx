@@ -292,6 +292,39 @@ function AutomationsEngine(props: {
                 ? Aglyn.screenRoutePathToUrl(screenSlug)
                 : step.url
             if (destination) window.location.assign(destination)
+          } else if (
+            step.type === 'showElement' ||
+            step.type === 'hideElement' ||
+            step.type === 'toggleElement'
+          ) {
+            // Element choreography (AGL-562): class-based so "show"
+            // reveals targets the author started hidden. The tenant page
+            // ships the hidden-class rule in its SSR HTML; ensure is the
+            // fallback for other embeddings.
+            Aglyn.ensureElementHiddenStyle()
+            Aglyn.applyElementVisibility(
+              step.type === 'showElement'
+                ? 'show'
+                : step.type === 'hideElement'
+                  ? 'hide'
+                  : 'toggle',
+              step.selector,
+            )
+          } else if (
+            step.type === 'openDrawer' ||
+            step.type === 'closeDrawer' ||
+            step.type === 'toggleDrawer'
+          ) {
+            // Drawer commands (AGL-562) ride the window event bus; the
+            // muiDrawer element answers (first drawer for broadcasts).
+            Aglyn.dispatchDrawerCommand(
+              step.type === 'openDrawer'
+                ? 'open'
+                : step.type === 'closeDrawer'
+                  ? 'close'
+                  : 'toggle',
+              step.drawerNodeId || undefined,
+            )
           } else if (step.type === 'trackGaEvent') {
             ;(window as any).gtag?.('event', step.eventName, step.params ?? {})
           } else if (step.type === 'siteAlert') {
@@ -309,8 +342,12 @@ function AutomationsEngine(props: {
     }
 
     const fire = (automation: ClientAutomation) => {
-      if (fired.has(automation.id)) return
-      fired.add(automation.id)
+      // Repeatable UI choreography (AGL-562): everyTime automations skip
+      // the once-per-pageview gate (explicit caps below still apply).
+      if (!automation.everyTime) {
+        if (fired.has(automation.id)) return
+        fired.add(automation.id)
+      }
       // Once per visitor (AGL-266): a persisted flag outlives the pageview.
       if (automation.oncePerVisitor) {
         const key = `aglyn:auto:${automation.id}`
@@ -404,6 +441,27 @@ function AutomationsEngine(props: {
         document.addEventListener('click', onClick, true)
         cleanups.push(() =>
           document.removeEventListener('click', onClick, true),
+        )
+      } else if (
+        event === 'elementHoverEnter' ||
+        event === 'elementHoverLeave'
+      ) {
+        // Hover choreography (AGL-562): delegated mouseover/mouseout with
+        // enter/leave semantics — moves WITHIN the matched element (its
+        // own children) never re-fire.
+        if (!selector) continue
+        const onHover = (mouseEvent: MouseEvent) => {
+          const target = mouseEvent.target as Element | null
+          const match = target?.closest?.(selector)
+          if (!match) return
+          const related = mouseEvent.relatedTarget as Element | null
+          if (related && match.contains(related)) return
+          fire(automation)
+        }
+        const type = event === 'elementHoverEnter' ? 'mouseover' : 'mouseout'
+        document.addEventListener(type, onHover, true)
+        cleanups.push(() =>
+          document.removeEventListener(type, onHover, true),
         )
       } else if (event === 'exitIntent') {
         const onLeave = (mouseEvent: MouseEvent) => {
