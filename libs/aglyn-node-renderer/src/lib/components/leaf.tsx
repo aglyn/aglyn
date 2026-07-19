@@ -33,21 +33,39 @@ export interface LeafProps extends HTMLAttributes<any> {
 
 export const Leaf = observer(
   forwardRef<any, LeafProps>((props, ref) => {
-    const { children, node, sx, ...rest } = props
+    const { children, node, sx, className, style, ...rest } = props
 
-    const resolvedProps = node?.resolvedProps
+    // Pull sx/className/style out of the node's props so the spreads below
+    // can never clobber the merged values composed explicitly afterwards
+    // (AGL-569: `props.sx` used to overwrite the node-level sx entirely).
+    const {
+      sx: propsSx,
+      className: propsClassName,
+      style: propsStyle,
+      ...resolvedProps
+    } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
     const Factory = Aglyn.components.getFactory(node?.componentId)
     const Component = isValidElementType(Factory) ? Factory : DefaultComponent
 
     const textContent = resolvedProps?.['children']
 
+    const mergedClassName =
+      [propsClassName, node?.className, className].filter(Boolean).join(' ') ||
+      undefined
+    const mergedStyle =
+      propsStyle || style ? { ...propsStyle, ...style } : undefined
+
     return (
       <Component
         ref={ref}
         data-aglyn={`leaf:${node?.$id}`}
-        sx={mergeSxProps(sx as any, node?.sx as any, resolvedProps?.sx as any)}
         {...resolvedProps}
         {...rest}
+        className={mergedClassName}
+        style={mergedStyle}
+        // MUI array composition: later entries win on key conflicts, so the
+        // node-level sx (Styles panel output) overrides props.sx.
+        sx={mergeSxProps(sx as any, propsSx as any, node?.sx as any)}
       >
         {children}
 
