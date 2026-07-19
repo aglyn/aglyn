@@ -141,7 +141,7 @@ export function subscribeDrawerCommands(
  * never needs a "restore" display value on the others — the element's
  * natural display simply keeps applying outside the hidden range.
  * Boundaries follow the MUI defaults the device preview uses: mobile
- * < 600, tablet 600–899, desktop ≥ 900.
+ * under 600, tablet 600–899, desktop 900 and up.
  */
 export const VISIBILITY_BANDS = ['mobile', 'tablet', 'desktop'] as const
 
