@@ -377,6 +377,101 @@ describe('form survey fields (AGL-544)', () => {
     })
   })
 
+  describe('conditional automations over submitted fields (AGL-565)', () => {
+    /**
+     * Submits a survey with a ticked `subscribe` box and a filled `email`
+     * and returns the fields payload — the exact object the action
+     * pipeline hands to evaluateTriggerConditions on formSubmission.
+     */
+    const submitSurvey = async () => {
+      const { form } = renderForm(
+        <>
+          <FormField fieldName="email" fieldType="email" />
+          <FormField
+            fieldName="subscribe"
+            fieldType="checkbox"
+            options="Keep me posted"
+          />
+        </>,
+      )
+      fireEvent.change(form.querySelector('input[name="email"]') as Element, {
+        target: { value: 'ada@example.com' },
+      })
+      fireEvent.click(screen.getByRole('checkbox'))
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      return submittedFields(fetchMock)
+    }
+
+    it('still honors a legacy single-condition automation (AGL-557 shape)', async () => {
+      const fields = await submitSurvey()
+      // Pre-565 docs carry `condition`; nothing about them changes.
+      expect(
+        Aglyn.evaluateTriggerConditions(
+          { condition: { field: 'subscribe', op: 'notEmpty' } },
+          fields,
+        ),
+      ).toBe(true)
+      expect(
+        Aglyn.evaluateTriggerConditions(
+          { condition: { field: 'phone', op: 'notEmpty' } },
+          fields,
+        ),
+      ).toBe(false)
+    })
+
+    it('AND chains require every condition over the submission', async () => {
+      const fields = await submitSurvey()
+      const conditions: Aglyn.HostActionTriggerCondition[] = [
+        { field: 'subscribe', op: 'notEmpty' },
+        { field: 'email', op: 'contains', value: '@example.com' },
+      ]
+      expect(
+        Aglyn.evaluateTriggerConditions(
+          { conditions, combinator: 'and' },
+          fields,
+        ),
+      ).toBe(true)
+      expect(
+        Aglyn.evaluateTriggerConditions(
+          {
+            conditions: [...conditions, { field: 'phone', op: 'notEmpty' }],
+            combinator: 'and',
+          },
+          fields,
+        ),
+      ).toBe(false)
+    })
+
+    it('OR chains pass on any matching condition', async () => {
+      const fields = await submitSurvey()
+      expect(
+        Aglyn.evaluateTriggerConditions(
+          {
+            conditions: [
+              { field: 'phone', op: 'notEmpty' },
+              { field: 'subscribe', op: 'contains', value: 'keep me posted' },
+            ],
+            combinator: 'or',
+          },
+          fields,
+        ),
+      ).toBe(true)
+      expect(
+        Aglyn.evaluateTriggerConditions(
+          {
+            conditions: [
+              { field: 'phone', op: 'notEmpty' },
+              { field: 'email', op: 'equals', value: 'someone-else' },
+            ],
+            combinator: 'or',
+          },
+          fields,
+        ),
+      ).toBe(false)
+    })
+  })
+
   describe('dataset binding by id (AGL-556)', () => {
     it('sends datasetId, with the legacy name riding along', async () => {
       const { form } = renderForm(<FormField fieldName="comments" />, {

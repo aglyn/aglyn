@@ -86,6 +86,11 @@ Visitors who tick the box are added to the list (and can be targeted by
 [email campaigns](../../marketing-and-automation/email-campaigns/overview.md));
 everyone lands on the thank-you page.
 
+Need a finer net? Conditions
+[chain with AND/OR](../../marketing-and-automation/workflows-and-actions/actions-builder.md#chain-multiple-conditions-andor)
+— e.g. enroll only when `subscribe` is ticked **and** `plan` equals `Pro`, or when
+either of two topic boxes is ticked.
+
 ## Where submissions go
 
 - **Inbox** — every submission is captured; open it in the console's mail reader dialog.

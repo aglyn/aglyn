@@ -16,12 +16,15 @@
  */
 
 import {
+  ACTION_MAX_CONDITIONS,
   CLIENT_ACTION_STEP_TYPES,
   evaluateTriggerCondition,
+  evaluateTriggerConditions,
   type HostAction,
   HOST_ACTION_STEP_LABELS,
   isCustomEventName,
   isSiteEventType,
+  normalizeTriggerConditions,
   validateHostAction,
   WEBHOOK_URL_PATTERN,
 } from './actions'
@@ -280,6 +283,24 @@ describe('evaluateTriggerCondition (AGL-557)', () => {
     expect(withCondition(null)).toBeNull()
   })
 
+  it('single-condition triggers evaluate unchanged through the list API', () => {
+    // Backward compat (AGL-565): pre-565 docs carry `condition` only.
+    expect(
+      evaluateTriggerConditions(
+        { condition: { field: 'subscribe', op: 'equals', value: 'yes' } },
+        payload,
+      ),
+    ).toBe(true)
+    expect(
+      evaluateTriggerConditions(
+        { condition: { field: 'subscribe', op: 'equals', value: 'no' } },
+        payload,
+      ),
+    ).toBe(false)
+    expect(evaluateTriggerConditions({ condition: null }, payload)).toBe(true)
+    expect(evaluateTriggerConditions(undefined, payload)).toBe(true)
+  })
+
   it('validates enrollList steps (the email-audience step)', () => {
     expect(
       validateHostAction({
@@ -293,6 +314,201 @@ describe('evaluateTriggerCondition (AGL-557)', () => {
         steps: [{ type: 'enrollList', listId: 'list-1' }],
       }),
     ).toBeNull()
+  })
+})
+
+describe('condition chaining (AGL-565)', () => {
+  const payload = {
+    event: 'formSubmission',
+    subscribe: 'Yes',
+    topics: 'Products, Pricing',
+    plan: 'Pro',
+    comments: '  ',
+  }
+  const subscribed = {
+    field: 'subscribe',
+    op: 'notEmpty',
+  } as const
+  const proPlan = {
+    field: 'plan',
+    op: 'equals',
+    value: 'pro',
+  } as const
+  const wantsSupport = {
+    field: 'topics',
+    op: 'contains',
+    value: 'Support',
+  } as const
+
+  describe('normalizeTriggerConditions', () => {
+    it('returns the legacy single condition as a one-element list', () => {
+      expect(normalizeTriggerConditions({ condition: subscribed })).toEqual([
+        subscribed,
+      ])
+    })
+
+    it('prefers the conditions array over the legacy condition', () => {
+      expect(
+        normalizeTriggerConditions({
+          condition: subscribed,
+          conditions: [proPlan, wantsSupport],
+        }),
+      ).toEqual([proPlan, wantsSupport])
+    })
+
+    it('returns an empty list for absent or cleared clauses', () => {
+      expect(normalizeTriggerConditions(undefined)).toEqual([])
+      expect(normalizeTriggerConditions(null)).toEqual([])
+      expect(normalizeTriggerConditions({})).toEqual([])
+      expect(
+        normalizeTriggerConditions({ condition: null, conditions: null }),
+      ).toEqual([])
+    })
+
+    it('a null conditions key falls back to the legacy condition', () => {
+      // Merge-set clears write null (AGL-557 pattern) — never an array.
+      expect(
+        normalizeTriggerConditions({
+          condition: subscribed,
+          conditions: null,
+        }),
+      ).toEqual([subscribed])
+    })
+  })
+
+  describe('evaluateTriggerConditions', () => {
+    it('AND (the default) requires every condition', () => {
+      expect(
+        evaluateTriggerConditions(
+          { conditions: [subscribed, proPlan] },
+          payload,
+        ),
+      ).toBe(true)
+      expect(
+        evaluateTriggerConditions(
+          { conditions: [subscribed, proPlan], combinator: 'and' },
+          payload,
+        ),
+      ).toBe(true)
+      expect(
+        evaluateTriggerConditions(
+          { conditions: [subscribed, wantsSupport], combinator: 'and' },
+          payload,
+        ),
+      ).toBe(false)
+      expect(
+        evaluateTriggerConditions(
+          { conditions: [subscribed, proPlan, wantsSupport] },
+          payload,
+        ),
+      ).toBe(false)
+    })
+
+    it('OR requires any condition', () => {
+      expect(
+        evaluateTriggerConditions(
+          { conditions: [wantsSupport, proPlan], combinator: 'or' },
+          payload,
+        ),
+      ).toBe(true)
+      expect(
+        evaluateTriggerConditions(
+          {
+            conditions: [
+              wantsSupport,
+              { field: 'comments', op: 'notEmpty' },
+            ],
+            combinator: 'or',
+          },
+          payload,
+        ),
+      ).toBe(false)
+    })
+
+    it('an empty list always passes, whatever the combinator', () => {
+      expect(
+        evaluateTriggerConditions({ conditions: [] }, payload),
+      ).toBe(true)
+      expect(
+        evaluateTriggerConditions(
+          { conditions: [], combinator: 'or' },
+          payload,
+        ),
+      ).toBe(true)
+    })
+
+    it('keeps AGL-557 per-condition semantics inside the chain', () => {
+      // Trim + case-insensitive equals, checkbox-join contains.
+      expect(
+        evaluateTriggerConditions(
+          {
+            conditions: [
+              { field: 'subscribe', op: 'equals', value: ' YES ' },
+              { field: 'topics', op: 'contains', value: 'pricing' },
+            ],
+          },
+          payload,
+        ),
+      ).toBe(true)
+    })
+  })
+
+  describe('validateHostAction with chained conditions', () => {
+    const withTrigger = (extra: Record<string, unknown>) =>
+      validateHostAction({
+        ...base,
+        trigger: { ...base.trigger, ...extra },
+      } as HostAction)
+
+    it('accepts a well-formed chain with either combinator', () => {
+      expect(
+        withTrigger({ conditions: [subscribed, proPlan], combinator: 'and' }),
+      ).toBeNull()
+      expect(
+        withTrigger({ conditions: [subscribed, proPlan], combinator: 'or' }),
+      ).toBeNull()
+    })
+
+    it('rejects unknown combinators', () => {
+      expect(withTrigger({ combinator: 'xor' })).toMatch(/AND or OR/)
+    })
+
+    it('points at the broken row of a multi-condition chain', () => {
+      expect(
+        withTrigger({
+          conditions: [subscribed, { field: '', op: 'notEmpty' }],
+        }),
+      ).toMatch(/condition 2/)
+      expect(
+        withTrigger({
+          conditions: [
+            subscribed,
+            { field: 'plan', op: 'equals', value: ' ' },
+          ],
+        }),
+      ).toMatch(/condition 2/)
+    })
+
+    it('keeps the AGL-557 single-condition messages unchanged', () => {
+      expect(withTrigger({ conditions: [{ field: '', op: 'notEmpty' }] }))
+        .toBe('Name the field the condition checks')
+    })
+
+    it('caps the chain length', () => {
+      expect(
+        withTrigger({
+          conditions: Array.from({ length: ACTION_MAX_CONDITIONS + 1 }, () => ({
+            ...subscribed,
+          })),
+        }),
+      ).toMatch(/capped/)
+    })
+
+    it('null conditions/combinator clear cleanly (merge-set semantics)', () => {
+      expect(
+        withTrigger({ condition: null, conditions: null, combinator: null }),
+      ).toBeNull()
+    })
   })
 })
 

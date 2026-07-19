@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  ACTION_MAX_CONDITIONS,
   ACTION_MAX_STEPS,
   type AglynOrgBilling,
   checkEntitlement,
@@ -24,11 +25,13 @@ import {
   ELEMENT_SCOPED_SITE_EVENTS,
   HOST_ACTION_STEP_LABELS,
   isSiteEventType,
+  normalizeTriggerConditions,
   SITE_EVENT_TYPES,
   HOST_EVENT_TYPES,
   type HostAction,
   type HostActionStep,
   type HostActionStepType,
+  type TriggerCombinator,
   type TriggerConditionOp,
   validateHostAction,
 } from '@aglyn/aglyn'
@@ -66,15 +69,25 @@ import HostActivityCard from './host-activity-card.component'
 
 const CUSTOM_EVENT_VALUE = '__custom__'
 
+/** One editable condition row (AGL-565); a lone row with an empty op
+ * means "always run" and clears the stored conditions. */
+interface ConditionRowDraft {
+  op: '' | TriggerConditionOp
+  field: string
+  value: string
+}
+
+const EMPTY_CONDITION_ROW: ConditionRowDraft = { op: '', field: '', value: '' }
+
 interface ActionDraft extends HostAction {
   id: string | null
   /** Raw custom-event text when the trigger select is on "custom". */
   customEvent: string
-  // Structured payload condition (AGL-557), held flat like customEvent:
-  // an empty op means "always run" and clears the stored condition.
-  conditionOp: '' | TriggerConditionOp
-  conditionField: string
-  conditionValue: string
+  // Structured payload conditions (AGL-557), chainable with AND/OR
+  // (AGL-565) — held as rows like the steps list; legacy
+  // single-`condition` docs hydrate through normalizeTriggerConditions.
+  conditionRows: ConditionRowDraft[]
+  conditionCombinator: TriggerCombinator
 }
 
 function defaultStep(type: HostActionStepType): HostActionStep {
@@ -266,9 +279,8 @@ export function HostActionsCard(props: {
       steps: [defaultStep('siteAlert')],
       enabled: true,
       customEvent: '',
-      conditionOp: '',
-      conditionField: '',
-      conditionValue: '',
+      conditionRows: [EMPTY_CONDITION_ROW],
+      conditionCombinator: 'and',
     })
   }, [org, enqueueSnackbar])
 
@@ -340,17 +352,22 @@ export function HostActionsCard(props: {
           ? { cooldownMinutes: Number(draft.trigger.cooldownMinutes) }
           : {}),
         ...(draft.trigger.everyTime === true ? { everyTime: true } : {}),
-        // Structured payload condition (AGL-557): built even when the
-        // field is still blank so validateHostAction surfaces the miss.
-        ...(draft.conditionOp
+        // Structured payload conditions (AGL-557; chained AGL-565):
+        // rows keep their blank fields so validateHostAction surfaces
+        // the miss. Saves always write the list shape — the legacy
+        // single `condition` is only ever read, never written back.
+        ...(draft.conditionRows.some((row) => row.op)
           ? {
-              condition: {
-                field: draft.conditionField.trim(),
-                op: draft.conditionOp,
-                ...(draft.conditionOp !== 'notEmpty'
-                  ? { value: draft.conditionValue.trim() }
-                  : {}),
-              },
+              conditions: draft.conditionRows
+                .filter((row) => row.op)
+                .map((row) => ({
+                  field: row.field.trim(),
+                  op: row.op as TriggerConditionOp,
+                  ...(row.op !== 'notEmpty'
+                    ? { value: row.value.trim() }
+                    : {}),
+                })),
+              combinator: draft.conditionCombinator,
             }
           : {}),
       },
@@ -372,7 +389,9 @@ export function HostActionsCard(props: {
           ...candidate,
           // Frequency caps overwrite explicitly (AGL-274): a merge-set
           // keeps omitted keys, so switching one off must write it out.
-          // The condition follows suit (AGL-557) — null clears it.
+          // Conditions follow suit (AGL-557/565): the list + combinator
+          // write null when cleared, and the legacy single `condition`
+          // is always nulled — `conditions` is canonical from now on.
           trigger: {
             ...candidate.trigger,
             oncePerVisitor: draft.trigger.oncePerVisitor === true,
@@ -382,7 +401,9 @@ export function HostActionsCard(props: {
                 ? Number(draft.trigger.cooldownMinutes)
                 : null,
             everyTime: draft.trigger.everyTime === true,
-            condition: candidate.trigger.condition ?? null,
+            condition: null,
+            conditions: candidate.trigger.conditions ?? null,
+            combinator: candidate.trigger.combinator ?? null,
           },
           updatedAt: Timestamp.now(),
           ...(draft.id ? {} : { createdAt: Timestamp.now() }),
@@ -499,10 +520,22 @@ export function HostActionsCard(props: {
                     isSiteEventType(String(action.trigger?.event ?? ''))
                       ? ''
                       : (action.trigger?.event ?? ''),
-                  // Structured condition (AGL-557).
-                  conditionOp: action.trigger?.condition?.op ?? '',
-                  conditionField: action.trigger?.condition?.field ?? '',
-                  conditionValue: action.trigger?.condition?.value ?? '',
+                  // Structured conditions (AGL-557; chained AGL-565):
+                  // legacy single-condition docs normalize to one row.
+                  conditionRows: (() => {
+                    const rows = normalizeTriggerConditions(
+                      action.trigger,
+                    ).map(
+                      (condition): ConditionRowDraft => ({
+                        op: condition.op ?? '',
+                        field: condition.field ?? '',
+                        value: condition.value ?? '',
+                      }),
+                    )
+                    return rows.length ? rows : [EMPTY_CONDITION_ROW]
+                  })(),
+                  conditionCombinator:
+                    action.trigger?.combinator === 'or' ? 'or' : 'and',
                 })
               }
             >
@@ -610,60 +643,159 @@ export function HostActionsCard(props: {
               />
             )}
           </Stack>
-          {/* Structured payload condition (AGL-557): the no-code sibling
-              of the filter — e.g. only when `subscribe` is not empty. */}
-          <Stack direction="row" spacing={1}>
-            <TextField
-              select
-              label="Only run when"
-              value={draft?.conditionOp ?? ''}
-              onChange={(event) =>
-                patch((previous) => ({
-                  ...previous,
-                  conditionOp: event.target
-                    .value as ActionDraft['conditionOp'],
-                }))
-              }
-              size="small"
-              sx={{ minWidth: 180 }}
+          {/* Structured payload conditions (AGL-557): the no-code sibling
+              of the filter — e.g. only when `subscribe` is not empty.
+              Chainable with AND/OR (AGL-565), rows styled like steps. */}
+          {(draft?.conditionRows ?? []).map((row, index) => (
+            <Stack
+              key={index}
+              direction="row"
+              spacing={1}
+              sx={{ alignItems: 'center' }}
             >
-              <MenuItem value="">{'Always (no condition)'}</MenuItem>
-              <MenuItem value="notEmpty">{'A field is not empty'}</MenuItem>
-              <MenuItem value="equals">{'A field equals…'}</MenuItem>
-              <MenuItem value="contains">{'A field contains…'}</MenuItem>
-            </TextField>
-            {draft?.conditionOp ? (
+              {index > 0 ? (
+                <Typography variant="caption" color="text.secondary">
+                  {draft?.conditionCombinator === 'or' ? 'or' : 'and'}
+                </Typography>
+              ) : null}
               <TextField
-                label="Field"
-                placeholder="subscribe"
-                value={draft?.conditionField ?? ''}
+                select
+                label={index === 0 ? 'Only run when' : 'Condition'}
+                value={row.op}
                 onChange={(event) =>
                   patch((previous) => ({
                     ...previous,
-                    conditionField: event.target.value,
+                    conditionRows: previous.conditionRows.map(
+                      (previousRow, index2) =>
+                        index2 === index
+                          ? {
+                              ...previousRow,
+                              op: event.target
+                                .value as ConditionRowDraft['op'],
+                            }
+                          : previousRow,
+                    ),
                   }))
                 }
                 size="small"
-                sx={{ flex: 1 }}
-              />
-            ) : null}
-            {draft?.conditionOp === 'equals' ||
-            draft?.conditionOp === 'contains' ? (
-              <TextField
-                label="Value"
-                placeholder="Yes"
-                value={draft?.conditionValue ?? ''}
-                onChange={(event) =>
+                sx={{ minWidth: 180 }}
+              >
+                {/* "Always" only exists while this is the sole row —
+                    multi-row chains clear by removing rows instead. */}
+                {(draft?.conditionRows.length ?? 0) === 1 ? (
+                  <MenuItem value="">{'Always (no condition)'}</MenuItem>
+                ) : null}
+                <MenuItem value="notEmpty">{'A field is not empty'}</MenuItem>
+                <MenuItem value="equals">{'A field equals…'}</MenuItem>
+                <MenuItem value="contains">{'A field contains…'}</MenuItem>
+              </TextField>
+              {row.op ? (
+                <TextField
+                  label="Field"
+                  placeholder="subscribe"
+                  value={row.field}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      conditionRows: previous.conditionRows.map(
+                        (previousRow, index2) =>
+                          index2 === index
+                            ? { ...previousRow, field: event.target.value }
+                            : previousRow,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ flex: 1 }}
+                />
+              ) : null}
+              {row.op === 'equals' || row.op === 'contains' ? (
+                <TextField
+                  label="Value"
+                  placeholder="Yes"
+                  value={row.value}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      conditionRows: previous.conditionRows.map(
+                        (previousRow, index2) =>
+                          index2 === index
+                            ? { ...previousRow, value: event.target.value }
+                            : previousRow,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ flex: 1 }}
+                />
+              ) : null}
+              {(draft?.conditionRows.length ?? 0) > 1 ? (
+                <IconButton
+                  size="small"
+                  aria-label="remove condition"
+                  onClick={() =>
+                    patch((previous) => ({
+                      ...previous,
+                      conditionRows: previous.conditionRows.length > 1
+                        ? previous.conditionRows.filter(
+                            (_, index2) => index2 !== index,
+                          )
+                        : [EMPTY_CONDITION_ROW],
+                    }))
+                  }
+                >
+                  {'×'}
+                </IconButton>
+              ) : null}
+            </Stack>
+          ))}
+          {draft?.conditionRows.every((row) => row.op) ? (
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Button
+                size="small"
+                disabled={
+                  (draft?.conditionRows.length ?? 0) >= ACTION_MAX_CONDITIONS
+                }
+                onClick={() =>
                   patch((previous) => ({
                     ...previous,
-                    conditionValue: event.target.value,
+                    conditionRows: [
+                      ...previous.conditionRows,
+                      // New rows start on the simplest operator so the
+                      // field input is immediately visible.
+                      { op: 'notEmpty', field: '', value: '' },
+                    ],
                   }))
                 }
-                size="small"
-                sx={{ flex: 1 }}
-              />
-            ) : null}
-          </Stack>
+              >
+                {'Add condition'}
+              </Button>
+              {(draft?.conditionRows.length ?? 0) >= 2 ? (
+                // AND/OR combinator (AGL-565); applies to every row.
+                <TextField
+                  select
+                  label="Match"
+                  value={draft?.conditionCombinator ?? 'and'}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      conditionCombinator: event.target
+                        .value as TriggerCombinator,
+                    }))
+                  }
+                  size="small"
+                  sx={{ minWidth: 220 }}
+                >
+                  <MenuItem value="and">
+                    {'All conditions match (AND)'}
+                  </MenuItem>
+                  <MenuItem value="or">
+                    {'Any condition matches (OR)'}
+                  </MenuItem>
+                </TextField>
+              ) : null}
+            </Stack>
+          ) : null}
           {isSiteEventType(draft?.trigger.event ?? '') ? (
             // Site-event config (AGL-256): what/where the trigger watches.
             <Stack direction="row" spacing={1}>

@@ -61,6 +61,21 @@ action on **formSubmission** with the condition *"A field is not empty" → `sub
 and one step: **Enroll in a list**, picking your audience. Visitors who tick the box
 join the list; everyone else just submits the form.
 
+### Chain multiple conditions (AND/OR)
+
+One condition rarely tells the whole story, so a condition can be a **chain**: click
+**Add condition** to append another row (up to five), and remove a row with its **×**
+button. With two or more rows a **Match** select appears:
+
+- **All conditions match (AND)** — the default; the action runs only when *every* row
+  passes. E.g. `subscribe` is not empty **and** `plan` equals `Pro`.
+- **Any condition matches (OR)** — the action runs when *at least one* row passes.
+  E.g. `topics` contains `Pricing` **or** `topics` contains `Billing`.
+
+Each row keeps the single-condition operators and semantics unchanged (trimmed,
+case-insensitive matching). Existing automations with a single condition keep working
+exactly as before — editing one simply shows it as a one-row chain.
+
 Each automation row offers a **Runs** log (its recent executions) and, for page
 triggers, a **Test** button that exercises the server-side steps immediately.
 
