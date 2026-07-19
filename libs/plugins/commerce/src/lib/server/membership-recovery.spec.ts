@@ -372,6 +372,30 @@ describe('membership reset handler (AGL-552)', () => {
     expect(memberSetCalls).toHaveLength(0)
   })
 
+  it('rejects a suspended member even with a valid token (AGL-550)', async () => {
+    // A token minted BEFORE the suspension stays cryptographically valid
+    // for its hour — the handler must still refuse to rehabilitate the
+    // account's password.
+    const token = mintPasswordResetToken(
+      HOST_ID,
+      'member-1',
+      mockMemberFields['passwordScrypt'] as string,
+    )
+    mockMemberFields['suspended'] = true
+    const { res, result } = makeResponse()
+    await membershipResetHandler(
+      makeRequest('10.2.0.7', {
+        hostId: HOST_ID,
+        token,
+        password: 'a whole new password',
+      }),
+      res,
+    )
+    expect(result.status).toBe(403)
+    expect(String(result.body?.error)).toMatch(/suspended/i)
+    expect(memberSetCalls).toHaveLength(0)
+  })
+
   it('rejects short passwords before touching the token', async () => {
     const { res, result } = makeResponse()
     await membershipResetHandler(

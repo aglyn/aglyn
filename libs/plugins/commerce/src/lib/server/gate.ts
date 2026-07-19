@@ -19,7 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { readMemberSession } from './membership'
+import { readActiveMemberSession, setMemberCookie } from './membership'
 
 /** Subscription statuses that grant access (trialing pays later). */
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
@@ -89,18 +89,17 @@ export const gateHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
   const productId = String(req.query.productId ?? 'any')
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  const memberId = readMemberSession(req, hostId)
-  if (!memberId) return res.status(200).json({ entitled: false, signedIn: false })
   try {
-    const memberSnapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('hosts')
-      .doc(hostId)
-      .collection('siteMembers')
-      .doc(memberId)
-      .get()
-    const email = String(memberSnapshot.get('email') ?? '')
+    // This probe answers 200 either way, so the suspension gate
+    // (AGL-546/550) maps a suspended member to the signed-out shape —
+    // never entitled — and drops the stale cookie so the signed-in
+    // shell unwinds on the next paint.
+    const session = await readActiveMemberSession(req, hostId)
+    if (session.status !== 'active') {
+      if (session.status === 'suspended') setMemberCookie(res, hostId, null)
+      return res.status(200).json({ entitled: false, signedIn: false })
+    }
+    const email = String(session.member.get('email') ?? '')
     if (!email) {
       return res.status(200).json({ entitled: false, signedIn: false })
     }

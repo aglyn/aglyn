@@ -23,6 +23,7 @@ import {
   timingSafeEqual,
 } from 'crypto'
 import type { PluginApiRequest, PluginApiResponse } from '@aglyn/aglyn/server'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
  * Site membership primitives (AGL-109): visitor accounts per host with
@@ -186,4 +187,78 @@ export function readMemberSession(
 ): string | null {
   const raw = req.cookies?.[memberCookieName(hostId)]
   return verifyMemberSession(hostId, raw)
+}
+
+/** Suspension rejection body — matches the login flow's AGL-546 message. */
+export const MEMBER_SUSPENDED_ERROR =
+  'This account has been suspended. Contact the site owner.'
+
+/** Resolved member-session state, see {@link readActiveMemberSession}. */
+export type MemberSessionCheck =
+  | { status: 'anonymous' }
+  | { status: 'suspended'; memberId: string }
+  | {
+      status: 'active'
+      memberId: string
+      member: FirebaseFirestore.DocumentSnapshot
+    }
+
+/**
+ * Session + member-doc resolution for cookie-authenticated endpoints
+ * (AGL-550). A verified cookie alone stopped being enough once console
+ * suspension (AGL-546) landed: the HMAC session outlives the member's
+ * standing, so every endpoint must also load the doc and check
+ * `suspended`. That is one doc read per request — acceptable, and most
+ * endpoints needed the member doc anyway. A deleted member doc reads as
+ * `anonymous` (same as no cookie).
+ */
+export async function readActiveMemberSession(
+  req: PluginApiRequest,
+  hostId: string,
+): Promise<MemberSessionCheck> {
+  const memberId = readMemberSession(req, hostId)
+  if (!memberId) return { status: 'anonymous' }
+  const member = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+    .collection('siteMembers')
+    .doc(memberId)
+    .get()
+  if (!member.exists) return { status: 'anonymous' }
+  if (member.get('suspended') === true) {
+    return { status: 'suspended', memberId }
+  }
+  return { status: 'active', memberId, member }
+}
+
+/**
+ * Guard for cookie-authenticated member endpoints (AGL-550): resolves
+ * the session AND the member doc, writing the rejection itself — 401
+ * (`signInError`) when there is no usable session, 403 with the session
+ * cookie cleared (mirroring membership-account's AGL-546 handling, so
+ * the site stops presenting a signed-in shell) when the member is
+ * suspended. Returns null after responding; handlers `if (!auth) return`.
+ */
+export async function requireActiveMember(
+  req: PluginApiRequest,
+  res: PluginApiResponse,
+  hostId: string,
+  signInError = 'Not signed in',
+): Promise<{
+  memberId: string
+  member: FirebaseFirestore.DocumentSnapshot
+} | null> {
+  const session = await readActiveMemberSession(req, hostId)
+  if (session.status === 'suspended') {
+    setMemberCookie(res, hostId, null)
+    res.status(403).json({ error: MEMBER_SUSPENDED_ERROR })
+    return null
+  }
+  if (session.status !== 'active') {
+    res.status(401).json({ error: signInError })
+    return null
+  }
+  return { memberId: session.memberId, member: session.member }
 }

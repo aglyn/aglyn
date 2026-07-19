@@ -17,7 +17,7 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { readMemberSession } from './membership'
+import { requireActiveMember } from './membership'
 
 /**
  * Subscriber self-service (AGL-303): opens the Stripe Billing Portal for
@@ -34,17 +34,15 @@ export const subscriptionPortalHandler: PluginApiHandler = async (req, res) => {
   }
   const hostId = String(req.body?.hostId ?? '')
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  const memberId = readMemberSession(req, hostId)
-  if (!memberId) return res.status(401).json({ error: 'Not signed in' })
 
   try {
+    // Suspension gate (AGL-550): suspended members (AGL-546) cannot
+    // open the billing portal — 403'd with the session cookie cleared.
+    const auth = await requireActiveMember(req, res, hostId)
+    if (!auth) return
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const memberSnapshot = await hostRef
-      .collection('siteMembers')
-      .doc(memberId)
-      .get()
-    const email = String(memberSnapshot.get('email') ?? '')
+    const email = String(auth.member.get('email') ?? '')
     if (!email) return res.status(401).json({ error: 'Not signed in' })
     const subscriptions = await hostRef
       .collection('subscriptions')

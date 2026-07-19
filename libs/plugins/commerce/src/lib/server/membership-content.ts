@@ -19,7 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { hostHasContentGating } from './gate'
-import { readMemberSession } from './membership'
+import { requireActiveMember } from './membership'
 
 /**
  * Members-only screen content (AGL-109/309): like the AGL-87 unlock API,
@@ -35,9 +35,11 @@ export const membershipContentHandler: PluginApiHandler = async (req, res) => {
   if (!hostId || !screenId) {
     return res.status(400).json({ error: 'Invalid request' })
   }
-  const memberId = readMemberSession(req, hostId)
-  if (!memberId) return res.status(401).json({ error: 'Sign in required' })
   try {
+    // Suspension gate (AGL-550): the cookie alone no longer unlocks the
+    // node tree — a suspended member (AGL-546) is 403'd, cookie cleared.
+    const auth = await requireActiveMember(req, res, hostId, 'Sign in required')
+    if (!auth) return
     // Org-level gate (AGL-481): members-only screens are a Business+
     // feature. If the host's plan doesn't include content gating, the
     // protected node tree is never served — fail closed. (These nodes

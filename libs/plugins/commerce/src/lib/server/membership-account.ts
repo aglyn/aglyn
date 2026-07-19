@@ -20,7 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { mintDownloadToken } from './download'
-import { readMemberSession, setMemberCookie } from './membership'
+import { requireActiveMember } from './membership'
 
 export interface AccountOrderView {
   id: string
@@ -43,24 +43,18 @@ export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
     (req.method === 'GET' ? req.query.hostId : req.body?.hostId) ?? '',
   )
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  const memberId = readMemberSession(req, hostId)
-  if (!memberId) return res.status(401).json({ error: 'Not signed in' })
 
   try {
+    // Suspension gate (AGL-546/550): the shared guard 401s stale
+    // sessions and 403s suspended members with the cookie cleared, so
+    // the site stops presenting a signed-in shell; the account block
+    // treats any non-OK response as signed-out, the graceful path here.
+    const auth = await requireActiveMember(req, res, hostId)
+    if (!auth) return
+    const { memberId, member: memberSnapshot } = auth
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const memberRef = hostRef.collection('siteMembers').doc(memberId)
-    const memberSnapshot = await memberRef.get()
-    if (!memberSnapshot.exists) {
-      return res.status(401).json({ error: 'Not signed in' })
-    }
-    // Suspension gate (AGL-546): clear the session cookie so the site
-    // stops presenting a signed-in shell; the account block treats any
-    // non-OK response as signed-out, which is the graceful path here.
-    if (memberSnapshot.get('suspended') === true) {
-      setMemberCookie(res, hostId, null)
-      return res.status(403).json({ error: 'suspended' })
-    }
 
     if (req.method === 'POST') {
       const displayName = String(req.body?.displayName ?? '').slice(0, 80)

@@ -17,7 +17,7 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { readMemberSession } from './membership'
+import { requireActiveMember } from './membership'
 
 /**
  * Member wishlist (AGL-297): product ids on the siteMembers doc.
@@ -33,20 +33,20 @@ export const membershipWishlistHandler: PluginApiHandler = async (req, res) => {
     (isPost ? req.body?.hostId : req.query.hostId) ?? '',
   )
   if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
-  const memberId = readMemberSession(req, hostId)
-  if (!memberId) return res.status(401).json({ error: 'Not signed in' })
 
   try {
+    // Suspension gate (AGL-550): loads the member doc too, so a
+    // suspended member's cookie (AGL-546) is 403'd and cleared here.
+    const auth = await requireActiveMember(req, res, hostId)
+    if (!auth) return
     const memberRef = firebaseAdmin
       .app()
       .firestore()
       .collection('hosts')
       .doc(hostId)
       .collection('siteMembers')
-      .doc(memberId)
-    const snapshot = await memberRef.get()
-    if (!snapshot.exists) return res.status(401).json({ error: 'Not signed in' })
-    let wishlist: string[] = (snapshot.get('wishlist') ?? []) as string[]
+      .doc(auth.memberId)
+    let wishlist: string[] = (auth.member.get('wishlist') ?? []) as string[]
 
     if (isPost) {
       const action = String(req.body?.action ?? 'add')

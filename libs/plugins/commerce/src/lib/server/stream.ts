@@ -20,7 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
-import { readMemberSession } from './membership'
+import { requireActiveMember } from './membership'
 import { checkMemberEntitlement } from './gate'
 
 const TTL_MS = 15 * 60 * 1000
@@ -57,17 +57,11 @@ export const streamHandler: PluginApiHandler = async (req, res) => {
 
   try {
     if (req.method === 'POST') {
-      const memberId = readMemberSession(req, hostId)
-      if (!memberId) return res.status(401).json({ error: 'Sign in first' })
-      const memberSnapshot = await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('hosts')
-        .doc(hostId)
-        .collection('siteMembers')
-        .doc(memberId)
-        .get()
-      const email = String(memberSnapshot.get('email') ?? '')
+      // Suspension gate (AGL-550): suspended members (AGL-546) cannot
+      // mint stream URLs — 403'd with the session cookie cleared.
+      const auth = await requireActiveMember(req, res, hostId, 'Sign in first')
+      if (!auth) return
+      const email = String(auth.member.get('email') ?? '')
       const entitled =
         email && (await checkMemberEntitlement(hostId, email, productId))
       if (!entitled) {

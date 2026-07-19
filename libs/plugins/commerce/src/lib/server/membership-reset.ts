@@ -18,6 +18,7 @@
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
+  MEMBER_SUSPENDED_ERROR,
   hashMemberPassword,
   passwordResetTokenMemberId,
   verifyPasswordResetToken,
@@ -67,6 +68,14 @@ export const membershipResetHandler: PluginApiHandler = async (req, res) => {
       !verifyPasswordResetToken(hostId, token, memberDoc.get('passwordScrypt'))
     ) {
       return invalid()
+    }
+    // Suspension gate (AGL-546/550): a token minted before the
+    // suspension stays cryptographically valid for its hour, so reject
+    // here — recovery must not rehabilitate a suspended account. Checked
+    // AFTER the signature so only the mailed-link holder (who already
+    // knows the account exists) can observe the suspension.
+    if (memberDoc.get('suspended') === true) {
+      return res.status(403).json({ error: MEMBER_SUSPENDED_ERROR })
     }
     await memberRef.set(
       {

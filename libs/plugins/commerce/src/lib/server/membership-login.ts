@@ -19,6 +19,7 @@ import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import {
+  MEMBER_SUSPENDED_ERROR,
   mintMemberSession,
   setMemberCookie,
   verifyMemberPassword,
@@ -74,9 +75,7 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
     // Checked after the password so the message never leaks account
     // existence to guessers who don't hold the credentials.
     if (memberDoc.get('suspended') === true) {
-      return res.status(401).json({
-        error: 'This account has been suspended. Contact the site owner.',
-      })
+      return res.status(401).json({ error: MEMBER_SUSPENDED_ERROR })
     }
     // Event trigger (AGL-128/148).
     await emitHostEvent(hostId, 'memberSignIn', { email })
