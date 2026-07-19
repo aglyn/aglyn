@@ -16,16 +16,21 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { mdiViewGridOutline } from '@aglyn/shared-data-mdi'
+import { mdiMagnify, mdiViewGridOutline } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardActionArea from '@mui/material/CardActionArea'
 import CardContent from '@mui/material/CardContent'
 import CardMedia from '@mui/material/CardMedia'
 import Chip from '@mui/material/Chip'
+import InputAdornment from '@mui/material/InputAdornment'
+import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
+import SvgIcon from '@mui/material/SvgIcon'
+import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
-import { forwardRef, useEffect, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -42,6 +47,16 @@ export interface ProductGridProps {
   collectionSlug?: string
   /** Faceted controls above the grid: tags, availability, sort. */
   showFilters?: boolean
+  /** Debounced visitor search box above the grid (server-side, AGL-561). */
+  showSearch?: boolean
+  /** Category filter chips from the host's categories (AGL-561). */
+  showCategories?: boolean
+  /** Sort select: newest, name, price low→high / high→low (AGL-561). */
+  showSort?: boolean
+  /** Physical / digital / services filter chips (AGL-561). */
+  showTypeFilter?: boolean
+  /** Products per page; shows a Load more button while more remain. */
+  pageSize?: number
   /** Category id when source = category (rename-safe, AGL-343). */
   categoryId?: string
   /** Legacy category slug; used only when no categoryId is set. */
@@ -68,11 +83,36 @@ interface CatalogItem {
   tags?: string[]
 }
 
+interface CatalogCategory {
+  id: string
+  name: string
+  slug: string
+}
+
 const SAMPLE_ITEMS: CatalogItem[] = [
   { id: 's1', name: 'Sample product', slug: '#', priceUsd: 29, maxPriceUsd: 29, soldOut: false },
   { id: 's2', name: 'Another product', slug: '#', priceUsd: 49, maxPriceUsd: 59, compareAtPriceUsd: 79, soldOut: false },
   { id: 's3', name: 'Third product', slug: '#', priceUsd: 12, maxPriceUsd: 12, soldOut: true },
 ]
+
+/** Inert chips shown on the besigner canvas when categories are on. */
+const SAMPLE_CATEGORIES: CatalogCategory[] = [
+  { id: 'sc1', name: 'Apparel', slug: 'apparel' },
+  { id: 'sc2', name: 'Accessories', slug: 'accessories' },
+]
+
+const TYPE_OPTIONS = [
+  { value: 'physical', label: 'Physical' },
+  { value: 'digital', label: 'Digital' },
+  { value: 'service', label: 'Services' },
+] as const
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'name', label: 'Name' },
+  { value: 'price-asc', label: 'Price: low to high' },
+  { value: 'price-desc', label: 'Price: high to low' },
+] as const
 
 function collectionSlugFromLocation(): string {
   if (typeof window === 'undefined') return ''
@@ -91,7 +131,10 @@ function priceLabel(item: CatalogItem): string {
  * public listing API, filterable by collection/category/tag, designable
  * in besigner with sample cards (no SiteContext = inert canvas, same
  * convention as the mui Product block). Cards navigate to
- * `/products/{slug}` (PDP routes, AGL-292).
+ * `/products/{slug}` (PDP routes, AGL-292). Catalog UX (AGL-561):
+ * optional debounced search, category chips, type chips, a sort
+ * select, and Load more paging — all resolved server-side by the
+ * catalog handler so large catalogs stay cheap.
  */
 const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
   (props, ref) => {
@@ -107,6 +150,11 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       maxItems,
       emptyText,
       showFilters,
+      showSearch,
+      showCategories,
+      showSort,
+      showTypeFilter,
+      pageSize,
       ...rest
     } = props
     const { hostId } = Aglyn.useSite()
@@ -114,49 +162,104 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const [sort, setSort] = useState(sortProp)
     const [inStockOnly, setInStockOnly] = useState(false)
     const [activeTag, setActiveTag] = useState('')
+    // Catalog UX state (AGL-561): the search box debounces into
+    // `query`; a chip pick overrides any pinned category ('*' = All);
+    // paging appends via `nextOffset` from the catalog handler.
+    const [searchInput, setSearchInput] = useState('')
+    const [query, setQuery] = useState('')
+    const [activeCategoryId, setActiveCategoryId] = useState('')
+    const [activeType, setActiveType] = useState('')
+    const [categories, setCategories] = useState<CatalogCategory[]>([])
+    const [nextOffset, setNextOffset] = useState<number | null>(null)
+    const [loadingMore, setLoadingMore] = useState(false)
+    const fetchSeq = useRef(0)
     const collectionSlug =
       source === 'collection'
         ? collectionSlugProp || collectionSlugFromLocation()
         : collectionSlugProp
+    const pageLimit =
+      pageSize && Number(pageSize) > 0 ? Math.floor(Number(pageSize)) : 0
+    const pinnedCategoryId = source === 'category' ? categoryId ?? '' : ''
+
+    // Debounce keystrokes so large catalogs aren't fetched per letter.
+    useEffect(() => {
+      const timer = setTimeout(() => setQuery(searchInput.trim()), 300)
+      return () => clearTimeout(timer)
+    }, [searchInput])
+
+    const loadPage = useCallback(
+      async (offset: number): Promise<void> => {
+        if (!hostId) return
+        const seq = ++fetchSeq.current
+        const params = new URLSearchParams({ hostId })
+        // Ids first (rename-safe, AGL-343); slugs remain as the legacy path.
+        if (source === 'collection') {
+          if (collectionId) params.set('collectionId', collectionId)
+          else if (collectionSlug) params.set('collection', collectionSlug)
+        }
+        const effectiveCategoryId =
+          activeCategoryId === '*' ? '' : activeCategoryId || pinnedCategoryId
+        if (effectiveCategoryId) {
+          params.set('categoryId', effectiveCategoryId)
+        } else if (!activeCategoryId && source === 'category' && categorySlug) {
+          params.set('category', categorySlug)
+        }
+        if (source === 'tag' && tag) params.set('tag', tag)
+        if (query) params.set('q', query)
+        if (activeType) params.set('type', activeType)
+        if (sort) params.set('sort', sort)
+        const limit = pageLimit || maxItems
+        if (limit) params.set('limit', String(limit))
+        if (offset) params.set('offset', String(offset))
+        if (showCategories && offset === 0) params.set('facets', '1')
+        try {
+          const response = await fetch(
+            `/api/commerce/catalog?${params.toString()}`,
+          )
+          const payload = await response.json()
+          if (seq !== fetchSeq.current) return
+          const pageItems: CatalogItem[] = payload?.items ?? []
+          setItems((prev) =>
+            offset && prev ? [...prev, ...pageItems] : pageItems,
+          )
+          setNextOffset(
+            typeof payload?.nextOffset === 'number' ? payload.nextOffset : null,
+          )
+          if (Array.isArray(payload?.categories)) {
+            setCategories(payload.categories)
+          }
+        } catch {
+          if (seq !== fetchSeq.current) return
+          if (!offset) setItems([])
+          setNextOffset(null)
+        }
+      },
+      [
+        hostId,
+        source,
+        collectionId,
+        collectionSlug,
+        categorySlug,
+        tag,
+        sort,
+        maxItems,
+        query,
+        activeCategoryId,
+        activeType,
+        pageLimit,
+        pinnedCategoryId,
+        showCategories,
+      ],
+    )
 
     useEffect(() => {
       if (!hostId) return
-      let active = true
-      const params = new URLSearchParams({ hostId })
-      // Ids first (rename-safe, AGL-343); slugs remain as the legacy path.
-      if (source === 'collection') {
-        if (collectionId) params.set('collectionId', collectionId)
-        else if (collectionSlug) params.set('collection', collectionSlug)
-      }
-      if (source === 'category') {
-        if (categoryId) params.set('categoryId', categoryId)
-        else if (categorySlug) params.set('category', categorySlug)
-      }
-      if (source === 'tag' && tag) params.set('tag', tag)
-      if (sort) params.set('sort', sort)
-      if (maxItems) params.set('limit', String(maxItems))
-      void fetch(`/api/commerce/catalog?${params.toString()}`)
-        .then((response) => response.json())
-        .then((payload) => {
-          if (active) setItems(payload?.items ?? [])
-        })
-        .catch(() => {
-          if (active) setItems([])
-        })
+      void loadPage(0)
+      // Invalidate any in-flight request on dep change or unmount.
       return () => {
-        active = false
+        fetchSeq.current++
       }
-    }, [
-      hostId,
-      source,
-      collectionId,
-      collectionSlug,
-      categoryId,
-      categorySlug,
-      tag,
-      sort,
-      maxItems,
-    ])
+    }, [hostId, loadPage])
 
     const desktopColumns = Math.min(6, Math.max(1, columns ?? 3))
     const gridSx = {
@@ -199,7 +302,136 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         </Box>
       )
     }
-    if (visible && visible.length === 0) {
+
+    // Catalog controls (AGL-561): search on top, category/type chips
+    // under it with the sort select right-aligned — the layout every
+    // mainstream commerce PLP uses. Server-side; sample data inert.
+    const chipCategories = categories.length
+      ? categories
+      : !hostId && showCategories
+        ? SAMPLE_CATEGORIES
+        : []
+    const selectedCategoryId =
+      activeCategoryId === '*' ? '' : activeCategoryId || pinnedCategoryId
+    const hasCatalogControls = Boolean(
+      showSearch || showCategories || showSort || showTypeFilter,
+    )
+    const controls = hasCatalogControls ? (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
+        {showSearch ? (
+          <TextField
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search products…"
+            size="small"
+            fullWidth
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SvgIcon fontSize="small" color="disabled">
+                      <path d={mdiMagnify.path} />
+                    </SvgIcon>
+                  </InputAdornment>
+                ),
+              },
+              htmlInput: { 'aria-label': 'Search products', type: 'search' },
+            }}
+          />
+        ) : null}
+        {showCategories || showTypeFilter || showSort ? (
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+            }}
+          >
+            {showCategories && chipCategories.length ? (
+              <>
+                <Chip
+                  label="All"
+                  size="small"
+                  variant={selectedCategoryId ? 'outlined' : 'filled'}
+                  color={selectedCategoryId ? 'default' : 'secondary'}
+                  onClick={() => setActiveCategoryId('*')}
+                />
+                {chipCategories.map((category) => (
+                  <Chip
+                    key={category.id}
+                    label={category.name}
+                    size="small"
+                    variant={
+                      selectedCategoryId === category.id ? 'filled' : 'outlined'
+                    }
+                    color={
+                      selectedCategoryId === category.id
+                        ? 'secondary'
+                        : 'default'
+                    }
+                    onClick={() =>
+                      setActiveCategoryId((prev) =>
+                        (prev || pinnedCategoryId) === category.id
+                          ? '*'
+                          : category.id,
+                      )
+                    }
+                  />
+                ))}
+              </>
+            ) : null}
+            {showTypeFilter
+              ? TYPE_OPTIONS.map((option) => (
+                  <Chip
+                    key={option.value}
+                    label={option.label}
+                    size="small"
+                    variant={activeType === option.value ? 'filled' : 'outlined'}
+                    color={
+                      activeType === option.value ? 'secondary' : 'default'
+                    }
+                    onClick={() =>
+                      setActiveType((prev) =>
+                        prev === option.value ? '' : option.value,
+                      )
+                    }
+                  />
+                ))
+              : null}
+            {showSort ? (
+              <>
+                <Box sx={{ flex: 1 }} />
+                <TextField
+                  select
+                  size="small"
+                  value={
+                    SORT_OPTIONS.some((option) => option.value === sort)
+                      ? sort
+                      : 'name'
+                  }
+                  onChange={(event) =>
+                    setSort(event.target.value as ProductGridProps['sort'])
+                  }
+                  sx={{ minWidth: 180 }}
+                  slotProps={{
+                    htmlInput: { 'aria-label': 'Sort products' },
+                  }}
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </>
+            ) : null}
+          </Box>
+        ) : null}
+      </Box>
+    ) : null
+
+    if (visible && visible.length === 0 && !hasCatalogControls) {
       return (
         <Box ref={ref} {...rest} sx={{ p: 3, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
@@ -208,6 +440,34 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         </Box>
       )
     }
+    // With controls visible the empty state renders inline, so a
+    // no-result search still leaves the box available to clear.
+    const emptyState = (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="body2" color="text.secondary">
+          {query || activeType || selectedCategoryId
+            ? 'No products match — try clearing a filter.'
+            : emptyText || 'No products here yet — check back soon.'}
+        </Typography>
+      </Box>
+    )
+    const loadMore =
+      hostId && pageLimit && nextOffset != null ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+          <Button
+            variant="outlined"
+            disabled={loadingMore}
+            onClick={async () => {
+              if (nextOffset == null || loadingMore) return
+              setLoadingMore(true)
+              await loadPage(nextOffset)
+              setLoadingMore(false)
+            }}
+          >
+            {loadingMore ? 'Loading…' : 'Load more'}
+          </Button>
+        </Box>
+      ) : null
 
     const grid = (
       <Box sx={gridSx}>
@@ -255,15 +515,19 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       </Box>
     )
 
+    const body = visible && visible.length === 0 ? emptyState : grid
     if (!showFilters) {
       return (
         <Box ref={ref} {...rest}>
-          {grid}
+          {controls}
+          {body}
+          {loadMore}
         </Box>
       )
     }
     return (
       <Box ref={ref} {...rest}>
+        {controls}
         <Box
           sx={{
             display: 'flex',
@@ -314,7 +578,8 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
             }
           />
         </Box>
-        {grid}
+        {body}
+        {loadMore}
       </Box>
     )
   },
@@ -411,6 +676,42 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       description: 'Tag chips, in-stock toggle, and price sort above the grid.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
+    {
+      name: 'showSearch',
+      label: 'Search box',
+      description:
+        'Visitor search box above the grid — matches product names, ' +
+        'descriptions, and tags (server-side).',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      name: 'showCategories',
+      label: 'Category chips',
+      description:
+        'Filter chips built from your product categories, with an All chip.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      name: 'showSort',
+      label: 'Sort select',
+      description:
+        'Visitor sort: newest, name, price low→high, price high→low.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      name: 'showTypeFilter',
+      label: 'Type filter',
+      description: 'Physical / digital / services chips.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      name: 'pageSize',
+      label: 'Page size',
+      description:
+        'Products per page with a Load more button; blank loads once ' +
+        '(capped by Max items).',
+      component: Aglyn.FieldComponentType.TEXT_FIELD,
+    },
   ],
 }
 
@@ -428,6 +729,31 @@ export const presets: Aglyn.PresetSchema[] = [
       componentId: ID,
       pluginId: BUNDLE_ID,
       props: { source: 'all', sort: 'name', columns: 3 },
+    },
+  },
+  {
+    // Full shop page (AGL-561): the grid with every catalog control on
+    // — search, category chips, sort, and Load more paging.
+    $id: generatePresetId(ID, 'shop'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Shop catalog',
+    pluginId: BUNDLE_ID,
+    description: 'Product grid with search, category chips, sort, and paging',
+    category: Aglyn.ComponentCategory.COMMERCE,
+    icon: { path: mdiViewGridOutline.path, sx: { color: '#2e7d32' } },
+    data: {
+      $id: null,
+      componentId: ID,
+      pluginId: BUNDLE_ID,
+      props: {
+        source: 'all',
+        sort: 'newest',
+        columns: 3,
+        showSearch: true,
+        showCategories: true,
+        showSort: true,
+        pageSize: 12,
+      },
     },
   },
 ]

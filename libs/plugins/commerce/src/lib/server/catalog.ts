@@ -33,11 +33,39 @@ export interface PublicCatalogItem {
   tags?: string[]
 }
 
+/** Host category surfaced to grids for filter chips (AGL-561). */
+export interface PublicCatalogCategory {
+  id: string
+  name: string
+  slug: string
+}
+
+/**
+ * Case-insensitive catalog search (AGL-561): matches the product name,
+ * description, or any tag. An empty/blank query matches everything.
+ */
+export function matchesCatalogQuery(
+  product: Pick<CommerceModel.HostProduct, 'name' | 'description' | 'tags'>,
+  query: string,
+): boolean {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  return (
+    product.name.toLowerCase().includes(needle) ||
+    (product.description ?? '').toLowerCase().includes(needle) ||
+    (product.tags ?? []).some((tag) => tag.toLowerCase().includes(needle))
+  )
+}
+
 /**
  * Public catalog listing (AGL-291): active products for storefront
  * blocks — filterable by collection/category slug or tag, sortable,
- * capped at 100 items per request. Read-only public data; prices here
- * are display-only (charges always come from the docs server-side).
+ * capped at 100 items per request. Storefront catalog UX (AGL-561)
+ * adds text search (`q`), a product-type filter (`type`), offset
+ * paging (`offset` + `nextOffset` in the response, for Load more), and
+ * `facets=1` to include the host's categories for filter chips.
+ * Read-only public data; prices here are display-only (charges always
+ * come from the docs server-side).
  */
 export const catalogHandler: PluginApiHandler = async (req, res) => {
   const hostId = String(req.query.hostId ?? '')
@@ -49,6 +77,11 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
   const collectionIdParam = String(req.query.collectionId ?? '')
   const categoryIdParam = String(req.query.categoryId ?? '')
   const tag = String(req.query.tag ?? '')
+  const query = String(req.query.q ?? '')
+  const typeParam = String(req.query.type ?? '')
+  const type = ['physical', 'digital', 'service'].includes(typeParam)
+    ? (typeParam as CommerceModel.ProductType)
+    : ''
   const ids = String(req.query.ids ?? '')
     .split(',')
     .map((id) => id.trim())
@@ -56,11 +89,19 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
     .slice(0, 100)
   const sort = String(req.query.sort ?? 'name')
   const max = Math.min(100, Math.max(1, Number(req.query.limit ?? 24)))
+  const offset = Math.max(0, Math.round(Number(req.query.offset ?? 0)) || 0)
+  const wantFacets = String(req.query.facets ?? '') === '1'
 
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const [productsSnapshot, collectionsSnapshot, categoriesSnapshot, collectionByIdSnapshot] =
+    const [
+      productsSnapshot,
+      collectionsSnapshot,
+      categoriesSnapshot,
+      collectionByIdSnapshot,
+      facetsSnapshot,
+    ] =
       await Promise.all([
         hostRef.collection('products').limit(500).get(),
         !collectionIdParam && collectionSlug
@@ -79,6 +120,9 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
           : null,
         collectionIdParam
           ? hostRef.collection('collections').doc(collectionIdParam).get()
+          : null,
+        wantFacets
+          ? hostRef.collection('productCategories').limit(200).get()
           : null,
       ])
     const collection =
@@ -117,6 +161,15 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
         (product.tags ?? []).includes(tag),
       )
     }
+    // Storefront catalog UX (AGL-561): type filter + text search.
+    if (type) {
+      products = products.filter((product) => product.type === type)
+    }
+    if (query.trim()) {
+      products = products.filter((product) =>
+        matchesCatalogQuery(product, query),
+      )
+    }
     // Wishlist rendering (AGL-297): explicit id list, given order.
     if (ids.length) {
       const order = new Map(ids.map((id, index) => [id, index]))
@@ -139,7 +192,13 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
       products.sort((a, b) => a.name.localeCompare(b.name))
     }
 
-    const items: PublicCatalogItem[] = products.slice(0, max).map((product) => {
+    // Offset paging (AGL-561): grids pass `offset` for Load more;
+    // `nextOffset` comes back only while more filtered items remain.
+    const page = products.slice(offset, offset + max)
+    const nextOffset =
+      offset + max < products.length ? offset + max : undefined
+
+    const items: PublicCatalogItem[] = page.map((product) => {
       const [minPrice, maxPrice] = CommerceModel.productPriceRange(product)
       const primary = product.variants[0]
       const inventory = CommerceModel.productInventory(product)
@@ -163,11 +222,32 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
         ...(product.tags?.length ? { tags: product.tags } : {}),
       }
     })
+    // Category facets (AGL-561): id/name/slug for grid filter chips,
+    // parent-tree order preserved (order, then name).
+    const categories: PublicCatalogCategory[] | undefined = facetsSnapshot
+      ? facetsSnapshot.docs
+          .map((docSnapshot) => {
+            const data = docSnapshot.data() as CommerceModel.ProductCategory
+            return {
+              id: docSnapshot.id,
+              name: String(data.name ?? ''),
+              slug: String(data.slug ?? ''),
+              order: Number(data.order ?? 0),
+            }
+          })
+          .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+          .map(({ id, name, slug }) => ({ id, name, slug }))
+      : undefined
+
     res.setHeader(
       'Cache-Control',
       'public, s-maxage=60, stale-while-revalidate=300',
     )
-    return res.status(200).json({ items })
+    return res.status(200).json({
+      items,
+      ...(nextOffset != null ? { nextOffset } : {}),
+      ...(categories ? { categories } : {}),
+    })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Catalog unavailable' })

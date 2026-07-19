@@ -83,10 +83,48 @@ the element picker:
   caption, and `/mo`·`/yr` when subscribing), **Add to cart**, and the buy
   button (**Buy now** / **Subscribe**, or the one-time-vs-subscribe toggle for
   "Both" products). Leave its **Product slug** blank on a template screen so
-  it follows the URL.
-- **Cart** — two presets: a **Cart button** (app-bar icon with a badge and a
-  slide-out drawer) and a **Cart page** (inline, with coupon and gift-card
-  fields). Both end in a **Checkout** button.
+  it follows the URL. The **Product page** preset drops the whole
+  commerce-standard page in one go: a `Shop / {{product.name}}` breadcrumb,
+  the detail block, a *You may also like* strip, and product reviews.
+- **Cart** — two presets: a **Cart button** (app-bar icon with an item-count
+  badge and a slide-out drawer — the badge updates live as blocks add to the
+  cart) and a **Cart page** (inline, with coupon and gift-card fields). Both
+  end in a **Checkout** button.
+
+### Catalog search, filters, and sort
+
+The Product grid carries a toggle per storefront catalog control, so a bare
+strip on the home page and a full shop page are the same block:
+
+- **Search box** — a debounced search field above the grid; matches product
+  names, descriptions, and tags.
+- **Category chips** — one chip per product category (plus **All**), built
+  from the categories you manage in the Products hub. Visitors tap to filter.
+- **Sort select** — newest, name, price low→high, price high→low,
+  right-aligned above the grid.
+- **Type filter** — physical / digital / services chips, useful for mixed
+  catalogs.
+- **Page size** — products per page with a **Load more** button; leave blank
+  to load once (**Max items** still caps the grid either way).
+
+Everything resolves server-side through the catalog API — searching and
+filtering stay fast on large catalogs, and the browser never downloads the
+whole catalog. The **Shop catalog** preset inserts the grid with search,
+categories, sort, and paging already on.
+
+### Category pages
+
+Two ways to give every category a browsable page:
+
+- **Pinned grid** — set a grid's **Show** to *A category* and pick the
+  category, then place it on its own screen (say `/apparel`). The category is
+  stored by id, so renaming it later never breaks the page. With **Category
+  chips** on, the pinned category is the initial filter and visitors can
+  still hop to a sibling category or back to **All** from the same grid.
+- **Collection template** — design one screen with a Product grid whose
+  collection is left blank and set it as the **Collection page template**
+  (store settings): every `/collections/{slug}` URL renders that screen
+  scoped to its collection.
 
 ![A storefront screen on the live site showing the product grid with prices and a sale badge](/img/guides/commerce-storefront-grid.png)
 

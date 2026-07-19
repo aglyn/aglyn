@@ -32,6 +32,8 @@ import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
 import { CART_UPDATED_EVENT } from './cart'
+import { ID as PRODUCT_REVIEWS_ID } from './product-reviews'
+import { ID as RELATED_PRODUCTS_ID } from './related-products'
 import { readLocalWishlist, toggleWishlist } from './wishlist'
 
 // Component ids are persisted in screen documents; never rename.
@@ -574,6 +576,72 @@ export const presets: Aglyn.PresetSchema[] = [
       componentId: ID,
       pluginId: BUNDLE_ID,
       props: {},
+    },
+  },
+  {
+    // Product page (AGL-561): the commerce-standard PDP subtree —
+    // breadcrumb, detail, related products, reviews — for the product
+    // page template screen. `{{product.name}}` resolves there via the
+    // site page resolver's token pass (AGL-292); node shapes follow
+    // the Sections & Blocks convention (AGL-539) and reference only
+    // persisted component ids.
+    $id: generatePresetId(ID, 'page'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Product page',
+    pluginId: BUNDLE_ID,
+    description:
+      'Breadcrumb, product detail, related products, and reviews',
+    category: Aglyn.ComponentCategory.COMMERCE,
+    icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
+    data: {
+      $id: null,
+      componentId: 'muiStack',
+      pluginId: Aglyn.MUI_BUNDLE_ID,
+      props: { spacing: 4, sx: { py: 2 } },
+      nodes: [
+        {
+          $id: null,
+          componentId: 'muiStack',
+          pluginId: Aglyn.MUI_BUNDLE_ID,
+          props: {
+            direction: 'row',
+            spacing: 1,
+            sx: { alignItems: 'center' },
+          },
+          nodes: [
+            {
+              $id: null,
+              componentId: 'muiScreenLink',
+              pluginId: Aglyn.MUI_BUNDLE_ID,
+              props: { children: 'Shop', size: 'small', color: 'inherit' },
+            },
+            {
+              $id: null,
+              componentId: 'muiTypography',
+              pluginId: Aglyn.MUI_BUNDLE_ID,
+              props: { variant: 'body2', children: '/ {{product.name}}' },
+            },
+          ],
+        },
+        {
+          $id: null,
+          componentId: ID,
+          pluginId: BUNDLE_ID,
+          props: {},
+        },
+        {
+          $id: null,
+          componentId: RELATED_PRODUCTS_ID,
+          pluginId: BUNDLE_ID,
+          props: {},
+        },
+        {
+          $id: null,
+          componentId: PRODUCT_REVIEWS_ID,
+          pluginId: BUNDLE_ID,
+          props: {},
+        },
+      ],
     },
   },
 ]
