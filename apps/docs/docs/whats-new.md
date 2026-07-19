@@ -10,7 +10,17 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## Designed content collections (newest)
+## Nav menu system (newest)
+
+- **[Menus & navigation](building-sites/menus-and-navigation/overview.md)** — a
+  **Dropdown Menu** (click or hover), a hover **Mega Menu** with a free-form
+  wide panel, a slide-in **Drawer** with a **Menu Button**, and a one-insert
+  **Mobile Nav** preset. Interactions gained hover enter/leave triggers, a
+  repeatable *every time* frequency, element **show/hide** actions with a
+  canvas element picker, and **drawer open/close** actions; the styles panel
+  gained a per-device-band **Visibility** control.
+
+## Designed content collections
 
 - **[First-class blog pages](building-sites/site-templates/build-a-blog.md)** — collection
   list and entry routes render through your site theme and shared layout. Pick a

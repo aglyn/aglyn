@@ -1,0 +1,10 @@
+{
+  "label": "Menus & navigation",
+  "position": 2.5,
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "building-sites/menus-and-navigation/overview"
+  }
+}
