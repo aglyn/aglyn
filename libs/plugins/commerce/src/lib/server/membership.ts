@@ -16,6 +16,7 @@
  */
 
 import {
+  createHash,
   createHmac,
   randomBytes,
   scryptSync,
@@ -83,6 +84,78 @@ export function verifyMemberSession(
   if (a.length !== b.length) return null
   if (!timingSafeEqual(new Uint8Array(a), new Uint8Array(b))) return null
   return memberId
+}
+
+/** Password-reset links live for one hour (AGL-552). */
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000
+
+/**
+ * Fingerprint of the member's CURRENT scrypt hash, folded into the reset
+ * token signature (AGL-552): completing a reset rewrites `passwordScrypt`,
+ * so every token minted before it stops verifying — single-use without any
+ * server-side token storage.
+ */
+function passwordFingerprint(passwordScrypt: string | undefined): string {
+  return createHash('sha256')
+    .update(String(passwordScrypt ?? ''))
+    .digest('hex')
+}
+
+/**
+ * Single-use, time-boxed password-reset token (AGL-552):
+ * `hostId.memberId.expiry.HMAC(payload + password-fingerprint)`. Same
+ * secret as sessions; the fingerprint binding is what makes it one-shot.
+ */
+export function mintPasswordResetToken(
+  hostId: string,
+  memberId: string,
+  passwordScrypt: string | undefined,
+): string {
+  const payload = `${hostId}.${memberId}.${Date.now() + RESET_TOKEN_TTL_MS}`
+  return `${payload}.${sign(
+    `${payload}.${passwordFingerprint(passwordScrypt)}`,
+  )}`
+}
+
+/**
+ * First step of reset verification: extract the memberId from a
+ * well-formed, unexpired token for THIS host. The signature is NOT checked
+ * here (it binds to the member's current password hash, which the caller
+ * has to load first) — never trust the result without a follow-up
+ * {@link verifyPasswordResetToken}.
+ */
+export function passwordResetTokenMemberId(
+  hostId: string,
+  token: string | undefined,
+): string | null {
+  const parts = String(token ?? '').split('.')
+  if (parts.length !== 4) return null
+  const [tokenHost, memberId, expires] = parts
+  if (tokenHost !== hostId) return null
+  if (!memberId) return null
+  if (Number(expires) < Date.now()) return null
+  return memberId
+}
+
+/** Full reset-token check: host, expiry, and password-hash binding. */
+export function verifyPasswordResetToken(
+  hostId: string,
+  token: string | undefined,
+  currentPasswordScrypt: string | undefined,
+): boolean {
+  const parts = String(token ?? '').split('.')
+  if (parts.length !== 4) return false
+  const [tokenHost, memberId, expires, signature] = parts
+  if (tokenHost !== hostId || !memberId) return false
+  if (Number(expires) < Date.now()) return false
+  const payload = `${tokenHost}.${memberId}.${expires}`
+  const expected = sign(
+    `${payload}.${passwordFingerprint(currentPasswordScrypt)}`,
+  )
+  const a = Buffer.from(signature)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) return false
+  return timingSafeEqual(new Uint8Array(a), new Uint8Array(b))
 }
 
 export function memberCookieName(hostId: string): string {

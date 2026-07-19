@@ -106,6 +106,19 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   }, [props.memberScreen, memberHostId, memberScreenId])
   // Membership forms (AGL-109).
   const [memberFormError, setMemberFormError] = useState<string | null>(null)
+  // Password recovery (AGL-552): reset token from the emailed link, read
+  // post-hydration (the query string is unavailable during SSR), and the
+  // step the built-in /recover flow is on.
+  const [recoverToken, setRecoverToken] = useState('')
+  const [recoverDone, setRecoverDone] = useState<
+    'requested' | 'reset' | null
+  >(null)
+  useEffect(() => {
+    if (props.membershipPage !== 'recover') return
+    setRecoverToken(
+      new URLSearchParams(window.location.search).get('token') ?? '',
+    )
+  }, [props.membershipPage])
 
   // Fill the canvas DURING render, not only in an effect: the server
   // otherwise emits an empty page (crawlers see nothing) and hydration
@@ -205,6 +218,95 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
   // Password-protected screens render an unlock form; the composed nodes
   // arrive from /api/protection/unlock after verification (AGL-87).
   // Membership sign-in/up forms (AGL-109).
+  if (props.membershipPage === 'recover') {
+    // Built-in password recovery (AGL-552), mirroring /signin's pattern:
+    // request form by default, reset form when the emailed token is in the
+    // URL. Both endpoints are the AGL-552 membership APIs; the request
+    // route always reports success (no account-existence leak).
+    return (
+      <div style={{ maxWidth: 420, margin: '15vh auto', padding: 24 }}>
+        <Head>
+          <title>{'Reset your password'}</title>
+          <meta key="robots" name="robots" content="noindex" />
+        </Head>
+        <h1 style={{ fontSize: 22 }}>{'Reset your password'}</h1>
+        {recoverDone === 'reset' ? (
+          <p>
+            {'Your password has been updated. '}
+            <a href="/signin">{'Sign in'}</a>
+          </p>
+        ) : recoverDone === 'requested' ? (
+          <p style={{ opacity: 0.8 }}>
+            {'If that email belongs to an account here, a reset link is ' +
+              'on its way. The link works once and expires in an hour.'}
+          </p>
+        ) : (
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault()
+              setMemberFormError(null)
+              const form = new FormData(event.currentTarget)
+              const isReset = Boolean(recoverToken)
+              const response = await fetch(
+                isReset ? '/api/membership/reset' : '/api/membership/recover',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    hostId: props.data?.host?.$id,
+                    ...(isReset
+                      ? {
+                          token: recoverToken,
+                          password: String(form.get('password') ?? ''),
+                        }
+                      : { email: String(form.get('email') ?? '') }),
+                  }),
+                },
+              )
+              if (!response.ok) {
+                const payload = await response.json().catch(() => ({}))
+                return setMemberFormError(
+                  payload?.error ?? 'Something went wrong',
+                )
+              }
+              setRecoverDone(isReset ? 'reset' : 'requested')
+            }}
+          >
+            {recoverToken ? (
+              <input
+                name="password"
+                type="password"
+                required
+                minLength={8}
+                placeholder="New password (min 8 characters)"
+                style={{ width: '100%', padding: 8 }}
+              />
+            ) : (
+              <input
+                name="email"
+                type="email"
+                required
+                placeholder="Email"
+                style={{ width: '100%', padding: 8 }}
+              />
+            )}
+            <button
+              type="submit"
+              style={{ marginTop: 12, padding: '8px 16px' }}
+            >
+              {recoverToken ? 'Set new password' : 'Email me a reset link'}
+            </button>
+            {memberFormError ? (
+              <p style={{ color: '#c62828' }}>{memberFormError}</p>
+            ) : null}
+          </form>
+        )}
+        <p style={{ opacity: 0.8 }}>
+          <a href="/signin">{'Back to sign in'}</a>
+        </p>
+      </div>
+    )
+  }
   if (props.membershipPage) {
     const isSignup = props.membershipPage === 'signup'
     return (
@@ -279,7 +381,12 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
           {isSignup ? (
             <a href="/signin">{'Already a member? Sign in'}</a>
           ) : (
-            <a href="/signup">{'New here? Create an account'}</a>
+            <>
+              <a href="/signup">{'New here? Create an account'}</a>
+              {' · '}
+              {/* Recovery flow (AGL-552). */}
+              <a href="/recover">{'Forgot password?'}</a>
+            </>
           )}
         </p>
       </div>

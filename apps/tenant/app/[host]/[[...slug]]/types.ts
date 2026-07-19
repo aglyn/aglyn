@@ -58,7 +58,7 @@ export interface Props {
   protectedScreen?: boolean
   /** Members-only screen (AGL-109): nodes arrive via /api/membership. */
   memberScreen?: boolean
-  /** Membership form route (AGL-109): 'signin' | 'signup'. */
+  /** Membership form route (AGL-109/552): 'signin' | 'signup' | 'recover'. */
   membershipPage?: string
   /** Rendered as the custom not-found screen (noindex, AGL-87). */
   notFoundFallback?: boolean

@@ -23,6 +23,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
+import MuiLink from '@mui/material/Link'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
@@ -240,6 +241,15 @@ const CustomerAccount = forwardRef<HTMLDivElement, CustomerAccountProps>(
             >
               {busy ? 'Working…' : tab === 0 ? 'Sign in' : 'Create account'}
             </Button>
+            {tab === 0 ? (
+              // Recovery flow (AGL-552): the built-in /recover route (or
+              // the host's designated recovery screen) handles the rest.
+              <Typography variant="body2">
+                <MuiLink href="/recover" underline="hover">
+                  {'Forgot password?'}
+                </MuiLink>
+              </Typography>
+            ) : null}
           </Box>
         </Box>
       )

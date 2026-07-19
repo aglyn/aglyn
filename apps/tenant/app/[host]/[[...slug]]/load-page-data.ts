@@ -169,8 +169,9 @@ export const loadPageData = cache(
       }
     }
 
-    // Membership routes (AGL-109): fixed sign-in/up surfaces per site.
-    if (path === 'signin' || path === 'signup') {
+    // Membership routes (AGL-109): fixed sign-in/up surfaces per site,
+    // plus /recover for password recovery (AGL-552).
+    if (path === 'signin' || path === 'signup' || path === 'recover') {
       return {
         props: JSON.parse(
           JSON.stringify({

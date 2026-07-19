@@ -51,7 +51,9 @@ import { membershipAccountHandler } from './server/membership-account'
 import { membershipContentHandler } from './server/membership-content'
 import { membershipLoginHandler } from './server/membership-login'
 import { membershipLogoutHandler } from './server/membership-logout'
+import { membershipRecoverHandler } from './server/membership-recover'
 import { membershipRegisterHandler } from './server/membership-register'
+import { membershipResetHandler } from './server/membership-reset'
 import { membershipWishlistHandler } from './server/membership-wishlist'
 import { reserveHandler } from './server/reserve'
 import { streamHandler } from './server/stream'
@@ -92,7 +94,10 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('membership/content', membershipContentHandler)
   registerPluginApiRoute('membership/login', membershipLoginHandler)
   registerPluginApiRoute('membership/logout', membershipLogoutHandler)
+  // Password recovery pair (AGL-552): request + complete.
+  registerPluginApiRoute('membership/recover', membershipRecoverHandler)
   registerPluginApiRoute('membership/register', membershipRegisterHandler)
+  registerPluginApiRoute('membership/reset', membershipResetHandler)
   registerPluginApiRoute('membership/wishlist', membershipWishlistHandler)
 }
 

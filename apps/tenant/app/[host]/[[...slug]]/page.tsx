@@ -53,7 +53,12 @@ function buildMetadata(props: Props): Metadata {
   // Gated / fixed surfaces stay out of search (AGL-87/109/131).
   if (props.membershipPage) {
     return {
-      title: props.membershipPage === 'signup' ? 'Sign up' : 'Sign in',
+      title:
+        props.membershipPage === 'signup'
+          ? 'Sign up'
+          : props.membershipPage === 'recover'
+            ? 'Reset your password'
+            : 'Sign in',
       robots: { index: false, follow: true },
     }
   }
