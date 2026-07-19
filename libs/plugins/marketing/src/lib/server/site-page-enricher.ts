@@ -123,17 +123,18 @@ export const marketingSitePageEnricher: SitePageEnricher = async ({
     }
   }
 
-  // Site-event automations (AGL-256): actions-gated; runJs steps are
-  // business-gated (webhooks flag marks the tier).
-  const actionsEntitled = Aglyn.resolveOrgEntitlements(org).features
-    .actions
-  const clientAutomations: ClientAutomation[] = actionsEntitled
-    ? await getClientAutomations({
-        hostId,
-        path: overlayPath,
-        allowJs: Aglyn.resolveOrgEntitlements(org).features.webhooks,
-      })
-    : []
+  // Site-event automations (AGL-256/577): the engine loads on every plan
+  // so basic presentational interactions (menu/drawer/show-hide/class/
+  // nav/alert) work everywhere. Powerful steps are gated per-step inside
+  // getClientAutomations — `actions` for server/overlay/analytics steps,
+  // `webhooks` for runJs.
+  const orgFeatures = Aglyn.resolveOrgEntitlements(org).features
+  const clientAutomations: ClientAutomation[] = await getClientAutomations({
+    hostId,
+    path: overlayPath,
+    actionsEntitled: !!orgFeatures.actions,
+    allowJs: !!orgFeatures.webhooks,
+  })
   // Screen/section experiments (AGL-253): Business-gated; composing a
   // tree per divergent variant is bounded (≤4) and ISR-cached.
   const experiments: ScreenExperiment[] =

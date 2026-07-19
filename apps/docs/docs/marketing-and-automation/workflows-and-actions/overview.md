@@ -21,7 +21,10 @@ flowchart LR
 ```
 
 :::info Plan availability
-**Pro+** for actions and workflows (metered runs per tier). **Webhooks** are **Business**.
+**Basic in-page interactions** (menu/drawer open-close, show/hide, class toggles, sticky
+nav, navigation, site alerts) are on **every plan** and never metered. The **automations
+engine** — server-side steps, analytics, overlays, and custom JS — is **Pro+** with
+metered runs per tier. **Webhooks** are **Business**.
 :::
 
 ## Workflows
@@ -34,7 +37,8 @@ flowchart LR
 ## Actions builder
 
 The **actions builder** turns an event into an action — event → action automation without
-code. Available on **Pro+** with metered runs.
+code. Basic in-page effects (menus, drawers, show/hide, navigation) run on every plan; the
+server-side and advanced steps are **Pro+** with metered runs.
 
 ## Webhooks
 

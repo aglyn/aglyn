@@ -298,6 +298,67 @@ export function isClientActionStep(step: HostActionStep): boolean {
   return CLIENT_ACTION_STEP_TYPES.has(step.type)
 }
 
+/**
+ * Basic presentational interactions (AGL-577): the subset of client steps
+ * that are pure DOM choreography — menu/drawer open-close, element
+ * show/hide, class toggles, sticky nav, navigation, and client-only
+ * alerts. They carry NO server cost and touch NO data, so they run on
+ * every plan (the `interactions` feature, on by default everywhere).
+ *
+ * The powerful client steps stay behind the `actions` entitlement:
+ * `showOverlay` (marketing overlays), `showHtml` (arbitrary HTML
+ * injection), and `trackGaEvent` (analytics). `runJs` keeps its own
+ * higher `webhooks` (Business) gate. Server steps
+ * (sendEmail/notifyAdmins/enrollList/updateDataset/assignCampaign) are
+ * re-checked against `actions` server-side in `runEventActions`.
+ */
+export const BASIC_CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
+  new Set([
+    'stickyNav',
+    'addClass',
+    'removeClass',
+    'toggleClass',
+    'showElement',
+    'hideElement',
+    'toggleElement',
+    'openDrawer',
+    'closeDrawer',
+    'toggleDrawer',
+    'openMenu',
+    'closeMenu',
+    'toggleMenu',
+    'redirect',
+    'siteAlert',
+  ] as const)
+
+/** A client step available on all plans (no `actions` entitlement). */
+export function isBasicClientActionStep(step: HostActionStep): boolean {
+  return BASIC_CLIENT_ACTION_STEP_TYPES.has(step.type)
+}
+
+/**
+ * Whether a client step may run for the given entitlement tier (AGL-577).
+ * This is the single source of truth the page enricher uses to trim the
+ * client-automation payload per plan:
+ *
+ * - Basic presentational steps → always (every plan).
+ * - `runJs` → `allowJs` (Business `webhooks` tier).
+ * - Remaining advanced client steps (overlay / showHtml / analytics) →
+ *   `actionsEntitled` (`actions` tier).
+ *
+ * Server steps are not client steps and always return false here; they
+ * are dispatched and re-authorized server-side.
+ */
+export function isClientStepEntitled(
+  step: HostActionStep,
+  entitlements: { actionsEntitled: boolean; allowJs: boolean },
+): boolean {
+  if (!isClientActionStep(step)) return false
+  if (isBasicClientActionStep(step)) return true
+  if (step.type === 'runJs') return entitlements.allowJs
+  return entitlements.actionsEntitled
+}
+
 export type HostActionStepType = HostActionStep['type']
 
 /** `hosts/{hostId}/actions/{id}` doc. */

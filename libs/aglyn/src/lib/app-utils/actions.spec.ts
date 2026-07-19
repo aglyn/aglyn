@@ -17,11 +17,15 @@
 
 import {
   ACTION_MAX_CONDITIONS,
+  BASIC_CLIENT_ACTION_STEP_TYPES,
   CLIENT_ACTION_STEP_TYPES,
   evaluateTriggerCondition,
   evaluateTriggerConditions,
   type HostAction,
+  type HostActionStep,
   HOST_ACTION_STEP_LABELS,
+  isBasicClientActionStep,
+  isClientStepEntitled,
   isCustomEventName,
   isSiteEventType,
   normalizeTriggerConditions,
@@ -585,5 +589,72 @@ describe('WEBHOOK_URL_PATTERN', () => {
         className: 'y',
       }),
     ).toBe(true)
+  })
+})
+
+describe('basic-interaction tiering (AGL-577)', () => {
+  const step = (type: string): HostActionStep => ({ type } as HostActionStep)
+  const ALL_PLANS = { actionsEntitled: false, allowJs: false }
+  const PRO = { actionsEntitled: true, allowJs: false }
+  const BUSINESS = { actionsEntitled: true, allowJs: true }
+
+  it('classifies presentational steps as basic', () => {
+    for (const type of [
+      'openMenu',
+      'closeMenu',
+      'toggleMenu',
+      'openDrawer',
+      'closeDrawer',
+      'toggleDrawer',
+      'showElement',
+      'hideElement',
+      'toggleElement',
+      'addClass',
+      'removeClass',
+      'toggleClass',
+      'stickyNav',
+      'redirect',
+      'siteAlert',
+    ]) {
+      expect(isBasicClientActionStep(step(type))).toBe(true)
+    }
+  })
+
+  it('does not classify powerful client steps as basic', () => {
+    for (const type of ['showOverlay', 'showHtml', 'runJs', 'trackGaEvent']) {
+      expect(isBasicClientActionStep(step(type))).toBe(false)
+    }
+  })
+
+  it('every basic step is a client step', () => {
+    for (const type of BASIC_CLIENT_ACTION_STEP_TYPES) {
+      expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(true)
+    }
+  })
+
+  it('basic steps are entitled on every plan (no actions/webhooks)', () => {
+    expect(isClientStepEntitled(step('openMenu'), ALL_PLANS)).toBe(true)
+    expect(isClientStepEntitled(step('toggleDrawer'), ALL_PLANS)).toBe(true)
+    expect(isClientStepEntitled(step('redirect'), ALL_PLANS)).toBe(true)
+  })
+
+  it('advanced client steps need the actions entitlement', () => {
+    expect(isClientStepEntitled(step('showOverlay'), ALL_PLANS)).toBe(false)
+    expect(isClientStepEntitled(step('trackGaEvent'), ALL_PLANS)).toBe(false)
+    expect(isClientStepEntitled(step('showHtml'), ALL_PLANS)).toBe(false)
+    expect(isClientStepEntitled(step('showOverlay'), PRO)).toBe(true)
+    expect(isClientStepEntitled(step('trackGaEvent'), PRO)).toBe(true)
+  })
+
+  it('runJs needs the webhooks (Business) tier, not just actions', () => {
+    expect(isClientStepEntitled(step('runJs'), ALL_PLANS)).toBe(false)
+    expect(isClientStepEntitled(step('runJs'), PRO)).toBe(false)
+    expect(isClientStepEntitled(step('runJs'), BUSINESS)).toBe(true)
+  })
+
+  it('server steps are never client-entitled (re-checked server-side)', () => {
+    for (const type of ['sendEmail', 'notifyAdmins', 'enrollList', 'assignCampaign']) {
+      expect(isClientStepEntitled(step(type), BUSINESS)).toBe(false)
+    }
   })
 })

@@ -109,6 +109,18 @@ describe('plan entitlements', () => {
     expect(PLAN_ENTITLEMENTS.business.features.mediaCdn).toBe(true)
   })
 
+  it('includes basic interactions on every plan while gating actions (AGL-577)', () => {
+    // Basic presentational interactions (menu/drawer/show-hide) ship on
+    // every tier; the powerful automations stay behind `actions`.
+    for (const plan of Object.values(PLAN_ENTITLEMENTS)) {
+      expect(plan.features.interactions).toBe(true)
+    }
+    expect(PLAN_ENTITLEMENTS.free.features.actions).toBe(false)
+    expect(PLAN_ENTITLEMENTS.starter.features.actions).toBe(false)
+    expect(PLAN_ENTITLEMENTS.pro.features.actions).toBe(true)
+    expect(PLAN_ENTITLEMENTS.business.features.actions).toBe(true)
+  })
+
   it('treats UNLIMITED quotas as always allowed', () => {
     const org = { plan: 'business' } as any
     const result = checkQuota(org, 'screensPerHost', 100000)

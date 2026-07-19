@@ -32,6 +32,14 @@ export async function getClientAutomations(options: {
   hostId: string
   /** Leading-slash page path for pathPattern targeting. */
   path: string
+  /**
+   * `actions` entitlement (AGL-577). Basic presentational steps
+   * (menu/drawer/show-hide/class/nav/alert) always load; the advanced
+   * client steps (overlay/showHtml/analytics) and server steps are
+   * dropped when this is false. Server steps are re-checked server-side
+   * on dispatch, so a false value here only trims the client payload.
+   */
+  actionsEntitled: boolean
   /** Business-tier gate for `runJs` steps (dropped when false). */
   allowJs: boolean
 }): Promise<ClientAutomation[]> {
@@ -57,14 +65,21 @@ export async function getClientAutomations(options: {
       ) {
         continue
       }
-      const clientSteps = (action.steps ?? []).filter(
-        (step) =>
-          Aglyn.isClientActionStep(step) &&
-          (options.allowJs || step.type !== 'runJs'),
+      // Step-level entitlement tiering (AGL-577): basic presentational
+      // steps load on every plan; advanced client steps need `actions`
+      // and runJs needs `webhooks` — see isClientStepEntitled.
+      const clientSteps = (action.steps ?? []).filter((step) =>
+        Aglyn.isClientStepEntitled(step, {
+          actionsEntitled: options.actionsEntitled,
+          allowJs: options.allowJs,
+        }),
       )
-      const hasServerSteps = (action.steps ?? []).some(
-        (step) => !Aglyn.isClientActionStep(step),
-      )
+      // Server steps only dispatch (and are only re-authorized) when the
+      // org is actions-entitled — never advertise them otherwise, so
+      // basic-tier pages don't POST to /api/events/dispatch for a no-op.
+      const hasServerSteps =
+        options.actionsEntitled &&
+        (action.steps ?? []).some((step) => !Aglyn.isClientActionStep(step))
       if (!clientSteps.length && !hasServerSteps) continue
       automations.push({
         id: doc.id,

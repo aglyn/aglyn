@@ -10,7 +10,13 @@ When you just need "**when X happens, do Y**", the **actions builder** is faster
 workflow. It maps one **event** to one **action**.
 
 :::info Plan availability
-**Pro+**, with **metered** runs.
+**Basic interactions are on every plan** (including Free): menu and drawer
+open/close, show/hide an element, toggle a CSS class, sticky nav, navigation, and
+site alerts — pure in-page effects with no server cost and no metering.
+
+The **automations engine** — server-side steps, custom JS, analytics events, and
+Marketing overlays — is **Pro+**, with **metered** runs. You build both in the same
+place; steps that need a higher plan are labelled in the editor.
 :::
 
 ## Create an action
@@ -83,12 +89,18 @@ triggers, a **Test** button that exercises the server-side steps immediately.
 
 Steps run in order and mix **in-page effects** with **server-side work**:
 
-- **In the page**: show a popup or bar from your Marketing overlays, make the navigation
-  sticky, add/remove a CSS class, show custom HTML, run custom JS (Business), redirect,
-  track an analytics event, show a site alert.
-- **On the server**: run a workflow, write to or update a dataset, send a webhook
+- **Basic in-page effects (all plans)**: open/close/toggle a menu or drawer, show/hide or
+  toggle an element, add/remove/toggle a CSS class, make the navigation sticky, redirect,
+  show a site alert. These are pure DOM choreography — they run everywhere and are never
+  metered.
+- **Advanced in-page effects (Pro+)**: show a popup or bar from your Marketing overlays,
+  show custom HTML, track an analytics event, and run custom JS (Business).
+- **On the server (Pro+)**: run a workflow, write to or update a dataset, send a webhook
   (Business), send an email, notify site admins, enroll the contact in a list, assign a
   campaign, fire a custom event to chain more actions.
+
+On plans without the automations entitlement, an automation that mixes tiers still runs
+its basic in-page steps — the Pro+ steps are simply skipped until you upgrade.
 
 Every reference (workflow, dataset, webhook, overlay, list, campaign) is picked from a
 list and stored by id — renaming things never breaks an automation. Deleting can,
@@ -101,9 +113,12 @@ longer exists.
 ## Interactions from the Besigner
 
 Select any element in the Besigner and use the **Interactions** section of the
-attributes panel to attach a "when clicked" or "when scrolled into view" trigger to that
-exact element — no CSS selectors to write. The interaction is created disabled with a
-placeholder step; finish and enable it on the Workflows page. The same panel lists the
+attributes panel to attach a **when clicked**, **when hovered**, or **when scrolled into
+view** trigger to that exact element — no CSS selectors to write. Pairing a **when
+hovered** trigger with an **open menu** or **open drawer** step is how you build
+hover-to-reveal navigation, and — like all basic in-page effects — it works on every
+plan. The interaction is created disabled with a placeholder step; finish and enable it
+on the Workflows page. The same panel lists the
 element's existing interactions with an **enable switch and a remove button** — so you
 can pause or retire one without leaving the canvas — and offers **"A/B test this
 section"**, which creates a draft section experiment for the element.

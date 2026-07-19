@@ -75,6 +75,14 @@ export interface OrgFeatureFlags {
   videoMedia?: boolean
   /** Appointment bookings (AGL-159). */
   bookings?: boolean
+  /**
+   * Basic presentational interactions (AGL-577): menu/drawer open-close,
+   * element show/hide, class toggles, sticky nav, navigation, site
+   * alerts. Included on ALL plans — pure client-side DOM with no server
+   * cost. The `actions` flag below gates the powerful automation steps
+   * (server dispatch, runJs, analytics, overlays, raw HTML).
+   */
+  interactions?: boolean
   /** Event → action automation builder (AGL-148). */
   actions?: boolean
   /** Outbound/inbound webhooks (AGL-149). */
