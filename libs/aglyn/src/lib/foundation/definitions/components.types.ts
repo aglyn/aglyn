@@ -202,6 +202,14 @@ export enum FieldComponentType {
   COLLECTION_SELECT = 'collection-select',
   CATEGORY_SELECT = 'category-select',
   DATASET_SELECT = 'dataset-select',
+  /**
+   * Select listing the model fields of the nearest ancestor node's chosen
+   * dataset (AGL-556): the editor resolves options from
+   * EntityPickerContext.datasetFields using the ancestor's `datasetId`
+   * (or legacy `datasetName` matched by label) and persists the stable
+   * model fieldId — field renames never break the mapping.
+   */
+  DATASET_FIELD_SELECT = 'dataset-field-select',
   SELECT = 'select',
   SLIDER = 'slider',
   SUB_FORM = 'sub-form',

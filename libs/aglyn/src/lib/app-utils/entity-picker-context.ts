@@ -39,6 +39,13 @@ export interface EntityPickerContextValue {
   collections?: EntityOption[]
   categories?: EntityOption[]
   datasets?: EntityOption[]
+  /**
+   * Per-dataset model fields (AGL-556), keyed by dataset id, in model
+   * order: id = stable model fieldId, label = current display name. Feeds
+   * DATASET_FIELD_SELECT attributes (e.g. a form field's "Maps to schema
+   * field" picker).
+   */
+  datasetFields?: Record<string, EntityOption[]>
 }
 
 export const EntityPickerContext = createContext<EntityPickerContextValue>({})

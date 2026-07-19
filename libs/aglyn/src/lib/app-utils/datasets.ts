@@ -21,6 +21,11 @@
  * repeatable components (AGL-103) via `{{item.field}}` bindings.
  */
 
+import {
+  type DatasetModel,
+  effectiveDatasetModel,
+} from './dataset-models'
+
 /** Dataset field name: starts with a letter; letters/digits/underscores. */
 export const DATASET_FIELD_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
 
@@ -71,6 +76,41 @@ export function sanitizeRecordValues(
     const value = input?.[field]
     if (value == null) continue
     values[field] = String(value)
+  }
+  return values
+}
+
+/**
+ * Record values for a dataset write (AGL-556). With a `fieldMap`
+ * (submitted key → stable model fieldId), mapped values are stored under
+ * the mapped fieldId — so renamed schema fields keep receiving data — and
+ * entries whose fieldId isn't in the model are dropped (the map is
+ * client-supplied and never trusted). Submitted keys without a mapping
+ * (and calls without a map) fall back to the legacy name-intersection
+ * against the model's field ids, matching `sanitizeRecordValues`.
+ */
+export function buildDatasetRecordValues(
+  dataset: { model?: DatasetModel; fields?: string[] },
+  input: Record<string, unknown> | null | undefined,
+  fieldMap?: Record<string, string> | null,
+): Record<string, string> {
+  const model = effectiveDatasetModel(dataset)
+  const map = fieldMap ?? {}
+  const values: Record<string, string> = {}
+  for (const fieldId of model.order) {
+    if (!model.fields[fieldId]) continue
+    // A submitted key with an explicit mapping never doubles as a
+    // name-match — the mapping decides where it lands.
+    if (fieldId in map) continue
+    const value = input?.[fieldId]
+    if (value == null) continue
+    values[fieldId] = String(value)
+  }
+  for (const [submittedKey, fieldId] of Object.entries(map)) {
+    if (typeof fieldId !== 'string' || !model.fields[fieldId]) continue
+    const value = input?.[submittedKey]
+    if (value == null) continue
+    values[fieldId] = String(value)
   }
   return values
 }

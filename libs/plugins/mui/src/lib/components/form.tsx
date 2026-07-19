@@ -42,14 +42,27 @@ export interface FormProps {
   /** Identifies the form in the submissions inbox. */
   formName?: string
   /**
-   * Dataset (by name) submissions also append into, mapped by field name
-   * (AGL-141); the inbox copy is always written.
+   * Dataset (by id) submissions also append into (AGL-556); the inbox
+   * copy is always written. Renaming the dataset never breaks the binding.
+   */
+  datasetId?: string
+  /**
+   * Legacy dataset-by-name binding (AGL-141), honored when no `datasetId`
+   * is set; kept so persisted nodes keep working.
    */
   datasetName?: string
   submitLabel?: string
   successMessage?: string
   children?: React.ReactNode
 }
+
+/**
+ * Hidden-input prefix a FormField uses to publish its field → dataset
+ * schema-field mapping to the enclosing Form (AGL-556). Rides the DOM so
+ * arbitrary nesting between Form and field needs no React context; the
+ * `__` prefix keeps it out of the submitted fields.
+ */
+export const FIELD_MAP_INPUT_PREFIX = '__map__'
 
 /**
  * Lead-capture form (AGL-76): collects its field children's values and
@@ -61,6 +74,7 @@ export interface FormProps {
 const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   const {
     formName,
+    datasetId,
     datasetName,
     submitLabel,
     successMessage,
@@ -81,11 +95,19 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       if (!hostId || status === 'sending') return
       const data = new FormData(event.currentTarget)
       const fields: Record<string, string> = {}
+      const fieldMap: Record<string, string> = {}
       let website = ''
       for (const [key, value] of data.entries()) {
         if (typeof value !== 'string') continue
         if (key === 'website') {
           website = value
+          continue
+        }
+        // Field → dataset schema-field mappings (AGL-556), published by
+        // each FormField as a hidden input.
+        if (key.startsWith(FIELD_MAP_INPUT_PREFIX)) {
+          const submittedKey = key.slice(FIELD_MAP_INPUT_PREFIX.length)
+          if (submittedKey && value) fieldMap[submittedKey] = value
           continue
         }
         // `__`-prefixed inputs are internal controls (e.g. the rating
@@ -105,7 +127,11 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
           body: JSON.stringify({
             hostId,
             formName: formName || 'Form',
+            // Id-first dataset binding (AGL-556); the name rides along for
+            // the server's legacy fallback.
+            ...(datasetId ? { datasetId } : {}),
             ...(datasetName ? { dataset: datasetName } : {}),
+            ...(Object.keys(fieldMap).length ? { fieldMap } : {}),
             path: window.location.pathname,
             fields,
             website,
@@ -121,7 +147,7 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
         setStatus('error')
       }
     },
-    [hostId, status, formName, datasetName],
+    [hostId, status, formName, datasetId, datasetName],
   )
 
   if (status === 'sent') {
@@ -176,6 +202,12 @@ Form.displayName = 'AglynForm'
 export interface FormFieldProps {
   /** Submission key; also the input's name attribute. */
   fieldName?: string
+  /**
+   * Stable model fieldId of the parent form's dataset this value is
+   * stored under (AGL-556). When unset, values match dataset fields by
+   * name — the legacy behavior.
+   */
+  datasetFieldId?: string
   label?: string
   fieldType?:
     | 'text'
@@ -208,7 +240,8 @@ export const parseFieldOptions = (options?: string): string[] =>
  * radio, checkbox group, and star rating — are AGL-544.
  */
 const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
-  const { fieldName, label, fieldType, options, required, ...rest } = props
+  const { fieldName, datasetFieldId, label, fieldType, options, required, ...rest } =
+    props
   const name = fieldName || 'field'
   const fieldLabel = label || fieldName || 'Field'
   const choices = parseFieldOptions(options)
@@ -217,26 +250,39 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
   const [checkedCount, setCheckedCount] = useState(0)
   // Rating is controlled so a hidden input can serialize the number.
   const [rating, setRating] = useState<number | null>(null)
+  // Publishes this field's dataset schema-field mapping to the enclosing
+  // Form via the DOM (AGL-556); `__`-prefixed, so never a submitted field.
+  const mapInput = datasetFieldId ? (
+    <input
+      type="hidden"
+      name={`${FIELD_MAP_INPUT_PREFIX}${name}`}
+      value={datasetFieldId}
+      readOnly
+    />
+  ) : null
 
   if (fieldType === 'select') {
     return (
-      <TextField
-        ref={ref}
-        select
-        name={name}
-        label={fieldLabel}
-        required={Boolean(required)}
-        defaultValue=""
-        fullWidth
-        size="small"
-        {...rest}
-      >
-        {choices.map((choice, index) => (
-          <MenuItem key={index} value={choice}>
-            {choice}
-          </MenuItem>
-        ))}
-      </TextField>
+      <>
+        <TextField
+          ref={ref}
+          select
+          name={name}
+          label={fieldLabel}
+          required={Boolean(required)}
+          defaultValue=""
+          fullWidth
+          size="small"
+          {...rest}
+        >
+          {choices.map((choice, index) => (
+            <MenuItem key={index} value={choice}>
+              {choice}
+            </MenuItem>
+          ))}
+        </TextField>
+        {mapInput}
+      </>
     )
   }
 
@@ -254,6 +300,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
             />
           ))}
         </RadioGroup>
+        {mapInput}
       </FormControl>
     )
   }
@@ -283,6 +330,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
             />
           ))}
         </FormGroup>
+        {mapInput}
       </FormControl>
     )
   }
@@ -299,23 +347,27 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
           onChange={(_event, value) => setRating(value)}
         />
         <input type="hidden" name={name} value={rating ?? ''} />
+        {mapInput}
       </FormControl>
     )
   }
 
   return (
-    <TextField
-      ref={ref}
-      name={name}
-      label={fieldLabel}
-      type={fieldType === 'email' ? 'email' : 'text'}
-      required={Boolean(required)}
-      multiline={fieldType === 'textarea'}
-      minRows={fieldType === 'textarea' ? 3 : undefined}
-      fullWidth
-      size="small"
-      {...rest}
-    />
+    <>
+      <TextField
+        ref={ref}
+        name={name}
+        label={fieldLabel}
+        type={fieldType === 'email' ? 'email' : 'text'}
+        required={Boolean(required)}
+        multiline={fieldType === 'textarea'}
+        minRows={fieldType === 'textarea' ? 3 : undefined}
+        fullWidth
+        size="small"
+        {...rest}
+      />
+      {mapInput}
+    </>
   )
 })
 FormField.displayName = 'AglynFormField'
@@ -334,12 +386,23 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
       label: 'Form name',
     },
     {
+      name: 'datasetId',
+      description:
+        'Optional dataset (from the Data page) submissions are appended ' +
+        'to. Stored by id, so renaming the dataset never breaks the ' +
+        'binding (AGL-556). The inbox always gets a copy.',
+      component: Aglyn.FieldComponentType.DATASET_SELECT,
+      label: 'Write to dataset',
+    },
+    {
       name: 'datasetName',
       description:
-        'Optional dataset (by name, from the Data page) submissions are ' +
-        'appended to — fields map by name. The inbox always gets a copy.',
+        'Legacy name-based dataset binding — matched against the ' +
+        "dataset's display name at submit time. Pick the dataset above " +
+        'and clear this; it only shows while a name is still set.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
-      label: 'Write to dataset',
+      label: 'Write to dataset (legacy name)',
+      condition: { when: 'datasetName', isNotEmpty: true },
     },
     {
       name: 'submitLabel',
@@ -371,6 +434,15 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
       description: 'Key this value is stored under in submissions.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Field name',
+    },
+    {
+      name: 'datasetFieldId',
+      description:
+        "Schema field of the form's dataset this value is stored under. " +
+        'Stored by id, so renaming the field never breaks the mapping ' +
+        '(AGL-556). When unset, values match dataset fields by name.',
+      component: Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
+      label: 'Maps to schema field',
     },
     {
       name: 'label',

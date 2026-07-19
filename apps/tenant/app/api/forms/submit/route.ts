@@ -24,7 +24,7 @@ import {
   orgDataCollectionForHost,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
 import { FieldValue } from 'firebase-admin/firestore'
 
 export const dynamic = 'force-dynamic'
@@ -57,7 +57,8 @@ const json = (body: unknown, status = 200) => Response.json(body, { status })
  */
 export async function POST(request: Request): Promise<Response> {
   const payload = (await request.json().catch(() => ({}))) as Record<string, any>
-  const { hostId, formName, dataset, path, fields, website } = payload
+  const { hostId, formName, dataset, datasetId, fieldMap, path, fields, website } =
+    payload
 
   // Honeypot filled → pretend success so bots learn nothing.
   if (typeof website === 'string' && website.trim()) {
@@ -135,37 +136,44 @@ export async function POST(request: Request): Promise<Response> {
         },
       })
     }
-    // Dataset binding (AGL-141): append a record mapped by field name into
-    // the named dataset. Best-effort — a missing dataset or a full record
-    // quota never fails the submission (the inbox copy above is canonical).
+    // Dataset binding (AGL-141/556): append a record into the bound
+    // dataset — by id first (rename-safe), by human name for legacy nodes.
+    // Best-effort — a missing dataset or a full record quota never fails
+    // the submission (the inbox copy above is canonical).
     const datasetName = String(dataset ?? '')
       .trim()
       .slice(0, 60)
-    if (datasetName) {
+    const boundDatasetId = String(datasetId ?? '')
+      .trim()
+      .slice(0, 128)
+    // Client-supplied field → model-fieldId mapping (AGL-556); entries
+    // are re-validated against the dataset model below (unknown ids drop).
+    const sanitizedFieldMap: Record<string, string> = {}
+    if (fieldMap && typeof fieldMap === 'object' && !Array.isArray(fieldMap)) {
+      for (const [key, value] of Object.entries(fieldMap).slice(0, MAX_FIELDS)) {
+        if (typeof value !== 'string' || !value) continue
+        sanitizedFieldMap[String(key).slice(0, 64)] = value.slice(0, 64)
+      }
+    }
+    if (boundDatasetId || datasetName) {
       try {
-        // Org-scoped datasets (AGL-237): the form's named dataset
-        // resolves against the org so every host shares it. Console-
-        // created datasets store the human name as `displayName`
-        // (AGL-536); `name` covers pre-migration docs.
+        // Org-scoped datasets (AGL-237): the form's dataset resolves
+        // against the org so every host shares it.
         const datasetsRef = await orgDataCollectionForHost(hostId, 'datasets')
-        let datasetsSnapshot = await datasetsRef
-          .where('displayName', '==', datasetName)
-          .limit(1)
-          .get()
-        if (datasetsSnapshot.empty) {
-          datasetsSnapshot = await datasetsRef
-            .where('name', '==', datasetName)
-            .limit(1)
-            .get()
-        }
-        const datasetDoc = datasetsSnapshot.docs[0]
-        if (datasetDoc && !datasetDoc.get('deletedAt')) {
-          const declaredFields: string[] = Array.isArray(datasetDoc.get('fields'))
-            ? datasetDoc.get('fields')
-            : []
-          const values = Aglyn.sanitizeRecordValues(
-            declaredFields,
+        const datasetDoc = await resolveDatasetDoc(datasetsRef, {
+          datasetId: boundDatasetId,
+          datasetName,
+        })
+        if (datasetDoc?.exists && !datasetDoc.get('deletedAt')) {
+          const values = Aglyn.buildDatasetRecordValues(
+            {
+              model: datasetDoc.get('model'),
+              fields: Array.isArray(datasetDoc.get('fields'))
+                ? datasetDoc.get('fields')
+                : [],
+            },
             sanitizedFields,
+            sanitizedFieldMap,
           )
           let allowed = Object.keys(values).length > 0
           if (allowed) {

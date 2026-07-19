@@ -49,8 +49,9 @@ organization **Data** page (or any site's Data page — both edit the same data)
 
 Each field's **Display name** is what you see in dialogs and table headers; the
 **field id** next to it (a slug generated once from the display name) is the
-stable key records store values under — and the key you'll reference from
-bindings and form fields. Renaming the display name later never changes the id.
+stable key records store values under — the key `{{item.fieldId}}` bindings
+reference, and what a form field's **Maps to schema field** picker stores.
+Renaming the display name later never changes the id.
 
 ![The Schema dialog for the Survey responses dataset with field rows, type chips, and the Add field button](/img/guides/survey-schema-dialog.png)
 
@@ -88,11 +89,18 @@ Select each Form Field and set its properties in the inspector:
 
 | Property | What it does |
 | --- | --- |
-| **Field name** | The key the value is stored under in submissions — make it match the dataset **field id** (`satisfaction`, `visit`, `topics`, `comments`). |
+| **Field name** | The key the value is stored under in submissions (and in the inbox copy). |
+| **Maps to schema field** | Which of the dataset's schema fields this value is stored under. The dropdown lists the fields of the dataset chosen on the Form (see step 5) and stores the stable **field id**, so renaming the field later never breaks the mapping. Left on **None**, the value matches a dataset field by name instead. |
 | **Label** | The visible input label ("How satisfied are you?"). |
 | **Type** | **Text** (default), **Email**, **Multiline**, **Dropdown**, **Radio choice**, **Checkboxes**, or **Star rating**. |
 | **Options** | Choices for dropdown, radio, and checkbox fields — one per line or comma-separated. Ignored by other types. |
 | **Required?** | Whether the field must be filled; a required checkbox group needs at least one box ticked. |
+
+:::tip Pick the dataset first
+"Maps to schema field" lists the fields of whichever dataset the **Form** is
+pointed at — set the Form's **Write to dataset** (step 5) before mapping the
+fields, or the dropdown reads *No dataset selected on the form*.
+:::
 
 For this survey:
 
@@ -111,17 +119,22 @@ Select the **Form** container itself and fill its properties:
 
 - **Form name** — identifies the form in your submissions inbox
   (`Visitor survey`).
-- **Write to dataset** — type the dataset's **name exactly as it appears on the
-  Data page**: `Survey responses`. Submissions append a record with fields
-  mapped by name; the inbox always keeps its own copy either way.
+- **Write to dataset** — pick `Survey responses` from the dropdown, which
+  lists your organization's datasets by display name. The form stores the
+  dataset's **id**, so renaming the dataset later never breaks the binding.
+  Submissions append a record; the inbox always keeps its own copy either way.
 - **Submit label** — the button text (defaults to **Send**).
 - **Success message** — shown in place of the form after a successful submit.
 
-:::warning Match by name
-"Write to dataset" matches the dataset by its display name — if you later
-rename the dataset in the Schema dialog (its plural name), update the form to
-match. Values whose field name doesn't exist in the dataset's schema are
-dropped from the record (the inbox copy still has everything).
+:::info Rename-safe by id
+Both pickers bind by stable id: the Form stores the dataset's document id and
+each field's "Maps to schema field" stores the model field id. Rename the
+dataset or its fields freely — records keep landing. Unmapped values still
+match schema fields **by name** (field name = field id); values that match
+nothing are dropped from the record (the inbox copy still has everything).
+Forms built before the pickers keep working through their stored dataset
+name — shown as **Write to dataset (legacy name)** until you pick the dataset
+above and clear it.
 :::
 
 ## 6. Publish

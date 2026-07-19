@@ -17,24 +17,39 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import Form, { FormField, formFieldSchema, parseFieldOptions } from './form'
+import Form, {
+  FormField,
+  formFieldSchema,
+  formSchema,
+  parseFieldOptions,
+  type FormProps,
+} from './form'
 
 /** Renders children inside a Form with a live site context + fetch mock. */
-const renderForm = (children: React.ReactNode) => {
+const renderForm = (
+  children: React.ReactNode,
+  formProps: Partial<FormProps> = {},
+) => {
   const utils = render(
     <Aglyn.SiteContext.Provider value={{ hostId: 'host-1' }}>
-      <Form formName="Survey">{children}</Form>
+      <Form formName="Survey" {...formProps}>
+        {children}
+      </Form>
     </Aglyn.SiteContext.Provider>,
   )
   const form = utils.container.querySelector('form') as HTMLFormElement
   return { ...utils, form }
 }
 
-/** Fields payload of the (single) mocked submit call. */
-const submittedFields = (fetchMock: jest.Mock): Record<string, string> => {
+/** Body payload of the (single) mocked submit call. */
+const submittedBody = (fetchMock: jest.Mock): Record<string, any> => {
   const [, init] = fetchMock.mock.calls[0]
-  return JSON.parse(init.body).fields
+  return JSON.parse(init.body)
 }
+
+/** Fields payload of the (single) mocked submit call. */
+const submittedFields = (fetchMock: jest.Mock): Record<string, string> =>
+  submittedBody(fetchMock).fields
 
 describe('form survey fields (AGL-544)', () => {
   let fetchMock: jest.Mock
@@ -177,6 +192,107 @@ describe('form survey fields (AGL-544)', () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
       // Only the hidden input submits; the `__`-prefixed radios do not.
       expect(submittedFields(fetchMock)).toEqual({ satisfaction: '4' })
+    })
+  })
+
+  describe('dataset binding by id (AGL-556)', () => {
+    it('sends datasetId, with the legacy name riding along', async () => {
+      const { form } = renderForm(<FormField fieldName="comments" />, {
+        datasetId: 'ds-1',
+        datasetName: 'Survey responses',
+      })
+      fireEvent.change(form.querySelector('input[name="comments"]') as Element, {
+        target: { value: 'Hi' },
+      })
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = submittedBody(fetchMock)
+      expect(body.datasetId).toBe('ds-1')
+      expect(body.dataset).toBe('Survey responses')
+    })
+
+    it('sends only the legacy name for pre-556 nodes', async () => {
+      const { form } = renderForm(<FormField fieldName="comments" />, {
+        datasetName: 'Survey responses',
+      })
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = submittedBody(fetchMock)
+      expect(body.datasetId).toBeUndefined()
+      expect(body.dataset).toBe('Survey responses')
+    })
+
+    it('collects field → schema-field mappings without leaking them into fields', async () => {
+      const { form } = renderForm(
+        <>
+          <FormField fieldName="stars" datasetFieldId="satisfaction" />
+          <FormField fieldName="feedback" />
+        </>,
+        { datasetId: 'ds-1' },
+      )
+      fireEvent.change(form.querySelector('input[name="stars"]') as Element, {
+        target: { value: '5' },
+      })
+      fireEvent.change(
+        form.querySelector('input[name="feedback"]') as Element,
+        { target: { value: 'Great' } },
+      )
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = submittedBody(fetchMock)
+      expect(body.fieldMap).toEqual({ stars: 'satisfaction' })
+      expect(body.fields).toEqual({ stars: '5', feedback: 'Great' })
+    })
+
+    it('omits fieldMap entirely when no field is mapped', async () => {
+      const { form } = renderForm(<FormField fieldName="comments" />, {
+        datasetId: 'ds-1',
+      })
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      expect(submittedBody(fetchMock).fieldMap).toBeUndefined()
+    })
+
+    it('maps every survey field type, including the rating', async () => {
+      const { form } = renderForm(
+        <FormField
+          fieldName="stars"
+          fieldType="rating"
+          datasetFieldId="satisfaction"
+        />,
+        { datasetId: 'ds-1' },
+      )
+      fireEvent.click(screen.getByRole('radio', { name: '4 Stars' }))
+      fireEvent.submit(form)
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      const body = submittedBody(fetchMock)
+      expect(body.fields).toEqual({ stars: '4' })
+      expect(body.fieldMap).toEqual({ stars: 'satisfaction' })
+    })
+
+    it('exposes the dataset picker by id and keeps the legacy name field conditional', () => {
+      const datasetId = formSchema.attributes?.find(
+        (attribute) => attribute.name === 'datasetId',
+      )
+      expect(datasetId?.component).toBe(
+        Aglyn.FieldComponentType.DATASET_SELECT,
+      )
+      const datasetName = formSchema.attributes?.find(
+        (attribute) => attribute.name === 'datasetName',
+      )
+      expect(datasetName?.condition).toEqual({
+        when: 'datasetName',
+        isNotEmpty: true,
+      })
+    })
+
+    it('exposes the schema-field mapping picker on form fields', () => {
+      const datasetFieldId = formFieldSchema.attributes?.find(
+        (attribute) => attribute.name === 'datasetFieldId',
+      )
+      expect(datasetFieldId?.component).toBe(
+        Aglyn.FieldComponentType.DATASET_FIELD_SELECT,
+      )
     })
   })
 
