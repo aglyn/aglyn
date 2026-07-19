@@ -32,7 +32,7 @@ import {
 } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
-import { createIdUrlSafe } from '../foundation'
+import { createIdUrlSafe, FEATURE_FLAG } from '../foundation'
 import type { PluginId } from '../plugin-manager'
 import {
   type ComponentId,
@@ -50,6 +50,16 @@ import {
 
 export const NODE_ROOT_ID = '_@_'
 export const NODE_ROOT_LABEL = 'Document'
+
+/**
+ * True only when a feature flag is explicitly present and carries the
+ * ENABLED bit. Unlike {@link isFeatureEnabled}, an absent (undefined) flag
+ * reads as false here — components that declare no flags at all (Stack,
+ * Section, the document root) must not be mistaken for self-closing leaves.
+ */
+function isLeafFlagEnabled(flag?: FEATURE_FLAG): boolean {
+  return typeof flag === 'number' && (flag & FEATURE_FLAG.ENABLED) !== 0
+}
 
 export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   // public store: CanvasManager
@@ -343,6 +353,49 @@ export class CanvasManager {
       node.componentId && this.aglyn.components.getLabel(node.componentId)
     return node?.name || componentLabel || node?.$id
   })
+
+  /**
+   * Whether a node can host inserted child nodes. The document root and
+   * layout containers (Stack, Section, Container — anything with a real
+   * children slot) can; a leaf whose component is self-closing or renders
+   * its `children` as inline text (a screen link, button, icon, image) has
+   * no slot to receive them and can't. Components with no registered schema
+   * default to accepting children.
+   */
+  public nodeAcceptsChildren = computedFn((node: NodeSchema<any>): boolean => {
+    if (!node) return false
+    if (this.isRootNode(node)) return true
+    const flags = this.aglyn?.components?.getSchema(node.componentId)?.flags
+    const isLeaf =
+      isLeafFlagEnabled(flags?.selfClosing) ||
+      isLeafFlagEnabled(flags?.textEditable)
+    return !isLeaf
+  })
+
+  /**
+   * Resolve where a newly inserted node should attach, given the node the
+   * user had selected (the Insert menu passes the current selection). A
+   * container target — including the document-root fallback for a missing,
+   * stale, or non-node target (AGL-537) — receives the node as an appended
+   * child. A leaf target has no child slot, so the node lands as the leaf's
+   * next sibling in its own container instead, mirroring how a
+   * drag-and-drop side-drop resolves rather than nesting the node where it
+   * can never render.
+   */
+  public resolveInsertTarget(target?: NodeSchema<any>): {
+    parent: NodeSchema<any>
+    index: number
+  } {
+    const root = this.getNode(NODE_ROOT_ID)!
+    const requested =
+      (typeof target?.$id === 'string' && this.getNode(target.$id)) || root
+    if (this.nodeAcceptsChildren(requested)) {
+      return { parent: requested, index: NaN }
+    }
+    const parent = this.getNodeParent(requested) ?? root
+    const at = parent.nodes?.indexOf(requested.$id) ?? -1
+    return { parent, index: at < 0 ? NaN : at + 1 }
+  }
 
   public makeNested = computedFn((node: NodeSchema<any>) => {
     // Serialize to a plain schema object: a toJS copy would carry the node's

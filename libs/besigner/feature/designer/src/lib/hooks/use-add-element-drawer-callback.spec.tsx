@@ -33,6 +33,12 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 describe('useAddElementDrawerCallback', () => {
   const APP_BAR = 'aglTestAppBar537'
   const TOOLBAR = 'aglTestToolbar537'
+  // Leaf-insert fixtures (AGL-575): a container plus leaves that render no
+  // node children slot (self-closing, or children-as-inline-text).
+  const STACK = 'aglTestStack575'
+  const LEAF_TEXT = 'aglTestLeafText575'
+  const LEAF_SELF = 'aglTestLeafSelf575'
+  const STACK_ONLY = 'aglTestStackOnly575'
 
   beforeAll(() => {
     Aglyn.components.registerComponent((() => null) as any, {
@@ -49,11 +55,41 @@ describe('useAddElementDrawerCallback', () => {
         { components: [APP_BAR] },
       ],
     } as any)
+    Aglyn.components.registerComponent((() => null) as any, {
+      $id: STACK,
+      pluginId: 'test-plugin',
+      displayName: 'Stack',
+    } as any)
+    Aglyn.components.registerComponent((() => null) as any, {
+      $id: LEAF_TEXT,
+      pluginId: 'test-plugin',
+      displayName: 'Screen Link',
+      flags: { textEditable: Aglyn.FEATURE_FLAG.ENABLED },
+    } as any)
+    Aglyn.components.registerComponent((() => null) as any, {
+      $id: LEAF_SELF,
+      pluginId: 'test-plugin',
+      displayName: 'Icon',
+      flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+    } as any)
+    Aglyn.components.registerComponent((() => null) as any, {
+      $id: STACK_ONLY,
+      pluginId: 'test-plugin',
+      displayName: 'Stack Item',
+      restrictParent: [
+        Aglyn.LinealDirectiveFlag.LIMIT_TO,
+        { components: [STACK] },
+      ],
+    } as any)
   })
 
   afterAll(() => {
     Aglyn.components.unregisterComponent(APP_BAR)
     Aglyn.components.unregisterComponent(TOOLBAR)
+    Aglyn.components.unregisterComponent(STACK)
+    Aglyn.components.unregisterComponent(LEAF_TEXT)
+    Aglyn.components.unregisterComponent(LEAF_SELF)
+    Aglyn.components.unregisterComponent(STACK_ONLY)
     Aglyn.canvas.reset()
     Besigner.focus.clearFocusStatus()
   })
@@ -180,5 +216,155 @@ describe('useAddElementDrawerCallback', () => {
     expect(Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!.nodes).toContain(node.$id)
     expect('nodes' in clickEvent).toBe(false)
     expect(collectOrphans()).toEqual([])
+  })
+
+  // Leaf-selection sibling placement (AGL-575): inserting while a leaf (a
+  // screen link, icon — no children slot) is selected must place the new
+  // node as the leaf's next sibling in its own container, not nest it inside
+  // the leaf where it can never render and drag-and-drop refuses to move it.
+  describe('leaf selection inserts as a sibling', () => {
+    // root › stack1 › [link1 (text leaf), icon1 (self-closing leaf), link2]
+    const setupLeafTree = () =>
+      Aglyn.canvas.setNodes({
+        [Aglyn.NODE_ROOT_ID]: {
+          $id: Aglyn.NODE_ROOT_ID,
+          type: 'node',
+          parentId: Aglyn.NODE_ROOT_ID,
+          componentId: 'div',
+          props: {},
+          sx: {},
+          nodes: ['stack1'],
+        },
+        stack1: {
+          $id: 'stack1',
+          type: 'node',
+          parentId: Aglyn.NODE_ROOT_ID,
+          componentId: STACK,
+          pluginId: 'test-plugin',
+          props: {},
+          sx: {},
+          nodes: ['link1', 'icon1', 'link2'],
+        },
+        link1: {
+          $id: 'link1',
+          type: 'node',
+          parentId: 'stack1',
+          componentId: LEAF_TEXT,
+          pluginId: 'test-plugin',
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+        icon1: {
+          $id: 'icon1',
+          type: 'node',
+          parentId: 'stack1',
+          componentId: LEAF_SELF,
+          pluginId: 'test-plugin',
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+        link2: {
+          $id: 'link2',
+          type: 'node',
+          parentId: 'stack1',
+          componentId: LEAF_TEXT,
+          pluginId: 'test-plugin',
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+      } as any)
+
+    it('places the new node after a selected text-editable leaf', async () => {
+      setupLeafTree()
+      const addElement = renderCallback(LEAF_TEXT)
+      const leaf = Aglyn.canvas.getNode('link1')!
+
+      const node = (await addElement(leaf)) as Aglyn.NodeSchema<any>
+
+      expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+      // Sibling in the container, not a child of the leaf.
+      expect(node.parentId).toBe('stack1')
+      expect(leaf.nodes).toEqual([])
+      expect(Aglyn.canvas.getNode('stack1')!.nodes).toEqual([
+        'link1',
+        node.$id,
+        'icon1',
+        'link2',
+      ])
+      expect(Besigner.focus.getLastSelected()?.$id).toBe(node.$id)
+      expect(collectOrphans()).toEqual([])
+    })
+
+    it('places the new node after a selected self-closing leaf', async () => {
+      setupLeafTree()
+      const addElement = renderCallback(LEAF_TEXT)
+      const leaf = Aglyn.canvas.getNode('icon1')!
+
+      const node = (await addElement(leaf)) as Aglyn.NodeSchema<any>
+
+      expect(node.parentId).toBe('stack1')
+      expect(leaf.nodes).toEqual([])
+      expect(Aglyn.canvas.getNode('stack1')!.nodes).toEqual([
+        'link1',
+        'icon1',
+        node.$id,
+        'link2',
+      ])
+      expect(collectOrphans()).toEqual([])
+    })
+
+    it('appends the sibling when the last leaf is selected', async () => {
+      setupLeafTree()
+      const addElement = renderCallback(LEAF_TEXT)
+      const leaf = Aglyn.canvas.getNode('link2')!
+
+      const node = (await addElement(leaf)) as Aglyn.NodeSchema<any>
+
+      expect(node.parentId).toBe('stack1')
+      expect(Aglyn.canvas.getNode('stack1')!.nodes).toEqual([
+        'link1',
+        'icon1',
+        'link2',
+        node.$id,
+      ])
+      expect(collectOrphans()).toEqual([])
+    })
+
+    it('still nests the new node when a container is selected', async () => {
+      setupLeafTree()
+      const addElement = renderCallback(LEAF_TEXT)
+      const container = Aglyn.canvas.getNode('stack1')!
+
+      const node = (await addElement(container)) as Aglyn.NodeSchema<any>
+
+      // Containers accept children — appended, not made a sibling of stack1.
+      expect(node.parentId).toBe('stack1')
+      expect(Aglyn.canvas.getNode('stack1')!.nodes).toEqual([
+        'link1',
+        'icon1',
+        'link2',
+        node.$id,
+      ])
+      expect(collectOrphans()).toEqual([])
+    })
+
+    it('validates a constrained insert against the resolved container, not the leaf', async () => {
+      setupLeafTree()
+      // STACK_ONLY may only live inside STACK. With a leaf selected, the
+      // insert target resolves to the leaf's container (stack1), so the
+      // constraint passes — validating against the leaf would wrongly reject.
+      const addElement = renderCallback(STACK_ONLY)
+      const leaf = Aglyn.canvas.getNode('link1')!
+
+      const node = (await addElement(leaf)) as Aglyn.NodeSchema<any>
+
+      expect(mockEnqueueSnackbar).not.toHaveBeenCalled()
+      expect(node.parentId).toBe('stack1')
+      expect(Aglyn.canvas.getNode('stack1')!.nodes).toContain(node.$id)
+      expect(collectOrphans()).toEqual([])
+    })
   })
 })
