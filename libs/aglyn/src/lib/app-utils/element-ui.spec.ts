@@ -26,7 +26,11 @@ import {
   ELEMENT_HIDDEN_CLASS,
   ELEMENT_HIDDEN_STYLE_ID,
   ensureElementHiddenStyle,
+  expandLeafSelector,
+  leafIdFromSelector,
+  leafIdsMatch,
   MENU_COMMAND_EVENT,
+  normalizeLeafId,
   subscribeDrawerCommands,
   subscribeMenuCommands,
   VISIBILITY_BAND_MEDIA,
@@ -164,6 +168,98 @@ describe('menu command bus (AGL-568)', () => {
     window.dispatchEvent(new CustomEvent(MENU_COMMAND_EVENT, {}))
     unsubscribe()
     expect(seen).toHaveLength(0)
+  })
+})
+
+describe('layout-namespace-insensitive id matching (AGL-573)', () => {
+  // The live example from the bug: the Northwind Main Layout Shop dropdown
+  // is stamped `leaf:layout___5I3TBXywa` on the live DOM, but the builder
+  // persisted the raw canvas id `_5I3TBXywa`.
+  const RAW = '_5I3TBXywa'
+  const NAMESPACED = `layout__${RAW}` // layout___5I3TBXywa
+
+  describe('normalizeLeafId', () => {
+    it('strips a leading layout__ namespace', () => {
+      expect(normalizeLeafId(NAMESPACED)).toBe(RAW)
+    })
+
+    it('leaves a raw id unchanged (idempotent)', () => {
+      expect(normalizeLeafId(RAW)).toBe(RAW)
+      expect(normalizeLeafId(normalizeLeafId(NAMESPACED))).toBe(RAW)
+    })
+
+    it('only strips a LEADING prefix, never an embedded one', () => {
+      expect(normalizeLeafId('Xlayout__abc')).toBe('Xlayout__abc')
+      expect(normalizeLeafId('abc-layout__z')).toBe('abc-layout__z')
+    })
+
+    it('coerces nullish ids to an empty string', () => {
+      expect(normalizeLeafId(undefined)).toBe('')
+      expect(normalizeLeafId(null)).toBe('')
+    })
+  })
+
+  describe('leafIdsMatch', () => {
+    it('matches a raw command id to a namespaced live id and back', () => {
+      expect(leafIdsMatch(RAW, NAMESPACED)).toBe(true)
+      expect(leafIdsMatch(NAMESPACED, RAW)).toBe(true)
+    })
+
+    it('matches the un-prefixed case', () => {
+      expect(leafIdsMatch(RAW, RAW)).toBe(true)
+      expect(leafIdsMatch(NAMESPACED, NAMESPACED)).toBe(true)
+    })
+
+    it('never matches unrelated ids (suffix stays anchored)', () => {
+      // `_5I3TBXywa` must not match a node that merely embeds it.
+      expect(leafIdsMatch(RAW, `layout__X${RAW}Y`)).toBe(false)
+      expect(leafIdsMatch(RAW, 'somethingElse')).toBe(false)
+    })
+
+    it('treats a missing id as no-match, not a wildcard', () => {
+      expect(leafIdsMatch(undefined, undefined)).toBe(false)
+      expect(leafIdsMatch('', NAMESPACED)).toBe(false)
+    })
+  })
+
+  describe('leafIdFromSelector', () => {
+    it('reads the id out of a canonical leaf selector', () => {
+      expect(leafIdFromSelector(`[data-aglyn="leaf:${RAW}"]`)).toBe(RAW)
+    })
+
+    it('returns undefined for non-leaf selectors', () => {
+      expect(leafIdFromSelector('#menu-button')).toBeUndefined()
+      expect(leafIdFromSelector('header, nav')).toBeUndefined()
+      expect(leafIdFromSelector('[data-other="leaf:x"]')).toBeUndefined()
+    })
+  })
+
+  describe('expandLeafSelector', () => {
+    it('adds the layout-namespaced alternative to a raw leaf selector', () => {
+      expect(expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)).toBe(
+        `[data-aglyn="leaf:${RAW}"], [data-aglyn="leaf:${NAMESPACED}"]`,
+      )
+    })
+
+    it('normalizes an already-namespaced selector to cover both forms', () => {
+      expect(expandLeafSelector(`[data-aglyn="leaf:${NAMESPACED}"]`)).toBe(
+        `[data-aglyn="leaf:${RAW}"], [data-aglyn="leaf:${NAMESPACED}"]`,
+      )
+    })
+
+    it('passes hand-typed CSS selectors through unchanged', () => {
+      expect(expandLeafSelector('#menu-button')).toBe('#menu-button')
+      expect(expandLeafSelector('header, nav')).toBe('header, nav')
+    })
+
+    it('actually matches the namespaced live element via querySelector', () => {
+      document.body.innerHTML = `<div data-aglyn="leaf:${NAMESPACED}">Shop</div>`
+      const expanded = expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)
+      expect(document.querySelector(expanded)).not.toBeNull()
+      // …and does not over-match a similarly-named node.
+      document.body.innerHTML = `<div data-aglyn="leaf:layout__X${RAW}Y"></div>`
+      expect(document.querySelector(expanded)).toBeNull()
+    })
   })
 })
 

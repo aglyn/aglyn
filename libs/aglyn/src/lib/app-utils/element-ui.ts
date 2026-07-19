@@ -24,6 +24,8 @@
  * that touches `window`/`document` is only ever called client-side.
  */
 
+import { LAYOUT_NODE_ID_PREFIX } from './compose-layout-nodes'
+
 /**
  * Class the show/hide steps toggle. The tenant page ships
  * `ELEMENT_HIDDEN_STYLE_TEXT` in its SSR HTML so an author-applied
@@ -83,6 +85,87 @@ export function applyElementVisibility(
     }
   }
   return elements.length
+}
+
+/* ── Layout-namespace-insensitive id matching (AGL-573) ─────────────── */
+
+/**
+ * Composition namespace prefixes the live runtime can graft onto a node's
+ * canvas id. Layout nodes are namespaced during screen composition
+ * ({@link LAYOUT_NODE_ID_PREFIX}) so they can never collide with screen
+ * ids — which means an interaction authored against the RAW canvas id
+ * (what the besigner builder emits: `menuNodeId` and the
+ * `[data-aglyn="leaf:<id>"]` selector) is not byte-equal to the id the
+ * live, layout-composed DOM carries. Kept as a list so a future screen
+ * namespace slots in here and every matcher below inherits it.
+ */
+const LEAF_ID_NAMESPACE_PREFIXES = [LAYOUT_NODE_ID_PREFIX] as const
+
+/**
+ * Strips a single leading composition namespace prefix from a node/leaf id
+ * so ids authored against the raw canvas id and ids stamped on the live
+ * (layout-composed) DOM compare equal (AGL-573). Idempotent for an
+ * already-raw id, and only a *leading* prefix is removed, so unrelated ids
+ * can never be coerced into colliding.
+ *
+ * @example
+ * normalizeLeafId('layout___5I3TBXywa') // → '_5I3TBXywa'
+ * normalizeLeafId('_5I3TBXywa')         // → '_5I3TBXywa'
+ */
+export function normalizeLeafId(id: string | undefined | null): string {
+  const value = String(id ?? '')
+  for (const prefix of LEAF_ID_NAMESPACE_PREFIXES) {
+    if (value.startsWith(prefix)) return value.slice(prefix.length)
+  }
+  return value
+}
+
+/**
+ * Whether two node ids address the same node ignoring composition
+ * namespace prefixes (AGL-573) — the durable half of the fix for
+ * interactions authored on layout-scoped elements, whose stored command id
+ * is the raw canvas id while the live element's id is `layout__`-namespaced.
+ * Two empty ids never match (a missing id is not a wildcard).
+ */
+export function leafIdsMatch(
+  a: string | undefined | null,
+  b: string | undefined | null,
+): boolean {
+  const left = normalizeLeafId(a)
+  return left !== '' && left === normalizeLeafId(b)
+}
+
+/**
+ * Extracts the leaf id from a canonical `[data-aglyn="leaf:<id>"]`
+ * selector (the exact form the renderer and the interaction builder emit),
+ * or `undefined` for any other selector.
+ */
+export function leafIdFromSelector(selector: string): string | undefined {
+  const match = /^\s*\[data-aglyn="leaf:(.+)"\]\s*$/.exec(selector)
+  return match?.[1] || undefined
+}
+
+/**
+ * Rewrites a `[data-aglyn="leaf:<id>"]` selector so it ALSO matches the
+ * same node once layout composition has namespaced its live id (AGL-573):
+ *
+ *   [data-aglyn="leaf:_5I3TBXywa"]
+ *     → [data-aglyn="leaf:_5I3TBXywa"], [data-aglyn="leaf:layout___5I3TBXywa"]
+ *
+ * Each alternative is anchored to the exact id (raw, or a namespace prefix
+ * plus the exact id), so an id can never match an unrelated node that
+ * merely contains it as a substring. Any non-leaf selector — a plain CSS
+ * selector an author typed by hand — passes through verbatim.
+ */
+export function expandLeafSelector(selector: string): string {
+  const rawId = leafIdFromSelector(selector)
+  if (!rawId) return selector
+  const base = normalizeLeafId(rawId)
+  const ids = [
+    base,
+    ...LEAF_ID_NAMESPACE_PREFIXES.map((prefix) => `${prefix}${base}`),
+  ]
+  return ids.map((id) => `[data-aglyn="leaf:${id}"]`).join(', ')
 }
 
 /* ── UI command buses (drawer AGL-562, menu AGL-568) ────────────────── */

@@ -63,6 +63,28 @@ describe('Drawer element (AGL-562)', () => {
     expect(screen.getByText('Drawer links')).toBeTruthy()
   })
 
+  it('matches a raw-id command to a layout-namespaced live drawer (AGL-573)', () => {
+    // Live layout node id is `leaf:layout__drawer-1`; the interaction
+    // stored the raw canvas id `drawer-1`.
+    render(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:layout__drawer-1' }}>
+        <span>{'Layout drawer links'}</span>
+      </DrawerElement>,
+    )
+    command('open', 'drawer-1')
+    expect(screen.getByText('Layout drawer links')).toBeTruthy()
+  })
+
+  it('never matches a command whose id merely embeds the drawer id (AGL-573)', () => {
+    render(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-1' }}>
+        <span>{'Only-me contents'}</span>
+      </DrawerElement>,
+    )
+    command('open', 'layout__Xdrawer-1Y')
+    expect(screen.queryByText('Only-me contents')).toBeNull()
+  })
+
   it('ignores commands addressed to other drawers', () => {
     render(
       <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-2' }}>

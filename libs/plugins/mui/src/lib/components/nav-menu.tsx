@@ -166,8 +166,12 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
     if (suppressNavigation || !nodeId) return undefined
     mountedMenus.push(nodeId)
     const unsubscribe = Aglyn.subscribeMenuCommands((detail) => {
+      // Match on the un-namespaced suffix (AGL-573): a command authored on
+      // a layout-scoped menu carries the raw canvas id while this menu's
+      // live id is `layout__`-namespaced (or vice versa) — leafIdsMatch
+      // compares them equal without re-authoring the persisted action.
       const targeted = detail.nodeId
-        ? detail.nodeId === nodeId
+        ? Aglyn.leafIdsMatch(detail.nodeId, nodeId)
         : mountedMenus[0] === nodeId
       if (!targeted) return
       cancelClose()

@@ -152,6 +152,40 @@ describe('menu command bus (AGL-568)', () => {
     expect(screen.queryByText('About')).toBeNull()
   })
 
+  it('matches a raw-id command to a layout-namespaced live menu (AGL-573)', () => {
+    // The live layout node is stamped `leaf:layout___5I3TBXywa`, but the
+    // besigner-authored openMenu step carries the raw canvas id.
+    renderLive(
+      <NavMenu label="Shop" {...{ 'data-aglyn': 'leaf:layout___5I3TBXywa' }}>
+        <a href="/shop">{'Shop contents'}</a>
+      </NavMenu>,
+    )
+    command('open', '_5I3TBXywa')
+    expect(screen.getByText('Shop contents')).toBeTruthy()
+    command('close', '_5I3TBXywa')
+    expect(screen.queryByText('Shop contents')).toBeNull()
+  })
+
+  it('matches a namespaced command to a raw-id live menu (reverse, AGL-573)', () => {
+    renderLive(
+      <NavMenu label="Shop" {...{ 'data-aglyn': 'leaf:_5I3TBXywa' }}>
+        <a href="/shop">{'Shop contents'}</a>
+      </NavMenu>,
+    )
+    command('open', 'layout___5I3TBXywa')
+    expect(screen.getByText('Shop contents')).toBeTruthy()
+  })
+
+  it('never matches a command whose id merely embeds the menu id (AGL-573)', () => {
+    renderLive(
+      <NavMenu label="Shop" {...{ 'data-aglyn': 'leaf:_5I3TBXywa' }}>
+        <a href="/shop">{'Shop contents'}</a>
+      </NavMenu>,
+    )
+    command('open', 'layout__X_5I3TBXywaY')
+    expect(screen.queryByText('Shop contents')).toBeNull()
+  })
+
   it('ignores commands addressed to other menus', () => {
     renderLive(
       <NavMenu label="Mine" {...{ 'data-aglyn': 'leaf:menu-2' }}>

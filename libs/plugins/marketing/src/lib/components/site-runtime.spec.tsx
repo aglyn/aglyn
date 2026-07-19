@@ -238,6 +238,53 @@ describe('automations engine — nav interactions (AGL-562)', () => {
     ])
   })
 
+  it('hovers a layout-namespaced live element from a raw-id trigger + opens the menu (AGL-573)', () => {
+    // Reproduces the Northwind Shop dropdown: the live element carries the
+    // `layout__`-namespaced id while the interaction was authored against
+    // the raw canvas id (both the hover selector and the openMenu step id).
+    document.body.innerHTML =
+      '<div data-aglyn="leaf:layout___5I3TBXywa">Shop</div>'
+    const live = document.querySelector(
+      '[data-aglyn="leaf:layout___5I3TBXywa"]',
+    ) as HTMLElement
+    const seen: Aglyn.MenuCommandDetail[] = []
+    const unsubscribe = Aglyn.subscribeMenuCommands((d) => seen.push(d))
+    runEngine([
+      {
+        event: 'elementHoverEnter',
+        selector: '[data-aglyn="leaf:_5I3TBXywa"]',
+        everyTime: true,
+        steps: [{ type: 'openMenu', menuNodeId: '_5I3TBXywa' }],
+      },
+    ])
+    fireEvent.mouseOver(live, { relatedTarget: document.body })
+    unsubscribe()
+    expect(seen).toEqual([
+      { command: 'open', nodeId: '_5I3TBXywa', hover: true },
+    ])
+  })
+
+  it('does not fire the raw-id hover trigger on an unrelated namespaced element (AGL-573)', () => {
+    document.body.innerHTML =
+      '<div data-aglyn="leaf:layout__X_5I3TBXywaY">Decoy</div>'
+    const decoy = document.querySelector(
+      '[data-aglyn="leaf:layout__X_5I3TBXywaY"]',
+    ) as HTMLElement
+    const seen: Aglyn.MenuCommandDetail[] = []
+    const unsubscribe = Aglyn.subscribeMenuCommands((d) => seen.push(d))
+    runEngine([
+      {
+        event: 'elementHoverEnter',
+        selector: '[data-aglyn="leaf:_5I3TBXywa"]',
+        everyTime: true,
+        steps: [{ type: 'openMenu', menuNodeId: '_5I3TBXywa' }],
+      },
+    ])
+    fireEvent.mouseOver(decoy, { relatedTarget: document.body })
+    unsubscribe()
+    expect(seen).toEqual([])
+  })
+
   it('injects the hidden-class rule when running the element steps', () => {
     document.getElementById(Aglyn.ELEMENT_HIDDEN_STYLE_ID)?.remove()
     runEngine([

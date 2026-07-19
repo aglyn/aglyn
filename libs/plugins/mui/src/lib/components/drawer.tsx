@@ -123,8 +123,12 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
       if (suppressNavigation || !nodeId) return undefined
       mountedDrawers.push(nodeId)
       const unsubscribe = Aglyn.subscribeDrawerCommands((detail) => {
+        // Match on the un-namespaced suffix (AGL-573): an interaction
+        // authored on a layout-scoped drawer stores the raw canvas id
+        // while this drawer's live id is `layout__`-namespaced (or vice
+        // versa) — leafIdsMatch compares them equal without re-authoring.
         const targeted = detail.nodeId
-          ? detail.nodeId === nodeId
+          ? Aglyn.leafIdsMatch(detail.nodeId, nodeId)
           : mountedDrawers[0] === nodeId
         if (!targeted) return
         if (detail.command === 'open') setOpen(true)

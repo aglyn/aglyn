@@ -244,7 +244,12 @@ function AutomationsEngine(props: {
             step.type === 'removeClass' ||
             step.type === 'toggleClass'
           ) {
-            document.querySelectorAll(step.selector).forEach((element) => {
+            // Expand the raw-id selector to also match the layout-composed
+            // live id (AGL-573); non-leaf selectors are unchanged.
+            const targets = document.querySelectorAll(
+              Aglyn.expandLeafSelector(step.selector),
+            )
+            targets.forEach((element) => {
               if (step.type === 'addClass') {
                 element.classList.add(step.className)
               } else if (step.type === 'removeClass') {
@@ -255,7 +260,7 @@ function AutomationsEngine(props: {
             })
           } else if (step.type === 'stickyNav') {
             const target = document.querySelector(
-              step.selector?.trim() || 'header, nav',
+              Aglyn.expandLeafSelector(step.selector?.trim() || 'header, nav'),
             )
             if (target instanceof HTMLElement) {
               target.style.position = 'sticky'
@@ -308,7 +313,9 @@ function AutomationsEngine(props: {
                 : step.type === 'hideElement'
                   ? 'hide'
                   : 'toggle',
-              step.selector,
+              // Expand so a show/hide/toggle authored against the raw
+              // canvas id still reaches the layout-composed node (AGL-573).
+              Aglyn.expandLeafSelector(step.selector),
             )
           } else if (
             step.type === 'openDrawer' ||
@@ -418,7 +425,14 @@ function AutomationsEngine(props: {
     }
 
     for (const automation of automations) {
-      const { event, selector, threshold } = automation
+      const { event, threshold } = automation
+      // Layout composition namespaces a node's live `data-aglyn` id, but
+      // the interaction builder records the RAW canvas id in the selector.
+      // Expand it so the trigger still matches the live element (AGL-573);
+      // hand-typed CSS selectors pass through untouched.
+      const selector = automation.selector
+        ? Aglyn.expandLeafSelector(automation.selector)
+        : automation.selector
       if (event === 'pageVisit') {
         fire(automation)
       } else if (event === 'timeOnPage') {
