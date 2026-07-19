@@ -29,6 +29,7 @@ import * as ListItemText from './components/list-item-text'
 import * as FunctionWidget from './components/function-widget'
 import * as Product from './components/product'
 import * as Blocks from './components/blocks'
+import * as Collection from './components/collection'
 import * as FormComponents from './components/form'
 import * as Image from './components/image'
 import * as Icon from './components/icon'
@@ -79,6 +80,9 @@ export function registerMuiPlugin(): void {
     { component: FormComponents.FormField, schema: FormComponents.formFieldSchema },
     { component: Blocks.VideoEmbed, schema: Blocks.videoEmbedSchema, presets: Blocks.blockPresets },
     { component: Blocks.SocialLinks, schema: Blocks.socialLinksSchema },
+    // Content collections (AGL-551): entries repeater + markdown entry body.
+    { component: Collection.CollectionEntries, schema: Collection.collectionEntriesSchema, presets: Collection.collectionPresets },
+    { component: Collection.CollectionEntryBody, schema: Collection.collectionEntryBodySchema },
     { component: Image.default, schema: Image.schema, presets: Image.presets },
     { component: Video.default, schema: Video.schema, presets: Video.presets },
     { component: Icon.default, schema: Icon.schema, presets: Icon.presets },

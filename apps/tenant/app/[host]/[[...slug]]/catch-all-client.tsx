@@ -395,8 +395,10 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
     )
   }
 
-  // Collection surfaces render outside the canvas system (AGL-81).
-  if (props.content?.collection) {
+  // Legacy collection surface (AGL-81): only when AGL-551 could compose
+  // neither a template screen nor the themed built-in (`nodes` present means
+  // the collection page renders through the normal canvas path below).
+  if (props.content?.collection && !nodes) {
     const { collection, entries, entry } = props.content
     const contentTitle = entry?.title ?? collection.displayName
     const contentFullTitle =

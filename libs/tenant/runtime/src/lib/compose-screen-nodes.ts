@@ -19,56 +19,83 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
+import { getPublishedCollectionEntries } from './get-collection-content'
 import getPluginInstalls from './get-plugin-installs'
 import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
 import getScreenVersion from './get-screen-version'
 
 /**
- * Full published-render composition for one screen (extracted for AGL-87 so
- * the SSG path and the password-unlock API build identical trees): applies
- * a due publish schedule, loads the version, composes the shared layout
- * chrome, grafts reusable components, and denormalizes.
+ * Content-collection context for a compose (AGL-551): the collection the
+ * route resolved (list/entry template screens). `entries` rides along when
+ * the route already fetched them (list pages); blocks bound to other
+ * collections — or to this one when `entries` is absent — fetch on demand.
  */
-export async function composeScreenNodes(options: {
+export interface ComposeCollectionContext {
+  slug: string
+  entries?: Aglyn.CollectionEntryRecord[]
+}
+
+/**
+ * Expands Collection entries blocks (AGL-551) against their collections'
+ * published entries. Fetches lazily — screens without the block cost
+ * nothing — and fails open on lookup errors like every other compose stage.
+ */
+async function expandCollectionEntryBlocks(
+  hostId: string,
+  nodes: Record<string, any>,
+  collection?: ComposeCollectionContext,
+): Promise<Record<string, any>> {
+  const slugs = new Set<string>()
+  for (const node of Object.values(nodes)) {
+    if (node?.componentId !== Aglyn.COLLECTION_ENTRIES_COMPONENT_ID) continue
+    const slug =
+      String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
+    if (slug) slugs.add(slug)
+  }
+  if (!slugs.size) return nodes
+  const sources: Record<string, Aglyn.CollectionEntriesSource> = {}
+  await Promise.all(
+    [...slugs].map(async (slug) => {
+      const entries =
+        slug === collection?.slug && collection.entries
+          ? collection.entries
+          : await getPublishedCollectionEntries({
+              hostId,
+              collectionSlug: slug,
+            })
+      sources[slug] = { slug, entries }
+    }),
+  )
+  return Aglyn.expandCollectionEntries(nodes, sources, collection?.slug)
+}
+
+/**
+ * Shared post-version composition (AGL-551, extracted from
+ * `composeScreenNodes`): layout chrome, reusable components, repeatables,
+ * collection entries, bindings, function definitions, plugin installs,
+ * named tokens, denormalize. The screen path and the collection-fallback
+ * path (which has no screen doc) build identical trees through this one
+ * pipeline.
+ */
+export async function composeNodesWithChrome(options: {
   hostId: string
-  screenId: string
-  screen: Aglyn.AglynScreen
+  layoutId?: string | null
+  screenNodes: Record<string, any>
   /** Entry-template tokens (AGL-105) substituted before denormalize. */
   tokens?: Record<string, string>
-  /**
-   * Compose a specific version instead of the published one (AGL-253):
-   * experiment variants point at versions; schedules don't apply.
-   */
-  versionId?: string
-}): Promise<Record<string, any> | null> {
-  const { hostId, screenId, screen } = options
+  /** Routed content collection (AGL-551) for Collection entries blocks. */
+  collection?: ComposeCollectionContext
+}): Promise<Record<string, any>> {
+  const { hostId, layoutId, screenNodes } = options
 
-  const effectiveVersionId = options.versionId
-    ? null
-    : await applyDuePublishSchedule({
-        hostId,
-        collectionName: 'screens',
-        docId: screenId,
-        parent: screen,
-      })
-  const versionRes = await getScreenVersion({
-    hostId,
-    screenId,
-    versionId: (options.versionId ??
-      effectiveVersionId ??
-      screen.versionId) as string,
-  })
-  if (versionRes.error || !versionRes.version) return null
-
-  const layoutId = screen.layoutId
   const layoutRes = layoutId
     ? await getPublishedLayoutVersion({ hostId, layoutId })
     : undefined
 
   const composedNodes = Aglyn.composeLayoutAndScreenNodes(
     layoutRes?.version?.nodes as any,
-    versionRes.version.nodes,
+    screenNodes as any,
   )
   const componentsRes = await getComponents({ hostId })
   const grafted = Aglyn.composeReusableComponentNodes(
@@ -97,7 +124,19 @@ export async function composeScreenNodes(options: {
   // reusable components) and before bindings (so {{name}} tokens inside
   // cloned items still resolve).
   const repeated = Aglyn.expandRepeatables(grafted as any, datasets)
-  const bound = Aglyn.resolveNodesBindings(repeated as any, variables, functions)
+  // Collection entries blocks (AGL-551) expand alongside repeatables:
+  // per-entry {{entry.*}} tokens substitute inside the clones here, while
+  // page-level tokens wait for resolveNamedTokens below.
+  const withEntries = await expandCollectionEntryBlocks(
+    hostId,
+    repeated,
+    options.collection,
+  )
+  const bound = Aglyn.resolveNodesBindings(
+    withEntries as any,
+    variables,
+    functions,
+  )
   // Function widgets run client-side: embed their definitions (AGL-93).
   const withFunctions = Aglyn.attachFunctionDefinitions(bound, functions)
   // Community plugins (AGL-45): stamp each communityPlugin node with its
@@ -106,6 +145,54 @@ export async function composeScreenNodes(options: {
   // Entry-template tokens (AGL-105): {{entry.*}} from the rendered entry.
   const finalNodes = Aglyn.resolveNamedTokens(nodes as any, options.tokens)
   return Aglyn.canvas.processNodesToDenormalized(finalNodes as any)
+}
+
+/**
+ * Full published-render composition for one screen (extracted for AGL-87 so
+ * the SSG path and the password-unlock API build identical trees): applies
+ * a due publish schedule, loads the version, composes the shared layout
+ * chrome, grafts reusable components, and denormalizes.
+ */
+export async function composeScreenNodes(options: {
+  hostId: string
+  screenId: string
+  screen: Aglyn.AglynScreen
+  /** Entry-template tokens (AGL-105) substituted before denormalize. */
+  tokens?: Record<string, string>
+  /** Routed content collection (AGL-551) for Collection entries blocks. */
+  collection?: ComposeCollectionContext
+  /**
+   * Compose a specific version instead of the published one (AGL-253):
+   * experiment variants point at versions; schedules don't apply.
+   */
+  versionId?: string
+}): Promise<Record<string, any> | null> {
+  const { hostId, screenId, screen } = options
+
+  const effectiveVersionId = options.versionId
+    ? null
+    : await applyDuePublishSchedule({
+        hostId,
+        collectionName: 'screens',
+        docId: screenId,
+        parent: screen,
+      })
+  const versionRes = await getScreenVersion({
+    hostId,
+    screenId,
+    versionId: (options.versionId ??
+      effectiveVersionId ??
+      screen.versionId) as string,
+  })
+  if (versionRes.error || !versionRes.version) return null
+
+  return composeNodesWithChrome({
+    hostId,
+    layoutId: screen.layoutId as string | undefined,
+    screenNodes: versionRes.version.nodes as any,
+    tokens: options.tokens,
+    collection: options.collection,
+  })
 }
 
 export default composeScreenNodes

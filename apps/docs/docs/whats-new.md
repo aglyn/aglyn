@@ -10,7 +10,18 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## Self-serve add-ons (newest)
+## Designed content collections (newest)
+
+- **[First-class blog pages](building-sites/site-templates/build-a-blog.md)** — collection
+  list and entry routes render through your site theme and shared layout. Pick a
+  **List template screen** and an **Entry template screen** per collection in
+  **Content**, drop the new **Collection Entries** block (repeats title, date,
+  excerpt, Read more per published entry — works on any screen via its
+  collection-slug attribute), and render markdown with the themed **Entry
+  Body** block. With no template set, the built-in pages still compose inside
+  your theme and default layout.
+
+## Self-serve add-ons
 
 - **[Add-ons](workspace-and-billing/billing-and-plans/add-ons.md)** — buy manager and
   member seats, extra datasets, extra sites, POS registers, and the Event Calendar

@@ -121,19 +121,30 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         ),
     [screenDocs],
   )
+  // Template screens (AGL-105/551): /{collection} renders through the list
+  // template, /{collection}/{entry} through the entry template; both go
+  // through the normal published pipeline (theme + shared layout + tokens).
   const handleTemplateChange = useCallback(
-    (collectionId: string) =>
+    (collectionId: string, kind: 'list' | 'entry') =>
       async (event: { target: { value: string } }) => {
+        const value = event.target.value
         await updateDoc(
           doc(firestore, 'hosts', hostId, 'collections', collectionId),
-          event.target.value
-            ? { templateScreenId: event.target.value }
-            : { templateScreenId: deleteField() },
+          kind === 'list'
+            ? { listScreenId: value || deleteField() }
+            : {
+                entryScreenId: value || deleteField(),
+                // Superseded AGL-105 pointer; clear it so the entry select
+                // stays the single source of truth.
+                templateScreenId: deleteField(),
+              },
         )
         enqueueSnackbar(
-          event.target.value
-            ? 'Entry template assigned — entries render through that screen'
-            : 'Entry template cleared — entries use the built-in article',
+          value
+            ? `${kind === 'list' ? 'List' : 'Entry'} template assigned — ` +
+                'the page renders through that screen'
+            : `${kind === 'list' ? 'List' : 'Entry'} template cleared — ` +
+                'the built-in themed page renders instead',
           { variant: 'success', persist: false },
         )
       },
@@ -478,13 +489,33 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                 <TextField
                   select
                   size="small"
-                  label="Entry template"
-                  value={selected?.templateScreenId ?? ''}
-                  onChange={handleTemplateChange(selected?.$id ?? '')}
+                  label="List template screen"
+                  value={selected?.listScreenId ?? ''}
+                  onChange={handleTemplateChange(selected?.$id ?? '', 'list')}
                   sx={{ minWidth: 200 }}
-                  helperText="Screen with {{entry.title}} etc."
+                  helperText={`Screen for /${selected?.slug ?? '…'} — drop a Collection Entries block`}
                 >
-                  <MenuItem value="">{'Built-in article'}</MenuItem>
+                  <MenuItem value="">{'Built-in themed list'}</MenuItem>
+                  {screenOptions.map((screen: any) => (
+                    <MenuItem key={screen.$id} value={screen.$id}>
+                      {screen.displayName ?? screen.$id}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  size="small"
+                  label="Entry template screen"
+                  value={
+                    selected?.entryScreenId ??
+                    selected?.templateScreenId ??
+                    ''
+                  }
+                  onChange={handleTemplateChange(selected?.$id ?? '', 'entry')}
+                  sx={{ minWidth: 200 }}
+                  helperText={`Screen for /${selected?.slug ?? '…'}/{entry} — use {{entry.title}}, Entry Body`}
+                >
+                  <MenuItem value="">{'Built-in themed article'}</MenuItem>
                   {screenOptions.map((screen: any) => (
                     <MenuItem key={screen.$id} value={screen.$id}>
                       {screen.displayName ?? screen.$id}

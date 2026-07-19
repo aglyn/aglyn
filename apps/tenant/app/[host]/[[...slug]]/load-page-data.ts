@@ -22,11 +22,15 @@ import {
   getRealmPluginInstalls,
 } from '@aglyn/tenant-data-admin'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
+import {
+  composeCollectionFallbackPage,
+  composeCollectionTemplatePage,
+} from '@aglyn/tenant-runtime/compose-collection-page'
+import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import getVariables from '@aglyn/tenant-runtime/get-variables'
 import { cache } from 'react'
 import { serverPluginLoader } from '../../../utils/server-plugin-loader'
-import getCollectionContent from '../../../utils/get-collection-content'
 import getHost from '../../../utils/get-host'
 import getOrgBilling from '../../../utils/get-org-billing'
 import type { LoadResult, Props } from './types'
@@ -211,65 +215,69 @@ export const loadPageData = cache(
           entrySlug: segments[1],
         })
         if (content.collection && (segments.length === 1 || content.entry)) {
-          // Entry-template screens (AGL-105): a collection can designate a
-          // besigner-built screen that renders each entry with {{entry.*}}
-          // tokens; fall through to the built-in article otherwise.
-          const templateScreenId = content.collection.templateScreenId
-          if (content.entry && templateScreenId) {
-            const templateRes = await getScreen({
-              hostId,
-              screenId: templateScreenId,
-            })
-            if (templateRes.screen) {
-              const entry = content.entry
-              const templateNodes = await composeScreenNodes({
-                hostId,
-                screenId: templateScreenId,
-                screen: templateRes.screen,
-                tokens: {
-                  'entry.title': entry.title ?? '',
-                  'entry.excerpt': entry.excerpt ?? '',
-                  'entry.body': entry.body ?? '',
-                  'entry.coverImage': (entry as any).coverImage ?? '',
-                  'entry.date': entry.publishedAt
-                    ? new Date(
-                        entry.publishedAt.seconds * 1000,
-                      ).toLocaleDateString()
-                    : '',
-                },
-              })
-              if (templateNodes) {
-                return {
-                  props: JSON.parse(
-                    JSON.stringify({
-                      data: {
-                        host: hostRes.host,
-                        screen: {
-                          data: {
-                            ...templateRes.screen,
-                            // Entry metadata drives the head (AGL-117 merge).
-                            seo: {
-                              ...((templateRes.screen as any).seo ?? {}),
-                              title: entry.title,
-                              description: entry.excerpt || undefined,
-                            },
-                          },
-                        },
-                      },
-                      nodes: templateNodes,
-                    }),
-                  ),
-                  revalidate: 60,
-                }
-              }
+          // Collection pages are first-class designed pages (AGL-551): both
+          // routes carry the same plugin switchboard + branding flag as
+          // published screens so shared-layout chrome renders faithfully.
+          const collectionEnabledPlugins =
+            await filterEnabledPluginsByReleaseFlags(
+              Aglyn.resolveEnabledPlugins(orgRes.org as never),
+              {
+                subjectId: (orgRes.org as { $id?: string })?.$id ?? hostId,
+              },
+            )
+          const collectionShowBranding = !Aglyn.resolveOrgEntitlements(
+            orgRes.org,
+          ).features.removeBranding
+
+          // Template screens (AGL-105/551): the collection's designated
+          // list/entry screens render through the NORMAL published pipeline
+          // — theme, shared layout, {{entry.*}}/{{collection.*}} tokens,
+          // Collection entries blocks — mirroring commerce PDP templates.
+          const templated = await composeCollectionTemplatePage({
+            hostId,
+            content,
+          })
+          if (templated) {
+            return {
+              props: JSON.parse(
+                JSON.stringify({
+                  data: {
+                    host: hostRes.host,
+                    screen: { data: templated.screen },
+                  },
+                  nodes: templated.nodes,
+                  // Entry JSON-LD + metadata read this (the client renders
+                  // the composed nodes because they are present).
+                  content,
+                  enabledPlugins: collectionEnabledPlugins,
+                  showBranding: collectionShowBranding,
+                }),
+              ),
+              revalidate: 60,
             }
           }
+
+          // No template designated: the designed built-in still composes
+          // through the site theme + the host's default shared layout
+          // (AGL-551). Only if that fails does the legacy plain article
+          // render (nodes: null).
+          const fallback = await composeCollectionFallbackPage({
+            hostId,
+            host: hostRes.host,
+            content,
+          })
           return {
             props: JSON.parse(
               JSON.stringify({
                 data: { host: hostRes.host },
-                nodes: null,
+                nodes: fallback?.nodes ?? null,
                 content,
+                ...(fallback
+                  ? {
+                      enabledPlugins: collectionEnabledPlugins,
+                      showBranding: collectionShowBranding,
+                    }
+                  : {}),
               }),
             ),
             revalidate: 60,

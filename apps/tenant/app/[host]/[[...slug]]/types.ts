@@ -16,7 +16,7 @@
  */
 
 import type * as Aglyn from '@aglyn/aglyn/server'
-import type { CollectionContent } from '../../../utils/get-collection-content'
+import type { CollectionContent } from '@aglyn/tenant-runtime/get-collection-content'
 
 /**
  * Composed page payload the server route hands to the client renderer

@@ -23,6 +23,7 @@
  * re-adds the contexts for client consumers.
  */
 export * from './binding-tokens'
+export * from './collection-entries'
 export * from './contacts'
 export * from './compose-layout-nodes'
 export * from './functions'

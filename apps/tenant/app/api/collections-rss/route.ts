@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import getCollectionContent from '../../../utils/get-collection-content'
+import getCollectionContent from '@aglyn/tenant-runtime/get-collection-content'
 import getHost from '../../../utils/get-host'
 
 export const dynamic = 'force-dynamic'

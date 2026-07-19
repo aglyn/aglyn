@@ -56,12 +56,86 @@ export interface CollectionContent {
     $id: string
     displayName: string
     slug: string
-    /** Entry-template screen (AGL-105); entries render through it. */
+    /**
+     * Legacy entry-template screen (AGL-105); superseded by
+     * `entryScreenId` but still honored when only it is set.
+     */
     templateScreenId?: string
+    /** List-template screen (AGL-551); `/{collection}` renders through it. */
+    listScreenId?: string
+    /**
+     * Entry-template screen (AGL-551); `/{collection}/{entry}` renders
+     * through it with `{{entry.*}}` tokens.
+     */
+    entryScreenId?: string
   } | null
   entries: CollectionEntrySummary[]
   entry: CollectionEntrySummary | null
   error: unknown
+}
+
+/**
+ * Fetches a collection's live entries (newest first), shared by the route
+ * loader and the compose-time Collection entries block (AGL-551).
+ */
+async function listLiveEntries(
+  entriesRef: FirebaseFirestore.CollectionReference,
+): Promise<CollectionEntrySummary[]> {
+  // No orderBy: entries missing publishedAt would be dropped by Firestore;
+  // sort client-side like the version lists.
+  const entriesQuery = await entriesRef
+    .where('status', 'in', ['published', 'scheduled'])
+    .limit(100)
+    .get()
+  return entriesQuery.docs
+    .filter((entryDoc) => isLive(entryDoc.data()))
+    .map((entryDoc) => {
+      const value = entryDoc.data()
+      flipDueEntry(entryDoc.ref, value)
+      return {
+        $id: entryDoc.id,
+        title: value['title'] ?? entryDoc.id,
+        slug: value['slug'] ?? entryDoc.id,
+        excerpt: value['excerpt'] ?? '',
+        coverImage: value['coverImage'] ?? '',
+        publishedAt: (value['publishedAt'] ?? value['publishAt'])
+          ? {
+              seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
+            }
+          : null,
+      }
+    })
+    .sort(
+      (a, b) => (b.publishedAt?.seconds ?? 0) - (a.publishedAt?.seconds ?? 0),
+    )
+}
+
+/**
+ * Published entries for a collection resolved by slug — the data source of
+ * the Collection entries block on arbitrary screens (AGL-551). Fail-open:
+ * errors and unknown slugs resolve to an empty list so a renamed collection
+ * never takes a published screen down.
+ */
+export async function getPublishedCollectionEntries(options: {
+  hostId: string
+  collectionSlug: string
+}): Promise<CollectionEntrySummary[]> {
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const collectionQuery = await firestore
+      .collection('hosts')
+      .doc(options.hostId)
+      .collection('collections')
+      .where('slug', '==', options.collectionSlug)
+      .limit(1)
+      .get()
+    const collectionDoc = collectionQuery.docs[0]
+    if (!collectionDoc) return []
+    return await listLiveEntries(collectionDoc.ref.collection('entries'))
+  } catch (error) {
+    console.error(error)
+    return []
+  }
 }
 
 /**
@@ -98,6 +172,8 @@ export async function getCollectionContent(options: {
       displayName: collectionDoc.get('displayName') ?? collectionSlug,
       slug: collectionSlug,
       templateScreenId: collectionDoc.get('templateScreenId') ?? undefined,
+      listScreenId: collectionDoc.get('listScreenId') ?? undefined,
+      entryScreenId: collectionDoc.get('entryScreenId') ?? undefined,
     }
 
     const entriesRef = collectionDoc.ref.collection('entries')
@@ -129,32 +205,7 @@ export async function getCollectionContent(options: {
       return data
     }
 
-    // No orderBy: entries missing publishedAt would be dropped by Firestore;
-    // sort client-side like the version lists.
-    const entriesQuery = await entriesRef
-      .where('status', 'in', ['published', 'scheduled'])
-      .limit(100)
-      .get()
-    data.entries = entriesQuery.docs
-      .filter((entryDoc) => isLive(entryDoc.data()))
-      .map((entryDoc) => {
-        const value = entryDoc.data()
-        flipDueEntry(entryDoc.ref, value)
-        return {
-          $id: entryDoc.id,
-          title: value['title'] ?? entryDoc.id,
-          slug: value['slug'] ?? entryDoc.id,
-          excerpt: value['excerpt'] ?? '',
-          publishedAt: (value['publishedAt'] ?? value['publishAt'])
-            ? {
-                seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
-              }
-            : null,
-        }
-      })
-      .sort(
-        (a, b) => (b.publishedAt?.seconds ?? 0) - (a.publishedAt?.seconds ?? 0),
-      )
+    data.entries = await listLiveEntries(entriesRef)
   } catch (error) {
     console.error(error)
     data.error = error
