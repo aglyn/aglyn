@@ -16,6 +16,7 @@
  */
 
 import { NodeId, NodeSchema, NodeSchemaNested, NodeType } from '../types/nodes'
+import { FEATURE_FLAG } from '../foundation'
 import { CanvasManager, NODE_ROOT_ID } from './canvas-manager'
 
 describe('Aglyn: Screen Manager', () => {
@@ -387,6 +388,120 @@ describe('Aglyn: Screen Manager', () => {
       canvas.applyNodes(second)
       expect(canvas.canRedo).toBe(false)
       expect(canvas.canUndo).toBe(true)
+    })
+  })
+
+  // Insert-target resolution (AGL-575): the Insert menu hands the current
+  // selection in as the target. Containers accept the node as a child; a
+  // leaf (no children slot) redirects to its container as the next sibling.
+  describe('resolveInsertTarget / nodeAcceptsChildren (AGL-575)', () => {
+    const CONTAINER = 'testContainer575'
+    const LEAF_TEXT = 'testLeafText575'
+    const LEAF_SELF = 'testLeafSelf575'
+    const UNKNOWN = 'testUnregistered575'
+    const schemas: Record<string, any> = {
+      div: {},
+      [CONTAINER]: {},
+      [LEAF_TEXT]: { flags: { textEditable: FEATURE_FLAG.ENABLED } },
+      [LEAF_SELF]: { flags: { selfClosing: FEATURE_FLAG.ENABLED } },
+    }
+    const fakeAglyn = {
+      components: { getSchema: (id: string) => schemas[id] },
+    } as any
+
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(fakeAglyn)
+      canvas.setNodes({
+        [NODE_ROOT_ID]: {
+          $id: NODE_ROOT_ID,
+          type: NodeType.NODE,
+          parentId: NODE_ROOT_ID,
+          componentId: 'div',
+          props: {},
+          sx: {},
+          nodes: ['stack'],
+        },
+        stack: {
+          $id: 'stack',
+          type: NodeType.NODE,
+          parentId: NODE_ROOT_ID,
+          componentId: CONTAINER,
+          props: {},
+          sx: {},
+          nodes: ['a', 'b', 'c'],
+        },
+        a: {
+          $id: 'a',
+          type: NodeType.NODE,
+          parentId: 'stack',
+          componentId: LEAF_TEXT,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+        b: {
+          $id: 'b',
+          type: NodeType.NODE,
+          parentId: 'stack',
+          componentId: LEAF_SELF,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+        c: {
+          $id: 'c',
+          type: NodeType.NODE,
+          parentId: 'stack',
+          componentId: UNKNOWN,
+          props: {},
+          sx: {},
+          nodes: [],
+        },
+      })
+      return canvas
+    }
+
+    it('nodeAcceptsChildren: root and containers do, leaves do not', () => {
+      const canvas = makeCanvas()
+      expect(canvas.nodeAcceptsChildren(canvas.getNode(NODE_ROOT_ID)!)).toBe(
+        true,
+      )
+      expect(canvas.nodeAcceptsChildren(canvas.getNode('stack')!)).toBe(true)
+      expect(canvas.nodeAcceptsChildren(canvas.getNode('a')!)).toBe(false)
+      expect(canvas.nodeAcceptsChildren(canvas.getNode('b')!)).toBe(false)
+      // Unregistered components default to accepting children.
+      expect(canvas.nodeAcceptsChildren(canvas.getNode('c')!)).toBe(true)
+    })
+
+    it('resolveInsertTarget: a container appends as a child (NaN index)', () => {
+      const canvas = makeCanvas()
+      const { parent, index } = canvas.resolveInsertTarget(
+        canvas.getNode('stack'),
+      )
+      expect(parent.$id).toBe('stack')
+      expect(Number.isNaN(index)).toBe(true)
+    })
+
+    it('resolveInsertTarget: a leaf redirects to its container as next sibling', () => {
+      const canvas = makeCanvas()
+      expect(canvas.resolveInsertTarget(canvas.getNode('a'))).toMatchObject({
+        index: 1,
+      })
+      expect(canvas.resolveInsertTarget(canvas.getNode('a')).parent.$id).toBe(
+        'stack',
+      )
+      // Self-closing leaf, second position → next sibling at index 2.
+      expect(canvas.resolveInsertTarget(canvas.getNode('b')).index).toBe(2)
+    })
+
+    it('resolveInsertTarget: falls back to the root for a missing/non-node target', () => {
+      const canvas = makeCanvas()
+      const fallback = canvas.resolveInsertTarget(undefined)
+      expect(fallback.parent.$id).toBe(NODE_ROOT_ID)
+      expect(Number.isNaN(fallback.index)).toBe(true)
+
+      const stale = canvas.resolveInsertTarget({ $id: 'ghost' } as any)
+      expect(stale.parent.$id).toBe(NODE_ROOT_ID)
     })
   })
 })

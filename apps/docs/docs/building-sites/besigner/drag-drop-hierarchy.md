@@ -17,6 +17,20 @@ hierarchy panel or directly on the canvas.
 - A **placement marker** shows exactly where the node will land before you drop.
 - Drops work reliably across the hierarchy and the canvas.
 
+## Adding a new element
+
+**Insert → New Element** (and the toolbar **+**) adds the component you pick relative to
+your current selection:
+
+- Select a **container** — a stack, section, or the document itself — and the new element
+  is added **inside** it.
+- Select a **leaf** — anything without a child slot, such as a screen link, button, or
+  icon — and the new element lands as its **next sibling** in the same container, rather
+  than nested inside it.
+- With nothing selected, the element is added at the end of the document.
+
+This mirrors drag-and-drop: the same placement (lineal) rules decide where the element can go.
+
 ## When a drop is rejected
 
 Not every element can go everywhere. If a drop isn't allowed, the Besigner tells you **why**
