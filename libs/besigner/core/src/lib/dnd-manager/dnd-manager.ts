@@ -69,7 +69,16 @@ export class DndManager {
     if (!this.drop) return this.drop
     if (Aglyn.canvas.isRootNode(this.drop)) return this.drop
     if (!this.dropRegion) return this.drop
-    if (this.dropRegion === DropRegion.CHILDREN) return this.drop
+    if (this.dropRegion === DropRegion.CHILDREN) {
+      // A leaf (self-closing / text-editable) has no slot for node children,
+      // so a center/CHILDREN drop resolves against its PARENT and lands as a
+      // sibling — mirroring the Insert menu's leaf handling (AGL-575). This
+      // also makes the lineal check validate against the real parent instead
+      // of the leaf, which (declaring no restrictChildren) would wrongly pass.
+      const node = Aglyn.canvas.getNode(this.drop.$id)
+      if (node && !Aglyn.canvas.nodeAcceptsChildren(node)) return node.parent
+      return this.drop
+    }
     return Aglyn.canvas.getNode(this.drop.$id).parent
   }
 
@@ -266,7 +275,21 @@ export class DndManager {
       position = Aglyn.canvas.getNodeIndex(dropNode)
       if (after) position = position + 1
     } else {
-      parent = Aglyn.canvas.getNode(dropNode.$id)
+      const dropTarget = Aglyn.canvas.getNode(dropNode.$id)
+      // Leaf redirect (AGL-575 parallel): a self-closing / text-editable
+      // target has no children slot, so a center drop becomes a sibling right
+      // after it rather than a nested child. Non-leaf containers still nest.
+      if (
+        dropTarget &&
+        dropNode.parentId &&
+        !Aglyn.canvas.nodeAcceptsChildren(dropTarget)
+      ) {
+        const leafIndex = Aglyn.canvas.getNodeIndex(dropTarget)
+        parent = Aglyn.canvas.getNode(dropNode.parentId)
+        if (leafIndex > -1) position = leafIndex + 1
+      } else {
+        parent = dropTarget
+      }
     }
 
     if (dragNode.type === Aglyn.NodeType.PRESET) {

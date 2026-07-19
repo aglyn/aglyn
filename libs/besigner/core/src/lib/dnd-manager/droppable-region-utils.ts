@@ -102,7 +102,27 @@ export function withinRegion(rect: { left: number; top: number; width: number; h
   return xis && yis
 }
 
-export function determineDropRegion(clientRect: DroppableClientRect, x: number, y: number, regions?: ReturnType<typeof buildDroppableRects>) {
+/**
+ * Before/after sibling region for a point over a leaf element, split on the
+ * element's dominant axis: wide elements divide left/right, tall ones divide
+ * top/bottom. Used when the target can't hold node children so its center
+ * never reads as a nest.
+ */
+export function determineSiblingRegion(rect: DroppableClientRect, x: number, y: number) {
+  const { width = 0, height = 0, top = 0, left = 0 } = rect || {}
+  if (width >= height) {
+    return x < left + width / 2 ? DropRegion.LEFT : DropRegion.RIGHT
+  }
+  return y < top + height / 2 ? DropRegion.TOP : DropRegion.BOTTOM
+}
+
+export function determineDropRegion(
+  clientRect: DroppableClientRect,
+  x: number,
+  y: number,
+  acceptsChildren = true,
+  regions?: ReturnType<typeof buildDroppableRects>,
+) {
   const _regions = regions || buildDroppableRects(clientRect)
   switch (true) {
     case withinRegion(_regions.top, x, y):
@@ -113,6 +133,12 @@ export function determineDropRegion(clientRect: DroppableClientRect, x: number, 
       return DropRegion.BOTTOM
     case withinRegion(_regions.left, x, y):
       return DropRegion.LEFT
+    case !acceptsChildren:
+      // Leaf targets (self-closing / text-editable) have no children slot, so
+      // the center resolves to a sibling insert rather than a nest — keeping
+      // the drop indicator and the committed placement in agreement
+      // (AGL-575 parallel for drag-and-drop).
+      return determineSiblingRegion(clientRect, x, y)
     case withinRegion(_regions.children, x, y):
     default:
       return DropRegion.CHILDREN

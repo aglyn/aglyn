@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { LOADING_OVERLAY_ELEMENT, useMergeRefs } from '@aglyn/shared-ui-jsx'
@@ -120,10 +121,15 @@ const WorkspaceEditorComponent = forwardRef<any, WorkspaceEditorComponentProps>(
           // dnd-kit rects are viewport-relative; useMouse coords are
           // document-relative — subtract the page scroll so region hit
           // tests keep working when the page is scrolled.
+          const overNode = event.over.data.current?.node
           region = Besigner.determineDropRegion(
             event.over.rect,
             mouse.docX - window.scrollX,
             mouse.docY - window.scrollY,
+            // Leaves (self-closing / text-editable) never offer a CHILDREN
+            // region — the center reads as a sibling insert, matching where
+            // the drop actually lands (see dnd-manager onDragEnd).
+            overNode ? Aglyn.canvas.nodeAcceptsChildren(overNode) : true,
           )
           event.over.data.current.region = region
         }
