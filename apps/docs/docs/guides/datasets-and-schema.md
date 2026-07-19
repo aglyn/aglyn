@@ -32,7 +32,26 @@ plural is the dataset's display name — the label its entry shows in
 and repeatable pickers (which store the dataset's id underneath, so renames
 never break the bindings).
 
-![The schema dialog's field editor with Display name, Type, Required, Description, and Default value inputs](/img/guides/datasets-schema-field-editor.png)
+![The schema dialog's field editor with Display name, Description, Type, Required, and Default value inputs](/img/guides/datasets-schema-field-editor.png)
+
+## Naming & describing fields
+
+Open the schema dialog and **Edit** a field to change how it presents:
+
+- **Display name** — rename it freely, any time. The field id underneath never
+  changes, so `{{item.fieldId}}` bindings, form field mappings, and stored
+  records are all unaffected by a rename.
+- **Description** — a free-form note on what the field is for. When set, it
+  follows the field around the console:
+  - the schema dialog's field list shows it under the `Display name · fieldId`
+    line,
+  - the records table shows it as a tooltip on the column header,
+  - the record editor shows it as the input's helper text (a validation error
+    takes its place while present).
+
+Both are trimmed on save, and a blank description is dropped rather than
+stored. Descriptions are console-facing documentation only — they never render
+on the published site.
 
 ## The typed model
 

@@ -35,6 +35,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -922,11 +923,23 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {fields.map((fieldId) => (
-                  <TableCell key={fieldId}>
-                    {model.fields[fieldId]?.name ?? fieldId}
-                  </TableCell>
-                ))}
+                {fields.map((fieldId) => {
+                  const field = model.fields[fieldId]
+                  // Field descriptions (AGL-560) surface as header hints.
+                  return (
+                    <TableCell key={fieldId}>
+                      {field?.description ? (
+                        <Tooltip title={field.description}>
+                          <span style={{ cursor: 'help' }}>
+                            {field.name ?? fieldId}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        (field?.name ?? fieldId)
+                      )}
+                    </TableCell>
+                  )
+                })}
                 <TableCell align="right">{'Actions'}</TableCell>
               </TableRow>
             </TableHead>
