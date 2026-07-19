@@ -119,6 +119,14 @@ export const NodeLeaf = observer(
           ref={ref}
           node={renderNode as typeof node}
           data-aglyn-selected={Besigner.focus.isNodeSelected(node)}
+          // Present while the selection lives in this node's subtree (the
+          // node itself or any descendant). Canvas-aware components (nav
+          // menus, drawers) read this neutral leaf attribute to expand
+          // only while they are being authored (AGL-571). Presence-based
+          // (''/undefined) so unaffected leaves carry no attribute.
+          data-aglyn-selected-within={
+            Besigner.focus.isNodeOrDescendantSelected(node) ? '' : undefined
+          }
           data-aglyn-bound={boundProps.length ? '' : undefined}
           {...rest}
         >

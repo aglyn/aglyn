@@ -37,7 +37,7 @@ import {
 import type { SxProps } from '@mui/material/styles'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
-import { parseLeafNodeId } from './drawer'
+import { isLeafSelectedWithin, parseLeafNodeId } from './drawer'
 
 // Component ids are persisted in screen documents; never rename.
 export const NAV_MENU_ID: Aglyn.ComponentId = 'muiNavMenu'
@@ -111,9 +111,13 @@ export function megaMenuPanelSx(panelWidth: MegaMenuPanelWidth): SxProps {
  * or an explicit close.
  *
  * On editing surfaces (besigner canvas, preview — flagged by
- * ScreenLinkContext.suppressNavigation) the children render expanded
- * inline instead, like form fields do, so menu contents stay selectable
- * and editable without fighting a popup.
+ * ScreenLinkContext.suppressNavigation) the menu mirrors the live site's
+ * collapsed state: just the trigger, no panel (AGL-571). Only while the
+ * menu or one of its descendants is selected (the renderer stamps
+ * `data-aglyn-selected-within` on the leaf) does the panel expand
+ * inline, like form fields do, so its contents stay selectable and
+ * editable without fighting a popup — and it collapses again the moment
+ * selection leaves the subtree.
  */
 interface MenuShellProps extends BoxProps {
   label: string
@@ -187,30 +191,39 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
   }, [suppressNavigation, nodeId, cancelClose])
 
   if (suppressNavigation) {
-    // Editor affordance: trigger + inline, editable panel contents.
+    // Editor affordance (AGL-571): collapsed trigger by default — exactly
+    // what the live site shows — expanding to inline, editable panel
+    // contents only while the menu subtree holds the selection.
+    const authoring = isLeafSelectedWithin(rest as Record<string, unknown>)
     return (
       <Box ref={ref} {...rest} sx={[{ display: 'inline-block' }, ...nodeSx]}>
-        <Button color="inherit" endIcon={<MdiIcon path={mdiChevronDown.path} />}>
+        <Button
+          color="inherit"
+          aria-expanded={authoring || undefined}
+          endIcon={<MdiIcon path={mdiChevronDown.path} />}
+        >
           {label}
         </Button>
-        <Box
-          sx={{
-            m: 0.5,
-            p: 1,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 1,
-          }}
-        >
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'block', mb: 0.5 }}
+        {authoring ? (
+          <Box
+            sx={{
+              m: 0.5,
+              p: 1,
+              border: '1px dashed',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
           >
-            {editorHint}
-          </Typography>
-          {children}
-        </Box>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mb: 0.5 }}
+            >
+              {editorHint}
+            </Typography>
+            {children}
+          </Box>
+        ) : null}
       </Box>
     )
   }

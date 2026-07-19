@@ -91,15 +91,47 @@ describe('NavMenu dropdown (AGL-562)', () => {
     expect(screen.getByText('About')).toBeTruthy()
   })
 
-  it('renders children expanded inline on editing surfaces', () => {
+  it('renders only the collapsed trigger on the canvas by default (AGL-571)', () => {
     renderEditor(
       <NavMenu label="Company">
+        <a href="/about">{'About'}</a>
+      </NavMenu>,
+    )
+    // The canvas mirrors the live site's collapsed state until the menu
+    // is being authored.
+    expect(screen.getByRole('button', { name: /Company/ })).toBeTruthy()
+    expect(screen.queryByText('About')).toBeNull()
+    expect(screen.queryByText(/Dropdown items/)).toBeNull()
+  })
+
+  it('expands inline while the menu subtree holds the selection (AGL-571)', () => {
+    // The besigner renderer stamps data-aglyn-selected-within on the leaf
+    // whenever the menu node or any descendant is selected.
+    renderEditor(
+      <NavMenu label="Company" {...{ 'data-aglyn-selected-within': '' }}>
         <a href="/about">{'About'}</a>
       </NavMenu>,
     )
     // No click needed — the dropdown contents are editable in place.
     expect(screen.getByText('About')).toBeTruthy()
     expect(screen.getByText(/Dropdown items/)).toBeTruthy()
+  })
+
+  it('collapses again when selection leaves the subtree (AGL-571)', () => {
+    const editor = (selectedWithin: boolean) => (
+      <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+        <NavMenu
+          label="Company"
+          {...(selectedWithin ? { 'data-aglyn-selected-within': '' } : {})}
+        >
+          <a href="/about">{'About'}</a>
+        </NavMenu>
+      </Aglyn.ScreenLinkContext.Provider>
+    )
+    const { rerender } = render(editor(true))
+    expect(screen.getByText('About')).toBeTruthy()
+    rerender(editor(false))
+    expect(screen.queryByText('About')).toBeNull()
   })
 })
 
@@ -255,6 +287,26 @@ describe('MegaMenu (AGL-562)', () => {
     expect(screen.queryByText('Columns')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Products/ }))
     expect(screen.getByText('Columns')).toBeTruthy()
+  })
+
+  it('canvas-collapses to the trigger until its subtree is selected (AGL-571)', () => {
+    renderEditor(
+      <MegaMenu label="Products">
+        <div>{'Columns'}</div>
+      </MegaMenu>,
+    )
+    expect(screen.getByRole('button', { name: /Products/ })).toBeTruthy()
+    expect(screen.queryByText('Columns')).toBeNull()
+  })
+
+  it('canvas-expands its panel while selected (AGL-571)', () => {
+    renderEditor(
+      <MegaMenu label="Products" {...{ 'data-aglyn-selected-within': '' }}>
+        <div>{'Columns'}</div>
+      </MegaMenu>,
+    )
+    expect(screen.getByText('Columns')).toBeTruthy()
+    expect(screen.getByText(/Mega menu panel/)).toBeTruthy()
   })
 
   it('sizes the panel per width preset', () => {

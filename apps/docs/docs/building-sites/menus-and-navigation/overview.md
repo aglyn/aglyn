@@ -19,8 +19,10 @@ in — no code, no raw JSON:
 | **Mobile Nav** | A one-insert preset: menu button + drawer + inline desktop links, responsive wiring included. |
 
 All of them render **closed on the live site until the visitor interacts**,
-and render **expanded inline on the canvas** so their contents stay
-selectable and editable — exactly like form fields do.
+and the canvas mirrors that: menus show just their trigger and drawers a
+slim placeholder. **Select the element — or anything inside it — and it
+expands in place** so its contents stay selectable and editable; click
+elsewhere and it collapses again.
 
 ## Dropdown menu
 

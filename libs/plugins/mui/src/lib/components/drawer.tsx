@@ -68,6 +68,18 @@ export function parseLeafNodeId(dataAglyn: unknown): string | undefined {
 }
 
 /**
+ * True while the besigner canvas flags this leaf's subtree as holding the
+ * current selection (AGL-571): the renderer stamps
+ * `data-aglyn-selected-within` on a leaf whenever the node itself or any
+ * descendant is selected, and drops it when selection leaves the subtree.
+ * Live surfaces never set it, so absence simply means "render collapsed" —
+ * the same neutral `data-aglyn*` leaf contract `parseLeafNodeId` reads.
+ */
+export function isLeafSelectedWithin(rest: Record<string, unknown>): boolean {
+  return rest['data-aglyn-selected-within'] != null
+}
+
+/**
  * Mounted drawers in mount order. Broadcast commands (no target node id)
  * are answered by the FIRST registered drawer only, so a page with one
  * drawer — the overwhelmingly common case — needs no wiring at all.
@@ -84,8 +96,10 @@ export function firstMountedDrawer(): string | undefined {
  * page edge — the mobile-menu building block. Opens/closes/toggles via
  * the shared window event bus (`dispatchDrawerCommand`), reachable from
  * the interactions system's drawer steps and the Menu Button element.
- * SSR ships it closed; the canvas renders the contents expanded inline
- * so they stay editable.
+ * SSR ships it closed; the canvas shows a slim collapsed placeholder that
+ * expands its contents inline only while the drawer or one of its
+ * descendants is selected (AGL-571) — full drawer designability is
+ * AGL-572.
  */
 const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
   (props, ref) => {
@@ -124,8 +138,11 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
     }, [suppressNavigation, nodeId])
 
     if (suppressNavigation) {
-      // Editor affordance: framed, always-visible contents (like form
-      // fields) so the drawer stays authorable without opening anything.
+      // Editor affordance (AGL-571): mirror the live site's hidden-until-
+      // opened drawer with a slim, selectable placeholder. Only while the
+      // drawer or any descendant is selected do the contents expand
+      // inline (framed, like form fields) so they stay authorable.
+      const authoring = isLeafSelectedWithin(rest as Record<string, unknown>)
       return (
         <Box
           ref={ref}
@@ -145,11 +162,11 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ display: 'block', mb: 0.5 }}
+            sx={{ display: 'block', mb: authoring ? 0.5 : 0 }}
           >
             {`Drawer (${resolvedAnchor}) — slides in on the live site`}
           </Typography>
-          {children}
+          {authoring ? children : null}
         </Box>
       )
     }

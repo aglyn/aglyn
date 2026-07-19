@@ -53,6 +53,13 @@ interface FocusState {
   readonly hasMultipleSelected: boolean
 
   readonly isNodeSelected: (node: Aglyn.NodeSchema) => boolean
+  /**
+   * Whether the current selection lives inside this node's subtree — the
+   * node itself or any of its descendants is selected. Canvas chrome uses
+   * this to expand collapsed containers (menus, drawers) only while they
+   * are being authored (AGL-571).
+   */
+  readonly isNodeOrDescendantSelected: (node: Aglyn.NodeSchema) => boolean
   readonly isNodeHovered: (node: Aglyn.NodeSchema) => boolean
   readonly isNodeExpanded: (node: Aglyn.NodeSchema) => boolean
   /**
@@ -86,6 +93,20 @@ const state = observable<FocusState>({
     if (!node) return false
     return state.selected.some((i) => i?.$id === node?.$id)
   }),
+  isNodeOrDescendantSelected: computedFn(
+    (node: Aglyn.NodeSchema<any>): boolean => {
+      if (!node) return false
+      // A node's breadcrumbPath is [root, ...ancestors, self], so a
+      // selected node whose path contains this id makes this node the
+      // selection itself or one of its ancestors — i.e. the selection is
+      // within this node's subtree.
+      return state.selected.some(
+        (selectedNode) =>
+          selectedNode?.$id === node.$id ||
+          selectedNode?.breadcrumbPath?.includes(node.$id),
+      )
+    },
+  ),
   isNodeHovered: computedFn((node: Aglyn.NodeSchema<any>): boolean => {
     if (!node) return false
     return state.hovered?.$id === node?.$id
@@ -140,6 +161,10 @@ export function getManuallyCollapsed(): Aglyn.NodeId[] {
 
 export function isNodeSelected(node: Aglyn.NodeSchema<any>) {
   return state.isNodeSelected(node)
+}
+
+export function isNodeOrDescendantSelected(node: Aglyn.NodeSchema<any>) {
+  return state.isNodeOrDescendantSelected(node)
 }
 
 export function isNodeHovered(node: Aglyn.NodeSchema<any>) {

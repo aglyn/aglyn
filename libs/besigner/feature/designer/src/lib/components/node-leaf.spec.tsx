@@ -16,7 +16,8 @@
  */
 
 import { Leaf } from '@aglyn/aglyn-node-renderer'
-import { render } from '@testing-library/react'
+import * as Besigner from '@aglyn/besigner'
+import { act, render } from '@testing-library/react'
 
 import ElementLeafComponent from './node-leaf'
 
@@ -53,6 +54,72 @@ describe('NodeLeaf', () => {
     }
     const { baseElement } = render(<ElementLeafComponent node={node} />)
     expect(baseElement).toBeTruthy()
+  })
+})
+
+describe('canvas selection stamping (AGL-571)', () => {
+  afterEach(() => {
+    act(() => Besigner.focus.clearFocusStatus())
+  })
+
+  const menuNode = () =>
+    ({
+      $id: 'menu-node',
+      type: 'node',
+      componentId: 'unregistered-menu',
+      props: {},
+      nodes: ['child-node'],
+    }) as any
+
+  const leaf = () =>
+    document.querySelector('[data-aglyn="leaf:menu-node"]') as HTMLElement
+
+  it('omits data-aglyn-selected-within while selection is elsewhere', () => {
+    render(<ElementLeafComponent node={menuNode()} />)
+    expect(leaf().hasAttribute('data-aglyn-selected-within')).toBe(false)
+  })
+
+  it('stamps data-aglyn-selected-within when the node itself is selected', () => {
+    const node = menuNode()
+    act(() => Besigner.focus.setSelectedNode(node))
+    render(<ElementLeafComponent node={node} />)
+    expect(leaf().hasAttribute('data-aglyn-selected-within')).toBe(true)
+  })
+
+  it('stamps it for a selected descendant and clears it on deselect', () => {
+    const node = menuNode()
+    const child = {
+      $id: 'child-node',
+      type: 'node',
+      componentId: 'unregistered-link',
+      props: {},
+      // Canvas breadcrumbPath shape: [root, ...ancestors, self].
+      breadcrumbPath: ['node-root', 'menu-node', 'child-node'],
+      nodes: [],
+    } as any
+    act(() => Besigner.focus.setSelectedNode(child))
+    render(<ElementLeafComponent node={node} />)
+    // Selection inside the subtree marks the ancestor leaf …
+    expect(leaf().hasAttribute('data-aglyn-selected-within')).toBe(true)
+    // … but never as the selected node itself.
+    expect(leaf().getAttribute('data-aglyn-selected')).toBe('false')
+    // Deselecting collapses the mark again (observer re-render).
+    act(() => Besigner.focus.clearSelection())
+    expect(leaf().hasAttribute('data-aglyn-selected-within')).toBe(false)
+  })
+
+  it('never marks an unrelated leaf', () => {
+    const stranger = {
+      $id: 'stranger-node',
+      type: 'node',
+      componentId: 'unregistered-box',
+      props: {},
+      breadcrumbPath: ['node-root', 'stranger-node'],
+      nodes: [],
+    } as any
+    act(() => Besigner.focus.setSelectedNode(stranger))
+    render(<ElementLeafComponent node={menuNode()} />)
+    expect(leaf().hasAttribute('data-aglyn-selected-within')).toBe(false)
   })
 })
 

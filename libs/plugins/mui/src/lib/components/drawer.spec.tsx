@@ -101,17 +101,37 @@ describe('Drawer element (AGL-562)', () => {
     ).toBeTruthy()
   })
 
-  it('renders contents expanded inline on editing surfaces', () => {
+  it('renders a collapsed placeholder on editing surfaces by default (AGL-571)', () => {
     renderEditor(
       <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-4' }}>
         <span>{'Editable contents'}</span>
       </DrawerElement>,
     )
-    expect(screen.getByText('Editable contents')).toBeTruthy()
+    // The drawer is invisible on the live site until opened; the canvas
+    // shows a slim, selectable marker instead of the expanded contents.
     expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
+    expect(screen.queryByText('Editable contents')).toBeNull()
     // Editor surfaces never enroll on the command bus.
     command('open', 'drawer-4')
     expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull()
+    expect(screen.queryByText('Editable contents')).toBeNull()
+  })
+
+  it('expands contents while the drawer subtree holds the selection (AGL-571)', () => {
+    // The besigner renderer stamps data-aglyn-selected-within on the leaf
+    // whenever the drawer node or any descendant is selected.
+    renderEditor(
+      <DrawerElement
+        {...{
+          'data-aglyn': 'leaf:drawer-5',
+          'data-aglyn-selected-within': '',
+        }}
+      >
+        <span>{'Editable contents'}</span>
+      </DrawerElement>,
+    )
+    expect(screen.getByText('Editable contents')).toBeTruthy()
+    expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
   })
 })
 
