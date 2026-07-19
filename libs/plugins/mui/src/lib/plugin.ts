@@ -37,6 +37,8 @@ import * as LanguageSwitcher from './components/language-switcher'
 import * as Video from './components/video'
 import * as CommunityPlugin from './components/plugin'
 import * as CustomHtml from './components/custom-html'
+import * as DrawerComponents from './components/drawer'
+import * as NavMenuComponents from './components/nav-menu'
 import * as ReusableInstance from './components/reusable-instance'
 import * as SearchBox from './components/search-box'
 import * as ScreenLink from './components/screen-link'
@@ -91,6 +93,11 @@ export function registerMuiPlugin(): void {
     { component: LanguageSwitcher.default, schema: LanguageSwitcher.schema, presets: LanguageSwitcher.presets },
     { component: ReusableInstance.default, schema: ReusableInstance.schema, presets: ReusableInstance.presets },
     { component: ScreenLink.default, schema: ScreenLink.schema, presets: ScreenLink.presets },
+    // Nav menu system (AGL-562): dropdown, mega menu, drawer + menu button.
+    { component: NavMenuComponents.default, schema: NavMenuComponents.navMenuSchema, presets: NavMenuComponents.navMenuPresets },
+    { component: NavMenuComponents.MegaMenu, schema: NavMenuComponents.megaMenuSchema },
+    { component: DrawerComponents.default, schema: DrawerComponents.drawerSchema, presets: DrawerComponents.drawerPresets },
+    { component: DrawerComponents.DrawerToggle, schema: DrawerComponents.drawerToggleSchema },
     { component: FunctionWidget.default, schema: FunctionWidget.schema, presets: FunctionWidget.presets },
     { component: Product.default, schema: Product.schema, presets: Product.presets },
     { component: CommunityPlugin.default, schema: CommunityPlugin.schema, presets: CommunityPlugin.presets },

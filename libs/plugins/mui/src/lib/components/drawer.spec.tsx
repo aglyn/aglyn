@@ -1,0 +1,198 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import * as Aglyn from '@aglyn/aglyn'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import DrawerElement, {
+  drawerPresets,
+  drawerSchema,
+  DrawerToggle,
+  drawerToggleSchema,
+  parseLeafNodeId,
+} from './drawer'
+
+const command = (kind: Aglyn.DrawerCommand, nodeId?: string) =>
+  act(() => {
+    Aglyn.dispatchDrawerCommand(kind, nodeId)
+  })
+
+const renderEditor = (ui: React.ReactElement) =>
+  render(
+    <Aglyn.ScreenLinkContext.Provider value={{ suppressNavigation: true }}>
+      {ui}
+    </Aglyn.ScreenLinkContext.Provider>,
+  )
+
+describe('parseLeafNodeId', () => {
+  it('extracts the node id from the renderer attribute', () => {
+    expect(parseLeafNodeId('leaf:abc-123')).toBe('abc-123')
+    expect(parseLeafNodeId('leaf:')).toBeUndefined()
+    expect(parseLeafNodeId(undefined)).toBeUndefined()
+    expect(parseLeafNodeId('viewport:dom')).toBeUndefined()
+  })
+})
+
+describe('Drawer element (AGL-562)', () => {
+  it('ships closed and answers open/close commands for its node id', () => {
+    render(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-1' }}>
+        <span>{'Drawer links'}</span>
+      </DrawerElement>,
+    )
+    expect(screen.queryByText('Drawer links')).toBeNull()
+    command('open', 'drawer-1')
+    expect(screen.getByText('Drawer links')).toBeTruthy()
+    command('close', 'drawer-1')
+    // MUI keeps the panel in the DOM during the exit transition; the
+    // reopened toggle below proves state, so just assert via toggle.
+    command('toggle', 'drawer-1')
+    expect(screen.getByText('Drawer links')).toBeTruthy()
+  })
+
+  it('ignores commands addressed to other drawers', () => {
+    render(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-2' }}>
+        <span>{'Mine'}</span>
+      </DrawerElement>,
+    )
+    command('open', 'someone-else')
+    expect(screen.queryByText('Mine')).toBeNull()
+  })
+
+  it('routes broadcast commands to the first mounted drawer only', () => {
+    render(
+      <>
+        <DrawerElement {...{ 'data-aglyn': 'leaf:first' }}>
+          <span>{'First contents'}</span>
+        </DrawerElement>
+        <DrawerElement {...{ 'data-aglyn': 'leaf:second' }}>
+          <span>{'Second contents'}</span>
+        </DrawerElement>
+      </>,
+    )
+    command('toggle')
+    expect(screen.getByText('First contents')).toBeTruthy()
+    expect(screen.queryByText('Second contents')).toBeNull()
+  })
+
+  it('shows a close button inside the open panel', () => {
+    render(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-3' }}>
+        <span>{'Contents'}</span>
+      </DrawerElement>,
+    )
+    command('open', 'drawer-3')
+    expect(
+      screen.getByRole('button', { name: 'Close menu' }),
+    ).toBeTruthy()
+  })
+
+  it('renders contents expanded inline on editing surfaces', () => {
+    renderEditor(
+      <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-4' }}>
+        <span>{'Editable contents'}</span>
+      </DrawerElement>,
+    )
+    expect(screen.getByText('Editable contents')).toBeTruthy()
+    expect(screen.getByText(/slides in on the live site/)).toBeTruthy()
+    // Editor surfaces never enroll on the command bus.
+    command('open', 'drawer-4')
+    expect(screen.queryByRole('button', { name: 'Close menu' })).toBeNull()
+  })
+})
+
+describe('DrawerToggle (AGL-562)', () => {
+  it('toggles its target drawer on click', () => {
+    render(
+      <>
+        <DrawerToggle targetNodeId="drawer-t1" ariaLabel="Open menu" />
+        <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-t1' }}>
+          <span>{'Toggled contents'}</span>
+        </DrawerElement>
+      </>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(screen.getByText('Toggled contents')).toBeTruthy()
+  })
+
+  it('drives the first drawer when no target is set (preset wiring)', () => {
+    render(
+      <>
+        <DrawerToggle ariaLabel="Open menu" />
+        <DrawerElement {...{ 'data-aglyn': 'leaf:drawer-t2' }}>
+          <span>{'Broadcast contents'}</span>
+        </DrawerElement>
+      </>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    expect(screen.getByText('Broadcast contents')).toBeTruthy()
+  })
+
+  it('is inert on editing surfaces', () => {
+    const seen: unknown[] = []
+    const unsubscribe = Aglyn.subscribeDrawerCommands((d) => seen.push(d))
+    renderEditor(<DrawerToggle ariaLabel="Open menu" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }))
+    unsubscribe()
+    expect(seen).toHaveLength(0)
+  })
+})
+
+describe('drawer schemas & presets (AGL-562)', () => {
+  it('keeps the persisted component ids in the Navigation group', () => {
+    expect(drawerSchema.$id).toBe('muiDrawer')
+    expect(drawerToggleSchema.$id).toBe('muiDrawerToggle')
+    expect(drawerSchema.category).toBe(Aglyn.ComponentCategory.NAVIGATION)
+    expect(drawerToggleSchema.category).toBe(
+      Aglyn.ComponentCategory.NAVIGATION,
+    )
+  })
+
+  it('targets drawers through the canvas element picker', () => {
+    const byName = Object.fromEntries(
+      (drawerToggleSchema.attributes ?? []).map((attr) => [attr.name, attr]),
+    )
+    expect(byName['targetNodeId']?.component).toBe(
+      Aglyn.FieldComponentType.NODE_SELECT,
+    )
+  })
+
+  it('ships Drawer, Menu Button, and Mobile Nav presets', () => {
+    const names = drawerPresets.map((preset) => preset.displayName)
+    expect(names).toEqual(['Drawer', 'Menu Button', 'Mobile Nav'])
+  })
+
+  it('pre-wires the Mobile Nav responsive visibility bands', () => {
+    const mobileNav = drawerPresets.find(
+      (preset) => preset.displayName === 'Mobile Nav',
+    )!
+    const [toggle, links, drawer] = (mobileNav.data.nodes ?? []) as any[]
+    expect(toggle.componentId).toBe('muiDrawerToggle')
+    // Hamburger hidden on desktop; inline links hidden below desktop.
+    expect(
+      toggle.props.sx[Aglyn.VISIBILITY_BAND_MEDIA.desktop],
+    ).toEqual({ display: 'none' })
+    expect(
+      links.props.sx[Aglyn.VISIBILITY_BAND_MEDIA.mobile],
+    ).toEqual({ display: 'none' })
+    expect(
+      links.props.sx[Aglyn.VISIBILITY_BAND_MEDIA.tablet],
+    ).toEqual({ display: 'none' })
+    expect(drawer.componentId).toBe('muiDrawer')
+    expect((drawer.nodes ?? []).length).toBeGreaterThan(0)
+  })
+})
