@@ -22,6 +22,7 @@ import {
   type HostWebhook,
   WEBHOOK_URL_PATTERN,
   evaluateExpression,
+  evaluateTriggerCondition,
   isClientActionStep,
   type HostAction,
   type HostActionAlert,
@@ -496,6 +497,16 @@ export async function runEventActions(
           continue // A broken filter never fires.
         }
       }
+      // Structured payload condition (AGL-557): same scope as the filter;
+      // an unmet condition skips the action (and never counts as a run).
+      if (
+        !evaluateTriggerCondition(action.trigger?.condition, {
+          event,
+          ...payload,
+        })
+      ) {
+        continue
+      }
       executed += 1
       await executeAction(env, doc.id, action, event, payload)
     }
@@ -535,6 +546,16 @@ export async function runSingleAction(
     // Only site-event actions may be dispatched externally — server
     // events flow through their own emitters.
     if (String(action.trigger?.event ?? '') !== String(event)) return alerts
+    // Structured payload condition (AGL-557): the single-action dispatch
+    // path honors it too, so client-evaluated triggers can't bypass it.
+    if (
+      !evaluateTriggerCondition(action.trigger?.condition, {
+        event,
+        ...payload,
+      })
+    ) {
+      return alerts
+    }
 
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')

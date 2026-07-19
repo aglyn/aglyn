@@ -46,6 +46,56 @@ export function isSiteEventType(event: string): event is SiteEventType {
   return SITE_EVENT_TYPES.includes(event as SiteEventType)
 }
 
+/** Structured condition operators (AGL-557). */
+export const TRIGGER_CONDITION_OPS = [
+  'equals',
+  'contains',
+  'notEmpty',
+] as const
+
+export type TriggerConditionOp = (typeof TRIGGER_CONDITION_OPS)[number]
+
+/**
+ * Structured per-action condition over the event payload (AGL-557): the
+ * no-code sibling of the free-text `filter` expression, e.g. "only run
+ * when the `subscribe` field is not empty". Evaluated against the same
+ * scope as the filter (event name + payload fields); the action is
+ * skipped when unmet.
+ */
+export interface HostActionTriggerCondition {
+  /** Payload field the condition reads (a submitted form field name). */
+  field: string
+  op: TriggerConditionOp
+  /** Comparison value for `equals`/`contains`; unused by `notEmpty`. */
+  value?: string
+}
+
+/**
+ * Evaluates a structured trigger condition (AGL-557). String-coerces the
+ * payload value; `equals`/`contains` compare trimmed + case-insensitive
+ * so checkbox values like "Yes" match an author-typed "yes". A missing
+ * field never matches (and is "empty" for `notEmpty`); an absent or
+ * field-less condition always passes, mirroring the filter's default.
+ */
+export function evaluateTriggerCondition(
+  condition: HostActionTriggerCondition | undefined | null,
+  payload: Record<string, unknown>,
+): boolean {
+  const field = condition?.field?.trim()
+  if (!condition || !field) return true
+  const raw = (payload ?? {})[field]
+  const actual = (raw == null ? '' : String(raw)).trim().toLowerCase()
+  if (condition.op === 'notEmpty') return actual.length > 0
+  const expected = String(condition.value ?? '')
+    .trim()
+    .toLowerCase()
+  if (condition.op === 'equals') return actual === expected
+  if (condition.op === 'contains') {
+    return expected.length > 0 && actual.includes(expected)
+  }
+  return false
+}
+
 export interface HostActionTrigger {
   /**
    * Event the action enrolls on: a HOST_EVENT_TYPE (server-emitted), a
@@ -55,6 +105,8 @@ export interface HostActionTrigger {
   event: string
   /** Optional expression over the payload; runs only when truthy. */
   filter?: string
+  /** Optional structured payload condition (AGL-557); null clears it. */
+  condition?: HostActionTriggerCondition | null
   /** CSS selector for element-scoped site events (click/visible/scroll-to). */
   selector?: string
   /** Percent 0-100 (scrollDepth) or seconds (timeOnPage). */
@@ -221,6 +273,19 @@ export function validateHostAction(action: HostAction): string | null {
     !(Number(action.trigger.cooldownMinutes) >= 1)
   ) {
     return 'Cooldown must be at least 1 minute'
+  }
+  // Structured payload condition (AGL-557).
+  const condition = action.trigger?.condition
+  if (condition) {
+    if (!TRIGGER_CONDITION_OPS.includes(condition.op)) {
+      return 'Pick a condition operator'
+    }
+    if (!condition.field?.trim()) {
+      return 'Name the field the condition checks'
+    }
+    if (condition.op !== 'notEmpty' && !condition.value?.trim()) {
+      return 'Enter the value the condition compares against'
+    }
   }
   const steps = action.steps ?? []
   if (!steps.length) return 'Add at least one step'

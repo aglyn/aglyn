@@ -16,6 +16,7 @@
  */
 
 import {
+  evaluateTriggerCondition,
   type HostAction,
   isCustomEventName,
   validateHostAction,
@@ -84,6 +85,137 @@ describe('validateHostAction', () => {
         steps: [{ type: 'datasetAppend', datasetName: '' }],
       }),
     ).toMatch(/Step 1/)
+  })
+})
+
+describe('evaluateTriggerCondition (AGL-557)', () => {
+  const payload = {
+    event: 'formSubmission',
+    subscribe: 'Yes',
+    topics: 'Products, Pricing',
+    comments: '  ',
+    rating: 4,
+  }
+
+  it('always passes without a condition or field', () => {
+    expect(evaluateTriggerCondition(undefined, payload)).toBe(true)
+    expect(evaluateTriggerCondition(null, payload)).toBe(true)
+    expect(
+      evaluateTriggerCondition({ field: '  ', op: 'equals' }, payload),
+    ).toBe(true)
+  })
+
+  it('equals compares trimmed + case-insensitive', () => {
+    const condition = { field: 'subscribe', op: 'equals' as const }
+    expect(
+      evaluateTriggerCondition({ ...condition, value: 'yes' }, payload),
+    ).toBe(true)
+    expect(
+      evaluateTriggerCondition({ ...condition, value: ' YES ' }, payload),
+    ).toBe(true)
+    expect(
+      evaluateTriggerCondition({ ...condition, value: 'no' }, payload),
+    ).toBe(false)
+    // Non-string payload values coerce (rating fields arrive numeric).
+    expect(
+      evaluateTriggerCondition(
+        { field: 'rating', op: 'equals', value: '4' },
+        payload,
+      ),
+    ).toBe(true)
+  })
+
+  it('contains matches checkbox-group joins and never matches empty', () => {
+    const condition = { field: 'topics', op: 'contains' as const }
+    expect(
+      evaluateTriggerCondition({ ...condition, value: 'pricing' }, payload),
+    ).toBe(true)
+    expect(
+      evaluateTriggerCondition({ ...condition, value: 'Support' }, payload),
+    ).toBe(false)
+    expect(
+      evaluateTriggerCondition({ ...condition, value: '' }, payload),
+    ).toBe(false)
+  })
+
+  it('notEmpty treats missing and whitespace values as empty', () => {
+    expect(
+      evaluateTriggerCondition({ field: 'subscribe', op: 'notEmpty' }, payload),
+    ).toBe(true)
+    expect(
+      evaluateTriggerCondition({ field: 'comments', op: 'notEmpty' }, payload),
+    ).toBe(false)
+    expect(
+      evaluateTriggerCondition({ field: 'missing', op: 'notEmpty' }, payload),
+    ).toBe(false)
+  })
+
+  it('a missing field never matches equals/contains', () => {
+    expect(
+      evaluateTriggerCondition(
+        { field: 'missing', op: 'equals', value: '' },
+        payload,
+      ),
+    ).toBe(true) // both sides empty — validation forbids saving this shape
+    expect(
+      evaluateTriggerCondition(
+        { field: 'missing', op: 'equals', value: 'x' },
+        payload,
+      ),
+    ).toBe(false)
+    expect(
+      evaluateTriggerCondition(
+        { field: 'missing', op: 'contains', value: 'x' },
+        payload,
+      ),
+    ).toBe(false)
+  })
+
+  it('an unknown operator never matches', () => {
+    expect(
+      evaluateTriggerCondition(
+        { field: 'subscribe', op: 'regex' as any, value: '.*' },
+        payload,
+      ),
+    ).toBe(false)
+  })
+
+  it('validateHostAction enforces the condition shape', () => {
+    const withCondition = (condition: any) =>
+      validateHostAction({
+        ...base,
+        trigger: { ...base.trigger, condition },
+      })
+    expect(
+      withCondition({ field: 'subscribe', op: 'notEmpty' }),
+    ).toBeNull()
+    expect(
+      withCondition({ field: 'subscribe', op: 'equals', value: 'Yes' }),
+    ).toBeNull()
+    expect(withCondition({ field: '', op: 'notEmpty' })).toMatch(/field/)
+    expect(
+      withCondition({ field: 'subscribe', op: 'equals', value: ' ' }),
+    ).toMatch(/value/)
+    expect(
+      withCondition({ field: 'subscribe', op: 'regex', value: 'x' }),
+    ).toMatch(/operator/)
+    // Null clears a previously-set condition (merge-set semantics).
+    expect(withCondition(null)).toBeNull()
+  })
+
+  it('validates enrollList steps (the email-audience step)', () => {
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'enrollList', listId: '' }],
+      }),
+    ).toMatch(/Step 1/)
+    expect(
+      validateHostAction({
+        ...base,
+        steps: [{ type: 'enrollList', listId: 'list-1' }],
+      }),
+    ).toBeNull()
   })
 })
 
