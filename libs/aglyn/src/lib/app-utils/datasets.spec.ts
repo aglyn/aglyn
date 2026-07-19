@@ -16,8 +16,11 @@
  */
 
 import {
+  humanizeDatasetFieldId,
+  parseDatasetFieldEntries,
   parseDatasetFields,
   sanitizeRecordValues,
+  slugifyDatasetFieldId,
   sortDatasetRecords,
 } from './datasets'
 
@@ -33,6 +36,28 @@ describe('datasets', () => {
       'body',
     ])
     expect(parseDatasetFields('')).toEqual([])
+  })
+
+  it('slugifies human names into stable field ids (AGL-558)', () => {
+    expect(slugifyDatasetFieldId('Roast preference')).toBe('roast_preference')
+    expect(slugifyDatasetFieldId('  Unit-Price ($) ')).toBe('unit_price')
+    expect(slugifyDatasetFieldId('9 lives')).toBe('lives')
+    expect(slugifyDatasetFieldId('???')).toBe('')
+  })
+
+  it('humanizes raw ids for display', () => {
+    expect(humanizeDatasetFieldId('roast_preference')).toBe('Roast preference')
+    expect(humanizeDatasetFieldId('title')).toBe('Title')
+  })
+
+  it('parses human field entries keeping pretty names (AGL-558)', () => {
+    expect(
+      parseDatasetFieldEntries('Roast preference, flavors, Roast Preference'),
+    ).toEqual([
+      { id: 'roast_preference', name: 'Roast preference' },
+      { id: 'flavors', name: 'Flavors' },
+    ])
+    expect(parseDatasetFieldEntries('???, ,')).toEqual([])
   })
 
   it('sanitizes record values to declared fields as strings', () => {
