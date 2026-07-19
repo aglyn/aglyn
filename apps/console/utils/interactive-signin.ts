@@ -33,6 +33,7 @@
  * ignored, so a genuine later restore still gets normal validation.
  */
 const MARKER_KEY = 'aglyn:interactive-signin-at'
+const SIGNOUT_MARKER_KEY = 'aglyn:interactive-signout-at'
 const DEFAULT_MAX_AGE_MS = 120_000
 
 export function markInteractiveSignIn(): void {
@@ -67,5 +68,42 @@ export function clearInteractiveSignIn(): void {
     window.sessionStorage.removeItem(MARKER_KEY)
   } catch {
     // ignore
+  }
+}
+
+/**
+ * Interactive-sign-OUT marker (AGL-543). Firebase auth also drops the
+ * user WITHOUT anyone asking — the common case is a suspended tab whose
+ * ID token expired and whose refresh then failed. `useSessionCookie`
+ * must not read that as "the user signed out" and retire the shared
+ * parent-domain cookie: one zombie tab would tombstone every workspace's
+ * session. Intentional sign-out paths set this marker synchronously
+ * before calling `signOut()`; the session hook only propagates sign-out
+ * when it can consume a fresh marker.
+ */
+export function markInteractiveSignOut(): void {
+  try {
+    window.sessionStorage.setItem(SIGNOUT_MARKER_KEY, String(Date.now()))
+  } catch {
+    // Storage unavailable: the explicit paths (/signout, impersonation
+    // exit) still retire the cookie themselves before signOut.
+  }
+}
+
+/**
+ * Reads-and-clears the sign-out marker. True only when a sign-out was
+ * initiated in this tab within `maxAgeMs` — i.e. the current auth-null
+ * emission is that sign-out completing.
+ */
+export function consumeInteractiveSignOut(
+  maxAgeMs = DEFAULT_MAX_AGE_MS,
+): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(SIGNOUT_MARKER_KEY)
+    if (raw === null) return false
+    window.sessionStorage.removeItem(SIGNOUT_MARKER_KEY)
+    return Date.now() - Number(raw) < maxAgeMs
+  } catch {
+    return false
   }
 }

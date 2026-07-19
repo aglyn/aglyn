@@ -59,6 +59,11 @@ exactly where you left off.
 Activity means any interaction: pointer movement, typing, scrolling, or touching. Active
 work in one tab keeps your other tabs alive too.
 
+Inactivity is the **only** thing that ends a session early: a background tab losing its
+own authentication (a laptop waking from sleep, a suspended tab, a network blip) recovers
+silently from the shared session instead of signing you out everywhere. Only an explicit
+sign-out — yours, or a staff-initiated revocation — retires the shared session.
+
 :::note Self-hosting
 The idle window is configurable via the `NEXT_PUBLIC_AUTH_IDLE_TIMEOUT_MINUTES`
 environment variable (default `60`; set `0` to disable).

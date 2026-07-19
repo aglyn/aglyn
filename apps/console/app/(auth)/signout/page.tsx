@@ -26,6 +26,7 @@ import { useEffect } from 'react'
 import { useAuth } from '@aglyn/tenant-feature-instance'
 import AuthFormComponent from '../../../components/auth-form.component'
 import AuthenticatingLayout from '../../../components/layouts/authenticating.layout'
+import { markInteractiveSignOut } from '../../../utils/interactive-signin'
 
 function SignOut() {
   useNextPageTitle({
@@ -38,6 +39,10 @@ function SignOut() {
 
   useEffect(() => {
     void (async () => {
+      // This sign-out is intentional — mark it so useSessionCookie's
+      // auth-null handler propagates it instead of treating it as an
+      // SDK hiccup to recover from (AGL-543).
+      markInteractiveSignOut()
       // The shared workspace cookie dies FIRST (AGL-236): waiting on the
       // DELETE before signOut means neither a hard navigation nor an
       // in-flight mint can strand a live cookie that would silently
