@@ -20,6 +20,7 @@ import { Alert, Button } from '@mui/material'
 import { signOut } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
+import { markInteractiveSignOut } from '../utils/interactive-signin'
 
 /**
  * Impersonation banner (AGL-246): pinned warning whenever the session was
@@ -63,6 +64,9 @@ export function ImpersonationBanner() {
           color="inherit"
           size="small"
           onClick={() => {
+            // Intentional sign-out: mark it so the session hook retires
+            // the shared cookie instead of restoring from it (AGL-543).
+            markInteractiveSignOut()
             // Named-app auth instance (useAuth) — bare getAuth() resolves the
             // '[DEFAULT]' app, which this app never registers.
             void signOut(auth).then(() => window.location.assign('/signin'))
