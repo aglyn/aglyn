@@ -102,28 +102,10 @@ const QUOTA_FIELDS: Array<{ key: string; label: string }> = [
 ]
 
 /** Every boolean feature flag, overridable as inherit / on / off. */
-const FLAG_FIELDS: string[] = [
-  'versioning',
-  'reusableComponents',
-  'customDomain',
-  'removeBranding',
-  'scheduledPublishing',
-  'marketplaceSelling',
-  'aiAssist',
-  'workflows',
-  'dataStore',
-  'videoMedia',
-  'bookings',
-  'actions',
-  'webhooks',
-  'siteExport',
-  'multilingual',
-  'eventCalendar',
-  'redirects',
-  'screenAnalytics',
-  'mediaCdn',
-  'marketingOverlays',
-]
+// Every feature key, derived from the plan model so new flags (the
+// commerce wave added 9) can never silently drop out of the staff
+// override dialog again (AGL-549).
+const FLAG_FIELDS: string[] = Object.keys(PLAN_ENTITLEMENTS.free.features)
 
 /** Count of explicit overrides on an org doc, for the row chip. */
 const overrideCount = (org: any): number =>
