@@ -62,19 +62,78 @@ import { MediaPickerContext } from '../contexts/media-picker-context'
 import { ComponentPromotionContext } from '../contexts/component-promotion-context'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 
-// Subscribes to form value changes via FormSpy and auto-submits when dirty.
-// This is needed because MUI Select uses a Portal, so its onChange never
-// bubbles through the <form> element as a DOM event.
+// Attribute edits commit to the node model on a short debounce, never once
+// per keystroke (AGL-567). A commit runs `canvas.updateNodeProps`, which calls
+// `saveHistory` — deep-cloning the ENTIRE node map onto the undo stack — and
+// mutates the observable props the canvas tree renders from. Firing that on
+// every character of a long value (a 30-plus-character External URL is the
+// reproducer) floods the main thread with full-tree clones and full-tree
+// re-renders faster than it can drain them, until the renderer process is
+// killed ("Aw, Snap"). Short labels never typed enough characters to reach the
+// tipping point, which is why only long URLs crashed. The data-driven-forms
+// field keeps the typed value in its own local state, so typing stays
+// responsive while the (expensive) model commit is deferred.
+export const ATTRIBUTE_COMMIT_DEBOUNCE_MS = 250
+
+/**
+ * Debounces a commit callback and exposes an imperative `flush`. Rapid
+ * `schedule()` calls (keystrokes) coalesce into a single commit; `flush()`
+ * forces a pending commit out immediately (focus leaving a field, an explicit
+ * Save), and a pending commit is also flushed on unmount (panel close) so an
+ * in-flight edit is never dropped. `commit` may change identity between
+ * renders (react-final-form's `handleSubmit` does) — the latest is always used
+ * without resubscribing the timer.
+ */
+export function useDebouncedCommit(
+  commit: () => void,
+  delay: number = ATTRIBUTE_COMMIT_DEBOUNCE_MS,
+) {
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingRef = useRef(false)
+
+  const flush = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    if (pendingRef.current) {
+      pendingRef.current = false
+      commitRef.current()
+    }
+  }, [])
+
+  const schedule = useCallback(() => {
+    pendingRef.current = true
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null
+      pendingRef.current = false
+      commitRef.current()
+    }, delay)
+  }, [delay])
+
+  // Flush any pending edit when the form tears down (panel close) so the last
+  // keystrokes are never lost.
+  useEffect(() => flush, [flush])
+
+  return { schedule, flush }
+}
+
+// Subscribes to form value changes via FormSpy and schedules a debounced
+// commit when dirty. The spy is needed because MUI Select uses a Portal, so
+// its onChange never bubbles through the <form> element as a DOM event.
 const AutoSaveOnChange = memo(function AutoSaveOnChange({
   values,
   pristine,
   valid,
-  onSubmit,
+  onSchedule,
 }: {
   values: unknown
   pristine: boolean
   valid: boolean
-  onSubmit: () => void
+  onSchedule: () => void
 }) {
   const isFirstRender = useRef(true)
   useEffect(() => {
@@ -83,7 +142,7 @@ const AutoSaveOnChange = memo(function AutoSaveOnChange({
       return
     }
     if (!pristine && valid) {
-      onSubmit()
+      onSchedule()
     }
   }, [values]) // eslint-disable-line react-hooks/exhaustive-deps
   return null
@@ -99,12 +158,18 @@ export const ElementPropsFormTemplate = forwardRef<
 >((props, ref) => {
   const { formFields, schema, ...rest } = props
   const { handleSubmit } = useFormApi()
+  const { schedule, flush } = useDebouncedCommit(handleSubmit)
   return (
     <form
       ref={ref}
       onSubmit={handleSubmit}
       noValidate
       {...rest}
+      // Focus leaving any field (clicking another node, tabbing away, pressing
+      // Save) forces the pending debounced commit out immediately, so an edit
+      // is never stranded in the debounce window while switching selection
+      // (AGL-567). Placed after {...rest} so this handler always wins.
+      onBlur={flush}
     >
       {schema.title}
       <Grid spacing={2} container>
@@ -116,7 +181,7 @@ export const ElementPropsFormTemplate = forwardRef<
             values={values}
             pristine={pristine}
             valid={valid}
-            onSubmit={handleSubmit}
+            onSchedule={schedule}
           />
         )}
       </FormSpy>
