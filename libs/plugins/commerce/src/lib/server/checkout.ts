@@ -50,6 +50,11 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     .trim()
     .toUpperCase()
     .slice(0, 40)
+  // Buyer-chosen billing (AGL-545): a request, never an instruction —
+  // the session mode re-resolves from the product doc below.
+  const billingRaw = String(body.billing ?? '')
+  const billing: CommerceModel.CheckoutBillingChoice | undefined =
+    billingRaw === 'once' || billingRaw === 'subscribe' ? billingRaw : undefined
   if (!hostId || !productId) {
     return res.status(400).json({ error: 'Missing hostId or productId' })
   }
@@ -102,11 +107,20 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!Aglyn.checkEntitlement(ownerOrg.org as any, 'commerce')) {
       return res.status(403).json({ error: 'Selling is not enabled' })
     }
+    // Session mode (AGL-545): 'subscribe' only takes effect on
+    // subscriptionOptional products, 'once' never applies to
+    // subscription-only products, and price/interval always come from
+    // the product doc — never the request.
+    const isSubscription =
+      CommerceModel.resolveCheckoutBillingMode(lifted, billing) ===
+      'subscription'
     // Tiered product types (AGL-470): recurring subscriptions and gift
     // cards are Business+ entitlements, checked per sale — the product doc
-    // alone must not unlock them.
+    // alone must not unlock them. Gated whenever the session ends up in
+    // subscription mode (a subscriptionOptional one-time sale is a plain
+    // order, so it rides the base `commerce` entitlement).
     if (
-      lifted.subscription &&
+      isSubscription &&
       !Aglyn.checkEntitlement(ownerOrg.org as any, 'storefrontSubscriptions')
     ) {
       return res
@@ -194,7 +208,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
 
     // Subscriptions (AGL-303): recurring prices bill on the platform with
     // a destination transfer + percent fee; the webhook records the sub.
-    const isSubscription = Boolean(lifted.subscription)
+    // `isSubscription` resolved above (AGL-545).
     const params = new URLSearchParams({
       mode: isSubscription ? 'subscription' : 'payment',
       'line_items[0][quantity]': String(quantity),

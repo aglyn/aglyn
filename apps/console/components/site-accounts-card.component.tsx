@@ -19,6 +19,7 @@
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Button,
+  Chip,
   Stack,
   Table,
   TableBody,
@@ -37,19 +38,25 @@ import {
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import SiteMemberDrawer from './site-member-drawer.component'
 
 const PAGE_SIZE = 25
 
 /**
  * Site users section (AGL-350): the visitor accounts created through the
  * storefront sign-up (AGL-109), searchable and paged — previously only a
- * dashboard afterthought. Newest first.
+ * dashboard afterthought. Newest first. Rows open the member detail
+ * drawer (AGL-546) with orders, subscriptions, the lifetime purchase
+ * total, and suspend/reactivate; the old `purchaseCents` column read a
+ * field nothing writes, so totals moved to the drawer where they are
+ * computed from the order docs.
  */
 export function SiteAccountsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
   const [pageLimit, setPageLimit] = useState(PAGE_SIZE)
   const [search, setSearch] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
       query(
@@ -69,11 +76,15 @@ export function SiteAccountsCard(props: { hostId: string }) {
         String(member.email ?? '')
           .toLowerCase()
           .includes(term) ||
-        String(member.name ?? '')
+        String(member.displayName ?? member.name ?? '')
           .toLowerCase()
           .includes(term),
     )
   }, [memberDocs, search])
+
+  // Resolved from the live docs so the drawer reflects rule-side updates.
+  const selectedMember =
+    (memberDocs ?? []).find((member: any) => member.$id === selectedId) ?? null
 
   return (
     <CardDisplay
@@ -99,23 +110,32 @@ export function SiteAccountsCard(props: { hostId: string }) {
                 <TableCell>{'Email'}</TableCell>
                 <TableCell>{'Name'}</TableCell>
                 <TableCell>{'Joined'}</TableCell>
-                <TableCell align="right">{'Purchases'}</TableCell>
+                <TableCell align="right">{'Status'}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {visible.map((member: any) => (
-                <TableRow key={member.$id} hover>
+                <TableRow
+                  key={member.$id}
+                  hover
+                  onClick={() => setSelectedId(member.$id)}
+                  sx={{ cursor: 'pointer' }}
+                >
                   <TableCell>{member.email ?? member.$id}</TableCell>
-                  <TableCell>{member.name ?? '—'}</TableCell>
+                  <TableCell>
+                    {member.displayName ?? member.name ?? '—'}
+                  </TableCell>
                   <TableCell>
                     {member.createdAt?.toDate?.()
                       ? member.createdAt.toDate().toLocaleDateString()
                       : '—'}
                   </TableCell>
                   <TableCell align="right">
-                    {member.purchaseCents
-                      ? `$${(Number(member.purchaseCents) / 100).toFixed(2)}`
-                      : '—'}
+                    {member.suspended === true ? (
+                      <Chip label="Suspended" size="small" color="error" />
+                    ) : (
+                      <Chip label="Active" size="small" variant="outlined" />
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -138,6 +158,11 @@ export function SiteAccountsCard(props: { hostId: string }) {
               'on your site.'}
         </Typography>
       )}
+      <SiteMemberDrawer
+        hostId={hostId}
+        member={selectedMember}
+        onClose={() => setSelectedId(null)}
+      />
     </CardDisplay>
   )
 }

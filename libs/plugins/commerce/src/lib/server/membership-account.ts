@@ -20,7 +20,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { mintDownloadToken } from './download'
-import { readMemberSession } from './membership'
+import { readMemberSession, setMemberCookie } from './membership'
 
 export interface AccountOrderView {
   id: string
@@ -53,6 +53,13 @@ export const membershipAccountHandler: PluginApiHandler = async (req, res) => {
     const memberSnapshot = await memberRef.get()
     if (!memberSnapshot.exists) {
       return res.status(401).json({ error: 'Not signed in' })
+    }
+    // Suspension gate (AGL-546): clear the session cookie so the site
+    // stops presenting a signed-in shell; the account block treats any
+    // non-OK response as signed-out, which is the graceful path here.
+    if (memberSnapshot.get('suspended') === true) {
+      setMemberCookie(res, hostId, null)
+      return res.status(403).json({ error: 'suspended' })
     }
 
     if (req.method === 'POST') {

@@ -19,6 +19,15 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiEmailFastOutline, mdiFormTextbox } from '@aglyn/shared-data-mdi'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
+import Checkbox from '@mui/material/Checkbox'
+import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import FormGroup from '@mui/material/FormGroup'
+import FormLabel from '@mui/material/FormLabel'
+import MenuItem from '@mui/material/MenuItem'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
+import Rating from '@mui/material/Rating'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import { type FormEvent, forwardRef, useCallback, useState } from 'react'
@@ -75,8 +84,18 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       let website = ''
       for (const [key, value] of data.entries()) {
         if (typeof value !== 'string') continue
-        if (key === 'website') website = value
-        else fields[key] = value.slice(0, 2000)
+        if (key === 'website') {
+          website = value
+          continue
+        }
+        // `__`-prefixed inputs are internal controls (e.g. the rating
+        // field's star radios) and never submit (AGL-544).
+        if (key.startsWith('__')) continue
+        // Checkbox groups emit one entry per ticked box; join them under
+        // the field name instead of letting the last one win (AGL-544).
+        fields[key] = (
+          key in fields ? `${fields[key]}, ${value}` : value
+        ).slice(0, 2000)
       }
       setStatus('sending')
       try {
@@ -158,18 +177,137 @@ export interface FormFieldProps {
   /** Submission key; also the input's name attribute. */
   fieldName?: string
   label?: string
-  fieldType?: 'text' | 'email' | 'textarea'
+  fieldType?:
+    | 'text'
+    | 'email'
+    | 'textarea'
+    | 'select'
+    | 'radio'
+    | 'checkbox'
+    | 'rating'
+  /**
+   * Choice list for select/radio/checkbox fields (AGL-544): newline- or
+   * comma-separated. Ignored by the other types.
+   */
+  options?: string
   required?: boolean
 }
 
-/** Single input inside a Form (AGL-76). */
+/**
+ * Splits a newline- or comma-separated choice list into trimmed,
+ * non-empty entries (AGL-544).
+ */
+export const parseFieldOptions = (options?: string): string[] =>
+  (options || '')
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+
+/**
+ * Single input inside a Form (AGL-76). Survey field types — select,
+ * radio, checkbox group, and star rating — are AGL-544.
+ */
 const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
-  const { fieldName, label, fieldType, required, ...rest } = props
+  const { fieldName, label, fieldType, options, required, ...rest } = props
+  const name = fieldName || 'field'
+  const fieldLabel = label || fieldName || 'Field'
+  const choices = parseFieldOptions(options)
+  // Checkbox groups count ticked boxes so "required" can mean "at least
+  // one": native `required` is only asserted while none are ticked.
+  const [checkedCount, setCheckedCount] = useState(0)
+  // Rating is controlled so a hidden input can serialize the number.
+  const [rating, setRating] = useState<number | null>(null)
+
+  if (fieldType === 'select') {
+    return (
+      <TextField
+        ref={ref}
+        select
+        name={name}
+        label={fieldLabel}
+        required={Boolean(required)}
+        defaultValue=""
+        fullWidth
+        size="small"
+        {...rest}
+      >
+        {choices.map((choice, index) => (
+          <MenuItem key={index} value={choice}>
+            {choice}
+          </MenuItem>
+        ))}
+      </TextField>
+    )
+  }
+
+  if (fieldType === 'radio') {
+    return (
+      <FormControl ref={ref} required={Boolean(required)} {...rest}>
+        <FormLabel>{fieldLabel}</FormLabel>
+        <RadioGroup name={name}>
+          {choices.map((choice, index) => (
+            <FormControlLabel
+              key={index}
+              value={choice}
+              label={choice}
+              control={<Radio size="small" required={Boolean(required)} />}
+            />
+          ))}
+        </RadioGroup>
+      </FormControl>
+    )
+  }
+
+  if (fieldType === 'checkbox') {
+    return (
+      <FormControl ref={ref} required={Boolean(required)} {...rest}>
+        <FormLabel>{fieldLabel}</FormLabel>
+        <FormGroup>
+          {choices.map((choice, index) => (
+            <FormControlLabel
+              key={index}
+              label={choice}
+              control={
+                <Checkbox
+                  name={name}
+                  value={choice}
+                  size="small"
+                  required={Boolean(required) && checkedCount === 0}
+                  onChange={(event) =>
+                    setCheckedCount(
+                      (count) => count + (event.target.checked ? 1 : -1),
+                    )
+                  }
+                />
+              }
+            />
+          ))}
+        </FormGroup>
+      </FormControl>
+    )
+  }
+
+  if (fieldType === 'rating') {
+    return (
+      <FormControl ref={ref} required={Boolean(required)} {...rest}>
+        <FormLabel>{fieldLabel}</FormLabel>
+        <Rating
+          // `__`-prefixed so the star radios themselves are skipped by
+          // Form.handleSubmit; the hidden input carries the value.
+          name={`__${name}`}
+          value={rating}
+          onChange={(_event, value) => setRating(value)}
+        />
+        <input type="hidden" name={name} value={rating ?? ''} />
+      </FormControl>
+    )
+  }
+
   return (
     <TextField
       ref={ref}
-      name={fieldName || 'field'}
-      label={label || fieldName || 'Field'}
+      name={name}
+      label={fieldLabel}
       type={fieldType === 'email' ? 'email' : 'text'}
       required={Boolean(required)}
       multiline={fieldType === 'textarea'}
@@ -249,7 +387,19 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
         { value: '', label: 'Text' },
         { value: 'email', label: 'Email' },
         { value: 'textarea', label: 'Multiline' },
+        { value: 'select', label: 'Dropdown' },
+        { value: 'radio', label: 'Radio choice' },
+        { value: 'checkbox', label: 'Checkboxes' },
+        { value: 'rating', label: 'Star rating' },
       ],
+    },
+    {
+      name: 'options',
+      description:
+        'Choices for dropdown, radio, and checkbox fields — one per line ' +
+        '(or comma-separated). Ignored by the other types.',
+      component: Aglyn.FieldComponentType.TEXTAREA,
+      label: 'Options',
     },
     {
       name: 'required',

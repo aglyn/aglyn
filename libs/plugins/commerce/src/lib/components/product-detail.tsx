@@ -25,6 +25,8 @@ import Chip from '@mui/material/Chip'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
 import TextField from '@mui/material/TextField'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
@@ -60,6 +62,10 @@ interface Detail {
   mediaUrls: string[]
   options: CommerceModel.ProductOption[]
   variants: DetailVariant[]
+  /** Recurring billing (AGL-303); framing + buyer choice on the PDP. */
+  subscription?: { interval: 'month' | 'year'; trialDays?: number }
+  /** Buyer picks one-time or subscribe at the same price (AGL-545). */
+  subscriptionOptional?: boolean
 }
 
 const SAMPLE: Detail = {
@@ -103,6 +109,11 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
     const [wishlisted, setWishlisted] = useState(false)
     const [notifyEmail, setNotifyEmail] = useState('')
     const [notifyState, setNotifyState] = useState<'idle' | 'done'>('idle')
+    // Buyer-chosen billing (AGL-545): only meaningful when the product
+    // is subscriptionOptional; defaults to a one-time purchase.
+    const [billing, setBilling] = useState<CommerceModel.CheckoutBillingChoice>(
+      'once',
+    )
 
     const slug = slugProp || slugFromLocation()
 
@@ -199,6 +210,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             productId: resolved.id,
             variantId: variant.id,
             quantity,
+            // Billing choice (AGL-545): the server re-validates against
+            // the product doc, so this is a request, not an instruction.
+            ...(resolved.subscriptionOptional ? { billing } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
@@ -237,6 +251,16 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
 
     const galleryImage =
       variant?.imageUrl ?? resolved.mediaUrls[activeImage] ?? resolved.mediaUrls[0]
+
+    // Subscription framing (AGL-545): subscription-only products price as
+    // $X/mo|/yr with a "Subscribe" button; subscriptionOptional products
+    // surface the one-time/subscribe toggle instead. Same price either way
+    // — the server re-prices from the product doc regardless.
+    const subscription = resolved.subscription
+    const intervalSuffix = subscription?.interval === 'year' ? '/yr' : '/mo'
+    const subscribing =
+      Boolean(subscription) &&
+      (!resolved.subscriptionOptional || billing === 'subscribe')
 
     // schema.org Product/Offer (AGL-299), same inline-script convention
     // as the event-list block (AGL-143).
@@ -331,7 +355,14 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
             {resolved.name}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">{`$${variant?.priceUsd ?? 0}`}</Typography>
+            <Typography variant="h6">
+              {`$${variant?.priceUsd ?? 0}${subscribing ? intervalSuffix : ''}`}
+            </Typography>
+            {subscribing && subscription?.trialDays ? (
+              <Typography variant="caption" color="text.secondary">
+                {`${subscription.trialDays}-day free trial`}
+              </Typography>
+            ) : null}
             {variant?.compareAtPriceUsd ? (
               <>
                 <Typography
@@ -358,6 +389,26 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
               {wishlisted ? '♥ Saved' : '♡ Save'}
             </Button>
           </Box>
+          {subscription && resolved.subscriptionOptional ? (
+            <ToggleButtonGroup
+              value={billing}
+              exclusive
+              size="small"
+              onChange={(_event, value) => {
+                if (value === 'once' || value === 'subscribe') {
+                  setBilling(value)
+                }
+              }}
+              sx={{ mb: 2 }}
+            >
+              <ToggleButton value="once">
+                {`One-time $${variant?.priceUsd ?? 0}`}
+              </ToggleButton>
+              <ToggleButton value="subscribe">
+                {`Subscribe $${variant?.priceUsd ?? 0}${intervalSuffix}`}
+              </ToggleButton>
+            </ToggleButtonGroup>
+          ) : null}
           {resolved.options.map((option) => (
             <TextField
               key={option.name}
@@ -418,7 +469,7 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
                 ? 'Sold out'
                 : status === 'sending'
                   ? 'Redirecting…'
-                  : buyLabel || 'Buy now'}
+                  : buyLabel || (subscribing ? 'Subscribe' : 'Buy now')}
             </Button>
           </Box>
           {status === 'error' ? (

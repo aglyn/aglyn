@@ -155,6 +155,12 @@ export interface HostProduct {
    * checks (AGL-309).
    */
   subscription?: { interval: 'month' | 'year'; trialDays?: number }
+  /**
+   * Buyer-chosen billing (AGL-545): with `subscription` set, true lets
+   * the buyer pick one-time OR subscribe on the PDP (default one-time);
+   * absent/false keeps the product subscription-only.
+   */
+  subscriptionOptional?: boolean
   /** Members-only videos (AGL-315), streamed via short-TTL links. */
   gatedVideos?: Array<{ url: string; title?: string }>
   /** Manual related products for the upsell block (AGL-325). */
@@ -351,6 +357,27 @@ export function canPurchase(
   if (variant.inventory == null) return true
   if (product.oversellPolicy === 'backorder') return true
   return Number(variant.inventory) >= quantity
+}
+
+/** Buyer's requested billing mode on a checkout POST (AGL-545). */
+export type CheckoutBillingChoice = 'once' | 'subscribe'
+
+/**
+ * Resolves the Stripe Checkout mode for a product + the buyer's
+ * requested billing choice (AGL-545). The product doc is authoritative:
+ * - no `subscription` → always one-time (the request field is ignored)
+ * - `subscription` without `subscriptionOptional` → always subscription
+ *   (a forged `billing: 'once'` cannot buy a subscription product once)
+ * - `subscriptionOptional` → the buyer chooses; absent/invalid choices
+ *   default to one-time, matching the PDP default.
+ */
+export function resolveCheckoutBillingMode(
+  product: Pick<HostProduct, 'subscription' | 'subscriptionOptional'>,
+  requested?: string | null,
+): 'payment' | 'subscription' {
+  if (!product.subscription) return 'payment'
+  if (!product.subscriptionOptional) return 'subscription'
+  return requested === 'subscribe' ? 'subscription' : 'payment'
 }
 
 /**

@@ -70,6 +70,14 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
     ) {
       return res.status(401).json({ error: 'Wrong email or password' })
     }
+    // Suspension gate (AGL-546): console-suspended members cannot sign in.
+    // Checked after the password so the message never leaks account
+    // existence to guessers who don't hold the credentials.
+    if (memberDoc.get('suspended') === true) {
+      return res.status(401).json({
+        error: 'This account has been suspended. Contact the site owner.',
+      })
+    }
     // Event trigger (AGL-128/148).
     await emitHostEvent(hostId, 'memberSignIn', { email })
     // Cart linkage (AGL-294): stamp the guest cart with the member so

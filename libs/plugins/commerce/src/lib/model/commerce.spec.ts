@@ -27,6 +27,7 @@ import {
   productInventory,
   productPriceRange,
   registersWithinCap,
+  resolveCheckoutBillingMode,
   transferVariantInventory,
   validateCollection,
   validateProduct,
@@ -349,5 +350,44 @@ describe('registersWithinCap (AGL-482)', () => {
   it('treats a missing createdAt as oldest (0)', () => {
     const registers = [reg('new', 5), { $id: 'legacy' } as any]
     expect([...registersWithinCap(registers, 1)]).toEqual(['legacy'])
+  })
+})
+
+describe('resolveCheckoutBillingMode (AGL-545)', () => {
+  const monthly = { interval: 'month' as const }
+
+  it('is always payment without a subscription, whatever is requested', () => {
+    expect(resolveCheckoutBillingMode({}, undefined)).toBe('payment')
+    expect(resolveCheckoutBillingMode({}, 'subscribe')).toBe('payment')
+    expect(resolveCheckoutBillingMode({}, 'once')).toBe('payment')
+  })
+
+  it('ignores the request on subscription-only products', () => {
+    const only = { subscription: monthly }
+    expect(resolveCheckoutBillingMode(only, undefined)).toBe('subscription')
+    expect(resolveCheckoutBillingMode(only, 'subscribe')).toBe('subscription')
+    // A forged 'once' cannot buy a subscription product one-time.
+    expect(resolveCheckoutBillingMode(only, 'once')).toBe('subscription')
+  })
+
+  it('honors the buyer choice on subscriptionOptional products', () => {
+    const optional = { subscription: monthly, subscriptionOptional: true }
+    expect(resolveCheckoutBillingMode(optional, 'subscribe')).toBe(
+      'subscription',
+    )
+    expect(resolveCheckoutBillingMode(optional, 'once')).toBe('payment')
+  })
+
+  it('defaults optional products to one-time (matching the PDP)', () => {
+    const optional = { subscription: monthly, subscriptionOptional: true }
+    expect(resolveCheckoutBillingMode(optional, undefined)).toBe('payment')
+    expect(resolveCheckoutBillingMode(optional, null)).toBe('payment')
+    expect(resolveCheckoutBillingMode(optional, 'garbage')).toBe('payment')
+  })
+
+  it('treats subscriptionOptional without subscription as one-time', () => {
+    expect(
+      resolveCheckoutBillingMode({ subscriptionOptional: true }, 'subscribe'),
+    ).toBe('payment')
   })
 })

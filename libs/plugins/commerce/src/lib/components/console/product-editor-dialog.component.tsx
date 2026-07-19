@@ -638,18 +638,36 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
         <Stack direction="row" spacing={2}>
           <TextField
             label="Billing"
-            value={current.subscription ? current.subscription.interval : 'once'}
+            value={
+              current.subscription
+                ? current.subscriptionOptional
+                  ? 'both'
+                  : current.subscription.interval
+                : 'once'
+            }
             onChange={(event) => {
               const value = event.target.value
-              update({
-                subscription:
-                  value === 'once'
-                    ? undefined
-                    : {
-                        ...(current.subscription ?? {}),
-                        interval: value as 'month' | 'year',
-                      },
-              })
+              // "Both" (AGL-545): the PDP offers one-time OR subscribe at
+              // the same price; the interval field beside picks the cadence.
+              // Cleared keys are deleted (not set undefined) so the
+              // client-direct setDoc on save never sees undefined values.
+              const next = { ...current }
+              if (value === 'once') {
+                delete next.subscription
+              } else {
+                next.subscription = {
+                  ...(current.subscription ?? {}),
+                  interval:
+                    value === 'both'
+                      ? (current.subscription?.interval ?? 'month')
+                      : (value as 'month' | 'year'),
+                }
+              }
+              if (value === 'both') next.subscriptionOptional = true
+              else delete next.subscriptionOptional
+              // setDraft directly: update() spreads the patch over
+              // `current`, which would resurrect the deleted keys.
+              setDraft(next)
             }}
             size="small"
             select
@@ -659,7 +677,28 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             <MenuItem value="once">{'One-time purchase'}</MenuItem>
             <MenuItem value="month">{'Monthly subscription'}</MenuItem>
             <MenuItem value="year">{'Yearly subscription'}</MenuItem>
+            <MenuItem value="both">{'Both — buyer chooses'}</MenuItem>
           </TextField>
+          {current.subscription && current.subscriptionOptional ? (
+            <TextField
+              label="Interval"
+              value={current.subscription.interval}
+              onChange={(event) =>
+                update({
+                  subscription: {
+                    ...current.subscription!,
+                    interval: event.target.value as 'month' | 'year',
+                  },
+                })
+              }
+              size="small"
+              select
+              sx={{ minWidth: 120 }}
+            >
+              <MenuItem value="month">{'Monthly'}</MenuItem>
+              <MenuItem value="year">{'Yearly'}</MenuItem>
+            </TextField>
+          ) : null}
           {current.subscription ? (
             <TextField
               label="Free trial (days)"

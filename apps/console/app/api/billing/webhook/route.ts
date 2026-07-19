@@ -98,13 +98,25 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
   const secret = process.env.STRIPE_WEBHOOK_SECRET
-  if (!secret) {
+  // Test-mode fallback (AGL-547): the test-mode webhook endpoint signs with
+  // its own secret, so deliveries for test-mode tenant checkouts verify
+  // against STRIPE_WEBHOOK_SECRET_TEST when the live secret rejects (or is
+  // unset). Secrets are never logged.
+  const testSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST
+  if (!secret && !testSecret) {
     return Response.json({ error: 'Billing is not configured.' }, { status: 501 })
   }
 
   const payload = Buffer.from(await request.arrayBuffer())
   const signatureHeader = String(headers['stripe-signature'] ?? '')
-  if (!verifyStripeSignature(payload, signatureHeader, secret)) {
+  const verified =
+    (secret
+      ? verifyStripeSignature(payload, signatureHeader, secret)
+      : false) ||
+    (testSecret
+      ? verifyStripeSignature(payload, signatureHeader, testSecret)
+      : false)
+  if (!verified) {
     return Response.json({ error: 'Invalid signature' }, { status: 400 })
   }
 

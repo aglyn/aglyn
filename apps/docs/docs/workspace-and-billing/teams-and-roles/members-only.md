@@ -28,6 +28,33 @@ flow into your [Contacts CRM](../../content-and-data/contacts/overview.md) autom
 2. Mark it **members-only**.
 3. Publish. Only signed-in members can now view it; everyone else is prompted to sign in.
 
+## Manage your members
+
+The site's **Users** page lists everyone who signed up on your published site —
+searchable and paged, newest first. Click a member to open their detail drawer:
+
+- **Profile** — email, display name, join date, and saved addresses.
+- **Order history** — the member's payment records, newest first: order number,
+  status, total, and date, plus the Stripe payment reference and any refunded
+  amount. Order history is visible to site admins and editors.
+- **Subscriptions** — active and past storefront subscriptions with their
+  renewal date.
+- **Lifetime purchases** — everything the member actually paid: charged order
+  totals minus refunds (pending and cancelled orders don't count).
+
+### Suspend or reactivate a member
+
+From the drawer you can **suspend** a member (with a confirmation). A suspended
+member:
+
+- can no longer **sign in** on your published site — they see a clear
+  "account suspended" message;
+- is **signed out** the next time their account page loads;
+- keeps all orders, subscriptions, and history — nothing is deleted.
+
+**Reactivate** restores access with the member's existing password. The member
+list shows each account's Active/Suspended status at a glance.
+
 ## Tips
 
 - Combine members-only screens with [email campaigns](../../marketing-and-automation/email-campaigns/overview.md) to

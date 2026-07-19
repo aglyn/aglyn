@@ -31,6 +31,27 @@ Products created with the earlier single-price product block are lifted
 into this model automatically as a single default variant — nothing breaks
 and no migration step is needed.
 
+## Billing modes and subscriptions
+
+Each product's **Billing** setting picks how buyers pay:
+
+- **One-time purchase** (default) — a normal order.
+- **Monthly / Yearly subscription** — buyers subscribe instead of buying
+  once; the product page prices as `$X/mo` or `$X/yr`, the buy button reads
+  **Subscribe**, and an optional **free trial** (in days) can precede the
+  first charge. An active subscription is what members-only content checks.
+- **Both — buyer chooses** — the product page shows a one-time /
+  subscribe toggle (same price either way, at the interval you pick) and
+  defaults to one-time. The choice is validated server-side against the
+  product: a one-time sale here is a plain order, while the subscribe
+  choice creates a recurring subscription exactly like a
+  subscription-only product.
+
+Selling subscriptions (including the subscribe side of *Both*) requires a
+plan with storefront subscriptions (Business and above). Subscription
+billing applies to the product page's direct checkout — cart checkouts
+always charge one-time.
+
 ## Categories and tags
 
 **Categories** are hierarchical (each may have a parent) and slugged for

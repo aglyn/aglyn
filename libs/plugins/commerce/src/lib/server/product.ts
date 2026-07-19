@@ -37,6 +37,10 @@ export interface PublicProductDetail {
     imageUrl?: string
   }>
   tags?: string[]
+  /** Recurring billing (AGL-303) so the PDP frames the price. */
+  subscription?: { interval: 'month' | 'year'; trialDays?: number }
+  /** Buyer may choose one-time OR subscribe (AGL-545). */
+  subscriptionOptional?: boolean
 }
 
 /**
@@ -88,6 +92,10 @@ export const productHandler: PluginApiHandler = async (req, res) => {
         ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
       })),
       ...(product.tags?.length ? { tags: product.tags } : {}),
+      ...(product.subscription ? { subscription: product.subscription } : {}),
+      ...(product.subscription && product.subscriptionOptional
+        ? { subscriptionOptional: true }
+        : {}),
     }
     res.setHeader(
       'Cache-Control',
