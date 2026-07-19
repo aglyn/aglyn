@@ -15,7 +15,7 @@
       },
       "configurations": {
         "production": {
-          "webpack": true
+          "webpack": false
         },
         "development": {
           "outputPath": "apps/console"
