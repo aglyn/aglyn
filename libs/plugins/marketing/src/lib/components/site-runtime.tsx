@@ -325,6 +325,25 @@ function AutomationsEngine(props: {
                   : 'toggle',
               step.drawerNodeId || undefined,
             )
+          } else if (
+            step.type === 'openMenu' ||
+            step.type === 'closeMenu' ||
+            step.type === 'toggleMenu'
+          ) {
+            // Menu commands (AGL-568) ride their own event bus like
+            // drawers; the nav-menu elements answer (first menu for
+            // broadcasts). A hover-enter trigger stamps the hover flag
+            // so a menu opened this way closes itself when the pointer
+            // leaves the trigger + panel surface.
+            Aglyn.dispatchMenuCommand(
+              step.type === 'openMenu'
+                ? 'open'
+                : step.type === 'closeMenu'
+                  ? 'close'
+                  : 'toggle',
+              step.menuNodeId || undefined,
+              { hover: automation.event === 'elementHoverEnter' },
+            )
           } else if (step.type === 'trackGaEvent') {
             ;(window as any).gtag?.('event', step.eventName, step.params ?? {})
           } else if (step.type === 'siteAlert') {

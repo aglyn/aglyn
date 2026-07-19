@@ -12,8 +12,8 @@ in — no code, no raw JSON:
 
 | Element | What it does |
 | --- | --- |
-| **Dropdown Menu** | A nav item that opens a dropdown of links on click or hover. |
-| **Mega Menu** | A SaaS-style wide panel that opens on hover, with a free-form slot for columns of links and promos. |
+| **Dropdown Menu** | A nav item that opens a dropdown of links — click-toggles out of the box, interactions do the rest. |
+| **Mega Menu** | A SaaS-style wide panel with a free-form slot for columns of links and promos. |
 | **Drawer** | A slide-in panel (left or right) with a slot for anything — the mobile menu building block. |
 | **Menu Button** | A hamburger icon button that opens/closes a drawer. |
 | **Mobile Nav** | A one-insert preset: menu button + drawer + inline desktop links, responsive wiring included. |
@@ -25,12 +25,20 @@ selectable and editable — exactly like form fields do.
 ## Dropdown menu
 
 Insert **Dropdown Menu**, set its **Label**, and drop screen links (or
-anything else) inside. Attributes:
+anything else) inside. Its only attribute is **Label** — how the menu
+opens is not an attribute:
 
-- **Label** — the text on the nav item.
-- **Open on** — *Click* (default) or *Hover*. Hover menus keep a short
-  grace period so the pointer can travel into the panel; click menus
-  close on outside clicks and <kbd>Esc</kbd>.
+- **By default, clicking the nav item toggles the menu.** No
+  configuration needed; the menu also closes on outside clicks and
+  <kbd>Esc</kbd>.
+- **Everything else is an [interaction](#interactions-for-menus)** —
+  e.g. *When hovered → Open a menu* on the menu element itself gives you
+  a hover menu, and any other element can open, close, or toggle any
+  menu.
+
+Menus opened by a hover interaction close themselves once the pointer
+leaves the nav item and its panel, with a short grace period so the
+pointer can travel between the two.
 
 ## Mega menu
 
@@ -38,9 +46,14 @@ Insert **Mega Menu** inside your nav bar. Its panel is a normal canvas
 slot — the preset starts you with three columns of links, but rows,
 images, and promo cards all work. Attributes:
 
-- **Open on** — *Hover* (default) or *Click*.
 - **Panel width** — *Fit content*, *Wide* (720px), or *Full width*
   (edge-to-edge under the nav item).
+
+It opens exactly like the dropdown: click-toggle by default, and the
+classic SaaS hover behavior is one interaction — on the mega menu
+element, *When hovered → Open a menu* (the target defaults to the
+element itself). Hover-opened panels close on pointer leave
+automatically.
 
 ## Drawer & menu button
 
@@ -79,19 +92,24 @@ choreography ([interactions guide](../besigner/interactions-and-custom-html.md))
 - **Triggers**: *When clicked…*, *When hovered…*, *When hover ends…*,
   *When scrolled into view…*
 - **Actions**: *Show / Hide / Show-hide an element* (pick the target from
-  a list of canvas elements) and *Open / Close / Open-close a drawer*
-  (pick the drawer, or default to the page's first).
+  a list of canvas elements), *Open / Close / Open-close a menu* (drives
+  a Dropdown or Mega Menu; picking defaults to the element itself when it
+  is a menu, or the page's first menu), and *Open / Close / Open-close a
+  drawer* (pick the drawer, or default to the page's first).
 - **Frequency**: new interactions default to **Every time** so toggles
   keep working; the legacy *once per page view* and the per-session /
   per-visitor / cooldown caps are still there for announcements.
 
-Two patterns cover most menus:
+Three patterns cover most menus:
 
+- **Hover menu** — on the Dropdown/Mega Menu element itself: *When
+  hovered → Open a menu*. Leaving the nav item and its panel closes it
+  automatically — no hover-ends interaction needed.
 - **Custom hover reveal** — on the trigger element: *When hovered → Show
   an element* (your panel), plus a second interaction *When hover ends →
   Hide an element*.
 - **Custom hamburger** — on any button or icon: *When clicked →
-  Open/close a drawer*.
+  Open/close a drawer* (or *a menu*).
 
 :::tip Start hidden
 To make a show-target start hidden, add the `aglyn-hidden` class under

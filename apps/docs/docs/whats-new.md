@@ -13,12 +13,14 @@ Each links into its section for the how-to.
 ## Nav menu system (newest)
 
 - **[Menus & navigation](building-sites/menus-and-navigation/overview.md)** — a
-  **Dropdown Menu** (click or hover), a hover **Mega Menu** with a free-form
-  wide panel, a slide-in **Drawer** with a **Menu Button**, and a one-insert
-  **Mobile Nav** preset. Interactions gained hover enter/leave triggers, a
-  repeatable *every time* frequency, element **show/hide** actions with a
-  canvas element picker, and **drawer open/close** actions; the styles panel
-  gained a per-device-band **Visibility** control.
+  **Dropdown Menu**, a **Mega Menu** with a free-form wide panel, a slide-in
+  **Drawer** with a **Menu Button**, and a one-insert **Mobile Nav** preset.
+  Every menu click-toggles out of the box; hover opening (and anything
+  fancier) is authored as an interaction. Interactions gained hover
+  enter/leave triggers, a repeatable *every time* frequency, element
+  **show/hide** actions with a canvas element picker, and **menu** and
+  **drawer open/close** actions; the styles panel gained a per-device-band
+  **Visibility** control.
 
 ## Designed content collections
 

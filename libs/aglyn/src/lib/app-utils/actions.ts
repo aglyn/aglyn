@@ -245,6 +245,13 @@ export type HostActionStep =
   | { type: 'openDrawer'; drawerNodeId?: string }
   | { type: 'closeDrawer'; drawerNodeId?: string }
   | { type: 'toggleDrawer'; drawerNodeId?: string }
+  // Menu commands (AGL-568): the drawer pattern for Dropdown/Mega Menu
+  // elements — delivered over their own window event bus keyed by node
+  // id; an empty target addresses the page's first menu. Hover-triggered
+  // opens carry a hover flag so the menu closes on pointer leave.
+  | { type: 'openMenu'; menuNodeId?: string }
+  | { type: 'closeMenu'; menuNodeId?: string }
+  | { type: 'toggleMenu'; menuNodeId?: string }
   | { type: 'showHtml'; html: string }
   | { type: 'runJs'; code: string }
   // Screen targets are rename-safe (AGL-339): the tenant resolves the
@@ -277,6 +284,9 @@ export const CLIENT_ACTION_STEP_TYPES: ReadonlySet<HostActionStepType> =
     'openDrawer',
     'closeDrawer',
     'toggleDrawer',
+    'openMenu',
+    'closeMenu',
+    'toggleMenu',
     'showHtml',
     'runJs',
     'redirect',
@@ -322,6 +332,9 @@ export const HOST_ACTION_STEP_LABELS: Record<HostActionStepType, string> = {
   openDrawer: 'Open a drawer',
   closeDrawer: 'Close a drawer',
   toggleDrawer: 'Open/close a drawer',
+  openMenu: 'Open a menu',
+  closeMenu: 'Close a menu',
+  toggleMenu: 'Open/close a menu',
   showHtml: 'Show custom HTML',
   runJs: 'Run custom JS (Business)',
   redirect: 'Redirect the visitor',
@@ -447,7 +460,8 @@ export function validateHostAction(action: HostAction): string | null {
       if (!step.className?.trim()) return `${label}: enter the class name`
     }
     // Element show/hide steps (AGL-562) always target a selector; drawer
-    // commands may omit the target (the page's first drawer answers).
+    // (AGL-562) and menu (AGL-568) commands may omit the target (the
+    // page's first drawer/menu answers).
     if (
       (step.type === 'showElement' ||
         step.type === 'hideElement' ||

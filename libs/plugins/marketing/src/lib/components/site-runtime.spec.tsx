@@ -193,6 +193,51 @@ describe('automations engine — nav interactions (AGL-562)', () => {
     ])
   })
 
+  it('dispatches menu commands over their own event bus (AGL-568)', () => {
+    const seen: Aglyn.MenuCommandDetail[] = []
+    const unsubscribe = Aglyn.subscribeMenuCommands((d) => seen.push(d))
+    runEngine([
+      {
+        event: 'elementClick',
+        selector: '#menu-button',
+        everyTime: true,
+        steps: [
+          { type: 'openMenu', menuNodeId: 'menu-9' },
+          { type: 'toggleMenu' },
+          { type: 'closeMenu', menuNodeId: 'menu-9' },
+        ],
+      },
+    ])
+    fireEvent.click(button)
+    unsubscribe()
+    // Click-triggered commands carry no hover flag.
+    expect(seen).toEqual([
+      { command: 'open', nodeId: 'menu-9' },
+      { command: 'toggle' },
+      { command: 'close', nodeId: 'menu-9' },
+    ])
+  })
+
+  it('stamps the hover flag on hover-enter-triggered menu opens', () => {
+    const seen: Aglyn.MenuCommandDetail[] = []
+    const unsubscribe = Aglyn.subscribeMenuCommands((d) => seen.push(d))
+    runEngine([
+      {
+        event: 'elementHoverEnter',
+        selector: '#menu-button',
+        everyTime: true,
+        steps: [{ type: 'openMenu', menuNodeId: 'menu-9' }],
+      },
+    ])
+    fireEvent.mouseOver(button, { relatedTarget: document.body })
+    unsubscribe()
+    // The hover flag is what makes the menu close itself on pointer
+    // leave of the trigger + panel surface.
+    expect(seen).toEqual([
+      { command: 'open', nodeId: 'menu-9', hover: true },
+    ])
+  })
+
   it('injects the hidden-class rule when running the element steps', () => {
     document.getElementById(Aglyn.ELEMENT_HIDDEN_STYLE_ID)?.remove()
     runEngine([

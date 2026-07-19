@@ -140,6 +140,18 @@ describe('nav-menu interactions surface (AGL-562)', () => {
     }
   })
 
+  it('accepts menu commands with and without an explicit target (AGL-568)', () => {
+    for (const type of ['openMenu', 'closeMenu', 'toggleMenu'] as const) {
+      expect(validateHostAction({ ...base, steps: [{ type }] })).toBeNull()
+      expect(
+        validateHostAction({
+          ...base,
+          steps: [{ type, menuNodeId: 'node-9' }],
+        }),
+      ).toBeNull()
+    }
+  })
+
   it('classifies the new UI steps as client steps with labels', () => {
     for (const type of [
       'showElement',
@@ -148,6 +160,9 @@ describe('nav-menu interactions surface (AGL-562)', () => {
       'openDrawer',
       'closeDrawer',
       'toggleDrawer',
+      'openMenu',
+      'closeMenu',
+      'toggleMenu',
     ] as const) {
       expect(CLIENT_ACTION_STEP_TYPES.has(type)).toBe(true)
       expect(HOST_ACTION_STEP_LABELS[type]).toBeTruthy()

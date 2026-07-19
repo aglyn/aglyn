@@ -21,11 +21,14 @@
 import {
   applyElementVisibility,
   dispatchDrawerCommand,
+  dispatchMenuCommand,
   DRAWER_COMMAND_EVENT,
   ELEMENT_HIDDEN_CLASS,
   ELEMENT_HIDDEN_STYLE_ID,
   ensureElementHiddenStyle,
+  MENU_COMMAND_EVENT,
   subscribeDrawerCommands,
+  subscribeMenuCommands,
   VISIBILITY_BAND_MEDIA,
   VISIBILITY_BANDS,
 } from './element-ui'
@@ -109,6 +112,56 @@ describe('drawer command bus (AGL-562)', () => {
     const seen: unknown[] = []
     const unsubscribe = subscribeDrawerCommands((detail) => seen.push(detail))
     window.dispatchEvent(new CustomEvent(DRAWER_COMMAND_EVENT, {}))
+    unsubscribe()
+    expect(seen).toHaveLength(0)
+  })
+})
+
+describe('menu command bus (AGL-568)', () => {
+  it('delivers commands with an optional node id target', () => {
+    const seen: Array<{ command: string; nodeId?: string }> = []
+    const unsubscribe = subscribeMenuCommands((detail) => seen.push(detail))
+    dispatchMenuCommand('open', 'menu-1')
+    dispatchMenuCommand('toggle')
+    dispatchMenuCommand('close', 'menu-2')
+    unsubscribe()
+    dispatchMenuCommand('open', 'menu-3')
+    expect(seen).toEqual([
+      { command: 'open', nodeId: 'menu-1' },
+      { command: 'toggle' },
+      { command: 'close', nodeId: 'menu-2' },
+    ])
+  })
+
+  it('carries the hover provenance flag only when set', () => {
+    const seen: Array<Record<string, unknown>> = []
+    const unsubscribe = subscribeMenuCommands((detail) =>
+      seen.push(detail as never),
+    )
+    dispatchMenuCommand('open', 'menu-1', { hover: true })
+    dispatchMenuCommand('open', 'menu-1', { hover: false })
+    dispatchMenuCommand('toggle', undefined, { hover: true })
+    unsubscribe()
+    expect(seen).toEqual([
+      { command: 'open', nodeId: 'menu-1', hover: true },
+      { command: 'open', nodeId: 'menu-1' },
+      { command: 'toggle', hover: true },
+    ])
+  })
+
+  it('stays off the drawer bus (separate event names)', () => {
+    const drawerSeen: unknown[] = []
+    const unsubscribe = subscribeDrawerCommands((d) => drawerSeen.push(d))
+    dispatchMenuCommand('open', 'menu-1')
+    unsubscribe()
+    expect(drawerSeen).toHaveLength(0)
+    expect(MENU_COMMAND_EVENT).not.toBe(DRAWER_COMMAND_EVENT)
+  })
+
+  it('ignores malformed events', () => {
+    const seen: unknown[] = []
+    const unsubscribe = subscribeMenuCommands((detail) => seen.push(detail))
+    window.dispatchEvent(new CustomEvent(MENU_COMMAND_EVENT, {}))
     unsubscribe()
     expect(seen).toHaveLength(0)
   })

@@ -55,10 +55,14 @@ export interface InteractionBuilderDialogProps {
 type StepDraft = Record<string, any> & { type: string }
 
 const STEP_TYPES: Array<{ value: string; label: string }> = [
-  // Element & drawer choreography (AGL-562) — the nav-menu headliners.
+  // Element, menu & drawer choreography (AGL-562; menu commands
+  // AGL-568) — the nav-menu headliners.
   { value: 'toggleElement', label: 'Show/hide an element' },
   { value: 'showElement', label: 'Show an element' },
   { value: 'hideElement', label: 'Hide an element' },
+  { value: 'toggleMenu', label: 'Open/close a menu' },
+  { value: 'openMenu', label: 'Open a menu' },
+  { value: 'closeMenu', label: 'Close a menu' },
   { value: 'toggleDrawer', label: 'Open/close a drawer' },
   { value: 'openDrawer', label: 'Open a drawer' },
   { value: 'closeDrawer', label: 'Close a drawer' },
@@ -195,6 +199,16 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       ),
     [elementTargetOptions],
   )
+  // Menu targets (AGL-568): Dropdown/Mega Menu elements on this canvas.
+  const menuTargetOptions = useMemo(
+    () =>
+      elementTargetOptions.filter(
+        (option) =>
+          option.componentId === 'muiNavMenu' ||
+          option.componentId === 'muiMegaMenu',
+      ),
+    [elementTargetOptions],
+  )
 
   const problem = Aglyn.validateHostAction(candidate as any)
 
@@ -241,10 +255,13 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
       } else if (
         step.type === 'openDrawer' ||
         step.type === 'closeDrawer' ||
-        step.type === 'toggleDrawer'
+        step.type === 'toggleDrawer' ||
+        step.type === 'openMenu' ||
+        step.type === 'closeMenu' ||
+        step.type === 'toggleMenu'
       ) {
-        // Canvas drawers render inline (not command-driven) while
-        // editing, so the command only shows on the live site.
+        // Canvas drawers and menus render inline (not command-driven)
+        // while editing, so the command only shows on the live site.
         enqueueSnackbar(
           `"${STEP_TYPES.find((entry) => entry.value === step.type)?.label}" runs on the live site`,
           { variant: 'info', persist: false },
@@ -354,9 +371,10 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               <TextField
                 label="Action"
                 value={step.type}
-                onChange={(inputEvent) =>
+                onChange={(inputEvent) => {
+                  const nextType = inputEvent.target.value
                   updateStep(index, {
-                    type: inputEvent.target.value,
+                    type: nextType,
                     // Reset type-specific fields, keep the selector.
                     className: undefined,
                     message: undefined,
@@ -365,9 +383,21 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     url: undefined,
                     eventName: undefined,
                     drawerNodeId: undefined,
+                    // Menu commands (AGL-568) default to this element
+                    // when it is itself a menu — "Open menu (this
+                    // element)" with zero extra picking.
+                    menuNodeId:
+                      ['openMenu', 'closeMenu', 'toggleMenu'].includes(
+                        nextType,
+                      ) &&
+                      menuTargetOptions.some(
+                        (option) => option.nodeId === state.nodeId,
+                      )
+                        ? state.nodeId
+                        : undefined,
                     selector: step.selector ?? selector,
                   })
-                }
+                }}
                 size="small"
                 select
                 sx={{ minWidth: 220 }}
@@ -436,6 +466,39 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                   {drawerTargetOptions.map((option) => (
                     <MenuItem key={option.nodeId} value={option.nodeId}>
                       {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : null}
+              {['openMenu', 'closeMenu', 'toggleMenu'].includes(
+                step.type,
+              ) ? (
+                // Menu target (AGL-568): Dropdown/Mega Menu elements on
+                // this canvas; empty addresses the page's first menu.
+                <TextField
+                  label="Menu"
+                  value={step.menuNodeId ?? ''}
+                  onChange={(inputEvent) =>
+                    updateStep(index, {
+                      menuNodeId: inputEvent.target.value || undefined,
+                    })
+                  }
+                  size="small"
+                  select
+                  sx={{ flex: 1 }}
+                  helperText={
+                    menuTargetOptions.length
+                      ? undefined
+                      : 'No menu on this screen yet — add one from the ' +
+                        'Navigation group'
+                  }
+                >
+                  <MenuItem value="">{'First menu on the page'}</MenuItem>
+                  {menuTargetOptions.map((option) => (
+                    <MenuItem key={option.nodeId} value={option.nodeId}>
+                      {option.nodeId === state.nodeId
+                        ? `This element · ${option.label}`
+                        : option.label}
                     </MenuItem>
                   ))}
                 </TextField>

@@ -29,18 +29,20 @@ import {
   type KeyboardEvent,
   type ReactNode,
   useCallback,
+  useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
 import type { SxProps } from '@mui/material/styles'
 import { BUNDLE_ID } from '../constants/bundle-common'
 import { generatePresetId } from '../utils/generate-preset-id'
+import { parseLeafNodeId } from './drawer'
 
 // Component ids are persisted in screen documents; never rename.
 export const NAV_MENU_ID: Aglyn.ComponentId = 'muiNavMenu'
 export const MEGA_MENU_ID: Aglyn.ComponentId = 'muiMegaMenu'
 
-export type NavMenuTrigger = 'click' | 'hover'
 export type MegaMenuPanelWidth = 'auto' | 'wide' | 'full'
 
 /** Hover close grace period so the pointer can cross into the panel. */
@@ -49,19 +51,22 @@ const HOVER_CLOSE_DELAY_MS = 150
 export interface NavMenuProps {
   /** Visible trigger text of the nav item. */
   label?: string
-  /** How the dropdown opens (AGL-562); nav menus default to click. */
-  trigger?: NavMenuTrigger
   children?: ReactNode
 }
 
 export interface MegaMenuProps {
   label?: string
-  /** Mega menus follow the SaaS convention and default to hover. */
-  trigger?: NavMenuTrigger
   /** Panel width preset: content-sized, wide (720px), or full-bleed. */
   panelWidth?: MegaMenuPanelWidth
   children?: ReactNode
 }
+
+/**
+ * Mounted menus in mount order (AGL-568). Broadcast commands (no target
+ * node id) are answered by the FIRST registered menu only, mirroring the
+ * drawer bus, so a page with one menu needs no wiring at all.
+ */
+const mountedMenus: string[] = []
 
 /**
  * The panel sx per mega-menu width preset. Wide/full center under the
@@ -90,11 +95,20 @@ export function megaMenuPanelSx(panelWidth: MegaMenuPanelWidth): SxProps {
 }
 
 /**
- * Shared dropdown shell (AGL-562): a trigger button plus an absolutely
- * positioned panel inside a relative wrapper. Keeping the panel inside
- * the wrapper's DOM (no portal) makes hover open/close a single
- * mouseenter/mouseleave pair and keeps SSR hydration trivial — the panel
- * simply isn't rendered until opened, so the server ships a closed menu.
+ * Shared dropdown shell (AGL-562, interactions-driven since AGL-568): a
+ * trigger button plus an absolutely positioned panel inside a relative
+ * wrapper. Keeping the panel inside the wrapper's DOM (no portal) makes
+ * pointer leave of trigger + panel a single mouseleave and keeps SSR
+ * hydration trivial — the panel simply isn't rendered until opened, so
+ * the server ships a closed menu.
+ *
+ * Open/close behavior: clicking the trigger toggles the menu (the
+ * zero-config default), and the interactions system drives it over the
+ * menu command bus (`dispatchMenuCommand`) keyed by node id — e.g. "On
+ * hover → Open menu (this element)". Hover-opened menus close on their
+ * own when the pointer leaves the trigger + panel surface (with a short
+ * grace period); click/command opens stay put until click-away, Escape,
+ * or an explicit close.
  *
  * On editing surfaces (besigner canvas, preview — flagged by
  * ScreenLinkContext.suppressNavigation) the children render expanded
@@ -103,19 +117,27 @@ export function megaMenuPanelSx(panelWidth: MegaMenuPanelWidth): SxProps {
  */
 interface MenuShellProps extends BoxProps {
   label: string
-  trigger: NavMenuTrigger
   editorHint: string
   panelSx: SxProps
 }
 
 const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
-  const { label, trigger, editorHint, panelSx, sx, children, ...rest } = props
+  const { label, editorHint, panelSx, sx, children, ...rest } = props
   // Node styles ride the sx prop the renderer merges; keep them by
   // composing with the shell's own layout sx (stack.ts pattern).
   const nodeSx = Array.isArray(sx) ? sx : sx ? [sx] : []
   const { suppressNavigation } = Aglyn.useScreenLink(undefined)
   const [open, setOpen] = useState(false)
+  // True while the menu is open BECAUSE a hover interaction opened it —
+  // only then does pointer leave close the menu.
+  const hoverOpenRef = useRef(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The renderer stamps the node id on every leaf; commands target it.
+  const nodeId = useMemo(
+    () => parseLeafNodeId((rest as Record<string, unknown>)['data-aglyn']),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [(rest as Record<string, unknown>)['data-aglyn']],
+  )
 
   const cancelClose = useCallback(() => {
     if (closeTimer.current) {
@@ -123,10 +145,46 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
       closeTimer.current = null
     }
   }, [])
+  const closeNow = useCallback(() => {
+    cancelClose()
+    hoverOpenRef.current = false
+    setOpen(false)
+  }, [cancelClose])
   const scheduleClose = useCallback(() => {
     cancelClose()
-    closeTimer.current = setTimeout(() => setOpen(false), HOVER_CLOSE_DELAY_MS)
-  }, [cancelClose])
+    closeTimer.current = setTimeout(closeNow, HOVER_CLOSE_DELAY_MS)
+  }, [cancelClose, closeNow])
+
+  // Menu command bus enrollment (AGL-568): mirrors the drawer exactly —
+  // live surfaces only, keyed by node id, broadcasts answered by the
+  // first mounted menu.
+  useEffect(() => {
+    if (suppressNavigation || !nodeId) return undefined
+    mountedMenus.push(nodeId)
+    const unsubscribe = Aglyn.subscribeMenuCommands((detail) => {
+      const targeted = detail.nodeId
+        ? detail.nodeId === nodeId
+        : mountedMenus[0] === nodeId
+      if (!targeted) return
+      cancelClose()
+      if (detail.command === 'close') {
+        hoverOpenRef.current = false
+        setOpen(false)
+        return
+      }
+      // open/toggle: remember hover provenance so pointer leave closes
+      // hover-opened menus (and never click/command-opened ones).
+      hoverOpenRef.current = Boolean(detail.hover)
+      if (detail.command === 'open') setOpen(true)
+      else setOpen((value) => !value)
+    })
+    return () => {
+      unsubscribe()
+      cancelClose()
+      const index = mountedMenus.indexOf(nodeId)
+      if (index >= 0) mountedMenus.splice(index, 1)
+    }
+  }, [suppressNavigation, nodeId, cancelClose])
 
   if (suppressNavigation) {
     // Editor affordance: trigger + inline, editable panel contents.
@@ -157,84 +215,87 @@ const MenuShell = forwardRef<HTMLDivElement, MenuShellProps>((props, ref) => {
     )
   }
 
-  const hoverHandlers =
-    trigger === 'hover'
-      ? {
-          onMouseEnter: () => {
-            cancelClose()
-            setOpen(true)
-          },
-          onMouseLeave: scheduleClose,
-        }
-      : {}
-
-  const content = (
-    <Box
-      ref={ref}
-      {...rest}
-      {...hoverHandlers}
-      onKeyDown={(event: KeyboardEvent) => {
-        if (event.key === 'Escape') setOpen(false)
-      }}
-      sx={[{ position: 'relative', display: 'inline-flex' }, ...nodeSx]}
-    >
-      <Button
-        color="inherit"
-        aria-haspopup="true"
-        aria-expanded={open || undefined}
-        endIcon={<MdiIcon path={mdiChevronDown.path} />}
-        onClick={
-          trigger === 'hover' ? undefined : () => setOpen((value) => !value)
-        }
+  return (
+    <ClickAwayListener onClickAway={() => open && closeNow()}>
+      <Box
+        ref={ref}
+        {...rest}
+        // Hover-close choreography (AGL-568): the panel renders inside
+        // this wrapper (no portal), so trigger + panel share one
+        // enter/leave pair. Only hover-opened menus follow the pointer
+        // out; enter always cancels a pending close so the pointer can
+        // travel between trigger and panel.
+        onMouseEnter={cancelClose}
+        onMouseLeave={() => {
+          if (hoverOpenRef.current) scheduleClose()
+        }}
+        onKeyDown={(event: KeyboardEvent) => {
+          if (event.key === 'Escape') closeNow()
+        }}
+        sx={[{ position: 'relative', display: 'inline-flex' }, ...nodeSx]}
       >
-        {label}
-      </Button>
-      {open ? (
-        <Paper
-          elevation={4}
-          aria-label={label}
-          sx={[
-            {
-              position: 'absolute',
-              top: '100%',
-              zIndex: (theme) => theme.zIndex.modal,
-              p: 1,
-            },
-            panelSx as never,
-          ]}
+        <Button
+          color="inherit"
+          aria-haspopup="true"
+          aria-expanded={open || undefined}
+          endIcon={<MdiIcon path={mdiChevronDown.path} />}
+          onClick={() => {
+            // Zero-config default: the trigger click-toggles its menu;
+            // a click also "pins" a hover-opened menu.
+            cancelClose()
+            hoverOpenRef.current = false
+            setOpen((value) => !value)
+          }}
         >
-          {children}
-        </Paper>
-      ) : null}
-    </Box>
+          {label}
+        </Button>
+        {open ? (
+          <Paper
+            elevation={4}
+            aria-label={label}
+            sx={[
+              {
+                position: 'absolute',
+                top: '100%',
+                zIndex: (theme) => theme.zIndex.modal,
+                p: 1,
+              },
+              panelSx as never,
+            ]}
+          >
+            {children}
+          </Paper>
+        ) : null}
+      </Box>
+    </ClickAwayListener>
   )
-
-  // Click-away only matters for click-opened menus; hover menus close on
-  // mouseleave. Wrapped unconditionally for that trigger so the tree
-  // shape (and the mounted DOM) stays stable across open/close.
-  if (trigger === 'click') {
-    return (
-      <ClickAwayListener onClickAway={() => open && setOpen(false)}>
-        {content}
-      </ClickAwayListener>
-    )
-  }
-  return content
 })
 MenuShell.displayName = 'AglynMenuShell'
 
 /**
+ * Strips the pre-AGL-568 "Open on" attribute persisted docs may still
+ * carry. Behavior configuration rides the interactions system now; the
+ * stored value is ignored silently — no migrations, no warnings — and
+ * must never leak onto the DOM.
+ */
+function stripLegacyTrigger(rest: Record<string, unknown>): void {
+  delete rest['trigger']
+}
+
+/**
  * Dropdown nav item (AGL-562): a labeled nav button whose children —
- * screen links, buttons, anything — open in a dropdown panel on click or
- * hover. SSR ships the menu closed; no window access happens at render.
+ * screen links, buttons, anything — open in a dropdown panel. Clicking
+ * the trigger toggles it; interactions drive it over the menu command
+ * bus (AGL-568). SSR ships the menu closed; no window access happens at
+ * render.
  */
 const NavMenu = forwardRef<HTMLDivElement, NavMenuProps>((props, ref) => {
-  const { label, trigger, children, ...rest } = props
+  const { label, children, ...rest } = props
+  stripLegacyTrigger(rest as Record<string, unknown>)
   return (
     <MenuShell
       ref={ref}
       label={label || 'Menu'}
-      trigger={trigger === 'hover' ? 'hover' : 'click'}
       editorHint="Dropdown items — shown in a menu on the live site"
       panelSx={{ minWidth: 220, left: 0 }}
       {...rest}
@@ -248,18 +309,20 @@ const NavMenu = forwardRef<HTMLDivElement, NavMenuProps>((props, ref) => {
 NavMenu.displayName = 'AglynNavMenu'
 
 /**
- * Hover mega menu (AGL-562): a SaaS-style wide panel anchored under a
- * nav item with a free-form canvas slot — columns of links, promos,
- * whatever the author drops in.
+ * Mega menu (AGL-562): a SaaS-style wide panel anchored under a nav
+ * item with a free-form canvas slot — columns of links, promos,
+ * whatever the author drops in. Click-toggles like the dropdown; the
+ * SaaS hover-open convention is one interaction away ("On hover → Open
+ * menu", AGL-568) and then closes itself on pointer leave.
  */
 export const MegaMenu = forwardRef<HTMLDivElement, MegaMenuProps>(
   (props, ref) => {
-    const { label, trigger, panelWidth, children, ...rest } = props
+    const { label, panelWidth, children, ...rest } = props
+    stripLegacyTrigger(rest as Record<string, unknown>)
     return (
       <MenuShell
         ref={ref}
         label={label || 'Menu'}
-        trigger={trigger === 'click' ? 'click' : 'hover'}
         editorHint="Mega menu panel — opens under the nav item on the live site"
         panelSx={{ p: 3, ...megaMenuPanelSx(panelWidth || 'auto') } as never}
         {...rest}
@@ -271,33 +334,21 @@ export const MegaMenu = forwardRef<HTMLDivElement, MegaMenuProps>(
 )
 MegaMenu.displayName = 'AglynMegaMenu'
 
-const TRIGGER_OPTIONS = [
-  { value: '', label: 'Default' },
-  { value: 'click', label: 'Click' },
-  { value: 'hover', label: 'Hover' },
-]
-
 export const navMenuSchema: Aglyn.ComponentSchema<NavMenuProps> = {
   $id: NAV_MENU_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Dropdown Menu',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiFormDropdown.path, sx: { color: '#2196f3' } },
+  // Open/close behavior deliberately has NO attribute (AGL-568): click
+  // toggles by default and everything else is authored as an
+  // interaction (e.g. "On hover → Open menu").
   attributes: [
     {
       name: 'label',
       description: 'Text on the nav item that opens the dropdown.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Label',
-    },
-    {
-      name: 'trigger',
-      description:
-        'How the dropdown opens on the live site: on click (default) or ' +
-        'on hover.',
-      component: Aglyn.FieldComponentType.SELECT,
-      label: 'Open on',
-      options: TRIGGER_OPTIONS,
     },
   ],
 }
@@ -308,25 +359,14 @@ export const megaMenuSchema: Aglyn.ComponentSchema<MegaMenuProps> = {
   displayName: 'Mega Menu',
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiViewGridOutline.path, sx: { color: '#2196f3' } },
+  // Open/close behavior deliberately has NO attribute (AGL-568) — see
+  // navMenuSchema.
   attributes: [
     {
       name: 'label',
       description: 'Text on the nav item that opens the panel.',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
       label: 'Label',
-    },
-    {
-      name: 'trigger',
-      description:
-        'How the panel opens on the live site: on hover (default) or on ' +
-        'click.',
-      component: Aglyn.FieldComponentType.SELECT,
-      label: 'Open on',
-      options: [
-        { value: '', label: 'Default' },
-        { value: 'hover', label: 'Hover' },
-        { value: 'click', label: 'Click' },
-      ],
     },
     {
       name: 'panelWidth',
@@ -387,7 +427,9 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Mega Menu',
     pluginId: BUNDLE_ID,
-    description: 'Hover-opened wide panel with columns of links',
+    description:
+      'Wide panel with columns of links; add a hover interaction to ' +
+      'open it on hover',
     category: Aglyn.ComponentCategory.NAVIGATION,
     icon: megaMenuSchema.icon,
     data: {

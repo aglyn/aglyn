@@ -85,15 +85,44 @@ export function applyElementVisibility(
   return elements.length
 }
 
-/* ── Drawer command bus ─────────────────────────────────────────────── */
+/* ── UI command buses (drawer AGL-562, menu AGL-568) ────────────────── */
+
+/**
+ * Shared open/close/toggle transport for popup-like elements. Keeping
+ * the transport at the DOM level lets the marketing automations engine
+ * drive drawers and menus without importing the mui plugin (and vice
+ * versa). Each surface keeps its own event name so the drawer contract
+ * shipped in AGL-562 stays byte-for-byte stable.
+ */
+interface UiCommandDetail {
+  command: 'open' | 'close' | 'toggle'
+  nodeId?: string
+}
+
+function dispatchUiCommand<TDetail extends UiCommandDetail>(
+  eventName: string,
+  detail: TDetail,
+): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent<TDetail>(eventName, { detail }))
+}
+
+function subscribeUiCommands<TDetail extends UiCommandDetail>(
+  eventName: string,
+  handler: (detail: TDetail) => void,
+): () => void {
+  if (typeof window === 'undefined') return () => undefined
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<TDetail>).detail
+    if (detail?.command) handler(detail)
+  }
+  window.addEventListener(eventName, listener)
+  return () => window.removeEventListener(eventName, listener)
+}
 
 export type DrawerCommand = 'open' | 'close' | 'toggle'
 
-/**
- * Window event carrying a drawer command. Keeping the transport at the
- * DOM level lets the marketing automations engine drive drawers without
- * importing the mui plugin (and vice versa).
- */
+/** Window event carrying a drawer command (AGL-562). */
 export const DRAWER_COMMAND_EVENT = 'aglyn:drawer-command'
 
 export interface DrawerCommandDetail {
@@ -107,12 +136,10 @@ export function dispatchDrawerCommand(
   command: DrawerCommand,
   nodeId?: string,
 ): void {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(
-    new CustomEvent<DrawerCommandDetail>(DRAWER_COMMAND_EVENT, {
-      detail: { command, ...(nodeId ? { nodeId } : {}) },
-    }),
-  )
+  dispatchUiCommand<DrawerCommandDetail>(DRAWER_COMMAND_EVENT, {
+    command,
+    ...(nodeId ? { nodeId } : {}),
+  })
 }
 
 /**
@@ -123,13 +150,54 @@ export function dispatchDrawerCommand(
 export function subscribeDrawerCommands(
   handler: (detail: DrawerCommandDetail) => void,
 ): () => void {
-  if (typeof window === 'undefined') return () => undefined
-  const listener = (event: Event) => {
-    const detail = (event as CustomEvent<DrawerCommandDetail>).detail
-    if (detail?.command) handler(detail)
-  }
-  window.addEventListener(DRAWER_COMMAND_EVENT, listener)
-  return () => window.removeEventListener(DRAWER_COMMAND_EVENT, listener)
+  return subscribeUiCommands(DRAWER_COMMAND_EVENT, handler)
+}
+
+export type MenuCommand = 'open' | 'close' | 'toggle'
+
+/**
+ * Window event carrying a nav-menu command (AGL-568): the interactions
+ * system's open/close/toggle steps address Dropdown Menu and Mega Menu
+ * elements over this bus, exactly like drawers — no bespoke "open on"
+ * attribute involved.
+ */
+export const MENU_COMMAND_EVENT = 'aglyn:menu-command'
+
+export interface MenuCommandDetail {
+  command: MenuCommand
+  /** Target menu's canvas node id; absent = the page's first menu. */
+  nodeId?: string
+  /**
+   * Set when the command came from a hover trigger: a menu opened this
+   * way closes itself once the pointer leaves the trigger + panel
+   * surface (standard hover-menu UX), while click/command opens stay
+   * put until an explicit close, click-away, or Escape.
+   */
+  hover?: boolean
+}
+
+/** Dispatches a menu command onto the window event bus. */
+export function dispatchMenuCommand(
+  command: MenuCommand,
+  nodeId?: string,
+  options?: { hover?: boolean },
+): void {
+  dispatchUiCommand<MenuCommandDetail>(MENU_COMMAND_EVENT, {
+    command,
+    ...(nodeId ? { nodeId } : {}),
+    ...(options?.hover ? { hover: true } : {}),
+  })
+}
+
+/**
+ * Subscribes to menu commands; returns the unsubscriber. The handler
+ * receives every command — menu instances filter by their own node id
+ * (or first-registered status for broadcasts).
+ */
+export function subscribeMenuCommands(
+  handler: (detail: MenuCommandDetail) => void,
+): () => void {
+  return subscribeUiCommands(MENU_COMMAND_EVENT, handler)
 }
 
 /* ── Responsive visibility bands (AGL-562) ──────────────────────────── */

@@ -23,6 +23,12 @@ one dialog without leaving the besigner:
     element from a list; no selectors or classes needed. Add the
     `aglyn-hidden` class to a target to start it hidden on the live
     site.
+  - **Open / close / open-close a menu** — drives a
+    [Dropdown or Mega Menu element](../menus-and-navigation/overview.md).
+    The target defaults to the element itself when it is a menu; leave it
+    empty to address the page's first menu. A menu opened by *When
+    hovered* closes itself when the pointer leaves the nav item and its
+    panel.
   - **Open / close / open-close a drawer** — drives a
     [Drawer element](../menus-and-navigation/overview.md); leave the
     target empty to address the page's first drawer.
@@ -44,6 +50,10 @@ Interactions list with edit (✎), enable/disable, and remove controls.
 - **Hamburger menu**: on any button, *When clicked → Open/close a
   drawer*. (The [Menu Button element](../menus-and-navigation/overview.md)
   does this without any interaction at all.)
+- **Hover menu**: on a Dropdown or Mega Menu element, *When hovered →
+  Open a menu* at frequency *every time*. Clicking already toggles every
+  menu with zero configuration; this adds the hover-open, and the menu
+  closes itself when the pointer leaves.
 - **Hover reveal**: *When hovered → Show an element* plus *When hover
   ends → Hide an element*, both at frequency *every time*.
 - **Scroll reveal**: on a section, *When scrolled into view → Append class

@@ -116,6 +116,11 @@ function defaultStep(type: HostActionStepType): HostActionStep {
     case 'closeDrawer':
     case 'toggleDrawer':
       return { type }
+    // Menu commands (AGL-568) mirror the drawer's optional target.
+    case 'openMenu':
+    case 'closeMenu':
+    case 'toggleMenu':
+      return { type }
     case 'showHtml':
       return { type, html: '' }
     case 'runJs':
@@ -1261,6 +1266,33 @@ export function HostActionsCard(props: {
                           ? {
                               ...s,
                               drawerNodeId:
+                                event.target.value || undefined,
+                            }
+                          : s,
+                      ),
+                    }))
+                  }
+                  size="small"
+                  sx={{ flex: 1 }}
+                />
+              ) : step.type === 'openMenu' ||
+                step.type === 'closeMenu' ||
+                step.type === 'toggleMenu' ? (
+                // Menu commands (AGL-568). The besigner's builder offers
+                // a menu picker; here the raw node id is the escape
+                // hatch, like the drawer field above.
+                <TextField
+                  label="Menu node id (optional)"
+                  placeholder="Empty = the page's first menu"
+                  value={(step as any).menuNodeId ?? ''}
+                  onChange={(event) =>
+                    patch((previous) => ({
+                      ...previous,
+                      steps: previous.steps.map((s, index2) =>
+                        index2 === index
+                          ? {
+                              ...s,
+                              menuNodeId:
                                 event.target.value || undefined,
                             }
                           : s,
