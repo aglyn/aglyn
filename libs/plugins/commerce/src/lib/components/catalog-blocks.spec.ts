@@ -46,6 +46,7 @@ describe('commerce catalog blocks', () => {
       'showCategories',
       'showSort',
       'showTypeFilter',
+      'showPriceFilter',
       'pageSize',
     ]) {
       expect(attributeNames).toContain(expected)

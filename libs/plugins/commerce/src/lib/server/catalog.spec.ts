@@ -241,6 +241,61 @@ describe('catalog handler params (AGL-561)', () => {
       { id: 'cat-apparel', name: 'Apparel', slug: 'apparel' },
     ])
   })
+
+  // Price-range filter (AGL-564). Displayed prices in cents:
+  // Blue Hat 3000, Red Scarf 2000, Ebook 500.
+  it('filters by minPriceCents/maxPriceCents inclusively', async () => {
+    expect(names(await run({ minPriceCents: '1000' }))).toEqual([
+      'Blue Hat',
+      'Red Scarf',
+    ])
+    expect(names(await run({ maxPriceCents: '2000' }))).toEqual([
+      'Ebook',
+      'Red Scarf',
+    ])
+    expect(
+      names(await run({ minPriceCents: '1500', maxPriceCents: '2500' })),
+    ).toEqual(['Red Scarf'])
+    // Invalid or negative values are ignored, matching type/sort.
+    expect(
+      names(await run({ minPriceCents: 'abc', maxPriceCents: '-5' })),
+    ).toHaveLength(3)
+  })
+
+  it('filters multi-price products on their displayed (lowest) price', async () => {
+    mockDb.products.push(
+      product('Variant Pack', {
+        variants: [
+          { id: 'a', priceUsd: 40, inventory: null },
+          { id: 'b', priceUsd: 90, inventory: null },
+        ],
+      }),
+    )
+    // Displayed as "From $40" — in range even though one variant is $90.
+    expect(names(await run({ maxPriceCents: '4000' }))).toContain(
+      'Variant Pack',
+    )
+    expect(names(await run({ minPriceCents: '5000' }))).toEqual([])
+  })
+
+  it('reports price bounds facets unaffected by the price filter', async () => {
+    expect((await run({})).body.priceBounds).toBeUndefined()
+    const faceted = await run({ facets: '1' })
+    expect(faceted.body.priceBounds).toEqual({ minCents: 500, maxCents: 3000 })
+    // Bounds ignore the price filter itself, so a slider stays anchored…
+    const narrowed = await run({ facets: '1', minPriceCents: '1000' })
+    expect(narrowed.body.priceBounds).toEqual({
+      minCents: 500,
+      maxCents: 3000,
+    })
+    expect(names(narrowed)).toEqual(['Blue Hat', 'Red Scarf'])
+    // …but respect every other filter.
+    const typed = await run({ facets: '1', type: 'digital' })
+    expect(typed.body.priceBounds).toEqual({ minCents: 500, maxCents: 500 })
+    // An empty result set has no bounds.
+    const empty = await run({ facets: '1', q: 'zzz' })
+    expect(empty.body.priceBounds).toBeUndefined()
+  })
 })
 
 describe('matchesCatalogQuery', () => {

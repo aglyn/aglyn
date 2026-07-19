@@ -27,6 +27,7 @@ import Chip from '@mui/material/Chip'
 import InputAdornment from '@mui/material/InputAdornment'
 import MenuItem from '@mui/material/MenuItem'
 import Skeleton from '@mui/material/Skeleton'
+import Slider from '@mui/material/Slider'
 import SvgIcon from '@mui/material/SvgIcon'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
@@ -55,6 +56,8 @@ export interface ProductGridProps {
   showSort?: boolean
   /** Physical / digital / services filter chips (AGL-561). */
   showTypeFilter?: boolean
+  /** Price range slider bounded by the catalog's prices (AGL-564). */
+  showPriceFilter?: boolean
   /** Products per page; shows a Load more button while more remain. */
   pageSize?: number
   /** Category id when source = category (rename-safe, AGL-343). */
@@ -89,6 +92,12 @@ interface CatalogCategory {
   slug: string
 }
 
+/** Price facet from the catalog handler, in cents (AGL-564). */
+interface CatalogPriceBounds {
+  minCents: number
+  maxCents: number
+}
+
 const SAMPLE_ITEMS: CatalogItem[] = [
   { id: 's1', name: 'Sample product', slug: '#', priceUsd: 29, maxPriceUsd: 29, soldOut: false },
   { id: 's2', name: 'Another product', slug: '#', priceUsd: 49, maxPriceUsd: 59, compareAtPriceUsd: 79, soldOut: false },
@@ -100,6 +109,12 @@ const SAMPLE_CATEGORIES: CatalogCategory[] = [
   { id: 'sc1', name: 'Apparel', slug: 'apparel' },
   { id: 'sc2', name: 'Accessories', slug: 'accessories' },
 ]
+
+/** Inert slider bounds on the canvas, matching the sample cards. */
+const SAMPLE_PRICE_BOUNDS: CatalogPriceBounds = {
+  minCents: 1200,
+  maxCents: 4900,
+}
 
 const TYPE_OPTIONS = [
   { value: 'physical', label: 'Physical' },
@@ -154,6 +169,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       showCategories,
       showSort,
       showTypeFilter,
+      showPriceFilter,
       pageSize,
       ...rest
     } = props
@@ -170,6 +186,15 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const [activeCategoryId, setActiveCategoryId] = useState('')
     const [activeType, setActiveType] = useState('')
     const [categories, setCategories] = useState<CatalogCategory[]>([])
+    // Price filter (AGL-564): the slider drags into `priceInput` (whole
+    // dollars) and debounces into `priceFilter`, which drives the query;
+    // null = untouched (no price params sent). Bounds come from the
+    // handler's price facets.
+    const [priceBounds, setPriceBounds] = useState<CatalogPriceBounds | null>(
+      null,
+    )
+    const [priceInput, setPriceInput] = useState<number[] | null>(null)
+    const [priceFilter, setPriceFilter] = useState<number[] | null>(null)
     const [nextOffset, setNextOffset] = useState<number | null>(null)
     const [loadingMore, setLoadingMore] = useState(false)
     const fetchSeq = useRef(0)
@@ -186,6 +211,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       const timer = setTimeout(() => setQuery(searchInput.trim()), 300)
       return () => clearTimeout(timer)
     }, [searchInput])
+
+    // Debounce slider drags the same way (AGL-564): one fetch per
+    // settled range, not one per pixel of thumb movement.
+    useEffect(() => {
+      const timer = setTimeout(() => setPriceFilter(priceInput), 300)
+      return () => clearTimeout(timer)
+    }, [priceInput])
 
     const loadPage = useCallback(
       async (offset: number): Promise<void> => {
@@ -207,11 +239,18 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         if (source === 'tag' && tag) params.set('tag', tag)
         if (query) params.set('q', query)
         if (activeType) params.set('type', activeType)
+        // Slider dollars → API cents (AGL-564).
+        if (priceFilter) {
+          params.set('minPriceCents', String(priceFilter[0] * 100))
+          params.set('maxPriceCents', String(priceFilter[1] * 100))
+        }
         if (sort) params.set('sort', sort)
         const limit = pageLimit || maxItems
         if (limit) params.set('limit', String(limit))
         if (offset) params.set('offset', String(offset))
-        if (showCategories && offset === 0) params.set('facets', '1')
+        if ((showCategories || showPriceFilter) && offset === 0) {
+          params.set('facets', '1')
+        }
         try {
           const response = await fetch(
             `/api/commerce/catalog?${params.toString()}`,
@@ -227,6 +266,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
           )
           if (Array.isArray(payload?.categories)) {
             setCategories(payload.categories)
+          }
+          const bounds = payload?.priceBounds
+          if (
+            typeof bounds?.minCents === 'number' &&
+            typeof bounds?.maxCents === 'number'
+          ) {
+            setPriceBounds(bounds)
           }
         } catch {
           if (seq !== fetchSeq.current) return
@@ -246,9 +292,11 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         query,
         activeCategoryId,
         activeType,
+        priceFilter,
         pageLimit,
         pinnedCategoryId,
         showCategories,
+        showPriceFilter,
       ],
     )
 
@@ -314,8 +362,15 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const selectedCategoryId =
       activeCategoryId === '*' ? '' : activeCategoryId || pinnedCategoryId
     const hasCatalogControls = Boolean(
-      showSearch || showCategories || showSort || showTypeFilter,
+      showSearch || showCategories || showSort || showTypeFilter ||
+        showPriceFilter,
     )
+    // Price slider bounds (AGL-564), widened to whole dollars so both
+    // ends stay reachable; sample bounds keep the canvas designable.
+    const sliderBounds = hostId ? priceBounds : SAMPLE_PRICE_BOUNDS
+    const sliderMin = sliderBounds ? Math.floor(sliderBounds.minCents / 100) : 0
+    const sliderMax = sliderBounds ? Math.ceil(sliderBounds.maxCents / 100) : 0
+    const showSlider = Boolean(showPriceFilter && sliderMin < sliderMax)
     const controls = hasCatalogControls ? (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
         {showSearch ? (
@@ -428,6 +483,49 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
             ) : null}
           </Box>
         ) : null}
+        {showSlider ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              maxWidth: 360,
+              px: 1,
+            }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              {`$${sliderMin}`}
+            </Typography>
+            <Slider
+              size="small"
+              value={priceInput ?? [sliderMin, sliderMax]}
+              min={sliderMin}
+              max={sliderMax}
+              step={1}
+              disableSwap
+              disabled={!hostId}
+              onChange={(_event, value) =>
+                setPriceInput(Array.isArray(value) ? value : [value, value])
+              }
+              valueLabelDisplay="auto"
+              valueLabelFormat={(value) => `$${value}`}
+              getAriaLabel={(index) =>
+                index === 0 ? 'Minimum price' : 'Maximum price'
+              }
+            />
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              {`$${sliderMax}`}
+            </Typography>
+          </Box>
+        ) : null}
       </Box>
     ) : null
 
@@ -445,7 +543,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const emptyState = (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {query || activeType || selectedCategoryId
+          {query || activeType || selectedCategoryId || priceFilter
             ? 'No products match — try clearing a filter.'
             : emptyText || 'No products here yet — check back soon.'}
         </Typography>
@@ -702,6 +800,13 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       name: 'showTypeFilter',
       label: 'Type filter',
       description: 'Physical / digital / services chips.',
+      component: Aglyn.FieldComponentType.CHECKBOX,
+    },
+    {
+      name: 'showPriceFilter',
+      label: 'Price filter',
+      description:
+        'Price range slider between your lowest and highest product prices.',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
     {

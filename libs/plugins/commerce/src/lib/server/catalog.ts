@@ -40,6 +40,32 @@ export interface PublicCatalogCategory {
   slug: string
 }
 
+/** Price facet surfaced to grids to bound a range slider (AGL-564). */
+export interface PublicCatalogPriceBounds {
+  minCents: number
+  maxCents: number
+}
+
+/**
+ * Displayed price in cents (AGL-564): the low end of the variant range —
+ * the number grid cards render (`$X` / `From $X`) — so price filtering
+ * matches what visitors see.
+ */
+export function displayedPriceCents(
+  product: Pick<CommerceModel.HostProduct, 'variants'>,
+): number {
+  return Math.round(CommerceModel.productPriceRange(product)[0] * 100)
+}
+
+/** Non-negative integer cents from a query param; undefined otherwise. */
+function parsePriceCents(value: unknown): number | undefined {
+  const raw = String(value ?? '').trim()
+  if (!raw) return undefined
+  const cents = Number(raw)
+  if (!Number.isFinite(cents) || cents < 0) return undefined
+  return Math.round(cents)
+}
+
 /**
  * Case-insensitive catalog search (AGL-561): matches the product name,
  * description, or any tag. An empty/blank query matches everything.
@@ -63,7 +89,9 @@ export function matchesCatalogQuery(
  * capped at 100 items per request. Storefront catalog UX (AGL-561)
  * adds text search (`q`), a product-type filter (`type`), offset
  * paging (`offset` + `nextOffset` in the response, for Load more), and
- * `facets=1` to include the host's categories for filter chips.
+ * `facets=1` to include the host's categories for filter chips. The
+ * price-range filter (AGL-564) adds `minPriceCents`/`maxPriceCents`
+ * bounds on the displayed price, plus `priceBounds` in the facets.
  * Read-only public data; prices here are display-only (charges always
  * come from the docs server-side).
  */
@@ -87,6 +115,9 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
     .map((id) => id.trim())
     .filter(Boolean)
     .slice(0, 100)
+  // Price-range filter (AGL-564): integer cents on the displayed price.
+  const minPriceCents = parsePriceCents(req.query.minPriceCents)
+  const maxPriceCents = parsePriceCents(req.query.maxPriceCents)
   const sort = String(req.query.sort ?? 'name')
   const max = Math.min(100, Math.max(1, Number(req.query.limit ?? 24)))
   const offset = Math.max(0, Math.round(Number(req.query.offset ?? 0)) || 0)
@@ -177,6 +208,27 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
         .filter((product) => order.has(product.$id))
         .sort((a, b) => (order.get(a.$id) ?? 0) - (order.get(b.$id) ?? 0))
     }
+    // Price facets + filter (AGL-564): bounds are computed before the
+    // price filter (with everything else applied) so the grid's slider
+    // stays anchored while the visitor narrows it. Both use the
+    // displayed price — the low end of the variant range grid cards
+    // show — so filtering matches what visitors see.
+    const priceBounds: PublicCatalogPriceBounds | undefined =
+      wantFacets && products.length
+        ? {
+            minCents: Math.min(...products.map(displayedPriceCents)),
+            maxCents: Math.max(...products.map(displayedPriceCents)),
+          }
+        : undefined
+    if (minPriceCents != null || maxPriceCents != null) {
+      products = products.filter((product) => {
+        const cents = displayedPriceCents(product)
+        return (
+          (minPriceCents == null || cents >= minPriceCents) &&
+          (maxPriceCents == null || cents <= maxPriceCents)
+        )
+      })
+    }
     if (sort === 'price-asc' || sort === 'price-desc') {
       products.sort((a, b) => {
         const [minA] = CommerceModel.productPriceRange(a)
@@ -247,6 +299,7 @@ export const catalogHandler: PluginApiHandler = async (req, res) => {
       items,
       ...(nextOffset != null ? { nextOffset } : {}),
       ...(categories ? { categories } : {}),
+      ...(priceBounds ? { priceBounds } : {}),
     })
   } catch (error) {
     console.error(error)

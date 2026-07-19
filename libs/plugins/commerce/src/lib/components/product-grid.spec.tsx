@@ -41,6 +41,7 @@ function payloadFor(url: string) {
     items: [item('First product'), item('Second product')],
     nextOffset: 2,
     categories: [{ id: 'c1', name: 'Apparel', slug: 'apparel' }],
+    priceBounds: { minCents: 1200, maxCents: 4900 },
   }
 }
 
@@ -97,6 +98,22 @@ describe('product grid catalog controls', () => {
     await waitFor(() => expect(lastUrl()).not.toContain('categoryId'))
     fireEvent.click(screen.getByText('Digital'))
     await waitFor(() => expect(lastUrl()).toContain('type=digital'))
+  })
+
+  it('drives debounced minPriceCents/maxPriceCents from the price slider', async () => {
+    render(<ProductGrid showPriceFilter />)
+    await screen.findByText('First product')
+    // The price facets ride the same facets=1 request as categories.
+    expect(lastUrl()).toContain('facets=1')
+    const initialCalls = fetchMock.mock.calls.length
+    // Bounds 1200–4900 cents widen to whole dollars: $12–$49.
+    const minThumb = await screen.findByLabelText('Minimum price')
+    fireEvent.change(minThumb, { target: { value: '15' } })
+    fireEvent.change(minThumb, { target: { value: '20' } })
+    await waitFor(() => expect(lastUrl()).toContain('minPriceCents=2000'))
+    expect(lastUrl()).toContain('maxPriceCents=4900')
+    // One debounced request for the two drags, like search keystrokes.
+    expect(fetchMock.mock.calls.length).toBe(initialCalls + 1)
   })
 
   it('passes the authored sort through to the catalog API', async () => {

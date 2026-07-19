@@ -104,6 +104,10 @@ strip on the home page and a full shop page are the same block:
   right-aligned above the grid.
 - **Type filter** — physical / digital / services chips, useful for mixed
   catalogs.
+- **Price filter** — a two-thumb price range slider, automatically bounded
+  by the lowest and highest prices among the products currently showing
+  (variant-priced products count by their "From" price). Visitors drag
+  either end to narrow the range.
 - **Page size** — products per page with a **Load more** button; leave blank
   to load once (**Max items** still caps the grid either way).
 
