@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { EntityPickerContext, type EntityOption } from '@aglyn/aglyn'
+import {
+  EntityPickerContext,
+  type EntityOption,
+  effectiveDatasetModel,
+} from '@aglyn/aglyn'
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -89,7 +93,27 @@ export function EntityPickerProvider(props: EntityPickerProviderProps) {
       products: toOptions(productDocs),
       collections: toOptions(collectionDocs),
       categories: toOptions(categoryDocs),
-      datasets: toOptions(datasetDocs),
+      // Console-created datasets store the human name as `displayName`
+      // (AGL-536); `name` covers pre-migration docs.
+      datasets: toOptions(datasetDocs, 'displayName'),
+      // Per-dataset model fields (AGL-556) for "Maps to schema field"
+      // pickers: stable fieldId + current display name, in model order.
+      datasetFields: Object.fromEntries(
+        (datasetDocs ?? [])
+          .filter((dataset) => !dataset.deletedAt)
+          .map((dataset) => {
+            const model = effectiveDatasetModel(dataset)
+            return [
+              dataset.$id,
+              model.order
+                .filter((fieldId) => model.fields[fieldId])
+                .map((fieldId) => ({
+                  id: fieldId,
+                  label: model.fields[fieldId].name || fieldId,
+                })),
+            ]
+          }),
+      ),
     }),
     [productDocs, collectionDocs, categoryDocs, datasetDocs],
   )

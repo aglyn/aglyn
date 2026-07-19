@@ -21,16 +21,37 @@ A dataset field has two names, and the distinction matters everywhere:
   headers and record editors show. Rename it freely.
 - The **field id** is a slug generated **once** from the display name when the
   field is created (`Visit frequency` → `visitFrequency`). It never changes
-  afterwards. Records store values keyed by field id, and it's the key you use
-  in `{{item.fieldId}}` bindings and form **Field name** properties.
+  afterwards. Records store values keyed by field id — it's the key you use in
+  `{{item.fieldId}}` bindings and what a form field's **Maps to schema field**
+  picker stores.
 
 The schema dialog shows both — each field row reads `Display name · fieldId`.
 The dataset itself likewise has a **Singular name** and a **Plural name**; the
-plural is the dataset's display name, which is what forms'
+plural is the dataset's display name — the label its entry shows in
 "[Write to dataset](build-and-publish-a-survey.md#5-point-the-form-at-the-dataset)"
-matches on.
+and repeatable pickers (which store the dataset's id underneath, so renames
+never break the bindings).
 
-![The schema dialog's field editor with Display name, Type, Required, Description, and Default value inputs](/img/guides/datasets-schema-field-editor.png)
+![The schema dialog's field editor with Display name, Description, Type, Required, and Default value inputs](/img/guides/datasets-schema-field-editor.png)
+
+## Naming & describing fields
+
+Open the schema dialog and **Edit** a field to change how it presents:
+
+- **Display name** — rename it freely, any time. The field id underneath never
+  changes, so `{{item.fieldId}}` bindings, form field mappings, and stored
+  records are all unaffected by a rename.
+- **Description** — a free-form note on what the field is for. When set, it
+  follows the field around the console:
+  - the schema dialog's field list shows it under the `Display name · fieldId`
+    line,
+  - the records table shows it as a tooltip on the column header,
+  - the record editor shows it as the input's helper text (a validation error
+    takes its place while present).
+
+Both are trimmed on save, and a blank description is dropped rather than
+stored. Descriptions are console-facing documentation only — they never render
+on the published site.
 
 ## The typed model
 
@@ -138,7 +159,7 @@ design a single template. Up to 100 records render per repeatable.
 | --- | --- |
 | **Console** — **Add record** / record editor | Typed inputs per field; validated and quota-checked. |
 | **Console** — **Import records** | Bulk CSV/JSON with validation, upsert, and quota math. |
-| **Forms** — the Form element's **Write to dataset** | Appends on each submission, mapping fields by name; best-effort (quota-full submissions keep only the inbox copy). See the [survey guide](build-and-publish-a-survey.md). |
+| **Forms** — the Form element's **Write to dataset** | Appends on each submission. The dataset is bound by id (a dropdown; legacy forms still match by name) and each form field can map to a schema field by id via **Maps to schema field**, with name-matching as the fallback — so renames never lose data. Best-effort (quota-full submissions keep only the inbox copy). See the [survey guide](build-and-publish-a-survey.md). |
 | **Automations** — the **Write to a dataset** step | Appends a record from a workflow/action run. |
 | **Automations** — the **Update a dataset record** step | Updates a matching record (by email) or appends when none matches. |
 

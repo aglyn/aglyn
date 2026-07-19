@@ -28,6 +28,7 @@ import {
   type HostAction,
   type HostActionStep,
   type HostActionStepType,
+  type TriggerConditionOp,
   validateHostAction,
 } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -68,6 +69,11 @@ interface ActionDraft extends HostAction {
   id: string | null
   /** Raw custom-event text when the trigger select is on "custom". */
   customEvent: string
+  // Structured payload condition (AGL-557), held flat like customEvent:
+  // an empty op means "always run" and clears the stored condition.
+  conditionOp: '' | TriggerConditionOp
+  conditionField: string
+  conditionValue: string
 }
 
 function defaultStep(type: HostActionStepType): HostActionStep {
@@ -250,6 +256,9 @@ export function HostActionsCard(props: {
       steps: [defaultStep('siteAlert')],
       enabled: true,
       customEvent: '',
+      conditionOp: '',
+      conditionField: '',
+      conditionValue: '',
     })
   }, [org, enqueueSnackbar])
 
@@ -320,6 +329,19 @@ export function HostActionsCard(props: {
         ...(Number(draft.trigger.cooldownMinutes) >= 1
           ? { cooldownMinutes: Number(draft.trigger.cooldownMinutes) }
           : {}),
+        // Structured payload condition (AGL-557): built even when the
+        // field is still blank so validateHostAction surfaces the miss.
+        ...(draft.conditionOp
+          ? {
+              condition: {
+                field: draft.conditionField.trim(),
+                op: draft.conditionOp,
+                ...(draft.conditionOp !== 'notEmpty'
+                  ? { value: draft.conditionValue.trim() }
+                  : {}),
+              },
+            }
+          : {}),
       },
       steps: draft.steps,
       enabled: draft.enabled !== false,
@@ -339,6 +361,7 @@ export function HostActionsCard(props: {
           ...candidate,
           // Frequency caps overwrite explicitly (AGL-274): a merge-set
           // keeps omitted keys, so switching one off must write it out.
+          // The condition follows suit (AGL-557) — null clears it.
           trigger: {
             ...candidate.trigger,
             oncePerVisitor: draft.trigger.oncePerVisitor === true,
@@ -347,6 +370,7 @@ export function HostActionsCard(props: {
               Number(draft.trigger.cooldownMinutes) >= 1
                 ? Number(draft.trigger.cooldownMinutes)
                 : null,
+            condition: candidate.trigger.condition ?? null,
           },
           updatedAt: Timestamp.now(),
           ...(draft.id ? {} : { createdAt: Timestamp.now() }),
@@ -462,6 +486,10 @@ export function HostActionsCard(props: {
                     isSiteEventType(String(action.trigger?.event ?? ''))
                       ? ''
                       : (action.trigger?.event ?? ''),
+                  // Structured condition (AGL-557).
+                  conditionOp: action.trigger?.condition?.op ?? '',
+                  conditionField: action.trigger?.condition?.field ?? '',
+                  conditionValue: action.trigger?.condition?.value ?? '',
                 })
               }
             >
@@ -568,6 +596,60 @@ export function HostActionsCard(props: {
                 sx={{ flex: 1 }}
               />
             )}
+          </Stack>
+          {/* Structured payload condition (AGL-557): the no-code sibling
+              of the filter — e.g. only when `subscribe` is not empty. */}
+          <Stack direction="row" spacing={1}>
+            <TextField
+              select
+              label="Only run when"
+              value={draft?.conditionOp ?? ''}
+              onChange={(event) =>
+                patch((previous) => ({
+                  ...previous,
+                  conditionOp: event.target
+                    .value as ActionDraft['conditionOp'],
+                }))
+              }
+              size="small"
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">{'Always (no condition)'}</MenuItem>
+              <MenuItem value="notEmpty">{'A field is not empty'}</MenuItem>
+              <MenuItem value="equals">{'A field equals…'}</MenuItem>
+              <MenuItem value="contains">{'A field contains…'}</MenuItem>
+            </TextField>
+            {draft?.conditionOp ? (
+              <TextField
+                label="Field"
+                placeholder="subscribe"
+                value={draft?.conditionField ?? ''}
+                onChange={(event) =>
+                  patch((previous) => ({
+                    ...previous,
+                    conditionField: event.target.value,
+                  }))
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              />
+            ) : null}
+            {draft?.conditionOp === 'equals' ||
+            draft?.conditionOp === 'contains' ? (
+              <TextField
+                label="Value"
+                placeholder="Yes"
+                value={draft?.conditionValue ?? ''}
+                onChange={(event) =>
+                  patch((previous) => ({
+                    ...previous,
+                    conditionValue: event.target.value,
+                  }))
+                }
+                size="small"
+                sx={{ flex: 1 }}
+              />
+            ) : null}
           </Stack>
           {isSiteEventType(draft?.trigger.event ?? '') ? (
             // Site-event config (AGL-256): what/where the trigger watches.

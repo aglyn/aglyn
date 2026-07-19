@@ -33,6 +33,10 @@ consistent.
 - Model the data first, then bind it — a clean model makes [repeatable
   components](overview.md#repeatable-components) and
   [bindings](../../building-sites/bindings/overview.md) straightforward.
+- Give fields a **description** in the schema dialog — it appears as a hint in
+  the record editor, as a tooltip on table headers, and under the field's name
+  in the schema dialog itself. See
+  [naming & describing fields](../../guides/datasets-and-schema.md#naming--describing-fields).
 - Use a **reference** field to link records; see [relations](relations.md).
 
 ## Related

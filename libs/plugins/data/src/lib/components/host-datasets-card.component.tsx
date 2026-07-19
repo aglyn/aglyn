@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, createResourceUid, datasetValueToInput, deriveModelFromFields, effectiveDatasetModel, formatDatasetValue, parseDatasetFields, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
+import { type AglynOrgBilling, applyDatasetQuery, checkDatasetQuota, checkEntitlement, checkQuota, coerceDocumentValues, createResourceUid, datasetValueToInput, effectiveDatasetModel, formatDatasetValue, modelFromFieldEntries, parseDatasetFieldEntries, parseDatasetFilter, parseDatasetSort, sortDatasetRecords, validateDocument, getCustomFieldType } from '@aglyn/aglyn'
 import { datasetRecordsToCsv, mapImportColumns, parseImportRows, serializeDatasetValue } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -35,6 +35,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -209,7 +210,10 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     }
     setCreator({ name: '', fields: '' })
   }, [org, datasets.length, enqueueSnackbar])
-  const creatorFields = parseDatasetFields(creator?.fields ?? '')
+  // Entries are human names — "Roast preference" → stable id
+  // `roast_preference` with the pretty name kept for headers (AGL-558).
+  const creatorEntries = parseDatasetFieldEntries(creator?.fields ?? '')
+  const creatorFields = creatorEntries.map((entry) => entry.id)
   const handleCreate = useCallback(async () => {
     if (!creator?.name.trim() || creatorFields.length === 0) return
     let id: string
@@ -220,7 +224,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           displayName: creator.name.trim(),
           fields: creatorFields,
           // Typed model from day one (AGL-178); refine in the Schema dialog.
-          model: deriveModelFromFields(creatorFields),
+          model: modelFromFieldEntries(creatorEntries),
         })
         id = String(result.id)
       } else {
@@ -229,7 +233,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
         await setDoc(doc(firestore, dataScope[0], dataScope[1], 'datasets', id), {
           displayName: creator.name.trim(),
           fields: creatorFields,
-          model: deriveModelFromFields(creatorFields),
+          model: modelFromFieldEntries(creatorEntries),
           createdAt: Timestamp.now(),
         })
       }
@@ -250,7 +254,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
       id,
       name: creator.name.trim(),
     })
-  }, [creator, creatorFields, firestore, hostId, orgId, callDatasetApi, enqueueSnackbar, logActivity])
+  }, [creator, creatorEntries, creatorFields, firestore, hostId, orgId, callDatasetApi, enqueueSnackbar, logActivity])
 
   // Join collection template (AGL-180): extrinsic many-to-many as a
   // visible, editable collection of FKey pairs — no magic.
@@ -919,11 +923,23 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {fields.map((fieldId) => (
-                  <TableCell key={fieldId}>
-                    {model.fields[fieldId]?.name ?? fieldId}
-                  </TableCell>
-                ))}
+                {fields.map((fieldId) => {
+                  const field = model.fields[fieldId]
+                  // Field descriptions (AGL-560) surface as header hints.
+                  return (
+                    <TableCell key={fieldId}>
+                      {field?.description ? (
+                        <Tooltip title={field.description}>
+                          <span style={{ cursor: 'help' }}>
+                            {field.name ?? fieldId}
+                          </span>
+                        </Tooltip>
+                      ) : (
+                        (field?.name ?? fieldId)
+                      )}
+                    </TableCell>
+                  )
+                })}
                 <TableCell align="right">{'Actions'}</TableCell>
               </TableRow>
             </TableHead>
@@ -1013,9 +1029,11 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             }
             size="small"
             helperText={
-              creatorFields.length
-                ? `Columns: ${creatorFields.join(', ')}`
-                : 'Comma-separated column names, e.g. title, price'
+              creatorEntries.length
+                ? `Columns: ${creatorEntries
+                    .map((entry) => entry.name)
+                    .join(', ')}`
+                : 'Comma-separated column names, e.g. Title, Unit price'
             }
           />
         </DialogContent>

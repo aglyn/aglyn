@@ -166,6 +166,11 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
     const definition = { ...fieldEditor.definition }
     if (!definition.name.trim()) return
     definition.name = definition.name.trim()
+    // Descriptions (AGL-560) surface as hints wherever the field appears;
+    // blank ones are dropped so the model doesn't accrete empty strings.
+    const description = definition.description?.trim()
+    if (description) definition.description = description
+    else delete definition.description
     const options = fieldEditor.optionsText
       .split(',')
       .map((option) => option.trim())
@@ -335,16 +340,27 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                     borderRadius: 1,
                   }}
                 >
-                  <Typography variant="body2" sx={{ flex: 1 }} noWrap>
-                    {field.name}
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      color="text.secondary"
-                    >
-                      {` · ${fieldId}`}
+                  <Stack sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" noWrap>
+                      {field.name}
+                      <Typography
+                        component="span"
+                        variant="caption"
+                        color="text.secondary"
+                      >
+                        {` · ${fieldId}`}
+                      </Typography>
                     </Typography>
-                  </Typography>
+                    {field.description ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                      >
+                        {field.description}
+                      </Typography>
+                    ) : null}
+                  </Stack>
                   <Chip
                     size="small"
                     label={DATASET_FIELD_TYPE_LABELS[field.type] ?? field.type}
@@ -436,6 +452,27 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
                 ? `Field id "${fieldEditor.fieldId}" is a stable key and cannot change`
                 : 'The field id is derived from this once, then never changes'
             }
+          />
+          <TextField
+            size="small"
+            label="Description"
+            multiline
+            minRows={2}
+            value={editorDefinition?.description ?? ''}
+            onChange={(event) =>
+              setFieldEditor((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      definition: {
+                        ...prev.definition,
+                        description: event.target.value,
+                      },
+                    }
+                  : prev,
+              )
+            }
+            helperText="What this field is for — shown as a hint wherever the field appears"
           />
           <TextField
             select
@@ -636,24 +673,6 @@ export function DatasetSchemaDialog(props: DatasetSchemaDialogProps) {
               />
             }
             label="Required"
-          />
-          <TextField
-            size="small"
-            label="Description"
-            value={editorDefinition?.description ?? ''}
-            onChange={(event) =>
-              setFieldEditor((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      definition: {
-                        ...prev.definition,
-                        description: event.target.value,
-                      },
-                    }
-                  : prev,
-              )
-            }
           />
           <TextField
             size="small"

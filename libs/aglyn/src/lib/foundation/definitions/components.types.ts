@@ -194,6 +194,12 @@ export enum FieldComponentType {
    */
   SCREEN_SELECT = 'screen-select',
   /**
+   * Select listing the canvas's other elements (AGL-557): the editor
+   * resolves options from the live canvas at edit time and persists the
+   * node id — e.g. the form's reveal-on-submit target.
+   */
+  NODE_SELECT = 'node-select',
+  /**
    * Id-based entity pickers (AGL-343/344): the editor resolves options
    * from EntityPickerContext at edit time and persists the entity id —
    * renames never break the reference.
@@ -202,6 +208,14 @@ export enum FieldComponentType {
   COLLECTION_SELECT = 'collection-select',
   CATEGORY_SELECT = 'category-select',
   DATASET_SELECT = 'dataset-select',
+  /**
+   * Select listing the model fields of the nearest ancestor node's chosen
+   * dataset (AGL-556): the editor resolves options from
+   * EntityPickerContext.datasetFields using the ancestor's `datasetId`
+   * (or legacy `datasetName` matched by label) and persists the stable
+   * model fieldId — field renames never break the mapping.
+   */
+  DATASET_FIELD_SELECT = 'dataset-field-select',
   SELECT = 'select',
   SLIDER = 'slider',
   SUB_FORM = 'sub-form',

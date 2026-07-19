@@ -40,6 +40,27 @@ Page triggers can be limited to certain paths (`/pricing`, `/blog/*`), and a
 **once per visitor**, or **with a cooldown** (a minimum number of minutes between fires
 for the same browser).
 
+### Only run when a field matches
+
+Every action can carry a **condition** over the event's payload — for form submissions,
+that's the submitted field values. Pick an operator in the **"Only run when"** select:
+
+- **A field is not empty** — e.g. the `subscribe` checkbox was ticked.
+- **A field equals…** — an exact match (trimmed, case-insensitive), e.g.
+  `plan` equals `Pro`.
+- **A field contains…** — a partial match, handy for checkbox groups that submit
+  all ticked options joined with `, ` (e.g. `topics` contains `Pricing`).
+
+When the condition isn't met the action is simply skipped — it doesn't count as a
+metered run. Conditions are the no-code sibling of the free-text **Filter**
+expression; use whichever reads better (both must pass when both are set).
+
+**Example — grow an email list from a signup form:** add a **Checkboxes** field named
+`subscribe` with a single option `Yes, keep me posted` to your form. Then create an
+action on **formSubmission** with the condition *"A field is not empty" → `subscribe`*
+and one step: **Enroll in a list**, picking your audience. Visitors who tick the box
+join the list; everyone else just submits the form.
+
 Each automation row offers a **Runs** log (its recent executions) and, for page
 triggers, a **Test** button that exercises the server-side steps immediately.
 

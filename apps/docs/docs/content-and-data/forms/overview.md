@@ -56,6 +56,36 @@ Submissions land in the inbox like any other form — a visitor who ticks two
 checkboxes submits `topics: Products, Pricing`, and the rating arrives as a
 number you can chart from a bound [dataset](../datasets/overview.md).
 
+## After submit
+
+The form's **After submit** setting controls what a successful submission does:
+
+| Outcome | What the visitor sees |
+| --- | --- |
+| **Show the success message** (default) | The form is replaced by your **Success message** |
+| **Redirect the visitor** | The browser navigates to a **screen** you pick (rename-safe — slug changes never break it) or, with no screen picked, to a **Redirect URL** (a same-site path like `/thanks` or an https URL; anything else is ignored) |
+| **Reveal a hidden element** | An element you pick from the canvas — hidden on the published page until then — appears in place of the form |
+
+For the **reveal** outcome, drop the follow-up content (a thank-you block, a download
+link, an embedded video) anywhere on the screen, then select it as the **Element to
+reveal**. It stays hidden for visitors until the form is submitted; in the Besigner it
+stays visible so you can keep editing it. If a redirect target can't be resolved (the
+screen was deleted, the URL was rejected), the form falls back to the success message.
+
+### Example: grow an email list from a signup form
+
+Combine an outcome with a [conditional automation](../../marketing-and-automation/workflows-and-actions/actions-builder.md#only-run-when-a-field-matches):
+
+1. Add a **Checkboxes** field named `subscribe` with one option, `Yes, keep me posted`.
+2. Set **After submit** to *Redirect the visitor* and pick your `/thanks` screen.
+3. On the Workflows page, add an action on **formSubmission** with the condition
+   *"A field is not empty" → `subscribe`* and the step **Enroll in a list**,
+   picking your email audience.
+
+Visitors who tick the box are added to the list (and can be targeted by
+[email campaigns](../../marketing-and-automation/email-campaigns/overview.md));
+everyone lands on the thank-you page.
+
 ## Where submissions go
 
 - **Inbox** — every submission is captured; open it in the console's mail reader dialog.
