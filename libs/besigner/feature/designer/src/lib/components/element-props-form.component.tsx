@@ -171,7 +171,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     // pickers (AGL-343/344) resolve the same way from EntityPickerContext.
     const { screens, labels } = useContext(Aglyn.ScreenLinkContext)
     const entityOptions = useContext(Aglyn.EntityPickerContext)
-<<<<<<< HEAD
     // Canvas-node options for NODE_SELECT attributes (AGL-557): every
     // other element on the canvas, labeled by component name + a text
     // snippet, with a short id suffix to tell repeats apart. The edited
@@ -208,7 +207,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         })
         .sort((a, b) => a.label.localeCompare(b.label))
     }, [rawAttributes, node?.$id])
-=======
     // Dataset-field selects (AGL-556) list the model fields of the nearest
     // ancestor's chosen dataset (e.g. the form field's parent form). The
     // ancestor persists the dataset id; legacy nodes carrying only a name
@@ -237,7 +235,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       return undefined
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasDatasetFieldSelect, node, entityOptions.datasets])
->>>>>>> main
     const attributes = useMemo(() => {
       const entityListFor = (component: Aglyn.FieldComponentType) => {
         switch (component) {
@@ -271,14 +268,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
-<<<<<<< HEAD
         if (field.component === Aglyn.FieldComponentType.NODE_SELECT) {
           // Canvas-element picker (AGL-557), resolved above.
           return {
             ...field,
             component: Aglyn.FieldComponentType.SELECT,
             options: [{ value: '', label: 'None' }, ...nodeOptions],
-=======
+          }
+        }
         if (
           field.component === Aglyn.FieldComponentType.DATASET_FIELD_SELECT
         ) {
@@ -301,7 +298,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 label: modelField.label,
               })),
             ],
->>>>>>> main
           }
         }
         const entities = entityListFor(field.component as any)
@@ -319,11 +315,14 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
         }
         return field
       })
-<<<<<<< HEAD
-    }, [rawAttributes, screens, labels, entityOptions, nodeOptions])
-=======
-    }, [rawAttributes, screens, labels, entityOptions, ancestorDatasetId])
->>>>>>> main
+    }, [
+      rawAttributes,
+      screens,
+      labels,
+      entityOptions,
+      nodeOptions,
+      ancestorDatasetId,
+    ])
 
     // Reusable-component flows (AGL-35): actions appear only when the host
     // app provides callbacks; locked nodes (layout chrome) never promote.
