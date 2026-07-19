@@ -36,6 +36,7 @@ import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import { buildInteractionCandidate } from './interaction-builder-doc'
 
 export interface InteractionBuilderState {
   /** Existing action id when editing; null for a new interaction. */
@@ -154,14 +155,23 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
     })
   }
 
-  const candidate = useMemo(() => {
-    const trigger: Record<string, unknown> = { event, selector }
-    if (frequency === 'every') trigger.everyTime = true
-    if (frequency === 'session') trigger.oncePerSession = true
-    if (frequency === 'visitor') trigger.oncePerVisitor = true
-    if (frequency === 'cooldown') trigger.cooldownMinutes = cooldownMinutes
-    return { name, trigger, steps, enabled: true }
-  }, [name, event, selector, frequency, cooldownMinutes, steps])
+  // Serialize once, pruning the `undefined` step fields the action-type
+  // reset leaves behind (AGL-570): this Firestore has no
+  // `ignoreUndefinedProperties`, so a raw `undefined` rejects the whole
+  // write — the reason element interactions never reached the actions
+  // collection. buildInteractionCandidate strips them.
+  const candidate = useMemo(
+    () =>
+      buildInteractionCandidate({
+        name,
+        event,
+        selector,
+        frequency,
+        cooldownMinutes,
+        steps,
+      }),
+    [name, event, selector, frequency, cooldownMinutes, steps],
+  )
 
   // Canvas element targets for the show/hide + drawer steps (AGL-562):
   // the same live-canvas resolution the props panel's NODE_SELECT uses.
@@ -283,15 +293,24 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
   const handleSave = useCallback(async () => {
     if (problem) return
     const id = state.id ?? Aglyn.createResourceUid()
-    await setDoc(
-      doc(firestore, 'hosts', hostId, 'actions', id),
-      {
-        ...candidate,
-        updatedAt: new Date(),
-        ...(state.id ? {} : { createdAt: new Date() }),
-      },
-      { merge: true },
-    )
+    try {
+      // `candidate` is already pruned of `undefined` (AGL-570); wrap the
+      // write so any real failure surfaces instead of a silent
+      // unhandled rejection that leaves the dialog open with no feedback.
+      await setDoc(
+        doc(firestore, 'hosts', hostId, 'actions', id),
+        {
+          ...candidate,
+          updatedAt: new Date(),
+          ...(state.id ? {} : { createdAt: new Date() }),
+        },
+        { merge: true },
+      )
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Could not save the interaction', { variant: 'error' })
+      return
+    }
     enqueueSnackbar('Interaction saved and enabled', {
       variant: 'success',
       persist: false,
