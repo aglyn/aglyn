@@ -18,7 +18,9 @@
 import {
   clearInteractiveSignIn,
   consumeInteractiveSignIn,
+  consumeInteractiveSignOut,
   markInteractiveSignIn,
+  markInteractiveSignOut,
 } from './interactive-signin'
 
 describe('interactive-signin marker', () => {
@@ -61,6 +63,33 @@ describe('interactive-signin marker', () => {
     markInteractiveSignIn()
     clearInteractiveSignIn()
     expect(consumeInteractiveSignIn()).toBe(false)
+  })
+
+  it('sign-out marker consumes exactly once (AGL-543)', () => {
+    markInteractiveSignOut()
+    expect(consumeInteractiveSignOut()).toBe(true)
+    // A later SDK-initiated auth drop must not be misread as another
+    // explicit sign-out and tombstone the shared session.
+    expect(consumeInteractiveSignOut()).toBe(false)
+  })
+
+  it('auth drop with no sign-out marker reads as unintentional', () => {
+    expect(consumeInteractiveSignOut()).toBe(false)
+  })
+
+  it('a stale sign-out marker expires (abandoned signout navigation)', () => {
+    const now = 2_000_000
+    jest.spyOn(Date, 'now').mockReturnValue(now)
+    markInteractiveSignOut()
+    ;(Date.now as jest.Mock).mockReturnValue(now + 120_001)
+    expect(consumeInteractiveSignOut()).toBe(false)
+  })
+
+  it('sign-in and sign-out markers are independent keys', () => {
+    markInteractiveSignIn()
+    markInteractiveSignOut()
+    expect(consumeInteractiveSignOut()).toBe(true)
+    expect(consumeInteractiveSignIn()).toBe(true)
   })
 
   it('survives sessionStorage throwing (private mode) without crashing', () => {
