@@ -49,9 +49,10 @@ export interface DrawerElementProps {
 
 export interface DrawerToggleProps {
   /**
-   * Node id of the drawer this button drives; empty targets the page's
-   * first drawer, which is what makes the one-insert Mobile Nav preset
-   * work before any ids exist.
+   * Legacy pre-AGL-572 binding attribute. Persisted values are accepted
+   * and silently ignored (no migration): behavior config rides the
+   * interactions system (AGL-568), so explicit targeting is authored as
+   * *When clicked → Open/close a drawer* on the button instead.
    */
   targetNodeId?: string
   /** Accessible name for the icon button. */
@@ -138,10 +139,11 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
     }, [suppressNavigation, nodeId])
 
     if (suppressNavigation) {
-      // Editor affordance (AGL-571): mirror the live site's hidden-until-
-      // opened drawer with a slim, selectable placeholder. Only while the
-      // drawer or any descendant is selected do the contents expand
-      // inline (framed, like form fields) so they stay authorable.
+      // Editor affordance: a slim, selectable placeholder mirroring the
+      // live hidden-until-opened drawer (AGL-571). While the drawer or a
+      // descendant is selected, the contents expand inline as a real
+      // design surface sized to the configured width with the live
+      // panel's padding (AGL-572), so links and headers render full size.
       const authoring = isLeafSelectedWithin(rest as Record<string, unknown>)
       return (
         <Box
@@ -150,8 +152,9 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
           sx={[
             {
               m: 0.5,
-              p: 1,
-              maxWidth: width || 280,
+              p: 2,
+              width: width || 280,
+              maxWidth: '100%',
               border: '1px dashed',
               borderColor: 'divider',
               borderRadius: 1,
@@ -201,15 +204,19 @@ const DrawerElement = forwardRef<HTMLDivElement, DrawerElementProps>(
 DrawerElement.displayName = 'AglynDrawer'
 
 /**
- * Menu button (AGL-562): a hamburger icon button that toggles a drawer
- * over the shared command bus. With no explicit target it drives the
- * page's first drawer; the interactions system can equally drive drawers
- * from any other element via the openDrawer/closeDrawer/toggleDrawer
- * steps. Inert on editing surfaces so canvas clicks only select.
+ * Menu button (AGL-562, targeting moved to interactions in AGL-572): a
+ * hamburger icon button whose click broadcast-toggles the page's first
+ * drawer over the shared command bus — the zero-config default that
+ * makes the one-insert Mobile Nav preset work. Targeting a specific
+ * drawer is an interaction (*When clicked → Open/close a drawer*), the
+ * same openDrawer/closeDrawer/toggleDrawer steps any element can use;
+ * the legacy `targetNodeId` attribute is discarded here so persisted
+ * values neither retarget the click nor leak into the DOM. Inert on
+ * editing surfaces so canvas clicks only select.
  */
 export const DrawerToggle = forwardRef<HTMLButtonElement, DrawerToggleProps>(
   (props, ref) => {
-    const { targetNodeId, ariaLabel, ...rest } = props
+    const { targetNodeId: _ignoredLegacyBinding, ariaLabel, ...rest } = props
     const { suppressNavigation } = Aglyn.useScreenLink(undefined)
     return (
       <IconButton
@@ -219,8 +226,7 @@ export const DrawerToggle = forwardRef<HTMLButtonElement, DrawerToggleProps>(
         onClick={
           suppressNavigation
             ? undefined
-            : () =>
-                Aglyn.dispatchDrawerCommand('toggle', targetNodeId || undefined)
+            : () => Aglyn.dispatchDrawerCommand('toggle')
         }
         {...rest}
       >
@@ -264,15 +270,11 @@ export const drawerToggleSchema: Aglyn.ComponentSchema<DrawerToggleProps> = {
   category: Aglyn.ComponentCategory.NAVIGATION,
   icon: { path: mdiMenu.path, sx: { color: '#2196f3' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
+  // No drawer-binding attribute (AGL-572): clicking toggles the page's
+  // first drawer out of the box, and targeting a specific drawer is an
+  // interaction (*When clicked → Open/close a drawer*), per the AGL-568
+  // rule that behavior config rides interactions, not bespoke props.
   attributes: [
-    {
-      name: 'targetNodeId',
-      description:
-        'Drawer this button opens and closes. Leave empty to control ' +
-        "the page's first drawer.",
-      component: Aglyn.FieldComponentType.NODE_SELECT,
-      label: 'Drawer',
-    },
     {
       name: 'ariaLabel',
       description: 'Accessible name announced by screen readers.',

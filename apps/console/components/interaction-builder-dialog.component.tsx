@@ -401,7 +401,20 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                     overlayId: undefined,
                     url: undefined,
                     eventName: undefined,
-                    drawerNodeId: undefined,
+                    // Drawer commands (AGL-572) default to this element
+                    // when it is itself a drawer, mirroring the menu
+                    // default below; anything else broadcasts to the
+                    // page's first drawer — the Menu Button's built-in
+                    // zero-config behavior.
+                    drawerNodeId:
+                      ['openDrawer', 'closeDrawer', 'toggleDrawer'].includes(
+                        nextType,
+                      ) &&
+                      drawerTargetOptions.some(
+                        (option) => option.nodeId === state.nodeId,
+                      )
+                        ? state.nodeId
+                        : undefined,
                     // Menu commands (AGL-568) default to this element
                     // when it is itself a menu — "Open menu (this
                     // element)" with zero extra picking.
@@ -461,8 +474,10 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
               {['openDrawer', 'closeDrawer', 'toggleDrawer'].includes(
                 step.type,
               ) ? (
-                // Drawer target (AGL-562): drawers on this canvas; empty
-                // addresses the page's first drawer.
+                // Drawer target (AGL-562/AGL-572): drawers on this
+                // canvas; empty addresses the page's first drawer, and
+                // the picker pre-selects this element when it is itself
+                // a drawer (mirroring the menu default).
                 <TextField
                   label="Drawer"
                   value={step.drawerNodeId ?? ''}
@@ -484,7 +499,9 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
                   <MenuItem value="">{'First drawer on the page'}</MenuItem>
                   {drawerTargetOptions.map((option) => (
                     <MenuItem key={option.nodeId} value={option.nodeId}>
-                      {option.label}
+                      {option.nodeId === state.nodeId
+                        ? `This element · ${option.label}`
+                        : option.label}
                     </MenuItem>
                   ))}
                 </TextField>
