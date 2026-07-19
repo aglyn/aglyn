@@ -431,7 +431,7 @@ export const schema: Aglyn.ComponentSchema<CustomerAccountProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Customer account',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiAccountCircleOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -451,7 +451,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Customer account',
     pluginId: BUNDLE_ID,
     description: 'Sign-in/up, profile, addresses, and order history',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiAccountCircleOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

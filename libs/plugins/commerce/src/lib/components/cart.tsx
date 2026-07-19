@@ -375,7 +375,7 @@ export const schema: Aglyn.ComponentSchema<CartProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Cart',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -417,7 +417,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Cart button',
     pluginId: BUNDLE_ID,
     description: 'Badge icon with a slide-out cart drawer',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,
@@ -432,7 +432,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Cart page',
     pluginId: BUNDLE_ID,
     description: 'Full cart with quantities, coupon, and checkout',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiCartOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

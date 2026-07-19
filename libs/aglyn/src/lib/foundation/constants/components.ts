@@ -16,7 +16,19 @@
  */
 
 export enum ComponentCategory {
+  /**
+   * Composed, ready-made section presets (hero, nav bar, footer, …) —
+   * the "Section & block library" (AGL-538). Multi-node subtrees with
+   * sensible defaults, as opposed to single primitive elements.
+   */
+  BLOCKS = 'Sections & Blocks',
   INPUT = 'Input',
+  /** Data-capture elements: forms, fields, search (AGL-541). */
+  FORMS = 'Forms',
+  /** Visual content: images, video, icons (AGL-541). */
+  MEDIA = 'Media',
+  /** Store widgets: products, cart, checkout companions (AGL-541). */
+  COMMERCE = 'Commerce',
   SURFACE = 'Surface',
   NAVIGATION = 'Navigation',
   LAYOUT = 'Layout',
@@ -25,3 +37,22 @@ export enum ComponentCategory {
   UNCATEGORIZED = 'Uncategorized',
   ALL = 'All',
 }
+
+/**
+ * Display rank of the element drawer/picker categories (AGL-538). Lower
+ * ranks first; categories not listed here (plugin-registered strings like
+ * "Community" or the per-host "Your components") sort after the ranked
+ * ones alphabetically, and Uncategorized/All always sink to the bottom.
+ */
+export const COMPONENT_CATEGORY_ORDER: readonly string[] = [
+  ComponentCategory.BLOCKS,
+  ComponentCategory.LAYOUT,
+  ComponentCategory.NAVIGATION,
+  ComponentCategory.TEXT,
+  ComponentCategory.FORMS,
+  ComponentCategory.INPUT,
+  ComponentCategory.MEDIA,
+  ComponentCategory.DATA_DISPLAY,
+  ComponentCategory.COMMERCE,
+  ComponentCategory.SURFACE,
+]

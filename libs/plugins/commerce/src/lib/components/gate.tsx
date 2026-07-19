@@ -143,7 +143,7 @@ export const schema: Aglyn.ComponentSchema<GateProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Members gate',
-  category: Aglyn.ComponentCategory.LAYOUT,
+  category: Aglyn.ComponentCategory.COMMERCE,
   attributes: [
     {
       name: 'productId',
@@ -182,7 +182,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Members gate',
     pluginId: BUNDLE_ID,
     description: 'Wraps content only entitled members can see',
-    category: Aglyn.ComponentCategory.LAYOUT,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiLockOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

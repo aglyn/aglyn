@@ -186,7 +186,7 @@ export const formSchema: Aglyn.ComponentSchema<FormProps> = {
   $id: FORM_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Form',
-  category: Aglyn.ComponentCategory.INPUT,
+  category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiEmailFastOutline.path, sx: { color: '#0288d1' } },
   attributes: [
     {
@@ -222,7 +222,7 @@ export const formFieldSchema: Aglyn.ComponentSchema<FormFieldProps> = {
   $id: FORM_FIELD_ID,
   pluginId: BUNDLE_ID,
   displayName: 'Form Field',
-  category: Aglyn.ComponentCategory.INPUT,
+  category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiFormTextbox.path, sx: { color: '#0288d1' } },
   flags: {
     selfClosing: Aglyn.FEATURE_FLAG.ENABLED,
@@ -267,7 +267,7 @@ export const formPresets: Aglyn.PresetSchema[] = [
     displayName: 'Contact Form',
     pluginId: BUNDLE_ID,
     description: 'Name, email, and message with a send button',
-    category: Aglyn.ComponentCategory.INPUT,
+    category: Aglyn.ComponentCategory.FORMS,
     icon: { path: mdiEmailFastOutline.path, sx: { color: '#0288d1' } },
     data: {
       $id: null,
@@ -312,7 +312,7 @@ export const formPresets: Aglyn.PresetSchema[] = [
     displayName: 'Form Field',
     pluginId: BUNDLE_ID,
     description: 'Single input inside a form',
-    category: Aglyn.ComponentCategory.INPUT,
+    category: Aglyn.ComponentCategory.FORMS,
     icon: { path: mdiFormTextbox.path, sx: { color: '#0288d1' } },
     data: {
       $id: null,

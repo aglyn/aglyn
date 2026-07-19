@@ -144,7 +144,7 @@ export const schema: Aglyn.ComponentSchema<ImageProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Image',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiImage.path,
     sx: { color: '#7b1fa2' },
@@ -216,7 +216,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Image',
     pluginId: BUNDLE_ID,
     description: 'Image from your media library or any URL',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.MEDIA,
     icon: {
       path: mdiImage.path,
       sx: { color: '#7b1fa2' },

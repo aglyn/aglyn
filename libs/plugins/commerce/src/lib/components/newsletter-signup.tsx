@@ -110,7 +110,7 @@ export const schema: Aglyn.ComponentSchema<NewsletterSignupProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Newsletter signup',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiEmailOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -142,7 +142,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Newsletter signup',
     pluginId: BUNDLE_ID,
     description: 'Consented email capture into contacts',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiEmailOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

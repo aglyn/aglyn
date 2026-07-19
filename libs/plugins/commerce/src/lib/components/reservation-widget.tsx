@@ -280,7 +280,7 @@ export const schema: Aglyn.ComponentSchema<ReservationWidgetProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Reservation widget',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiCalendarCheckOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -306,7 +306,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Reservation widget',
     pluginId: BUNDLE_ID,
     description: 'Date-range stay booking with live quote + deposit',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiCalendarCheckOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

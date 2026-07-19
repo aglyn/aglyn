@@ -20,7 +20,7 @@ import { makeAutoObservable, toJS } from 'mobx'
 import { computedFn } from 'mobx-utils'
 import type { Aglyn } from '../aglyn'
 import { lifecycleEvent } from '../lifecycle'
-import { createIdUrlSafe } from '../foundation'
+import { COMPONENT_CATEGORY_ORDER, createIdUrlSafe } from '../foundation'
 import { AglynEvent } from '../emit-manager'
 import type { PluginId } from '../plugin-manager'
 import {
@@ -80,28 +80,31 @@ export class ComponentManager {
   }
 
   public get schemasBySortedCategories() {
+    // Explicit display rank (AGL-538): curated categories first in a
+    // deliberate order (Sections & Blocks on top), plugin-registered
+    // categories after them alphabetically, Uncategorized/All last.
+    const rankOf = (label: string): number => {
+      switch (label) {
+        case ComponentCategory.UNCATEGORIZED:
+          return COMPONENT_CATEGORY_ORDER.length + 1
+        case ComponentCategory.ALL:
+          return COMPONENT_CATEGORY_ORDER.length + 2
+        default: {
+          const rank = COMPONENT_CATEGORY_ORDER.indexOf(label)
+          return rank === -1 ? COMPONENT_CATEGORY_ORDER.length : rank
+        }
+      }
+    }
     return Object.entries(this.schemasByCategory)
       .map(([k, v]) => ({
         $id: k,
         label: k,
         items: v,
       }))
-      .sort(({ label: a }, { label: b }) => {
-        switch (true) {
-          case a === 'All' && b === 'Uncategorized':
-            return 1
-          case a === 'Uncategorized' && b === 'All':
-            return -1
-          case a === 'All':
-          case a === 'Uncategorized':
-            return 1
-          case b === 'All':
-          case b === 'Uncategorized':
-            return -1
-          default:
-            return a.localeCompare(b)
-        }
-      })
+      .sort(
+        ({ label: a }, { label: b }) =>
+          rankOf(a) - rankOf(b) || a.localeCompare(b),
+      )
   }
 
   public getFactory = computedFn((id: ComponentId) => {

@@ -82,6 +82,12 @@ import {
   readSxValue,
   writeSxValue,
 } from '../utils/responsive-sx'
+import {
+  buildStyleFieldGroups,
+  computeStylePartial,
+  pickStyleValues,
+  styleGroupFieldNames,
+} from '../utils/style-field-groups'
 import { Accordion } from './accordion-list.component'
 import CustomCssForm from './custom-css-form.component'
 import ElementClassesField from './element-classes-field.component'
@@ -835,13 +841,20 @@ const ElementStylesForm = observer(
     const nodeSx = node?.sx
     const siteTheme = useAglynSiteTheme()
 
-    const schema = useMemo(() => {
-      const flatMap = objectFlatten(siteTheme.palette)
-      const values = Object.entries(flatMap)
-        .map(([, value]) => String(value))
-        .filter((color) => Boolean(color.match(/^(rgb|#)/)?.[0]))
-      return stylesSchema(values)
-    }, [siteTheme])
+    const presetColors = useMemo(
+      () =>
+        Object.entries(objectFlatten(siteTheme.palette))
+          .map(([, value]) => String(value))
+          .filter((color) => Boolean(color.match(/^(rgb|#)/)?.[0])),
+      [siteTheme],
+    )
+    const schema = useMemo(() => stylesSchema(presetColors), [presetColors])
+    // Accordion field groups (AGL-540): sizing, typography, borders &
+    // shadows, position & overflow, grid/flex-child controls.
+    const styleGroups = useMemo(
+      () => buildStyleFieldGroups(presetColors),
+      [presetColors],
+    )
 
     // Breakpoint-scoped editing (AGL-333): when the artboard preview is a
     // device size, style edits write into that breakpoint's slice of the
@@ -898,6 +911,18 @@ const ElementStylesForm = observer(
         applyStyleValues(partial)
       },
       [applyStyleValues, effectiveValues],
+    )
+
+    /**
+     * Scoped group save (AGL-540): a group's auto-submit may only write
+     * its own field names, so it can never clear values owned by other
+     * groups or by the custom-CSS editor.
+     */
+    const handleGroupSave = useCallback(
+      (fieldNames: string[]) => (values: Record<string, unknown>) => {
+        applyStyleValues(computeStylePartial(fieldNames, values))
+      },
+      [applyStyleValues],
     )
 
     const handleBoxStylerChange = useCallback(
@@ -1048,6 +1073,29 @@ const ElementStylesForm = observer(
             schema={schema}
             {...rest}
           />
+
+          {/* First-class style groups (AGL-540). Each form is keyed on
+              the node + breakpoint so switching selection or artboard
+              scope re-seeds the initial values. */}
+          {styleGroups.map((group) => {
+            const fieldNames = styleGroupFieldNames(group)
+            return (
+              <Accordion
+                key={group.$id}
+                summary={group.label}
+                sx={{ mt: 2 }}
+              >
+                <FormRenderer
+                  key={`${node?.$id ?? ''}:${activeBreakpoint ?? 'base'}`}
+                  FormTemplate={ElementPropsFormTemplate}
+                  componentMapper={componentMapper}
+                  onSubmit={handleGroupSave(fieldNames)}
+                  initialValues={pickStyleValues(fieldNames, effectiveValues)}
+                  schema={{ fields: group.fields }}
+                />
+              </Accordion>
+            )
+          })}
 
           <Accordion summary="Classes & custom CSS" sx={{ mt: 2 }}>
             <ElementClassesField node={node} />

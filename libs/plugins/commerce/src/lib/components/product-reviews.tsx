@@ -257,7 +257,7 @@ export const schema: Aglyn.ComponentSchema<ProductReviewsProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product reviews',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiStarOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -283,7 +283,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Product reviews',
     pluginId: BUNDLE_ID,
     description: 'Verified-buyer reviews with a submit form',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiStarOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

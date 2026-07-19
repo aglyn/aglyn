@@ -69,7 +69,7 @@ export const schema: Aglyn.ComponentSchema<SearchBoxProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Search Box',
-  category: Aglyn.ComponentCategory.INPUT,
+  category: Aglyn.ComponentCategory.FORMS,
   icon: { path: mdiMagnify.path, sx: { color: '#455a64' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -89,7 +89,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Search Box',
     pluginId: BUNDLE_ID,
     description: 'Search field that opens the site search page',
-    category: Aglyn.ComponentCategory.INPUT,
+    category: Aglyn.ComponentCategory.FORMS,
     icon: { path: mdiMagnify.path, sx: { color: '#455a64' } },
     data: {
       $id: null,

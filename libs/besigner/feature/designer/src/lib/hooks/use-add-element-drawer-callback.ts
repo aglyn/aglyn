@@ -51,7 +51,18 @@ export function useAddElementDrawerCallback(): Response {
           return res.option
         })
         .then((preset) => {
-          const parentNode = parent || Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!
+          // Resolve the insert target against the live canvas. Callers can
+          // wire anything in as `parent` (the console INSERT menu passed the
+          // raw menu click event for a while), and a non-node — or a node
+          // that was deleted while the picker was open — must fall back to
+          // the document root. Otherwise the constraint check runs against a
+          // phantom target and the created node is pushed onto a detached
+          // `nodes` array, so it never reaches the hierarchy, canvas, or
+          // saves (AGL-537).
+          const parentNode =
+            (typeof parent?.$id === 'string' &&
+              Aglyn.canvas.getNode(parent.$id)) ||
+            Aglyn.canvas.getNode(Aglyn.NODE_ROOT_ID)!
 
           // Inserting follows the same lineal placement rules as dnd —
           // without this, forbidden arrangements get created here that

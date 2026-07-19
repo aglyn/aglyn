@@ -84,7 +84,7 @@ export const schema: Aglyn.ComponentSchema<IconProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Icon',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiShapePlus.path,
     sx: { color: '#7b1fa2' },
@@ -121,7 +121,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Icon',
     pluginId: BUNDLE_ID,
     description: 'A single icon from the mdi library',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.MEDIA,
     icon: {
       path: mdiShapePlus.path,
       sx: { color: '#7b1fa2' },

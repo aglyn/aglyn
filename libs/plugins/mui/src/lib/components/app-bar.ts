@@ -30,7 +30,7 @@ export const schema: Aglyn.ComponentSchema<AppBarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'App Bar',
-  category: Aglyn.ComponentCategory.SURFACE,
+  category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiPageLayoutHeader.path,
     sx: { color: '#2196f3' },
@@ -45,7 +45,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'App Bar',
     pluginId: BUNDLE_ID,
     description: 'An app bar preset with the app bar and toolbar content nodes',
-    category: Aglyn.ComponentCategory.SURFACE,
+    category: Aglyn.ComponentCategory.NAVIGATION,
     icon: schema.icon,
     data: {
       $id: null,

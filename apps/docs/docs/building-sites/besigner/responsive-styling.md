@@ -34,6 +34,27 @@ The margin/padding stylers are fully interactive:
   per-side fields — each with a unit menu (px, %, em, rem, vh, vw…).
 - Everything respects the active breakpoint scope.
 
+## Style groups
+
+Beyond display, colors, and the flexbox toggles, the styles panel groups
+first-class controls into accordions — no custom CSS needed for the
+common properties:
+
+- **Sizing** — width, height, and the min/max bounds for both.
+- **Typography** — font size, weight, family, line height, letter
+  spacing, text transform, and text decoration.
+- **Borders & Shadows** — border shorthand, border color (with your
+  theme palette in the picker), corner radius, outline, and a shadow
+  preset menu (Subtle / Medium / Large / None).
+- **Position & Overflow** — position scheme with top/right/bottom/left
+  offsets, z-index, overflow, opacity, and cursor.
+- **Grid & Flex Child** — grid template columns/rows, auto-flow, and the
+  per-item grid column/row, flex shrink, and order controls.
+
+Every group writes through the same responsive pipeline, so the active
+breakpoint scope applies — and each group saves only its own
+properties, never touching values you set elsewhere.
+
 ## Custom classes
 
 Every element accepts **Classes** (chips input under *Classes & custom

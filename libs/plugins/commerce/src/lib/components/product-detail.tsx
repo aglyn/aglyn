@@ -482,7 +482,7 @@ export const schema: Aglyn.ComponentSchema<ProductDetailProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Product detail',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.COMMERCE,
   icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
   flags: { selfClosing: Aglyn.FEATURE_FLAG.ENABLED },
   attributes: [
@@ -516,7 +516,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Product detail',
     pluginId: BUNDLE_ID,
     description: 'Gallery, variant picker, and buy button for one product',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.COMMERCE,
     icon: { path: mdiTagOutline.path, sx: { color: '#2e7d32' } },
     data: {
       $id: null,

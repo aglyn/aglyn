@@ -31,7 +31,7 @@ export const schema: Aglyn.ComponentSchema<ToolbarProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Toolbar Content',
-  category: Aglyn.ComponentCategory.SURFACE,
+  category: Aglyn.ComponentCategory.NAVIGATION,
   icon: {
     path: mdiBorderInside.path,
     sx: { color: '#2196f3' },
@@ -65,7 +65,7 @@ export const presets: Aglyn.PresetSchema[] = [
       path: mdiBorderInside.path,
       sx: { color: '#2196f3' },
     },
-    category: Aglyn.ComponentCategory.SURFACE,
+    category: Aglyn.ComponentCategory.NAVIGATION,
     data: {
       $id: null,
       componentId: ID,

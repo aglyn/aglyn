@@ -112,7 +112,7 @@ export const schema: Aglyn.ComponentSchema<VideoProps> = {
   $id: ID,
   pluginId: BUNDLE_ID,
   displayName: 'Video',
-  category: Aglyn.ComponentCategory.DATA_DISPLAY,
+  category: Aglyn.ComponentCategory.MEDIA,
   icon: {
     path: mdiVideo.path,
     sx: { color: '#7b1fa2' },
@@ -180,7 +180,7 @@ export const presets: Aglyn.PresetSchema[] = [
     displayName: 'Video',
     pluginId: BUNDLE_ID,
     description: 'Video from your media library or any URL',
-    category: Aglyn.ComponentCategory.DATA_DISPLAY,
+    category: Aglyn.ComponentCategory.MEDIA,
     icon: {
       path: mdiVideo.path,
       sx: { color: '#7b1fa2' },
