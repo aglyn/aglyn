@@ -46,9 +46,14 @@ const model: DatasetModel = {
 
 describe('deriveModelFromFields / effectiveDatasetModel', () => {
   it('derives optional text fields from v1 columns', () => {
-    const derived = deriveModelFromFields(['name', 'city'])
-    expect(derived.order).toEqual(['name', 'city'])
-    expect(derived.fields['name']).toEqual({ name: 'name', type: 'text' })
+    const derived = deriveModelFromFields(['name', 'roast_preference'])
+    expect(derived.order).toEqual(['name', 'roast_preference'])
+    // Ids stay the stable keys; display names humanize (AGL-558).
+    expect(derived.fields['name']).toEqual({ name: 'Name', type: 'text' })
+    expect(derived.fields['roast_preference']).toEqual({
+      name: 'Roast preference',
+      type: 'text',
+    })
   })
 
   it('prefers a stored model and falls back to v1 fields', () => {

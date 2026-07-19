@@ -16,6 +16,7 @@
  */
 
 import { validateCustomFieldValue } from '../plugin-manager/custom-fields'
+import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
 
 /**
  * Dataset models (AGL-177): the runtime promotion of the type-level
@@ -135,8 +136,26 @@ export interface DatasetModel {
 export function deriveModelFromFields(fields: string[]): DatasetModel {
   const model: DatasetModel = { fields: {}, order: [] }
   for (const name of fields) {
-    model.fields[name] = { name, type: 'text' }
+    // Raw snake_case ids read as titles in table headers and pickers;
+    // the id stays the stable key (AGL-558).
+    model.fields[name] = { name: humanizeDatasetFieldId(name), type: 'text' }
     model.order.push(name)
+  }
+  return model
+}
+
+/**
+ * Model from quick-creator entries (AGL-558): stable slug ids with the
+ * human display names preserved — "Roast preference" → id
+ * `roast_preference`, name "Roast preference".
+ */
+export function modelFromFieldEntries(
+  entries: readonly DatasetFieldEntry[],
+): DatasetModel {
+  const model: DatasetModel = { fields: {}, order: [] }
+  for (const entry of entries) {
+    model.fields[entry.id] = { name: entry.name, type: 'text' }
+    model.order.push(entry.id)
   }
   return model
 }

@@ -44,6 +44,62 @@ export interface HostDatasetRecord {
 }
 
 /**
+ * A human field entry from the quick creator: the stable id plus the
+ * display name shown in table headers and bindings pickers (AGL-558).
+ */
+export interface DatasetFieldEntry {
+  id: string
+  name: string
+}
+
+/**
+ * Stable field id from a human name: "Roast preference" → "roast_preference".
+ * Mirrors DATASET_FIELD_PATTERN; returns '' when nothing salvageable.
+ */
+export function slugifyDatasetFieldId(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/^[0-9_]+/, '')
+    .replace(/_+$/, '')
+  return DATASET_FIELD_PATTERN.test(slug) ? slug : ''
+}
+
+/** Display fallback for raw ids: "roast_preference" → "Roast preference". */
+export function humanizeDatasetFieldId(id: string): string {
+  const words = id.replace(/_/g, ' ').trim()
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id
+}
+
+/**
+ * Parses a comma/newline separated list of HUMAN field names into
+ * {id, name} entries — "Roast preference" keeps its pretty name and gets
+ * the stable id `roast_preference` (AGL-558). Plain snake_case keys
+ * still work and pick up a humanized display name. Duplicate ids and
+ * unsalvageable entries are dropped rather than failing the set.
+ */
+export function parseDatasetFieldEntries(input: string): DatasetFieldEntry[] {
+  const seen = new Set<string>()
+  const entries: DatasetFieldEntry[] = []
+  for (const raw of input.split(/[,\n]/)) {
+    const trimmed = raw.trim()
+    if (!trimmed) continue
+    const id = slugifyDatasetFieldId(trimmed)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    entries.push({
+      id,
+      name: DATASET_FIELD_PATTERN.test(trimmed)
+        ? humanizeDatasetFieldId(trimmed)
+        : trimmed,
+    })
+  }
+  return entries
+}
+
+/**
  * Parses a comma/newline separated field list into valid unique names;
  * invalid entries are dropped rather than failing the whole set.
  */
