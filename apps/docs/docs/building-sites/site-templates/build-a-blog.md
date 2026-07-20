@@ -33,9 +33,32 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
 
-The body editor ships a **markdown toolbar** (bold, italic, H2, link, image — each wraps
-your current selection) plus a **live preview pane** rendered with the exact same
-markdown parser the published site uses. Markdown supports `**bold**`, `*italic*`,
+### Visual editor
+
+The body opens in a **Visual** tab — a WYSIWYG surface where you edit the formatted
+article directly. It is native to the markdown dialect: what you type round-trips
+losslessly to the same markdown string the site stores and renders, so nothing is ever
+saved as HTML. A **Markdown** tab sits beside it with the raw source and a live preview
+pane (rendered with the exact same parser the published site uses); both tabs edit the
+same content, so you can switch freely.
+
+The shared **toolbar** works in both tabs:
+
+- **B / I** — bold or italicize the selection (`Cmd/Ctrl+B`, `Cmd/Ctrl+I` in Visual).
+- **H2** — toggle the current line between paragraph and heading.
+- **Link** — wrap the selection as a link; you're prompted for an `https://` URL or a
+  site path like `/pricing`. In Visual mode, clicking an existing link opens a small
+  popover to **edit or remove** it (it never navigates).
+- **Image** — insert an image by URL; **Insert image** picks one from your media
+  library instead.
+
+Visual-mode shortcuts: type `## `, `### `, or `- ` at the start of a line to convert it
+to a heading or list item; **Enter** splits a block (and exits a list from an empty
+item); **Backspace** at a line start demotes headings/list items and then merges
+paragraphs; `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` undo and redo. Pasting inserts plain
+text — formatting in the clipboard is stripped.
+
+Markdown supports `**bold**`, `*italic*`,
 `## headings`, `- lists`, `[links](https://…)` — including **site-relative links**
 (`[pricing](/pricing)`) that get client-side navigation — and `![images](https://…)`.
 

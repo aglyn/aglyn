@@ -58,13 +58,26 @@ export function isInternalMarkdownHref(href: string): boolean {
   return /^\/(?!\/)/.test(href)
 }
 
+/**
+ * Appends plain text, merging into a trailing text inline so the emitted
+ * model is canonical (no adjacent text runs). Canonical inlines are what
+ * makes `serializeMarkdownLite` a true inverse: a degraded link squeezed
+ * between two text gaps re-parses to the same single text inline (AGL-582).
+ */
+function pushText(inlines: MarkdownInline[], text: string): void {
+  if (!text) return
+  const last = inlines[inlines.length - 1]
+  if (last?.type === 'text') last.text += text
+  else inlines.push({ type: 'text', text })
+}
+
 export function parseMarkdownInlines(text: string): MarkdownInline[] {
   const inlines: MarkdownInline[] = []
   let cursor = 0
   for (const match of text.matchAll(INLINE_PATTERN)) {
     const index = match.index ?? 0
     if (index > cursor) {
-      inlines.push({ type: 'text', text: text.slice(cursor, index) })
+      pushText(inlines, text.slice(cursor, index))
     }
     if (match[2] != null) {
       inlines.push({ type: 'bold', text: match[2] })
@@ -73,12 +86,12 @@ export function parseMarkdownInlines(text: string): MarkdownInline[] {
     } else if (match[6] != null) {
       const href = safeLinkUrl(match[7])
       if (href) inlines.push({ type: 'link', text: match[6], href })
-      else inlines.push({ type: 'text', text: match[6] })
+      else pushText(inlines, match[6])
     }
     cursor = index + match[0].length
   }
   if (cursor < text.length) {
-    inlines.push({ type: 'text', text: text.slice(cursor) })
+    pushText(inlines, text.slice(cursor))
   }
   return inlines
 }
@@ -119,4 +132,68 @@ export function parseMarkdownLite(body: string): MarkdownBlock[] {
     })
   }
   return blocks
+}
+
+/** Newlines cannot exist inside an inline run — flatten them to a space. */
+const flattenInlineText = (text: string): string =>
+  text.replace(/\s*\n+\s*/g, ' ')
+
+/**
+ * Serializes inlines back to markdown-lite source (AGL-582). Characters an
+ * inline run cannot represent (the dialect has NO escapes) are dropped:
+ * `*` inside bold/italic, `]` in link text/alt, `)` or whitespace in URLs.
+ * Parser-emitted inlines never contain them, so for those this is exact.
+ */
+export function serializeMarkdownInlines(inlines: MarkdownInline[]): string {
+  let out = ''
+  for (const inline of inlines) {
+    if (inline.type === 'bold' || inline.type === 'italic') {
+      const text = flattenInlineText(inline.text).replace(/\*/g, '')
+      if (!text) continue
+      out += inline.type === 'bold' ? `**${text}**` : `*${text}*`
+    } else if (inline.type === 'link') {
+      const text = flattenInlineText(inline.text).replace(/\]/g, '')
+      const href = inline.href.replace(/[)\s]/g, '')
+      out += text && href ? `[${text}](${href})` : text
+    } else {
+      out += flattenInlineText(inline.text)
+    }
+  }
+  return out
+}
+
+/**
+ * Inverse of `parseMarkdownLite` — the WYSIWYG round-trip contract
+ * (AGL-582): for any parser-produced model, the serialized string re-parses
+ * to a deep-equal model, and serializing is stable (a second
+ * parse→serialize round-trip returns the identical string). Editor-produced
+ * models are additionally NORMALIZED the same way the parser would: blocks
+ * and list items that would parse to nothing (empty text) are omitted, and
+ * block lines are edge-trimmed. Entry bodies stay markdown-lite strings in
+ * Firestore — this is the only writer the visual editor goes through.
+ */
+export function serializeMarkdownLite(blocks: MarkdownBlock[]): string {
+  const chunks: string[] = []
+  for (const block of blocks) {
+    if (block.type === 'image') {
+      const src = block.src.replace(/[)\s]/g, '')
+      const alt = flattenInlineText(block.alt).replace(/\]/g, '')
+      if (src) chunks.push(`![${alt}](${src})`)
+      continue
+    }
+    if (block.type === 'list') {
+      const lines = block.items
+        .map((item) => serializeMarkdownInlines(item).trim())
+        .filter(Boolean)
+        .map((line) => `- ${line}`)
+      if (lines.length) chunks.push(lines.join('\n'))
+      continue
+    }
+    const line = serializeMarkdownInlines(block.inlines).trim()
+    if (!line) continue
+    chunks.push(
+      block.type === 'heading' ? `${'#'.repeat(block.level)} ${line}` : line,
+    )
+  }
+  return chunks.join('\n\n')
 }
