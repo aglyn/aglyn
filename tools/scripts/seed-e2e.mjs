@@ -234,7 +234,7 @@ await put(firestore.collection('orgs').doc(E2E_ORG2_ID), {
   name: 'E2E Studio',
   slug: E2E_ORG2_SLUG,
   ownerUid: E2E_UID,
-  plan: 'business',
+  plan: 'pro',
   enabledPlugins: ['mui'],
   subscription: { status: 'active' },
   createdAt: now,

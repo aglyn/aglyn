@@ -40,6 +40,7 @@ import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
@@ -68,6 +69,12 @@ export function OrgSwitcherNav() {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+  // Each org's billing tier for the row badges — read only while the menu is
+  // open (AGL-631). The current org's plan comes straight from useCurrentOrg.
+  const plans = useOrgPlans(
+    orgs.map((item) => item.$id),
+    Boolean(anchor),
+  )
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -177,6 +184,11 @@ export function OrgSwitcherNav() {
           ) : (
             filtered.map((item) => {
               const isCurrent = item.$id === currentOrg.$id
+              // Billing tier, like the button — the current org's plan is
+              // known immediately, others resolve as the reads land.
+              const tier = titleCase(
+                plans[item.$id] ?? (isCurrent ? plan : undefined),
+              )
               return (
                 <MenuItem
                   key={item.$id}
@@ -191,9 +203,9 @@ export function OrgSwitcherNav() {
                     primary={item.orgName ?? item.slug ?? item.$id}
                     slotProps={{ primary: { noWrap: true } }}
                   />
-                  {item.role ? (
+                  {tier ? (
                     <Chip
-                      label={titleCase(item.role)}
+                      label={tier}
                       size="small"
                       variant="outlined"
                       sx={{
