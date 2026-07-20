@@ -12,6 +12,12 @@ Each links into its section for the how-to.
 
 ## Nav menu system (newest)
 
+- **[Dropdown Panel preset](building-sites/menus-and-navigation/overview.md#the-dropdown-panel-preset)** —
+  a primitive-built hover panel (Stack + Button + hidden panel) that inserts
+  with its hover choreography **pre-wired as editable interactions**: show on
+  hover with Esc/outside-click dismissal, hide on leave with a 250ms grace
+  delay. Show/hide steps themselves gained **Delay** and **Close on
+  Esc / outside click** options in the interaction builder.
 - **[Menus & navigation](building-sites/menus-and-navigation/overview.md)** — a
   **Dropdown Menu**, a **Mega Menu** with a free-form wide panel, a slide-in
   **Drawer** with a **Menu Button**, and a one-insert **Mobile Nav** preset.

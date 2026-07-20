@@ -439,6 +439,92 @@ export const navMenuPresets: Aglyn.PresetSchema[] = [
       nodes: [navLink('About'), navLink('Blog'), navLink('Contact')],
     },
   },
+  // Primitive dropdown scaffold (AGL-589): the same result as the menu
+  // elements but built from a Stack + Button + hidden panel, with the
+  // hover choreography (grace delay, Esc/outside-click dismissal)
+  // pre-wired as real interactions the user can edit or remove. The
+  // panel carries `aglyn-hidden` so it starts closed on the live site;
+  // the canvas shows it for editing (the hidden style only injects at
+  // runtime).
+  {
+    $id: generatePresetId('muiStack', 'dropdown-panel'),
+    type: Aglyn.NodeType.PRESET,
+    displayName: 'Dropdown Panel',
+    pluginId: BUNDLE_ID,
+    description:
+      'Trigger + hover panel built from primitives — opens on hover, ' +
+      'closes on leave with a grace delay, dismisses on Esc or outside ' +
+      'click; the wiring arrives as editable interactions',
+    category: Aglyn.ComponentCategory.NAVIGATION,
+    icon: { path: mdiFormDropdown.path, sx: { color: '#2196f3' } },
+    data: {
+      $id: null,
+      presetRef: 'wrapper',
+      componentId: 'muiStack',
+      pluginId: BUNDLE_ID,
+      props: {
+        sx: { position: 'relative', display: 'inline-flex' },
+      },
+      nodes: [
+        {
+          $id: null,
+          presetRef: 'trigger',
+          componentId: 'muiButton',
+          pluginId: BUNDLE_ID,
+          props: { children: 'Explore', color: 'inherit' },
+        },
+        {
+          $id: null,
+          presetRef: 'panel',
+          componentId: 'muiStack',
+          pluginId: BUNDLE_ID,
+          props: {
+            className: 'aglyn-hidden',
+            direction: 'row',
+            spacing: 4,
+            sx: {
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              zIndex: 1300,
+              p: 3,
+              minWidth: 560,
+              flexWrap: 'wrap',
+              bgcolor: 'background.paper',
+              color: 'text.primary',
+              boxShadow: 8,
+              borderRadius: 1,
+            },
+          },
+          nodes: [
+            megaColumn('Shop', ['New arrivals', 'Best sellers', 'Sale']),
+            megaColumn('Company', ['About', 'Careers', 'Press']),
+            megaColumn('Support', ['Help center', 'Contact']),
+          ],
+        },
+      ],
+    },
+    interactions: [
+      {
+        name: 'Dropdown panel — open on hover',
+        event: 'elementHoverEnter',
+        triggerRef: 'wrapper',
+        steps: [
+          {
+            type: 'showElement',
+            targetRef: 'panel',
+            dismissOn: ['escape', 'outsideClick'],
+          },
+        ],
+      },
+      {
+        name: 'Dropdown panel — close on hover leave',
+        event: 'elementHoverLeave',
+        triggerRef: 'wrapper',
+        steps: [{ type: 'hideElement', targetRef: 'panel', delayMs: 250 }],
+      },
+    ],
+  },
   {
     $id: generatePresetId(MEGA_MENU_ID),
     type: Aglyn.NodeType.PRESET,

@@ -250,6 +250,39 @@ export interface PresetSchema<P = JSX.AnyProps> extends PresetII {
   category?: string | ComponentCategory
   icon?: MdiIconProps
   data: NodeSchemaNested<P>
+  /**
+   * Interaction templates wired when the preset is inserted (AGL-589):
+   * the host app persists one `hosts/{hostId}/actions` doc per entry,
+   * with each `presetRef` marker resolved to the freshly minted node's
+   * `[data-aglyn="leaf:<id>"]` selector. Presets that need hover
+   * choreography (a primitive dropdown panel) ship working out of the
+   * box instead of asking the user to author the interactions by hand.
+   */
+  interactions?: PresetInteractionSchema[]
+}
+
+/**
+ * A visibility step inside a {@link PresetSchema} interaction template.
+ * Only the basic client visibility steps are expressible — presets
+ * scaffold in-page choreography, never server automations.
+ */
+export interface PresetInteractionStepSchema {
+  type: 'showElement' | 'hideElement' | 'toggleElement'
+  /** `presetRef` of the preset node this step targets. */
+  targetRef: string
+  /** Optional grace delay, validated to 0–5000ms like the builder. */
+  delayMs?: number
+  /** Self-dismissal for steps that can reveal the target. */
+  dismissOn?: Array<'escape' | 'outsideClick'>
+}
+
+/** An interaction template a preset wires on insert (AGL-589). */
+export interface PresetInteractionSchema {
+  name: string
+  event: 'elementClick' | 'elementHoverEnter' | 'elementHoverLeave'
+  /** `presetRef` of the preset node whose selector fires the trigger. */
+  triggerRef: string
+  steps: PresetInteractionStepSchema[]
 }
 
 // @TODO ⚠️ Refactor for better adoption of hast
@@ -265,6 +298,13 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    * Class name to pass the DOM node, can also be defined in props
    */
   className?: string
+  /**
+   * Preset-authoring marker (AGL-589): names a node inside a preset's
+   * `data` tree so the preset's interaction templates can reference it
+   * (`triggerRef` / `targetRef`). Cloned onto the inserted node; inert
+   * everywhere else.
+   */
+  presetRef?: string
   /**
    * The computed node parent (only for type completion)
    */

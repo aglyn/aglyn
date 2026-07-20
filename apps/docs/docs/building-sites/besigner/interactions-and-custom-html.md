@@ -106,7 +106,10 @@ yourself).
   position absolute below the trigger). On the wrapper: *When hovered →
   Show* the panel, *When hover ends → Hide* it with a small **Delay**
   (say 250ms) so the pointer can travel; add **Close on Esc** to the
-  show step for keyboard dismissal.
+  show step for keyboard dismissal. The **Dropdown Panel** preset
+  (Navigation group) inserts exactly this pattern with both
+  interactions pre-wired — see
+  [menus & navigation](../menus-and-navigation/overview.md#the-dropdown-panel-preset).
 - **Scroll reveal**: on a section, *When scrolled into view → Append class
   `visible`* with a CSS transition, frequency *once per visitor*.
 - **Announcement click-through**: *When clicked → Track analytics event*

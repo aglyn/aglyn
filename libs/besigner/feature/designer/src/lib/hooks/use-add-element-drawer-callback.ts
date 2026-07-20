@@ -19,11 +19,13 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import { type NodeId } from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useCallback } from 'react'
+import { useCallback, useContext } from 'react'
 import {
   type ElementDrawerOptions,
   useElementDrawerContext,
 } from '../contexts/element-drawer-context'
+import { InteractionsContext } from '../contexts/interactions-context'
+import { buildPresetInteractionDrafts } from '../utils/preset-interactions'
 
 export interface UseAddElementCallbackOptions {
   onComplete?: (data: unknown) => void
@@ -39,6 +41,7 @@ type Response = (
 
 export function useAddElementDrawerCallback(): Response {
   const { elementDrawer } = useElementDrawerContext()
+  const { onCreatePresetInteractions } = useContext(InteractionsContext)
   // Null-safe: surfaces render without a snackbar provider in tests.
   const { enqueueSnackbar } = useSnackbar() ?? {}
 
@@ -102,6 +105,17 @@ export function useAddElementDrawerCallback(): Response {
 
           const node = Aglyn.canvas.addNodeFromPreset(preset, parentNode, index)
 
+          // Preset-declared interactions (AGL-589): resolve the authored
+          // presetRef markers against the freshly minted subtree and hand
+          // ready drafts to the host app to validate + persist — the
+          // designer stays storage-agnostic (same split as the builder).
+          if (node && preset.interactions?.length && onCreatePresetInteractions) {
+            const drafts = buildPresetInteractionDrafts(preset, node)
+            if (drafts.length) {
+              onCreatePresetInteractions({ interactions: drafts })
+            }
+          }
+
           // const templateData = {
           //   ...(data as any),
           //   $id: Aglyn.createNodeId(),
@@ -120,7 +134,7 @@ export function useAddElementDrawerCallback(): Response {
           if (typeof err !== 'string') console.error(err)
         })
     },
-    [elementDrawer, enqueueSnackbar],
+    [elementDrawer, enqueueSnackbar, onCreatePresetInteractions],
   )
 }
 

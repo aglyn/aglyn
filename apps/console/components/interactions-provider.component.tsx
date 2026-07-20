@@ -16,11 +16,16 @@
  */
 'use client'
 
-import { createResourceUid, isSiteEventType } from '@aglyn/aglyn'
+import {
+  createResourceUid,
+  isSiteEventType,
+  validateHostAction,
+} from '@aglyn/aglyn'
 import {
   InteractionsContext,
   type InteractionsContextValue,
 } from '@aglyn/besigner-ui'
+import { buildInteractionCandidate } from './interaction-builder-doc'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
@@ -147,6 +152,53 @@ export function InteractionsProvider(props: InteractionsProviderProps) {
               variant: 'error',
             })
           })
+      },
+      // Preset-wired interactions (AGL-589): a preset like Dropdown
+      // Panel declares its hover choreography; persist each resolved
+      // draft exactly like a builder save — validated, undefined-pruned
+      // via buildInteractionCandidate, and enabled immediately.
+      onCreatePresetInteractions: ({ interactions }) => {
+        void (async () => {
+          let saved = 0
+          for (const draft of interactions) {
+            const candidate = buildInteractionCandidate({
+              name: draft.name,
+              event: draft.event,
+              selector: draft.selector,
+              frequency: 'every',
+              cooldownMinutes: 0,
+              steps: draft.steps.map((step) => ({ ...step })),
+            })
+            const problem = validateHostAction(candidate as any)
+            if (problem) {
+              console.error('Preset interaction rejected:', problem, draft)
+              continue
+            }
+            await setDoc(
+              doc(firestore, 'hosts', hostId, 'actions', createResourceUid()),
+              {
+                ...candidate,
+                createdAt: Timestamp.now(),
+                updatedAt: Timestamp.now(),
+              },
+              { merge: true },
+            )
+            saved += 1
+          }
+          if (saved) {
+            enqueueSnackbar(
+              saved === 1
+                ? 'Interaction wired and enabled'
+                : `${saved} interactions wired and enabled`,
+              { variant: 'success', persist: false },
+            )
+          }
+        })().catch((error) => {
+          console.error(error)
+          enqueueSnackbar('Could not wire the preset interactions', {
+            variant: 'error',
+          })
+        })
       },
       // Fluent builder (AGL-319): configure everything inline.
       onCreateInteraction: ({ nodeId, event }) => {

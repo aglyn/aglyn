@@ -17,6 +17,7 @@ in — no code, no raw JSON:
 | **Drawer** | A slide-in panel (left or right) with a slot for anything — the mobile menu building block. |
 | **Menu Button** | A hamburger icon button that opens/closes a drawer. |
 | **Mobile Nav** | A one-insert preset: menu button + drawer + inline desktop links, responsive wiring included. |
+| **Dropdown Panel** | A primitive-built hover panel — Stack + Button + hidden panel with the hover interactions pre-wired and editable. |
 
 All of them render **closed on the live site until the visitor interacts**,
 and the canvas mirrors that: menus show just their trigger and drawers a
@@ -90,6 +91,35 @@ you get a working responsive pattern immediately:
 Swap the placeholder links for your screens and you're done. The
 show/hide wiring is plain [visibility styling](#responsive-visibility),
 so you can retune the breakpoints per element afterwards.
+
+## The Dropdown Panel preset
+
+The menu elements above are purpose-built components. **Dropdown Panel**
+is the same result assembled from **primitives** — insert it and you get:
+
+- a wrapper **Stack** (`position: relative`) holding
+- a trigger **Button**, and
+- a **panel Stack** positioned under the trigger, three link columns
+  inside, carrying the `aglyn-hidden` class so it starts closed on the
+  live site (the canvas still shows it for editing).
+
+The difference from hand-building: **the hover choreography arrives
+pre-wired.** Inserting the preset creates two real interactions on the
+wrapper, enabled immediately and listed on its Interactions panel like
+any you'd author yourself:
+
+1. *When hovered → Show* the panel, with **Close on Esc** and **Close on
+   outside click**.
+2. *When hover ends → Hide* the panel with a **250ms delay**, so the
+   pointer can travel from trigger to panel.
+
+Because they're ordinary interactions and ordinary elements, everything
+is editable: restyle the panel, change the delay, swap the trigger for
+an icon button, or delete one interaction and wire your own. Use it when
+you want full styling control that the Mega Menu's panel attributes
+don't reach — and see
+[the walkthrough's from-scratch recipe](../../guides/mega-menu-with-interactions.md)
+for the same pattern built by hand.
 
 ## Interactions for menus
 
