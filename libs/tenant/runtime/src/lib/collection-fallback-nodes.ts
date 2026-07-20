@@ -35,6 +35,8 @@ interface FallbackEntry {
   excerpt?: string
   body?: string
   coverImage?: string
+  category?: string
+  tags?: string[]
   publishedAt?: { seconds: number } | null
 }
 
@@ -102,24 +104,46 @@ export function buildCollectionEntryFallbackNodes(
     }),
   ]
   const date = formatDate(entry.publishedAt)
-  if (date) {
-    entries.push(
-      typography('date', {
-        variant: 'caption',
-        children: date,
-        sx: { color: 'text.secondary' },
-      }),
-    )
+  const tags = (entry.tags ?? []).filter(Boolean)
+  if (date || entry.category || tags.length) {
+    // Entry meta block (AGL-582): "date · category" line + tag chips.
+    entries.push([
+      id('meta'),
+      {
+        $id: id('meta'),
+        componentId: Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID,
+        pluginId: 'mui',
+        parentId: id('stack'),
+        props: {
+          date,
+          category: entry.category ?? '',
+          tags: tags.join(', '),
+        },
+      },
+    ])
   }
-  if (entry.coverImage) {
+  if (entry.coverImage && /^https?:\/\//i.test(entry.coverImage)) {
+    // Rendered as a background image on a plain stack, NOT through the
+    // first-party `image` component — that component crashes tenant SSR
+    // (AGL-579); the background-image approach is proven safe.
     entries.push([
       id('cover'),
       {
         $id: id('cover'),
-        componentId: 'image',
+        componentId: 'muiStack',
         pluginId: 'mui',
         parentId: id('stack'),
-        props: { src: entry.coverImage, alt: entry.title ?? '' },
+        props: {
+          role: 'img',
+          'aria-label': entry.title ?? '',
+          sx: {
+            backgroundImage: `url("${encodeURI(entry.coverImage)}")`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            borderRadius: 1,
+            minHeight: 320,
+          },
+        },
       },
     ])
   }
@@ -131,6 +155,28 @@ export function buildCollectionEntryFallbackNodes(
       pluginId: 'mui',
       parentId: id('stack'),
       props: { markdown: entry.body ?? '' },
+    },
+  ])
+  // Related posts after the body, share bar at the end (AGL-582); the
+  // compose pipeline stamps the related entries server-side.
+  entries.push([
+    id('related'),
+    {
+      $id: id('related'),
+      componentId: Aglyn.COLLECTION_RELATED_COMPONENT_ID,
+      pluginId: 'mui',
+      parentId: id('stack'),
+      props: { heading: 'Related articles', limit: 3, sx: { pt: 2 } },
+    },
+  ])
+  entries.push([
+    id('share'),
+    {
+      $id: id('share'),
+      componentId: Aglyn.COLLECTION_SHARE_COMPONENT_ID,
+      pluginId: 'mui',
+      parentId: id('stack'),
+      props: {},
     },
   ])
   entries.push([

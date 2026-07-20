@@ -55,8 +55,8 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore'
-import { Divider, Link as MuiLink } from '@mui/material'
-import { useCallback, useMemo, useState } from 'react'
+import { Box, Divider, Link as MuiLink } from '@mui/material'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../../components/host-display-name.component'
 import { useHostId } from '../../../../components/host-id-provider'
@@ -79,6 +79,67 @@ const slugify = (value: string) =>
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '')
+
+/**
+ * Live markdown-lite preview (AGL-582): the SAME parser the tenant's Entry
+ * Body block renders with, so what editors see here is what publishes.
+ */
+const MarkdownLitePreview = ({ body }: { body: string }) => (
+  <>
+    {parseMarkdownLite(body).map((block, index) => {
+      const inline = (inlines: Aglyn.MarkdownInline[]) =>
+        inlines.map((item, i) =>
+          item.type === 'bold' ? (
+            <strong key={i}>{item.text}</strong>
+          ) : item.type === 'italic' ? (
+            <em key={i}>{item.text}</em>
+          ) : item.type === 'link' ? (
+            <MuiLink key={i} href={item.href} target="_blank">
+              {item.text}
+            </MuiLink>
+          ) : (
+            <span key={i}>{item.text}</span>
+          ),
+        )
+      if (block.type === 'heading') {
+        return (
+          <Typography
+            key={index}
+            variant={block.level === 2 ? 'h5' : 'h6'}
+            sx={{ mt: 2 }}
+          >
+            {inline(block.inlines)}
+          </Typography>
+        )
+      }
+      if (block.type === 'image') {
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={index}
+            src={block.src}
+            alt={block.alt}
+            style={{ maxWidth: '100%', borderRadius: 8, marginTop: 16 }}
+          />
+        )
+      }
+      if (block.type === 'list') {
+        return (
+          <ul key={index}>
+            {block.items.map((item, i) => (
+              <li key={i}>{inline(item)}</li>
+            ))}
+          </ul>
+        )
+      }
+      return (
+        <Typography key={index} variant="body1" sx={{ mt: 1.5 }}>
+          {inline(block.inlines)}
+        </Typography>
+      )
+    })}
+  </>
+)
 
 /**
  * Content collections manager (AGL-81): collections (e.g. Blog) with
@@ -222,12 +283,55 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     excerpt: string
     body: string
     coverImage: string
+    // Entry model v2 (AGL-582): SEO overrides + taxonomy. Tags stay a
+    // comma-separated STRING while editing; saved as string[].
+    seoTitle: string
+    seoDescription: string
+    category: string
+    tags: string
   } | null>(null)
   // Media picker target: entry cover image or an inline body image.
   const [pickerTarget, setPickerTarget] = useState<'cover' | 'body' | null>(
     null,
   )
-  const [previewOpen, setPreviewOpen] = useState(false)
+  // Markdown toolbar (AGL-582): wraps the CURRENT SELECTION of the body
+  // textarea instead of appending at the end.
+  const bodyInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const applyMarkdown = useCallback(
+    (kind: 'bold' | 'italic' | 'heading' | 'link' | 'image') => {
+      const input = bodyInputRef.current
+      setEditor((prev) => {
+        if (!prev) return prev
+        const body = prev.body
+        const start = input?.selectionStart ?? body.length
+        const end = input?.selectionEnd ?? body.length
+        const selected = body.slice(start, end)
+        // Headings/images are block-level in markdown-lite: they need a
+        // blank line before them to parse as their own block.
+        const blockPrefix =
+          start > 0 && !/\n\n$/.test(body.slice(0, start)) ? '\n\n' : ''
+        const insert =
+          kind === 'bold'
+            ? `**${selected || 'bold text'}**`
+            : kind === 'italic'
+              ? `*${selected || 'italic text'}*`
+              : kind === 'heading'
+                ? `${blockPrefix}## ${selected || 'Heading'}`
+                : kind === 'link'
+                  ? `[${selected || 'link text'}](https://)`
+                  : `${blockPrefix}![${selected || 'alt text'}](https://)`
+        requestAnimationFrame(() => {
+          input?.focus()
+          input?.setSelectionRange(start, start + insert.length)
+        })
+        return {
+          ...prev,
+          body: body.slice(0, start) + insert + body.slice(end),
+        }
+      })
+    },
+    [],
+  )
   // AI assist (AGL-130): write or improve the markdown-lite body.
   const { data: aiUser } = useUser()
   const { org } = useCurrentOrg()
@@ -311,6 +415,14 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         excerpt: editor.excerpt.trim(),
         body: editor.body,
         coverImage: editor.coverImage.trim(),
+        // Entry model v2 (AGL-582): SEO overrides + taxonomy.
+        seoTitle: editor.seoTitle.trim(),
+        seoDescription: editor.seoDescription.trim(),
+        category: editor.category.trim(),
+        tags: editor.tags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
         ...(editor.id ? {} : { status: 'draft', createdAt: timestamp }),
         updatedAt: timestamp,
       },
@@ -533,6 +645,10 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       excerpt: '',
                       body: '',
                       coverImage: '',
+                      seoTitle: '',
+                      seoDescription: '',
+                      category: '',
+                      tags: '',
                     })
                   }
                 >
@@ -597,6 +713,12 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                 excerpt: entry.excerpt ?? '',
                                 body: entry.body ?? '',
                                 coverImage: entry.coverImage ?? '',
+                                seoTitle: entry.seoTitle ?? '',
+                                seoDescription: entry.seoDescription ?? '',
+                                category: entry.category ?? '',
+                                tags: Array.isArray(entry.tags)
+                                  ? entry.tags.join(', ')
+                                  : '',
                               })
                             }
                           >
@@ -700,7 +822,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>{editor?.id ? 'Edit entry' : 'New entry'}</DialogTitle>
@@ -753,52 +875,70 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             </Button>
           </Stack>
           <Stack direction="row" spacing={1}>
-            <Button
-              size="small"
-              onClick={() =>
+            <TextField
+              label="Category"
+              value={editor?.category ?? ''}
+              onChange={(event) =>
                 setEditor((prev) =>
-                  prev ? { ...prev, body: `${prev.body}**bold**` } : prev,
+                  prev ? { ...prev, category: event.target.value } : prev,
                 )
               }
-            >
+              size="small"
+              sx={{ flexGrow: 1 }}
+              helperText="Single bucket, e.g. Guides"
+            />
+            <TextField
+              label="Tags"
+              value={editor?.tags ?? ''}
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev ? { ...prev, tags: event.target.value } : prev,
+                )
+              }
+              size="small"
+              sx={{ flexGrow: 2 }}
+              helperText="Comma-separated, e.g. nextjs, seo"
+            />
+          </Stack>
+          <TextField
+            label="SEO title"
+            value={editor?.seoTitle ?? ''}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, seoTitle: event.target.value } : prev,
+              )
+            }
+            size="small"
+            helperText="Search/social title — falls back to the title"
+          />
+          <TextField
+            label="SEO description"
+            value={editor?.seoDescription ?? ''}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, seoDescription: event.target.value } : prev,
+              )
+            }
+            size="small"
+            multiline
+            minRows={2}
+            helperText="Meta description — falls back to the excerpt"
+          />
+          <Stack direction="row" spacing={1}>
+            <Button size="small" onClick={() => applyMarkdown('bold')}>
               {'B'}
             </Button>
-            <Button
-              size="small"
-              onClick={() =>
-                setEditor((prev) =>
-                  prev ? { ...prev, body: `${prev.body}*italic*` } : prev,
-                )
-              }
-            >
+            <Button size="small" onClick={() => applyMarkdown('italic')}>
               {'I'}
             </Button>
-            <Button
-              size="small"
-              onClick={() =>
-                setEditor((prev) =>
-                  prev
-                    ? { ...prev, body: `${prev.body}\n\n## Heading` }
-                    : prev,
-                )
-              }
-            >
+            <Button size="small" onClick={() => applyMarkdown('heading')}>
               {'H2'}
             </Button>
-            <Button
-              size="small"
-              onClick={() =>
-                setEditor((prev) =>
-                  prev
-                    ? {
-                        ...prev,
-                        body: `${prev.body}\n\n[link text](https://)`,
-                      }
-                    : prev,
-                )
-              }
-            >
+            <Button size="small" onClick={() => applyMarkdown('link')}>
               {'Link'}
+            </Button>
+            <Button size="small" onClick={() => applyMarkdown('image')}>
+              {'Image'}
             </Button>
             <Button size="small" onClick={() => setPickerTarget('body')}>
               {'Insert image'}
@@ -819,27 +959,58 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             >
               {editor?.body?.trim() ? 'Improve with AI' : 'Write with AI'}
             </Button>
-            <Button
-              size="small"
-              color="secondary"
-              onClick={() => setPreviewOpen(true)}
-            >
-              {'Preview'}
-            </Button>
           </Stack>
-          <TextField
-            label="Body"
-            value={editor?.body ?? ''}
-            onChange={(event) =>
-              setEditor((prev) =>
-                prev ? { ...prev, body: event.target.value } : prev,
-              )
-            }
-            size="small"
-            multiline
-            minRows={10}
-            helperText="Markdown-lite: **bold**, *italic*, ## headings, - lists, [links](https://), ![images](https://)."
-          />
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={2}
+            sx={{ alignItems: 'stretch' }}
+          >
+            <TextField
+              label="Body"
+              value={editor?.body ?? ''}
+              onChange={(event) =>
+                setEditor((prev) =>
+                  prev ? { ...prev, body: event.target.value } : prev,
+                )
+              }
+              size="small"
+              multiline
+              minRows={12}
+              inputRef={bodyInputRef}
+              sx={{ flex: 1, minWidth: 0 }}
+              helperText="Markdown-lite: **bold**, *italic*, ## headings, - lists, [links](https:// or /page), ![images](https://)."
+            />
+            {/* Live preview (AGL-582): same parser the tenant renders with. */}
+            <Box
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                maxHeight: 420,
+                overflow: 'auto',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                px: 2,
+                pb: 2,
+              }}
+            >
+              <Typography
+                variant="overline"
+                color="text.secondary"
+                component="div"
+                sx={{ pt: 1 }}
+              >
+                {'Preview'}
+              </Typography>
+              {editor?.body?.trim() ? (
+                <MarkdownLitePreview body={editor.body} />
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  {'Start writing to see the preview.'}
+                </Typography>
+              )}
+            </Box>
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
@@ -922,79 +1093,6 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           setPickerTarget(null)
         }}
       />
-      <Dialog
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>{editor?.title || 'Preview'}</DialogTitle>
-        <DialogContent>
-          {editor?.coverImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={editor.coverImage}
-              alt=""
-              style={{ maxWidth: '100%', borderRadius: 8 }}
-            />
-          ) : null}
-          {parseMarkdownLite(editor?.body ?? '').map((block, index) => {
-            const inline = (inlines: any[]) =>
-              inlines.map((item, i) =>
-                item.type === 'bold' ? (
-                  <strong key={i}>{item.text}</strong>
-                ) : item.type === 'italic' ? (
-                  <em key={i}>{item.text}</em>
-                ) : item.type === 'link' ? (
-                  <MuiLink key={i} href={item.href} target="_blank">
-                    {item.text}
-                  </MuiLink>
-                ) : (
-                  <span key={i}>{item.text}</span>
-                ),
-              )
-            if (block.type === 'heading') {
-              return (
-                <Typography
-                  key={index}
-                  variant={block.level === 2 ? 'h5' : 'h6'}
-                  sx={{ mt: 2 }}
-                >
-                  {inline(block.inlines)}
-                </Typography>
-              )
-            }
-            if (block.type === 'image') {
-              return (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={index}
-                  src={block.src}
-                  alt={block.alt}
-                  style={{ maxWidth: '100%', borderRadius: 8, marginTop: 16 }}
-                />
-              )
-            }
-            if (block.type === 'list') {
-              return (
-                <ul key={index}>
-                  {block.items.map((item, i) => (
-                    <li key={i}>{inline(item)}</li>
-                  ))}
-                </ul>
-              )
-            }
-            return (
-              <Typography key={index} variant="body1" sx={{ mt: 1.5 }}>
-                {inline(block.inlines)}
-              </Typography>
-            )
-          })}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreviewOpen(false)}>{'Close'}</Button>
-        </DialogActions>
-      </Dialog>
       <Dialog
         open={Boolean(scheduler)}
         onClose={() => setScheduler(null)}

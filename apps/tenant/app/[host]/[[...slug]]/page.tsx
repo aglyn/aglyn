@@ -70,11 +70,18 @@ function buildMetadata(props: Props): Metadata {
   }
 
   // Content collections (AGL-81/117): entry metadata drives the head.
+  // Entry model v2 (AGL-582): per-entry SEO overrides with title/excerpt
+  // fallbacks, and the cover image as the social card.
   if (props.content) {
     const content = props.content as any
     const entry = content.entry
-    const title = entry ? entry.title : content.collection?.displayName
-    const description: string | undefined = entry?.excerpt || undefined
+    const title = entry
+      ? entry.seoTitle || entry.title
+      : content.collection?.displayName
+    const description: string | undefined = entry
+      ? entry.seoDescription || entry.excerpt || undefined
+      : undefined
+    const socialImage: string | undefined = entry?.coverImage || undefined
     const fullTitle = withSite(title)
     return {
       title: fullTitle,
@@ -83,7 +90,12 @@ function buildMetadata(props: Props): Metadata {
         title: fullTitle,
         ...(description ? { description } : {}),
         type: entry ? 'article' : 'website',
+        ...(socialImage ? { images: [socialImage] } : {}),
         ...(siteTitle ? { siteName: siteTitle } : {}),
+      },
+      twitter: {
+        card: socialImage ? 'summary_large_image' : 'summary',
+        ...(socialImage ? { images: [socialImage] } : {}),
       },
     }
   }
@@ -191,6 +203,10 @@ function buildJsonLd(props: Props): string[] {
         headline: entry.title,
         ...(entry.excerpt && { description: entry.excerpt }),
         ...(entry.coverImage && { image: [entry.coverImage] }),
+        // Entry model v2 (AGL-582): taxonomy enriches rich results.
+        ...(entry.category && { articleSection: entry.category }),
+        ...(Array.isArray(entry.tags) &&
+          entry.tags.length && { keywords: entry.tags.join(', ') }),
         ...(entry.publishedAt?.seconds && {
           datePublished: new Date(
             entry.publishedAt.seconds * 1000,

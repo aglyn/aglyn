@@ -95,21 +95,23 @@ export async function composeCollectionTemplatePage(options: {
     screen: templateRes.screen,
     tokens,
     // List pages hand their already-fetched entries to the Collection
-    // entries block; entry pages let the block fetch on demand (e.g. a
-    // "More posts" section on the article template).
+    // entries block; entry pages carry the routed entry (AGL-582, Related
+    // posts) and let blocks fetch entry lists on demand (e.g. a "More
+    // posts" section on the article template).
     collection: entry
-      ? { slug: collection.slug }
+      ? { slug: collection.slug, entry }
       : { slug: collection.slug, entries: content.entries },
   })
   if (!nodes) return null
 
   const screenSeo = (templateRes.screen as any).seo ?? {}
   const seo = entry
-    ? // Entry metadata drives the head (AGL-117 merge).
+    ? // Entry metadata drives the head (AGL-117 merge; AGL-582 overrides).
       {
         ...screenSeo,
-        title: entry.title,
-        description: entry.excerpt || undefined,
+        title: entry.seoTitle || entry.title,
+        description: entry.seoDescription || entry.excerpt || undefined,
+        image: entry.coverImage || screenSeo.image || undefined,
       }
     : { ...screenSeo, title: screenSeo.title ?? collection.displayName }
   return {
@@ -154,7 +156,13 @@ export async function composeCollectionFallbackPage(options: {
       hostId,
       layoutId,
       screenNodes,
-      collection: { slug: collection.slug, entries: content.entries },
+      // Entry routes resolve with an EMPTY entries list (the loader only
+      // fetched the one entry), so hand the routed entry over and let the
+      // Related posts block fetch the list on demand (AGL-582); list
+      // routes keep their already-fetched entries.
+      collection: content.entry
+        ? { slug: collection.slug, entry: content.entry }
+        : { slug: collection.slug, entries: content.entries },
     })
     return nodes ? { nodes } : null
   } catch (error) {

@@ -42,6 +42,22 @@ function safeUrl(url: string): string | null {
   return /^https?:\/\//i.test(url) ? url : null
 }
 
+/**
+ * Link targets additionally allow SITE-RELATIVE paths (AGL-582) so entry
+ * markdown can link to other pages of the same site — renderers give those
+ * client-side navigation. Protocol-relative `//host` is rejected: it would
+ * silently leave the site.
+ */
+function safeLinkUrl(url: string): string | null {
+  if (/^\/(?!\/)/.test(url)) return url
+  return safeUrl(url)
+}
+
+/** True for hrefs the parser emitted as site-relative (start with `/`). */
+export function isInternalMarkdownHref(href: string): boolean {
+  return /^\/(?!\/)/.test(href)
+}
+
 export function parseMarkdownInlines(text: string): MarkdownInline[] {
   const inlines: MarkdownInline[] = []
   let cursor = 0
@@ -55,7 +71,7 @@ export function parseMarkdownInlines(text: string): MarkdownInline[] {
     } else if (match[4] != null) {
       inlines.push({ type: 'italic', text: match[4] })
     } else if (match[6] != null) {
-      const href = safeUrl(match[7])
+      const href = safeLinkUrl(match[7])
       if (href) inlines.push({ type: 'link', text: match[6], href })
       else inlines.push({ type: 'text', text: match[6] })
     }

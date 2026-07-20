@@ -67,6 +67,9 @@ const entry = {
   slug: 'hello-world',
   excerpt: 'The first post',
   body: '# Heading',
+  coverImage: 'https://cdn.example.com/cover.png',
+  category: 'Guides',
+  tags: ['nextjs', 'seo'],
   publishedAt: { seconds: 1_700_000_000 },
 }
 
@@ -134,13 +137,40 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
     expect(composeArgs.tokens['entry.title']).toBe('Hello world')
     expect(composeArgs.tokens['entry.url']).toBe('/blog/hello-world')
     expect(composeArgs.tokens['entry.body']).toBe('# Heading')
+    expect(composeArgs.tokens['entry.category']).toBe('Guides')
+    expect(composeArgs.tokens['entry.tags']).toBe('nextjs, seo')
     expect(composeArgs.tokens['collection.name']).toBe('Blog')
-    expect(composeArgs.collection).toEqual({ slug: 'blog' })
+    // Related posts (AGL-582): entry renders carry the routed entry.
+    expect(composeArgs.collection).toEqual({ slug: 'blog', entry })
     expect(result?.screen['seo']).toEqual({
       title: 'Hello world',
       description: 'The first post',
+      image: 'https://cdn.example.com/cover.png',
     })
     expect(result?.nodes).toEqual({ root: {} })
+  })
+
+  it('prefers seoTitle/seoDescription over title/excerpt (AGL-582)', async () => {
+    const data = content({
+      entry: {
+        ...entry,
+        seoTitle: 'SEO title',
+        seoDescription: 'SEO description',
+      },
+    })
+    data.collection!.entryScreenId = 'entry-screen'
+    const result = await composeCollectionTemplatePage({
+      hostId: 'host-1',
+      content: data,
+    })
+    expect(result?.screen['seo']).toEqual({
+      title: 'SEO title',
+      description: 'SEO description',
+      image: 'https://cdn.example.com/cover.png',
+    })
+    const composeArgs = composeScreenNodesMock.mock.calls[0][0]
+    expect(composeArgs.tokens['entry.seoTitle']).toBe('SEO title')
+    expect(composeArgs.tokens['entry.seoDescription']).toBe('SEO description')
   })
 
   it('composes list routes with the fetched entries in context', async () => {
@@ -216,6 +246,38 @@ describe('composeCollectionFallbackPage (AGL-551)', () => {
         node.componentId === Aglyn.COLLECTION_ENTRY_BODY_COMPONENT_ID,
     )
     expect(bodyNode?.props?.markdown).toBe('# Heading')
+    // Entry routes hand the routed entry over for Related posts (AGL-582);
+    // the empty just-this-entry list must NOT mask on-demand fetching.
+    expect(chromeArgs.collection).toEqual({ slug: 'blog', entry })
+  })
+
+  it('includes meta/related/share blocks, image-component-free (AGL-582)', async () => {
+    await composeCollectionFallbackPage({
+      hostId: 'host-1',
+      host,
+      content: content({ entry }),
+    })
+    const chromeArgs = composeNodesWithChromeMock.mock.calls[0][0]
+    const nodes = Object.values(chromeArgs.screenNodes) as any[]
+    const componentIds = nodes.map((node) => node.componentId)
+    expect(componentIds).toContain(Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID)
+    expect(componentIds).toContain(Aglyn.COLLECTION_RELATED_COMPONENT_ID)
+    expect(componentIds).toContain(Aglyn.COLLECTION_SHARE_COMPONENT_ID)
+    const metaNode = nodes.find(
+      (node) =>
+        node.componentId === Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID,
+    )
+    expect(metaNode?.props?.category).toBe('Guides')
+    expect(metaNode?.props?.tags).toBe('nextjs, seo')
+    // The first-party image component crashes tenant SSR (AGL-579): the
+    // cover renders as a background-image stack instead.
+    expect(componentIds).not.toContain('image')
+    const coverNode = nodes.find((node) =>
+      String(node.props?.sx?.backgroundImage ?? '').includes(
+        'https://cdn.example.com/cover.png',
+      ),
+    )
+    expect(coverNode?.componentId).toBe('muiStack')
   })
 
   it('skips the layout lookup when the host has no home screen', async () => {

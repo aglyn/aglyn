@@ -59,6 +59,12 @@ export async function GET(request: Request): Promise<Response> {
         (entry.excerpt
           ? `    <description>${escapeXml(entry.excerpt)}</description>\n`
           : '') +
+        // Entry model v2 (AGL-582): category + tags ride along as RSS
+        // <category> elements.
+        [entry.category, ...(entry.tags ?? [])]
+          .filter((value): value is string => Boolean(value))
+          .map((value) => `    <category>${escapeXml(value)}</category>\n`)
+          .join('') +
         '  </item>',
     )
     .join('\n')

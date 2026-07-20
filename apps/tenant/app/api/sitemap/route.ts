@@ -81,10 +81,41 @@ export async function GET(request: Request): Promise<Response> {
     // Sitemap stays screens-only if commerce reads fail.
   }
 
+  // Content collections & blog (AGL-582): /{collection} lists and their
+  // published /{collection}/{entry} articles join the sitemap. Bounded
+  // reads, fail-open — a content read failure never takes the sitemap down.
+  try {
+    const hostRef = firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hosts')
+      .doc(hostRes.host.$id)
+    const collections = await hostRef.collection('collections').limit(50).get()
+    for (const docSnapshot of collections.docs) {
+      const collectionSlug = (docSnapshot.data() as any).slug
+      if (!collectionSlug) continue
+      urls.push(`${base}/${collectionSlug}`)
+      const entries = await docSnapshot.ref
+        .collection('entries')
+        .where('status', '==', 'published')
+        .limit(200)
+        .get()
+      for (const entryDoc of entries.docs) {
+        const entrySlug = (entryDoc.data() as any).slug
+        if (entrySlug) urls.push(`${base}/${collectionSlug}/${entrySlug}`)
+      }
+    }
+  } catch {
+    // Sitemap stays screens-only if content reads fail.
+  }
+
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    urls.map((item) => `  <url><loc>${escapeXml(item)}</loc></url>`).join('\n') +
+    // De-duplicated (AGL-582): a collection slug can shadow a screen path.
+    [...new Set(urls)]
+      .map((item) => `  <url><loc>${escapeXml(item)}</loc></url>`)
+      .join('\n') +
     '\n</urlset>\n'
 
   return new Response(xml, {

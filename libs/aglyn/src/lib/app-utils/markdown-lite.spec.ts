@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { parseMarkdownInlines, parseMarkdownLite } from './markdown-lite'
+import {
+  isInternalMarkdownHref,
+  parseMarkdownInlines,
+  parseMarkdownLite,
+} from './markdown-lite'
 
 describe('markdown-lite', () => {
   it('parses headings, paragraphs, lists, and images into blocks', () => {
@@ -56,5 +60,27 @@ describe('markdown-lite', () => {
         (block) => block.type !== 'image',
       ),
     ).toBe(true)
+  })
+
+  it('keeps site-relative links but not protocol-relative ones (AGL-582)', () => {
+    expect(parseMarkdownInlines('[about](/about)')).toEqual([
+      { type: 'link', text: 'about', href: '/about' },
+    ])
+    // //host would silently leave the site — degrade to text.
+    expect(parseMarkdownInlines('[x](//evil.example)')).toEqual([
+      { type: 'text', text: 'x' },
+    ])
+    // Site-relative IMAGES stay unsupported; media URLs are absolute.
+    expect(
+      parseMarkdownLite('![x](/img.png)').every(
+        (block) => block.type !== 'image',
+      ),
+    ).toBe(true)
+  })
+
+  it('classifies internal hrefs for AppLink rendering (AGL-582)', () => {
+    expect(isInternalMarkdownHref('/blog/post')).toBe(true)
+    expect(isInternalMarkdownHref('//evil.example')).toBe(false)
+    expect(isInternalMarkdownHref('https://example.com')).toBe(false)
   })
 })
