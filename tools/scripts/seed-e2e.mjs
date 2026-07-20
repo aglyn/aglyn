@@ -207,7 +207,7 @@ await put(
 )
 await put(
   firestore.collection('users').doc(E2E_UID).collection('orgs').doc(orgId),
-  { name: 'E2E Bakery Co', slug: E2E_ORG_SLUG, role: 'owner', createdAt: now },
+  { orgName: 'E2E Bakery Co', slug: E2E_ORG_SLUG, role: 'owner', createdAt: now },
 )
 // Public slug → org reservation (AGL-585/AGL-621): the middleware and the
 // client both resolve workspaces through orgSlugs.
@@ -259,7 +259,7 @@ await put(
     .doc(E2E_UID)
     .collection('orgs')
     .doc(E2E_ORG2_ID),
-  { name: 'E2E Studio', slug: E2E_ORG2_SLUG, role: 'owner', createdAt: now },
+  { orgName: 'E2E Studio', slug: E2E_ORG2_SLUG, role: 'owner', createdAt: now },
 )
 await put(firestore.collection('orgSlugs').doc(E2E_ORG2_SLUG), {
   orgId: E2E_ORG2_ID,
