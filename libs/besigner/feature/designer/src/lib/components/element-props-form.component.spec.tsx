@@ -17,8 +17,10 @@
 
 import { act, renderHook } from '@testing-library/react'
 
+import * as Aglyn from '@aglyn/aglyn'
 import {
   ATTRIBUTE_COMMIT_DEBOUNCE_MS,
+  elementPropsComponentMapper,
   useDebouncedCommit,
 } from './element-props-form.component'
 
@@ -111,5 +113,24 @@ describe('useDebouncedCommit (AGL-567)', () => {
 
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Regression guard for AGL-584: the email designer's blocks declare
+// COLOR_PICKER attributes, and any editor type missing from the mapper makes
+// the form renderer throw — blanking the entire attributes panel. Every
+// editor type a plugin schema may declare directly (the entity/screen/node
+// selects convert to SELECT before rendering) must stay registered.
+describe('elementPropsComponentMapper coverage (AGL-584)', () => {
+  it.each([
+    Aglyn.FieldComponentType.TEXT_FIELD,
+    Aglyn.FieldComponentType.TEXTAREA,
+    Aglyn.FieldComponentType.SELECT,
+    Aglyn.FieldComponentType.SWITCH,
+    Aglyn.FieldComponentType.CHECKBOX,
+    Aglyn.FieldComponentType.ICON_PICKER,
+    Aglyn.FieldComponentType.COLOR_PICKER,
+  ])('registers an editor for %s', (type) => {
+    expect(elementPropsComponentMapper[type]).toBeDefined()
   })
 })

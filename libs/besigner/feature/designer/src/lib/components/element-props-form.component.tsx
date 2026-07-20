@@ -22,6 +22,7 @@ import {
   FormSpy,
   type FormTemplateRenderProps,
   FIELD_MAP_CHECKBOX,
+  FIELD_MAP_COLOR_PICKER,
   FIELD_MAP_ICON_PICKER,
   simpleComponentMapper,
   useFormApi,
@@ -216,11 +217,14 @@ export interface ElementPropsFormProps extends FormRendererProps {
 
 // Attribute editors available to canvas component schemas: the simple set
 // plus pickers components actually declare (icon picker AGL-146, checkbox
-// AGL-162).
-const elementPropsComponentMapper = {
+// AGL-162, color picker AGL-584 — the email blocks declare 5 color
+// attributes and an unregistered type makes the form renderer throw,
+// which blanked the email designer's whole attributes panel).
+export const elementPropsComponentMapper = {
   ...simpleComponentMapper,
   [Aglyn.FieldComponentType.ICON_PICKER]: FIELD_MAP_ICON_PICKER,
   [Aglyn.FieldComponentType.CHECKBOX]: FIELD_MAP_CHECKBOX,
+  [Aglyn.FieldComponentType.COLOR_PICKER]: FIELD_MAP_COLOR_PICKER,
 }
 
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
@@ -379,6 +383,20 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
           }
         }
         return field
+      }).filter((field) => {
+        // Unknown editor types must degrade to a skipped attribute, never
+        // kill the whole form: the renderer throws on unregistered
+        // components, which blanked the email designer's attributes panel
+        // when COLOR_PICKER wasn't mapped (AGL-584).
+        const known = (field.component as string) in elementPropsComponentMapper
+        if (!known && process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `[ElementPropsForm] attribute "${field.name}" uses unregistered ` +
+              `editor "${field.component}" — skipped; register it in ` +
+              'elementPropsComponentMapper.',
+          )
+        }
+        return known
       })
     }, [
       rawAttributes,
