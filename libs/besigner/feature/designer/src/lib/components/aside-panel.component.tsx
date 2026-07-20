@@ -68,6 +68,7 @@ import ComponentAccordionList from './component-accordion-list'
 import ElementPropsForm from './element-props-form.component'
 import ElementStylesForm from './element-styles-form.component'
 import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
+import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
 import WorkspacePanelComponent, {
   type WorkspacePanelComponentProps,
 } from './workspace-panel.component'
@@ -450,11 +451,20 @@ export const AsidePanelComponent = forwardRef<any, AsidePanelComponentProps>(
             </MuiAppBar>
           </Box>
 
-          {tabs.map(({ value, panel: { Component, ...panel } }) => (
-            <TabPanel key={value} value={numberToHexadecimal(value)} {...panel}>
-              <Component />
-            </TabPanel>
-          ))}
+          {/* Site-theme color tokens (AGL-588): every COLOR_PICKER field
+              in these panels — styles panel, attribute forms, email
+              blocks — offers the site palette's token references. */}
+          <SiteThemeColorTokensProvider>
+            {tabs.map(({ value, panel: { Component, ...panel } }) => (
+              <TabPanel
+                key={value}
+                value={numberToHexadecimal(value)}
+                {...panel}
+              >
+                <Component />
+              </TabPanel>
+            ))}
+          </SiteThemeColorTokensProvider>
         </MuiTabContext>
 
         {children}

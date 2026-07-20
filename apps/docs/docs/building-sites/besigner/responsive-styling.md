@@ -49,8 +49,10 @@ properties:
 - **Flexbox & Grids** — the container controls: alignment and
   direction toggles plus the gap, row-gap, and column-gap fields.
 - **Layout** — display variant and float.
-- **Colors** — text color and background color, with your theme
-  palette in both pickers.
+- **Colors** — text color and background color. Both pickers open on
+  **theme color references** first (see
+  [scheme-scoped colors](#scheme-scoped-colors)); a *Custom color*
+  step reveals the full picker.
 - **Sizing** — width, height, and the min/max bounds for both.
 - **Typography** — font size, weight, family, line height, letter
   spacing, text transform, and text decoration.
@@ -86,6 +88,41 @@ XS shows the mobile band, SM the tablet band, MD and up the desktop
 band. In Fluid Responsive mode the canvas follows the real browser
 window instead, so resize the window (or open the published site) to
 see bands flip.
+
+## Scheme-scoped colors
+
+Published sites follow each visitor's **light/dark scheme** (system
+setting, or their own choice via the theme mode switcher component), so
+a hardcoded light-mode hex can be unreadable in dark mode. Two tools
+keep colors correct in both schemes:
+
+**Theme color references (preferred).** Every color picker — text,
+background, and border color, plus color attributes on components —
+opens on your site theme's palette references first: Primary,
+Secondary, Background, Surface, Text, Divider, and friends. Each
+swatch is split to preview its **light and dark** resolutions, and
+selecting one stores the *reference* (e.g. `background.paper`), not a
+fixed color — the element automatically re-colors when the site
+switches schemes. Pick **Custom color** to reveal the full picker when
+you really want a fixed value.
+
+**Per-scheme custom colors.** The artboard's scheme toggle (the
+sun/moon button in the toolbar) doubles as a styling scope, exactly
+like the device preview does for breakpoints:
+
+- **Light preview** (default) — color edits set the element's **base**
+  colors, which both schemes share until dark overrides exist.
+- **Dark preview** — the styles panel shows a **"Styling: dark
+  scheme"** chip, and edits to *text, background, and border color*
+  become **dark-only overrides**. Light mode keeps the base values;
+  the canvas shows the dark result as you edit.
+
+Only color fields scope to the scheme — spacing, sizing, typography,
+and layout always apply to both schemes no matter which one you
+preview. Clearing a color while previewing dark removes the override
+and falls back to the base color. Scheme overrides compose with
+[breakpoint scoping](#style-per-breakpoint): previewing dark on the
+*MD – Laptop* artboard writes a dark override that applies from MD up.
 
 ## Custom classes
 

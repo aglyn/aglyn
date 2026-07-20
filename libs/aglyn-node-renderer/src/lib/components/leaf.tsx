@@ -17,12 +17,13 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { ShadowDom } from '@aglyn/shared-ui-jsx'
-import { styled } from '@aglyn/shared-ui-theme'
+import { styled, useTheme } from '@aglyn/shared-ui-theme'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, type HTMLAttributes, useContext } from 'react'
 import { isValidElementType } from 'react-is'
 import { LeafSxTransformContext } from '../contexts/leaf-sx-transform'
+import { resolveSchemeSx } from '../utils/scheme-sx'
 
 const DefaultComponent = styled('div')({})
 
@@ -72,9 +73,18 @@ export const Leaf = observer(
     // re-targets viewport media queries at the artboard device width.
     // Undefined everywhere else, keeping the tenant path unchanged.
     const transformSx = useContext(LeafSxTransformContext)
+    // Scheme-scoped styles (AGL-588): sites swap a single-mode theme for
+    // light/dark (tenant HostThemeProvider, canvas useAglynSiteTheme), so
+    // '@scheme dark' sx slices resolve here against the ACTIVE theme's
+    // palette mode — the one signal that is correct in both places.
+    const theme = useTheme() as { palette?: { mode?: string } } | null
+    const activeScheme = theme?.palette?.mode === 'dark' ? 'dark' : 'light'
     // MUI array composition: later entries win on key conflicts, so the
     // node-level sx (Styles panel output) overrides props.sx.
-    const mergedSx = mergeSxProps(sx as any, propsSx as any, node?.sx as any)
+    const mergedSx = resolveSchemeSx(
+      mergeSxProps(sx as any, propsSx as any, node?.sx as any),
+      activeScheme,
+    )
 
     // Shared leaf attributes; self-closing components must receive NO
     // children at all (AGL-579) — a separate element expression keeps the

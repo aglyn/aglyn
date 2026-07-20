@@ -39,3 +39,4 @@ export * from './contexts/leaf-sx-transform'
 // Absorbed from core-feature-renderer (controller-framework react bindings)
 export * from './hooks/use-aglyn-site-theme'
 export * from './utils/create-aglyn-component'
+export * from './utils/scheme-sx'

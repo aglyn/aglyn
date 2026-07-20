@@ -15,11 +15,25 @@
  * limitations under the License.
  */
 
+import { SX_SCHEME_DARK_KEY, type SxScheme } from '@aglyn/aglyn-node-renderer'
 import { BesignerDeviceFlag } from '@aglyn/besigner'
+import type { HostThemeScheme } from '@aglyn/shared-data-types'
 
 /** MUI breakpoint keys, smallest to largest (`xs` doubles as the base). */
 export const SX_BREAKPOINTS = ['xs', 'sm', 'md', 'lg', 'xl'] as const
 export type SxBreakpoint = (typeof SX_BREAKPOINTS)[number]
+
+/**
+ * The sx scheme scope a styles-panel edit should target for the given
+ * artboard canvas scheme (AGL-588). Light is the base — only the dark
+ * preview scopes edits into the {@link SX_SCHEME_DARK_KEY} slice — so
+ * this returns null unless the artboard previews dark.
+ */
+export function canvasSchemeToSxScheme(
+  scheme: HostThemeScheme | undefined,
+): SxScheme | null {
+  return scheme === 'dark' ? 'dark' : null
+}
 
 /**
  * The breakpoint a styles-panel edit should scope to for the given
@@ -58,12 +72,26 @@ const isResponsiveObject = (value: unknown): value is Record<string, unknown> =>
  * The value a property resolves to at a breakpoint, following MUI's
  * mobile-first cascade (a breakpoint inherits the nearest smaller slice).
  * `breakpoint: null` reads the base value.
+ *
+ * Scheme dimension (AGL-588): the persisted nesting is scheme OUTER,
+ * breakpoints INNER — `sx['@scheme dark']` holds ordinary properties
+ * whose values may be responsive objects. `scheme: 'dark'` reads the
+ * dark slice first and falls back to the base, mirroring how the
+ * renderer merges the slice over base styles at render time; `'light'`,
+ * null, and undefined all read the base (light IS the base).
  */
 export function readSxValue(
   sx: Record<string, any> | undefined,
   property: string,
   breakpoint: SxBreakpoint | null,
+  scheme?: SxScheme | null,
 ): unknown {
+  if (scheme === 'dark') {
+    const slice = sx?.[SX_SCHEME_DARK_KEY] as Record<string, any> | undefined
+    const override = readSxValue(slice, property, breakpoint)
+    if (override !== undefined) return override
+    return readSxValue(sx, property, breakpoint)
+  }
   const value = sx?.[property]
   if (!isResponsiveObject(value)) return value
   if (breakpoint === null) return value['xs']
@@ -93,13 +121,29 @@ export function sxHasBreakpointOverrides(
  * only when a non-base breakpoint diverges; single-`xs` objects collapse
  * back to plain values; `undefined` clears the slice (and the property
  * once no slice remains).
+ *
+ * Scheme dimension (AGL-588): `scheme: 'dark'` applies the exact same
+ * write to the {@link SX_SCHEME_DARK_KEY} slice instead of the base
+ * (scheme OUTER, breakpoints INNER — see {@link readSxValue}); an empty
+ * slice is removed entirely. `'light'`/null/undefined write the base.
+ * Purely additive: sx documents without dark overrides never change
+ * shape.
  */
 export function writeSxValue(
   sx: Record<string, any> | undefined,
   property: string,
   value: unknown,
   breakpoint: SxBreakpoint | null,
+  scheme?: SxScheme | null,
 ): Record<string, any> {
+  if (scheme === 'dark') {
+    const current = (sx?.[SX_SCHEME_DARK_KEY] ?? {}) as Record<string, any>
+    const slice = writeSxValue(current, property, value, breakpoint)
+    const next: Record<string, any> = { ...sx }
+    if (Object.keys(slice).length === 0) delete next[SX_SCHEME_DARK_KEY]
+    else next[SX_SCHEME_DARK_KEY] = slice
+    return next
+  }
   const next: Record<string, any> = { ...sx }
   const current = next[property]
   const key: SxBreakpoint = breakpoint ?? 'xs'

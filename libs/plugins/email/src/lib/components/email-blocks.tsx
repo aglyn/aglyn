@@ -485,7 +485,12 @@ export const EmailDivider = forwardRef<HTMLHRElement, EmailDividerProps>(
         sx={mergeSxProps(
           {
             border: 0,
-            borderTop: `1px solid ${color || '#e0e0e0'}`,
+            // Split shorthand so a palette token path from the theme-
+            // reference color picker (AGL-588) resolves through the sx
+            // system instead of dying inside a template string.
+            borderTopStyle: 'solid',
+            borderTopWidth: 1,
+            borderTopColor: color || '#e0e0e0',
             my: 2,
           },
           sx,
