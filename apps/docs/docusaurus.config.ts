@@ -73,10 +73,23 @@ const config: Config = {
         highlightSearchTermsOnTargetPage: true,
       },
     ],
+    // Click-to-enlarge (lightbox) for every content image (AGL-609).
+    // NOTE: this plugin reads its options from themeConfig.zoom (below),
+    // not from plugin-array options.
+    'docusaurus-plugin-image-zoom',
   ],
 
   themeConfig: {
     image: 'img/aglyn-social-card.png',
+    // Click-to-enlarge for content images (docusaurus-plugin-image-zoom,
+    // AGL-609). Skip inline/emphasis images; dim to the console slate.
+    zoom: {
+      selector: '.markdown :not(em) > img',
+      background: {
+        light: 'rgba(22, 28, 33, 0.65)',
+        dark: 'rgba(0, 0, 0, 0.8)',
+      },
+    },
     colorMode: {
       defaultMode: 'light',
       respectPrefersColorScheme: true,
