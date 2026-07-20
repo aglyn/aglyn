@@ -73,6 +73,15 @@ export const E2E_EMAIL = 'e2e@aglyn.test'
 // lowercase + digit) — the harness signs in through the real UI.
 export const E2E_PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const orgId = E2E_UID // Org doc id = owner uid, matching real signups.
+// Org workspace slug (AGL-621): the console routes by /[orgSlug]/… and the
+// jump page lists memberships by slug, so the e2e org needs a real slug +
+// orgSlugs reservation + membership-mirror slug.
+export const E2E_ORG_SLUG = 'e2e-bakery'
+// A SECOND org the same owner belongs to (AGL-621/622/623): exercises the
+// org jump page (2+ orgs → picker), the switcher, and cross-org redirects.
+export const E2E_ORG2_ID = 'e2e-owner-studio'
+export const E2E_ORG2_SLUG = 'e2e-studio'
+export const E2E_HOST2_ID = 'e2e-studio-site'
 
 // Second org owned by a NON-staff user (AGL-357 regression). The primary
 // org above is owned by the staff account, so staff impersonation of its
@@ -162,6 +171,7 @@ const put = async (ref, data) => {
 // ── Org, membership mirror, host, hostIndex ────────────────────────────────
 await put(firestore.collection('orgs').doc(orgId), {
   name: 'E2E Bakery Co',
+  slug: E2E_ORG_SLUG,
   ownerUid: E2E_UID,
   plan: 'business',
   // Plugin switchboard (AGL-416): explicit so the e2e exercises the
@@ -196,8 +206,14 @@ await put(
 )
 await put(
   firestore.collection('users').doc(E2E_UID).collection('orgs').doc(orgId),
-  { name: 'E2E Bakery Co', role: 'owner', createdAt: now },
+  { name: 'E2E Bakery Co', slug: E2E_ORG_SLUG, role: 'owner', createdAt: now },
 )
+// Public slug → org reservation (AGL-585/AGL-621): the middleware and the
+// client both resolve workspaces through orgSlugs.
+await put(firestore.collection('orgSlugs').doc(E2E_ORG_SLUG), {
+  orgId,
+  createdAt: now,
+})
 await put(firestore.collection('hostIndex').doc(hostId), { orgId })
 await put(firestore.collection('hosts').doc(hostId), {
   subdomain: hostId,
@@ -209,6 +225,57 @@ await put(firestore.collection('hosts').doc(hostId), {
 })
 const hostRef = firestore.collection('hosts').doc(hostId)
 const orgRef = firestore.collection('orgs').doc(orgId)
+
+// ── Second org the SAME owner belongs to (AGL-621/622/623) ──────────────────
+// Gives the e2e user 2+ workspaces so the jump page shows a picker, the org
+// switcher has somewhere to switch to, and a cross-org URL can be exercised.
+await put(firestore.collection('orgs').doc(E2E_ORG2_ID), {
+  name: 'E2E Studio',
+  slug: E2E_ORG2_SLUG,
+  ownerUid: E2E_UID,
+  plan: 'business',
+  enabledPlugins: ['mui'],
+  subscription: { status: 'active' },
+  createdAt: now,
+})
+await put(
+  firestore
+    .collection('orgs')
+    .doc(E2E_ORG2_ID)
+    .collection('members')
+    .doc(E2E_UID),
+  {
+    email: E2E_EMAIL,
+    displayName: 'E2E Owner',
+    role: 'owner',
+    status: 'active',
+    createdAt: now,
+  },
+)
+await put(
+  firestore
+    .collection('users')
+    .doc(E2E_UID)
+    .collection('orgs')
+    .doc(E2E_ORG2_ID),
+  { name: 'E2E Studio', slug: E2E_ORG2_SLUG, role: 'owner', createdAt: now },
+)
+await put(firestore.collection('orgSlugs').doc(E2E_ORG2_SLUG), {
+  orgId: E2E_ORG2_ID,
+  createdAt: now,
+})
+await put(firestore.collection('hostIndex').doc(E2E_HOST2_ID), {
+  orgId: E2E_ORG2_ID,
+  subdomain: E2E_HOST2_ID,
+})
+await put(firestore.collection('hosts').doc(E2E_HOST2_ID), {
+  subdomain: E2E_HOST2_ID,
+  displayName: 'Studio Site',
+  orgId: E2E_ORG2_ID,
+  memberRoles: { [E2E_UID]: 'admin' },
+  screens: {},
+  createdAt: now,
+})
 
 // ── Non-staff-owned org (impersonation success path) ────────────────────────
 // Minimal but complete: the org doc + both membership mirrors, enough for
