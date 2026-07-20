@@ -31,6 +31,8 @@ import {
 } from '@data-driven-forms/react-form-renderer'
 import {
   Box,
+  Button,
+  ButtonBase,
   ClickAwayListener,
   type FormControlProps as MuiFormControlProps,
   type GridProps,
@@ -38,10 +40,12 @@ import {
   type IconButtonProps,
   InputAdornment,
   type InputAdornmentProps,
+  Paper,
   Popper,
   type PopperProps,
   TextField as MuiTextField,
   type TextFieldProps,
+  Typography,
 } from '@mui/material'
 import {
   type FocusEvent,
@@ -52,9 +56,16 @@ import {
   useRef,
   useState,
 } from 'react'
+import {
+  type ColorPickerTokenOption,
+  TokenSwatch,
+  useColorPickerTokenOptions,
+} from './color-picker-tokens'
 
 interface TextFieldColorSwatchProps extends Partial<InputAdornmentProps> {
   color: string
+  /** Set when the value is a theme token — renders the split swatch. */
+  token?: ColorPickerTokenOption
   IconButtonProps?: Partial<IconButtonProps>
 }
 
@@ -70,7 +81,7 @@ const Swatch = styled('span', {
 
 const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
   (props, ref) => {
-    const { color, IconButtonProps, ...rest } = props
+    const { color, token, IconButtonProps, ...rest } = props
 
     return (
       <InputAdornment ref={ref} position={'start'} {...rest}>
@@ -82,7 +93,11 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
               borderColor: 'divider',
               borderRadius: "50%"
             }}>
-            <Swatch color={color} />
+            {token ? (
+              <TokenSwatch light={token.light} dark={token.dark} />
+            ) : (
+              <Swatch color={color} />
+            )}
           </Box>
         </IconButton>
       </InputAdornment>
@@ -90,6 +105,68 @@ const TextFieldColorSwatch = forwardRef<any, TextFieldColorSwatchProps>(
   },
 )
 TextFieldColorSwatch.displayName = 'AglynTextFieldColorSwatch'
+
+/**
+ * Default stage of the two-stage picker (AGL-588): the site theme's
+ * palette references. Each split swatch previews the token's light and
+ * dark resolutions; selecting one stores the TOKEN PATH (not a hex), so
+ * the color keeps adapting when the site switches schemes.
+ */
+const ThemeColorTokenGrid = (props: {
+  options: ColorPickerTokenOption[]
+  value: string
+  onSelect: (tokenPath: string, e: any) => void
+  onCustom: () => void
+}) => {
+  const { options, value, onSelect, onCustom } = props
+  return (
+    <Paper sx={{ p: 1, width: 248 }}>
+      <Typography
+        variant="overline"
+        component="div"
+        color="text.secondary"
+        sx={{ px: 0.5, lineHeight: 2 }}
+      >
+        Theme colors
+      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 0.25,
+        }}
+      >
+        {options.map((option) => (
+          <ButtonBase
+            key={option.value}
+            aria-label={option.label}
+            aria-pressed={option.value === value}
+            onClick={(e) => onSelect(option.value, e)}
+            sx={{
+              justifyContent: 'flex-start',
+              gap: 0.75,
+              px: 0.5,
+              py: 0.5,
+              borderRadius: 1,
+              border: 1,
+              borderColor:
+                option.value === value ? 'secondary.main' : 'transparent',
+              '&:hover': { backgroundColor: 'action.hover' },
+            }}
+          >
+            <TokenSwatch light={option.light} dark={option.dark} size={18} />
+            <Typography variant="caption" noWrap>
+              {option.label}
+            </Typography>
+          </ButtonBase>
+        ))}
+      </Box>
+      <Button size="small" fullWidth sx={{ mt: 0.5 }} onClick={onCustom}>
+        Custom color…
+      </Button>
+    </Paper>
+  )
+}
 
 type InternalColorPickerProps = Partial<TextFieldProps> & {
   FormFieldGridProps?: Partial<GridProps>
@@ -177,25 +254,53 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
     const [fieldRef, setFieldRef] = useState<HTMLDivElement | null>(null)
     const [open, setOpen] = useState(false)
 
+    // Two-stage picking (AGL-588): theme token references first, the
+    // raw color picker behind an explicit "Custom color" step. A stored
+    // token path re-opens on the token stage with its swatch selected; a
+    // hex/rgb value re-opens on the custom stage. `stage` only tracks an
+    // explicit in-session choice — it resets whenever the popper opens.
+    const tokenOptions = useColorPickerTokenOptions()
+    const activeToken = useMemo(
+      () => tokenOptions.find((option) => option.value === value),
+      [tokenOptions, value],
+    )
+    const [stage, setStage] = useState<'tokens' | 'custom' | undefined>()
+    const effectiveStage =
+      stage ??
+      (!tokenOptions.length || (value && !activeToken) ? 'custom' : 'tokens')
+
     const handleClickAway = useCallback((e: MouseEvent | TouchEvent) => setOpen(false), [])
     const handleFocus = useCallback(
       (e: FocusEvent<HTMLInputElement>) => {
+        setStage(undefined)
         setOpen(true)
         onFocus && onFocus(e)
       },
       [onFocus],
     )
 
+    const handleTokenSelect = useCallback(
+      (tokenPath: string, e: any) => {
+        handleChange(tokenPath, e)
+        setOpen(false)
+      },
+      [handleChange],
+    )
+
     const startAdornment = useMemo(
       () => (
         <TextFieldColorSwatch
           color={value}
+          token={activeToken}
           IconButtonProps={{
-            onClick: () => setOpen((prev) => !prev),
+            onClick: () => {
+              setStage(undefined)
+              setOpen((prev) => !prev)
+            },
           }}
         />
       ),
-      [value],
+      [value, activeToken],
     )
 
     return (
@@ -241,12 +346,39 @@ export const ColorPickerComponent = forwardRef<any, ColorPickerProps>(
               disablePortal
               {...PopperProps}
             >
-              <AglynColorPicker
-                {...ColorPickerProps}
-                color={value}
-                onChange={handleColorChange}
-                presetColors={presetColors}
-              />
+              {effectiveStage === 'tokens' ? (
+                <ThemeColorTokenGrid
+                  options={tokenOptions}
+                  value={value}
+                  onSelect={handleTokenSelect}
+                  onCustom={() => setStage('custom')}
+                />
+              ) : (
+                <Paper sx={{ p: 0.5 }}>
+                  {tokenOptions.length ? (
+                    <Button
+                      size="small"
+                      fullWidth
+                      sx={{ mb: 0.5 }}
+                      onClick={() => setStage('tokens')}
+                    >
+                      ‹ Theme colors
+                    </Button>
+                  ) : null}
+                  <AglynColorPicker
+                    {...ColorPickerProps}
+                    // A token path is not parseable by the picker; seed it
+                    // with the token's resolved color instead.
+                    color={
+                      activeToken
+                        ? activeToken.light ?? activeToken.dark ?? ''
+                        : value
+                    }
+                    onChange={handleColorChange}
+                    presetColors={presetColors}
+                  />
+                </Paper>
+              )}
             </Popper>
           </div>
         </ClickAwayListener>
