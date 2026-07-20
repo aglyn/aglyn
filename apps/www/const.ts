@@ -17,14 +17,17 @@
 
 
 export const mainNavigation = [
-  {
-    children: 'Pricing',
-    href: '/pricing',
-  },
-  {
-    children: 'Changelog',
-    href: '/changelog',
-  },
+  // {
+  //   children: 'Features',
+  // },
+  // {
+  //   children: 'Partners',
+  //   items: [],
+  // },
+  // {
+  //   children: 'Company',
+  //   items: [],
+  // },
   {
     children: 'Get Access',
     variant: 'contained',

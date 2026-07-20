@@ -22,16 +22,6 @@
       "port": 4500
     },
     {
-      "name": "www",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": [
-        "nx",
-        "serve",
-        "www"
-      ],
-      "port": 4100
-    },
-    {
       "name": "docs",
       "runtimeExecutable": "npx",
       "runtimeArgs": [
