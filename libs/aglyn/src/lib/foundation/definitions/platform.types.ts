@@ -153,6 +153,12 @@ export interface AglynHost extends AglynDocument {
   /** Promotional popup (AGL-196); marketingOverlays-gated. */
   popup?: HostPopup
   displayName?: string
+  /**
+   * Site logo URL (AGL-594): the host's own brand mark, shown by the
+   * tenant's navigation loader (and future chrome). Distinct from
+   * `seo.entity.logo`, which is publisher-semantic JSON-LD.
+   */
+  logoUrl?: string
   seo?: {
     title?: string
     description?: string

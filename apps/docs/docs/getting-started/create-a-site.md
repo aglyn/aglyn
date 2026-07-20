@@ -31,6 +31,9 @@ the console suggests an available variation.
 - **Data** — datasets, variables, functions, and workflows.
 - **Media** — images, video, and files, organized in folders.
 - **Setup** — theme, custom domain, SEO, and integrations under tabbed settings.
+  The **Site logo** card (Details tab) sets your brand mark: it's shown on the
+  live site's page-navigation loading overlay — a themed, blurred scrim with a
+  progress bar. Without a logo, the loader shows your site name instead.
 - **Billing** — the plan and usage meters that gate features and quotas.
 
 ## Switching between sites

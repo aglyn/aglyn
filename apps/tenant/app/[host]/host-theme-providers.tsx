@@ -17,6 +17,9 @@
 'use client'
 
 import type { HostTheme } from '@aglyn/shared-data-types'
+// Deep path like the console's providers.tsx — the component is not in
+// the shared-ui-jsx barrel.
+import LoadingLayoutAppComponent from '@aglyn/shared-ui-jsx/components/loading-layout-app.component'
 import {
   consoleThemeDark,
   consoleThemeLight,
@@ -30,12 +33,20 @@ import type { ReactNode } from 'react'
  * `[host]` server layout and handed down as a serializable prop, then
  * `HostThemeProvider` renders children under the host's MUI theme (falling
  * back to the console light/dark themes when the host has no customization).
+ *
+ * The navigation loader (AGL-594) mounts INSIDE the host theme so its
+ * blurred `background.paper` scrim and `secondary` progress colors match
+ * the site, branded with the host's logo (site name as fallback).
  */
 export function HostThemeProviders({
   hostTheme,
+  brandLogoUrl,
+  brandName,
   children,
 }: {
   hostTheme?: HostTheme
+  brandLogoUrl?: string
+  brandName?: string
   children: ReactNode
 }) {
   return (
@@ -43,7 +54,12 @@ export function HostThemeProviders({
       theme={hostTheme}
       fallback={[consoleThemeLight, consoleThemeDark]}
     >
-      {children}
+      <LoadingLayoutAppComponent
+        brandLogoUrl={brandLogoUrl}
+        brandName={brandName}
+      >
+        {children}
+      </LoadingLayoutAppComponent>
     </HostThemeProvider>
   )
 }

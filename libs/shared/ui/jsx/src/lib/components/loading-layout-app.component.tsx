@@ -99,7 +99,17 @@ RouterLoadingApp.aglyn = true
  * instead, and imperative `useLoading().queueLoading()` calls still render
  * the modal.
  */
-const LoadingLayoutAppComponent = forwardRef<any, LoadingLayoutComponentProps>(
+export interface LoadingLayoutAppComponentProps
+  extends LoadingLayoutComponentProps {
+  /** Per-site branding for the overlay (AGL-594) — see LoadingModal. */
+  brandLogoUrl?: string
+  brandName?: string
+}
+
+const LoadingLayoutAppComponent = forwardRef<
+  any,
+  LoadingLayoutAppComponentProps
+>(
   (props, ref) => {
     const { children, ...rest } = props
 

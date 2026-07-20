@@ -17,12 +17,14 @@
 'use client'
 
 import {
+  Box,
   CircularProgress,
   LinearProgress,
   Modal,
   type ModalProps,
   Stack,
   styled,
+  Typography,
 } from '@mui/material'
 import { forwardRef, Fragment } from 'react'
 import { AglynLogoFull } from '../const/svg-icons'
@@ -65,10 +67,25 @@ const LoadingOverlayModal = styled(Modal)(({ theme }) => {
   }
 })
 
-export interface LoadingModalProps extends Partial<ModalProps> {}
+export interface LoadingModalProps extends Partial<ModalProps> {
+  /**
+   * Brand the overlay for a tenant site (AGL-594): a site logo image
+   * replaces the Aglyn logo in the bottom slot; with only a name, the
+   * site name renders as text. Without either, the Aglyn logo shows —
+   * the console's own look.
+   */
+  brandLogoUrl?: string
+  brandName?: string
+}
 
 export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
-  const { open, children, ...rest } = props
+  const { open, children, brandLogoUrl, brandName, ...rest } = props
+
+  const brandSlotSx = {
+    m: '0 auto',
+    position: 'absolute',
+    bottom: (theme: any) => theme.spacing(2),
+  } as const
 
   return (
     <LoadingContext.Consumer>
@@ -108,14 +125,28 @@ export const LoadingModal = forwardRef<any, LoadingModalProps>((props, ref) => {
                     </LoadingTextComponent>
                   </div>
                 </Stack>
-                <AglynLogoFull
-                  sx={{
-                    fontSize: 100,
-                    m: '0 auto',
-                    position: 'absolute',
-                    bottom: (theme) => theme.spacing(2),
-                  }}
-                />
+                {brandLogoUrl ? (
+                  <Box
+                    component="img"
+                    src={brandLogoUrl}
+                    alt={brandName || 'Site logo'}
+                    sx={{
+                      ...brandSlotSx,
+                      maxHeight: 48,
+                      maxWidth: 200,
+                      objectFit: 'contain',
+                    }}
+                  />
+                ) : brandName ? (
+                  <Typography
+                    variant="h6"
+                    sx={{ ...brandSlotSx, fontWeight: 600 }}
+                  >
+                    {brandName}
+                  </Typography>
+                ) : (
+                  <AglynLogoFull sx={{ ...brandSlotSx, fontSize: 100 }} />
+                )}
               </div>
             </LoadingOverlayModal>
           </Fragment>

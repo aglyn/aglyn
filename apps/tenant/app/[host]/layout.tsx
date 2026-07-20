@@ -42,7 +42,11 @@ export default async function HostLayout({
   const hostTheme = hostRes.host?.theme
   const fontsHref = getGoogleFontsUrl(hostTheme?.fonts)
   return (
-    <HostThemeProviders hostTheme={hostTheme}>
+    <HostThemeProviders
+      hostTheme={hostTheme}
+      brandLogoUrl={hostRes.host?.logoUrl}
+      brandName={hostRes.host?.displayName}
+    >
       {fontsHref ? (
         <>
           <link

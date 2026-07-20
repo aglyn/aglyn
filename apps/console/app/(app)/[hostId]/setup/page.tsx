@@ -48,6 +48,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import AuthScreensCard from '../../../../components/auth-screens-card.component'
 import CustomDomainCard from '../../../../components/custom-domain-card.component'
 import FaviconCard from '../../../../components/favicon-card.component'
+import LogoCard from '../../../../components/logo-card.component'
 import ErrorScreensCard from '../../../../components/error-screens-card.component'
 import LanguagesCard from '../../../../components/languages-card.component'
 import SiteBackupCard from '../../../../components/site-backup-card.component'
@@ -484,6 +485,11 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
 
                           {schema.id === 'hostDetails' ? (
                             <>
+                              {/* Site brand mark (AGL-594): shown by the
+                                  tenant's navigation loader. */}
+                              <div style={{ marginTop: 24 }}>
+                                <LogoCard hostId={hostId} />
+                              </div>
                               <div style={{ marginTop: 24 }}>
                                 <ErrorScreensCard hostId={hostId} />
                               </div>
