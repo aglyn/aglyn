@@ -23,8 +23,9 @@ a guided, self-service wizard.
 4. Aglyn runs **DNS verification** and resolves the CNAME; once it checks out, your site
    serves on the custom domain.
 
-:::note More detailed how-tos coming
-Registrar-specific DNS walkthroughs and troubleshooting are on the way.
+:::tip How-tos
+- [Connect a domain](connect-a-domain.md)
+- [Troubleshoot verification](troubleshooting.md)
 :::
 
 ## Related

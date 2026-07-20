@@ -45,8 +45,9 @@ Use the inline **tester** at the bottom of the redirects card to paste a
 path and see exactly which rule (if any) catches it — it runs the same
 matcher the live site uses.
 
-:::note More detailed how-tos coming
-Examples for common migration patterns are on the way.
+:::tip How-tos
+- [Create a redirect](create-a-redirect.md)
+- [Migration patterns](migration-patterns.md)
 :::
 
 ## Related
