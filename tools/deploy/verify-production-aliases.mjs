@@ -100,6 +100,15 @@ const PROJECTS = [
     // commit trails HEAD by design — report the SHA, never fail on it.
     alwaysBuilds: false,
   },
+  {
+    name: 'docs-aglyn-io',
+    label: 'docs',
+    // Docusaurus docs site (apps/docs). Builds on every production push;
+    // three consecutive Error builds went unnoticed until AGL-580 because
+    // this project wasn't verified — a lagging commit now flags loudly.
+    domains: ['https://docs.aglyn.io'],
+    alwaysBuilds: true,
+  },
 ]
 
 const args = process.argv.slice(2)
