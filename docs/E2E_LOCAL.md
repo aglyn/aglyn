@@ -39,6 +39,25 @@ npm run serve:console:emulated     # port 4200
 npm run e2e:console                # E2E_BASE_URL overrides the target
 ```
 
+## Tenant production-mode smoke (AGL-595) — REQUIRED before deploying tenant changes
+
+```bash
+# emulators + seed running (steps 1–2 above); port 4500 free
+npm run smoke:tenant:prod
+```
+
+Builds apps/tenant for production, starts the real `next start` server
+against the emulators, and asserts the seeded routes return 200 with
+their content. This is the only local gate that catches
+**request-time-only ISR failures** — the class that took every tenant
+site down on 2026-07-20 (`useSearchParams()` without a Suspense
+boundary → `BAILOUT_TO_CLIENT_SIDE_RENDERING` 500): the dev server
+renders dynamically, the console is fully dynamic, and the Vercel build
+prerenders nothing, so typecheck, dev-server verification, and a green
+build all missed it. Run this for ANY change touching apps/tenant
+rendering paths (layouts, providers, shared client components the
+tenant mounts).
+
 The harness signs in once through the real `/signin` UI (a synthetic
 localStorage session races the app's `connectAuthEmulator` call — don't),
 pre-warms each route so dev-server compiles don't eat the navigation
