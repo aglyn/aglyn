@@ -275,6 +275,9 @@ await put(firestore.collection('hosts').doc(E2E_HOST2_ID), {
   orgId: E2E_ORG2_ID,
   memberRoles: { [E2E_UID]: 'admin' },
   screens: {},
+  // A favicon so the site switcher's favicon path (AGL-630) is exercised;
+  // the bakery/demo host has none and falls back to the generic glyph.
+  seo: { favicon: 'https://picsum.photos/seed/studiofav/64' },
   createdAt: now,
 })
 
