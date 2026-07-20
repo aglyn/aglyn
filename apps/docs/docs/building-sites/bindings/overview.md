@@ -43,11 +43,35 @@ variable doesn't break anything that uses it. Legacy name-based tokens still res
 fallback, and imports are normalized to id form automatically. When you publish, older
 documents are migrated to id tokens.
 
-## Insert bindings without typing
+## Insert a variable
 
-Use the **insert-binding picker**: search by friendly name, pick a variable or function,
-and the correct id token is inserted for you. Each variable option shows a **live value
-preview** so you can confirm what the binding resolves to before inserting it.
+You never have to hand-type token syntax. Every text-capable attribute field in the
+Besigner (Text, Link URL, Image URL, …) has a small **`{x}` insert button** at its end.
+Click it to open the **data picker** — a searchable menu grouped by source:
+
+| Group | Tokens | When it appears |
+| --- | --- | --- |
+| **Variables** | Your site variables (inserted as rename-safe id tokens) | When the site has variables |
+| **Functions** | Your functions, with parameter placeholders | When the site has functions |
+| **Entry** | Collection-entry fields — Title, Excerpt, Link URL, Published date, … | Always (hint shows where they resolve) |
+| **Collection** | Collection name and slug | Always (resolves on collection pages) |
+| **Dataset item** | The fields of the repeated dataset, by display name | Only inside a repeating container |
+
+Picking an option inserts the token **at your cursor**, keeping the text around it — so
+you can compose values like `Read “{{entry.title}}” →` or
+`https://example.com/blog/{{entry.slug}}` by mixing typed text and inserted placeholders.
+Pick again to keep concatenating; the cursor lands right after each inserted token. Each
+variable option shows a **live value preview** so you can confirm what the binding
+resolves to before inserting it.
+
+Selected text is replaced by the inserted token, and the element-level **Insert binding**
+button on text elements opens the same picker (appending to the element text).
+
+:::tip Advanced: type it raw
+The picker is a convenience, not a requirement — typing `{{...}}` tokens by hand keeps
+working everywhere, and typed `{{name}}` tokens are normalized to rename-safe id form on
+save.
+:::
 
 Everywhere else the console references logic by entity, it uses **pickers that store
 ids**, never typed names: workflow steps pick their function, automations pick their

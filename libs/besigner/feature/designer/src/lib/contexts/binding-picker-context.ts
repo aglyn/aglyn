@@ -36,6 +36,12 @@ export interface BindingOption {
    * require remembering what it holds.
    */
   preview?: string
+  /**
+   * Caption rendered under the group's subheader (AGL-583) — e.g. where a
+   * context-dependent token group resolves ("Resolves on collection
+   * pages"). Read from the group's first visible option.
+   */
+  groupHint?: string
 }
 
 export interface BindingPickerContextValue {

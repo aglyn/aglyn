@@ -22,6 +22,7 @@
  * import from tenant Server Components (AGL-405). The full `./index` barrel
  * re-adds the contexts for client consumers.
  */
+export * from './binding-token-catalog'
 export * from './binding-tokens'
 export * from './collection-entries'
 export * from './contacts'

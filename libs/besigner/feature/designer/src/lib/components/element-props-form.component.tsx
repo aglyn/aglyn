@@ -45,15 +45,22 @@ import {
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
-import ListSubheader from '@mui/material/ListSubheader'
-import MuiMenu from '@mui/material/Menu'
 import MuiMenuItem from '@mui/material/MenuItem'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import * as Besigner from '@aglyn/besigner'
-import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, memo, type MutableRefObject, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AiAssistContext } from '../contexts/ai-assist-context'
-import { BindingPickerContext } from '../contexts/binding-picker-context'
+import {
+  BindingPickerContext,
+  type BindingOption,
+} from '../contexts/binding-picker-context'
+import {
+  InsertTokenAdornment,
+  InsertTokenMenu,
+  insertTokenIntoText,
+  type TokenFieldCapture,
+} from './insert-token-menu.component'
 import {
   InteractionsContext,
   nodeElementSelector,
@@ -211,6 +218,67 @@ export const ElementPropsFormTemplate = forwardRef<
 ElementPropsFormTemplate.displayName = 'ElementPropsFormTemplate'
 ElementPropsFormTemplate.aglyn = true
 
+/** The attribute field whose insert-data picker is open (AGL-583). */
+export interface TokenInsertTarget {
+  fieldName: string
+  anchorEl: HTMLElement
+}
+
+/**
+ * Bridges the insert picker to the form state (AGL-583): the picked token
+ * is spliced into the target field's CURRENT form value at the caret
+ * captured when the adornment was pressed, via the form api — so an
+ * insert behaves exactly like typing, and the FormSpy autosave commits it
+ * through the same debounce as keystrokes (AGL-567). Must render inside
+ * the FormRenderer subtree (it calls `useFormApi`).
+ */
+export function FieldTokenInsertMenu({
+  target,
+  captureRef,
+  options,
+  onClose,
+}: {
+  target: TokenInsertTarget | null
+  captureRef: MutableRefObject<TokenFieldCapture>
+  options: BindingOption[]
+  onClose: () => void
+}) {
+  const formApi = useFormApi()
+  const handleInsert = useCallback(
+    (token: string) => {
+      if (!target) return
+      const { input, start, end } = captureRef.current
+      const raw = formApi.getFieldState(target.fieldName)?.value
+      const current = typeof raw === 'string' ? raw : raw == null ? '' : String(raw)
+      const { value, caret } = insertTokenIntoText(current, token, start, end)
+      formApi.change(target.fieldName, value)
+      onClose()
+      // Refocus the input with the caret just after the token, so picking
+      // another placeholder keeps concatenating where the last one ended.
+      requestAnimationFrame(() => {
+        if (!input) return
+        input.focus()
+        try {
+          input.setSelectionRange(caret, caret)
+        } catch {
+          // Some input types (number) reject selection — focus is enough.
+        }
+      })
+    },
+    [formApi, target, captureRef, onClose],
+  )
+  return (
+    <InsertTokenMenu
+      anchorEl={target?.anchorEl ?? null}
+      open={Boolean(target)}
+      onClose={onClose}
+      options={options}
+      onInsert={handleInsert}
+    />
+  )
+}
+FieldTokenInsertMenu.displayName = 'FieldTokenInsertMenu'
+
 export interface ElementPropsFormProps extends FormRendererProps {
   node?: Aglyn.NodeSchema<any>
 }
@@ -304,6 +372,25 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       return undefined
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasDatasetFieldSelect, node, entityOptions.datasets])
+    // Insert-data picker target (AGL-583): which attribute field's picker
+    // is open, plus the input + caret captured when its adornment was
+    // pressed (mousedown fires before focus can move).
+    const [tokenTarget, setTokenTarget] = useState<TokenInsertTarget | null>(
+      null,
+    )
+    const tokenCaptureRef = useRef<TokenFieldCapture>({
+      input: null,
+      start: null,
+      end: null,
+    })
+    const openTokenTarget = useCallback(
+      (fieldName: string, anchorEl: HTMLElement, capture: TokenFieldCapture) => {
+        tokenCaptureRef.current = capture
+        setTokenTarget({ fieldName, anchorEl })
+      },
+      [],
+    )
+    const closeTokenTarget = useCallback(() => setTokenTarget(null), [])
     const attributes = useMemo(() => {
       const entityListFor = (component: Aglyn.FieldComponentType) => {
         switch (component) {
@@ -382,6 +469,35 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             ],
           }
         }
+        if (
+          (field.component === Aglyn.FieldComponentType.TEXT_FIELD ||
+            field.component === Aglyn.FieldComponentType.TEXTAREA) &&
+          !(field as any).isReadOnly
+        ) {
+          // Token-capable free-text fields (children, href, src, …) get
+          // the insert-data affordance (AGL-583): a small {x} adornment
+          // that opens the placeholder picker and splices the picked
+          // token at the caret. Raw {{...}} typing keeps working.
+          return {
+            ...field,
+            slotProps: {
+              input: {
+                endAdornment: (
+                  <InsertTokenAdornment
+                    onOpen={(anchor, capture) =>
+                      openTokenTarget(field.name, anchor, capture)
+                    }
+                  />
+                ),
+              },
+              // A field-level slotProps REPLACES the mapper's, so any
+              // declared htmlInput props must be re-threaded here.
+              ...((field as any).inputProps
+                ? { htmlInput: { ...(field as any).inputProps } }
+                : {}),
+            },
+          }
+        }
         return field
       }).filter((field) => {
         // Unknown editor types must degrade to a skipped attribute, never
@@ -405,6 +521,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       entityOptions,
       nodeOptions,
       ancestorDatasetId,
+      openTokenTarget,
     ])
 
     // Reusable-component flows (AGL-35): actions appear only when the host
@@ -464,15 +581,84 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(nodeProps ?? {}), bindingVariables, bindingFunctions])
 
-    // Hosts can have hundreds of variables (AGL-186) — filter as you type.
-    const [bindingSearch, setBindingSearch] = useState('')
-    const visibleBindingOptions = useMemo(() => {
-      const term = bindingSearch.trim().toLowerCase()
-      if (!term) return bindingOptions ?? []
-      return (bindingOptions ?? []).filter((option) =>
-        option.label.toLowerCase().includes(term),
-      )
-    }, [bindingOptions, bindingSearch])
+    // Insert-picker context (AGL-583): walk the ancestor chain for a
+    // repeatable container (dataset-item tokens need its model fields) or
+    // a Collection entries block (entry tokens resolve right here, not
+    // only on entry pages). `repeatDataset` persists a dataset id OR a
+    // display name — resolve either against the entity picker options.
+    const insertContext = useMemo(() => {
+      const nodes = (Aglyn.canvas.toJSON().nodes ?? {}) as Record<string, any>
+      let repeatDatasetKey: string | undefined
+      let inCollectionEntries = false
+      let current = node?.$id ? nodes[node.$id] : undefined
+      for (let hops = 0; current && hops < 100; hops += 1) {
+        const props = current.props ?? {}
+        if (
+          !repeatDatasetKey &&
+          typeof props.repeatDataset === 'string' &&
+          props.repeatDataset.trim()
+        ) {
+          repeatDatasetKey = props.repeatDataset.trim()
+        }
+        if (
+          current.componentId === Aglyn.COLLECTION_ENTRIES_COMPONENT_ID
+        ) {
+          inCollectionEntries = true
+        }
+        current = current.parentId ? nodes[current.parentId] : undefined
+      }
+      const datasets = entityOptions.datasets ?? []
+      const dataset = repeatDatasetKey
+        ? datasets.find((candidate) => candidate.id === repeatDatasetKey) ??
+          datasets.find((candidate) => candidate.label === repeatDatasetKey)
+        : undefined
+      return {
+        inCollectionEntries,
+        datasetLabel: dataset?.label,
+        datasetFields: dataset
+          ? entityOptions.datasetFields?.[dataset.id] ?? []
+          : [],
+      }
+    }, [node, entityOptions.datasets, entityOptions.datasetFields])
+    // The full picker list (AGL-583): host bindings first (AGL-100), then
+    // the data-placeholder catalogs. Entry/Collection stay browsable even
+    // out of context — with a hint saying where they resolve — while the
+    // Dataset item group only appears inside a resolvable repeatable.
+    const insertOptions = useMemo(() => {
+      const options: BindingOption[] = [...(bindingOptions ?? [])]
+      const entryHint = insertContext.inCollectionEntries
+        ? undefined
+        : 'Resolves in Collection entries blocks and on entry pages'
+      for (const entry of Aglyn.ENTRY_TOKEN_CATALOG) {
+        options.push({
+          group: 'Entry',
+          label: entry.label,
+          token: entry.token,
+          preview: entry.description,
+          ...(entryHint ? { groupHint: entryHint } : {}),
+        })
+      }
+      for (const entry of Aglyn.COLLECTION_TOKEN_CATALOG) {
+        options.push({
+          group: 'Collection',
+          label: entry.label,
+          token: entry.token,
+          preview: entry.description,
+          groupHint: 'Resolves on collection pages',
+        })
+      }
+      for (const field of insertContext.datasetFields) {
+        options.push({
+          group: 'Dataset item',
+          label: field.label,
+          token: Aglyn.datasetItemToken(field.id),
+          ...(insertContext.datasetLabel
+            ? { groupHint: `From dataset "${insertContext.datasetLabel}"` }
+            : {}),
+        })
+      }
+      return options
+    }, [bindingOptions, insertContext])
     const handleInsertBinding = useCallback(
       (token: string) => {
         setBindingAnchor(null)
@@ -573,6 +759,17 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   {...rest}
                 />
 
+                {/* Per-field insert-data picker (AGL-583): opened by the
+                    {x} adornment on token-capable attribute inputs;
+                    splices the token at the captured caret via the form
+                    api, so the AGL-567 debounce commits it like typing. */}
+                <FieldTokenInsertMenu
+                  target={tokenTarget}
+                  captureRef={tokenCaptureRef}
+                  options={insertOptions}
+                  onClose={closeTokenTarget}
+                />
+
                 {boundPropSummaries.length ? (
                   <Box sx={{ mt: 2 }}>
                     <Box
@@ -616,7 +813,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     ))}
                   </Box>
                 ) : null}
-                {bindingOptions?.length && textEditable ? (
+                {insertOptions.length && textEditable ? (
                   <FormControl margin="none" fullWidth>
                     <Button
                       color="secondary"
@@ -628,66 +825,15 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     >
                       Insert binding
                     </Button>
-                    <MuiMenu
+                    {/* Element-level picker (AGL-100), now serving the
+                        full catalog (AGL-583); appends to the text. */}
+                    <InsertTokenMenu
                       anchorEl={bindingAnchor}
                       open={Boolean(bindingAnchor)}
-                      onClose={() => {
-                        setBindingAnchor(null)
-                        setBindingSearch('')
-                      }}
-                    >
-                      <Box sx={{ px: 1.5, pb: 1 }}>
-                        <TextField
-                          size="small"
-                          placeholder="Search bindings…"
-                          value={bindingSearch}
-                          onChange={(event) =>
-                            setBindingSearch(event.target.value)
-                          }
-                          onKeyDown={(event) => event.stopPropagation()}
-                          autoFocus
-                          fullWidth
-                        />
-                      </Box>
-                      {visibleBindingOptions.length === 0 ? (
-                        <MuiMenuItem disabled>
-                          {'No bindings match'}
-                        </MuiMenuItem>
-                      ) : null}
-                      {visibleBindingOptions.map((option, index) => {
-                        const previous = visibleBindingOptions[index - 1]
-                        return [
-                          option.group && option.group !== previous?.group ? (
-                            <ListSubheader key={`${option.group}-header`}>
-                              {option.group}
-                            </ListSubheader>
-                          ) : null,
-                          <MuiMenuItem
-                            key={option.token}
-                            onClick={() => {
-                              setBindingSearch('')
-                              handleInsertBinding(option.token)
-                            }}
-                          >
-                            <Stack sx={{ minWidth: 0 }}>
-                              <Typography variant="body2" noWrap>
-                                {option.label}
-                              </Typography>
-                              {/* Live value preview (AGL-262). */}
-                              {option.preview ? (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  noWrap
-                                >
-                                  {option.preview}
-                                </Typography>
-                              ) : null}
-                            </Stack>
-                          </MuiMenuItem>,
-                        ]
-                      })}
-                    </MuiMenu>
+                      onClose={() => setBindingAnchor(null)}
+                      options={insertOptions}
+                      onInsert={handleInsertBinding}
+                    />
                   </FormControl>
                 ) : null}
                 {onPickMedia && mediaAttributes.length
