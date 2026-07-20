@@ -1,0 +1,83 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Customer REST API v1 catch-all (AGL-617). Console middleware already
+ * excludes `/api/**`, so this group carries its own API-key auth (never the
+ * console session chokepoint). This file owns the pipeline (auth, entitlement,
+ * rate limit, error envelope); resource handlers are wired in AGL-618.
+ */
+import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
+import { authenticateApiV1 } from '../../../../utils/api-v1'
+
+export const dynamic = 'force-dynamic'
+
+type RouteContext = { params: Promise<{ route?: string[] }> }
+
+async function dispatch(
+  request: Request,
+  routeContext: RouteContext,
+): Promise<Response> {
+  const authenticated = await authenticateApiV1(request)
+  if (authenticated instanceof Response) return authenticated
+  const { context } = authenticated
+
+  const { route } = await routeContext.params
+  const path = (route ?? []).join('/')
+  const { headers } = context
+
+  if (request.method === 'GET') {
+    if (path === '') {
+      return apiJson(
+        {
+          object: 'api',
+          name: 'Aglyn REST API',
+          version: 'v1',
+          documentation: 'https://docs.aglyn.com/api',
+          resources: ['datasets', 'contacts', 'sites', 'forms'],
+        },
+        { headers },
+      )
+    }
+    if (path === 'me') {
+      return apiJson(
+        { object: 'api_key', org: context.orgId, scopes: context.scopes },
+        { headers },
+      )
+    }
+    return ApiErrors.notFound({
+      message: `Unknown endpoint: /v1/${path}`,
+      headers,
+    })
+  }
+
+  // Writes land with the resource handlers (AGL-618).
+  return ApiErrors.methodNotAllowed({ headers })
+}
+
+export function GET(request: Request, routeContext: RouteContext) {
+  return dispatch(request, routeContext)
+}
+export function POST(request: Request, routeContext: RouteContext) {
+  return dispatch(request, routeContext)
+}
+export function PATCH(request: Request, routeContext: RouteContext) {
+  return dispatch(request, routeContext)
+}
+export function DELETE(request: Request, routeContext: RouteContext) {
+  return dispatch(request, routeContext)
+}
