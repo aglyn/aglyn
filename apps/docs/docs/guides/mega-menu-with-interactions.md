@@ -43,8 +43,6 @@ don't have a layout yet, see
 3. Insert **Mega Menu**. It arrives as a nav item labelled *Menu* with a
    starter panel of three link columns.
 
-![The Choose element picker open on the Navigation group, with the Mega Menu element highlighted](/img/guides/mega-menu-element-picker.png)
-
 On the canvas the menu shows **just its trigger** — that's how it renders
 on the live site until a visitor interacts. Select the Mega Menu (or
 anything inside it) and the panel **expands in place** so you can edit its
@@ -71,8 +69,6 @@ section:
 3. Add as many columns, links, images, or promo cards as you like — a mega
    menu panel takes any content.
 
-![The Besigner canvas with the mega menu panel expanded, showing three columns of screen links being edited](/img/guides/mega-menu-panel-editing.png)
-
 ## 3. Make it open on hover
 
 Out of the box, **clicking** the nav item already toggles the panel — no
@@ -88,8 +84,6 @@ setup. To add the classic hover behavior:
 6. **Save**. The interaction is enabled immediately and appears in the
    element's Interactions list with edit, enable/disable, and remove
    controls.
-
-![The Add interaction dialog with When hovered selected and an Open a menu action](/img/guides/mega-menu-interaction-dialog.png)
 
 That's the whole wiring. A menu opened by hover **closes itself** when the
 pointer leaves the nav item and its panel, with a short grace period so the
@@ -130,8 +124,6 @@ for the full element reference.
 
 Open your live site and hover the nav item — the panel drops open, and
 moving the pointer away closes it.
-
-![The published mega menu open on hover on the live site, showing three columns of links under the nav item](/img/guides/mega-menu-live.png)
 
 ## How it works under the hood
 
