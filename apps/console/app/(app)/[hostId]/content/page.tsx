@@ -1197,6 +1197,9 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                   onChange={(body) =>
                     setEditor((prev) => (prev ? { ...prev, body } : prev))
                   }
+                  // The editor's Insert image dialog hands off to the same
+                  // media picker the "Insert image" button uses (AGL-596).
+                  onPickImageFromMedia={() => setPickerTarget('body')}
                 />
                 <Stack
                   direction="row"

@@ -57,6 +57,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { htmlToRows } from './markdown-html-paste'
 
 export type MarkdownEditorCommand =
   | 'bold'
@@ -77,6 +78,12 @@ export interface MarkdownVisualEditorProps {
   value: string
   /** Fires with the serialized markdown-lite string on every edit. */
   onChange: (markdown: string) => void
+  /**
+   * When set, the Insert image dialog offers a "Choose from media" button
+   * that closes the dialog and invokes this callback — the host page opens
+   * its media picker and inserts via the imperative handle (AGL-596).
+   */
+  onPickImageFromMedia?: () => void
   minHeight?: number | string
   maxHeight?: number | string
 }
@@ -456,7 +463,7 @@ const MarkdownVisualEditor = forwardRef<
   MarkdownVisualEditorHandle,
   MarkdownVisualEditorProps
 >(function MarkdownVisualEditor(
-  { value, onChange, minHeight = 280, maxHeight = 480 },
+  { value, onChange, onPickImageFromMedia, minHeight = 280, maxHeight = 480 },
   ref,
 ) {
   const [version, setVersion] = useState(0)
@@ -658,8 +665,8 @@ const MarkdownVisualEditor = forwardRef<
       const current = rowsRef.current ?? []
       const target = resolveTarget()
       if (command === 'image') {
-        // TODO(AGL-582): media-picker integration for the toolbar image
-        // button is a later phase — for now a URL prompt dialog.
+        // URL prompt dialog; when the host page wires
+        // `onPickImageFromMedia` it also offers the media picker (AGL-596).
         dialogTargetRef.current = target
         setUrlDialog({ kind: 'image', url: '', text: '' })
         return
@@ -916,11 +923,6 @@ const MarkdownVisualEditor = forwardRef<
   const handleRowPaste = useCallback(
     (key: string) => (event: React.ClipboardEvent<HTMLDivElement>) => {
       event.preventDefault()
-      // Plain-text paste only in this phase (AGL-582): HTML clipboard
-      // conversion and multi-block markdown paste are follow-ups.
-      const text = event.clipboardData?.getData('text/plain') ?? ''
-      if (!text) return
-      const flattened = text.replace(/\s*\n+\s*/g, ' ')
       const current = rowsRef.current ?? []
       const index = findRowIndex(key)
       const row = current[index]
@@ -932,6 +934,56 @@ const MarkdownVisualEditor = forwardRef<
         start: length,
         end: length,
       }
+      // Rich clipboard first (AGL-596): text/html converts to rows so
+      // bold/italic/links, headings, lists and images survive the paste.
+      const html = event.clipboardData?.getData('text/html') ?? ''
+      if (html) {
+        // Re-key onto this editor's sequence — converted keys are
+        // module-local placeholders and must not collide across pastes.
+        const converted = htmlToRows(html).map(
+          (pasted) => ({ ...pasted, key: nextRowKey() }) as EditorRow,
+        )
+        const only = converted.length === 1 ? converted[0] : undefined
+        if (only && only.kind !== 'image') {
+          // One text row: merge its inlines into this row at the caret,
+          // exactly like a plain-text paste but keeping the marks.
+          current[index] = { ...row, inlines } as EditorRow
+          pushHistory()
+          current[index] = {
+            ...row,
+            inlines: replaceInlineRange(
+              inlines,
+              offsets.start,
+              offsets.end,
+              only.inlines,
+            ),
+          } as EditorRow
+          const caret = offsets.start + rowPlainText(only.inlines).length
+          commit({ key: row.key, start: caret, end: caret })
+          return
+        }
+        if (converted.length > 0) {
+          // Multi-row (or image) paste: splice whole rows in after this
+          // one — no splitting of the current row.
+          current[index] = { ...row, inlines } as EditorRow
+          pushHistory()
+          const tail = converted[converted.length - 1]
+          if (tail && tail.kind === 'image') converted.push(emptyParagraph())
+          current.splice(index + 1, 0, ...converted)
+          const focus = converted[converted.length - 1]
+          if (focus && focus.kind !== 'image') {
+            const end = rowPlainText(focus.inlines).length
+            commit({ key: focus.key, start: end, end })
+          } else {
+            commit(null)
+          }
+          return
+        }
+        // Nothing usable in the HTML — fall through to text/plain.
+      }
+      const text = event.clipboardData?.getData('text/plain') ?? ''
+      if (!text) return
+      const flattened = text.replace(/\s*\n+\s*/g, ' ')
       current[index] = { ...row, inlines } as EditorRow
       pushHistory()
       current[index] = {
@@ -1318,6 +1370,18 @@ const MarkdownVisualEditor = forwardRef<
           ) : null}
         </DialogContent>
         <DialogActions>
+          {urlDialog?.kind === 'image' && onPickImageFromMedia ? (
+            <Button
+              color="secondary"
+              sx={{ mr: 'auto' }}
+              onClick={() => {
+                setUrlDialog(null)
+                onPickImageFromMedia()
+              }}
+            >
+              {'Choose from media'}
+            </Button>
+          ) : null}
           <Button onClick={() => setUrlDialog(null)}>{'Cancel'}</Button>
           <Button
             variant="contained"

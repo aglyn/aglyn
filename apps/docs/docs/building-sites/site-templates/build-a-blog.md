@@ -64,14 +64,16 @@ The shared **toolbar** works in both tabs:
 - **Link** — wrap the selection as a link; you're prompted for an `https://` URL or a
   site path like `/pricing`. In Visual mode, clicking an existing link opens a small
   popover to **edit or remove** it (it never navigates).
-- **Image** — insert an image by URL; **Insert image** picks one from your media
-  library instead.
+- **Image** — insert an image by URL, or hit **Choose from media** in the same dialog
+  to pick one from your media library; the standalone **Insert image** button opens the
+  media picker directly.
 
 Visual-mode shortcuts: type `## `, `### `, or `- ` at the start of a line to convert it
 to a heading or list item; **Enter** splits a block (and exits a list from an empty
 item); **Backspace** at a line start demotes headings/list items and then merges
-paragraphs; `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` undo and redo. Pasting inserts plain
-text — formatting in the clipboard is stripped.
+paragraphs; `Cmd/Ctrl+Z` / `Cmd/Ctrl+Shift+Z` undo and redo. Pasting rich text (from a
+web page, Google Docs, etc.) keeps everything the markdown dialect can express — bold,
+italic, links, headings, lists, and images — and flattens the rest to plain text.
 
 Markdown supports `**bold**`, `*italic*`,
 `## headings`, `- lists`, `[links](https://…)` — including **site-relative links**
