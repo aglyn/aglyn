@@ -120,6 +120,20 @@ const ViewportGlobalStyles = (
       ':host': {
         all: 'initial',
       },
+      // Canvas-sense for aglyn-hidden elements (AGL-592): start closed
+      // like the live site, but reveal while the panel's DIRECT PARENT
+      // carries the selected-within stamp — i.e. the selection is on the
+      // wrapper, the trigger, the panel, or anything inside it. The
+      // direct-child combinator is load-bearing: the stamp cascades up
+      // to the root leaf, so a descendant combinator would reveal every
+      // hidden element whenever anything on the page is selected.
+      // Expressed as a :not() guard (not hide-then-revert) so a revealed
+      // panel keeps its natural display; :where() keeps specificity at a
+      // single class. Injected into the closed shadow root via the
+      // shadow-scoped emotion cache — the live tenant is untouched.
+      '.aglyn-hidden:not(:where([data-aglyn-selected-within] > *))': {
+        display: 'none !important',
+      },
     }}
   />
 )
