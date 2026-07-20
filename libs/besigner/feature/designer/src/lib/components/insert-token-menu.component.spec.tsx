@@ -16,7 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 import ElementPropsForm from './element-props-form.component'
 import {
@@ -205,7 +205,10 @@ describe('ElementPropsForm insert affordance (AGL-583)', () => {
 
   // The attribute editors resolve through next/dynamic loadables, so the
   // fields (and their adornments) appear ASYNC on the suite's first mount
-  // — always await them.
+  // — always await them. Since AGL-586 the token-capable field is the
+  // pill-rendering TokenTextField; its insertion behaviors live in
+  // token-text-field.component.spec.tsx — here we only pin that the
+  // adornment still opens the grouped picker from inside the form.
   it('renders the {x} adornment on token-capable text attributes', async () => {
     const { unmount } = render(<ElementPropsForm {...formProps()} />)
     expect(
@@ -214,12 +217,8 @@ describe('ElementPropsForm insert affordance (AGL-583)', () => {
     unmount()
   })
 
-  it('inserts the picked token at the caret, concatenating with the value', async () => {
+  it('opens the grouped picker with context hints from the adornment', async () => {
     const { unmount } = render(<ElementPropsForm {...formProps()} />)
-    const input = (await screen.findByLabelText('Link')) as HTMLInputElement
-    act(() => input.focus())
-    // Caret inside the existing text: https://|a/b
-    input.setSelectionRange(8, 8)
     const button = await screen.findByRole('button', {
       name: 'Insert data token',
     })
@@ -232,21 +231,7 @@ describe('ElementPropsForm insert affordance (AGL-583)', () => {
         'Resolves in Collection entries blocks and on entry pages',
       ),
     ).toBeTruthy()
-    fireEvent.click(screen.getByText('Title'))
-    expect(input.value).toBe('https://{{entry.title}}a/b')
-    unmount()
-  })
-
-  it('appends at the end when the field was never focused', async () => {
-    const { unmount } = render(<ElementPropsForm {...formProps()} />)
-    const input = (await screen.findByLabelText('Link')) as HTMLInputElement
-    const button = await screen.findByRole('button', {
-      name: 'Insert data token',
-    })
-    fireEvent.mouseDown(button)
-    fireEvent.click(button)
-    fireEvent.click(await screen.findByText('Link URL'))
-    expect(input.value).toBe('https://a/b{{entry.url}}')
+    expect(screen.getByText('Collection name')).toBeTruthy()
     unmount()
   })
 })

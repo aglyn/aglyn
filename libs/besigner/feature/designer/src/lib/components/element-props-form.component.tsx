@@ -49,18 +49,15 @@ import MuiMenuItem from '@mui/material/MenuItem'
 import { Grid } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import * as Besigner from '@aglyn/besigner'
-import { forwardRef, memo, type MutableRefObject, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, memo, type SyntheticEvent, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { AiAssistContext } from '../contexts/ai-assist-context'
+import { BindingPickerContext } from '../contexts/binding-picker-context'
+import { InsertTokenMenu } from './insert-token-menu.component'
 import {
-  BindingPickerContext,
-  type BindingOption,
-} from '../contexts/binding-picker-context'
-import {
-  InsertTokenAdornment,
-  InsertTokenMenu,
-  insertTokenIntoText,
-  type TokenFieldCapture,
-} from './insert-token-menu.component'
+  TokenTextField,
+  TOKEN_TEXT_FIELD_COMPONENT,
+} from './token-text-field.component'
+import useInsertTokenOptions from '../hooks/use-insert-token-options'
 import {
   InteractionsContext,
   nodeElementSelector,
@@ -218,67 +215,6 @@ export const ElementPropsFormTemplate = forwardRef<
 ElementPropsFormTemplate.displayName = 'ElementPropsFormTemplate'
 ElementPropsFormTemplate.aglyn = true
 
-/** The attribute field whose insert-data picker is open (AGL-583). */
-export interface TokenInsertTarget {
-  fieldName: string
-  anchorEl: HTMLElement
-}
-
-/**
- * Bridges the insert picker to the form state (AGL-583): the picked token
- * is spliced into the target field's CURRENT form value at the caret
- * captured when the adornment was pressed, via the form api — so an
- * insert behaves exactly like typing, and the FormSpy autosave commits it
- * through the same debounce as keystrokes (AGL-567). Must render inside
- * the FormRenderer subtree (it calls `useFormApi`).
- */
-export function FieldTokenInsertMenu({
-  target,
-  captureRef,
-  options,
-  onClose,
-}: {
-  target: TokenInsertTarget | null
-  captureRef: MutableRefObject<TokenFieldCapture>
-  options: BindingOption[]
-  onClose: () => void
-}) {
-  const formApi = useFormApi()
-  const handleInsert = useCallback(
-    (token: string) => {
-      if (!target) return
-      const { input, start, end } = captureRef.current
-      const raw = formApi.getFieldState(target.fieldName)?.value
-      const current = typeof raw === 'string' ? raw : raw == null ? '' : String(raw)
-      const { value, caret } = insertTokenIntoText(current, token, start, end)
-      formApi.change(target.fieldName, value)
-      onClose()
-      // Refocus the input with the caret just after the token, so picking
-      // another placeholder keeps concatenating where the last one ended.
-      requestAnimationFrame(() => {
-        if (!input) return
-        input.focus()
-        try {
-          input.setSelectionRange(caret, caret)
-        } catch {
-          // Some input types (number) reject selection — focus is enough.
-        }
-      })
-    },
-    [formApi, target, captureRef, onClose],
-  )
-  return (
-    <InsertTokenMenu
-      anchorEl={target?.anchorEl ?? null}
-      open={Boolean(target)}
-      onClose={onClose}
-      options={options}
-      onInsert={handleInsert}
-    />
-  )
-}
-FieldTokenInsertMenu.displayName = 'FieldTokenInsertMenu'
-
 export interface ElementPropsFormProps extends FormRendererProps {
   node?: Aglyn.NodeSchema<any>
 }
@@ -293,6 +229,9 @@ export const elementPropsComponentMapper = {
   [Aglyn.FieldComponentType.ICON_PICKER]: FIELD_MAP_ICON_PICKER,
   [Aglyn.FieldComponentType.CHECKBOX]: FIELD_MAP_CHECKBOX,
   [Aglyn.FieldComponentType.COLOR_PICKER]: FIELD_MAP_COLOR_PICKER,
+  // Pill-rendering editor for token-capable free-text attributes
+  // (AGL-586); the attributes memo rewrites TEXT_FIELD/TEXTAREA to it.
+  [TOKEN_TEXT_FIELD_COMPONENT]: TokenTextField,
 }
 
 const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
@@ -372,25 +311,11 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       return undefined
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [hasDatasetFieldSelect, node, entityOptions.datasets])
-    // Insert-data picker target (AGL-583): which attribute field's picker
-    // is open, plus the input + caret captured when its adornment was
-    // pressed (mousedown fires before focus can move).
-    const [tokenTarget, setTokenTarget] = useState<TokenInsertTarget | null>(
-      null,
-    )
-    const tokenCaptureRef = useRef<TokenFieldCapture>({
-      input: null,
-      start: null,
-      end: null,
-    })
-    const openTokenTarget = useCallback(
-      (fieldName: string, anchorEl: HTMLElement, capture: TokenFieldCapture) => {
-        tokenCaptureRef.current = capture
-        setTokenTarget({ fieldName, anchorEl })
-      },
-      [],
-    )
-    const closeTokenTarget = useCallback(() => setTokenTarget(null), [])
+    // Insert-picker options + pill display-name inputs (AGL-583/586),
+    // assembled from this node's ancestor context — shared with the
+    // inline text editor via the extracted hook.
+    const { options: insertOptions, labelContext: tokenLabelContext } =
+      useInsertTokenOptions(node)
     const attributes = useMemo(() => {
       const entityListFor = (component: Aglyn.FieldComponentType) => {
         switch (component) {
@@ -474,28 +399,18 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             field.component === Aglyn.FieldComponentType.TEXTAREA) &&
           !(field as any).isReadOnly
         ) {
-          // Token-capable free-text fields (children, href, src, …) get
-          // the insert-data affordance (AGL-583): a small {x} adornment
-          // that opens the placeholder picker and splices the picked
-          // token at the caret. Raw {{...}} typing keeps working.
+          // Token-capable free-text fields (children, href, src, …)
+          // render through the pill editor (AGL-586): stored `{{...}}`
+          // tokens display as named colored pills, the {x} adornment
+          // inserts at the caret (AGL-583), and raw {{...}} typing keeps
+          // working (it materializes into a pill on blur).
           return {
             ...field,
-            slotProps: {
-              input: {
-                endAdornment: (
-                  <InsertTokenAdornment
-                    onOpen={(anchor, capture) =>
-                      openTokenTarget(field.name, anchor, capture)
-                    }
-                  />
-                ),
-              },
-              // A field-level slotProps REPLACES the mapper's, so any
-              // declared htmlInput props must be re-threaded here.
-              ...((field as any).inputProps
-                ? { htmlInput: { ...(field as any).inputProps } }
-                : {}),
-            },
+            component: TOKEN_TEXT_FIELD_COMPONENT,
+            multiline:
+              field.component === Aglyn.FieldComponentType.TEXTAREA,
+            tokenOptions: insertOptions,
+            tokenLabelContext,
           }
         }
         return field
@@ -521,7 +436,8 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       entityOptions,
       nodeOptions,
       ancestorDatasetId,
-      openTokenTarget,
+      insertOptions,
+      tokenLabelContext,
     ])
 
     // Reusable-component flows (AGL-35): actions appear only when the host
@@ -546,13 +462,10 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
     )
 
     // Insert binding (AGL-100): appends a {{token}} to the element text.
-    // Options come from the host app (variables + functions); the commit
-    // spreads current props — updateNodeProps REPLACES the props object.
-    const {
-      options: bindingOptions,
-      variables: bindingVariables,
-      functions: bindingFunctions,
-    } = useContext(BindingPickerContext)
+    // Variable/function docs come from the host app; the commit spreads
+    // current props — updateNodeProps REPLACES the props object.
+    const { variables: bindingVariables, functions: bindingFunctions } =
+      useContext(BindingPickerContext)
     const [bindingAnchor, setBindingAnchor] = useState<HTMLElement | null>(
       null,
     )
@@ -581,84 +494,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(nodeProps ?? {}), bindingVariables, bindingFunctions])
 
-    // Insert-picker context (AGL-583): walk the ancestor chain for a
-    // repeatable container (dataset-item tokens need its model fields) or
-    // a Collection entries block (entry tokens resolve right here, not
-    // only on entry pages). `repeatDataset` persists a dataset id OR a
-    // display name — resolve either against the entity picker options.
-    const insertContext = useMemo(() => {
-      const nodes = (Aglyn.canvas.toJSON().nodes ?? {}) as Record<string, any>
-      let repeatDatasetKey: string | undefined
-      let inCollectionEntries = false
-      let current = node?.$id ? nodes[node.$id] : undefined
-      for (let hops = 0; current && hops < 100; hops += 1) {
-        const props = current.props ?? {}
-        if (
-          !repeatDatasetKey &&
-          typeof props.repeatDataset === 'string' &&
-          props.repeatDataset.trim()
-        ) {
-          repeatDatasetKey = props.repeatDataset.trim()
-        }
-        if (
-          current.componentId === Aglyn.COLLECTION_ENTRIES_COMPONENT_ID
-        ) {
-          inCollectionEntries = true
-        }
-        current = current.parentId ? nodes[current.parentId] : undefined
-      }
-      const datasets = entityOptions.datasets ?? []
-      const dataset = repeatDatasetKey
-        ? datasets.find((candidate) => candidate.id === repeatDatasetKey) ??
-          datasets.find((candidate) => candidate.label === repeatDatasetKey)
-        : undefined
-      return {
-        inCollectionEntries,
-        datasetLabel: dataset?.label,
-        datasetFields: dataset
-          ? entityOptions.datasetFields?.[dataset.id] ?? []
-          : [],
-      }
-    }, [node, entityOptions.datasets, entityOptions.datasetFields])
-    // The full picker list (AGL-583): host bindings first (AGL-100), then
-    // the data-placeholder catalogs. Entry/Collection stay browsable even
-    // out of context — with a hint saying where they resolve — while the
-    // Dataset item group only appears inside a resolvable repeatable.
-    const insertOptions = useMemo(() => {
-      const options: BindingOption[] = [...(bindingOptions ?? [])]
-      const entryHint = insertContext.inCollectionEntries
-        ? undefined
-        : 'Resolves in Collection entries blocks and on entry pages'
-      for (const entry of Aglyn.ENTRY_TOKEN_CATALOG) {
-        options.push({
-          group: 'Entry',
-          label: entry.label,
-          token: entry.token,
-          preview: entry.description,
-          ...(entryHint ? { groupHint: entryHint } : {}),
-        })
-      }
-      for (const entry of Aglyn.COLLECTION_TOKEN_CATALOG) {
-        options.push({
-          group: 'Collection',
-          label: entry.label,
-          token: entry.token,
-          preview: entry.description,
-          groupHint: 'Resolves on collection pages',
-        })
-      }
-      for (const field of insertContext.datasetFields) {
-        options.push({
-          group: 'Dataset item',
-          label: field.label,
-          token: Aglyn.datasetItemToken(field.id),
-          ...(insertContext.datasetLabel
-            ? { groupHint: `From dataset "${insertContext.datasetLabel}"` }
-            : {}),
-        })
-      }
-      return options
-    }, [bindingOptions, insertContext])
     const handleInsertBinding = useCallback(
       (token: string) => {
         setBindingAnchor(null)
@@ -757,17 +592,6 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                   formFields={formFields}
                   schema={schema}
                   {...rest}
-                />
-
-                {/* Per-field insert-data picker (AGL-583): opened by the
-                    {x} adornment on token-capable attribute inputs;
-                    splices the token at the captured caret via the form
-                    api, so the AGL-567 debounce commits it like typing. */}
-                <FieldTokenInsertMenu
-                  target={tokenTarget}
-                  captureRef={tokenCaptureRef}
-                  options={insertOptions}
-                  onClose={closeTokenTarget}
                 />
 
                 {boundPropSummaries.length ? (

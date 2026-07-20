@@ -67,6 +67,34 @@ resolves to before inserting it.
 Selected text is replaced by the inserted token, and the element-level **Insert binding**
 button on text elements opens the same picker (appending to the element text).
 
+### Token pills
+
+Placeholders never show up as raw `{{...}}` syntax while you edit — each one renders
+as a small **colored pill** carrying the binding's *current display name*. Variables,
+functions, entry fields, collection fields, and dataset items each get their own
+stable color, so a glance tells you what kind of data a pill resolves to. Under the
+hood the stored value still keeps the rename-safe **id token**: the pill is pure
+presentation, which is why renaming a variable instantly relabels every pill without
+touching your content.
+
+- **Click a pill** to act on it: **Replace** reopens the data picker and swaps the
+  token in place, **Remove** deletes it from the text.
+- A pill whose referent no longer exists (a deleted variable, an unknown token)
+  renders in a warning color, with the raw token as its tooltip.
+- Typing raw `{{...}}` by hand still works — the token becomes a pill when the
+  field loses focus.
+
+### In the canvas text editor
+
+Double-clicking a text element opens the inline text editor right on the canvas —
+and it speaks pills too. Existing tokens render as pills the moment the editor
+opens, the toolbar's **`{x}` button** opens the same grouped data picker (with the
+element's own context: dataset items inside repeating containers, entry fields
+inside Collection entries blocks), and clicking a pill offers the same
+Replace/Remove. Rich-text elements keep their formatting toolbar — pills sit inline
+with bold, italic, links, and lists, and everything serializes back to plain token
+syntax when the edit commits.
+
 :::tip Advanced: type it raw
 The picker is a convenience, not a requirement — typing `{{...}}` tokens by hand keeps
 working everywhere, and typed `{{name}}` tokens are normalized to rename-safe id form on
