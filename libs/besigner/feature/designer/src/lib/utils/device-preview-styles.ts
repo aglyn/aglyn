@@ -296,9 +296,27 @@ export function pinBreakpointsToWidth(
  */
 export function createDevicePinnedTheme(theme: Theme, width: number): Theme {
   const breakpoints = pinBreakpointsToWidth(theme.breakpoints, width)
+  // Responsive font sizes (responsiveFontSizes) are baked into the
+  // typography VARIANTS as literal `@media (min-width:…px)` string keys
+  // at createTheme time — pinning the breakpoint helpers can't reach
+  // them, so they'd keep matching the real browser viewport (AGL-593).
+  // Flatten each variant object at the device width with the same
+  // resolver Leaf sx uses; scalars and functions (pxToRem, fontFamily)
+  // pass through untouched.
+  const typography = Object.fromEntries(
+    Object.entries(theme.typography as unknown as Record<string, unknown>).map(
+      ([key, value]) => [
+        key,
+        value && typeof value === 'object' && !Array.isArray(value)
+          ? resolveSxForDeviceWidth(value, width)
+          : value,
+      ],
+    ),
+  ) as unknown as Theme['typography']
   return {
     ...theme,
     breakpoints,
+    typography,
     mixins: {
       ...theme.mixins,
       toolbar: {

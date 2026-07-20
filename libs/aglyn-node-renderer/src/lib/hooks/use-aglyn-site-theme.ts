@@ -16,7 +16,10 @@
  */
 
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
-import { createTheme, hostThemeToThemeOptions } from '@aglyn/shared-ui-theme'
+import {
+  createResponsiveTheme,
+  hostThemeToThemeOptions,
+} from '@aglyn/shared-ui-theme'
 import { useMemo } from 'react'
 
 export type UseAglynSiteThemeOptions = {
@@ -35,23 +38,30 @@ export function useAglynSiteTheme(options: UseAglynSiteThemeOptions = {}) {
 
   return useMemo(() => {
     const themeOptions = hostThemeToThemeOptions(hostTheme, scheme)
-    return createTheme({
-      ...themeOptions,
-      components: {
-        ...themeOptions.components,
-        MuiPopover: {
-          defaultProps: {
-            container: container,
+    // createResponsiveTheme, not plain createTheme (AGL-593): the tenant
+    // builds host themes through it (HostThemeProvider), which bakes
+    // responsive font sizes into the typography variants — the canvas
+    // must carry the same media-keyed typography or device preview has
+    // nothing to re-resolve and canvas/tenant text sizes disagree.
+    return createResponsiveTheme({
+      themeOptions: {
+        ...themeOptions,
+        components: {
+          ...themeOptions.components,
+          MuiPopover: {
+            defaultProps: {
+              container: container,
+            },
           },
-        },
-        MuiPopper: {
-          defaultProps: {
-            container: container,
+          MuiPopper: {
+            defaultProps: {
+              container: container,
+            },
           },
-        },
-        MuiModal: {
-          defaultProps: {
-            container: container,
+          MuiModal: {
+            defaultProps: {
+              container: container,
+            },
           },
         },
       },

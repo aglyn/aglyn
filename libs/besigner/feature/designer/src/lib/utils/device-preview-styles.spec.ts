@@ -17,7 +17,7 @@
 
 import { VISIBILITY_BAND_MEDIA } from '@aglyn/aglyn'
 import { BesignerDeviceFlag } from '@aglyn/besigner'
-import { createTheme } from '@aglyn/shared-ui-theme'
+import { createTheme, responsiveFontSizes } from '@aglyn/shared-ui-theme'
 import {
   createDevicePinnedTheme,
   DEVICE_PREVIEW_XS_WIDTH,
@@ -260,9 +260,10 @@ describe('createDevicePinnedTheme', () => {
     const theme = createTheme()
     const pinnedPhone = createDevicePinnedTheme(theme, 390)
     const pinnedDesktop = createDevicePinnedTheme(theme, 1200)
-    // Untouched slices carry over by reference.
+    // Untouched slices carry over by reference; typography is rebuilt
+    // (its responsive @media keys flatten at the device width, AGL-593).
     expect(pinnedPhone.palette).toBe(theme.palette)
-    expect(pinnedPhone.typography).toBe(theme.typography)
+    expect(pinnedPhone.typography).not.toBe(theme.typography)
     // The dense-desktop toolbar rule lives under a never-matching query
     // on a phone and an always-matching one on desktop.
     const phoneKeys = Object.keys(pinnedPhone.mixins.toolbar)
@@ -271,5 +272,37 @@ describe('createDevicePinnedTheme', () => {
     expect(
       desktopKeys.some((key) => /min-width:0\.001px/.test(key)),
     ).toBe(true)
+  })
+
+  it('flattens responsive typography variants at the device width (AGL-593)', () => {
+    const responsive = responsiveFontSizes(createTheme(), {
+      breakpoints: ['xs', 'sm', 'md', 'lg', 'xl'],
+    })
+    const h1 = responsive.typography.h1 as Record<string, unknown>
+    // Precondition: responsiveFontSizes baked literal width media keys.
+    expect(
+      Object.keys(h1).some((key) => key.startsWith('@media (min-width:')),
+    ).toBe(true)
+
+    const pinnedPhone = createDevicePinnedTheme(responsive, 390)
+    const pinnedDesktop = createDevicePinnedTheme(responsive, 1400)
+    const phoneH1 = pinnedPhone.typography.h1 as Record<string, unknown>
+    const desktopH1 = pinnedDesktop.typography.h1 as Record<string, unknown>
+
+    // Width media keys are gone — collapsed into the base at the
+    // simulated width…
+    expect(
+      Object.keys(phoneH1).some((key) => key.startsWith('@media')),
+    ).toBe(false)
+    expect(
+      Object.keys(desktopH1).some((key) => key.startsWith('@media')),
+    ).toBe(false)
+    // …and the collapse actually picked different sizes per device.
+    expect(phoneH1.fontSize).not.toEqual(desktopH1.fontSize)
+    // Non-variant slices (functions, scalars) pass through untouched.
+    expect(pinnedPhone.typography.pxToRem).toBe(responsive.typography.pxToRem)
+    expect(pinnedPhone.typography.fontFamily).toBe(
+      responsive.typography.fontFamily,
+    )
   })
 })
