@@ -84,6 +84,12 @@ const slugify = (value: string) =>
     .replace(/(^-|-$)+/g, '')
 
 /**
+ * Sentinel option in the entry editor's category Select (AGL-582) that
+ * opens the Manage categories dialog instead of assigning a value.
+ */
+const MANAGE_CATEGORIES_VALUE = '__manage__'
+
+/**
  * Content collections manager (AGL-81): collections (e.g. Blog) with
  * entries the org serves at /{collectionSlug} and
  * /{collectionSlug}/{entrySlug}.
@@ -193,6 +199,96 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [entryDocs],
   )
 
+  // Category taxonomy (AGL-582): `{ id, name }` pairs on the COLLECTION
+  // doc. Entries reference the stable id, so renaming a category here
+  // updates every post at render time without touching any entry.
+  const categories = useMemo<Array<{ id: string; name: string }>>(
+    () =>
+      Array.isArray(selected?.categories)
+        ? selected.categories.filter(
+            (item: any) =>
+              typeof item?.id === 'string' &&
+              item.id.trim() !== '' &&
+              typeof item?.name === 'string' &&
+              item.name.trim() !== '',
+          )
+        : [],
+    [selected],
+  )
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  // Inline rename drafts keyed by category id; committed on blur.
+  const [categoryDrafts, setCategoryDrafts] = useState<
+    Record<string, string>
+  >({})
+  const persistCategories = useCallback(
+    async (next: Array<{ id: string; name: string }>) => {
+      if (!selected) return
+      await updateDoc(
+        doc(firestore, 'hosts', hostId, 'collections', selected.$id),
+        { categories: next },
+      )
+    },
+    [selected, firestore, hostId],
+  )
+  const handleAddCategory = useCallback(async () => {
+    const name = newCategoryName.trim()
+    if (!name || categories.length >= Aglyn.COLLECTION_CATEGORIES_MAX) return
+    // Stable id (AGL-582): slugified ONCE from the initial name and
+    // uniqued; later renames never change it — that is the whole point.
+    const base = slugify(name) || 'category'
+    let categoryId = base
+    for (
+      let suffix = 2;
+      categories.some((category) => category.id === categoryId);
+      suffix += 1
+    ) {
+      categoryId = `${base}-${suffix}`
+    }
+    await persistCategories([...categories, { id: categoryId, name }])
+    setNewCategoryName('')
+  }, [newCategoryName, categories, persistCategories])
+  const handleRenameCategory = useCallback(
+    (categoryId: string) => async () => {
+      const draft = (categoryDrafts[categoryId] ?? '').trim()
+      setCategoryDrafts((prev) => {
+        const rest = { ...prev }
+        delete rest[categoryId]
+        return rest
+      })
+      const current = categories.find(
+        (category) => category.id === categoryId,
+      )
+      if (!current || !draft || draft === current.name) return
+      // Rename updates the COLLECTION doc only — entries keep their ids.
+      await persistCategories(
+        categories.map((category) =>
+          category.id === categoryId ? { ...category, name: draft } : category,
+        ),
+      )
+    },
+    [categoryDrafts, categories, persistCategories],
+  )
+  const handleDeleteCategory = useCallback(
+    (category: { id: string; name: string }) => async () => {
+      const confirmed = await confirm({
+        title: `Delete "${category.name}"?`,
+        description:
+          'Entries assigned to this category keep their reference but ' +
+          'will show no category until they are reassigned.',
+        confirmationText: 'Delete',
+        confirmationButtonProps: { color: 'error' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      await persistCategories(
+        categories.filter((item) => item.id !== category.id),
+      )
+    },
+    [confirm, categories, persistCategories],
+  )
+
   const [newCollectionOpen, setNewCollectionOpen] = useState(false)
   const [collectionName, setCollectionName] = useState('')
   const handleCreateCollection = useCallback(async () => {
@@ -229,7 +325,12 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     // comma-separated STRING while editing; saved as string[].
     seoTitle: string
     seoDescription: string
-    category: string
+    // Category taxonomy (AGL-582): entries reference the collection's
+    // categories by stable id (lookup, not typed) so renames never touch
+    // entries. `legacyCategory` is the old free-typed string, shown
+    // read-only until a category is picked (which clears it on save).
+    categoryId: string
+    legacyCategory: string
     tags: string
   } | null>(null)
   // Media picker target: entry cover image or an inline body image.
@@ -375,7 +476,13 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         // Entry model v2 (AGL-582): SEO overrides + taxonomy.
         seoTitle: editor.seoTitle.trim(),
         seoDescription: editor.seoDescription.trim(),
-        category: editor.category.trim(),
+        // Category lookup (AGL-582): the entry stores the STABLE
+        // categoryId; picking one clears the legacy free-typed field.
+        // "None" only clears the id — the legacy value stays untouched so
+        // simply re-saving an old entry never wipes its category.
+        ...(editor.categoryId
+          ? { categoryId: editor.categoryId, category: deleteField() }
+          : { categoryId: deleteField() }),
         tags: editor.tags
           .split(',')
           .map((tag) => tag.trim())
@@ -595,6 +702,14 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                   size="small"
                   variant="outlined"
                   color="secondary"
+                  onClick={() => setCategoriesOpen(true)}
+                >
+                  {'Categories'}
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="secondary"
                   onClick={() => {
                     setBodyTab('visual')
                     setEditor({
@@ -605,7 +720,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       coverImage: '',
                       seoTitle: '',
                       seoDescription: '',
-                      category: '',
+                      categoryId: '',
+                      legacyCategory: '',
                       tags: '',
                     })
                   }}
@@ -674,7 +790,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                 coverImage: entry.coverImage ?? '',
                                 seoTitle: entry.seoTitle ?? '',
                                 seoDescription: entry.seoDescription ?? '',
-                                category: entry.category ?? '',
+                                categoryId: entry.categoryId ?? '',
+                                legacyCategory: entry.category ?? '',
                                 tags: Array.isArray(entry.tags)
                                   ? entry.tags.join(', ')
                                   : '',
@@ -778,6 +895,99 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      {/* Category taxonomy manager (AGL-582): add / inline-rename /
+          delete the collection's categories. Renames only touch the
+          collection doc — entries keep their stable ids. */}
+      <Dialog
+        open={categoriesOpen}
+        onClose={() => setCategoriesOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {`Categories${selected ? ` — ${selected.displayName}` : ''}`}
+        </DialogTitle>
+        <DialogContent
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'Entries reference categories by a stable id, so renaming ' +
+              'one here updates every post — no entry is ever touched.'}
+          </Typography>
+          {categories.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {'No categories yet — add the first one below.'}
+            </Typography>
+          ) : (
+            categories.map((category) => (
+              <Stack
+                key={category.id}
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'flex-start' }}
+              >
+                <TextField
+                  size="small"
+                  fullWidth
+                  value={categoryDrafts[category.id] ?? category.name}
+                  onChange={(event) =>
+                    setCategoryDrafts((prev) => ({
+                      ...prev,
+                      [category.id]: event.target.value,
+                    }))
+                  }
+                  onBlur={handleRenameCategory(category.id)}
+                  helperText={`id: ${category.id}`}
+                />
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={handleDeleteCategory(category)}
+                >
+                  {'Delete'}
+                </Button>
+              </Stack>
+            ))
+          )}
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'flex-start' }}>
+            <TextField
+              size="small"
+              fullWidth
+              label="New category"
+              value={newCategoryName}
+              onChange={(event) => setNewCategoryName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void handleAddCategory()
+                }
+              }}
+              helperText={
+                categories.length >= Aglyn.COLLECTION_CATEGORIES_MAX
+                  ? `Limit of ${Aglyn.COLLECTION_CATEGORIES_MAX} reached`
+                  : newCategoryName.trim()
+                    ? `id: ${slugify(newCategoryName) || 'category'}`
+                    : 'e.g. Guides'
+              }
+            />
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              disabled={
+                !newCategoryName.trim() ||
+                categories.length >= Aglyn.COLLECTION_CATEGORIES_MAX
+              }
+              onClick={handleAddCategory}
+            >
+              {'Add'}
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCategoriesOpen(false)}>{'Done'}</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}
@@ -834,18 +1044,51 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             </Button>
           </Stack>
           <Stack direction="row" spacing={1}>
+            {/* Category is a LOOKUP (AGL-582): entries store the stable
+                categoryId, names resolve at render — renames never touch
+                posts. The legacy free-typed value shows until migrated. */}
             <TextField
+              select
               label="Category"
-              value={editor?.category ?? ''}
-              onChange={(event) =>
+              value={editor?.categoryId ?? ''}
+              onChange={(event) => {
+                const value = event.target.value
+                if (value === MANAGE_CATEGORIES_VALUE) {
+                  return void setCategoriesOpen(true)
+                }
                 setEditor((prev) =>
-                  prev ? { ...prev, category: event.target.value } : prev,
+                  prev ? { ...prev, categoryId: value } : prev,
                 )
-              }
+              }}
               size="small"
               sx={{ flexGrow: 1 }}
-              helperText="Single bucket, e.g. Guides"
-            />
+              helperText={
+                editor?.legacyCategory && !editor.categoryId
+                  ? `Typed category "${editor.legacyCategory}" — pick one ` +
+                    'to migrate this entry'
+                  : 'Pick from this collection’s categories'
+              }
+            >
+              <MenuItem value="">{'None'}</MenuItem>
+              {categories.map((category) => (
+                <MenuItem key={category.id} value={category.id}>
+                  {category.name}
+                </MenuItem>
+              ))}
+              {editor?.categoryId &&
+              !categories.some(
+                (category) => category.id === editor.categoryId,
+              ) ? (
+                // The referenced category was deleted: keep the Select
+                // valid and let the author see (and move off) the id.
+                <MenuItem value={editor.categoryId}>
+                  {`${editor.categoryId} (deleted)`}
+                </MenuItem>
+              ) : null}
+              <MenuItem value={MANAGE_CATEGORIES_VALUE}>
+                {'Manage categories…'}
+              </MenuItem>
+            </TextField>
             <TextField
               label="Tags"
               value={editor?.tags ?? ''}

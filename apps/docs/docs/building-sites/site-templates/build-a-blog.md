@@ -28,10 +28,25 @@ publish at the right time.
 
 Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
-- **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts.
+- **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts,
+  **picked from the collection's category list** (see below), never typed free-form.
 - **Tags** — comma-separated labels (e.g. `nextjs, seo`).
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
+
+### Categories
+
+Categories are **managed per collection** — open **Categories** next to the template
+pickers (or **Manage categories…** inside the entry editor) to add, rename, or delete
+them. Entries reference a category by a **stable id**, so **renaming a category updates
+every post instantly without touching a single entry** — the display name is resolved at
+render time wherever it appears (entry pages, meta lines, related posts, RSS, JSON-LD).
+Deleting a category leaves its entries uncategorized until they are reassigned. A
+collection holds up to 50 categories.
+
+Posts written before category lookup existed keep rendering their old free-typed
+category; the entry editor flags them so you can migrate each post to a real category
+with one save.
 
 ### Visual editor
 
@@ -115,7 +130,8 @@ The Collection Entries block also works on **any** screen — set its **Collecti
 attribute (e.g. `blog`) and an **Entries limit** to build a "Latest posts" section on
 your home page. Its **Filter by category** / **Filter by tag** attributes narrow the
 list (e.g. a "Guides only" rail), so filtered landing pages are built as filtered
-blocks.
+blocks. The category filter matches either the category's display name or its stable
+id, so it keeps working across renames.
 :::
 
 ### No template? Still designed

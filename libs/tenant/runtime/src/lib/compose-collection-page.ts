@@ -86,7 +86,13 @@ export async function composeCollectionTemplatePage(options: {
   const tokens = entry
     ? {
         ...collectionTokens(collection),
-        ...Aglyn.collectionEntryTokens(entry, collection.slug),
+        // Category names resolve against the collection's taxonomy
+        // (AGL-582): `categoryId` lookup first, legacy string fallback.
+        ...Aglyn.collectionEntryTokens(
+          entry,
+          collection.slug,
+          collection.categories,
+        ),
       }
     : collectionTokens(collection)
   const nodes = await composeScreenNodes({
@@ -97,10 +103,15 @@ export async function composeCollectionTemplatePage(options: {
     // List pages hand their already-fetched entries to the Collection
     // entries block; entry pages carry the routed entry (AGL-582, Related
     // posts) and let blocks fetch entry lists on demand (e.g. a "More
-    // posts" section on the article template).
+    // posts" section on the article template). The category taxonomy
+    // rides along so `{{entry.category}}` resolves inside the blocks.
     collection: entry
-      ? { slug: collection.slug, entry }
-      : { slug: collection.slug, entries: content.entries },
+      ? { slug: collection.slug, entry, categories: collection.categories }
+      : {
+          slug: collection.slug,
+          entries: content.entries,
+          categories: collection.categories,
+        },
   })
   if (!nodes) return null
 
@@ -159,10 +170,19 @@ export async function composeCollectionFallbackPage(options: {
       // Entry routes resolve with an EMPTY entries list (the loader only
       // fetched the one entry), so hand the routed entry over and let the
       // Related posts block fetch the list on demand (AGL-582); list
-      // routes keep their already-fetched entries.
+      // routes keep their already-fetched entries. Categories ride along
+      // for `categoryId` → name resolution.
       collection: content.entry
-        ? { slug: collection.slug, entry: content.entry }
-        : { slug: collection.slug, entries: content.entries },
+        ? {
+            slug: collection.slug,
+            entry: content.entry,
+            categories: collection.categories,
+          }
+        : {
+            slug: collection.slug,
+            entries: content.entries,
+            categories: collection.categories,
+          },
     })
     return nodes ? { nodes } : null
   } catch (error) {

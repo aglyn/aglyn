@@ -196,6 +196,12 @@ function buildJsonLd(props: Props): string[] {
   if (props.content) {
     const entry = (props.content as any).entry
     if (!entry) return []
+    // Category name resolves against the collection taxonomy (AGL-582):
+    // stable categoryId lookup first, legacy free-typed string fallback.
+    const categoryName = Aglyn.resolveEntryCategoryName(
+      entry,
+      (props.content as any).collection?.categories,
+    )
     return [
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
@@ -204,7 +210,7 @@ function buildJsonLd(props: Props): string[] {
         ...(entry.excerpt && { description: entry.excerpt }),
         ...(entry.coverImage && { image: [entry.coverImage] }),
         // Entry model v2 (AGL-582): taxonomy enriches rich results.
-        ...(entry.category && { articleSection: entry.category }),
+        ...(categoryName && { articleSection: categoryName }),
         ...(Array.isArray(entry.tags) &&
           entry.tags.length && { keywords: entry.tags.join(', ') }),
         ...(entry.publishedAt?.seconds && {

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { CollectionCategory } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 export interface CollectionEntrySummary {
@@ -28,7 +29,12 @@ export interface CollectionEntrySummary {
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
   seoDescription?: string
-  /** Single taxonomy bucket (AGL-582). */
+  /**
+   * Stable reference into the collection's `categories` taxonomy
+   * (AGL-582); resolved to a display name at render.
+   */
+  categoryId?: string
+  /** Legacy free-typed bucket (AGL-582); read-only fallback. */
   category?: string
   /** Free-form labels (AGL-582). */
   tags?: string[]
@@ -40,18 +46,42 @@ function mapEntryFields(
   value: FirebaseFirestore.DocumentData,
 ): Pick<
   CollectionEntrySummary,
-  'excerpt' | 'coverImage' | 'seoTitle' | 'seoDescription' | 'category' | 'tags'
+  | 'excerpt'
+  | 'coverImage'
+  | 'seoTitle'
+  | 'seoDescription'
+  | 'categoryId'
+  | 'category'
+  | 'tags'
 > {
   return {
     excerpt: value['excerpt'] ?? '',
     coverImage: value['coverImage'] ?? '',
     seoTitle: value['seoTitle'] ?? '',
     seoDescription: value['seoDescription'] ?? '',
+    categoryId: value['categoryId'] ?? '',
     category: value['category'] ?? '',
     tags: Array.isArray(value['tags'])
       ? value['tags'].filter((tag): tag is string => typeof tag === 'string')
       : [],
   }
+}
+
+/**
+ * The collection doc's category taxonomy (AGL-582), sanitized: only
+ * `{ id, name }` pairs with non-empty strings survive, order preserved.
+ */
+function mapCollectionCategories(value: unknown): CollectionCategory[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter(
+      (item): item is CollectionCategory =>
+        typeof item?.id === 'string' &&
+        item.id.trim() !== '' &&
+        typeof item?.name === 'string' &&
+        item.name.trim() !== '',
+    )
+    .map((item) => ({ id: item.id, name: item.name }))
 }
 
 /**
@@ -95,6 +125,11 @@ export interface CollectionContent {
      * through it with `{{entry.*}}` tokens.
      */
     entryScreenId?: string
+    /**
+     * Category taxonomy (AGL-582): entries reference these by stable
+     * `id`; `name` is the renameable display label.
+     */
+    categories?: CollectionCategory[]
   } | null
   entries: CollectionEntrySummary[]
   entry: CollectionEntrySummary | null
@@ -137,15 +172,18 @@ async function listLiveEntries(
 }
 
 /**
- * Published entries for a collection resolved by slug — the data source of
- * the Collection entries block on arbitrary screens (AGL-551). Fail-open:
- * errors and unknown slugs resolve to an empty list so a renamed collection
- * never takes a published screen down.
+ * Published entries + category taxonomy for a collection resolved by slug —
+ * the data source of the Collection entries block on arbitrary screens
+ * (AGL-551/582). Fail-open: errors and unknown slugs resolve to an empty
+ * list so a renamed collection never takes a published screen down.
  */
-export async function getPublishedCollectionEntries(options: {
+export async function getPublishedCollectionSource(options: {
   hostId: string
   collectionSlug: string
-}): Promise<CollectionEntrySummary[]> {
+}): Promise<{
+  entries: CollectionEntrySummary[]
+  categories: CollectionCategory[]
+}> {
   try {
     const firestore = firebaseAdmin.app().firestore()
     const collectionQuery = await firestore
@@ -156,12 +194,23 @@ export async function getPublishedCollectionEntries(options: {
       .limit(1)
       .get()
     const collectionDoc = collectionQuery.docs[0]
-    if (!collectionDoc) return []
-    return await listLiveEntries(collectionDoc.ref.collection('entries'))
+    if (!collectionDoc) return { entries: [], categories: [] }
+    return {
+      entries: await listLiveEntries(collectionDoc.ref.collection('entries')),
+      categories: mapCollectionCategories(collectionDoc.get('categories')),
+    }
   } catch (error) {
     console.error(error)
-    return []
+    return { entries: [], categories: [] }
   }
+}
+
+/** Entries-only view of {@link getPublishedCollectionSource} (AGL-551). */
+export async function getPublishedCollectionEntries(options: {
+  hostId: string
+  collectionSlug: string
+}): Promise<CollectionEntrySummary[]> {
+  return (await getPublishedCollectionSource(options)).entries
 }
 
 /**
@@ -200,6 +249,7 @@ export async function getCollectionContent(options: {
       templateScreenId: collectionDoc.get('templateScreenId') ?? undefined,
       listScreenId: collectionDoc.get('listScreenId') ?? undefined,
       entryScreenId: collectionDoc.get('entryScreenId') ?? undefined,
+      categories: mapCollectionCategories(collectionDoc.get('categories')),
     }
 
     const entriesRef = collectionDoc.ref.collection('entries')

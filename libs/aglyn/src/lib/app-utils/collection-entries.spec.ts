@@ -20,6 +20,7 @@ import {
   entryMatchesFilter,
   expandCollectionEntries,
   expandCollectionRelated,
+  resolveEntryCategoryName,
   selectRelatedEntries,
 } from './collection-entries'
 
@@ -67,6 +68,50 @@ const blog = {
     { $id: 'e2', title: 'Second', slug: 'second', excerpt: '' },
   ],
 }
+
+describe('resolveEntryCategoryName (AGL-582)', () => {
+  const categories = [
+    { id: 'guides', name: 'Guides' },
+    { id: 'news', name: 'Newsroom' },
+  ]
+
+  it('resolves categoryId against the taxonomy first', () => {
+    expect(
+      resolveEntryCategoryName({ categoryId: 'news' }, categories),
+    ).toBe('Newsroom')
+    // The id lookup wins even when a stale legacy string is present.
+    expect(
+      resolveEntryCategoryName(
+        { categoryId: 'guides', category: 'Old name' },
+        categories,
+      ),
+    ).toBe('Guides')
+  })
+
+  it('falls back to the legacy free-typed category', () => {
+    expect(
+      resolveEntryCategoryName({ category: 'Engineering' }, categories),
+    ).toBe('Engineering')
+    expect(resolveEntryCategoryName({ category: 'Engineering' })).toBe(
+      'Engineering',
+    )
+    // Unknown id with a legacy string still resolves to the string.
+    expect(
+      resolveEntryCategoryName(
+        { categoryId: 'deleted', category: 'Engineering' },
+        categories,
+      ),
+    ).toBe('Engineering')
+  })
+
+  it('resolves to nothing on a miss (deleted category)', () => {
+    expect(
+      resolveEntryCategoryName({ categoryId: 'deleted' }, categories),
+    ).toBeUndefined()
+    expect(resolveEntryCategoryName({}, categories)).toBeUndefined()
+    expect(resolveEntryCategoryName({ category: '  ' })).toBeUndefined()
+  })
+})
 
 describe('collectionEntryTokens (AGL-551)', () => {
   it('exposes title/excerpt/body/slug/url/date tokens', () => {
@@ -123,6 +168,31 @@ describe('collectionEntryTokens (AGL-551)', () => {
     expect(explicit['entry.seoTitle']).toBe('SEO')
     expect(explicit['entry.seoDescription']).toBe('Meta')
   })
+
+  it('resolves entry.category through the taxonomy (AGL-582)', () => {
+    const categories = [{ id: 'guides', name: 'Guides' }]
+    // categoryId → display name when the taxonomy is present.
+    expect(
+      collectionEntryTokens({ categoryId: 'guides' }, 'blog', categories)[
+        'entry.category'
+      ],
+    ).toBe('Guides')
+    // Legacy free-typed entries keep rendering with or without it.
+    expect(
+      collectionEntryTokens({ category: 'Engineering' }, 'blog', categories)[
+        'entry.category'
+      ],
+    ).toBe('Engineering')
+    expect(
+      collectionEntryTokens({ category: 'Engineering' }, 'blog')[
+        'entry.category'
+      ],
+    ).toBe('Engineering')
+    // Absent taxonomy (or a deleted id) empties instead of leaking the id.
+    expect(
+      collectionEntryTokens({ categoryId: 'guides' }, 'blog')['entry.category'],
+    ).toBe('')
+  })
 })
 
 describe('entryMatchesFilter (AGL-582)', () => {
@@ -143,6 +213,27 @@ describe('entryMatchesFilter (AGL-582)', () => {
       entryMatchesFilter(entry, { category: 'Engineering', tag: 'x' }),
     ).toBe(false)
     expect(entryMatchesFilter(entry, {})).toBe(true)
+  })
+
+  it('matches categoryId entries by id OR resolved name (AGL-582)', () => {
+    const categories = [{ id: 'guides', name: 'How-to Guides' }]
+    const migrated = { categoryId: 'guides' }
+    // Filter written against the stable id.
+    expect(
+      entryMatchesFilter(migrated, { category: 'Guides' }, categories),
+    ).toBe(true)
+    // Filter written against the display name (case-insensitive).
+    expect(
+      entryMatchesFilter(migrated, { category: 'how-to guides' }, categories),
+    ).toBe(true)
+    expect(
+      entryMatchesFilter(migrated, { category: 'News' }, categories),
+    ).toBe(false)
+    // A deleted id still matches by id, but resolves to no name.
+    expect(entryMatchesFilter(migrated, { category: 'guides' })).toBe(true)
+    expect(entryMatchesFilter(migrated, { category: 'How-to Guides' })).toBe(
+      false,
+    )
   })
 })
 
@@ -234,6 +325,49 @@ describe('expandCollectionEntries (AGL-551)', () => {
       expandCollectionEntries(noMatch, { blog: tagged }, 'blog')['list'].nodes,
     ).toEqual([])
   })
+
+  it('filters and tokenizes categoryId entries via the taxonomy (AGL-582)', () => {
+    const source = {
+      slug: 'blog',
+      categories: [{ id: 'guides', name: 'Guides' }],
+      entries: [
+        { title: 'New', slug: 'new', categoryId: 'guides' },
+        { title: 'Legacy', slug: 'legacy', category: 'Guides' },
+        { title: 'Other', slug: 'other', category: 'News' },
+      ],
+    }
+    // filterCategory by display name catches migrated AND legacy entries…
+    const byName = baseNodes()
+    byName['list'].props.filterCategory = 'guides'
+    byName['title'].props.children = '{{entry.category}}'
+    const expanded = expandCollectionEntries(byName, { blog: source }, 'blog')
+    expect(expanded['list'].nodes).toHaveLength(2)
+    // …and the {{entry.category}} token resolves the id to its name.
+    const firstTitleId = `${(expanded['list'].nodes as string[])[0].replace(/item$/, '')}title`
+    expect(expanded[firstTitleId].props.children).toBe('Guides')
+
+    // filterCategory by stable id keeps matching after a rename.
+    const renamed = {
+      slug: 'blog',
+      categories: [{ id: 'guides', name: 'Playbooks' }],
+      entries: [
+        { title: 'New', slug: 'new', categoryId: 'guides' },
+        { title: 'Other', slug: 'other', category: 'News' },
+      ],
+    }
+    const byId = baseNodes()
+    byId['list'].props.filterCategory = 'guides'
+    expect(
+      expandCollectionEntries(byId, { blog: renamed }, 'blog')['list'].nodes,
+    ).toHaveLength(1)
+    // …and by the NEW display name too.
+    const byNewName = baseNodes()
+    byNewName['list'].props.filterCategory = 'Playbooks'
+    expect(
+      expandCollectionEntries(byNewName, { blog: renamed }, 'blog')['list']
+        .nodes,
+    ).toHaveLength(1)
+  })
 })
 
 describe('selectRelatedEntries (AGL-582)', () => {
@@ -285,6 +419,42 @@ describe('selectRelatedEntries (AGL-582)', () => {
 
   it('returns nothing for an entry with no category or tags', () => {
     expect(selectRelatedEntries(entries, { $id: 'x', slug: 'x' })).toEqual([])
+  })
+
+  it('relates categoryId and legacy entries across the migration (AGL-582)', () => {
+    const categories = [{ id: 'guides', name: 'Guides' }]
+    const mixed = [
+      { $id: 'new', slug: 'new', categoryId: 'guides' },
+      { $id: 'legacy', slug: 'legacy', category: 'guides' },
+      { $id: 'other', slug: 'other', category: 'News' },
+    ]
+    // A migrated entry still relates to a legacy free-typed sibling whose
+    // string spells the (case-insensitive) taxonomy name…
+    expect(
+      selectRelatedEntries(mixed, mixed[0], 3, categories).map(
+        (entry) => entry.$id,
+      ),
+    ).toEqual(['legacy'])
+    // …and vice versa from the legacy side.
+    expect(
+      selectRelatedEntries(mixed, mixed[1], 3, categories).map(
+        (entry) => entry.$id,
+      ),
+    ).toEqual(['new'])
+  })
+
+  it('relates same-categoryId entries even after the category is deleted', () => {
+    const orphaned = [
+      { $id: 'a', slug: 'a', categoryId: 'guides' },
+      { $id: 'b', slug: 'b', categoryId: 'guides' },
+      { $id: 'c', slug: 'c', categoryId: 'news' },
+    ]
+    // No taxonomy at all: the stable ids still pair the entries up.
+    expect(
+      selectRelatedEntries(orphaned, orphaned[0], 3).map(
+        (entry) => entry.$id,
+      ),
+    ).toEqual(['b'])
   })
 })
 
@@ -346,5 +516,29 @@ describe('expandCollectionRelated (AGL-582)', () => {
       .toEqual(snapshot)
     expandCollectionRelated(untouched, source, source.entries[0])
     expect(untouched).toEqual(snapshot)
+  })
+
+  it('stamps taxonomy-resolved category names on related items (AGL-582)', () => {
+    const taxonomySource = {
+      slug: 'blog',
+      categories: [{ id: 'guides', name: 'Guides' }],
+      entries: [
+        { $id: 'current', slug: 'current', categoryId: 'guides' },
+        {
+          $id: 'match',
+          title: 'Match',
+          slug: 'match',
+          categoryId: 'guides',
+        },
+      ],
+    }
+    const nodes = expandCollectionRelated(
+      relatedNodes(),
+      taxonomySource,
+      taxonomySource.entries[0],
+    )
+    expect(nodes['related'].props.entries).toEqual([
+      { title: 'Match', url: '/blog/match', category: 'Guides' },
+    ])
   })
 })

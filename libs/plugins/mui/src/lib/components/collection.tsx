@@ -61,7 +61,10 @@ export interface CollectionEntriesProps extends StackProps {
   collectionSlug?: string
   /** Maximum entries rendered (compose-time; blank = all, capped at 100). */
   entriesLimit?: number | string
-  /** Only entries in this category repeat (compose-time, AGL-582). */
+  /**
+   * Only entries in this category repeat (compose-time, AGL-582).
+   * Matches the collection's category by stable id or display name.
+   */
   filterCategory?: string
   /** Only entries carrying this tag repeat (compose-time, AGL-582). */
   filterTag?: string
@@ -115,8 +118,8 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
         name: 'filterCategory',
         label: 'Filter by category',
         description:
-          'Only entries in this category repeat (e.g. "Guides"). Blank = ' +
-          'no category filter.',
+          'Only entries in this category repeat — the category name or its ' +
+          'stable id both match (e.g. "Guides"). Blank = no category filter.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
       },
       {

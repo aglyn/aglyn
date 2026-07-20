@@ -51,6 +51,20 @@ export const COLLECTION_ENTRIES_MAX = 100
 export const COLLECTION_RELATED_DEFAULT_LIMIT = 3
 export const COLLECTION_RELATED_MAX = 12
 
+/** Most categories a collection's taxonomy holds (AGL-582). */
+export const COLLECTION_CATEGORIES_MAX = 50
+
+/**
+ * One taxonomy category on a COLLECTION doc (AGL-582): `id` is the stable
+ * slug-like key entries reference (`categoryId`), generated once from the
+ * initial name and never changed; `name` is the display label and freely
+ * renameable. Stored as an array to preserve author-defined ordering.
+ */
+export interface CollectionCategory {
+  id: string
+  name: string
+}
+
 /**
  * One published content-collection entry as the compose pipeline sees it
  * (AGL-551). Mirrors the tenant's `CollectionEntrySummary` without the
@@ -67,7 +81,17 @@ export interface CollectionEntryRecord {
   seoTitle?: string
   /** Meta description override (AGL-582); falls back to `excerpt`. */
   seoDescription?: string
-  /** Single taxonomy bucket (AGL-582), e.g. "Engineering". */
+  /**
+   * Stable reference into the collection's `categories` taxonomy
+   * (AGL-582): the ID survives renames, so display names resolve at
+   * render via {@link resolveEntryCategoryName}.
+   */
+  categoryId?: string
+  /**
+   * Legacy free-typed bucket (AGL-582), e.g. "Engineering". Still READ
+   * as a fallback everywhere; the editor writes `categoryId` going
+   * forward.
+   */
   category?: string
   /** Free-form labels (AGL-582), e.g. ["nextjs", "seo"]. */
   tags?: string[]
@@ -78,6 +102,30 @@ export interface CollectionEntryRecord {
 export interface CollectionEntriesSource {
   slug: string
   entries: CollectionEntryRecord[]
+  /** The collection's category taxonomy (AGL-582), for name resolution. */
+  categories?: CollectionCategory[]
+}
+
+/**
+ * Display name of an entry's category (AGL-582): the `categoryId` lookup
+ * into the collection's taxonomy wins; the legacy free-typed
+ * `entry.category` string is the fallback so existing data keeps
+ * rendering. An ID referencing a deleted category resolves to nothing —
+ * by design the entry simply shows no category.
+ */
+export function resolveEntryCategoryName(
+  entry: Pick<CollectionEntryRecord, 'categoryId' | 'category'>,
+  categories?: CollectionCategory[],
+): string | undefined {
+  const categoryId = (entry.categoryId ?? '').trim()
+  if (categoryId) {
+    const match = (categories ?? []).find(
+      (category) => category.id === categoryId,
+    )
+    if (match?.name) return match.name
+  }
+  const legacy = (entry.category ?? '').trim()
+  return legacy || undefined
 }
 
 /**
@@ -89,6 +137,7 @@ export interface CollectionEntriesSource {
 export function collectionEntryTokens(
   entry: CollectionEntryRecord,
   collectionSlug: string,
+  categories?: CollectionCategory[],
 ): Record<string, string> {
   return {
     'entry.title': entry.title ?? '',
@@ -102,7 +151,9 @@ export function collectionEntryTokens(
       : '',
     // Entry model v2 (AGL-582): taxonomy + SEO tokens. The SEO pair falls
     // back to title/excerpt so templates can bind them unconditionally.
-    'entry.category': entry.category ?? '',
+    // Category resolves by stable ID against the collection's taxonomy,
+    // falling back to the legacy free-typed string.
+    'entry.category': resolveEntryCategoryName(entry, categories) ?? '',
     'entry.tags': (entry.tags ?? []).join(', '),
     'entry.seoTitle': entry.seoTitle || entry.title || '',
     'entry.seoDescription': entry.seoDescription || entry.excerpt || '',
@@ -112,17 +163,25 @@ export function collectionEntryTokens(
 /**
  * Category/tag membership check (AGL-582), shared by the Collection entries
  * filter props and the query-less list surfaces. Matching is trimmed and
- * case-insensitive — editors type these by hand.
+ * case-insensitive — editors type these by hand. A category filter matches
+ * either the entry's stable `categoryId` or its RESOLVED display name (id
+ * lookup first, legacy string fallback), so filters written against either
+ * spelling keep working across the taxonomy migration.
  */
 export function entryMatchesFilter(
   entry: CollectionEntryRecord,
   filter: { category?: string; tag?: string },
+  categories?: CollectionCategory[],
 ): boolean {
   const normalize = (value: string) => value.trim().toLowerCase()
   if (filter.category) {
-    if (normalize(entry.category ?? '') !== normalize(filter.category)) {
-      return false
-    }
+    const wanted = normalize(filter.category)
+    const matchesId =
+      Boolean((entry.categoryId ?? '').trim()) &&
+      normalize(entry.categoryId ?? '') === wanted
+    const matchesName =
+      normalize(resolveEntryCategoryName(entry, categories) ?? '') === wanted
+    if (!matchesId && !matchesName) return false
   }
   if (filter.tag) {
     const wanted = normalize(filter.tag)
@@ -190,10 +249,14 @@ export function expandCollectionEntries<
     const filtered =
       filterCategory || filterTag
         ? source.entries.filter((entry) =>
-            entryMatchesFilter(entry, {
-              category: filterCategory || undefined,
-              tag: filterTag || undefined,
-            }),
+            entryMatchesFilter(
+              entry,
+              {
+                category: filterCategory || undefined,
+                tag: filterTag || undefined,
+              },
+              source.categories,
+            ),
           )
         : source.entries
 
@@ -226,7 +289,10 @@ export function expandCollectionEntries<
       }
       Object.assign(
         next,
-        resolveNamedTokens(cloned, collectionEntryTokens(entry, source.slug)),
+        resolveNamedTokens(
+          cloned,
+          collectionEntryTokens(entry, source.slug, source.categories),
+        ),
       )
     })
     next[containerId] = { ...container, nodes: childIds }
@@ -249,15 +315,24 @@ export interface CollectionRelatedItem {
  * first. Pure so the compose stage and tests share one implementation. An
  * entry with no category and no tags relates to nothing — the caller
  * renders nothing rather than guessing.
+ *
+ * Two entries share a category when their stable `categoryId`s are equal
+ * (survives renames AND deletions) or their RESOLVED display names match
+ * case-insensitively — so a legacy free-typed entry still relates to a
+ * migrated `categoryId` entry whose taxonomy name spells the same.
  */
 export function selectRelatedEntries(
   entries: CollectionEntryRecord[],
   current: CollectionEntryRecord,
   limit = COLLECTION_RELATED_DEFAULT_LIMIT,
+  categories?: CollectionCategory[],
 ): CollectionEntryRecord[] {
-  const category = (current.category ?? '').trim()
+  const categoryId = (current.categoryId ?? '').trim()
+  const categoryName = (
+    resolveEntryCategoryName(current, categories) ?? ''
+  ).toLowerCase()
   const tags = (current.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
-  if (!category && !tags.length) return []
+  if (!categoryId && !categoryName && !tags.length) return []
   const bounded = Math.min(
     Math.max(limit, 0) || COLLECTION_RELATED_DEFAULT_LIMIT,
     COLLECTION_RELATED_MAX,
@@ -270,7 +345,17 @@ export function selectRelatedEntries(
       ) {
         return false
       }
-      if (category && entryMatchesFilter(entry, { category })) return true
+      if (categoryId && (entry.categoryId ?? '').trim() === categoryId) {
+        return true
+      }
+      if (
+        categoryName &&
+        (resolveEntryCategoryName(entry, categories) ?? '')
+          .trim()
+          .toLowerCase() === categoryName
+      ) {
+        return true
+      }
       return tags.some((tag) => entryMatchesFilter(entry, { tag }))
     })
     .sort(
@@ -309,20 +394,24 @@ export function expandCollectionRelated<
       Number.isFinite(limitRaw) && limitRaw > 0
         ? limitRaw
         : COLLECTION_RELATED_DEFAULT_LIMIT,
+      source.categories,
     )
-    const items: CollectionRelatedItem[] = related.map((entry) => ({
-      title: entry.title ?? '',
-      url: `/${source.slug}/${entry.slug ?? ''}`,
-      ...(entry.publishedAt?.seconds
-        ? {
-            date: new Date(
-              entry.publishedAt.seconds * 1000,
-            ).toLocaleDateString(),
-          }
-        : {}),
-      ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
-      ...(entry.category ? { category: entry.category } : {}),
-    }))
+    const items: CollectionRelatedItem[] = related.map((entry) => {
+      const categoryName = resolveEntryCategoryName(entry, source.categories)
+      return {
+        title: entry.title ?? '',
+        url: `/${source.slug}/${entry.slug ?? ''}`,
+        ...(entry.publishedAt?.seconds
+          ? {
+              date: new Date(
+                entry.publishedAt.seconds * 1000,
+              ).toLocaleDateString(),
+            }
+          : {}),
+        ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
+        ...(categoryName ? { category: categoryName } : {}),
+      }
+    })
     next[containerId] = {
       ...container,
       props: { ...(container.props as any), entries: items },

@@ -173,6 +173,22 @@ describe('composeCollectionTemplatePage (AGL-551)', () => {
     expect(composeArgs.tokens['entry.seoDescription']).toBe('SEO description')
   })
 
+  it('resolves entry.category through the collection taxonomy (AGL-582)', async () => {
+    const data = content({
+      entry: { ...entry, category: undefined, categoryId: 'guides' },
+    })
+    data.collection!.entryScreenId = 'entry-screen'
+    data.collection!.categories = [{ id: 'guides', name: 'Guides' }]
+    await composeCollectionTemplatePage({ hostId: 'host-1', content: data })
+    const composeArgs = composeScreenNodesMock.mock.calls[0][0]
+    // The stable categoryId resolves to its display name…
+    expect(composeArgs.tokens['entry.category']).toBe('Guides')
+    // …and the taxonomy rides the collection context for block expansion.
+    expect(composeArgs.collection.categories).toEqual([
+      { id: 'guides', name: 'Guides' },
+    ])
+  })
+
   it('composes list routes with the fetched entries in context', async () => {
     const data = content()
     data.collection!.listScreenId = 'list-screen'
@@ -278,6 +294,27 @@ describe('composeCollectionFallbackPage (AGL-551)', () => {
       ),
     )
     expect(coverNode?.componentId).toBe('muiStack')
+  })
+
+  it('resolves the fallback meta category via the taxonomy (AGL-582)', async () => {
+    const data = content({
+      entry: { ...entry, category: undefined, categoryId: 'guides' },
+    })
+    data.collection!.categories = [{ id: 'guides', name: 'Guides' }]
+    await composeCollectionFallbackPage({
+      hostId: 'host-1',
+      host,
+      content: data,
+    })
+    const chromeArgs = composeNodesWithChromeMock.mock.calls[0][0]
+    const metaNode: any = Object.values(chromeArgs.screenNodes).find(
+      (node: any) =>
+        node.componentId === Aglyn.COLLECTION_ENTRY_META_COMPONENT_ID,
+    )
+    expect(metaNode?.props?.category).toBe('Guides')
+    expect(chromeArgs.collection.categories).toEqual([
+      { id: 'guides', name: 'Guides' },
+    ])
   })
 
   it('skips the layout lookup when the host has no home screen', async () => {

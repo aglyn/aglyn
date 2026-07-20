@@ -27,6 +27,8 @@ type NodesMap = Record<string, Aglyn.AglynNodeSchema>
 interface FallbackCollection {
   slug: string
   displayName: string
+  /** Category taxonomy (AGL-582) for `categoryId` → name resolution. */
+  categories?: Aglyn.CollectionCategory[]
 }
 
 interface FallbackEntry {
@@ -35,6 +37,9 @@ interface FallbackEntry {
   excerpt?: string
   body?: string
   coverImage?: string
+  /** Stable taxonomy reference (AGL-582); wins over `category`. */
+  categoryId?: string
+  /** Legacy free-typed category (AGL-582); read-only fallback. */
   category?: string
   tags?: string[]
   publishedAt?: { seconds: number } | null
@@ -105,7 +110,11 @@ export function buildCollectionEntryFallbackNodes(
   ]
   const date = formatDate(entry.publishedAt)
   const tags = (entry.tags ?? []).filter(Boolean)
-  if (date || entry.category || tags.length) {
+  // Category name resolves against the collection's taxonomy (AGL-582):
+  // `categoryId` lookup first, legacy free-typed string fallback.
+  const categoryName =
+    Aglyn.resolveEntryCategoryName(entry, collection.categories) ?? ''
+  if (date || categoryName || tags.length) {
     // Entry meta block (AGL-582): "date · category" line + tag chips.
     entries.push([
       id('meta'),
@@ -116,7 +125,7 @@ export function buildCollectionEntryFallbackNodes(
         parentId: id('stack'),
         props: {
           date,
-          category: entry.category ?? '',
+          category: categoryName,
           tags: tags.join(', '),
         },
       },

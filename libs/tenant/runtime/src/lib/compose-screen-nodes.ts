@@ -19,7 +19,7 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
-import { getPublishedCollectionEntries } from './get-collection-content'
+import { getPublishedCollectionSource } from './get-collection-content'
 import getPluginInstalls from './get-plugin-installs'
 import getVariables, { getFunctions, getWorkflows } from './get-variables'
 import getPublishedLayoutVersion from './get-layout-version'
@@ -39,6 +39,11 @@ export interface ComposeCollectionContext {
    * fallback) — the Related posts block resolves against it.
    */
   entry?: Aglyn.CollectionEntryRecord | null
+  /**
+   * The routed collection's category taxonomy (AGL-582): entry
+   * `categoryId`s resolve to display names against it during expansion.
+   */
+  categories?: Aglyn.CollectionCategory[]
 }
 
 /**
@@ -75,14 +80,28 @@ async function expandCollectionEntryBlocks(
   const sources: Record<string, Aglyn.CollectionEntriesSource> = {}
   await Promise.all(
     [...slugs].map(async (slug) => {
-      const entries =
-        slug === collection?.slug && collection.entries
-          ? collection.entries
-          : await getPublishedCollectionEntries({
-              hostId,
-              collectionSlug: slug,
-            })
-      sources[slug] = { slug, entries }
+      // The routed collection rides its already-fetched entries +
+      // categories (AGL-582); other collections fetch both on demand.
+      if (slug === collection?.slug && collection.entries) {
+        sources[slug] = {
+          slug,
+          entries: collection.entries,
+          categories: collection.categories,
+        }
+        return
+      }
+      const fetched = await getPublishedCollectionSource({
+        hostId,
+        collectionSlug: slug,
+      })
+      sources[slug] = {
+        slug,
+        entries: fetched.entries,
+        categories:
+          slug === collection?.slug && collection.categories
+            ? collection.categories
+            : fetched.categories,
+      }
     }),
   )
   const expanded = Aglyn.expandCollectionEntries(
