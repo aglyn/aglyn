@@ -15,12 +15,17 @@
  * limitations under the License.
  */
 
+import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn-node-renderer'
 import { readSxValue, writeSxValue } from './responsive-sx'
 import {
+  applyStylePartialToSx,
   buildFlexGapGroup,
   buildStyleFieldGroups,
+  computeEffectiveStyleValues,
   computeStylePartial,
+  isSchemeScopedStyleField,
   pickStyleValues,
+  SCHEME_SCOPED_STYLE_FIELDS,
   styleGroupFieldNames,
 } from './style-field-groups'
 
@@ -191,6 +196,108 @@ describe('style field groups (AGL-540/587)', () => {
 
     sx = writeSxValue(sx, 'boxShadow', 'none', null)
     expect(readSxValue(sx, 'boxShadow', 'sm')).toBe('none')
+  })
+
+  // Styles-panel scheme routing (AGL-588): while the artboard previews
+  // dark, only COLOR-BEARING fields write into the sx dark slice —
+  // everything else stays a scheme-agnostic base write.
+  describe('scheme routing (AGL-588)', () => {
+    it('declares exactly the color-bearing panel fields as scheme-scoped', () => {
+      expect([...SCHEME_SCOPED_STYLE_FIELDS].sort()).toEqual([
+        'backgroundColor',
+        'borderColor',
+        'color',
+      ])
+      expect(isSchemeScopedStyleField('color')).toBe(true)
+      expect(isSchemeScopedStyleField('width')).toBe(false)
+    })
+
+    it('routes color fields to the dark slice and others to the base while dark', () => {
+      const sx = applyStylePartialToSx(
+        { color: '#111' },
+        { color: '#eee', backgroundColor: '#000', width: '320px' },
+        null,
+        'dark',
+      )
+      expect(sx['color']).toBe('#111')
+      expect(sx['width']).toBe('320px')
+      expect(sx[SX_SCHEME_DARK_KEY]).toEqual({
+        color: '#eee',
+        backgroundColor: '#000',
+      })
+    })
+
+    it('edits the base (and never creates a slice) while previewing light', () => {
+      const sx = applyStylePartialToSx(
+        {},
+        { color: '#111', width: '50%' },
+        null,
+        null,
+      )
+      expect(sx).toEqual({ color: '#111', width: '50%' })
+      expect(SX_SCHEME_DARK_KEY in sx).toBe(false)
+    })
+
+    it('composes scheme with the active breakpoint (scheme outer, breakpoints inner)', () => {
+      let sx: Record<string, any> = {}
+      sx = applyStylePartialToSx(sx, { color: '#ddd' }, null, 'dark')
+      sx = applyStylePartialToSx(sx, { color: '#eee' }, 'md', 'dark')
+      expect(sx[SX_SCHEME_DARK_KEY]).toEqual({
+        color: { xs: '#ddd', md: '#eee' },
+      })
+    })
+
+    it('never pins inherited base colors into the slice by round-tripping', () => {
+      // The form shows '#111' (base fallback) in dark preview; saving it
+      // back unchanged must NOT create a dark override.
+      const sx = applyStylePartialToSx(
+        { color: '#111' },
+        { color: '#111' },
+        null,
+        'dark',
+      )
+      expect(SX_SCHEME_DARK_KEY in sx).toBe(false)
+    })
+
+    it('resolves effective values through the slice with base fallback', () => {
+      const sx = {
+        color: '#111',
+        backgroundColor: '#fff',
+        width: '320px',
+        [SX_SCHEME_DARK_KEY]: { color: '#eee' },
+      }
+      expect(computeEffectiveStyleValues(sx, null, 'dark')).toEqual({
+        color: '#eee',
+        backgroundColor: '#fff',
+        width: '320px',
+      })
+      expect(computeEffectiveStyleValues(sx, null, null)).toEqual({
+        color: '#111',
+        backgroundColor: '#fff',
+        width: '320px',
+      })
+    })
+
+    it('surfaces dark-only overrides that have no base value', () => {
+      const sx = { [SX_SCHEME_DARK_KEY]: { backgroundColor: '#000' } }
+      expect(computeEffectiveStyleValues(sx, null, 'dark')).toEqual({
+        backgroundColor: '#000',
+      })
+      // Light preview shows no value — nothing renders in light.
+      expect(computeEffectiveStyleValues(sx, null, null)).toEqual({})
+    })
+
+    it('clearing a dark override falls back to the base color', () => {
+      let sx: Record<string, any> = {
+        color: '#111',
+        [SX_SCHEME_DARK_KEY]: { color: '#eee' },
+      }
+      sx = applyStylePartialToSx(sx, { color: '' }, null, 'dark')
+      expect(SX_SCHEME_DARK_KEY in sx).toBe(false)
+      expect(computeEffectiveStyleValues(sx, null, 'dark')).toEqual({
+        color: '#111',
+      })
+    })
   })
 
   it('round-trips relocated fields through the responsive-sx pipeline', () => {

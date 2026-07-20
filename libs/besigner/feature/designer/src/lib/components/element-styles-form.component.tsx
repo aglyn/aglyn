@@ -61,6 +61,7 @@ import {
   type FormRendererProps,
 } from '@aglyn/shared-ui-jsx-forms'
 import { Container, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
   Chip,
@@ -86,13 +87,14 @@ import {
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
 import {
+  canvasSchemeToSxScheme,
   deviceFlagToBreakpoint,
-  readSxValue,
-  writeSxValue,
 } from '../utils/responsive-sx'
 import {
+  applyStylePartialToSx,
   buildFlexGapGroup,
   buildStyleFieldGroups,
+  computeEffectiveStyleValues,
   computeStylePartial,
   pickStyleValues,
   styleGroupFieldNames,
@@ -517,7 +519,8 @@ const ElementStylesForm = observer(
     const { node } = props
     const deleteElementCallback = useDeleteElementCallback()
     const nodeSx = node?.sx
-    const siteTheme = useAglynSiteTheme()
+    const hostThemeDoc = useHostThemeDocument()
+    const siteTheme = useAglynSiteTheme({ theme: hostThemeDoc })
 
     const presetColors = useMemo(
       () =>
@@ -541,41 +544,46 @@ const ElementStylesForm = observer(
     const [devicePreview] = useAglynBesignerFlag('devicePreview')
     const activeBreakpoint = deviceFlagToBreakpoint(devicePreview)
 
+    // Scheme-scoped colors (AGL-588): while the artboard previews the
+    // DARK scheme, color-bearing fields write into the sx dark slice and
+    // read through it; light preview edits the base (light IS the base).
+    // Non-color fields stay scheme-agnostic either way.
+    const [canvasScheme] = useAglynBesignerFlag('canvasScheme')
+    const activeScheme = canvasSchemeToSxScheme(canvasScheme)
+
     /**
-     * Merges style values into node.sx at the active breakpoint scope.
-     * Unchanged values are skipped so effective (inherited) readings never
-     * get pinned into a breakpoint slice by round-tripping through a form.
+     * Merges style values into node.sx at the active breakpoint + scheme
+     * scope. Unchanged values are skipped so effective (inherited)
+     * readings never get pinned into a slice by round-tripping through a
+     * form.
      */
     const applyStyleValues = useCallback(
       (partial: Record<string, unknown>) => {
         action(() => {
           if (!node) return
-          let sx = { ...(node.sx ?? {}) } as Record<string, any>
-          for (const [key, value] of Object.entries(partial)) {
-            const normalized = value === '' ? undefined : value
-            if (readSxValue(sx, key, activeBreakpoint) === normalized) continue
-            sx = writeSxValue(sx, key, normalized, activeBreakpoint)
-          }
-          node.sx = sx as any
+          node.sx = applyStylePartialToSx(
+            (node.sx ?? {}) as Record<string, any>,
+            partial,
+            activeBreakpoint,
+            activeScheme,
+          ) as any
         })()
       },
-      [node, activeBreakpoint],
+      [node, activeBreakpoint, activeScheme],
     )
 
-    // Effective scalar values at the active breakpoint — feeds the form
-    // and controls; responsive objects resolve to their active slice.
-    const effectiveValues = useMemo(() => {
-      const out: Record<string, any> = {}
-      for (const key of Object.keys((nodeSx ?? {}) as Record<string, any>)) {
-        const value = readSxValue(
+    // Effective scalar values at the active breakpoint + scheme — feeds
+    // the form and controls; responsive objects resolve to their active
+    // slice, color fields through the dark slice while previewing dark.
+    const effectiveValues = useMemo(
+      () =>
+        computeEffectiveStyleValues(
           nodeSx as Record<string, any>,
-          key,
           activeBreakpoint,
-        )
-        if (value !== undefined && typeof value !== 'object') out[key] = value
-      }
-      return out
-    }, [nodeSx, activeBreakpoint])
+          activeScheme,
+        ),
+      [nodeSx, activeBreakpoint, activeScheme],
+    )
 
     /**
      * Scoped group save (AGL-540): a group's auto-apply may only write
@@ -641,8 +649,10 @@ const ElementStylesForm = observer(
     )
 
     // Re-seeds a group form's initial values when the selection or the
-    // artboard scope changes (AGL-540).
-    const formSeedKey = `${node?.$id ?? ''}:${activeBreakpoint ?? 'base'}`
+    // artboard scope changes (AGL-540/588).
+    const formSeedKey =
+      `${node?.$id ?? ''}:${activeBreakpoint ?? 'base'}` +
+      `:${activeScheme ?? 'light'}`
 
     return (
       <>
@@ -667,6 +677,27 @@ const ElementStylesForm = observer(
               }
             />
           </Tooltip>
+          {/* Scheme scope chip (AGL-588): only the non-default (dark)
+              preview shows it — color edits become dark-only overrides
+              while the rest of the panel keeps editing shared values. */}
+          {activeScheme === 'dark' ? (
+            <Tooltip
+              title={
+                'The artboard is previewing the dark scheme: text, ' +
+                'background, and border color edits apply to dark mode ' +
+                'only. Other styles still apply to both schemes. Switch ' +
+                'the artboard back to light to edit the base colors.'
+              }
+            >
+              <Chip
+                size="small"
+                color="secondary"
+                variant="outlined"
+                sx={{ ml: 1 }}
+                label="Styling: dark scheme"
+              />
+            </Tooltip>
+          ) : null}
         </Container>
         <Container gutterY={[2]} dense>
           <BoxStyler

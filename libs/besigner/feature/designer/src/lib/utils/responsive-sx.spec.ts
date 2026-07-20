@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+import { SX_SCHEME_DARK_KEY } from '@aglyn/aglyn-node-renderer'
 import { BesignerDeviceFlag } from '@aglyn/besigner'
 import {
+  canvasSchemeToSxScheme,
   deviceFlagToBreakpoint,
   readSxValue,
   sxHasBreakpointOverrides,
@@ -81,5 +83,94 @@ describe('sxHasBreakpointOverrides', () => {
     expect(sxHasBreakpointOverrides({ p: 1 }, 'p')).toBe(false)
     expect(sxHasBreakpointOverrides({ p: { xs: 1 } }, 'p')).toBe(false)
     expect(sxHasBreakpointOverrides({ p: { xs: 1, md: 2 } }, 'p')).toBe(true)
+  })
+})
+
+// Scheme dimension (AGL-588): scheme OUTER, breakpoints INNER — the
+// '@scheme dark' slice holds ordinary properties whose values may be
+// responsive objects. Light IS the base; only dark gets a slice.
+describe('scheme-scoped sx (AGL-588)', () => {
+  it('maps the canvas scheme to an sx scope — light is the base', () => {
+    expect(canvasSchemeToSxScheme('dark')).toBe('dark')
+    expect(canvasSchemeToSxScheme('light')).toBeNull()
+    expect(canvasSchemeToSxScheme(undefined)).toBeNull()
+  })
+
+  it('dark writes land in the dark slice, leaving the base untouched', () => {
+    let sx: Record<string, any> = { color: '#111' }
+    sx = writeSxValue(sx, 'color', '#eee', null, 'dark')
+    expect(sx['color']).toBe('#111')
+    expect(sx[SX_SCHEME_DARK_KEY]).toEqual({ color: '#eee' })
+  })
+
+  it('base (light) writes never touch the dark slice', () => {
+    let sx: Record<string, any> = {
+      color: '#111',
+      [SX_SCHEME_DARK_KEY]: { color: '#eee' },
+    }
+    sx = writeSxValue(sx, 'color', '#222', null)
+    sx = writeSxValue(sx, 'backgroundColor', '#fafafa', null, 'light')
+    expect(sx['color']).toBe('#222')
+    expect(sx['backgroundColor']).toBe('#fafafa')
+    expect(sx[SX_SCHEME_DARK_KEY]).toEqual({ color: '#eee' })
+  })
+
+  it('dark reads resolve the slice and fall back to the base', () => {
+    const sx = {
+      color: '#111',
+      backgroundColor: '#fff',
+      [SX_SCHEME_DARK_KEY]: { color: '#eee' },
+    }
+    expect(readSxValue(sx, 'color', null, 'dark')).toBe('#eee')
+    // No dark override — what renders in dark is the base value.
+    expect(readSxValue(sx, 'backgroundColor', null, 'dark')).toBe('#fff')
+    // Base reads never see the slice.
+    expect(readSxValue(sx, 'color', null)).toBe('#111')
+    expect(readSxValue(sx, 'color', null, 'light')).toBe('#111')
+  })
+
+  it('composes scheme with breakpoints — responsive objects inside the slice', () => {
+    let sx: Record<string, any> = { color: '#111' }
+    sx = writeSxValue(sx, 'color', '#ddd', null, 'dark')
+    sx = writeSxValue(sx, 'color', '#eee', 'md', 'dark')
+    expect(sx[SX_SCHEME_DARK_KEY]).toEqual({
+      color: { xs: '#ddd', md: '#eee' },
+    })
+    expect(readSxValue(sx, 'color', null, 'dark')).toBe('#ddd')
+    expect(readSxValue(sx, 'color', 'sm', 'dark')).toBe('#ddd')
+    expect(readSxValue(sx, 'color', 'md', 'dark')).toBe('#eee')
+    // The dark slice's mobile-first cascade applies within the slice.
+    expect(readSxValue(sx, 'color', 'xl', 'dark')).toBe('#eee')
+    // The base keeps its own value at every breakpoint.
+    expect(readSxValue(sx, 'color', 'md')).toBe('#111')
+  })
+
+  it('falls back to the base per breakpoint when the slice has no value there', () => {
+    const sx = {
+      color: { xs: '#111', md: '#222' },
+      [SX_SCHEME_DARK_KEY]: { color: { md: '#eee' } },
+    }
+    // xs: no dark override resolves — the base shows through.
+    expect(readSxValue(sx, 'color', null, 'dark')).toBe('#111')
+    expect(readSxValue(sx, 'color', 'md', 'dark')).toBe('#eee')
+  })
+
+  it('clearing the last dark override removes the slice entirely', () => {
+    let sx: Record<string, any> = {
+      color: '#111',
+      [SX_SCHEME_DARK_KEY]: { color: '#eee' },
+    }
+    sx = writeSxValue(sx, 'color', undefined, null, 'dark')
+    expect(SX_SCHEME_DARK_KEY in sx).toBe(false)
+    expect(sx['color']).toBe('#111')
+  })
+
+  it('single-xs slices collapse to plain values inside the dark slice too', () => {
+    let sx: Record<string, any> = {}
+    sx = writeSxValue(sx, 'color', '#ddd', 'md', 'dark')
+    sx = writeSxValue(sx, 'color', undefined, 'md', 'dark')
+    expect(SX_SCHEME_DARK_KEY in sx).toBe(false)
+    sx = writeSxValue(sx, 'color', '#ccc', null, 'dark')
+    expect(sx[SX_SCHEME_DARK_KEY]).toEqual({ color: '#ccc' })
   })
 })

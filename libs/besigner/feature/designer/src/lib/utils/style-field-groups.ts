@@ -16,6 +16,8 @@
  */
 
 import { FieldComponentType } from '@aglyn/aglyn'
+import { SX_SCHEME_DARK_KEY, type SxScheme } from '@aglyn/aglyn-node-renderer'
+import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
 
 /**
  * First-class style controls beyond the base panel (AGL-540): layout,
@@ -461,4 +463,91 @@ export function pickStyleValues(
     if (values && values[name] !== undefined) picked[name] = values[name]
   }
   return picked
+}
+
+/**
+ * Style fields that carry a COLOR and therefore scope to the artboard's
+ * color scheme (AGL-588): while the canvas previews DARK, edits to these
+ * fields write into the sx dark slice so light keeps its own values.
+ * Everything else (spacing, sizing, layout…) is scheme-agnostic and
+ * always writes the base, no matter which scheme is previewed.
+ */
+export const SCHEME_SCOPED_STYLE_FIELDS = [
+  'color',
+  'backgroundColor',
+  'borderColor',
+] as const
+
+const schemeScopedFields: ReadonlySet<string> = new Set(
+  SCHEME_SCOPED_STYLE_FIELDS,
+)
+
+/** Whether edits to this style field scope to the previewed color scheme. */
+export function isSchemeScopedStyleField(name: string): boolean {
+  return schemeScopedFields.has(name)
+}
+
+/**
+ * The sx scope one field's edit targets: color-bearing fields follow the
+ * previewed scheme; everything else stays scheme-agnostic (base writes).
+ */
+function fieldSxScheme(
+  name: string,
+  scheme: SxScheme | null | undefined,
+): SxScheme | null {
+  return scheme === 'dark' && isSchemeScopedStyleField(name) ? 'dark' : null
+}
+
+/**
+ * Merges a partial of style values into an sx object at the active
+ * breakpoint + scheme scope (AGL-333 / AGL-588). Unchanged values are
+ * skipped so effective (inherited) readings never get pinned into a
+ * breakpoint or scheme slice by round-tripping through a form. Empty
+ * strings clear.
+ */
+export function applyStylePartialToSx(
+  sx: Record<string, any> | undefined,
+  partial: Record<string, unknown>,
+  breakpoint: SxBreakpoint | null,
+  scheme: SxScheme | null,
+): Record<string, any> {
+  let next: Record<string, any> = { ...(sx ?? {}) }
+  for (const [key, value] of Object.entries(partial)) {
+    const normalized = value === '' ? undefined : value
+    const fieldScheme = fieldSxScheme(key, scheme)
+    if (readSxValue(next, key, breakpoint, fieldScheme) === normalized) continue
+    next = writeSxValue(next, key, normalized, breakpoint, fieldScheme)
+  }
+  return next
+}
+
+/**
+ * Effective scalar style values at the active breakpoint + scheme scope
+ * — feeds the styles panel's forms and controls. Color-bearing fields
+ * resolve through the dark slice while the artboard previews dark
+ * (falling back to base where no override exists — exactly what
+ * renders); everything else reads the base. Responsive objects resolve
+ * to their active slice; nested objects are skipped.
+ */
+export function computeEffectiveStyleValues(
+  sx: Record<string, any> | undefined,
+  breakpoint: SxBreakpoint | null,
+  scheme: SxScheme | null,
+): Record<string, any> {
+  const source = (sx ?? {}) as Record<string, any>
+  const keys = new Set(Object.keys(source))
+  keys.delete(SX_SCHEME_DARK_KEY)
+  if (scheme === 'dark') {
+    for (const key of Object.keys(
+      (source[SX_SCHEME_DARK_KEY] ?? {}) as Record<string, any>,
+    )) {
+      keys.add(key)
+    }
+  }
+  const out: Record<string, any> = {}
+  for (const key of keys) {
+    const value = readSxValue(source, key, breakpoint, fieldSxScheme(key, scheme))
+    if (value !== undefined && typeof value !== 'object') out[key] = value
+  }
+  return out
 }
