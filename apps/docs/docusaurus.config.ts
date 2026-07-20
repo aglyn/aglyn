@@ -76,13 +76,35 @@ const config: Config = {
       },
     ],
     [
+      // "Learn" instance (AGL-612): guided learning paths at /learn.
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'learn',
+        path: 'learn',
+        routeBasePath: 'learn',
+        sidebarPath: './sidebarsLearn.ts',
+        editUrl,
+      },
+    ],
+    [
+      // "Help" instance (AGL-613): support, FAQ, troubleshooting at /help.
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'help',
+        path: 'help',
+        routeBasePath: 'help',
+        sidebarPath: './sidebarsHelp.ts',
+        editUrl,
+      },
+    ],
+    [
       // Offline/local full-text search (no external Algolia dependency).
       '@easyops-cn/docusaurus-search-local',
       {
         hashed: true,
         indexBlog: false,
-        // Index both the product docs (root) and the API instance.
-        docsRouteBasePath: ['/', '/api'],
+        // Index every docs instance.
+        docsRouteBasePath: ['/', '/api', '/learn', '/help'],
         highlightSearchTermsOnTargetPage: true,
       },
     ],
@@ -148,6 +170,20 @@ const config: Config = {
           docsPluginId: 'api',
           position: 'left',
           label: 'API',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'learnSidebar',
+          docsPluginId: 'learn',
+          position: 'left',
+          label: 'Learn',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'helpSidebar',
+          docsPluginId: 'help',
+          position: 'left',
+          label: 'Help',
         },
         {
           to: '/developers/plugins/overview',
