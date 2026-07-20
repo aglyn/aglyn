@@ -482,7 +482,7 @@ export const DOCS_HELP_ANCHORS = {
   billing: ['#tiers--entitlements', '#usage-meters', '#seats', '#organization-data', '#payments', '#related'],
   bindings: ['#binding-tokens', '#rename-safe-id-tokens', '#insert-a-variable', '#token-pills', '#in-the-canvas-text-editor', '#typed-variables', '#no-code-functions', '#where-used--safety', '#workflows', '#related'],
   bookings: ['#set-up-bookings', '#taking-bookings', '#manage', '#related'],
-  buildABlog: ['#1-create-a-collection', '#2-write-entries', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#entry-tokens', '#no-template-still-designed', '#4-publish--syndicate', '#tips', '#related'],
+  buildABlog: ['#1-create-a-collection', '#2-write-entries', '#categories', '#visual-editor', '#3-design-the-pages-with-template-screens', '#blog-blocks', '#entry-tokens', '#no-template-still-designed', '#paginated-page-sets', '#4-publish--syndicate', '#tips', '#related'],
   buildAndPublishASurvey: ['#1-create-the-dataset', '#2-add-a-screen-for-the-survey', '#3-insert-a-form-from-the-element-picker', '#4-configure-the-fields', '#5-point-the-form-at-the-dataset', '#6-publish', '#7-watch-responses-arrive', '#related'],
   buildAWorkflow: ['#1-open-the-workflows-page', '#2-choose-a-trigger', '#3-add-steps', '#4-save-and-test', '#tips', '#related'],
   buildingFeaturePlugins: ['#the-ui-half', '#the-console-half', '#how-the-shell-consumes-the-registry', '#loading-org-gated-and-dynamic-agl-417', '#extending-beyond-pages-slots-providers-runtimes-hooks-agl-418419', '#remote-bundles-the-trusted-realm-tier-agl-420', '#the-server-half-api-routes', '#shared-server-runtime-aglyntenant-runtime', '#project-setup', '#reference-implementations'],

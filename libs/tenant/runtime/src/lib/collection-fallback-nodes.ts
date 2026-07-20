@@ -208,15 +208,83 @@ export function buildCollectionEntryFallbackNodes(
   }
 }
 
+/** Pagination state for the built-in list (AGL-620). */
+export interface FallbackListPagination {
+  page: number
+  perPage: number
+  totalPages: number
+}
+
+/** Prev/next + "Page X of Y" nav linking to /{slug}/page/{n} (AGL-620). */
+function paginationNodes(
+  collection: FallbackCollection,
+  pagination: FallbackListPagination,
+): { childId: string; nodes: NodesMap } {
+  const { page, totalPages } = pagination
+  // Page 1 lives at the bare /{slug}; deeper pages at /{slug}/page/{n}.
+  const href = (n: number) =>
+    n <= 1 ? `/${collection.slug}` : `/${collection.slug}/page/${n}`
+  const children: string[] = []
+  const nodes: NodesMap = {}
+  if (page > 1) {
+    nodes[id('prev')] = {
+      $id: id('prev'),
+      componentId: 'muiScreenLink',
+      pluginId: 'mui',
+      parentId: id('pager'),
+      props: { href: href(page - 1), children: '← Newer' },
+    }
+    children.push(id('prev'))
+  }
+  nodes[id('pageinfo')] = {
+    $id: id('pageinfo'),
+    componentId: 'muiTypography',
+    pluginId: 'mui',
+    parentId: id('pager'),
+    props: {
+      variant: 'body2',
+      children: `Page ${page} of ${totalPages}`,
+      sx: { color: 'text.secondary' },
+    },
+  }
+  children.push(id('pageinfo'))
+  if (page < totalPages) {
+    nodes[id('next')] = {
+      $id: id('next'),
+      componentId: 'muiScreenLink',
+      pluginId: 'mui',
+      parentId: id('pager'),
+      props: { href: href(page + 1), children: 'Older →' },
+    }
+    children.push(id('next'))
+  }
+  nodes[id('pager')] = {
+    $id: id('pager'),
+    componentId: 'muiStack',
+    pluginId: 'mui',
+    parentId: id('stack'),
+    props: {
+      direction: 'row',
+      spacing: 3,
+      sx: { alignItems: 'center', justifyContent: 'center', pt: 2 },
+    },
+    nodes: children,
+  }
+  return { childId: id('pager'), nodes }
+}
+
 /**
  * Built-in entry list as canvas nodes (AGL-551): a heading plus a
  * Collection entries block whose template (title, date, excerpt, Read
  * more) the compose pipeline expands over the published entries — the same
- * block designers drop onto their own list-template screens.
+ * block designers drop onto their own list-template screens. With
+ * `pagination` (AGL-620) the block renders one page and prev/next nav links
+ * to `/{slug}/page/{n}`.
  */
 export function buildCollectionListFallbackNodes(
   collection: FallbackCollection,
   hasEntries: boolean,
+  pagination?: FallbackListPagination,
 ): NodesMap {
   const [titleId, title] = typography('title', {
     variant: 'h3',
@@ -242,17 +310,29 @@ export function buildCollectionListFallbackNodes(
     parentId: id('item'),
     props,
   })
+  const pager =
+    pagination && pagination.totalPages > 1
+      ? paginationNodes(collection, pagination)
+      : null
   return {
-    ...shell([titleId, id('entries')]),
+    ...shell(
+      pager ? [titleId, id('entries'), pager.childId] : [titleId, id('entries')],
+    ),
     [titleId]: title,
     [id('entries')]: {
       $id: id('entries'),
       componentId: Aglyn.COLLECTION_ENTRIES_COMPONENT_ID,
       pluginId: 'mui',
       parentId: id('stack'),
-      props: { spacing: 4 },
+      props: {
+        spacing: 4,
+        ...(pagination
+          ? { perPage: pagination.perPage, page: pagination.page }
+          : {}),
+      },
       nodes: [id('item')],
     },
+    ...(pager ? pager.nodes : {}),
     [id('item')]: {
       $id: id('item'),
       componentId: 'muiStack',
@@ -300,12 +380,14 @@ export function buildCollectionFallbackNodes(content: {
   collection: FallbackCollection
   entries: FallbackEntry[]
   entry: FallbackEntry | null
+  pagination?: FallbackListPagination | null
 }): NodesMap {
   return content.entry
     ? buildCollectionEntryFallbackNodes(content.collection, content.entry)
     : buildCollectionListFallbackNodes(
         content.collection,
         content.entries.length > 0,
+        content.pagination ?? undefined,
       )
 }
 

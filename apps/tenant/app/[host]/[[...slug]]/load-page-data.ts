@@ -263,13 +263,27 @@ export const loadPageData = cache(
       // /{collection}/{entry} paths that aren't screens render the themed
       // blog surfaces.
       const segments = path.split('/').filter(Boolean)
-      if (segments.length >= 1 && segments.length <= 2) {
+      // /{collection} (list), /{collection}/{entry} (entry), and the paginated
+      // list /{collection}/page/{n} (AGL-620). `page` is reserved as a list
+      // sub-path.
+      const isPagedList =
+        segments.length === 3 &&
+        segments[1] === 'page' &&
+        /^[1-9]\d*$/.test(segments[2])
+      if ((segments.length >= 1 && segments.length <= 2) || isPagedList) {
+        const entrySlug = segments.length === 2 ? segments[1] : undefined
+        const isList = !entrySlug
+        const page = isPagedList ? Number(segments[2]) : 1
         const content = await getCollectionContent({
           hostId,
           collectionSlug: segments[0],
-          entrySlug: segments[1],
+          entrySlug,
+          ...(isList ? { page, perPage: Aglyn.COLLECTION_LIST_PAGE_SIZE } : {}),
         })
-        if (content.collection && (segments.length === 1 || content.entry)) {
+        // A paged list beyond the last page 404s (page 1 always renders).
+        const pageInRange =
+          !content.pagination || page <= content.pagination.totalPages
+        if (content.collection && (isList ? pageInRange : content.entry)) {
           // Collection pages are first-class designed pages (AGL-551): both
           // routes carry the same plugin switchboard + branding flag as
           // published screens so shared-layout chrome renders faithfully.

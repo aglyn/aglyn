@@ -68,6 +68,14 @@ export interface CollectionEntriesProps extends StackProps {
   filterCategory?: string
   /** Only entries carrying this tag repeat (compose-time, AGL-582). */
   filterTag?: string
+  /**
+   * Entries per page (compose-time, AGL-620). When set, the block renders one
+   * page window instead of the top `entriesLimit`; the built-in collection
+   * list uses this with the `page` from `/{collection}/page/{n}`.
+   */
+  perPage?: number | string
+  /** 1-based page for `perPage` (compose-time, AGL-620). */
+  page?: number | string
 }
 
 /**
@@ -80,7 +88,16 @@ const CollectionEntries = forwardRef<HTMLDivElement, CollectionEntriesProps>(
   // collectionSlug/entriesLimit/filter* are compose-time attributes: the
   // tenant expands them before render; strip so they never hit the DOM.
   (
-    { collectionSlug, entriesLimit, filterCategory, filterTag, children, ...props },
+    {
+      collectionSlug,
+      entriesLimit,
+      filterCategory,
+      filterTag,
+      perPage,
+      page,
+      children,
+      ...props
+    },
     ref,
   ) => (
     <MuiStack ref={ref} spacing={4} {...props}>
@@ -129,6 +146,22 @@ export const collectionEntriesSchema: Aglyn.ComponentSchema<CollectionEntriesPro
           'Only entries carrying this tag repeat (e.g. "nextjs"). Blank = ' +
           'no tag filter.',
         component: Aglyn.FieldComponentType.TEXT_FIELD,
+      },
+      {
+        name: 'perPage',
+        label: 'Entries per page',
+        description:
+          'Paginate the list: entries per page (blank = no pagination). ' +
+          'Pairs with the page from /{collection}/page/{n}.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+        type: 'number',
+      },
+      {
+        name: 'page',
+        label: 'Page',
+        description: '1-based page to render when Entries per page is set.',
+        component: Aglyn.FieldComponentType.TEXT_FIELD,
+        type: 'number',
       },
       {
         name: 'spacing',

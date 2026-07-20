@@ -162,6 +162,7 @@ export async function composeCollectionFallbackPage(options: {
       collection,
       entries: content.entries,
       entry: content.entry,
+      pagination: content.pagination,
     })
     const nodes = await composeNodesWithChrome({
       hostId,

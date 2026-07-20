@@ -17,6 +17,7 @@
 
 import {
   collectionEntryTokens,
+  collectionTotalPages,
   entryMatchesFilter,
   expandCollectionEntries,
   expandCollectionRelated,
@@ -237,6 +238,16 @@ describe('entryMatchesFilter (AGL-582)', () => {
   })
 })
 
+describe('collectionTotalPages (AGL-620)', () => {
+  it('computes page counts and never drops below 1', () => {
+    expect(collectionTotalPages(0, 10)).toBe(1)
+    expect(collectionTotalPages(5, 10)).toBe(1)
+    expect(collectionTotalPages(10, 10)).toBe(1)
+    expect(collectionTotalPages(11, 10)).toBe(2)
+    expect(collectionTotalPages(25, 10)).toBe(3)
+  })
+})
+
 describe('expandCollectionEntries (AGL-551)', () => {
   it('clones the template once per entry with per-entry tokens', () => {
     const nodes = expandCollectionEntries(baseNodes(), { blog }, 'blog')
@@ -272,6 +283,39 @@ describe('expandCollectionEntries (AGL-551)', () => {
     nodes['list'].props.entriesLimit = 1
     const expanded = expandCollectionEntries(nodes, { blog }, 'blog')
     expect(expanded['list'].nodes).toHaveLength(1)
+  })
+
+  it('renders one page window with perPage/page (AGL-620)', () => {
+    const many = {
+      slug: 'blog',
+      entries: Array.from({ length: 5 }, (_, i) => ({
+        $id: `e${i}`,
+        title: `Post ${i}`,
+        slug: `post-${i}`,
+      })),
+    }
+    const pageCount = (n: number) => {
+      const nodes = baseNodes()
+      nodes['list'].props.perPage = 2
+      nodes['list'].props.page = n
+      return (
+        expandCollectionEntries(nodes, { blog: many }, 'blog')['list']
+          .nodes as string[]
+      ).length
+    }
+    expect(pageCount(1)).toBe(2)
+    expect(pageCount(2)).toBe(2)
+    expect(pageCount(3)).toBe(1) // 5 entries → last page has one
+    expect(pageCount(4)).toBe(0) // past the end
+  })
+
+  it('perPage takes precedence over entriesLimit (AGL-620)', () => {
+    const nodes = baseNodes()
+    nodes['list'].props.entriesLimit = 1
+    nodes['list'].props.perPage = 5
+    nodes['list'].props.page = 1
+    // The page window (5) wins over the legacy limit (1): both entries show.
+    expect(expandCollectionEntries(nodes, { blog }, 'blog')['list'].nodes).toHaveLength(2)
   })
 
   it('fails open when the collection is unknown or empty', () => {
