@@ -10,7 +10,17 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## In-console help (newest)
+## REST API & API keys (newest)
+
+- **[The Aglyn REST API](https://docs.aglyn.com/api)** — programmatic access to
+  your organization's datasets and records (full CRUD), contacts, sites, and
+  form submissions, authenticated with **API keys** you create under
+  **Organization → Settings → API keys**. Keys are scoped, shown once, and
+  Business-tier; the API supports cursor pagination, per-key rate limits,
+  idempotent writes, and a consistent error envelope. See the new
+  [API reference](https://docs.aglyn.com/api).
+
+## In-console help
 
 - **[Documentation from the console](getting-started/console-tour.md#the-app-bar)** —
   the account menu now has a **Documentation** entry that opens this site in a

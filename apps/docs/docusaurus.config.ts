@@ -64,12 +64,25 @@ const config: Config = {
 
   plugins: [
     [
+      // Separate "API" docs instance (AGL-611): the REST API reference lives
+      // at /api with its own sidebar, distinct from the product docs.
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'api',
+        path: 'api',
+        routeBasePath: 'api',
+        sidebarPath: './sidebarsApi.ts',
+        editUrl,
+      },
+    ],
+    [
       // Offline/local full-text search (no external Algolia dependency).
       '@easyops-cn/docusaurus-search-local',
       {
         hashed: true,
         indexBlog: false,
-        docsRouteBasePath: '/',
+        // Index both the product docs (root) and the API instance.
+        docsRouteBasePath: ['/', '/api'],
         highlightSearchTermsOnTargetPage: true,
       },
     ],
@@ -128,6 +141,13 @@ const config: Config = {
           sidebarId: 'docsSidebar',
           position: 'left',
           label: 'Docs',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'apiSidebar',
+          docsPluginId: 'api',
+          position: 'left',
+          label: 'API',
         },
         {
           to: '/developers/plugins/overview',
