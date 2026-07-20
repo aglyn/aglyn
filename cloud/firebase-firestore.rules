@@ -184,6 +184,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Customer API keys (AGL-616). Secret material: only a SHA-256 hash of
+    // the token is stored (doc id = hash). Deny ALL client access — minting,
+    // listing (metadata only), verification, and revocation happen through
+    // the Admin SDK. Clients never read this collection.
+    match /apiKeys/{keyHash} {
+      allow read, write: if false;
+    }
+
     // Hosts and everything under them (content-hardening review,
     // 2026-07-07: tenant sites read through the Admin SDK, so no public
     // read). Access resolves through the org membership projection

@@ -87,6 +87,8 @@ export interface OrgFeatureFlags {
   actions?: boolean
   /** Outbound/inbound webhooks (AGL-149). */
   webhooks?: boolean
+  /** Customer REST API v1 + API keys (AGL-615); Business tier. */
+  apiAccess?: boolean
   /** Whole-site export/backup + restore (AGL-163). */
   siteExport?: boolean
   /** Multilingual sites (AGL-164): locale variants + switcher. */

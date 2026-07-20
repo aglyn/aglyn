@@ -17,6 +17,7 @@
 
 export { appCheck, firebaseApp } from '@aglyn/shared-util-fbclient'
 
+export * from './lib/server/api-keys'
 export * from './lib/server/erase'
 export * from './lib/server/firebase-admin'
 export * from './lib/server/notifications'
