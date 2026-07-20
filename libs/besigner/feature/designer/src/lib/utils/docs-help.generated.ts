@@ -29,6 +29,7 @@ export const BESIGNER_DOCS = {
   responsiveStyling: '/building-sites/besigner/responsive-styling',
   reusableComponents: '/building-sites/besigner/reusable-components',
   screens: '/building-sites/screens-and-layouts/overview',
+  seo: '/building-sites/seo/overview',
   textEditing: '/building-sites/besigner/text-editing',
 } as const satisfies Record<string, string>
 
@@ -42,6 +43,7 @@ export const BESIGNER_DOCS_ANCHORS = {
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
   reusableComponents: ['#promote', '#insert-instances', '#manage', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
+  seo: ['#per-screen-seo', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],
   textEditing: ['#edit-inline', '#rich-text', '#the-text-attribute', '#bindings-in-text', '#related'],
 } as const satisfies Partial<Record<BesignerDocsKey, readonly `#${string}`[]>>
 

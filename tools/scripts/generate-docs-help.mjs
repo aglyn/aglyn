@@ -78,6 +78,7 @@ const BESIGNER_TOPICS = {
   interactions: '/building-sites/besigner/interactions-and-custom-html',
   bindings: '/building-sites/bindings/overview',
   screens: '/building-sites/screens-and-layouts/overview',
+  seo: '/building-sites/seo/overview',
 }
 
 // ── Docs parsing ──────────────────────────────────────────────────────────
