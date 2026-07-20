@@ -17,7 +17,7 @@
 
 // URL scheme (AGL-621): the org is a first-class path segment `[orgSlug]`
 // so the URL — not client-side precedence — is the source of truth for the
-// active workspace. Host routes nest under `/[orgSlug]/hosts/[hostId]`; the
+// active workspace. Host routes nest under `/[orgSlug]/hosts/[host]`; the
 // org area (settings, team, billing, media, data, plugins, support,
 // community) lives directly under `/[orgSlug]`. User-level `manage/*`,
 // staff `admin/*`, and `auth` routes are NOT org-scoped. Hosts stay keyed
@@ -46,38 +46,38 @@ export enum Route {
   AUTH_SIGN_UP = '/signup',
   AUTH_VERIFY_EMAIL = '/verify-email',
   HOST_LIST = '/[orgSlug]/hosts',
-  HOST_COMMUNITY = '/[orgSlug]/hosts/[hostId]/community',
-  HOST_COMMUNITY_LISTING = '/[orgSlug]/hosts/[hostId]/community/[listingId]',
-  HOST_COMMUNITY_PUBLISHER = '/[orgSlug]/hosts/[hostId]/community/publisher/[profileId]',
-  HOST_CONTENT = '/[orgSlug]/hosts/[hostId]/content',
+  HOST_COMMUNITY = '/[orgSlug]/hosts/[host]/community',
+  HOST_COMMUNITY_LISTING = '/[orgSlug]/hosts/[host]/community/[listingId]',
+  HOST_COMMUNITY_PUBLISHER = '/[orgSlug]/hosts/[host]/community/publisher/[profileId]',
+  HOST_CONTENT = '/[orgSlug]/hosts/[host]/content',
   MANAGE_COMMUNITY_PROFILE = '/[orgSlug]/community',
   MANAGE_TEAM = '/[orgSlug]/team',
   MANAGE_TEAM_MEMBER = '/[orgSlug]/team/[uid]',
   MANAGE_SUPPORT = '/[orgSlug]/support',
-  HOST_DASHBOARD = '/[orgSlug]/hosts/[hostId]',
-  HOST_INBOX = '/[orgSlug]/hosts/[hostId]/inbox',
-  HOST_CONTACTS = '/[orgSlug]/hosts/[hostId]/contacts',
-  HOST_MEDIA = '/[orgSlug]/hosts/[hostId]/media',
-  HOST_SETUP = '/[orgSlug]/hosts/[hostId]/setup',
-  HOST_THEME = '/[orgSlug]/hosts/[hostId]/theme',
-  HOST_WORKFLOWS = '/[orgSlug]/hosts/[hostId]/workflows',
-  HOST_DATA = '/[orgSlug]/hosts/[hostId]/data',
-  HOST_LOGIC = '/[orgSlug]/hosts/[hostId]/logic',
-  HOST_PRODUCTS = '/[orgSlug]/hosts/[hostId]/products',
-  HOST_COMPONENTS = '/[orgSlug]/hosts/[hostId]/components',
-  HOST_MARKETING = '/[orgSlug]/hosts/[hostId]/marketing',
-  HOST_BOOKINGS = '/[orgSlug]/hosts/[hostId]/bookings',
+  HOST_DASHBOARD = '/[orgSlug]/hosts/[host]',
+  HOST_INBOX = '/[orgSlug]/hosts/[host]/inbox',
+  HOST_CONTACTS = '/[orgSlug]/hosts/[host]/contacts',
+  HOST_MEDIA = '/[orgSlug]/hosts/[host]/media',
+  HOST_SETUP = '/[orgSlug]/hosts/[host]/setup',
+  HOST_THEME = '/[orgSlug]/hosts/[host]/theme',
+  HOST_WORKFLOWS = '/[orgSlug]/hosts/[host]/workflows',
+  HOST_DATA = '/[orgSlug]/hosts/[host]/data',
+  HOST_LOGIC = '/[orgSlug]/hosts/[host]/logic',
+  HOST_PRODUCTS = '/[orgSlug]/hosts/[host]/products',
+  HOST_COMPONENTS = '/[orgSlug]/hosts/[host]/components',
+  HOST_MARKETING = '/[orgSlug]/hosts/[host]/marketing',
+  HOST_BOOKINGS = '/[orgSlug]/hosts/[host]/bookings',
   // Events now come from the events-calendar plugin, served by the generic
-  // `[orgSlug]/hosts/[hostId]/[pluginSlug]` route (AGL-394).
-  HOST_REDIRECTS = '/[orgSlug]/hosts/[hostId]/redirects',
-  HOST_USERS = '/[orgSlug]/hosts/[hostId]/users',
-  HOST_ANALYTICS = '/[orgSlug]/hosts/[hostId]/analytics',
-  LAYOUT_BESIGNER = '/[orgSlug]/hosts/[hostId]/layouts/[layoutId]/versions/[versionId]/besigner',
-  LAYOUT_LIST = '/[orgSlug]/hosts/[hostId]/layouts/list',
-  SCREEN_BESIGNER = '/[orgSlug]/hosts/[hostId]/screens/[screenId]/versions/[versionId]/besigner',
-  SCREEN_DETAILS = '/[orgSlug]/hosts/[hostId]/screens/[screenId]/versions/[versionId]/view',
-  SCREEN_PREVIEW = '/[orgSlug]/hosts/[hostId]/screens/[screenId]/versions/[versionId]/preview',
-  SCREEN_LIST = '/[orgSlug]/hosts/[hostId]/screens/list',
+  // `[orgSlug]/hosts/[host]/[pluginSlug]` route (AGL-394).
+  HOST_REDIRECTS = '/[orgSlug]/hosts/[host]/redirects',
+  HOST_USERS = '/[orgSlug]/hosts/[host]/users',
+  HOST_ANALYTICS = '/[orgSlug]/hosts/[host]/analytics',
+  LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
+  LAYOUT_LIST = '/[orgSlug]/hosts/[host]/layouts/list',
+  SCREEN_BESIGNER = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner',
+  SCREEN_DETAILS = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view',
+  SCREEN_PREVIEW = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/preview',
+  SCREEN_LIST = '/[orgSlug]/hosts/[host]/screens/list',
 }
 
 export interface RoutePayload extends Record<keyof any, any> {
@@ -87,12 +87,12 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.AUTH_VERIFY_EMAIL]: undefined
   [Route.SCREEN_BESIGNER]: {
     orgSlug: string
-    hostId: string
+    host: string
     screenId: string
     versionId: string
   }
   [Route.ORG_HOME]: { orgSlug: string }
-  [Route.HOST_DASHBOARD]: { orgSlug: string; hostId: string }
+  [Route.HOST_DASHBOARD]: { orgSlug: string; host: string }
   [Route.ADMIN_ORGS]: undefined
   [Route.ADMIN_ORG_DETAIL]: { orgId: string }
   [Route.ADMIN_ORG_HOST_DETAIL]: { orgId: string; hostId: string }
@@ -109,56 +109,56 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.MANAGE_MY_COMMUNITY]: undefined
   [Route.ORG_SETTINGS]: { orgSlug: string }
   [Route.HOST_LIST]: { orgSlug: string }
-  [Route.HOST_COMMUNITY]: { orgSlug: string; hostId: string }
+  [Route.HOST_COMMUNITY]: { orgSlug: string; host: string }
   [Route.HOST_COMMUNITY_LISTING]: {
     orgSlug: string
-    hostId: string
+    host: string
     listingId: string
   }
   [Route.HOST_COMMUNITY_PUBLISHER]: {
     orgSlug: string
-    hostId: string
+    host: string
     profileId: string
   }
-  [Route.HOST_CONTENT]: { orgSlug: string; hostId: string }
+  [Route.HOST_CONTENT]: { orgSlug: string; host: string }
   [Route.MANAGE_COMMUNITY_PROFILE]: { orgSlug: string }
   [Route.MANAGE_TEAM]: { orgSlug: string }
   [Route.MANAGE_TEAM_MEMBER]: { orgSlug: string; uid: string }
   [Route.MANAGE_SUPPORT]: { orgSlug: string }
   [Route.MANAGE_BILLING]: { orgSlug: string }
-  [Route.HOST_INBOX]: { orgSlug: string; hostId: string }
-  [Route.HOST_MEDIA]: { orgSlug: string; hostId: string }
-  [Route.HOST_THEME]: { orgSlug: string; hostId: string }
-  [Route.HOST_WORKFLOWS]: { orgSlug: string; hostId: string }
-  [Route.HOST_DATA]: { orgSlug: string; hostId: string }
-  [Route.HOST_LOGIC]: { orgSlug: string; hostId: string }
-  [Route.HOST_PRODUCTS]: { orgSlug: string; hostId: string }
-  [Route.HOST_COMPONENTS]: { orgSlug: string; hostId: string }
-  [Route.HOST_MARKETING]: { orgSlug: string; hostId: string }
-  [Route.HOST_BOOKINGS]: { orgSlug: string; hostId: string }
-  [Route.HOST_REDIRECTS]: { orgSlug: string; hostId: string }
-  [Route.HOST_USERS]: { orgSlug: string; hostId: string }
-  [Route.HOST_ANALYTICS]: { orgSlug: string; hostId: string }
+  [Route.HOST_INBOX]: { orgSlug: string; host: string }
+  [Route.HOST_MEDIA]: { orgSlug: string; host: string }
+  [Route.HOST_THEME]: { orgSlug: string; host: string }
+  [Route.HOST_WORKFLOWS]: { orgSlug: string; host: string }
+  [Route.HOST_DATA]: { orgSlug: string; host: string }
+  [Route.HOST_LOGIC]: { orgSlug: string; host: string }
+  [Route.HOST_PRODUCTS]: { orgSlug: string; host: string }
+  [Route.HOST_COMPONENTS]: { orgSlug: string; host: string }
+  [Route.HOST_MARKETING]: { orgSlug: string; host: string }
+  [Route.HOST_BOOKINGS]: { orgSlug: string; host: string }
+  [Route.HOST_REDIRECTS]: { orgSlug: string; host: string }
+  [Route.HOST_USERS]: { orgSlug: string; host: string }
+  [Route.HOST_ANALYTICS]: { orgSlug: string; host: string }
   [Route.LAYOUT_BESIGNER]: {
     orgSlug: string
-    hostId: string
+    host: string
     layoutId: string
     versionId: string
   }
-  [Route.LAYOUT_LIST]: { orgSlug: string; hostId: string }
+  [Route.LAYOUT_LIST]: { orgSlug: string; host: string }
   [Route.SCREEN_DETAILS]: {
     orgSlug: string
-    hostId: string
+    host: string
     screenId: string
     versionId: string
   }
   [Route.SCREEN_PREVIEW]: {
     orgSlug: string
-    hostId: string
+    host: string
     screenId: string
     versionId: string
   }
-  [Route.SCREEN_LIST]: { orgSlug: string; hostId: string }
+  [Route.SCREEN_LIST]: { orgSlug: string; host: string }
 }
 
 export const routeReplacePattern = /\[([^\]]+)\]/g

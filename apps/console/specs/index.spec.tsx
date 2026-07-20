@@ -18,7 +18,7 @@
 import { render } from '@testing-library/react'
 import React from 'react'
 
-import Index from '../app/(app)/[orgSlug]/hosts/[hostId]/page'
+import Index from '../app/(app)/[orgSlug]/hosts/[host]/page'
 
 // The page tree reads Firebase services from FirebaseServicesProvider, which
 // needs a real firebase app; stub the hooks so the smoke test can render.

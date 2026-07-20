@@ -36,6 +36,7 @@ import { useParams } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { type MouseEvent, useCallback, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
+import { useHostId } from '../components/host-id-provider'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 
@@ -73,7 +74,7 @@ HostSwitcherNavComponent.displayName = 'HostSwitcherNavComponent'
 function HostSwitcherMenu(props: { uid: string }) {
   const { uid } = props
   const params = useParams<{ hostId?: string }>()
-  const hostId = params?.hostId
+  const hostId = useHostId()
   const router = useRouter()
   const orgSlug = useOrgSlug()
   const firestore = useFirestore()
@@ -92,15 +93,18 @@ function HostSwitcherMenu(props: { uid: string }) {
   }, [])
   const handleClose = useCallback(() => setAnchorEl(null), [])
   const handleSelect = useCallback(
-    (nextHostId: string) => () => {
+    (nextHost: { $id: string; subdomain: string }) => () => {
       setAnchorEl(null)
-      if (nextHostId !== hostId) {
+      if (nextHost.$id !== hostId) {
         void router.push(
-          buildRoute(Route.HOST_DASHBOARD, { orgSlug,  hostId: nextHostId }),
+          buildRoute(Route.HOST_DASHBOARD, {
+            orgSlug,
+            host: nextHost.subdomain,
+          }),
         )
       }
     },
-    [hostId, router],
+    [hostId, router, orgSlug],
   )
   const handleViewAll = useCallback(() => {
     setAnchorEl(null)
@@ -174,7 +178,7 @@ function HostSwitcherMenu(props: { uid: string }) {
           <MenuItem
             key={host.$id}
             selected={host.$id === hostId}
-            onClick={handleSelect(host.$id)}
+            onClick={handleSelect(host)}
           >
             <ListItemIcon>
               <MdiIcon

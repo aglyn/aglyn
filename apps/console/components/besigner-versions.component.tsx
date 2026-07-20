@@ -69,6 +69,7 @@ import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import { useHostSubdomain } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -96,6 +97,7 @@ export const BesignerVersionsComponent = observer(
     const { hostId, parent, versionId, publishedVersionId } = props
     const firestore = useFirestore()
     const orgSlug = useOrgSlug()
+    const host = useHostSubdomain()
     const router = useRouter()
     const { enqueueSnackbar } = useSnackbar()
     const { queueLoading } = useLoading()
@@ -138,12 +140,12 @@ export const BesignerVersionsComponent = observer(
       (targetVersionId: string) =>
         parent.kind === 'screen'
           ? buildRoute(Route.SCREEN_BESIGNER, { orgSlug, 
-              hostId,
+              host,
               screenId: parent.id,
               versionId: targetVersionId,
             })
           : buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
-              hostId,
+              host,
               layoutId: parent.id,
               versionId: targetVersionId,
             }),

@@ -33,6 +33,7 @@ import { observer } from 'mobx-react-lite'
 import { type UIEvent, useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
+import { useHostSubdomain } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -64,6 +65,7 @@ export const BesignerDocumentSwitcherComponent = observer(
     const { hostId, current } = props
     const firestore = useFirestore()
     const orgSlug = useOrgSlug()
+    const host = useHostSubdomain()
     const router = useRouter()
     const { confirm } = useConfirmationContext()
     const [pageCount, setPageCount] = useState(1)
@@ -164,7 +166,7 @@ export const BesignerDocumentSwitcherComponent = observer(
         const value = event.target.value
         if (!value || value === currentKey) return
         if (value === 'view-all') {
-          return void router.push(buildRoute(Route.SCREEN_LIST, { orgSlug,  hostId }))
+          return void router.push(buildRoute(Route.SCREEN_LIST, { orgSlug,  host }))
         }
         const [kind, id] = value.split(':') as ['screen' | 'layout', string]
         const target =
@@ -190,12 +192,12 @@ export const BesignerDocumentSwitcherComponent = observer(
         const url =
           kind === 'screen'
             ? buildRoute(Route.SCREEN_BESIGNER, { orgSlug, 
-                hostId,
+                host,
                 screenId: id,
                 versionId: target.versionId,
               })
             : buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
-                hostId,
+                host,
                 layoutId: id,
                 versionId: target.versionId,
               })

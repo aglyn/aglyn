@@ -168,8 +168,9 @@ export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
               <>
                 {' '}
                 <a
-                  href={buildRoute(Route.HOST_COMMUNITY, { orgSlug, 
-                    hostId: hosts[0].$id,
+                  href={buildRoute(Route.HOST_COMMUNITY, {
+                    orgSlug,
+                    host: hosts[0].subdomain,
                   })}
                 >
                   {'Browse the marketplace'}

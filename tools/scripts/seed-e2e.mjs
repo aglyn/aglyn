@@ -82,6 +82,7 @@ export const E2E_ORG_SLUG = 'e2e-bakery'
 export const E2E_ORG2_ID = 'e2e-owner-studio'
 export const E2E_ORG2_SLUG = 'e2e-studio'
 export const E2E_HOST2_ID = 'e2e-studio-site'
+export const E2E_HOST2_SUBDOMAIN = 'studio'
 
 // Second org owned by a NON-staff user (AGL-357 regression). The primary
 // org above is owned by the staff account, so staff impersonation of its
@@ -266,10 +267,10 @@ await put(firestore.collection('orgSlugs').doc(E2E_ORG2_SLUG), {
 })
 await put(firestore.collection('hostIndex').doc(E2E_HOST2_ID), {
   orgId: E2E_ORG2_ID,
-  subdomain: E2E_HOST2_ID,
+  subdomain: E2E_HOST2_SUBDOMAIN,
 })
 await put(firestore.collection('hosts').doc(E2E_HOST2_ID), {
-  subdomain: E2E_HOST2_ID,
+  subdomain: E2E_HOST2_SUBDOMAIN,
   displayName: 'Studio Site',
   orgId: E2E_ORG2_ID,
   memberRoles: { [E2E_UID]: 'admin' },

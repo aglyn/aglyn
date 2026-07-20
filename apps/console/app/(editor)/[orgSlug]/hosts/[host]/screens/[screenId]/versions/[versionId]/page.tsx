@@ -1,0 +1,38 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { permanentRedirect } from 'next/navigation'
+import { buildRoute, Route } from '../../../../../../../../../constants/route-links'
+import { useHostSubdomain } from '../../../../../../../../../components/host-id-provider'
+
+// Bare version path redirects to the read-only view (was the versions
+// [versionId]/index.ts getServerSideProps redirect).
+export default async function VersionIndex({
+  params,
+}: {
+  params: Promise<{
+    orgSlug: string
+    host: string
+    screenId: string
+    versionId: string
+  }>
+}) {
+  const { orgSlug, host, screenId, versionId } = await params
+  permanentRedirect(
+    buildRoute(Route.SCREEN_DETAILS, { orgSlug, host, screenId, versionId }),
+  )
+}

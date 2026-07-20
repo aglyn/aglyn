@@ -27,6 +27,7 @@ import { Box, Stack } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
+import { useHostId, useHostSubdomain } from '../../components/host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useReleaseFlags } from '../../hooks/use-release-flags'
 import DashboardHeaderComponent, {
@@ -99,9 +100,10 @@ export function DashboardLayout(props: DashboardLayoutProps) {
     activeTab,
   } = props
   const params = useParams<{ hostId: string }>()
-  const hostId = params?.hostId
+  const hostId = useHostId()
   const { flags, isStaff } = useReleaseFlags()
   const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
 
   const breadcrumbs = useMemo(() => {
     return [
@@ -119,14 +121,14 @@ export function DashboardLayout(props: DashboardLayoutProps) {
         id: 'nav-tab-dashboard',
         label: 'Dashboard',
         href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, 
-          hostId,
+          host,
         }),
       },
       {
         id: 'nav-tab-screens',
         label: 'Screens',
         href: buildRoute(Route.SCREEN_LIST, { orgSlug, 
-          hostId,
+          host,
         }),
       },
     ]

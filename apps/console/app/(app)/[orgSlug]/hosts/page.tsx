@@ -226,8 +226,9 @@ function HostsContent() {
                         </AppLink>
                         <AppLink
                           componentVariant="button"
-                          href={buildRoute(Route.HOST_DASHBOARD, { orgSlug, 
-                            hostId: host.$id,
+                          href={buildRoute(Route.HOST_DASHBOARD, {
+                            orgSlug,
+                            host: host.subdomain,
                           })}
                         >
                           {'Manage'}

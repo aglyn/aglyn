@@ -27,6 +27,7 @@ import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
+import { useHostId } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 
@@ -54,7 +55,7 @@ interface QuotaState {
  */
 export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const params = useParams<{ hostId?: string }>()
-  const hostId = props.hostId ?? params?.hostId
+  const hostId = props.hostId ?? useHostId()
   const firestore = useFirestore()
   const orgSlug = useOrgSlug()
   const { org, orgId } = useCurrentOrg()

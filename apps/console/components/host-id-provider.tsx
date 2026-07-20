@@ -16,105 +16,62 @@
  */
 'use client'
 
-import { doc, getDoc } from 'firebase/firestore'
-import {
-  useParams,
-  usePathname,
-  useRouter,
-  useSearchParams,
-} from 'next/navigation'
-import { createContext, useContext, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import { createContext, useContext } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { buildRoute, Route } from '../constants/route-links'
+import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope } from '../hooks/use-org-scope'
 
+/** The resolved host DOC ID — the internal key for all host data reads. */
 export const HostIdContext = createContext<string>(null)
+/** The host SUBDOMAIN from the URL — used to build `/hosts/[host]` links. */
+export const HostSubdomainContext = createContext<string | null>(null)
+/**
+ * Whether subdomain→doc-id resolution has settled for the current host route
+ * (true off host routes). The in-tree HostGuard reads this to hold the spinner
+ * until resolution finishes, then 404s an unknown subdomain.
+ */
+export const HostReadyContext = createContext<boolean>(true)
 
-export const useHostId = () => {
-  return useContext(HostIdContext)
-}
+export const useHostId = () => useContext(HostIdContext)
+export const useHostSubdomain = () => useContext(HostSubdomainContext)
+export const useHostReady = () => useContext(HostReadyContext)
 
 export function HostIdProvider({ children }) {
-  const params = useParams<{ orgSlug?: string; hostId?: string }>()
-  const hostId = params?.hostId as string
-  const pathOrgSlug =
-    typeof params?.orgSlug === 'string' ? params.orgSlug : null
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const hostSubdomain = typeof params?.host === 'string' ? params.host : null
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { orgs, currentOrg, loading: orgsLoading } = useOrgScope()
+  const { currentOrg } = useOrgScope()
 
-  // Host-route guard (AGL-236/AGL-621/AGL-623). The `[orgSlug]/hosts/[hostId]`
-  // route otherwise renders a broken shell for a phantom or cross-org host.
-  // Verify against hostIndex, which carries the owning org:
-  //  - phantom (no index doc) → the current org's sites list;
-  //  - a host owned by a DIFFERENT org the user belongs to → REDIRECT to
-  //    that org's canonical URL (swap the org segment), never a sign-out —
-  //    this is the cross-org bug fix (AGL-623);
-  //  - a host in another org the user is NOT in → the sites list;
-  //  - same org but no host access (AGL-242) → the sites list on a
-  //    permission-denied read (a denied host doc must never cascade to a
-  //    sign-out). Lookup errors (offline/signed-out) don't redirect.
-  useEffect(() => {
-    if (!hostId || !user || orgsLoading || !currentOrg) return
-    const homeHref = buildRoute(Route.HOST_LIST, { orgSlug: currentOrg.slug })
-    let active = true
-    void getDoc(doc(firestore, 'hostIndex', hostId))
-      .then((snapshot) => {
-        if (!active) return
-        if (!snapshot.exists()) {
-          void router.replace(homeHref)
-          return
-        }
-        const hostOrgId = snapshot.get('orgId') as string | undefined
-        if (!hostOrgId || hostOrgId === currentOrg.$id) {
-          void getDoc(doc(firestore, 'hosts', hostId)).catch(
-            (error: { code?: string }) => {
-              if (active && error?.code === 'permission-denied') {
-                void router.replace(homeHref)
-              }
-            },
-          )
-          return
-        }
-        const membership = orgs.find((org) => org.$id === hostOrgId)
-        if (!membership || !membership.slug) {
-          void router.replace(homeHref)
-          return
-        }
-        // The host lives in another org the user belongs to: rewrite the
-        // URL's org segment to that org and keep the rest of the deep link
-        // (and query) intact. Redirect — never sign out.
-        if (pathOrgSlug) {
-          const query = searchParams?.toString()
-          const corrected = pathname.replace(
-            `/${pathOrgSlug}/`,
-            `/${membership.slug}/`,
-          )
-          void router.replace(query ? `${corrected}?${query}` : corrected)
-        }
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [
+  // Resolve the URL subdomain to a host doc id within the CURRENT org
+  // (AGL-622). Scoping the query by orgId is what the security rules allow (an
+  // unscoped all-orgs list is denied), so a subdomain that belongs to another
+  // org simply isn't found here — the in-tree HostGuard renders the designed
+  // 404, never a sign-out. (Cross-org deep-link redirect would need a global
+  // subdomain index; tracked separately.) This provider is global (above the
+  // route not-found boundaries), so it only RESOLVES and exposes state; the
+  // HostGuard inside the host route tree enforces the spinner/404.
+  const { hosts, ready } = useOrgHosts(
     firestore,
-    hostId,
-    pathOrgSlug,
-    user,
-    router,
-    pathname,
-    searchParams,
-    orgs,
-    currentOrg,
-    orgsLoading,
-  ])
+    user?.uid,
+    currentOrg?.$id ?? undefined,
+  )
+  const match = hostSubdomain
+    ? hosts.find(
+        (h) => (h as { subdomain?: string }).subdomain === hostSubdomain,
+      )
+    : undefined
+  const hostReady = !hostSubdomain || Boolean(currentOrg && ready)
 
   return (
-    <HostIdContext.Provider value={hostId}>{children}</HostIdContext.Provider>
+    <HostReadyContext.Provider value={hostReady}>
+      <HostSubdomainContext.Provider value={hostSubdomain}>
+        <HostIdContext.Provider value={match?.$id ?? null}>
+          {children}
+        </HostIdContext.Provider>
+      </HostSubdomainContext.Provider>
+    </HostReadyContext.Provider>
   )
 }
 HostIdProvider.displayName = 'HostIdProvider'

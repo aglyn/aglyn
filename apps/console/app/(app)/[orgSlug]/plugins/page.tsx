@@ -74,6 +74,11 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   )
   const [selectedHost, setSelectedHost] = useState('')
   const actingHost = selectedHost || hostIds[0] || ''
+  // Links address hosts by subdomain (AGL-622); resolve the acting host's.
+  const actingHostSubdomain =
+    (hosts as Array<{ $id: string; subdomain?: string }> | undefined)?.find(
+      (host) => host.$id === actingHost,
+    )?.subdomain ?? ''
 
   const saveEnabledPlugins = async (enabledPlugins: string[]) => {
     const idToken = await (
@@ -176,8 +181,9 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                 {actingHost ? (
                   <Button
                     component={AppLink}
-                    href={buildRoute(Route.HOST_COMMUNITY, { orgSlug, 
-                      hostId: actingHost,
+                    href={buildRoute(Route.HOST_COMMUNITY, {
+                      orgSlug,
+                      host: actingHostSubdomain,
                     })}
                     variant="outlined"
                     size="small"

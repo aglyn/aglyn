@@ -29,39 +29,39 @@ import { buildRoute, Route } from './route-links'
  * DashboardLayout via their `navTabId`. The Events tab now arrives this
  * way from the events-calendar plugin.
  */
-export function hostNavTabItems(orgSlug: string, hostId: string) {
+export function hostNavTabItems(orgSlug: string, host: string) {
   const staticTabs = [
     {
       id: 'nav-tab-dashboard',
       label: 'Dashboard',
-      href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, host }),
     },
     {
       id: 'nav-tab-screens',
       label: 'Screens',
-      href: buildRoute(Route.SCREEN_LIST, { orgSlug, hostId }),
+      href: buildRoute(Route.SCREEN_LIST, { orgSlug, host }),
     },
     {
       id: 'nav-tab-layouts',
       label: 'Layouts',
-      href: buildRoute(Route.LAYOUT_LIST, { orgSlug, hostId }),
+      href: buildRoute(Route.LAYOUT_LIST, { orgSlug, host }),
     },
     // Dedicated pages for former dashboard cards (AGL-250).
     {
       id: 'nav-tab-components',
       label: 'Components',
-      href: buildRoute(Route.HOST_COMPONENTS, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_COMPONENTS, { orgSlug, host }),
     },
     // Theme lives under Setup → Theme (AGL-114); the /theme route redirects.
     {
       id: 'nav-tab-media',
       label: 'Media',
-      href: buildRoute(Route.HOST_MEDIA, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_MEDIA, { orgSlug, host }),
     },
     {
       id: 'nav-tab-content',
       label: 'Content',
-      href: buildRoute(Route.HOST_CONTENT, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_CONTENT, { orgSlug, host }),
     },
     // Inbox (nav + page) now comes from the inbox plugin's ConsoleExtension,
     // served by the generic route (AGL-395).
@@ -71,13 +71,13 @@ export function hostNavTabItems(orgSlug: string, hostId: string) {
     {
       id: 'nav-tab-users',
       label: 'Users',
-      href: buildRoute(Route.HOST_USERS, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_USERS, { orgSlug, host }),
     },
     // Analytics deep dive (AGL-352); the dashboard keeps the glance card.
     {
       id: 'nav-tab-analytics',
       label: 'Analytics',
-      href: buildRoute(Route.HOST_ANALYTICS, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_ANALYTICS, { orgSlug, host }),
     },
     // Bookings, Data (nav + page) now come from their plugins'
     // ConsoleExtensions, served by the generic route (AGL-395).
@@ -94,14 +94,14 @@ export function hostNavTabItems(orgSlug: string, hostId: string) {
     {
       id: 'nav-tab-setup',
       label: 'Setup',
-      href: buildRoute(Route.HOST_SETUP, { orgSlug, hostId }),
+      href: buildRoute(Route.HOST_SETUP, { orgSlug, host }),
     },
   ]
 
   // Plugin-contributed tabs from the ConsoleExtension registry. The href
   // is host-relative ('/events'); mount it under the active host. Ids fall
   // back to the navTabId so DashboardLayout's release-flag gating applies.
-  const hostBase = buildRoute(Route.HOST_DASHBOARD, { orgSlug, hostId })
+  const hostBase = buildRoute(Route.HOST_DASHBOARD, { orgSlug, host })
   const pluginTabs = listConsoleNavItems().map((item) => ({
     id: item.navTabId ?? `nav-plugin-${item.href.replace(/[^\w]+/g, '-')}`,
     label: item.label,
