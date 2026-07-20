@@ -37,11 +37,13 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
@@ -72,6 +74,10 @@ import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../../../hooks/use-host-activity-logger'
 import MediaPickerDialog from '../../../../components/media/media-picker-dialog.component'
+import MarkdownVisualEditor, {
+  type MarkdownEditorCommand,
+  type MarkdownVisualEditorHandle,
+} from '../../../../components/markdown-visual-editor.component'
 
 const slugify = (value: string) =>
   value
@@ -294,6 +300,11 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
   const [pickerTarget, setPickerTarget] = useState<'cover' | 'body' | null>(
     null,
   )
+  // Body editing mode (AGL-582): the WYSIWYG surface is the default; the
+  // raw markdown textarea (with live preview) stays one tab away. Both
+  // edit the same markdown-lite string, so switching re-parses/serializes.
+  const [bodyTab, setBodyTab] = useState<'visual' | 'markdown'>('visual')
+  const visualEditorRef = useRef<MarkdownVisualEditorHandle | null>(null)
   // Markdown toolbar (AGL-582): wraps the CURRENT SELECTION of the body
   // textarea instead of appending at the end.
   const bodyInputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -331,6 +342,16 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
       })
     },
     [],
+  )
+  // One toolbar, two surfaces (AGL-582): in the Visual tab commands mutate
+  // the editor's block model; in the Markdown tab they wrap the textarea
+  // selection as before.
+  const handleToolbar = useCallback(
+    (kind: MarkdownEditorCommand) => {
+      if (bodyTab === 'visual') visualEditorRef.current?.exec(kind)
+      else applyMarkdown(kind)
+    },
+    [bodyTab, applyMarkdown],
   )
   // AI assist (AGL-130): write or improve the markdown-lite body.
   const { data: aiUser } = useUser()
@@ -638,7 +659,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                   size="small"
                   variant="outlined"
                   color="secondary"
-                  onClick={() =>
+                  onClick={() => {
+                    setBodyTab('visual')
                     setEditor({
                       id: null,
                       title: '',
@@ -650,7 +672,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       category: '',
                       tags: '',
                     })
-                  }
+                  }}
                 >
                   {'New entry'}
                 </Button>
@@ -706,7 +728,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                         <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                           <Button
                             size="small"
-                            onClick={() =>
+                            onClick={() => {
+                              setBodyTab('visual')
                               setEditor({
                                 id: entry.$id,
                                 title: entry.title ?? '',
@@ -720,7 +743,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                   ? entry.tags.join(', ')
                                   : '',
                               })
-                            }
+                            }}
                           >
                             {'Edit'}
                           </Button>
@@ -925,19 +948,41 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
             helperText="Meta description — falls back to the excerpt"
           />
           <Stack direction="row" spacing={1}>
-            <Button size="small" onClick={() => applyMarkdown('bold')}>
+            {/* mousedown preventDefault keeps the visual editor's DOM
+                selection alive while the toolbar button is clicked. */}
+            <Button
+              size="small"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleToolbar('bold')}
+            >
               {'B'}
             </Button>
-            <Button size="small" onClick={() => applyMarkdown('italic')}>
+            <Button
+              size="small"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleToolbar('italic')}
+            >
               {'I'}
             </Button>
-            <Button size="small" onClick={() => applyMarkdown('heading')}>
+            <Button
+              size="small"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleToolbar('heading')}
+            >
               {'H2'}
             </Button>
-            <Button size="small" onClick={() => applyMarkdown('link')}>
+            <Button
+              size="small"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleToolbar('link')}
+            >
               {'Link'}
             </Button>
-            <Button size="small" onClick={() => applyMarkdown('image')}>
+            <Button
+              size="small"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => handleToolbar('image')}
+            >
               {'Image'}
             </Button>
             <Button size="small" onClick={() => setPickerTarget('body')}>
@@ -960,57 +1005,93 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               {editor?.body?.trim() ? 'Improve with AI' : 'Write with AI'}
             </Button>
           </Stack>
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            spacing={2}
-            sx={{ alignItems: 'stretch' }}
-          >
-            <TextField
-              label="Body"
-              value={editor?.body ?? ''}
-              onChange={(event) =>
-                setEditor((prev) =>
-                  prev ? { ...prev, body: event.target.value } : prev,
-                )
-              }
-              size="small"
-              multiline
-              minRows={12}
-              inputRef={bodyInputRef}
-              sx={{ flex: 1, minWidth: 0 }}
-              helperText="Markdown-lite: **bold**, *italic*, ## headings, - lists, [links](https:// or /page), ![images](https://)."
-            />
-            {/* Live preview (AGL-582): same parser the tenant renders with. */}
-            <Box
-              sx={{
-                flex: 1,
-                minWidth: 0,
-                maxHeight: 420,
-                overflow: 'auto',
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                px: 2,
-                pb: 2,
-              }}
+          <Box>
+            <Tabs
+              value={bodyTab}
+              onChange={(_event, tab) => setBodyTab(tab)}
+              sx={{ minHeight: 36, borderBottom: 1, borderColor: 'divider' }}
             >
-              <Typography
-                variant="overline"
-                color="text.secondary"
-                component="div"
-                sx={{ pt: 1 }}
-              >
-                {'Preview'}
-              </Typography>
-              {editor?.body?.trim() ? (
-                <MarkdownLitePreview body={editor.body} />
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  {'Start writing to see the preview.'}
+              <Tab value="visual" label="Visual" sx={{ minHeight: 36 }} />
+              <Tab value="markdown" label="Markdown" sx={{ minHeight: 36 }} />
+            </Tabs>
+            {bodyTab === 'visual' ? (
+              // WYSIWYG surface (AGL-582): the editor IS the preview — it
+              // round-trips through the same markdown-lite parser/serializer
+              // the tenant renders with, so no separate preview pane.
+              <Box sx={{ mt: 1.5 }}>
+                <MarkdownVisualEditor
+                  ref={visualEditorRef}
+                  value={editor?.body ?? ''}
+                  onChange={(body) =>
+                    setEditor((prev) => (prev ? { ...prev, body } : prev))
+                  }
+                />
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                  sx={{ mt: 0.5 }}
+                >
+                  {'Cmd/Ctrl+B bold · Cmd/Ctrl+I italic · Cmd/Ctrl+Z undo · ' +
+                    'type "## ", "### " or "- " at a line start to convert · ' +
+                    'Enter splits, Backspace at a line start merges'}
                 </Typography>
-              )}
-            </Box>
-          </Stack>
+              </Box>
+            ) : (
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                sx={{ alignItems: 'stretch', mt: 1.5 }}
+              >
+                <TextField
+                  label="Body"
+                  value={editor?.body ?? ''}
+                  onChange={(event) =>
+                    setEditor((prev) =>
+                      prev ? { ...prev, body: event.target.value } : prev,
+                    )
+                  }
+                  size="small"
+                  multiline
+                  minRows={12}
+                  inputRef={bodyInputRef}
+                  sx={{ flex: 1, minWidth: 0 }}
+                  helperText="Markdown-lite: **bold**, *italic*, ## headings, - lists, [links](https:// or /page), ![images](https://)."
+                />
+                {/* Live preview (AGL-582): same parser the tenant renders
+                    with. The Visual tab needs no preview pane. */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    maxHeight: 420,
+                    overflow: 'auto',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    px: 2,
+                    pb: 2,
+                  }}
+                >
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    component="div"
+                    sx={{ pt: 1 }}
+                  >
+                    {'Preview'}
+                  </Typography>
+                  {editor?.body?.trim() ? (
+                    <MarkdownLitePreview body={editor.body} />
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      {'Start writing to see the preview.'}
+                    </Typography>
+                  )}
+                </Box>
+              </Stack>
+            )}
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
@@ -1079,16 +1160,22 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         onPick={(media) => {
           const url = (media as any).url as string | undefined
           if (url) {
-            setEditor((prev) =>
-              prev
-                ? pickerTarget === 'cover'
-                  ? { ...prev, coverImage: url }
-                  : {
-                      ...prev,
-                      body: `${prev.body}\n\n![${(media as any).alt ?? (media as any).fileName ?? ''}](${url})`,
-                    }
-                : prev,
+            const alt = String(
+              (media as any).alt ?? (media as any).fileName ?? '',
             )
+            if (pickerTarget === 'cover') {
+              setEditor((prev) => (prev ? { ...prev, coverImage: url } : prev))
+            } else if (bodyTab === 'visual') {
+              // Visual tab (AGL-582): insert as an image block at the caret
+              // row; the editor serializes it back to ![alt](url).
+              visualEditorRef.current?.insertImage(alt, url)
+            } else {
+              setEditor((prev) =>
+                prev
+                  ? { ...prev, body: `${prev.body}\n\n![${alt}](${url})` }
+                  : prev,
+              )
+            }
           }
           setPickerTarget(null)
         }}
