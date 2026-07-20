@@ -29,6 +29,16 @@ email document and opens it in the besigner with the email blocks:
 - **Email custom HTML** — raw table markup for advanced layouts,
   sanitized.
 
+## Styling email blocks
+
+The styles panel works on email blocks exactly as on page elements —
+your edits (fonts, colors, spacing) apply on top of each block's
+email-safe defaults.
+
+Because email clients run no JavaScript, the attributes panel does
+**not** offer the Interactions section while an email document is open —
+use links (Email button, image links) for anything clickable.
+
 ## Merge tokens
 
 Use these anywhere in text, rich text, or button links:

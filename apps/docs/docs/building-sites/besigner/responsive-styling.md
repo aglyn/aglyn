@@ -42,10 +42,15 @@ The margin/padding stylers are fully interactive:
 
 ## Style groups
 
-Beyond display, colors, and the flexbox toggles, the styles panel groups
-first-class controls into accordions — no custom CSS needed for the
-common properties:
+The styles panel organizes every control into accordions, and every
+field has exactly one home — no custom CSS needed for the common
+properties:
 
+- **Flexbox & Grids** — the container controls: alignment and
+  direction toggles plus the gap, row-gap, and column-gap fields.
+- **Layout** — display variant and float.
+- **Colors** — text color and background color, with your theme
+  palette in both pickers.
 - **Sizing** — width, height, and the min/max bounds for both.
 - **Typography** — font size, weight, family, line height, letter
   spacing, text transform, and text decoration.
@@ -54,12 +59,16 @@ common properties:
   preset menu (Subtle / Medium / Large / None).
 - **Position & Overflow** — position scheme with top/right/bottom/left
   offsets, z-index, overflow, opacity, and cursor.
-- **Grid & Flex Child** — grid template columns/rows, auto-flow, and the
-  per-item grid column/row, flex shrink, and order controls.
+- **Grid & Flex Child** — grid template columns/rows, auto-flow, and
+  the per-item controls: grid column/row placement, flex grow, flex
+  shrink, flex basis, and order.
 
-Every group writes through the same responsive pipeline, so the active
-breakpoint scope applies — and each group saves only its own
-properties, never touching values you set elsewhere.
+Every control **applies immediately** — toggles and switches on click,
+text fields on a short pause in typing (or when focus leaves the
+field). There is no Save button in the styles panel; undo/redo covers
+you as usual. Everything writes through the same responsive pipeline,
+so the active breakpoint scope applies — and each group saves only its
+own properties, never touching values you set elsewhere.
 
 ## Visibility per device band
 
