@@ -82,9 +82,13 @@ export function registerMuiPlugin(): void {
     { component: FormComponents.FormField, schema: FormComponents.formFieldSchema },
     { component: Blocks.VideoEmbed, schema: Blocks.videoEmbedSchema, presets: Blocks.blockPresets },
     { component: Blocks.SocialLinks, schema: Blocks.socialLinksSchema },
-    // Content collections (AGL-551): entries repeater + markdown entry body.
+    // Content collections (AGL-551/582): entries repeater, markdown entry
+    // body, related posts, share bar, entry meta.
     { component: Collection.CollectionEntries, schema: Collection.collectionEntriesSchema, presets: Collection.collectionPresets },
     { component: Collection.CollectionEntryBody, schema: Collection.collectionEntryBodySchema },
+    { component: Collection.CollectionRelated, schema: Collection.collectionRelatedSchema },
+    { component: Collection.CollectionShare, schema: Collection.collectionShareSchema },
+    { component: Collection.CollectionEntryMeta, schema: Collection.collectionEntryMetaSchema },
     { component: Image.default, schema: Image.schema, presets: Image.presets },
     { component: Video.default, schema: Video.schema, presets: Video.presets },
     { component: Icon.default, schema: Icon.schema, presets: Icon.presets },

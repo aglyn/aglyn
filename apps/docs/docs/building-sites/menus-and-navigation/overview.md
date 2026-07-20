@@ -139,10 +139,12 @@ button instead. Bands are range-scoped, so hiding one never changes how
 the element displays on the others.
 
 :::note Canvas preview
-Band visibility follows the **browser window width**, not the artboard
-device preview — resize your window or check the published site to see
-it apply. See [responsive styling](../besigner/responsive-styling.md)
-for how breakpoint-scoped styles behave on the canvas.
+Pick a device in the artboard preview switcher and the canvas renders
+at that width — bands apply, the Mobile Nav swaps to its menu button,
+and breakpoint-scoped styles resolve for that device. In **Fluid
+Responsive** mode the canvas follows the real browser window instead.
+See [responsive styling](../besigner/responsive-styling.md) for how
+breakpoint-scoped styles behave on the canvas.
 :::
 
 ## Related

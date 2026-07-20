@@ -15,10 +15,15 @@
  * limitations under the License.
  */
 
-import { Leaf } from '@aglyn/aglyn-node-renderer'
+import { Leaf, LeafSxTransformContext } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
+import { createTheme, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { act, render } from '@testing-library/react'
 
+import {
+  createDevicePinnedTheme,
+  resolveSxForDeviceWidth,
+} from '../utils/device-preview-styles'
 import ElementLeafComponent from './node-leaf'
 
 /**
@@ -253,5 +258,107 @@ describe('Leaf sx composition (AGL-569)', () => {
     const css = emotionCssFor(leaf)
     expect(css).toContain('color:inherit')
     expect(css).toMatch(/@media\(max-width:599\.95px\)\{[^}]*\{display:none/)
+  })
+})
+
+describe('artboard device preview pinning (AGL-581)', () => {
+  const bandNode = (id: string) => ({
+    $id: id,
+    type: 'node',
+    componentId: 'unregistered-box',
+    props: {},
+    sx: {
+      color: 'red',
+      // AGL-562 visibility bands: hide on mobile, letter-space desktop.
+      '@media (max-width:599.95px)': { display: 'none' },
+      '@media (min-width:900px)': { letterSpacing: '3px' },
+    },
+    nodes: [],
+  })
+
+  const renderPinned = (node: any, width: number) =>
+    render(
+      <LeafSxTransformContext.Provider
+        value={(sx) => resolveSxForDeviceWidth(sx, width)}
+      >
+        <ElementLeafComponent node={node} />
+      </LeafSxTransformContext.Provider>,
+    )
+
+  it('applies the mobile band inline on a phone-width artboard', () => {
+    renderPinned(bandNode('phone-node'), 390)
+    const leaf = document.querySelector(
+      '[data-aglyn="leaf:phone-node"]',
+    ) as HTMLElement
+    const css = emotionCssFor(leaf)
+    // The hide-on-mobile band applies as plain CSS — no media gate — so
+    // the artboard shows it regardless of the real window width...
+    expect(css).toContain('display:none')
+    expect(css).not.toContain('@media(max-width:599.95px)')
+    // ...and the desktop-only slice is gone entirely.
+    expect(css).not.toContain('letter-spacing')
+    expect(css).toContain('color:red')
+  })
+
+  it('applies the desktop band and drops the mobile one at LG width', () => {
+    renderPinned(bandNode('desktop-node'), 1200)
+    const leaf = document.querySelector(
+      '[data-aglyn="leaf:desktop-node"]',
+    ) as HTMLElement
+    const css = emotionCssFor(leaf)
+    expect(css).toContain('letter-spacing:3px')
+    expect(css).not.toContain('display:none')
+  })
+
+  it('resolves responsive sx objects at the pinned device breakpoint', () => {
+    const node = {
+      $id: 'responsive-node',
+      type: 'node',
+      componentId: 'unregistered-box',
+      props: {},
+      // Mobile Nav shape: hidden on phones, flex row from md up.
+      sx: { display: { xs: 'none', md: 'flex' } },
+      nodes: [],
+    }
+    const theme = createDevicePinnedTheme(createTheme(), 900)
+    render(
+      <ThemeProvider theme={theme}>
+        <ElementLeafComponent node={node} />
+      </ThemeProvider>,
+    )
+    const leaf = document.querySelector(
+      '[data-aglyn="leaf:responsive-node"]',
+    ) as HTMLElement
+    const css = emotionCssFor(leaf)
+    // Both slices land under forced always-true queries, in mobile-first
+    // order, so the md value wins at the pinned laptop width.
+    expect(css).toContain('display:none')
+    expect(css).toContain('display:flex')
+    expect(css.lastIndexOf('display:flex')).toBeGreaterThan(
+      css.lastIndexOf('display:none'),
+    )
+  })
+
+  it('parks off-device responsive slices under unreachable queries', () => {
+    const node = {
+      $id: 'phone-responsive-node',
+      type: 'node',
+      componentId: 'unregistered-box',
+      props: {},
+      sx: { display: { xs: 'none', md: 'flex' } },
+      nodes: [],
+    }
+    const theme = createDevicePinnedTheme(createTheme(), 390)
+    render(
+      <ThemeProvider theme={theme}>
+        <ElementLeafComponent node={node} />
+      </ThemeProvider>,
+    )
+    const leaf = document.querySelector(
+      '[data-aglyn="leaf:phone-responsive-node"]',
+    ) as HTMLElement
+    const css = emotionCssFor(leaf)
+    // The md slice is gated behind a >=100000px query no window reaches.
+    expect(css).toMatch(/@media\(min-width:100\d{3}px\)\{[^}]*display:flex/)
   })
 })

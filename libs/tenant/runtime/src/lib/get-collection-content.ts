@@ -24,7 +24,34 @@ export interface CollectionEntrySummary {
   excerpt?: string
   body?: string
   coverImage?: string
+  /** Search-result title override (AGL-582); falls back to `title`. */
+  seoTitle?: string
+  /** Meta description override (AGL-582); falls back to `excerpt`. */
+  seoDescription?: string
+  /** Single taxonomy bucket (AGL-582). */
+  category?: string
+  /** Free-form labels (AGL-582). */
+  tags?: string[]
   publishedAt?: { seconds: number } | null
+}
+
+/** Entry-doc fields shared by the list and single-entry mappers (AGL-582). */
+function mapEntryFields(
+  value: FirebaseFirestore.DocumentData,
+): Pick<
+  CollectionEntrySummary,
+  'excerpt' | 'coverImage' | 'seoTitle' | 'seoDescription' | 'category' | 'tags'
+> {
+  return {
+    excerpt: value['excerpt'] ?? '',
+    coverImage: value['coverImage'] ?? '',
+    seoTitle: value['seoTitle'] ?? '',
+    seoDescription: value['seoDescription'] ?? '',
+    category: value['category'] ?? '',
+    tags: Array.isArray(value['tags'])
+      ? value['tags'].filter((tag): tag is string => typeof tag === 'string')
+      : [],
+  }
 }
 
 /**
@@ -96,8 +123,7 @@ async function listLiveEntries(
         $id: entryDoc.id,
         title: value['title'] ?? entryDoc.id,
         slug: value['slug'] ?? entryDoc.id,
-        excerpt: value['excerpt'] ?? '',
-        coverImage: value['coverImage'] ?? '',
+        ...mapEntryFields(value),
         publishedAt: (value['publishedAt'] ?? value['publishAt'])
           ? {
               seconds: (value['publishedAt'] ?? value['publishAt']).seconds,
@@ -192,9 +218,8 @@ export async function getCollectionContent(options: {
           $id: entryDoc.id,
           title: value['title'] ?? entrySlug,
           slug: entrySlug,
-          excerpt: value['excerpt'] ?? '',
           body: value['body'] ?? '',
-          coverImage: value['coverImage'] ?? '',
+          ...mapEntryFields(value),
           publishedAt: (value['publishedAt'] ?? value['publishAt'])
             ? {
                 seconds: (value['publishedAt'] ?? value['publishAt']).seconds,

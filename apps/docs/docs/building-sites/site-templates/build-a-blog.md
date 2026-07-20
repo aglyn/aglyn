@@ -23,8 +23,21 @@ In **Content**, create a **collection** for your posts. Manage entries from the 
 
 ## 2. Write entries
 
-Add **rich blog entries** with images, a **preview**, and **scheduling** so posts publish at
-the right time.
+Add **rich blog entries** with images, a **live preview**, and **scheduling** so posts
+publish at the right time.
+
+Each entry carries, besides the title, excerpt, cover image, and markdown body:
+
+- **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts.
+- **Tags** — comma-separated labels (e.g. `nextjs, seo`).
+- **SEO title / SEO description** — search & social overrides; they fall back to the
+  title and excerpt when blank.
+
+The body editor ships a **markdown toolbar** (bold, italic, H2, link, image — each wraps
+your current selection) plus a **live preview pane** rendered with the exact same
+markdown parser the published site uses. Markdown supports `**bold**`, `*italic*`,
+`## headings`, `- lists`, `[links](https://…)` — including **site-relative links**
+(`[pricing](/pricing)`) that get client-side navigation — and `![images](https://…)`.
 
 ## 3. Design the pages with template screens
 
@@ -42,6 +55,21 @@ Template screens go through the **normal published pipeline** — site theme, sh
 layout, reusable components, variables — exactly like any other screen (the same
 mechanism as commerce product/collection templates).
 
+### Blog blocks
+
+Besides **Collection Entries** and **Entry Body**, three entry-page blocks are available
+in the block library:
+
+- **Entry Meta** — a `date · category` line plus tag chips. Keep the default
+  `{{entry.date}}` / `{{entry.category}}` / `{{entry.tags}}` bindings on entry
+  templates; each part can be hidden with its **Show** switch.
+- **Related Posts** — other entries of the same collection that share the current
+  entry's **category or a tag**, newest first. Attributes: **Heading** (default
+  "Related articles") and **Limit** (default 3). Renders nothing when the entry has no
+  category/tags or nothing matches.
+- **Share Bar** — X, LinkedIn, Facebook, and copy-link buttons for the current page
+  URL. Attribute: **Heading** (default "Share").
+
 ### Entry tokens
 
 | Token | Value |
@@ -53,24 +81,33 @@ mechanism as commerce product/collection templates).
 | `{{entry.slug}}` | Entry slug |
 | `{{entry.url}}` | Entry route, e.g. `/blog/my-post` |
 | `{{entry.coverImage}}` | Cover image URL |
+| `{{entry.category}}` | Entry category |
+| `{{entry.tags}}` | Comma-joined tags, e.g. `nextjs, seo` |
+| `{{entry.seoTitle}}` | SEO title (falls back to the title) |
+| `{{entry.seoDescription}}` | SEO description (falls back to the excerpt) |
 | `{{collection.name}}` / `{{collection.slug}}` | The routed collection |
 
 :::tip Recent posts anywhere
 The Collection Entries block also works on **any** screen — set its **Collection slug**
 attribute (e.g. `blog`) and an **Entries limit** to build a "Latest posts" section on
-your home page.
+your home page. Its **Filter by category** / **Filter by tag** attributes narrow the
+list (e.g. a "Guides only" rail), so filtered landing pages are built as filtered
+blocks.
 :::
 
 ### No template? Still designed
 
 When no template screen is set, the built-in list and article render **inside your site
 theme and default shared layout** (the home screen's layout), so blog pages never look
-detached from the rest of the site.
+detached from the rest of the site. The built-in article includes the entry meta line
+under the title, the cover image, the body, related posts, and a share bar.
 
 ## 4. Publish & syndicate
 
-Publish the collection. Aglyn generates an **RSS** feed so readers and aggregators can
-subscribe.
+Publish the collection. Aglyn generates an **RSS** feed (entries include their category
+and tags) so readers and aggregators can subscribe, and blog pages join the site's
+**sitemap** automatically. Each entry's `<head>` uses its SEO title/description
+(falling back to title/excerpt) and its cover image as the social card.
 
 ## Tips
 

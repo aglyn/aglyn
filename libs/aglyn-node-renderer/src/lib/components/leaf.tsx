@@ -20,8 +20,9 @@ import { ShadowDom } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
-import { forwardRef, type HTMLAttributes } from 'react'
+import { forwardRef, type HTMLAttributes, useContext } from 'react'
 import { isValidElementType } from 'react-is'
+import { LeafSxTransformContext } from '../contexts/leaf-sx-transform'
 
 const DefaultComponent = styled('div')({})
 
@@ -67,6 +68,14 @@ export const Leaf = observer(
     const mergedStyle =
       propsStyle || style ? { ...propsStyle, ...style } : undefined
 
+    // Canvas-only hook (AGL-581): the besigner provides a transform that
+    // re-targets viewport media queries at the artboard device width.
+    // Undefined everywhere else, keeping the tenant path unchanged.
+    const transformSx = useContext(LeafSxTransformContext)
+    // MUI array composition: later entries win on key conflicts, so the
+    // node-level sx (Styles panel output) overrides props.sx.
+    const mergedSx = mergeSxProps(sx as any, propsSx as any, node?.sx as any)
+
     // Shared leaf attributes; self-closing components must receive NO
     // children at all (AGL-579) — a separate element expression keeps the
     // childless case genuinely childless instead of `[undefined, false]`.
@@ -77,9 +86,7 @@ export const Leaf = observer(
       ...rest,
       className: mergedClassName,
       style: mergedStyle,
-      // MUI array composition: later entries win on key conflicts, so the
-      // node-level sx (Styles panel output) overrides props.sx.
-      sx: mergeSxProps(sx as any, propsSx as any, node?.sx as any),
+      sx: transformSx ? (transformSx(mergedSx) as typeof mergedSx) : mergedSx,
     }
 
     if (selfClosing) return <Component {...leafProps} />

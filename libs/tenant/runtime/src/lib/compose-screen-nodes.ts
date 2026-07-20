@@ -34,12 +34,18 @@ import getScreenVersion from './get-screen-version'
 export interface ComposeCollectionContext {
   slug: string
   entries?: Aglyn.CollectionEntryRecord[]
+  /**
+   * The entry being rendered (AGL-582, entry-template screens / entry
+   * fallback) — the Related posts block resolves against it.
+   */
+  entry?: Aglyn.CollectionEntryRecord | null
 }
 
 /**
  * Expands Collection entries blocks (AGL-551) against their collections'
- * published entries. Fetches lazily — screens without the block cost
- * nothing — and fails open on lookup errors like every other compose stage.
+ * published entries, and Related posts blocks (AGL-582) against the routed
+ * entry. Fetches lazily — screens without the blocks cost nothing — and
+ * fails open on lookup errors like every other compose stage.
  */
 async function expandCollectionEntryBlocks(
   hostId: string,
@@ -47,11 +53,23 @@ async function expandCollectionEntryBlocks(
   collection?: ComposeCollectionContext,
 ): Promise<Record<string, any>> {
   const slugs = new Set<string>()
+  let hasRelated = false
   for (const node of Object.values(nodes)) {
-    if (node?.componentId !== Aglyn.COLLECTION_ENTRIES_COMPONENT_ID) continue
-    const slug =
-      String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
-    if (slug) slugs.add(slug)
+    if (node?.componentId === Aglyn.COLLECTION_ENTRIES_COMPONENT_ID) {
+      const slug =
+        String(node?.props?.collectionSlug ?? '').trim() || collection?.slug
+      if (slug) slugs.add(slug)
+    }
+    // Related posts (AGL-582) always resolve against the ROUTED collection
+    // — they only mean something with a current entry in context.
+    if (
+      node?.componentId === Aglyn.COLLECTION_RELATED_COMPONENT_ID &&
+      collection?.slug &&
+      collection.entry
+    ) {
+      hasRelated = true
+      slugs.add(collection.slug)
+    }
   }
   if (!slugs.size) return nodes
   const sources: Record<string, Aglyn.CollectionEntriesSource> = {}
@@ -67,7 +85,17 @@ async function expandCollectionEntryBlocks(
       sources[slug] = { slug, entries }
     }),
   )
-  return Aglyn.expandCollectionEntries(nodes, sources, collection?.slug)
+  const expanded = Aglyn.expandCollectionEntries(
+    nodes,
+    sources,
+    collection?.slug,
+  )
+  if (!hasRelated || !collection?.entry) return expanded
+  return Aglyn.expandCollectionRelated(
+    expanded,
+    sources[collection.slug],
+    collection.entry,
+  )
 }
 
 /**

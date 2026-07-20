@@ -24,6 +24,12 @@ A chip at the top of the styles panel always shows the active scope
 *don't* touch keep inheriting — opening a panel at a breakpoint never
 pins anything by itself.
 
+Selecting a device also re-renders the canvas at that width: responsive
+values (`{ xs, md }`), [visibility bands](#visibility-per-device-band),
+and breakpoint-driven component layouts all resolve as they will on a
+real device of that size — the published site is untouched by preview
+mode.
+
 ## Box stylers
 
 The margin/padding stylers are fully interactive:
@@ -65,9 +71,12 @@ the others — the classic "hide the link cluster on mobile, show a menu
 button instead" swap is two toggles
 ([menus & navigation](../menus-and-navigation/overview.md)).
 
-Band visibility applies at real viewport widths: the canvas follows your
-browser window, so resize the window (or open the published site) to see
-it take effect.
+On the canvas, bands follow the artboard: select a device in the
+preview switcher and the matching band applies at that device's width —
+XS shows the mobile band, SM the tablet band, MD and up the desktop
+band. In Fluid Responsive mode the canvas follows the real browser
+window instead, so resize the window (or open the published site) to
+see bands flip.
 
 ## Custom classes
 

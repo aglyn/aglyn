@@ -16,7 +16,11 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import { AglynNodeRenderer, Leaf } from '@aglyn/aglyn-node-renderer'
+import {
+  AglynNodeRenderer,
+  Leaf,
+  LeafSxTransformContext,
+} from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
 import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
 import {
@@ -37,9 +41,15 @@ import {
   forwardRef,
   HTMLAttributes,
   useCallback,
+  useMemo,
 } from 'react'
 import { useLayoutChromeContext } from '../contexts/layout-chrome-context'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
+import {
+  createDevicePinnedTheme,
+  devicePreviewWidth,
+  resolveSxForDeviceWidth,
+} from '../utils/device-preview-styles'
 import CanvasDropIndicator from './dnd/canvas-drop-indicator'
 import InlineTextEditorComponent from './inline-text-editor.component'
 import NodeLeaf from './node-leaf'
@@ -122,10 +132,39 @@ const ThemedElementContainer = ({ children }) => {
     theme: hostThemeDoc,
     scheme: canvasScheme,
   })
+  // Artboard device preview (AGL-581): media queries evaluate against
+  // the browser viewport, never the artboard, so a selected device pins
+  // the canvas subtree instead — a theme whose breakpoint helpers are
+  // forced for the device width (responsive sx values, Stack/Grid
+  // props, component styles), plus a per-Leaf sx transform that
+  // resolves width media keys (visibility bands, custom CSS) at that
+  // width. Fluid Responsive leaves both untouched, and the published
+  // tenant never mounts any of this.
+  const [devicePreview] = useAglynBesignerFlag('devicePreview')
+  const deviceWidth = devicePreviewWidth(
+    devicePreview,
+    hostTheme.breakpoints?.values,
+  )
+  const canvasTheme = useMemo(
+    () =>
+      deviceWidth == null
+        ? hostTheme
+        : createDevicePinnedTheme(hostTheme, deviceWidth),
+    [hostTheme, deviceWidth],
+  )
+  const sxTransform = useMemo(
+    () =>
+      deviceWidth == null
+        ? undefined
+        : (sx: unknown) => resolveSxForDeviceWidth(sx, deviceWidth),
+    [deviceWidth],
+  )
   return (
-    <ThemeProvider theme={hostTheme}>
+    <ThemeProvider theme={canvasTheme}>
       <CssBaseline />
-      {children}
+      <LeafSxTransformContext.Provider value={sxTransform}>
+        {children}
+      </LeafSxTransformContext.Provider>
     </ThemeProvider>
   )
 }
