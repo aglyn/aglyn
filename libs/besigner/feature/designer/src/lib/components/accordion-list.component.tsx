@@ -83,7 +83,10 @@ export const Accordion = forwardRef<any, AccordionProps>((props, ref) => {
     children,
     ...rest
   } = props
-  const [expanded, setExpanded] = useState(expandedProp)
+  // Always a boolean so MUI sees a controlled Accordion from the first
+  // render — seeding with an omitted (undefined) prop rendered it
+  // uncontrolled until the first toggle flipped it controlled (AGL-590).
+  const [expanded, setExpanded] = useState(Boolean(expandedProp))
   const handleToggle = useCallback(
     (e, expanded: boolean) => {
       setExpanded(Boolean(expanded))
