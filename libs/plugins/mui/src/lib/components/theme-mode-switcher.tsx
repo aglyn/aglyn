@@ -49,7 +49,7 @@ export interface ThemeModeSwitcherProps {
 const ThemeModeSwitcher = forwardRef<HTMLElement, ThemeModeSwitcherProps>(
   (props, ref) => {
     const { variant, ...rest } = props
-    const [[, mode], toggleThemeMode, cookieMode] = useThemeMode()
+    const [, toggleThemeMode, cookieMode] = useThemeMode()
 
     if (variant === 'toggle') {
       return (
@@ -87,10 +87,17 @@ const ThemeModeSwitcher = forwardRef<HTMLElement, ThemeModeSwitcherProps>(
           {...rest}
         >
           <MdiIcon
+            // Key off the visitor's SELECTION, not the resolved mode: with
+            // 'device default' chosen, `mode` still resolves to light or dark,
+            // so the button showed a sun/moon and the system state was
+            // invisible — you couldn't tell it apart from an explicit choice.
+            // Same mapping the toggle variant uses.
             path={
-              mode === 'dark'
+              cookieMode === 'dark'
                 ? mdiWeatherNight.path
-                : mdiWhiteBalanceSunny.path
+                : cookieMode === 'light'
+                ? mdiWhiteBalanceSunny.path
+                : mdiThemeLightDark.path
             }
             fontSize="small"
           />
