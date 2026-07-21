@@ -401,12 +401,18 @@ service cloud.firestore {
       // Owners toggle metadata (deletedAt un/republish) client-side, but
       // must NOT touch server-managed fields (AGL-503): installCount is
       // incremented by the install API (ranking integrity), priceUsd gates
-      // purchases, and profileId is the ownership key. Delete stays open to
-      // the owner; staff moderate anything.
+      // purchases, and profileId is the ownership key. The review verdict is
+      // equally server-owned (AGL-651): `reviewStatus` decides both the
+      // trust badge and whether a plugin is publicly browsable at all, so an
+      // owner who could write it could self-promote to 'verified' and skip
+      // staff review outright. Delete stays open to the owner; staff moderate
+      // anything.
       allow update: if isStaff() ||
         (isSignedIn() && resource.data.profileId == request.auth.uid &&
           !request.resource.data.diff(resource.data).affectedKeys()
-            .hasAny(['installCount', 'priceUsd', 'profileId']));
+            .hasAny(['installCount', 'priceUsd', 'profileId',
+                     'reviewStatus', 'reviewedBy', 'reviewedAt',
+                     'rejectionReason']));
       allow delete: if isStaff() ||
         (isSignedIn() && resource.data.profileId == request.auth.uid);
       // Version snapshots hold the actual (possibly paid) content — no

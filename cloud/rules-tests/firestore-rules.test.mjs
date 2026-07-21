@@ -500,6 +500,25 @@ describe('pre-release hardening guards', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'communityListings', LISTING), { profileId: OUTSIDER }),
     )
+    // The review verdict is staff-owned (AGL-651). It decides the trust badge
+    // AND whether a plugin is publicly browsable, so an owner able to write it
+    // could self-promote to 'verified' and bypass staff review entirely.
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), {
+        reviewStatus: 'verified',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), {
+        reviewStatus: 'listed',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'communityListings', LISTING), {
+        reviewedBy: OWNER,
+        reviewedAt: new Date(),
+      }),
+    )
     // Non-owners still can't touch someone else's listing.
     await assertFails(
       updateDoc(doc(authed(EDITOR), 'communityListings', LISTING), { deletedAt: new Date() }),
