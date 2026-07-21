@@ -83,6 +83,14 @@ async function handler(request: Request): Promise<Response> {
       { subdomain, updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     )
+    // Keep the routing mirror in step (AGL-628). `registerOrgHost` seeds
+    // hostIndex.subdomain on create and /api/hosts/rename maintains it, but
+    // this staff path never did — leaving a stale subdomain behind that
+    // cross-org host resolution would then follow to the wrong site.
+    await firestore
+      .collection('hostIndex')
+      .doc(hostId)
+      .set({ subdomain }, { merge: true })
     await firestore.collection('adminAudit').add({
       actorUid: decoded.uid,
       action: 'host.set-subdomain',
