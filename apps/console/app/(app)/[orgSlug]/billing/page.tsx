@@ -525,7 +525,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                         color="text.secondary"
                         sx={{ display: 'block' }}
                       >
-                        {`Add-ons: ${Object.entries(org.seatAddons)
+                        {`Plan add-ons: ${Object.entries(org.seatAddons)
                           .filter(([, count]) => Number(count) > 0)
                           .map(([kind, count]) =>
                             kind === 'eventCalendar'
@@ -707,7 +707,7 @@ const BillingContent: NextPageWithLayout<Record<string, never>> = () => {
                       // point-of-need upsell links (AGL-530).
                       <Box id="addons">
                         <CardDisplay
-                          header={'Add-ons'}
+                          header={'Plan add-ons'}
                           help={docsHelp('addOns', {
                             anchor: '#what-you-can-add',
                           })}

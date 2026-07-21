@@ -333,6 +333,55 @@ describe('hosts', () => {
     )
   })
 
+  // AGL-658. Takedown has to survive the person being taken down.
+  it('staff takedown fields and abuse reports are out of owner reach', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'communityListings', 'listing-hidden'), {
+        displayName: 'Dodgy', profileId: ORG, artifactType: 'component',
+        hiddenAt: new Date(), hiddenBy: STAFF, hiddenReason: 'spam',
+      })
+      await setDoc(doc(db, 'communityReports', 'report-1'), {
+        targetType: 'listing', listingId: 'listing-hidden',
+        reporterUid: OUTSIDER, reason: 'spam', status: 'open',
+      })
+    })
+    // The owner may still edit ordinary metadata...
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'communityListings', 'listing-hidden'), {
+        description: 'Reworded',
+      }),
+    )
+    // ...but cannot un-hide themselves, which would make moderation a
+    // suggestion.
+    for (const field of ['hiddenAt', 'hiddenBy', 'hiddenReason']) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'communityListings', 'listing-hidden'), {
+          [field]: null,
+        }),
+      ).catch((error) => {
+        throw new Error(`owner could clear ${field}: ${error.message}`)
+      })
+    }
+    // Reports name their reporter, so only staff read them — otherwise a
+    // publisher learns exactly who to retaliate against.
+    await assertSucceeds(
+      getDoc(doc(authed(STAFF, { staff: true }), 'communityReports', 'report-1')),
+    )
+    await assertFails(getDoc(doc(authed(OWNER), 'communityReports', 'report-1')))
+    await assertFails(
+      getDoc(doc(authed(OUTSIDER), 'communityReports', 'report-1')),
+    )
+    // And nobody files one by writing directly — the route stamps the
+    // reporter from the verified token.
+    await assertFails(
+      setDoc(doc(authed(OUTSIDER), 'communityReports', 'forged'), {
+        targetType: 'listing', listingId: 'listing-hidden',
+        reporterUid: OWNER, reason: 'framed',
+      }),
+    )
+  })
+
   // AGL-666. `source` says whether a template was authored here, downloaded
   // from the marketplace, or came from a starter — and the library shows that
   // as provenance. A client that can rewrite it can stamp "marketplace" on

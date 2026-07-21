@@ -129,6 +129,52 @@ async function handler(request: Request): Promise<Response> {
     }
     const listingId = String(body?.listingId ?? '')
     const action = String(body?.action ?? '')
+
+    // Takedown (AGL-658) is separate from the review verdict: it applies to
+    // EVERY artifact type, not just plugins, and it must not overwrite a
+    // plugin's `reviewStatus` — a hidden plugin that later gets un-hidden
+    // should return to the verdict it had, not to square one.
+    if (action === 'hide' || action === 'unhide') {
+      if (!listingId) {
+        return Response.json({ error: 'Missing listingId' }, { status: 400 })
+      }
+      const hideReason = String(body?.reason ?? '').slice(0, 500)
+      if (action === 'hide' && !hideReason.trim()) {
+        return Response.json({ error: 'Hiding needs a reason' }, { status: 400 })
+      }
+      const reviewUid = String(body?.reviewUid ?? '')
+      const target = reviewUid
+        ? firestore
+            .collection('communityListings')
+            .doc(listingId)
+            .collection('reviews')
+            .doc(reviewUid)
+        : firestore.collection('communityListings').doc(listingId)
+      if (!(await target.get()).exists) {
+        return Response.json({ error: 'Unknown target' }, { status: 404 })
+      }
+      await target.set(
+        reviewUid
+          ? { hidden: action === 'hide' }
+          : action === 'hide'
+            ? {
+                hiddenAt: FieldValue.serverTimestamp(),
+                hiddenBy: decoded.uid,
+                hiddenReason: hideReason,
+              }
+            : {
+                hiddenAt: FieldValue.delete(),
+                hiddenBy: FieldValue.delete(),
+                hiddenReason: FieldValue.delete(),
+              },
+        { merge: true },
+      )
+      return Response.json(
+        { ok: true, hidden: action === 'hide' },
+        { status: 200 },
+      )
+    }
+
     const nextStatus = ACTIONS[action]
     if (!listingId || !nextStatus) {
       return Response.json({ error: 'Unknown action' }, { status: 400 })

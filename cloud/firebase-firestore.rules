@@ -501,7 +501,11 @@ service cloud.firestore {
                      // the reviews API alone — a publisher who could write
                      // them could invent a five-star average.
                      'ratingSum', 'ratingCount', 'ratingAverage',
-                     'commentCount']));
+                     'commentCount',
+                     // Staff takedown (AGL-658). An owner who could clear
+                     // `hiddenAt` could un-hide their own listing, which
+                     // makes moderation a suggestion.
+                     'hiddenAt', 'hiddenBy', 'hiddenReason']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/community/install, which
@@ -539,6 +543,14 @@ service cloud.firestore {
     // Marketplace purchase records (AGL-46): written only by the Stripe
     // webhook (Admin SDK). Buyers read their own purchases (install
     // gating); sellers read sales of their listings (revenue ledger).
+    // Abuse reports on listings and reviews (AGL-658). Staff-only reads:
+    // a report names its reporter, and letting a publisher see who reported
+    // them invites retaliation. Written through /api/community/report so
+    // the reporter is the verified token, never a client-supplied uid.
+    match /communityReports/{reportId} {
+      allow read, write: if isStaff();
+    }
+
     match /communityPurchases/{purchaseId} {
       // The seller is an ORG (AGL-652), so the sales side is a membership
       // check, not a uid match — a uid never equals an org id, and leaving

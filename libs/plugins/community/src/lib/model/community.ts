@@ -197,7 +197,14 @@ export function isListingBrowsable(listing: {
   type?: string
   kind?: string
   reviewStatus?: string
+  hiddenAt?: unknown
 }): boolean {
+  // Staff takedown applies to EVERY artifact type (AGL-658). Pre-publication
+  // review is plugin-only — plugins execute code, so they earn the wait —
+  // but a component or template that turns out to be abusive must be
+  // removable too, and before this it simply was not: the early return
+  // below meant anything non-plugin was permanently browsable.
+  if (listing.hiddenAt) return false
   if (listingArtifactType(listing) !== 'plugin') return true
   return (
     listing.reviewStatus === undefined ||

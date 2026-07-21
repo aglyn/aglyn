@@ -134,6 +134,12 @@ export interface OrgEntitlements {
   sharedLayoutsPerHost?: number
   /** Saved templates per host (AGL-666) — includes marketplace downloads. */
   templatesPerHost?: number
+  // NOTE (AGL-658): "add-on" means two unrelated things in this codebase.
+  // `seatAddons` below are BILLING capacity — extra managers, hosts, seats —
+  // surfaced in the UI as "plan add-ons". The marketplace sense (installed
+  // plugins, the `orgAddons` slot) is a different concept entirely. The
+  // marketplace owns the bare word; billing copy always qualifies it.
+  // Firestore and Stripe lookup keys stay as they are — they are persisted.
   storagePerHostMb?: number
   totalSiteSizeMb?: number
   membersPerHost?: number

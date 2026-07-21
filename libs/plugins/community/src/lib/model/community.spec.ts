@@ -17,6 +17,7 @@
 
 import {
   COMMUNITY_COMPONENT_ID_ALLOWLIST,
+  isListingBrowsable,
   sanitizeCommunityDefinition,
 } from './community'
 
@@ -199,5 +200,54 @@ describe('validateListingContent (AGL-430)', () => {
     const verdict = validateListingContent({})
     expect(verdict.ok).toBe(true)
     expect(verdict.content).toEqual({})
+  })
+})
+
+/**
+ * Pre-publication review stays plugin-only — plugins execute code, so they
+ * earn the wait, while a component or template is inert until installed.
+ * Staff TAKEDOWN is the part that has to cover everything (AGL-658): before
+ * this, the early return meant a non-plugin listing was permanently
+ * browsable no matter what it turned out to contain.
+ */
+describe('isListingBrowsable (AGL-658)', () => {
+  it('leaves non-plugin listings browsable without review', () => {
+    expect(isListingBrowsable({ artifactType: 'component' })).toBe(true)
+    expect(isListingBrowsable({ artifactType: 'template' })).toBe(true)
+    expect(isListingBrowsable({ artifactType: 'layout' })).toBe(true)
+  })
+
+  it('gates plugins on their review verdict', () => {
+    expect(isListingBrowsable({ artifactType: 'plugin' })).toBe(true)
+    expect(
+      isListingBrowsable({ artifactType: 'plugin', reviewStatus: 'listed' }),
+    ).toBe(true)
+    expect(
+      isListingBrowsable({ artifactType: 'plugin', reviewStatus: 'verified' }),
+    ).toBe(true)
+    expect(
+      isListingBrowsable({ artifactType: 'plugin', reviewStatus: 'submitted' }),
+    ).toBe(false)
+    expect(
+      isListingBrowsable({ artifactType: 'plugin', reviewStatus: 'rejected' }),
+    ).toBe(false)
+  })
+
+  it('hides a taken-down listing of ANY type', () => {
+    for (const artifactType of ['component', 'template', 'layout', 'plugin']) {
+      expect(
+        isListingBrowsable({ artifactType, hiddenAt: new Date() }),
+      ).toBe(false)
+    }
+  })
+
+  it('takedown outranks an approved review verdict', () => {
+    expect(
+      isListingBrowsable({
+        artifactType: 'plugin',
+        reviewStatus: 'verified',
+        hiddenAt: new Date(),
+      }),
+    ).toBe(false)
   })
 })

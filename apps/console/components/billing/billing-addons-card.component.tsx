@@ -149,7 +149,7 @@ export default function BillingAddonsCardComponent({
         return null
       }
       if (!response.ok) {
-        enqueueSnackbar(payload?.error ?? 'Add-on request failed', {
+        enqueueSnackbar(payload?.error ?? 'Plan add-on request failed', {
           variant: 'warning',
           persist: false,
         })
@@ -259,7 +259,7 @@ export default function BillingAddonsCardComponent({
   if (!state) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {'Add-ons appear here once billing is configured.'}
+        {'Plan add-ons appear here once billing is configured.'}
       </Typography>
     )
   }
@@ -267,7 +267,7 @@ export default function BillingAddonsCardComponent({
   if (!state.hasSubscription) {
     return (
       <Alert severity="info">
-        {'Add-ons bill on your plan subscription — pick a plan below ' +
+        {'Plan add-ons bill on your plan subscription — pick a plan below ' +
           'first, then add seats, sites, datasets and more here.'}
       </Alert>
     )
