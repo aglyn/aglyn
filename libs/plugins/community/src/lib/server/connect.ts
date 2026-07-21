@@ -111,13 +111,20 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     }
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`
+    const orgSlug = (
+      await firestore.collection('orgs').doc(orgId).get()
+    ).get('slug') as string | undefined
+    const payoutsPath = orgSlug ? `/${orgSlug}/community` : '/manage/community'
     const link = await stripe(
       'account_links',
       new URLSearchParams({
         account: accountId as string,
         type: 'account_onboarding',
-        refresh_url: `${origin}/manage/community?connect=refresh`,
-        return_url: `${origin}/manage/community?connect=done`,
+        // Canonical org surface (AGL-653). `/manage/community` is now only a
+        // redirect, and Stripe bakes these URLs into the onboarding link —
+        // sending people through an extra hop mid-onboarding is avoidable.
+        refresh_url: `${origin}${payoutsPath}?connect=refresh`,
+        return_url: `${origin}${payoutsPath}?connect=done`,
       }),
     )
     return res
