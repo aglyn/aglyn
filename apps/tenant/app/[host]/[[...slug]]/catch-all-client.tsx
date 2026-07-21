@@ -199,7 +199,16 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
       ? `${canonicalBase}${Aglyn.screenRoutePathToUrl(screenPath)}`
       : undefined
 
-  const site = useMemo(() => ({ hostId: host?.$id }), [host?.$id])
+  // `pageData` carries whatever the site-page resolver already loaded on the
+  // server for this path (AGL-659), so blocks can render their primary
+  // content during SSR instead of fetching it in an effect.
+  const site = useMemo(
+    () => ({
+      hostId: host?.$id,
+      pageData: props.pageData as Record<string, unknown> | undefined,
+    }),
+    [host?.$id, props.pageData],
+  )
 
   // Password-protected screens render an unlock form; the composed nodes
   // arrive from /api/protection/unlock after verification (AGL-87).

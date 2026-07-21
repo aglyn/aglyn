@@ -100,8 +100,19 @@ function slugFromLocation(): string {
 const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
   (props, ref) => {
     const { slug: slugProp, buyLabel, hideDescription, ...rest } = props
-    const { hostId } = Aglyn.useSite()
-    const [detail, setDetail] = useState<Detail | null | 'missing'>(null)
+    const site = Aglyn.useSite()
+    const { hostId } = site
+    // Seeded from the server-resolved page data (AGL-659) so the PDP renders
+    // its real content in the SSR HTML. Starting at null meant the server
+    // emitted a <Skeleton> and the crawler got a product page with no
+    // product in it. Absent in the besigner/preview, where the effect below
+    // still fetches — so this is an optimisation, not a new requirement.
+    const seededProduct = (
+      site.pageData as { commerce?: { product?: Detail } } | undefined
+    )?.commerce?.product
+    const [detail, setDetail] = useState<Detail | null | 'missing'>(
+      seededProduct ?? null,
+    )
     const [selections, setSelections] = useState<Record<string, string>>({})
     const [quantity, setQuantity] = useState(1)
     const [activeImage, setActiveImage] = useState(0)
@@ -128,6 +139,9 @@ const ProductDetail = forwardRef<HTMLDivElement, ProductDetailProps>(
 
     useEffect(() => {
       if (!hostId || !slug) return
+      // Already delivered with the page (AGL-659) — refetching the identical
+      // payload on hydrate would just be a wasted round trip per visitor.
+      if (seededProduct && seededProduct.slug === slug) return
       let active = true
       void fetch(
         `/api/commerce/product?hostId=${encodeURIComponent(hostId)}` +
