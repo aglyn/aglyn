@@ -20,6 +20,7 @@ import {
   LISTING_CATEGORIES,
   LISTING_README_MAX_CHARS,
   listingArtifactType,
+  installTargetsFor,
 } from '../model/community'
 import {
   parseMarkdownLite,
@@ -299,6 +300,7 @@ export function CommunityListingContent({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { install, buy } = useCommunityActions(hostId)
+  const [installScope, setInstallScope] = useState<'org' | 'host'>('org')
   // Listings are org-owned (AGL-652) — "did I publish this" is an org
   // comparison, resolved from the routing mirror like the browse grid.
   const [viewerOrgId, setViewerOrgId] = useState<string | null>(null)
@@ -318,6 +320,13 @@ export function CommunityListingContent({
     () => doc(firestore, 'communityListings', listingId || '-missing-'),
     [firestore, listingId],
     { idField: '$id' },
+  )
+  // Targets this artifact type can actually install to (AGL-656) — only
+  // plugins have an org-scoped pin, so only plugins get a choice.
+  const installTargets = useMemo(
+    () =>
+      listing ? installTargetsFor(listing) : (['host'] as readonly string[]),
+    [listing],
   )
   const { data: profile } = useFirestoreDoc<any>(
     () => doc(firestore, 'publisherProfiles', listing?.profileId ?? '-anonymous-'),
@@ -546,6 +555,32 @@ export function CommunityListingContent({
                             <ListingReadme readme={listing.readme} />
                           </>
                         ) : null}
+                        {/* Install target (AGL-656). Only shown when the
+                            artifact actually HAS a choice — offering "this
+                            whole organization" for a template would be a
+                            lie, since templates only ever land on a site. */}
+                        {installTargets.length > 1 ? (
+                          <TextField
+                            select
+                            size="small"
+                            label="Install to"
+                            value={installScope}
+                            onChange={(event) =>
+                              setInstallScope(event.target.value as 'org' | 'host')
+                            }
+                            helperText={
+                              installScope === 'org'
+                                ? 'Available to every site in this organization. A site can still override it for itself.'
+                                : 'This site only.'
+                            }
+                            sx={{ maxWidth: 360 }}
+                          >
+                            <MenuItem value="org">
+                              {'This organization — all sites'}
+                            </MenuItem>
+                            <MenuItem value="host">{'This site only'}</MenuItem>
+                          </TextField>
+                        ) : null}
                         <Box>
                           <Button
                             variant={install_ ? 'outlined' : 'contained'}
@@ -554,7 +589,14 @@ export function CommunityListingContent({
                             onClick={
                               permissions.installPlugins
                                 ? () =>
-                                    mustBuy ? buy(listing) : install(listing)
+                                    mustBuy
+                                      ? buy(listing)
+                                      : install(
+                                          listing,
+                                          installTargets.length > 1
+                                            ? installScope
+                                            : undefined,
+                                        )
                                 : () =>
                                     enqueueSnackbar(
                                       'Your team role does not allow installing from the community',

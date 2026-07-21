@@ -165,6 +165,45 @@ export type CommunityArtifactType =
   | 'datasetSchema'
   | 'emailTemplate'
 
+/** Where an installed artifact lives. */
+export type InstallTarget = 'org' | 'host'
+
+/**
+ * Install targets each artifact type actually supports (AGL-656).
+ *
+ * This is not a policy choice — it is where the install routes physically
+ * write. Only plugins have an org-scoped pin
+ * (`orgs/{orgId}/installs/{listingId}`, applying to every site, shadowed by
+ * a host pin). Components land in `hosts/{h}/components`, templates and
+ * layouts in `hosts/{h}/templates`: all host-scoped by nature, because a
+ * screen tree belongs to a site.
+ *
+ * Exported so the UI can ask rather than assume — an install picker that
+ * offers "this whole organization" for a template would be lying.
+ */
+export const INSTALL_TARGETS: Record<
+  CommunityArtifactType,
+  readonly InstallTarget[]
+> = {
+  plugin: ['org', 'host'],
+  component: ['host'],
+  template: ['host'],
+  layout: ['host'],
+  // Dataset schemas are org-shared data (AGL-237), so they will pin at org
+  // scope when publishing them lands (AGL-657).
+  datasetSchema: ['org'],
+  emailTemplate: ['host'],
+}
+
+/** Targets a listing can be installed to, defaulting to host-only. */
+export function installTargetsFor(listing: {
+  artifactType?: string
+  type?: string
+  kind?: string
+}): readonly InstallTarget[] {
+  return INSTALL_TARGETS[listingArtifactType(listing)] ?? ['host']
+}
+
 /**
  * The listing's artifact type, tolerating the pre-AGL-654 shape.
  *

@@ -33,8 +33,11 @@ export function useCommunityActions(hostId: string) {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
 
+  // `scope` is only meaningful for artifact types that HAVE an org-scoped
+  // pin — see INSTALL_TARGETS. Passing it for a template would be ignored
+  // server-side, so callers ask the model rather than guessing.
   const install = useCallback(
-    async (listing: any) => {
+    async (listing: any, scope?: 'org' | 'host') => {
       const dequeue = queueLoading()
       try {
         const idToken = await (user as any)?.getIdToken?.()
@@ -57,7 +60,11 @@ export function useCommunityActions(hostId: string) {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          body: JSON.stringify({ listingId: listing.$id, hostId }),
+          body: JSON.stringify({
+            listingId: listing.$id,
+            hostId,
+            ...(scope ? { scope } : {}),
+          }),
         })
         const payload = await response.json()
         if (!response.ok) {

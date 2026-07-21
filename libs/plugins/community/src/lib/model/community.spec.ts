@@ -17,6 +17,7 @@
 
 import {
   COMMUNITY_COMPONENT_ID_ALLOWLIST,
+  installTargetsFor,
   isListingBrowsable,
   sanitizeCommunityDefinition,
 } from './community'
@@ -249,5 +250,39 @@ describe('isListingBrowsable (AGL-658)', () => {
         hiddenAt: new Date(),
       }),
     ).toBe(false)
+  })
+})
+
+/**
+ * The picker asks this rather than assuming (AGL-656). Offering "this whole
+ * organization" for a template would be a lie: only plugins have an
+ * org-scoped pin, everything else physically lands on a host.
+ */
+describe('installTargetsFor (AGL-656)', () => {
+  it('gives plugins the org/host choice', () => {
+    expect(installTargetsFor({ artifactType: 'plugin' })).toEqual([
+      'org',
+      'host',
+    ])
+  })
+
+  it('keeps screen-tree artifacts host-only', () => {
+    for (const artifactType of ['component', 'template', 'layout']) {
+      expect(installTargetsFor({ artifactType })).toEqual(['host'])
+    }
+  })
+
+  it('reads legacy discriminators, not just artifactType', () => {
+    // Pre-AGL-654 listings carry `type`/`kind` instead.
+    expect(installTargetsFor({ type: 'plugin' })).toEqual(['org', 'host'])
+    expect(installTargetsFor({ kind: 'template' })).toEqual(['host'])
+    // A component was the absence of both.
+    expect(installTargetsFor({})).toEqual(['host'])
+  })
+
+  it('never returns an empty set, so the UI always has a target', () => {
+    expect(
+      installTargetsFor({ artifactType: 'somethingNew' }).length,
+    ).toBeGreaterThan(0)
   })
 })
