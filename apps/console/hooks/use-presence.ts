@@ -37,7 +37,7 @@ import {
   remove,
   set,
 } from 'firebase/database'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 /** One entry per editor currently in a document. */
 export interface PresenceEntry {
@@ -101,6 +101,25 @@ export function usePresence(options: {
   const { hostId, docType, docId, selectedNodeId } = options
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | undefined)?.uid
+  // `user` is a NEW OBJECT on every render, so depending on it re-runs
+  // these effects forever: effect 1 re-minted a token each pass, and
+  // effect 2's cleanup removed the presence entry immediately after
+  // writing it — presence wrote and un-wrote itself in a loop, which is
+  // why the room looked empty with no error anywhere. Depend on
+  // primitives only.
+  const displayName = String(
+    (user as { displayName?: string; email?: string } | undefined)
+      ?.displayName ??
+      (user as { email?: string } | undefined)?.email ??
+      'Someone',
+  ).slice(0, 80)
+  const photoURL = (user as { photoURL?: string } | undefined)?.photoURL
+  // The token getter is called inside an effect that must NOT depend on
+  // the user object; a ref keeps the latest without re-triggering.
+  const getIdTokenRef = useRef<(() => Promise<string>) | undefined>(undefined)
+  getIdTokenRef.current = (
+    user as { getIdToken?: () => Promise<string> } | undefined
+  )?.getIdToken?.bind(user)
   const [entries, setEntries] = useState<PresenceEntry[]>([])
   const [session, setSession] = useState<{ orgId: string } | null>(null)
 
@@ -110,9 +129,7 @@ export function usePresence(options: {
     let active = true
     void (async () => {
       try {
-        const idToken = await (
-          user as { getIdToken?: () => Promise<string> } | undefined
-        )?.getIdToken?.()
+        const idToken = await getIdTokenRef.current?.()
         if (!idToken) return
         const response = await fetch('/api/presence/token', {
           method: 'POST',
@@ -159,7 +176,7 @@ export function usePresence(options: {
     return () => {
       active = false
     }
-  }, [hostId, uid, user])
+  }, [hostId, uid])
 
   // 2. Announce ourselves and watch the room.
   useEffect(() => {
@@ -182,15 +199,9 @@ export function usePresence(options: {
 
     const roomPath = `presence/${session.orgId}/${docType}/${docId}`
     const meRef = ref(database, `${roomPath}/${uid}`)
-    const displayName =
-      (user as { displayName?: string; email?: string } | undefined)
-        ?.displayName ??
-      (user as { email?: string } | undefined)?.email ??
-      'Someone'
-    const photoURL = (user as { photoURL?: string } | undefined)?.photoURL
 
     void set(meRef, {
-      displayName: String(displayName).slice(0, 80),
+      displayName,
       lastSeenAt: Date.now(),
       colour: colourFor(uid),
       ...(photoURL ? { photoURL: String(photoURL).slice(0, 512) } : {}),
@@ -219,7 +230,7 @@ export function usePresence(options: {
       unsubscribe()
       void remove(meRef).catch(() => undefined)
     }
-  }, [session, uid, docType, docId, selectedNodeId, user])
+  }, [session, uid, docType, docId, selectedNodeId, displayName, photoURL])
 
   return useMemo(() => entries, [entries])
 }
