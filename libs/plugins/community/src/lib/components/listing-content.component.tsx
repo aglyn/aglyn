@@ -693,8 +693,11 @@ export function CommunityListingContent({
                           </Stack>
                         </CardDisplay>
                       ) : null}
+                      {/* Org comparison, not uid — see viewerOrgId above
+                          (AGL-652). Against `user.uid` this was never true,
+                          so the edit card silently never rendered. */}
                       {listing?.profileId &&
-                      listing.profileId === user?.uid ? (
+                      listing.profileId === viewerOrgId ? (
                         <ListingEditCard
                           listing={listing}
                           listingId={listingId}

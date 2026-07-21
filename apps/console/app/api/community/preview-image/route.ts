@@ -21,6 +21,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { canActAsPublisher } from '@aglyn/plugins-community/server/publisher-profile'
 import { randomUUID } from 'crypto'
 
 // Base64 JSON payloads: 2MB of image encodes to ~2.7MB of body.
@@ -59,7 +60,15 @@ async function handler(request: Request): Promise<Response> {
     if (!listingSnapshot.exists) {
       return Response.json({ error: 'Unknown listing' }, { status: 404 })
     }
-    if (listingSnapshot.get('profileId') !== decoded.uid) {
+    // Listings are org-owned since AGL-652, so `profileId` holds an ORG id.
+    // Comparing it to a uid can never be true — it silently 403'd every
+    // publisher rather than erroring, which is why this survived the sweep.
+    const canEdit = await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listingSnapshot.get('profileId') as string | undefined,
+    )
+    if (!canEdit) {
       return Response.json({ error: 'Not your listing' }, { status: 403 })
     }
     const bucket = firebaseAdmin
