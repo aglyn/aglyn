@@ -182,7 +182,15 @@ function ComponentBesignerPage(props) {
 
   useEffect(() => {
     if (nodes && !Aglyn.canvas.didSetInitial) {
-      setLocalNodes(nodes)
+      // A definition's root is the promoted node, not the canvas root, so
+      // it has to be wrapped or the canvas has no root and renders nothing
+      // (AGL-680).
+      setLocalNodes(
+        Aglyn.definitionToCanvasTree({
+          rootId: data?.rootId,
+          nodes: nodes as Record<string, unknown>,
+        }) as Aglyn.ProcessableNodes,
+      )
       Aglyn.canvas.updateInitialNodes()
       baseStampRef.current = Aglyn.versionStamp(
         (data as { updatedAt?: unknown } | undefined)?.updatedAt,
@@ -307,14 +315,21 @@ function ComponentBesignerPage(props) {
     }
     setPublishing(true)
     try {
-      const { nodes: publishedNodes } = Aglyn.canvas.toJSON()
-      // `composeReusableComponentNodes` grafts from `rootId`, so it must
-      // name a node that exists in what we just published. The canvas root
-      // is authoritative after a load/edit round trip; the stored value is
-      // only a fallback for a tree the canvas could not root.
-      const rootId =
-        (Aglyn.canvas.rootNode as { $id?: string } | undefined)?.$id ??
-        componentResult?.data?.rootId
+      // Unwrap the synthetic canvas root: the tenant runtime grafts from
+      // `rootId`, so publishing the wrapper would put an always-empty
+      // container inside every instance of this component (AGL-680).
+      const definition = Aglyn.canvasTreeToDefinition(
+        Aglyn.canvas.toJSON().nodes as Record<string, unknown>,
+      )
+      if (definition.ambiguousRoot) {
+        return enqueueSnackbar(
+          'A component needs a single top-level element. Wrap what you have ' +
+            'in one container, then publish.',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
+      const publishedNodes = definition.nodes
+      const rootId = definition.rootId ?? componentResult?.data?.rootId
       await updateDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
         nodes: publishedNodes,
         ...(rootId ? { rootId } : {}),

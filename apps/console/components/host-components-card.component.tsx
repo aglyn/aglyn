@@ -295,6 +295,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
               <Button
                 size="small"
                 disabled={opening === definition.$id}
+                aria-label={`Open ${definition.displayName ?? definition.$id} in besigner`}
                 onClick={() => void handleOpenInBesigner(definition)}
               >
                 {opening === definition.$id ? 'Opening…' : 'Open in besigner'}

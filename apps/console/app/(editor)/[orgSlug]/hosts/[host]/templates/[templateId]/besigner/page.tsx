@@ -170,10 +170,22 @@ function TemplateBesignerPage(props) {
   /** Set when we save, so the resulting snapshot is adopted, not flagged. */
   const expectOwnWriteRef = useRef(false)
   const [remoteChanged, setRemoteChanged] = useState(false)
+  /** Whether the stored tree had to be wrapped for the canvas. */
+  const wrappedOnLoadRef = useRef(false)
 
   useEffect(() => {
     if (nodes && !Aglyn.canvas.didSetInitial) {
-      setLocalNodes(nodes)
+      // A page template holds a screen's canvas tree (already rooted at the
+      // canonical id); a component-kind template holds a DEFINITION, whose
+      // root is the promoted node. The canvas only renders the former, so
+      // the latter is wrapped — and remembered, so save can put it back the
+      // way it came (AGL-680/681).
+      const canvasTree = Aglyn.definitionToCanvasTree({
+        rootId: data?.rootId,
+        nodes: nodes as Record<string, unknown>,
+      })
+      wrappedOnLoadRef.current = canvasTree !== nodes
+      setLocalNodes(canvasTree as Aglyn.ProcessableNodes)
       Aglyn.canvas.updateInitialNodes()
       baseStampRef.current = Aglyn.versionStamp(
         (data as { updatedAt?: unknown } | undefined)?.updatedAt,
@@ -212,7 +224,20 @@ function TemplateBesignerPage(props) {
     }
     const dequeueLoading = queueLoading()
 
-    const nodes = Aglyn.canvas.toJSON().nodes
+    // Save in the shape it arrived in: unwrapping a page template would
+    // strip the canvas root its instantiation depends on.
+    const canvasNodes = Aglyn.canvas.toJSON().nodes as Record<string, unknown>
+    const unwrapped = wrappedOnLoadRef.current
+      ? Aglyn.canvasTreeToDefinition(canvasNodes)
+      : null
+    if (unwrapped?.ambiguousRoot) {
+      return enqueueSnackbar(
+        'This template needs a single top-level element. Wrap what you have ' +
+          'in one container, then save.',
+        { variant: 'warning', allowDuplicate: true },
+      )
+    }
+    const nodes = unwrapped ? unwrapped.nodes : canvasNodes
     // Size guard (AGL-678): the node map is stored as one msgpack blob and
     // Firestore rejects documents over 1 MiB. Nothing checked this before,
     // so an oversized template simply stopped saving with a generic error and

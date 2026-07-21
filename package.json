@@ -49,6 +49,7 @@
     "serve:tenant:emulated": "FIREBASE_AUTH_EMULATOR_ENABLED=true FIREBASE_FIRESTORE_EMULATOR_ENABLED=true FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 FIRESTORE_EMULATOR_HOST=localhost:8082 nx serve tenant --port 4500",
     "seed:e2e": "FIRESTORE_EMULATOR_HOST=localhost:8082 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 node tools/scripts/seed-e2e.mjs",
     "e2e:console": "node tools/e2e/console.e2e.mjs",
+    "e2e:besigner": "node tools/e2e/besigner-editors.e2e.mjs",
     "e2e:reviews": "node tools/e2e/listing-reviews.e2e.mjs",
     "e2e:save-as-template": "node tools/e2e/save-as-template.e2e.mjs",
     "smoke:tenant:prod": "FIRESTORE_EMULATOR_HOST=localhost:8082 FIREBASE_AUTH_EMULATOR_HOST=localhost:9099 node tools/e2e/tenant-prod-smoke.mjs",
