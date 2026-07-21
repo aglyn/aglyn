@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  ICON_VARIANT_HOST,
   ICON_VARIANT_HOST_GROUP,
   ICON_VARIANT_MENU_DOWN,
   ICON_VARIANT_MODIFY_ADD,
@@ -26,7 +25,6 @@ import {
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
-  Avatar,
   Box,
   Button,
   Divider,
@@ -44,32 +42,8 @@ import { useHostId } from '../components/host-id-provider'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import CreateHostDialog from './create-host-dialog.component'
+import HostIcon from './host-icon.component'
 import SwitcherSearchField from './switcher-search-field.component'
-
-/**
- * A site's icon: its favicon when set (AGL-630), otherwise the generic host
- * glyph (tinted for the current site).
- */
-function HostIcon(props: { host?: any; current?: boolean }) {
-  const favicon = props.host?.seo?.favicon as string | undefined
-  if (favicon) {
-    return (
-      <Avatar
-        src={favicon}
-        variant="rounded"
-        sx={{ width: 20, height: 20 }}
-        slotProps={{ img: { loading: 'lazy' } }}
-      />
-    )
-  }
-  return (
-    <MdiIcon
-      path={ICON_VARIANT_HOST.path}
-      fontSize="small"
-      color={props.current ? 'secondary' : undefined}
-    />
-  )
-}
 
 function HostsPlainLink() {
   const orgSlug = useOrgSlug()
@@ -216,7 +190,7 @@ function HostSwitcherMenu(props: { uid: string }) {
                   sx={{ gap: 1 }}
                 >
                   <ListItemIcon sx={{ minWidth: 0 }}>
-                    <HostIcon host={host} current={isCurrent} />
+                    <HostIcon host={host} color={isCurrent ? 'secondary' : undefined} />
                   </ListItemIcon>
                   <ListItemText
                     primary={host.displayName ?? host.$id}

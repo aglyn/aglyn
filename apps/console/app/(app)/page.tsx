@@ -75,6 +75,21 @@ function OrgJump() {
         children: 'Workspaces',
         icon: { path: ICON_VARIANT_ORGANIZATION.path },
       }}
+      // The primary action belongs in the header, like every other list page
+      // (sites, screens, layouts) — at the foot of the list it sat below the
+      // fold once you had more than a couple of workspaces. The zero-org
+      // empty state keeps its own inline actions.
+      headerRight={
+        !loading && orgs.length > 1 ? (
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setCreatingOrg(true)}
+          >
+            {'Create an organization'}
+          </Button>
+        ) : null
+      }
     >
       <NextPageTitle screen={'Workspaces'} />
       {loading || orgs.length === 1 ? (
@@ -166,11 +181,6 @@ function OrgJump() {
                   ),
                 }))}
               />
-              <Box>
-                <Button variant="outlined" onClick={() => setCreatingOrg(true)}>
-                  {'Create an organization'}
-                </Button>
-              </Box>
             </Stack>
           )}
           <CreateOrgDialog

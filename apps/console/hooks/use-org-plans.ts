@@ -44,7 +44,12 @@ export function useOrgPlans(
       orgIds.map(async (id) => {
         try {
           const snap = await getDoc(doc(firestore, 'orgs', id))
-          return [id, snap.get('plan') as string | undefined] as const
+          // An org on the free tier has no `plan` field at all — the webhook
+          // only writes one for a paid subscription. A successful read with
+          // no plan therefore MEANS free, and must be reported as such;
+          // leaving it absent made "free" look identical to "not loaded"
+          // (AGL-646). Only a failed read stays unknown.
+          return [id, (snap.get('plan') as string | undefined) ?? 'free'] as const
         } catch {
           return [id, undefined] as const
         }

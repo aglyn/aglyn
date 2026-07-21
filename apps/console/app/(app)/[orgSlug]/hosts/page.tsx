@@ -17,13 +17,9 @@
 
 'use client'
 
-import {
-  ICON_VARIANT_HOST,
-  ICON_VARIANT_HOST_GROUP,
-} from '@aglyn/shared-data-enums'
+import { ICON_VARIANT_HOST_GROUP } from '@aglyn/shared-data-enums'
 import { Container, GridItems } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { Button, Typography } from '@mui/material'
 import { useState } from 'react'
@@ -31,6 +27,7 @@ import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CreateHostDialog from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
+import HostIcon from '../../../../components/host-icon.component'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import OrgInvitesBanner from '../../../../components/org-invites-banner.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -171,11 +168,15 @@ function HostsContent() {
                     contentGutterY
                     contentBordered="bottom"
                     HeaderProps={{
+                      // The site's own favicon when it has one (AGL-647),
+                      // falling back to the generic glyph — same treatment as
+                      // the site switcher.
                       avatar: (
-                        <MdiIcon
-                          color="secondary"
+                        <HostIcon
+                          host={host}
+                          size={28}
                           fontSize="large"
-                          path={ICON_VARIANT_HOST.path}
+                          color="secondary"
                         />
                       ),
                       slotProps: {
