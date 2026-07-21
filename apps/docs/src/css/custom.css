@@ -248,3 +248,39 @@ html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='
     var(--ifm-color-emphasis-100)
   );
 }
+
+/* Click-to-enlarge affordance for content images (AGL-609 zoom plugin).
+   medium-zoom's own bundled stylesheet sets these cursors, so pinning them
+   here makes the affordance ours rather than dependent on that third-party
+   CSS surviving a bundle change. The hover lift matters more: a cursor swap
+   alone is easy to miss, so a zoomable screenshot now visibly responds.
+   The transition is re-declared — and carries the library's own transform
+   timing — because medium-zoom marks its transition `!important`. */
+.markdown .medium-zoom-image {
+  cursor: zoom-in;
+  transition:
+    transform 0.3s cubic-bezier(0.2, 0, 0.2, 1),
+    box-shadow 0.2s ease !important;
+}
+.markdown .medium-zoom-image:hover {
+  box-shadow: var(--ifm-global-shadow-md);
+}
+html[data-theme='dark'] .markdown .medium-zoom-image:hover {
+  box-shadow: 0 3px 14px rgb(0 0 0 / 55%);
+}
+
+/* Both the enlarged image and the backdrop dismiss on click. The overlay is
+   matched on its own class, NOT via medium-zoom's `.medium-zoom--opened`
+   ancestor the way the library's stylesheet does — that container class is
+   applied transiently during the zoom animation, so the ancestor-scoped rule
+   drops out mid-interaction and the backdrop reverts to a plain arrow. The
+   overlay element only exists while a zoom is open, so matching it directly
+   is both safe and stable. The opened image carries its own presentation, so
+   it drops the hover lift. */
+.medium-zoom-image--opened,
+.medium-zoom-overlay {
+  cursor: zoom-out;
+}
+.medium-zoom-image--opened:hover {
+  box-shadow: none;
+}
