@@ -31,7 +31,9 @@ import {
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { buildRoute, Route } from '../constants/route-links'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
@@ -48,6 +50,7 @@ export interface OrgPluginInstallsCardProps {
 export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
   const { orgId } = props
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -72,12 +75,17 @@ export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
         { variant: 'warning', persist: false },
       )
     }
-    const accepted = await confirm({
-      title: 'Uninstall from the whole organization?',
-      description: `"${install.displayName ?? install.$id}" stops loading on every site.`,
-      confirmationButtonProps: { color: 'error' },
-    })
-    if (!accepted) return
+    // confirm() resolves on accept and REJECTS on cancel (it carries no
+    // boolean) — so a catch is the cancel path, not a falsy return value.
+    try {
+      await confirm({
+        title: 'Uninstall from the whole organization?',
+        description: `"${install.displayName ?? install.$id}" stops loading on every site.`,
+        confirmationButtonProps: { color: 'error' },
+      })
+    } catch {
+      return
+    }
     try {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/community/install-plugin', {
@@ -113,6 +121,12 @@ export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
   return (
     <CardDisplay
       header="Organization plugin installs"
+      help={docsHelp('plugins', {
+        anchor: '#install--upgrade',
+        excerpt:
+          'Marketplace plugins installed for the whole organization — ' +
+          'they load on every site until uninstalled here.',
+      })}
       contentGutterX
       contentGutterY
     >
@@ -160,7 +174,8 @@ export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
                 {' '}
                 <a
                   href={buildRoute(Route.HOST_COMMUNITY, {
-                    hostId: hosts[0].$id,
+                    orgSlug,
+                    host: hosts[0].subdomain,
                   })}
                 >
                   {'Browse the marketplace'}

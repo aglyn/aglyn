@@ -60,7 +60,7 @@ import {
   FormRenderer,
   type FormRendererProps,
 } from '@aglyn/shared-ui-jsx-forms'
-import { Container, MdiIcon } from '@aglyn/shared-ui-jsx'
+import { Container, HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useHostThemeDocument } from '@aglyn/shared-ui-theme'
 import { objectFlatten } from '@aglyn/shared-util-vendor'
 import {
@@ -86,6 +86,7 @@ import {
 } from 'react'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import useDeleteElementCallback from '../hooks/use-delete-element-callback'
+import { besignerDocsUrl } from '../utils/docs-help'
 import {
   canvasSchemeToSxScheme,
   deviceFlagToBreakpoint,
@@ -699,7 +700,13 @@ const ElementStylesForm = observer(
             </Tooltip>
           ) : null}
         </Container>
-        <Container gutterY={[2]} dense>
+        <Container gutterY={[2]} dense sx={{ position: 'relative' }}>
+          <HelpTip
+            title="Margin & padding"
+            excerpt="The box stylers set the element's outer margin and inner padding at the active breakpoint — click a side, then type or drag."
+            href={besignerDocsUrl('responsiveStyling', '#box-stylers')}
+            sx={{ position: 'absolute', top: 0, right: 8, zIndex: 1, fontSize: '0.9em' }}
+          />
           <BoxStyler
             measurements={boxMeasurements}
             onChange={handleBoxStylerChange}
@@ -747,7 +754,16 @@ const ElementStylesForm = observer(
           />
         </Container>
 
-        <Accordion summary="Flexbox & Grids" sx={{ mb: 2 }}>
+        <Accordion
+          summary="Flexbox & Grids"
+          help={{
+            title: 'Flexbox & grid alignment',
+            excerpt:
+              'Configure the selected element as a flex or grid container — alignment, wrapping, direction, and gaps between children.',
+            href: besignerDocsUrl('responsiveStyling', '#style-groups'),
+          }}
+          sx={{ mb: 2 }}
+        >
           <ToggleButtonFormControl
             onChange={handleFlexboxChange(alignItems.name)}
             schema={alignItems}
@@ -798,7 +814,16 @@ const ElementStylesForm = observer(
         {/* Responsive visibility (AGL-562): hide the element on whole
             device bands — e.g. hide the desktop link cluster on mobile
             and show a menu button instead. */}
-        <Accordion summary="Visibility" sx={{ mb: 2 }}>
+        <Accordion
+          summary="Visibility"
+          help={{
+            title: 'Visibility per device band',
+            excerpt:
+              'Hide the element on whole device bands — e.g. hide a desktop link cluster on mobile and show a menu button instead.',
+            href: besignerDocsUrl('responsiveStyling', '#visibility-per-device-band'),
+          }}
+          sx={{ mb: 2 }}
+        >
           {VISIBILITY_BANDS.map((band) => (
             <FormControlLabel
               key={band}
@@ -827,7 +852,17 @@ const ElementStylesForm = observer(
         {styleGroups.map((group) => {
           const fieldNames = styleGroupFieldNames(group)
           return (
-            <Accordion key={group.$id} summary={group.label} sx={{ mb: 2 }}>
+            <Accordion
+              key={group.$id}
+              summary={group.label}
+              help={{
+                title: `${group.label} styles`,
+                excerpt:
+                  'Every field edits the selected element at the active breakpoint and scheme scope; hover a field’s ? for what it does.',
+                href: besignerDocsUrl('responsiveStyling', '#style-groups'),
+              }}
+              sx={{ mb: 2 }}
+            >
               <FormRenderer
                 key={formSeedKey}
                 FormTemplate={ElementStylesFormTemplate}
@@ -840,7 +875,16 @@ const ElementStylesForm = observer(
           )
         })}
 
-        <Accordion summary="Classes & custom CSS" sx={{ mb: 2 }}>
+        <Accordion
+          summary="Classes & custom CSS"
+          help={{
+            title: 'Custom classes & CSS',
+            excerpt:
+              'Attach reusable style classes to the element, or write raw CSS (sx) for anything the panels don’t cover.',
+            href: besignerDocsUrl('responsiveStyling', '#custom-classes'),
+          }}
+          sx={{ mb: 2 }}
+        >
           <ElementClassesField node={node} />
           <CustomCssForm node={node} breakpoint={activeBreakpoint} />
         </Accordion>

@@ -35,6 +35,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
@@ -134,6 +135,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
           { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
           { children: 'Audit log', href: buildRoute(Route.ADMIN_AUDIT) },
         ]}
+        help="staffConsole"
         header={{
           children: 'Audit Log',
           icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -147,6 +149,11 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
           ) : (
             <CardDisplay
               header={'Admin actions'}
+              help={docsHelp('staffConsole', {
+                anchor: '#whats-there',
+                excerpt:
+                  'Append-only record of every staff mutation with before/after diffs. Filter by actor, action, or target and export the slice as CSV.',
+              })}
               contentGutterX
               contentGutterY
             >

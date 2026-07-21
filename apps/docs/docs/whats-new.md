@@ -10,7 +10,28 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## Nav menu system (newest)
+## REST API & API keys (newest)
+
+- **[The Aglyn REST API](https://docs.aglyn.com/api)** — programmatic access to
+  your organization's datasets and records (full CRUD), contacts, sites, and
+  form submissions, authenticated with **API keys** you create under
+  **Organization → Settings → API keys**. Keys are scoped, shown once, and
+  Business-tier; the API supports cursor pagination, per-key rate limits,
+  idempotent writes, and a consistent error envelope. See the new
+  [API reference](https://docs.aglyn.com/api).
+
+## In-console help
+
+- **[Documentation from the console](getting-started/console-tour.md#the-app-bar)** —
+  the account menu now has a **Documentation** entry that opens this site in a
+  new tab, and feature pages grew a small **?** icon next to their titles: hover
+  for a one-line summary, click through for the full docs page.
+- **[Help everywhere](getting-started/console-tour.md#in-context-help)** — the
+  same **?** affordance now covers cards, form fields, table headers, the
+  staff console, and the Besigner's style and attribute panels, each
+  deep-linking to the exact docs section it explains.
+
+## Nav menu system
 
 - **[Dropdown Panel preset](building-sites/menus-and-navigation/overview.md#the-dropdown-panel-preset)** —
   a primitive-built hover panel (Stack + Button + hidden panel) that inserts

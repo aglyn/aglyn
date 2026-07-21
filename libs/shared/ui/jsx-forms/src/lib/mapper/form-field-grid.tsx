@@ -22,6 +22,7 @@
 
 import type { ReactNode } from 'react'
 
+import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import { Grid, type GridProps } from '@mui/material'
 import { styled } from '@mui/material/styles'
 
@@ -43,16 +44,31 @@ export interface FormFieldGridProps extends Omit<GridProps, 'size'> {
   children?: ReactNode
   className?: string
   size?: GridProps['size']
+  /** Contextual help affordance at the field's top-right (AGL-601). */
+  help?: HelpTipContent
 }
 
 export const FormFieldGrid = ({
   children,
   className,
+  help,
   size = { xs: 12 },
   ...props
 }: FormFieldGridProps) => (
   <StyledGrid size={size} className={clsx(classes.grid, className)} {...props}>
     {children}
+    {help && (
+      <HelpTip
+        {...help}
+        sx={{
+          position: 'absolute',
+          top: -6,
+          right: 0,
+          fontSize: '0.95em',
+          zIndex: 1,
+        }}
+      />
+    )}
   </StyledGrid>
 )
 

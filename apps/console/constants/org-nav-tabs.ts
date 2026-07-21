@@ -21,54 +21,54 @@ import { buildRoute, Route } from './route-links'
  * The organization area's tab strip (AGL-236): org-scoped surfaces that
  * need no host context, mirroring hostNavTabItems/adminNavTabItems.
  */
-export function orgNavTabItems() {
+export function orgNavTabItems(orgSlug: string) {
   return [
     {
       id: 'nav-tab-org-sites',
       label: 'Sites',
-      href: buildRoute(Route.HOST_LIST),
+      href: buildRoute(Route.HOST_LIST, { orgSlug }),
     },
     {
       id: 'nav-tab-org-team',
       label: 'Team',
-      href: buildRoute(Route.MANAGE_TEAM),
+      href: buildRoute(Route.MANAGE_TEAM, { orgSlug }),
     },
     {
       id: 'nav-tab-org-media',
       label: 'Media',
-      href: buildRoute(Route.ORG_MEDIA),
+      href: buildRoute(Route.ORG_MEDIA, { orgSlug }),
     },
     // Shares the host Data tab id so the release_data_store flag
     // gating in DashboardLayout applies here too.
     {
       id: 'nav-tab-data',
       label: 'Data',
-      href: buildRoute(Route.ORG_DATA),
+      href: buildRoute(Route.ORG_DATA, { orgSlug }),
     },
     {
       id: 'nav-tab-org-plugins',
       label: 'Plugins',
-      href: buildRoute(Route.ORG_PLUGINS),
+      href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
     },
     {
       id: 'nav-tab-org-billing',
       label: 'Billing',
-      href: buildRoute(Route.MANAGE_BILLING),
+      href: buildRoute(Route.MANAGE_BILLING, { orgSlug }),
     },
     {
       id: 'nav-tab-org-community',
       label: 'Community',
-      href: buildRoute(Route.MANAGE_COMMUNITY_PROFILE),
+      href: buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug }),
     },
     {
       id: 'nav-tab-org-support',
       label: 'Support',
-      href: buildRoute(Route.MANAGE_SUPPORT),
+      href: buildRoute(Route.MANAGE_SUPPORT, { orgSlug }),
     },
     {
       id: 'nav-tab-org-settings',
       label: 'Settings',
-      href: buildRoute(Route.ORG_SETTINGS),
+      href: buildRoute(Route.ORG_SETTINGS, { orgSlug }),
     },
   ]
 }

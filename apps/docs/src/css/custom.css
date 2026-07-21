@@ -49,9 +49,10 @@
   --ifm-background-color: #f5f5f5;
   --ifm-background-surface-color: #ffffff;
 
-  /* Material app-bar look: dark navbar with light text over console primary. */
-  --ifm-navbar-background-color: #404c5c;
-  --ifm-navbar-link-color: rgba(255, 255, 255, 0.9);
+  /* Material app-bar look: light navbar matching the console's `surface`
+     app bar (surface.main #F8F9FA, dark text) — not the old dark slate. */
+  --ifm-navbar-background-color: #f8f9fa;
+  --ifm-navbar-link-color: rgba(0, 0, 0, 0.78);
   --ifm-navbar-link-hover-color: #00b0ff;
 
   /* Semantic colors from console.theme.ts, wired into admonitions. */
@@ -84,7 +85,8 @@ html[data-theme='dark'] {
   --ifm-background-color: #161c21; /* background.default (dark) */
   --ifm-background-surface-color: #2a3440; /* background.paper (dark) */
 
-  --ifm-navbar-background-color: #2c3540; /* primary.main (dark) */
+  --ifm-navbar-background-color: #202934; /* surface.main (dark) */
+  --ifm-navbar-link-color: rgba(255, 255, 255, 0.9);
 
   --docusaurus-highlighted-code-line-bg: rgba(0, 176, 255, 0.2);
 }
@@ -99,13 +101,41 @@ html[data-theme='dark'] .footer--dark {
   --ifm-footer-background-color: #202934; /* surface.main (dark) */
 }
 
-/* Material app-bar: subtle elevation under the fixed navbar. */
+/* Material app-bar: subtle elevation + a hairline divider under the fixed
+   navbar, matching the console app bar. */
 .navbar {
   box-shadow: var(--ifm-global-shadow-lw);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
 }
 .navbar__title {
   font-weight: 500;
   letter-spacing: 0.02em;
+}
+
+/* App-bar controls follow the navbar link color so the color-mode toggle and
+   the mobile hamburger are legible on the light bar (AGL-633). Docusaurus
+   otherwise leaves the toggle icon a low-contrast emphasis gray. */
+.navbar__toggle,
+.navbar button[class*='toggleButton'],
+.navbar [class*='colorModeToggle'] {
+  color: var(--ifm-navbar-link-color);
+}
+.navbar button[class*='toggleButton'] svg,
+.navbar [class*='colorModeToggle'] svg {
+  fill: currentColor;
+}
+
+/* Mobile slide-out menu: match the console surface and text so it isn't the
+   old white-on-dark styling once the bar itself is light (AGL-633). */
+.navbar-sidebar {
+  background-color: var(--ifm-background-surface-color);
+}
+.navbar-sidebar__brand {
+  box-shadow: var(--ifm-global-shadow-lw);
+}
+.navbar-sidebar .navbar__toggle,
+.navbar-sidebar__close {
+  color: var(--ifm-navbar-link-color);
 }
 
 /* Cards and admonitions get Material elevation + rounded corners. */
@@ -160,4 +190,61 @@ html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='
 html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] .actor-man line,
 html[data-theme='dark'] .docusaurus-mermaid-container svg[aria-roledescription='sequence'] .actor-man circle {
   stroke: var(--ifm-color-emphasis-500) !important;
+}
+
+/* ── Home landing: hero + card grids (AGL-610) ──────────────────────────
+   A Cursor-style welcome: a lead paragraph, a "Start here" row, and a grid
+   of area cards. Uses console tokens so it matches light/dark automatically. */
+.home-hero {
+  margin: 0 0 2rem;
+}
+.home-hero__lead {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: var(--ifm-color-emphasis-800);
+  max-width: 46rem;
+}
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 2rem;
+}
+.home-card {
+  display: block;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: var(--ifm-global-radius);
+  background: var(--ifm-background-surface-color);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.home-card:hover {
+  text-decoration: none;
+  border-color: var(--ifm-color-primary);
+  box-shadow: var(--ifm-global-shadow-lw);
+  transform: translateY(-1px);
+}
+.home-card__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+}
+.home-card__desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ifm-color-emphasis-700);
+}
+/* The "Start here" row is a touch more prominent than the area grid. */
+.home-grid--start .home-card {
+  background: linear-gradient(
+    180deg,
+    var(--ifm-background-surface-color),
+    var(--ifm-color-emphasis-100)
+  );
 }

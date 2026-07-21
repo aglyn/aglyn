@@ -38,6 +38,7 @@ import type { JsonEditorProps } from '@aglyn/shared-ui-json-editor'
 import dynamic from 'next/dynamic'
 import Head from 'next/head'
 import { useCallback, useMemo, useState } from 'react'
+import { docsHelp } from '../../constants/docs-links'
 import ColorField from './color-field.component'
 import {
   fontFamilyStack,
@@ -254,7 +255,16 @@ export function ThemeEditor(props: ThemeEditorProps) {
       ) : null}
       <Grid size={{ xs: 12, md: 6 }}>
         <Stack spacing={3}>
-          <CardDisplay contentGutterY contentGutterX header="Color scheme">
+          <CardDisplay
+            contentGutterY
+            contentGutterX
+            header="Color scheme"
+            help={docsHelp('editYourTheme', {
+              anchor: '#set-colors-and-fonts',
+              excerpt:
+                'Pick the palette for light and dark schemes — primary, secondary, surfaces, and text; the preview updates live.',
+            })}
+          >
             <TabContext value={scheme}>
               <TabList onChange={handleSchemeTab}>
                 <Tab label="Light" value="light" />
@@ -299,7 +309,16 @@ export function ThemeEditor(props: ThemeEditorProps) {
             </TabContext>
           </CardDisplay>
 
-          <CardDisplay contentGutterY contentGutterX header="Typography">
+          <CardDisplay
+            contentGutterY
+            contentGutterX
+            header="Typography"
+            help={docsHelp('editYourTheme', {
+              anchor: '#set-colors-and-fonts',
+              excerpt:
+                'Choose the heading and body font families and base sizing your whole site inherits.',
+            })}
+          >
             <TextField
               select
               fullWidth
@@ -317,7 +336,15 @@ export function ThemeEditor(props: ThemeEditorProps) {
             </TextField>
           </CardDisplay>
 
-          <CardDisplay contentGutterY contentGutterX header="Shape & spacing">
+          <CardDisplay
+            contentGutterY
+            contentGutterX
+            header="Shape & spacing"
+            help={docsHelp('editYourTheme', {
+              excerpt:
+                'Corner radii and spacing scale applied across components — buttons, cards, and inputs follow it.',
+            })}
+          >
             <Stack spacing={2}>
               <Stack spacing={0.5}>
                 <Typography variant="body2">
@@ -343,7 +370,15 @@ export function ThemeEditor(props: ThemeEditorProps) {
             </Stack>
           </CardDisplay>
 
-          <CardDisplay contentGutterY contentGutterX header="Component overrides">
+          <CardDisplay
+            contentGutterY
+            contentGutterX
+            header="Component overrides"
+            help={docsHelp('themeBuilder', {
+              excerpt:
+                'Fine-tune how specific components render beyond the base palette and typography.',
+            })}
+          >
             <Stack spacing={1}>
               <Typography variant="body2" color="text.secondary">
                 {`Advanced: JSON overrides for whitelisted components (${
@@ -378,7 +413,17 @@ export function ThemeEditor(props: ThemeEditorProps) {
         </Stack>
       </Grid>
       <Grid size={{ xs: 12, md: 6 }}>
-        <CardDisplay contentGutterY contentGutterX header={`Preview (${scheme})`}>
+        <CardDisplay
+          contentGutterY
+          contentGutterX
+          header={`Preview (${scheme})`}
+          help={docsHelp('editYourTheme', {
+            anchor: '#it-follows-you-into-the-besigner',
+            title: 'Theme preview',
+            excerpt:
+              'A live sample of your theme in the selected scheme — what you see here is what the Besigner and your site render.',
+          })}
+        >
           <ThemePreview theme={draft} scheme={scheme} />
         </CardDisplay>
       </Grid>

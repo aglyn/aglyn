@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { HelpTipContent } from '@aglyn/shared-ui-jsx'
 import type { ReactNode } from 'react'
 
 export type OptionValue = string | number | boolean | null | undefined
@@ -45,6 +46,8 @@ export interface BaseFieldProps {
   isDisabled?: boolean
   isReadOnly?: boolean
   validateOnMount?: boolean
+  /** Contextual help tooltip rendered at the field's top-right (AGL-601). */
+  help?: HelpTipContent
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
 }

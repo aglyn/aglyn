@@ -45,9 +45,10 @@ workspace automatically. The team features above keep working unchanged.
 Team and site-member seats are metered and enforced; buy seat add-ons to grow. See
 [Billing & plans](../billing-and-plans/overview.md).
 
-:::note More detailed how-tos coming
-Step-by-step guides for inviting teammates and configuring members-only areas are on the
-way. This overview covers what the feature does today.
+:::tip How-tos
+- [Invite teammates](invite-teammates.md)
+- [Custom roles & permissions](custom-roles.md)
+- [Members-only areas](members-only.md)
 :::
 
 ## Related

@@ -20,6 +20,7 @@
  * updated for the current MUI APIs (Grid `size`, no Typography `paragraph`).
  */
 
+import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
 import type { ReactNode } from 'react'
 
 import {
@@ -50,6 +51,8 @@ export interface SubFormProps extends Omit<GridProps, 'component' | 'title'> {
   title?: ReactNode
   description?: ReactNode
   component?: string
+  /** Contextual help affordance rendered beside the section title (AGL-601). */
+  help?: HelpTipContent
   TitleGridProps?: GridProps
   TitleProps?: TypographyProps
   DescriptionProps?: TypographyProps
@@ -62,6 +65,7 @@ export const SubForm = ({
   title,
   description,
   component: _component,
+  help,
   TitleGridProps = {},
   TitleProps = {},
   DescriptionProps = {},
@@ -75,8 +79,13 @@ export const SubForm = ({
     <StyledGrid size={{ xs: 12 }} container className={classes.grid} {...rest}>
       {title && (
         <Grid size={{ xs: 12 }} {...TitleGridProps}>
-          <Typography variant="h5" {...TitleProps}>
+          <Typography
+            variant="h5"
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+            {...TitleProps}
+          >
             {title}
+            {help && <HelpTip {...help} sx={{ fontSize: '0.7em' }} />}
           </Typography>
         </Grid>
       )}

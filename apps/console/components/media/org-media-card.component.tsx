@@ -29,6 +29,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../../constants/docs-links'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 /**
@@ -107,6 +108,11 @@ export function OrgMediaCard(props: { orgId: string | null }) {
   return (
     <CardDisplay
       header={'Organization media (shared with all sites)'}
+      help={docsHelp('media', {
+        excerpt:
+          'A shared library for the whole organization — any site can use ' +
+          'these assets, unlike the site-private library.',
+      })}
       contentGutterX
       contentGutterY
     >
@@ -185,9 +191,15 @@ export function OrgMediaCard(props: { orgId: string | null }) {
                       void confirm({
                         title: 'Delete org media?',
                         description: `${item.fileName} disappears from every site using it.`,
-                      }).then(async (accepted) => {
-                        if (accepted) await request({ action: 'delete', mediaId: item.$id })
                       })
+                        // confirm() resolves on accept and REJECTS on
+                        // cancel — the catch is the cancel path.
+                        .then(async () => {
+                          await request({ action: 'delete', mediaId: item.$id })
+                        })
+                        .catch(() => {
+                          // Cancelled — nothing to do.
+                        })
                     }
                   >
                     {'Delete'}

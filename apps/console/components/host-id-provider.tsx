@@ -16,117 +16,62 @@
  */
 'use client'
 
-import { doc, getDoc } from 'firebase/firestore'
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { createContext, useContext, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import { createContext, useContext } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope } from '../hooks/use-org-scope'
 
-const WORKSPACE_DOMAIN =
-  process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.io'
-
+/** The resolved host DOC ID — the internal key for all host data reads. */
 export const HostIdContext = createContext<string>(null)
+/** The host SUBDOMAIN from the URL — used to build `/hosts/[host]` links. */
+export const HostSubdomainContext = createContext<string | null>(null)
+/**
+ * Whether subdomain→doc-id resolution has settled for the current host route
+ * (true off host routes). The in-tree HostGuard reads this to hold the spinner
+ * until resolution finishes, then 404s an unknown subdomain.
+ */
+export const HostReadyContext = createContext<boolean>(true)
 
-export const useHostId = () => {
-  return useContext(HostIdContext)
-}
+export const useHostId = () => useContext(HostIdContext)
+export const useHostSubdomain = () => useContext(HostSubdomainContext)
+export const useHostReady = () => useContext(HostReadyContext)
 
 export function HostIdProvider({ children }) {
-  const params = useParams<{ hostId: string }>()
-  const hostId = params?.hostId as string
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const params = useParams<{ orgSlug?: string; host?: string }>()
+  const hostSubdomain = typeof params?.host === 'string' ? params.host : null
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const {
-    orgs,
-    currentOrg,
-    selectOrg,
-    orgSlug,
-    loading: orgsLoading,
-  } = useOrgScope()
+  const { currentOrg } = useOrgScope()
 
-  // Host-route guard (AGL-236): the [hostId] catch-all otherwise treats
-  // any unknown first segment (a typo, or a bare /org before its index
-  // existed) as a host and renders a broken dashboard. Verify against
-  // hostIndex and bounce phantoms to the sites list. The index also
-  // carries the owning org, which scopes the WORKSPACE: a site from a
-  // different org never renders inside this one — on the apex the
-  // workspace switches to the owning org (deep links keep working,
-  // Slack-style); on a workspace subdomain the visit moves to the
-  // owning org's subdomain; without membership it bounces to the sites
-  // list. Lookup errors (signed-out, offline) don't redirect — only a
-  // definitive answer does.
-  useEffect(() => {
-    if (!hostId || !user || orgsLoading || !currentOrg) return
-    let active = true
-    void getDoc(doc(firestore, 'hostIndex', hostId))
-      .then((snapshot) => {
-        if (!active) return
-        if (!snapshot.exists()) {
-          void router.replace('/hosts')
-          return
-        }
-        const hostOrgId = snapshot.get('orgId') as string | undefined
-        if (!hostOrgId || hostOrgId === currentOrg.$id) {
-          // Host-scoped access guard (AGL-242): membership in the org is
-          // not access to every host — restricted members carry
-          // `hostAccess` and the host doc's memberRoles projection (and
-          // the rules) exclude them elsewhere. A permission-denied read
-          // here means "not your site": bounce instead of rendering an
-          // empty shell. Staff claims pass the rules, so staff keep
-          // access.
-          void getDoc(doc(firestore, 'hosts', hostId)).catch(
-            (error: { code?: string }) => {
-              if (active && error?.code === 'permission-denied') {
-                void router.replace('/hosts')
-              }
-            },
-          )
-          return
-        }
-        const membership = orgs.find((org) => org.$id === hostOrgId)
-        if (!membership) {
-          // Not this user's org — rules already deny the data; keep the
-          // UI from rendering an empty shell of someone else's site.
-          void router.replace('/hosts')
-          return
-        }
-        if (orgSlug && membership.slug) {
-          // Subdomains pin the workspace to the hostname — follow the
-          // site home instead (the session cookie signs it in). The Pages
-          // Router `router.asPath` (path + query) is reconstructed here from
-          // `usePathname()` + `useSearchParams()`.
-          const query = searchParams?.toString()
-          const asPath = query ? `${pathname}?${query}` : pathname
-          window.location.assign(
-            `https://${membership.slug}.${WORKSPACE_DOMAIN}${asPath}`,
-          )
-          return
-        }
-        selectOrg(hostOrgId)
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [
+  // Resolve the URL subdomain to a host doc id within the CURRENT org
+  // (AGL-622). Scoping the query by orgId is what the security rules allow (an
+  // unscoped all-orgs list is denied), so a subdomain that belongs to another
+  // org simply isn't found here — the in-tree HostGuard renders the designed
+  // 404, never a sign-out. (Cross-org deep-link redirect would need a global
+  // subdomain index; tracked separately.) This provider is global (above the
+  // route not-found boundaries), so it only RESOLVES and exposes state; the
+  // HostGuard inside the host route tree enforces the spinner/404.
+  const { hosts, ready } = useOrgHosts(
     firestore,
-    hostId,
-    user,
-    router,
-    pathname,
-    searchParams,
-    orgs,
-    currentOrg,
-    selectOrg,
-    orgSlug,
-    orgsLoading,
-  ])
+    user?.uid,
+    currentOrg?.$id ?? undefined,
+  )
+  const match = hostSubdomain
+    ? hosts.find(
+        (h) => (h as { subdomain?: string }).subdomain === hostSubdomain,
+      )
+    : undefined
+  const hostReady = !hostSubdomain || Boolean(currentOrg && ready)
 
   return (
-    <HostIdContext.Provider value={hostId}>{children}</HostIdContext.Provider>
+    <HostReadyContext.Provider value={hostReady}>
+      <HostSubdomainContext.Provider value={hostSubdomain}>
+        <HostIdContext.Provider value={match?.$id ?? null}>
+          {children}
+        </HostIdContext.Provider>
+      </HostSubdomainContext.Provider>
+    </HostReadyContext.Provider>
   )
 }
 HostIdProvider.displayName = 'HostIdProvider'

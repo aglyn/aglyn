@@ -21,6 +21,7 @@
  * the removed `ListItem button` prop).
  */
 
+import type { HelpTipContent } from '@aglyn/shared-ui-jsx'
 import type { ReactNode } from 'react'
 
 import {
@@ -359,6 +360,8 @@ export interface DualListSelectProps {
   filterValues: (value: string) => void
   rightTitle?: string
   isFilterable?: boolean
+  /** Contextual help tooltip rendered at the field's top-right (AGL-601). */
+  help?: HelpTipContent
   // MUI component props
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   FormFieldGridProps?: any
@@ -452,6 +455,7 @@ const DualListSelect = ({
   filterValues,
   rightTitle = 'Selected',
   isFilterable = true,
+  help,
   // Props
   FormFieldGridProps,
   InternalGridProps,
@@ -512,7 +516,7 @@ const DualListSelect = ({
     description
 
   return (
-    <StyledDualListSelect {...FormFieldGridProps}>
+    <StyledDualListSelect help={help} {...FormFieldGridProps}>
       <FormControl
         fullWidth
         required={isRequired}

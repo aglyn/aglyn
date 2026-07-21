@@ -54,6 +54,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import manageNavTabItems from '../../../../constants/manage-nav-tabs'
 import MainLayout from '../../../../components/layouts/main.layout'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import MediaUrlField from '../../../../components/media-url-field.component'
@@ -63,6 +64,13 @@ import useFirestoreDoc from '../../../../hooks/use-firestore-doc'
 const basicSchema: FormSchema = {
   id: 'basic',
   title: 'Basic info',
+  CardDisplayProps: {
+    help: docsHelp('account', {
+      excerpt:
+        'Your name and contact details, stored on your personal console ' +
+        'account and shown to teammates.',
+    }),
+  },
   fields: [
     FIELD_SCHEMA_FIRST_NAME,
     FIELD_SCHEMA_LAST_NAME,
@@ -73,6 +81,13 @@ const basicSchema: FormSchema = {
 const securitySchema: FormSchema = {
   id: 'security',
   title: 'Security',
+  CardDisplayProps: {
+    help: docsHelp('account', {
+      anchor: '#resetting-your-password',
+      excerpt:
+        'Change your console password by confirming the current one first.',
+    }),
+  },
   fields: [
     FIELD_SCHEMA_PASSWORD_OLD,
     FIELD_SCHEMA_PASSWORD,
@@ -195,6 +210,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
             href: buildRoute(Route.MANAGE_USER_SETTINGS),
           },
         ]}
+        help="account"
         header={{
           children: 'Account',
           icon: { path: ICON_VARIANT_APP_SETTINGS.path },
@@ -204,6 +220,11 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           {/* Profile image (AGL-365). */}
           <CardDisplay
             header={'Profile image'}
+            help={docsHelp('account', {
+              excerpt:
+                'Your personal avatar across the console — the app bar, ' +
+                'comments, and team lists.',
+            })}
             contentGutterX
             contentGutterY
             sx={{ mb: 3 }}
@@ -242,7 +263,14 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                     sm: 3,
                   },
                   children: (
-                    <CardDisplay header="Navigation">
+                    <CardDisplay
+                      header="Navigation"
+                      help={docsHelp('account', {
+                        excerpt:
+                          'Sections of your personal account settings — ' +
+                          'basic info and password.',
+                      })}
+                    >
                       <TabList
                         orientation="vertical"
                         textColor="secondary"

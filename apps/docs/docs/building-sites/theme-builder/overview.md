@@ -26,8 +26,8 @@ schemes — applied consistently across every screen.
 The theme you set here is supplied to the [Besigner](../besigner/overview.md) canvas too,
 so previews match the live site.
 
-:::note More detailed how-tos coming
-A full walkthrough of the theme editor's controls is on the way.
+:::tip How-tos
+- [Edit your theme](edit-your-theme.md)
 :::
 
 ## Related

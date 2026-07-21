@@ -32,6 +32,7 @@ import {
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface HostComponentsCardProps {
@@ -165,7 +166,12 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   )
 
   return (
-    <CardDisplay header={'Reusable components'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Reusable components'}
+      help={docsHelp('components', { anchor: '#manage' })}
+      contentGutterX
+      contentGutterY
+    >
       {components.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {'Select an element in the besigner and choose "Save as reusable ' +

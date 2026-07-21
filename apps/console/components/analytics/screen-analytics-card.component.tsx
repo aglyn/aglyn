@@ -29,8 +29,10 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../../constants/docs-links'
 import { hasEntitlement } from '../../constants/entitlements'
 import { buildRoute, Route } from '../../constants/route-links'
+import { useOrgSlug } from '../../hooks/use-org-scope'
 import useCurrentOrg from '../../hooks/use-current-org'
 
 const DAYS = 14
@@ -54,6 +56,7 @@ export function ScreenAnalyticsCard(props: {
 }) {
   const { hostId, screenId } = props
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
   const { org } = useCurrentOrg()
   const entitled = hasEntitlement('screen-analytics', org)
   const [days, setDays] = useState<DayStat[] | null>(null)
@@ -98,14 +101,19 @@ export function ScreenAnalyticsCard(props: {
 
   if (!entitled) {
     return (
-      <CardDisplay header={'Screen traffic'} contentGutterX contentGutterY>
+      <CardDisplay
+        header={'Screen traffic'}
+        help={docsHelp('analytics', { anchor: '#per-screen-traffic' })}
+        contentGutterX
+        contentGutterY
+      >
         <Alert
           severity="info"
           action={
             <Button
               color="inherit"
               size="small"
-              href={buildRoute(Route.MANAGE_BILLING)}
+              href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
             >
               {'Upgrade'}
             </Button>
@@ -148,6 +156,12 @@ export function ScreenAnalyticsCard(props: {
   return (
     <CardDisplay
       header={'Screen traffic (14 days)'}
+      help={docsHelp('analytics', {
+        anchor: '#per-screen-traffic',
+        excerpt:
+          "This screen's pageviews over the last 14 days, with its " +
+          'device split and top referrers.',
+      })}
       contentGutterX
       contentGutterY
     >

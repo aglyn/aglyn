@@ -64,19 +64,67 @@ const config: Config = {
 
   plugins: [
     [
+      // Separate "API" docs instance (AGL-611): the REST API reference lives
+      // at /api with its own sidebar, distinct from the product docs.
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'api',
+        path: 'api',
+        routeBasePath: 'api',
+        sidebarPath: './sidebarsApi.ts',
+        editUrl,
+      },
+    ],
+    [
+      // "Learn" instance (AGL-612): guided learning paths at /learn.
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'learn',
+        path: 'learn',
+        routeBasePath: 'learn',
+        sidebarPath: './sidebarsLearn.ts',
+        editUrl,
+      },
+    ],
+    [
+      // "Help" instance (AGL-613): support, FAQ, troubleshooting at /help.
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'help',
+        path: 'help',
+        routeBasePath: 'help',
+        sidebarPath: './sidebarsHelp.ts',
+        editUrl,
+      },
+    ],
+    [
       // Offline/local full-text search (no external Algolia dependency).
       '@easyops-cn/docusaurus-search-local',
       {
         hashed: true,
         indexBlog: false,
-        docsRouteBasePath: '/',
+        // Index every docs instance.
+        docsRouteBasePath: ['/', '/api', '/learn', '/help'],
         highlightSearchTermsOnTargetPage: true,
       },
     ],
+    // Click-to-enlarge (lightbox) for every content image (AGL-609).
+    // NOTE: this plugin reads its options from themeConfig.zoom (below),
+    // not from plugin-array options.
+    'docusaurus-plugin-image-zoom',
   ],
 
   themeConfig: {
     image: 'img/aglyn-social-card.png',
+    // Click-to-enlarge for content images (docusaurus-plugin-image-zoom,
+    // AGL-609). Skip inline/emphasis images; dim to the console slate.
+    zoom: {
+      selector: '.markdown :not(em) > img',
+      background: {
+        light: 'rgba(22, 28, 33, 0.65)',
+        dark: 'rgba(0, 0, 0, 0.8)',
+      },
+    },
     colorMode: {
       defaultMode: 'light',
       respectPrefersColorScheme: true,
@@ -100,12 +148,14 @@ const config: Config = {
     },
     navbar: {
       // The wordmark carries the name (AGL-449), so no navbar title text.
-      // The console-themed navbar is dark slate in BOTH color modes, so
-      // both modes use the light-word variant (aglyn-docs-logo.svg is the
-      // dark-word one for light surfaces elsewhere).
+      // The navbar now matches the console app bar — light in light mode, dark
+      // in dark mode (AGL-633) — so each mode needs its own wordmark: the
+      // dark-word variant on the light bar (`src`), the light-word variant on
+      // the dark bar (`srcDark`). Docusaurus swaps them by color mode.
       logo: {
         alt: 'Aglyn Documentation',
-        src: 'img/aglyn-docs-logo-dark.svg',
+        src: 'img/aglyn-docs-logo.svg',
+        srcDark: 'img/aglyn-docs-logo-dark.svg',
         height: 24,
         width: 220,
       },
@@ -115,6 +165,27 @@ const config: Config = {
           sidebarId: 'docsSidebar',
           position: 'left',
           label: 'Docs',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'apiSidebar',
+          docsPluginId: 'api',
+          position: 'left',
+          label: 'API',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'learnSidebar',
+          docsPluginId: 'learn',
+          position: 'left',
+          label: 'Learn',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'helpSidebar',
+          docsPluginId: 'help',
+          position: 'left',
+          label: 'Help',
         },
         {
           to: '/developers/plugins/overview',

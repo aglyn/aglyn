@@ -37,6 +37,7 @@ import {
 } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import SiteMemberDrawer from './site-member-drawer.component'
 
@@ -89,6 +90,12 @@ export function SiteAccountsCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Site users'}
+      help={docsHelp('members', {
+        anchor: '#4-manage-members-from-the-console',
+        excerpt:
+          'Visitors who signed up on your live site — open a row for ' +
+          'orders, subscriptions, and suspend/reactivate.',
+      })}
       contentGutterX
       contentGutterY
       HeaderProps={{

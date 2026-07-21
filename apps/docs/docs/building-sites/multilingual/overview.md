@@ -28,9 +28,11 @@ visitor.
 
 Add a **language switcher** so visitors can move between locales themselves.
 
-:::note More detailed how-tos coming
-Step-by-step guides for adding a locale and translating screens are on the way. This is
-**multilingual v1**.
+:::tip How-tos
+- [Add a locale](add-a-locale.md)
+- [Add a language switcher](language-switcher.md)
+
+This is **multilingual v1**.
 :::
 
 ## Related

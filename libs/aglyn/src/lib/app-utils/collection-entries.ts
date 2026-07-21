@@ -47,6 +47,18 @@ export const COLLECTION_ENTRIES_NODE_ID_PREFIX = 'centry__'
 /** Hard bound on entries a single block renders, before `entriesLimit`. */
 export const COLLECTION_ENTRIES_MAX = 100
 
+/** Default entries per page for a paginated collection list (AGL-620). */
+export const COLLECTION_LIST_PAGE_SIZE = 10
+
+/**
+ * Total pages for `total` entries at `perPage` per page — at least 1 so an
+ * empty collection still has a page 1 (AGL-620).
+ */
+export function collectionTotalPages(total: number, perPage: number): number {
+  if (perPage <= 0) return 1
+  return Math.max(1, Math.ceil(total / perPage))
+}
+
 /** Default/most related posts a Related posts block renders (AGL-582). */
 export const COLLECTION_RELATED_DEFAULT_LIMIT = 3
 export const COLLECTION_RELATED_MAX = 12
@@ -232,6 +244,17 @@ export function expandCollectionEntries<
       Number.isFinite(limitRaw) && limitRaw > 0
         ? Math.min(limitRaw, COLLECTION_ENTRIES_MAX)
         : COLLECTION_ENTRIES_MAX
+
+    // Pagination (AGL-620): when `perPage` is set the block renders one page
+    // window `[(page-1)*perPage, page*perPage)`; without it, the legacy
+    // `entriesLimit` slice from the top applies unchanged.
+    const perPageRaw = Number((container.props as any)?.perPage)
+    const perPage =
+      Number.isFinite(perPageRaw) && perPageRaw > 0
+        ? Math.min(Math.floor(perPageRaw), COLLECTION_ENTRIES_MAX)
+        : undefined
+    const pageRaw = Number((container.props as any)?.page)
+    const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
     const templateIds = Array.isArray(container.nodes)
       ? (container.nodes as NodeId[])
       : []
@@ -260,8 +283,12 @@ export function expandCollectionEntries<
           )
         : source.entries
 
+    const windowed = perPage
+      ? filtered.slice((page - 1) * perPage, (page - 1) * perPage + perPage)
+      : filtered.slice(0, limit)
+
     const childIds: NodeId[] = []
-    filtered.slice(0, limit).forEach((entry, index) => {
+    windowed.forEach((entry, index) => {
       const prefix = `${COLLECTION_ENTRIES_NODE_ID_PREFIX}${containerId}__${index}__`
       const prefixId = (id: NodeId) => `${prefix}${id}`
       const cloned: Record<NodeId, N> = {}

@@ -29,6 +29,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -101,7 +102,17 @@ export function AuthScreensCard(props: AuthScreensCardProps) {
   const authScreens = host?.authScreens ?? {}
 
   return (
-    <CardDisplay header="Sign-in & sign-up pages" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Sign-in & sign-up pages"
+      help={docsHelp('members', {
+        anchor: '#1-the-built-in-sign-in-and-sign-up-pages',
+        excerpt:
+          'Replace the built-in membership forms at /signin, /signup, ' +
+          'and /recover with screens you design.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Design your own membership pages with the Members blocks ' +
           '(Member sign-in, Member sign-up, Password recovery), then ' +

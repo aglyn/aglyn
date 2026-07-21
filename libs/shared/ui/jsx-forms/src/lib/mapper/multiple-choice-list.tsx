@@ -163,6 +163,7 @@ export const MultipleChoiceList = <T extends OptionValue = OptionValue>({
   FormLabelProps = {},
   FormGroupProps = {},
   FormHelperTextProps = {},
+  help,
   FormFieldGridProps = {},
   FormControlLabelProps = {},
   CheckboxProps = {},

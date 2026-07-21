@@ -27,6 +27,8 @@ import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
+import { useHostId } from '../components/host-id-provider'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 
 const DISMISS_KEY = 'aglyn-quota-banner-dismissed'
@@ -53,8 +55,9 @@ interface QuotaState {
  */
 export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
   const params = useParams<{ hostId?: string }>()
-  const hostId = props.hostId ?? params?.hostId
+  const hostId = props.hostId ?? useHostId()
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
   const { org, orgId } = useCurrentOrg()
   const [quotas, setQuotas] = useState<QuotaState[]>([])
   const [dismissed, setDismissed] = useState(true)
@@ -171,7 +174,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
           <Button
             color="inherit"
             size="small"
-            href={buildRoute(Route.MANAGE_BILLING)}
+            href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
           >
             {'Fix payment'}
           </Button>
@@ -205,7 +208,7 @@ export function QuotaWarningsBanner(props: QuotaWarningsBannerProps) {
           <Button
             color="inherit"
             size="small"
-            href={buildRoute(Route.MANAGE_BILLING)}
+            href={buildRoute(Route.MANAGE_BILLING, { orgSlug })}
           >
             {'Upgrade'}
           </Button>

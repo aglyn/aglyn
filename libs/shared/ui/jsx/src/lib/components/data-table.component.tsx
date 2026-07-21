@@ -29,10 +29,12 @@ import {
 import {
   DataGrid,
   type DataGridProps as MuiDataGridProps,
+  type GridColDef as MuiGridColDef,
   GridOverlay,
   type GridOverlayProps,
 } from '@mui/x-data-grid'
 import { forwardRef } from 'react'
+import { HelpTip } from './help-tip.component'
 
 const classKeys = generateComponentClassKeys('DataTableComponent', [
   'label',
@@ -144,6 +146,38 @@ export interface DataTableProps extends Partial<MuiDataGridProps> {
   children?: JSX.Children
 }
 
+/**
+ * Adds a small help affordance to the header of every column that declares a
+ * `description` (AGL-601). Columns with their own `renderHeader` are left
+ * untouched. Also usable directly by call sites that render MUI `DataGrid`
+ * themselves instead of `DataTableComponent`.
+ */
+export function withColumnHelp(
+  columns: readonly MuiGridColDef[],
+): MuiGridColDef[] {
+  return columns.map((column) => {
+    if (!column.description || column.renderHeader) return column
+    return {
+      ...column,
+      renderHeader: () => (
+        <Box
+          component="span"
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+        >
+          <Box component="span" className="MuiDataGrid-columnHeaderTitle">
+            {column.headerName ?? column.field}
+          </Box>
+          <HelpTip
+            excerpt={column.description}
+            ariaLabel={`Help: ${column.headerName ?? column.field}`}
+            sx={{ fontSize: '0.9em' }}
+          />
+        </Box>
+      ),
+    }
+  })
+}
+
 const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
   function RefRenderFn(props, ref) {
     const {
@@ -183,7 +217,7 @@ const DataTableComponent = forwardRef<HTMLElement, DataTableProps>(
         <DataGrid
           sx={{ flexGrow: 1 }}
           rows={rows}
-          columns={columns}
+          columns={withColumnHelp(columns)}
           loading={loading}
           slots={{
             noRowsOverlay: noRowsOverlay(noRowsLabel),

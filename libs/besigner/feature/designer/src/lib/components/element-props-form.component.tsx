@@ -331,7 +331,23 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
             return undefined
         }
       }
-      return (rawAttributes ?? []).map((field) => {
+      // Every described attribute gets a help tooltip beside the field
+      // (AGL-600) — the definition's own description, no docs link since
+      // attributes are component-specific.
+      const withAttributeHelp = <T extends Aglyn.AglynAttributeSchema>(
+        field: T,
+      ): T =>
+        field.description && !field['help']
+          ? {
+              ...field,
+              help: {
+                title: field['label'] ?? field.name,
+                excerpt: field.description,
+              },
+            }
+          : field
+
+      return (rawAttributes ?? []).map(withAttributeHelp).map((field) => {
         if (field.component === Aglyn.FieldComponentType.SCREEN_SELECT) {
           return {
             ...field,

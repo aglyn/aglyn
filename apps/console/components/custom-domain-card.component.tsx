@@ -29,6 +29,7 @@ import {
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -183,7 +184,12 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   }, [firestore, hostId, enqueueSnackbar])
 
   return (
-    <CardDisplay header="Custom domain" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Custom domain"
+      help={docsHelp('connectADomain', { anchor: '#steps' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         {connected ? (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>

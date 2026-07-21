@@ -36,6 +36,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
@@ -131,7 +132,16 @@ export function ErrorScreensCard(props: ErrorScreensCardProps) {
   const errorScreens = host?.errorScreens ?? {}
 
   return (
-    <CardDisplay header="Error pages" contentGutterX contentGutterY>
+    <CardDisplay
+      header="Error pages"
+      help={docsHelp('errorScreens', {
+        excerpt:
+          'Assign a designed screen per status code — the maintenance ' +
+          'toggle shows the 503 screen everywhere while it is on.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Design these like any screen, then assign them here. Assigned ' +
           'screens are kept out of search results.'}

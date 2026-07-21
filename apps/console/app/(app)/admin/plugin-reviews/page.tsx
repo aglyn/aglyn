@@ -34,6 +34,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import adminNavTabItems from '../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -180,6 +181,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
             href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
           },
         ]}
+        help="staffConsole"
         header={{
           children: 'Plugin reviews',
           icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
@@ -196,6 +198,11 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
               <CardDisplay
                 key={entry.listingId}
                 header={`${entry.displayName} v${entry.version}`}
+                help={docsHelp('manifestAndEnvs', {
+                  anchor: '#review--trust-lifecycle',
+                  excerpt:
+                    'Advance this submission through the review lifecycle — list, verify, or reject with a reason. Realm trust is a separate super-staff signing grant.',
+                })}
                 contentGutterX
                 contentGutterY
               >

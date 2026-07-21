@@ -64,6 +64,7 @@ export const Switch = (props: SwitchProps) => {
     meta,
     onText,
     offText,
+    help,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormGroupProps = {},
@@ -85,7 +86,7 @@ export const Switch = (props: SwitchProps) => {
     description
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <FormControl
         required={isRequired}
         error={!!invalid}

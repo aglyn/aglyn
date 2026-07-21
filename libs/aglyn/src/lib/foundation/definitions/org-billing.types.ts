@@ -87,6 +87,8 @@ export interface OrgFeatureFlags {
   actions?: boolean
   /** Outbound/inbound webhooks (AGL-149). */
   webhooks?: boolean
+  /** Customer REST API v1 + API keys (AGL-615); Business tier. */
+  apiAccess?: boolean
   /** Whole-site export/backup + restore (AGL-163). */
   siteExport?: boolean
   /** Multilingual sites (AGL-164): locale variants + switcher. */
@@ -159,6 +161,10 @@ export interface OrgEntitlements {
   emailSendsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
+  /** Included customer REST API requests per calendar month (AGL-634);
+   * beyond it, metered overage per 1,000 where the plan prices it. Only
+   * Business/Advanced carry `apiAccess`, so lower tiers are 0. */
+  apiRequestsPerMonth?: number
   /** Dynamic data caps — org-scoped (AGL-239/240): datasets are shared
    * by every host in the org, so counts and size meter per org. */
   datasetsPerOrg?: number

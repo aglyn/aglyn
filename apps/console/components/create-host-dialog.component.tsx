@@ -94,9 +94,14 @@ export function CreateHostDialog(props: CreateHostDialogProps) {
         variant: 'success',
         persist: false,
       })
-      void router.push(
-        buildRoute(Route.HOST_SETUP, { hostId: payload.hostId }),
-      )
+      // The workspace may have just been auto-created for a first-time user,
+      // so trust the response's orgSlug over the (possibly null) current org.
+      const orgSlug = payload.orgSlug ?? currentOrg?.slug
+      if (orgSlug) {
+        void router.push(
+          buildRoute(Route.HOST_SETUP, { orgSlug, hostId: payload.hostId }),
+        )
+      }
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {

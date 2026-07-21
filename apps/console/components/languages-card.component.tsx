@@ -22,6 +22,7 @@ import { Button, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { deleteField, doc, updateDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -91,7 +92,12 @@ export function LanguagesCard(props: { hostId: string }) {
   }, [org, firestore, hostId, parsed, defaultLocale, enqueueSnackbar])
 
   return (
-    <CardDisplay header={'Languages'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Languages'}
+      help={docsHelp('multilingual')}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
           {'List the languages this site publishes in, then link each ' +

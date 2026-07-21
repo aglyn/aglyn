@@ -24,13 +24,16 @@ import {
   ICON_VARIANT_MODIFY_EDIT,
 } from '@aglyn/shared-data-enums'
 import {
+  HelpTip,
   MdiIcon,
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { docsHelp } from '../constants/docs-links'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
+  Box,
   Button,
   Chip,
   Dialog,
@@ -66,6 +69,8 @@ import { useCallback, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { hasEntitlement } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import { useHostSubdomain } from '../components/host-id-provider'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -91,6 +96,8 @@ export const BesignerVersionsComponent = observer(
   function BesignerVersionsComponent(props: BesignerVersionsProps) {
     const { hostId, parent, versionId, publishedVersionId } = props
     const firestore = useFirestore()
+    const orgSlug = useOrgSlug()
+    const host = useHostSubdomain()
     const router = useRouter()
     const { enqueueSnackbar } = useSnackbar()
     const { queueLoading } = useLoading()
@@ -132,13 +139,13 @@ export const BesignerVersionsComponent = observer(
     const besignerUrl = useCallback(
       (targetVersionId: string) =>
         parent.kind === 'screen'
-          ? buildRoute(Route.SCREEN_BESIGNER, {
-              hostId,
+          ? buildRoute(Route.SCREEN_BESIGNER, { orgSlug, 
+              host,
               screenId: parent.id,
               versionId: targetVersionId,
             })
-          : buildRoute(Route.LAYOUT_BESIGNER, {
-              hostId,
+          : buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
+              host,
               layoutId: parent.id,
               versionId: targetVersionId,
             }),
@@ -472,7 +479,21 @@ export const BesignerVersionsComponent = observer(
               justifyContent: 'space-between',
             }}
           >
-            {'Versions'}
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+            >
+              {'Versions'}
+              <HelpTip
+                {...docsHelp('screens', {
+                  anchor: '#versions--scheduled-publishing',
+                  title: 'Versions & scheduled publishing',
+                  excerpt:
+                    'Every publish creates a version you can view, restore, or schedule to go live at a set time.',
+                })}
+                sx={{ fontSize: '0.7em' }}
+              />
+            </Box>
             <Button
               variant="outlined"
               color="secondary"

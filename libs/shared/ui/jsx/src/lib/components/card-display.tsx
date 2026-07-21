@@ -16,8 +16,10 @@
  */
 
 import { ErrorBoundaryComponent } from './error-boundary.component'
+import { HelpTip, type HelpTipContent } from './help-tip.component'
 import { generateComponentClassKeys, styled } from '@aglyn/shared-ui-theme'
 import {
+  Box,
   Card as MuiCard,
   CardActions as MuiCardActions,
   type CardActionsProps,
@@ -97,6 +99,8 @@ export interface CardDisplayProps extends CardProps {
   subheader?: JSX.Children
   actions?: JSX.Children
   disableContentWrapper?: boolean
+  /** Contextual help affordance rendered beside the header title (AGL-601). */
+  help?: HelpTipContent
   HeaderProps?: CardHeaderProps
   ContentProps?: CardContentProps
   ActionProps?: CardActionsProps
@@ -111,6 +115,7 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
     header,
     subheader,
     disableContentWrapper,
+    help,
     ActionProps,
     HeaderProps,
     ContentProps,
@@ -120,6 +125,23 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
     contentBordered,
     ...rest
   } = props
+
+  const headerTitle =
+    help && header != null ? (
+      <Box
+        component="span"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+      >
+        {header}
+        <HelpTip
+          {...help}
+          title={help.title ?? (typeof header === 'string' ? header : undefined)}
+          sx={{ fontSize: '0.8em', my: -0.5 }}
+        />
+      </Box>
+    ) : (
+      header
+    )
 
   const allBordered = contentBordered === 'all'
   const headerBordered = contentBordered === 'top'
@@ -141,7 +163,7 @@ const CardDisplay = forwardRef<any, CardDisplayProps>((props, ref) => {
       <ErrorBoundaryComponent>
         {header || HeaderProps || subheader ? (
           <MuiCardHeader
-            title={header}
+            title={headerTitle}
             subheader={subheader}
             slotProps={{ title: { variant: 'h6', component: 'div' } }}
             {...HeaderProps}

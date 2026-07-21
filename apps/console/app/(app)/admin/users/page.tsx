@@ -45,6 +45,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -229,6 +230,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
           { children: 'Users', href: buildRoute(Route.ADMIN_USERS) },
         ]}
+        help="staffConsole"
         header={{
           children: 'User Management',
           icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -240,7 +242,16 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
               {'This area requires the staff role.'}
             </Alert>
           ) : (
-            <CardDisplay header={'Accounts'} contentGutterX contentGutterY>
+            <CardDisplay
+              header={'Accounts'}
+              help={docsHelp('staffConsole', {
+                anchor: '#whats-there',
+                excerpt:
+                  'Grant or revoke staff roles and disable accounts — audited, with an exact-email lookup for accounts beyond the loaded pages.',
+              })}
+              contentGutterX
+              contentGutterY
+            >
               <Stack spacing={2}>
                 <Stack
                   direction="row"

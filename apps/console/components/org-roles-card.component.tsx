@@ -38,6 +38,7 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { useOrgScope } from '../hooks/use-org-scope'
 
 interface RoleDraft extends AglynOrgCustomRole {
@@ -121,12 +122,17 @@ export function OrgRolesCard() {
   }
 
   const handleDelete = async (role: RoleDraft & { $id: string }) => {
-    const accepted = await confirm({
-      title: 'Delete role?',
-      description: `Members assigned "${role.name ?? role.$id}" fall back to their org role's default permissions.`,
-      confirmationButtonProps: { color: 'error' },
-    })
-    if (!accepted) return
+    // confirm() resolves on accept and REJECTS on cancel (it carries no
+    // boolean) — so a catch is the cancel path, not a falsy return value.
+    try {
+      await confirm({
+        title: 'Delete role?',
+        description: `Members assigned "${role.name ?? role.$id}" fall back to their org role's default permissions.`,
+        confirmationButtonProps: { color: 'error' },
+      })
+    } catch {
+      return
+    }
     const deleted = await request('POST', {
       action: 'delete',
       roleId: role.$id,
@@ -140,7 +146,12 @@ export function OrgRolesCard() {
   if (!currentOrg || !canManage) return null
 
   return (
-    <CardDisplay header={'Custom roles'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Custom roles'}
+      help={docsHelp('customRoles', { anchor: '#create-a-custom-role' })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'Fine-tune what members can do beyond the four org roles — e.g. ' +

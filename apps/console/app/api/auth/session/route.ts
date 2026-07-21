@@ -20,15 +20,12 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { parseSignedOut, signedOutTombstone } from './session-tombstone'
 
 export const dynamic = 'force-dynamic'
 
 const SESSION_COOKIE = '__session'
 const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
-// Explicit sign-out tombstone (AGL-463): DELETE must be distinguishable
-// from "never minted", or every raced/expired mint reads as a
-// cross-subdomain sign-out and force-logs-out a valid local session.
-const SESSION_SIGNED_OUT = 'signed-out'
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.io'
 
 /**
@@ -145,9 +142,15 @@ async function handler(request: Request): Promise<Response> {
           { status: 401 },
         )
       }
-      if (cookie === SESSION_SIGNED_OUT) {
+      // Timestamped sign-out tombstone (AGL-624): return WHEN the sign-out
+      // happened so a restoring client can distinguish a real remote
+      // sign-out (newer than its own last sign-in) from a stale tombstone
+      // left by an earlier sign-out whose re-login mint failed/raced — the
+      // latter must heal, not force a logout on refresh.
+      const tombstone = parseSignedOut(cookie)
+      if (tombstone) {
         return Response.json(
-          { error: 'Signed out', reason: 'signed-out' },
+          { error: 'Signed out', reason: 'signed-out', signedOutAt: tombstone.at },
           { status: 401 },
         )
       }
@@ -193,12 +196,14 @@ async function handler(request: Request): Promise<Response> {
     }
 
     if (request.method === 'DELETE') {
-      // Tombstone, not deletion: other subdomains read this as "signed out
-      // elsewhere", while a truly absent cookie no longer signs anyone out.
+      // Timestamped tombstone, not deletion (AGL-463/AGL-624): other
+      // subdomains read this as "signed out elsewhere" — but only if the
+      // sign-out is newer than their last sign-in — while a truly absent
+      // cookie no longer signs anyone out.
       return jsonWithCookie(
         { ok: true },
         200,
-        `${SESSION_COOKIE}=${SESSION_SIGNED_OUT}; ${cookieAttributes(request, SESSION_TTL_MS / 1000)}`,
+        `${SESSION_COOKIE}=${signedOutTombstone(Date.now())}; ${cookieAttributes(request, SESSION_TTL_MS / 1000)}`,
       )
     }
 

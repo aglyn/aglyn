@@ -23,6 +23,7 @@ import {
 } from '@aglyn/shared-ui-jsx-forms'
 import type { FormSchema } from '@aglyn/shared-ui-jsx-forms'
 import { forwardRef, useCallback } from 'react'
+import { besignerDocsUrl } from '../utils/docs-help'
 import CloseableDrawerComponent, {
   type CloseableDrawerProps,
 } from './closeable-drawer.component'
@@ -35,6 +36,12 @@ const formSchema: FormSchema = {
       label: 'Page Title',
       description:
         'The page title will show in the browser tab. Additionally, will be the default text used in search results.',
+      help: {
+        title: 'Page title (SEO)',
+        excerpt:
+          'Shows in the browser tab and as the headline in search results and social cards.',
+        href: besignerDocsUrl('seo', '#per-screen-seo'),
+      },
     },
     {
       component: FieldComponentType.TEXT_FIELD,
@@ -42,6 +49,12 @@ const formSchema: FormSchema = {
       label: 'Page Description',
       description:
         'The page description will be the default text used in search results.',
+      help: {
+        title: 'Page description (SEO)',
+        excerpt:
+          'The summary search engines and social cards show beneath the title for this screen.',
+        href: besignerDocsUrl('seo', '#per-screen-seo'),
+      },
     },
   ],
 }

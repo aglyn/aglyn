@@ -17,6 +17,7 @@
 
 import { FieldComponentType } from '@aglyn/aglyn'
 import { SX_SCHEME_DARK_KEY, type SxScheme } from '@aglyn/aglyn-node-renderer'
+import { besignerDocsUrl } from './docs-help'
 import { readSxValue, type SxBreakpoint, writeSxValue } from './responsive-sx'
 
 /**
@@ -36,6 +37,26 @@ export interface StyleFieldGroup {
   $id: string
   label: string
   fields: Array<Record<string, unknown> & { name: string }>
+}
+
+/** Give every described style field a help tooltip (AGL-600): the field's
+ * own description plus a deep link into the responsive-styling docs. */
+function withStyleFieldHelp(group: StyleFieldGroup): StyleFieldGroup {
+  return {
+    ...group,
+    fields: group.fields.map((field) =>
+      field['description'] && !field['help']
+        ? {
+            ...field,
+            help: {
+              title: field['label'] ?? field.name,
+              excerpt: field['description'],
+              href: besignerDocsUrl('responsiveStyling', '#style-groups'),
+            },
+          }
+        : field,
+    ),
+  }
 }
 
 const textField = (

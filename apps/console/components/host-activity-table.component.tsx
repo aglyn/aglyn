@@ -38,6 +38,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 
 export interface HostActivityTableProps {
   hostId: string
@@ -100,6 +101,12 @@ export function HostActivityTable(props: HostActivityTableProps) {
   return (
     <CardDisplay
       header={'Activity'}
+      help={docsHelp('inviteTeammates', {
+        anchor: '#activity-log',
+        excerpt:
+          'Every change made to this site in the console — who did ' +
+          'what, and when.',
+      })}
       contentGutterX
       contentGutterY
       contentBordered="all"

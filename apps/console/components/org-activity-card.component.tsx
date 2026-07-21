@@ -29,6 +29,7 @@ import {
 import { collection, limit, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
 export interface OrgActivityCardProps {
@@ -96,6 +97,12 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   return (
     <CardDisplay
       header={header}
+      help={docsHelp('inviteTeammates', {
+        anchor: '#activity-log',
+        excerpt:
+          'Who changed what in this organization — settings, members, ' +
+          'invites, and site-level changes.',
+      })}
       contentGutterX
       contentGutterY
       contentBordered="all"

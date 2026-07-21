@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 
 /**
  * Save-as-template (AGL-137): publishes this host's published screens +
@@ -92,7 +93,14 @@ export function SiteTemplateCard(props: { hostId: string }) {
   }, [name, description, category, price, busy, user, hostId, enqueueSnackbar])
 
   return (
-    <CardDisplay header={'Site template'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Site template'}
+      help={docsHelp('saveATemplate', {
+        anchor: '#save-your-site-as-a-template',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
           {'Publish this site — every published screen plus the theme — ' +

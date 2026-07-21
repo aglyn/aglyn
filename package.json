@@ -61,6 +61,8 @@
     "postinstall": "patch-package",
     "test:rules": "bash tools/scripts/test-rules.sh",
     "test:eslint-rules": "node tools/eslint-rules/no-plan-gated-entitlement.test.mjs",
+    "generate:docs-help": "node tools/scripts/generate-docs-help.mjs",
+    "generate:docs-help:check": "node tools/scripts/generate-docs-help.mjs --check",
     "typecheck": "node tools/scripts/typecheck.mjs"
   },
   "dependencies": {

@@ -34,6 +34,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { docsHelp } from '../constants/docs-links'
 import { useReleaseFlags } from '../hooks/use-release-flags'
 
 export interface OrgPluginsCardProps {
@@ -87,7 +88,19 @@ export default function OrgPluginsCard(props: OrgPluginsCardProps) {
   }
 
   return (
-    <CardDisplay header="Plugins" contentGutterX contentGutterY sx={{ mt: 3 }}>
+    <CardDisplay
+      header="Plugins"
+      help={docsHelp('plugins', {
+        anchor: '#how-plugins-run',
+        excerpt:
+          'Choose which plugins this workspace loads — disabled plugins ' +
+          'disappear from navigation, the editor, published sites, and the ' +
+          'API.',
+      })}
+      contentGutterX
+      contentGutterY
+      sx={{ mt: 3 }}
+    >
       <Stack spacing={1} sx={{ maxWidth: 560 }}>
         <Typography variant="body2" color="text.secondary">
           {'Choose which plugins this workspace loads. Disabled plugins ' +

@@ -49,11 +49,12 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgHosts } from '../hooks/use-org-hosts'
-import { useOrgScope } from '../hooks/use-org-scope'
+import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 
 const ASSIGNABLE_ROLES: OrgRole[] = ['admin', 'editor', 'viewer']
 const HOST_ROLE_OPTIONS: Array<HostAccessRole | 'none'> = [
@@ -81,6 +82,7 @@ interface AccessDraft {
 export function OrgMembersCard() {
   const { data: user } = useUser()
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -191,6 +193,12 @@ export function OrgMembersCard() {
   return (
     <CardDisplay
       header={`Organization members — ${currentOrg.orgName ?? currentOrg.$id}`}
+      help={docsHelp('inviteTeammates', {
+        anchor: '#invite-someone',
+        excerpt:
+          'Add or invite people by email, set org and custom roles, and ' +
+          'limit editors and viewers to specific sites.',
+      })}
       contentGutterX
       contentGutterY
     >
@@ -270,7 +278,7 @@ export function OrgMembersCard() {
                 <TableCell>
                   {/* Member detail page (AGL-364). */}
                   <MuiLink
-                    href={buildRoute(Route.MANAGE_TEAM_MEMBER, {
+                    href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug, 
                       uid: member.$id,
                     })}
                     color="inherit"
@@ -398,15 +406,24 @@ export function OrgMembersCard() {
                         void confirm({
                           title: 'Remove member?',
                           description: `${member.email ?? member.$id} loses access to every site in this organization.`,
-                        }).then(async (accepted) => {
-                          if (!accepted) return
-                          const ok = await request('/api/orgs/members', 'POST', {
-                            orgId,
-                            action: 'remove',
-                            uid: member.$id,
-                          })
-                          if (ok) await refresh()
                         })
+                          // confirm() resolves on accept and REJECTS on
+                          // cancel — the catch is the cancel path.
+                          .then(async () => {
+                            const ok = await request(
+                              '/api/orgs/members',
+                              'POST',
+                              {
+                                orgId,
+                                action: 'remove',
+                                uid: member.$id,
+                              },
+                            )
+                            if (ok) await refresh()
+                          })
+                          .catch(() => {
+                            // Cancelled — nothing to do.
+                          })
                       }
                     >
                       {'Remove'}

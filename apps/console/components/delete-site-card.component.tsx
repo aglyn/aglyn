@@ -22,6 +22,7 @@ import { Button, Stack, TextField, Typography } from '@mui/material'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useHost, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 
 /**
  * Delete site (AGL-488): site-admin-only. A single site is deleted
@@ -87,7 +88,17 @@ export function DeleteSiteCard(props: { hostId: string }) {
   }
 
   return (
-    <CardDisplay header={'Delete site'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Delete site'}
+      help={docsHelp('downgradingAndCanceling', {
+        anchor: '#deleting-a-single-site',
+        excerpt:
+          'Deleting a site is immediate and permanent — export a backup ' +
+          'first if you might want it back.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2} sx={{ maxWidth: 480 }}>
         <Typography variant="body2" color="text.secondary">
           {'Permanently delete this site — its screens, media, and settings. ' +

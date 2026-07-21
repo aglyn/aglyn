@@ -16,135 +16,127 @@
  */
 'use client'
 
-import { generateOrgSlug } from '@aglyn/aglyn'
 import {
-  ICON_VARIANT_MENU_DOWN, ICON_VARIANT_ORGANIZATION,
-  ICON_VARIANT_SYMBOL_SECURE,
+  ICON_VARIANT_MENU_DOWN,
+  ICON_VARIANT_MODIFY_ADD,
+  ICON_VARIANT_ORGANIZATION,
+  ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
-import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Avatar,
+  Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
+  Chip,
   Divider,
-  InputAdornment,
+  ListItemIcon,
   ListItemText,
   Menu,
   MenuItem,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
 import useCurrentOrg from '../hooks/use-current-org'
+import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
+import CreateOrgDialog from './create-org-dialog.component'
+import SwitcherSearchField from './switcher-search-field.component'
 
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.io'
 
+const titleCase = (value?: string) =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : ''
+
 /**
- * Slack-style organization switcher (AGL-236), rendered in the secondary
- * app bar. Switching scopes the console to that org (persisted locally);
- * once wildcard workspace subdomains are live the menu will navigate to
- * {slug}.aglyn.io instead.
+ * Organization switcher (AGL-236/AGL-621; AGL-629 Vercel team-switcher UI).
+ * The button shows the current workspace; the dropdown filters the user's
+ * orgs, marks the current one with a check, and offers a create row.
+ * Switching NAVIGATES to the other org's URL — the URL is the source of truth,
+ * so there is no local selection to race and snap back (the old switch-bounce).
+ * On the apex that is `/[orgSlug]/hosts`; on a workspace subdomain it is the
+ * other org's subdomain (the session cookie signs it in silently).
  */
 export function OrgSwitcherNav() {
-  const { data: user } = useUser()
-  const { orgs, currentOrg, selectOrg, orgSlug } = useOrgScope()
-  // Org logo (AGL-363) — replaces the generic building icon when set.
+  const { orgs, currentOrg, orgSlug } = useOrgScope()
+  // The full current-org doc carries the logo (AGL-363) and plan for the badge.
   const { org } = useCurrentOrg()
   const logoUrl = (org as any)?.logoUrl as string | undefined
+  const plan = (org as any)?.plan as string | undefined
   const router = useRouter()
-  const { enqueueSnackbar } = useSnackbar()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)
-  const [name, setName] = useState('')
-  const [slug, setSlug] = useState('')
-  const [slugTouched, setSlugTouched] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
+  // Each org's billing tier for the row badges — read only while the menu is
+  // open (AGL-631). The current org's plan comes straight from useCurrentOrg.
+  const plans = useOrgPlans(
+    orgs.map((item) => item.$id),
+    Boolean(anchor),
+  )
 
-  const handleCreate = async () => {
-    if (!name.trim() || busy) return
-    setBusy(true)
-    try {
-      const idToken = await (user as any)?.getIdToken?.()
-      const response = await fetch('/api/orgs/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({ name: name.trim(), slug: slug.trim() }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload?.orgId) {
-        enqueueSnackbar(payload?.error ?? 'Creating the organization failed', {
-          variant: response.status === 409 ? 'warning' : 'error',
-        })
-        return
-      }
-      enqueueSnackbar(`Created "${name.trim()}"`, { variant: 'success' })
-      // Land in the new workspace, not on the previous org's pages —
-      // from a subdomain that means the new org's own subdomain.
-      if (orgSlug && slug) {
-        window.location.assign(
-          `https://${slug}.${WORKSPACE_DOMAIN}` +
-            buildRoute(Route.HOST_LIST),
-        )
-        return
-      }
-      selectOrg(payload.orgId)
-      void router.push(buildRoute(Route.HOST_LIST))
-      setCreating(false)
-      setName('')
-      setSlug('')
-      setSlugTouched(false)
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('Creating the organization failed', { variant: 'error' })
-    } finally {
-      setBusy(false)
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return orgs
+    return orgs.filter((item) =>
+      [item.orgName, item.slug, item.$id].some((field) =>
+        field?.toLowerCase().includes(needle),
+      ),
+    )
+  }, [orgs, query])
+
+  const close = () => {
+    setAnchor(null)
+    setQuery('')
+  }
+
+  const switchTo = (item: (typeof orgs)[number]) => {
+    close()
+    if (item.$id === currentOrg?.$id || !item.slug) return
+    const href = buildRoute(Route.HOST_LIST, { orgSlug: item.slug })
+    // On a workspace subdomain the org IS the hostname, so switching means
+    // moving to the other org's subdomain; on the apex it is a client
+    // navigation. Either way the URL drives the scope.
+    if (orgSlug) {
+      window.location.assign(`https://${item.slug}.${WORKSPACE_DOMAIN}${href}`)
+      return
     }
+    router.push(href)
   }
 
   if (!currentOrg) return null
+  const currentBadge = titleCase(plan) || titleCase(currentOrg.role)
+
+  const orgAvatar = (url?: string) =>
+    url ? (
+      <Avatar src={url} variant="rounded" sx={{ width: 22, height: 22 }} />
+    ) : (
+      <Avatar
+        variant="rounded"
+        sx={{ width: 22, height: 22, bgcolor: 'primary.main' }}
+      >
+        <MdiIcon path={ICON_VARIANT_ORGANIZATION.path} fontSize="small" />
+      </Avatar>
+    )
 
   return (
     <>
       <Tooltip title={`Workspace: ${currentOrg.orgName ?? currentOrg.$id}`}>
         <Button
           size="small"
-          variant="contained"
-          color="primary"
+          variant="text"
+          color="inherit"
           onClick={(event) => setAnchor(event.currentTarget)}
-          startIcon={
-            logoUrl ? (
-              <Avatar
-                src={logoUrl}
-                variant="rounded"
-                sx={{ width: 18, height: 18 }}
-              />
-            ) : (
-              <MdiIcon
-                path={ICON_VARIANT_ORGANIZATION.path}
-                fontSize={'small'}
-              />
-            )
-          }
+          startIcon={orgAvatar(logoUrl)}
           endIcon={
             <MdiIcon path={ICON_VARIANT_MENU_DOWN.path} fontSize="small" />
           }
           sx={{
-            maxWidth: 240,
+            maxWidth: 280,
             textTransform: 'none',
-            '& .MuiButton-endIcon': { marginLeft: 0 },
-            '& .MuiButton-endIcon>*:nth-of-type(1)': { fontSize: `1.7em` },
+            gap: 0.5,
+            '& .MuiButton-endIcon': { marginLeft: 0.25 },
           }}
         >
           <Typography
@@ -154,116 +146,126 @@ export function OrgSwitcherNav() {
           >
             {currentOrg.orgName ?? currentOrg.slug ?? currentOrg.$id}
           </Typography>
+          {currentBadge ? (
+            <Chip
+              label={currentBadge}
+              size="small"
+              variant="outlined"
+              sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }}
+            />
+          ) : null}
         </Button>
       </Tooltip>
       <Menu
         anchorEl={anchor}
         open={Boolean(anchor)}
-        onClose={() => setAnchor(null)}
+        onClose={close}
+        autoFocus={false}
+        slotProps={{
+          list: { autoFocusItem: false, sx: { pt: 0 } },
+          paper: { sx: { width: 320, maxWidth: '90vw', mt: 0.5 } },
+        }}
       >
-        {orgs.map((org) => (
-          <MenuItem
-            key={org.$id}
-            selected={org.$id === currentOrg.$id}
-            onClick={() => {
-              setAnchor(null)
-              if (org.$id === currentOrg.$id) return
-              // On a workspace subdomain the org IS the hostname, so
-              // switching means moving to the other org's subdomain —
-              // the session cookie signs it in silently (AGL-236).
-              if (orgSlug && org.slug) {
-                window.location.assign(
-                  `https://${org.slug}.${WORKSPACE_DOMAIN}` +
-                    buildRoute(Route.HOST_LIST),
-                )
-                return
-              }
-              // Apex: re-scope in place and leave any page from the
-              // previous org (Slack semantics).
-              selectOrg(org.$id)
-              void router.push(buildRoute(Route.HOST_LIST))
-            }}
-          >
-            <ListItemText
-              primary={org.orgName ?? org.$id}
-              secondary={
-                org.slug
-                  ? `${org.slug}.${WORKSPACE_DOMAIN} · ${org.role}`
-                  : org.role
-              }
-            />
-          </MenuItem>
-        ))}
+        <SwitcherSearchField
+          value={query}
+          onChange={setQuery}
+          placeholder="Find organization…"
+        />
+        <Divider />
+        <Box sx={{ maxHeight: 280, overflowY: 'auto', py: 0.5 }}>
+          {filtered.length === 0 ? (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ px: 2, py: 1.5 }}
+            >
+              {'No organizations match.'}
+            </Typography>
+          ) : (
+            filtered.map((item) => {
+              const isCurrent = item.$id === currentOrg.$id
+              // Billing tier, like the button — the current org's plan is
+              // known immediately, others resolve as the reads land.
+              const tier = titleCase(
+                plans[item.$id] ?? (isCurrent ? plan : undefined),
+              )
+              return (
+                <MenuItem
+                  key={item.$id}
+                  selected={isCurrent}
+                  onClick={() => switchTo(item)}
+                  sx={{ gap: 1 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 0 }}>
+                    {orgAvatar(isCurrent ? logoUrl : undefined)}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.orgName ?? item.slug ?? item.$id}
+                    secondary={
+                      item.slug
+                        ? `${item.slug}.${WORKSPACE_DOMAIN}`
+                        : undefined
+                    }
+                    slotProps={{
+                      primary: { noWrap: true },
+                      secondary: { noWrap: true, variant: 'caption' },
+                    }}
+                  />
+                  {tier ? (
+                    <Chip
+                      label={tier}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        height: 20,
+                        '& .MuiChip-label': { px: 0.75, fontSize: 11 },
+                      }}
+                    />
+                  ) : null}
+                  {isCurrent ? (
+                    <MdiIcon
+                      path={ICON_VARIANT_SYMBOL_CONFIRMED.path}
+                      fontSize="small"
+                      sx={{ color: 'text.secondary' }}
+                    />
+                  ) : null}
+                </MenuItem>
+              )
+            })
+          )}
+        </Box>
         <Divider />
         <MenuItem
-          component={AppLink as any}
-          {...({ componentVariant: 'naked' } as any)}
-          href={buildRoute(Route.MANAGE_TEAM)}
-          onClick={() => setAnchor(null)}
-        >
-          {'Manage organization…'}
-        </MenuItem>
-        <MenuItem
           onClick={() => {
-            setAnchor(null)
+            close()
             setCreating(true)
           }}
+          sx={{ gap: 1, py: 1 }}
         >
-          {'Create organization…'}
+          <ListItemIcon sx={{ minWidth: 0 }}>
+            <Avatar
+              variant="rounded"
+              sx={{
+                width: 22,
+                height: 22,
+                bgcolor: 'action.hover',
+                color: 'text.secondary',
+              }}
+            >
+              <MdiIcon path={ICON_VARIANT_MODIFY_ADD.path} fontSize="small" />
+            </Avatar>
+          </ListItemIcon>
+          <ListItemText
+            primary="Create organization"
+            secondary="Own sites and share media, data & billing"
+            slotProps={{
+              primary: { variant: 'body2' },
+              secondary: { variant: 'caption' },
+            }}
+          />
         </MenuItem>
       </Menu>
-      <Dialog
-        open={creating}
-        onClose={() => (busy ? null : setCreating(false))}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>{'Create an organization'}</DialogTitle>
-        <DialogContent
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            {'Organizations own sites and share media, data, plugins and ' +
-              'billing across them. You become the owner.'}
-          </Typography>
-          <TextField
-            label="Organization name"
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value)
-              if (!slugTouched) setSlug(generateOrgSlug(event.target.value))
-            }}
-            autoFocus
-          />
-          <TextField
-            label="Workspace URL"
-            value={slug}
-            onChange={(event) => {
-              setSlug(event.target.value.toLowerCase())
-              setSlugTouched(true)
-            }}
-            slotProps={{
-              input: {
-                endAdornment: (
-                  <InputAdornment position="end">{`.${WORKSPACE_DOMAIN}`}</InputAdornment>
-                ),
-              },
-            }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={busy} onClick={() => setCreating(false)}>
-            {'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={busy || !name.trim()}
-            onClick={() => void handleCreate()}
-          >
-            {busy ? 'Creating…' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <CreateOrgDialog open={creating} onClose={() => setCreating(false)} />
     </>
   )
 }

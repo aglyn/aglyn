@@ -53,6 +53,7 @@ export const DatePicker = (props: DatePickerProps) => {
     description,
     validateOnMount,
     meta,
+    help,
     FormFieldGridProps = {},
     DatePickerProps = {},
     ...rest
@@ -61,7 +62,7 @@ export const DatePicker = (props: DatePickerProps) => {
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <MuiDatePicker
         slotProps={{
           textField: {

@@ -43,6 +43,7 @@ import AuthenticatedLayout from '../../../../../components/layouts/authenticated
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 
@@ -227,6 +228,11 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header="Identity"
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          "The account's auth state and staff role, with audited identity edits. Impersonation replaces your session with this account.",
+                      })}
                       contentGutterX
                       contentGutterY
                     >
@@ -350,6 +356,11 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header="Organizations"
+                      help={docsHelp('architectureMultiTenancy', {
+                        anchor: '#membership-lifecycle',
+                        excerpt:
+                          'Every organization this account belongs to, with its role and per-site access.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >
@@ -430,6 +441,11 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header="Recent audit trail"
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'Audited staff actions performed by or on this account — the full record lives on the Audit log page.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >

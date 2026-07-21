@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost } from '@aglyn/tenant-feature-instance'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
+import { docsHelp } from '../constants/docs-links'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface FaviconCardProps {
@@ -44,7 +45,17 @@ export function FaviconCard(props: FaviconCardProps) {
   const favicon = data?.seo?.favicon
 
   return (
-    <CardDisplay header={'Favicon'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Favicon'}
+      help={docsHelp('media', {
+        excerpt:
+          'The small icon browsers show in tabs and bookmarks — pick an ' +
+          '.ico or .png from your media library, or paste a URL in the ' +
+          'SEO form.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
         {favicon ? (
           <Box

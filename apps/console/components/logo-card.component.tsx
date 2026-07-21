@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHost } from '@aglyn/tenant-feature-instance'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
+import { docsHelp } from '../constants/docs-links'
 import MediaPickerDialog from './media/media-picker-dialog.component'
 
 export interface LogoCardProps {
@@ -44,7 +45,16 @@ export function LogoCard(props: LogoCardProps) {
   const logoUrl = data?.logoUrl
 
   return (
-    <CardDisplay header={'Site logo'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Site logo'}
+      help={docsHelp('media', {
+        excerpt:
+          "Your site's brand mark, picked from the media library — " +
+          'shown while pages load on your live site.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         {'Shown while pages load on your live site. Without a logo, the ' +
           'site name is shown instead.'}

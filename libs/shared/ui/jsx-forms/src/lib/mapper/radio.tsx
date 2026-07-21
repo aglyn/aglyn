@@ -128,6 +128,7 @@ export function Radio<T = OptionValue>({ name, ...props }: RadioProps<T>) {
     isReadOnly,
     meta,
     validateOnMount,
+    help,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormLabelProps = {},
@@ -149,7 +150,7 @@ export function Radio<T = OptionValue>({ name, ...props }: RadioProps<T>) {
     description
 
   return (
-    <StyledFormFieldGrid className={classes.grid} {...FormFieldGridProps}>
+    <StyledFormFieldGrid className={classes.grid} help={help} {...FormFieldGridProps}>
       <FormControl
         required={isRequired}
         error={!!invalid}

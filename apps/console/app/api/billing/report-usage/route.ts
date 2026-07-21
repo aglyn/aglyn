@@ -17,7 +17,10 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
-import { checkDataStorageQuota } from '@aglyn/aglyn/server'
+import {
+  checkApiRequestQuota,
+  checkDataStorageQuota,
+} from '@aglyn/aglyn/server'
 import {
   estimateMonthlyUsageCost,
   type HostUsageSnapshot,
@@ -164,8 +167,16 @@ async function handler(request: Request): Promise<Response> {
         orgSnapshot.data() as any,
         dataStorageMb,
       )
+      // Customer REST API request overage (AGL-635): plan-priced per 1,000
+      // requests over the included quota, metered like dataset storage. The
+      // durable counter is written per-request by the API auth chokepoint.
+      const apiUsageSnap = await orgRef.collection('apiUsage').doc(month).get()
+      const apiRequests = Number(apiUsageSnap.get('count') ?? 0)
+      const apiQuota = checkApiRequestQuota(orgSnapshot.data() as any, apiRequests)
       const billedCents =
-        estimate.billedCents + Math.round(dataQuota.overageMonthlyUsd * 100)
+        estimate.billedCents +
+        Math.round(dataQuota.overageMonthlyUsd * 100) +
+        Math.round(apiQuota.overageMonthlyUsd * 100)
       const usageRef = orgRef.collection('usage').doc(month)
       const existing = await usageRef.get()
       if (existing.get('reportedAt')) {
@@ -208,6 +219,8 @@ async function handler(request: Request): Promise<Response> {
           costUsd: estimate.costUsd,
           dataStorageMb,
           dataOverageUsd: dataQuota.overageMonthlyUsd,
+          apiRequests,
+          apiOverageUsd: apiQuota.overageMonthlyUsd,
           billedCents,
           computedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           ...(reported && {

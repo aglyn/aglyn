@@ -254,6 +254,14 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         `${Math.round(entitlements.dataStorageMbPerOrg / 1024)} GB data`
                       : 'No datasets'}
                   </Typography>
+                  <Typography variant="body2">
+                    {entitlements.apiRequestsPerMonth > 0
+                      ? `${entitlements.apiRequestsPerMonth.toLocaleString()} API requests/mo` +
+                        (pricing.extraApiRequestsUsdPer1k != null
+                          ? ` (+$${pricing.extraApiRequestsUsdPer1k}/1k over)`
+                          : '')
+                      : 'No API access'}
+                  </Typography>
                 </Stack>
                 <Stack spacing={0.5}>
                   {FEATURE_ROWS.map(({ key, label }) => {

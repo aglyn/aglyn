@@ -24,25 +24,29 @@
  * is exactly the regression these assertions catch.
  */
 
+// Org- and host-scoped pages live under /[orgSlug]/… and
+// /[orgSlug]/hosts/[host]/… now (AGL-621/622). The seed provisions org slug
+// `e2e-bakery` with host subdomain `demo`.
+const ORG = '/e2e-bakery'
+const HOST = '/e2e-bakery/hosts/demo'
 const PAGES = [
   '/signin',
   '/signup',
-  '/hosts',
-  '/org', // redirects to /org/team — must never fall into [hostId]
-  '/org/team',
-  '/org/media',
-  '/org/billing',
-  '/org/community',
-  '/org/support',
-  '/org/settings',
-  '/manage/team', // legacy redirect
+  `${ORG}/hosts`,
+  ORG, // org home → redirects to its sites
+  `${ORG}/team`,
+  `${ORG}/media`,
+  `${ORG}/billing`,
+  `${ORG}/community`,
+  `${ORG}/support`,
+  `${ORG}/settings`,
   '/admin/flags',
   '/admin/overview',
   '/admin/orgs',
   '/admin/tenants', // legacy redirect to /admin/orgs
-  '/somehost/media',
-  '/somehost/contacts',
-  '/somehost/community',
+  `${HOST}/media`,
+  `${HOST}/components`,
+  `${HOST}/content`,
 ]
 
 // route → expected status for an unauthenticated GET.

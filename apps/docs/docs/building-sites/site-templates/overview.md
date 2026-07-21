@@ -60,8 +60,9 @@ appear once you add profile URLs.
 - Publish a **blog** with rich entries (images, preview, scheduling) and an **RSS** feed.
 - Use **entry-template screens** with `{{entry.*}}` bindings to render each collection item.
 
-:::note More detailed how-tos coming
-Guides for building a blog and saving your own template are on the way.
+:::tip How-tos
+- [Build a blog](build-a-blog.md)
+- [Save & share a template](save-a-template.md)
 :::
 
 ## Related

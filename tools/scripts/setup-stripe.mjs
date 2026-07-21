@@ -230,6 +230,64 @@ const eventCalendarAddon = await ensureAddonPair({
 env['STRIPE_PRICE_EVENT_CALENDAR'] = eventCalendarAddon.monthly.id
 env['STRIPE_PRICE_EVENT_CALENDAR_YEARLY'] = eventCalendarAddon.yearly.id
 
+// Usage-based billing meter (AGL-635). The report-usage cron posts
+// `billing/meter_events` (event_name aglyn_metered_usage) carrying the
+// month's billed cents; this provisions the Meter that sums them and a
+// metered Price that turns each aggregated unit into 1¢ on the invoice. Both
+// dataset-storage overage and customer-API-request overage ride this one
+// meter. (Attaching the metered price to each org's subscription as a usage
+// item — so overage actually lands on the invoice — is done at checkout/
+// subscription creation, not here.)
+const METER_EVENT_NAME = 'aglyn_metered_usage'
+async function ensureMeter() {
+  const list = await stripe('billing/meters?limit=100')
+  const existing = (list.data ?? []).find(
+    (m) => m.event_name === METER_EVENT_NAME && m.status === 'active',
+  )
+  if (existing) {
+    console.log(`= meter ${METER_EVENT_NAME} already exists (${existing.id})`)
+    return existing
+  }
+  const meter = await stripe('billing/meters', {
+    display_name: 'Aglyn metered usage',
+    event_name: METER_EVENT_NAME,
+    'default_aggregation[formula]': 'sum',
+    'value_settings[event_payload_key]': 'value',
+    'customer_mapping[type]': 'by_id',
+    'customer_mapping[event_payload_key]': 'stripe_customer_id',
+  })
+  console.log(`+ created meter ${METER_EVENT_NAME} (${meter.id})`)
+  return meter
+}
+const meter = await ensureMeter()
+env['STRIPE_METER_ID'] = meter.id
+env['STRIPE_METER_EVENT_NAME'] = METER_EVENT_NAME
+
+// A metered price on that meter: the posted value is already in cents, so
+// 1¢ per aggregated unit reproduces the billed amount exactly.
+const meteredExisting = await findPriceByLookupKey('aglyn_metered_usage')
+let meteredPrice = meteredExisting
+if (!meteredPrice) {
+  const product = await stripe('products', {
+    name: 'Aglyn metered usage',
+    'metadata[plan]': 'metered',
+  })
+  meteredPrice = await stripe('prices', {
+    product: product.id,
+    currency: 'usd',
+    unit_amount: '1',
+    'recurring[interval]': 'month',
+    'recurring[usage_type]': 'metered',
+    'recurring[meter]': meter.id,
+    lookup_key: 'aglyn_metered_usage',
+    'metadata[plan]': 'metered',
+  })
+  console.log(`+ created metered price (${meteredPrice.id})`)
+} else {
+  console.log(`= metered price already exists (${meteredExisting.id})`)
+}
+env['STRIPE_PRICE_METERED'] = meteredPrice.id
+
 console.log('\nAdd these to the console app environment:\n')
 for (const [key, value] of Object.entries(env)) {
   console.log(`${key}=${value}`)

@@ -60,6 +60,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import manageNavTabItems from '../../../../constants/manage-nav-tabs'
 import MainLayout from '../../../../components/layouts/main.layout'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -210,6 +211,12 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <CardDisplay
             header={'All notifications'}
+            help={docsHelp('consoleTour', {
+              anchor: '#workspace-settings--notifications',
+              excerpt:
+                'Every console notification, newest first — mark all read ' +
+                "and mute the categories you don't want.",
+            })}
             contentGutterX
             contentGutterY
             contentBordered="all"

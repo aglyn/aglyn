@@ -25,6 +25,21 @@ const TENANT_PREVIEW_HOST =
   process.env.NEXT_PUBLIC_AGLYN_TENANT_PREVIEW_HOST ||
   'tenant-aglyn-app-git-main-zach-govers-projects.vercel.app'
 
+/**
+ * The site's public address for display (AGL-632): its custom domain when
+ * connected, otherwise the assigned Aglyn subdomain (`{subdomain}.aglyn.app`).
+ * Always the production domain — this is a label, not a live link.
+ */
+export function hostDisplayDomain(
+  host: { cname?: string; subdomain?: string } | undefined,
+): string | undefined {
+  if (!host) return undefined
+  return (
+    host.cname ||
+    (host.subdomain ? `${host.subdomain}.${TENANT_PRODUCTION_ROOT}` : undefined)
+  )
+}
+
 export function isPreviewConsole(hostname: string): boolean {
   return (
     hostname.endsWith('.vercel.app') ||

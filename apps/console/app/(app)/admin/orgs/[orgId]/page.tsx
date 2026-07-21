@@ -59,6 +59,7 @@ import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
@@ -439,6 +440,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={'Summary'}
+                        help={docsHelp('staffConsole', {
+                          anchor: '#whats-there',
+                          excerpt:
+                            'Plan, subscription, and suspension state at a glance. Impersonating the owner replaces your session and is audited.',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -519,6 +525,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       // Direct editing (AGL-358).
                       <CardDisplay
                         header={'Edit organization'}
+                        help={docsHelp('team', {
+                          anchor: '#organizations',
+                          excerpt:
+                            'Rename the organization, update its logo and contact details, or transfer ownership to another member — audited to the org activity log.',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -642,6 +653,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={`Sites (${(hostDocs ?? []).length})`}
+                        help={docsHelp('architectureMultiTenancy', {
+                          anchor: '#data-model',
+                          excerpt:
+                            'Every site (host) this organization owns — open one for its staff detail page with usage and subdomain controls.',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -698,6 +714,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={`Members (${(memberDocs ?? []).length})`}
+                        help={docsHelp('architectureMultiTenancy', {
+                          anchor: '#membership-lifecycle',
+                          excerpt:
+                            "The organization's member roster with each person's role and whether they can reach all sites.",
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -750,6 +771,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={'Effective entitlements'}
+                        help={docsHelp('billing', {
+                          anchor: '#tiers--entitlements',
+                          excerpt:
+                            'Resolved limits after plan defaults and per-org overrides, with current usage against each cap. Overrides are edited on the Organizations page.',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -820,6 +846,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={'Billing history & payment method'}
+                        help={docsHelp('billing', {
+                          anchor: '#payments',
+                          excerpt:
+                            "The organization's Stripe invoice history and default payment method, including delinquency — read-only.",
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -913,6 +944,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={'Recent admin actions on this organization'}
+                        help={docsHelp('staffConsole', {
+                          anchor: '#whats-there',
+                          excerpt:
+                            'The audit-log slice referencing this organization — the full record lives on the Audit log page.',
+                        })}
                         contentGutterX
                         contentGutterY
                       >
@@ -958,6 +994,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     children: (
                       <CardDisplay
                         header={'Staff notes'}
+                        help={docsHelp('staffConsole', {
+                          anchor: '#whats-there',
+                          excerpt:
+                            'Support and billing context on this organization, visible to staff only — never written into tenant-readable data. Audited.',
+                        })}
                         contentGutterX
                         contentGutterY
                       >

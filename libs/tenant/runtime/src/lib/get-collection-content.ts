@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CollectionCategory } from '@aglyn/aglyn/server'
+import { type CollectionCategory, collectionTotalPages } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 export interface CollectionEntrySummary {
@@ -133,7 +133,17 @@ export interface CollectionContent {
   } | null
   entries: CollectionEntrySummary[]
   entry: CollectionEntrySummary | null
+  /** List pagination (AGL-620); null for entry pages or unpaginated lists. */
+  pagination?: CollectionPagination | null
   error: unknown
+}
+
+export interface CollectionPagination {
+  /** 1-based current page. */
+  page: number
+  perPage: number
+  totalPages: number
+  totalEntries: number
 }
 
 /**
@@ -223,12 +233,17 @@ export async function getCollectionContent(options: {
   hostId: string
   collectionSlug: string
   entrySlug?: string
+  /** 1-based list page (AGL-620); with `perPage`, drives pagination metadata. */
+  page?: number
+  /** Entries per page (AGL-620); when set the list is paginated. */
+  perPage?: number
 }): Promise<CollectionContent> {
-  const { hostId, collectionSlug, entrySlug } = options
+  const { hostId, collectionSlug, entrySlug, page = 1, perPage } = options
   const data: CollectionContent = {
     collection: null,
     entries: [],
     entry: null,
+    pagination: null,
     error: null,
   }
   try {
@@ -281,6 +296,15 @@ export async function getCollectionContent(options: {
     }
 
     data.entries = await listLiveEntries(entriesRef)
+    if (perPage && perPage > 0) {
+      const totalEntries = data.entries.length
+      data.pagination = {
+        page,
+        perPage,
+        totalEntries,
+        totalPages: collectionTotalPages(totalEntries, perPage),
+      }
+    }
   } catch (error) {
     console.error(error)
     data.error = error

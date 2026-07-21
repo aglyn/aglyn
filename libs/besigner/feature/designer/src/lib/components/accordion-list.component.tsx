@@ -16,7 +16,7 @@
  */
 
 import { ICON_VARIANT_COLLAPSIBLE_OPEN } from '@aglyn/shared-data-enums'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { HelpTip, type HelpTipContent, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { styled } from '@aglyn/shared-ui-theme'
 import {
   Accordion as MuiAccordion,
@@ -71,6 +71,8 @@ export interface AccordionProps extends MuiAccordionProps {
   AccordionSummaryProps?: MuiAccordionSummaryProps
   AccordionDetailsProps?: MuiAccordionDetailsProps
   summary?: JSX.Children
+  /** Contextual help affordance rendered after the summary label (AGL-600). */
+  help?: HelpTipContent
 }
 
 export const Accordion = forwardRef<any, AccordionProps>((props, ref) => {
@@ -80,6 +82,7 @@ export const Accordion = forwardRef<any, AccordionProps>((props, ref) => {
     AccordionSummaryProps,
     AccordionDetailsProps,
     summary,
+    help,
     children,
     ...rest
   } = props
@@ -116,6 +119,13 @@ export const Accordion = forwardRef<any, AccordionProps>((props, ref) => {
         {...AccordionSummaryProps}
       >
         {summary}
+        {help && (
+          <HelpTip
+            {...help}
+            sx={{ fontSize: '0.8em', ml: 0.5, my: -0.5 }}
+            onClick={(event) => event.stopPropagation()}
+          />
+        )}
       </MuiAccordionSummary>
       <MuiAccordionDetails sx={{ zIndex: 1 }} {...AccordionDetailsProps}>
         {children}

@@ -68,6 +68,7 @@ export const SingleCheckbox = (props: SingleCheckboxProps) => {
     description,
     validateOnMount,
     meta,
+    help,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormGroupProps = {},
@@ -89,7 +90,7 @@ export const SingleCheckbox = (props: SingleCheckboxProps) => {
     description
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <FormControl
         required={isRequired}
         error={!!invalid}

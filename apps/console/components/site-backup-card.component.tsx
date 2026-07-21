@@ -21,6 +21,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Stack, Typography } from '@mui/material'
 import { type ChangeEvent, useCallback, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { hasEntitlement } from '../constants/entitlements'
 import useCurrentOrg from '../hooks/use-current-org'
 
@@ -144,7 +145,16 @@ export function SiteBackupCard(props: { hostId: string }) {
   )
 
   return (
-    <CardDisplay header={'Backup & restore'} contentGutterX contentGutterY>
+    <CardDisplay
+      header={'Backup & restore'}
+      help={docsHelp('downgradingAndCanceling', {
+        excerpt:
+          'Export the whole site — screens, theme, content, data — as ' +
+          'one JSON file you can restore here or import into another site.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={1.5}>
         <Typography variant="body2" color="text.secondary">
           {'Download everything designable — screens, layouts, theme, ' +

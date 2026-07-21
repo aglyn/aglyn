@@ -74,6 +74,7 @@ export const Slider = (props: SliderProps) => {
     description,
     validateOnMount,
     meta,
+    help,
     FormFieldGridProps = {},
     FormControlProps = {},
     FormGroupProps = {},
@@ -101,7 +102,7 @@ export const Slider = (props: SliderProps) => {
   const defaultValue = (max + min) / 2
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <FormControl
         fullWidth
         required={isRequired}

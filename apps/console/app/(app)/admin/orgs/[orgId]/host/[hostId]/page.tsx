@@ -42,6 +42,7 @@ import AuthenticatedLayout from '../../../../../../../components/layouts/authent
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
@@ -196,7 +197,16 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 {
                   size: { xs: 12, md: 6 },
                   children: (
-                    <CardDisplay header={'Site'} contentGutterX contentGutterY>
+                    <CardDisplay
+                      header={'Site'}
+                      help={docsHelp('architectureMultiTenancy', {
+                        anchor: '#workspace-subdomains',
+                        excerpt:
+                          "The site's live URL, custom domain, and publish state. Retargeting the subdomain is audited and takes effect within a minute.",
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
                       <Stack spacing={1}>
                         <Typography variant="body2">
                           {host?.displayName ?? '—'}
@@ -270,7 +280,16 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 {
                   size: { xs: 12, md: 6 },
                   children: (
-                    <CardDisplay header={'Usage'} contentGutterX contentGutterY>
+                    <CardDisplay
+                      header={'Usage'}
+                      help={docsHelp('billing', {
+                        anchor: '#usage-meters',
+                        excerpt:
+                          "Live counts for this site — pages, screens, media, members, and storage — the figures metered against the org's entitlements.",
+                      })}
+                      contentGutterX
+                      contentGutterY
+                    >
                       <Stack
                         direction="row"
                         spacing={3}
@@ -290,6 +309,11 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Settings snapshot'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          "A read-only snapshot of the site's locales, analytics id, password protection, and store template screens.",
+                      })}
                       contentGutterX
                       contentGutterY
                     >

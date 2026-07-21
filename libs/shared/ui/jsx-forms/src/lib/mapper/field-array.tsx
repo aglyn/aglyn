@@ -255,6 +255,7 @@ export const DynamicArray = (props: FieldArrayProps) => {
     minItems = 0,
     maxItems = Infinity,
     noItemsMessage = 'No items added',
+    help,
     FormFieldGridProps = {},
     FormControlProps = {},
     buttonLabels,
@@ -288,6 +289,7 @@ export const DynamicArray = (props: FieldArrayProps) => {
 
   return (
     <StyledFormFieldGrid
+      help={help}
       {...FormFieldGridProps}
       className={clsx(classes.fieldArrayGroup, FormFieldGridProps.className)}
     >

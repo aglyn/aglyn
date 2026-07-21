@@ -141,7 +141,20 @@ id, so it keeps working across renames.
 When no template screen is set, the built-in list and article render **inside your site
 theme and default shared layout** (the home screen's layout), so blog pages never look
 detached from the rest of the site. The built-in article includes the entry meta line
-under the title, the cover image, the body, related posts, and a share bar.
+under the title, the cover image, the body, related posts, and a share bar. The built-in
+list is **paginated** (see below).
+
+### Paginated page sets
+
+Long collections split into pages. The built-in list shows a page of entries with
+**← Newer / Older →** links; deeper pages live at `/{collection}/page/2`,
+`/{collection}/page/3`, and so on (page 1 is the bare `/{collection}`). A page past the
+end returns 404.
+
+On your own **list template screen**, turn on pagination by setting the **Collection
+Entries** block's **Entries per page** attribute; it then renders the page from the URL
+(the **Page** attribute overrides it for a fixed page). Without **Entries per page**, the
+block shows the top **Entries limit** entries as before.
 
 ## 4. Publish & syndicate
 

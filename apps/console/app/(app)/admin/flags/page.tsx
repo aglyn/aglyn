@@ -22,7 +22,7 @@ import {
   type ReleaseFlagValue,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_FLAG } from '@aglyn/shared-data-enums'
-import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, Container, HelpTip } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -42,6 +42,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -187,6 +188,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
           { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
           { children: 'Feature flags', href: buildRoute(Route.ADMIN_FLAGS) },
         ]}
+        help="featureFlags"
         header={{
           children: 'Feature Flags',
           icon: { path: ICON_VARIANT_SYMBOL_FLAG.path },
@@ -206,9 +208,17 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                 {canEdit
                   ? ''
                   : ' Your staff role is read-only here — editing requires the super role.'}
+                <HelpTip
+                  {...docsHelp('featureFlags', { anchor: '#how-gating-behaves' })}
+                />
               </Alert>
               <CardDisplay
                 header={'Release flags'}
+                help={docsHelp('featureFlags', {
+                  anchor: '#managing-flags',
+                  excerpt:
+                    'Toggle a flag or stage a percentage rollout, leave a note, and publish — customers pick up changes within an hour. Editing requires the super staff role.',
+                })}
                 contentGutterX
                 contentGutterY
               >

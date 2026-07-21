@@ -47,13 +47,14 @@ export const TextField = (props: TextFieldProps) => {
     validateOnMount,
     meta,
     inputProps,
+    help,
     FormFieldGridProps = {},
     ...rest
   } = useFieldApi(props)
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <MuiTextField
         {...input}
         fullWidth

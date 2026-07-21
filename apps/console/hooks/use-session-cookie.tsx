@@ -20,6 +20,7 @@ import { FIREBASE_AUTH_EMULATOR_ENABLED } from '@aglyn/shared-data-enums'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import { signInWithCustomToken, signOut } from 'firebase/auth'
 import { useEffect, useRef } from 'react'
+import { tombstoneEndsSession } from '../app/api/auth/session/session-tombstone'
 import {
   clearInteractiveSignIn,
   consumeInteractiveSignIn,
@@ -109,9 +110,23 @@ export function useSessionCookie(): void {
             if (!active || response.ok || response.status !== 401) return
             const payload = await response.json().catch(() => null)
             const reason = payload?.reason
-            if (reason === 'signed-out' || reason === 'revoked') {
+            // A revocation always ends the session. A `signed-out`
+            // tombstone only does when it is NEWER than this session's last
+            // sign-in — otherwise it is stale (a prior sign-out whose
+            // re-login mint failed/raced) and would otherwise log the user
+            // out on a plain refresh (AGL-624); heal it by re-minting.
+            if (reason === 'revoked') {
               if (active) await signOut(auth)
               return
+            }
+            if (reason === 'signed-out') {
+              const signedOutAt = Number(payload?.signedOutAt) || 0
+              const lastSignInMs =
+                Date.parse(user.metadata?.lastSignInTime ?? '') || 0
+              if (tombstoneEndsSession(signedOutAt, lastSignInMs)) {
+                if (active) await signOut(auth)
+                return
+              }
             }
             mintedForUid.current = user.uid
             const idToken = await user.getIdToken()

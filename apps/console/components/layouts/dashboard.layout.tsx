@@ -27,6 +27,8 @@ import { Box, Stack } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { buildRoute, Route } from '../../constants/route-links'
+import { useHostId, useHostSubdomain } from '../../components/host-id-provider'
+import { useOrgSlug } from '../../hooks/use-org-scope'
 import { useReleaseFlags } from '../../hooks/use-release-flags'
 import DashboardHeaderComponent, {
   type DashboardHeaderProps,
@@ -76,6 +78,7 @@ export interface DashboardLayoutProps {
   disableDefaultBreadcrumb?: true
   header?: DashboardHeaderProps['header']
   headerRight?: DashboardHeaderProps['headerRight']
+  help?: DashboardHeaderProps['help']
   tabBarTitle?: SecondaryAppBarProps['tabBarTitle']
   navTabItems?: SecondaryAppBarProps['navTabItems']
   activeTab?: SecondaryAppBarProps['activeTab']
@@ -86,6 +89,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
   const {
     children,
     header,
+    help,
     breadcrumbItems,
     disableBreadcrumbs,
     disableDefaultBreadcrumb = false,
@@ -96,8 +100,10 @@ export function DashboardLayout(props: DashboardLayoutProps) {
     activeTab,
   } = props
   const params = useParams<{ hostId: string }>()
-  const hostId = params?.hostId
+  const hostId = useHostId()
   const { flags, isStaff } = useReleaseFlags()
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
 
   const breadcrumbs = useMemo(() => {
     return [
@@ -114,15 +120,15 @@ export function DashboardLayout(props: DashboardLayoutProps) {
       {
         id: 'nav-tab-dashboard',
         label: 'Dashboard',
-        href: buildRoute(Route.HOST_DASHBOARD, {
-          hostId,
+        href: buildRoute(Route.HOST_DASHBOARD, { orgSlug, 
+          host,
         }),
       },
       {
         id: 'nav-tab-screens',
         label: 'Screens',
-        href: buildRoute(Route.SCREEN_LIST, {
-          hostId,
+        href: buildRoute(Route.SCREEN_LIST, { orgSlug, 
+          host,
         }),
       },
     ]
@@ -165,6 +171,7 @@ export function DashboardLayout(props: DashboardLayoutProps) {
           breadcrumbItems={breadcrumbs}
           headerRight={headerRight}
           header={header}
+          help={help}
         />
 
         <Box component="section" sx={{ flexGrow: 1 }}>

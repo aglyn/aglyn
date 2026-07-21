@@ -26,6 +26,7 @@ import {
   onSnapshot,
   query,
 } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import {
   createContext,
   useCallback,
@@ -59,10 +60,15 @@ export interface OrgScopeContextValue {
   orgs: UserOrgMembership[]
   /** The org the console is currently scoped to (null pre-resolution). */
   currentOrg: UserOrgMembership | null
-  /** Selects an org on the apex console (persisted locally). */
+  /** Remembers the last apex selection (used by the org jump page). */
   selectOrg: (orgId: string) => void
   /** The workspace slug the page was opened under, when subdomain-scoped. */
   orgSlug: string | null
+  /**
+   * The org slug in the URL path (`/[orgSlug]/…`), the source of truth for
+   * the active workspace on org-scoped routes (AGL-621); null off them.
+   */
+  pathOrgSlug: string | null
   loading: boolean
 }
 
@@ -71,19 +77,26 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   currentOrg: null,
   selectOrg: () => undefined,
   orgSlug: null,
+  pathOrgSlug: null,
   loading: true,
 })
 
 /**
- * Org workspace context (AGL-236): the
- * Slack-style scope the console operates in. Precedence — the workspace
- * subdomain ({slug}.aglyn.com, resolved via the public orgSlugs doc),
- * then the locally remembered selection, then the user's first org.
+ * Org workspace context (AGL-236/AGL-621): the Slack-style scope the
+ * console operates in. The URL is the source of truth — the `/[orgSlug]/…`
+ * path segment wins, so a stale local selection can never override the org
+ * you navigated to (this is what killed the old switch-bounce). Precedence:
+ * the path slug, then the workspace subdomain (resolved via the public
+ * orgSlugs doc — the deferred subdomain form), then the locally remembered
+ * selection (jump-page convenience), then the user's first org.
  */
 export function OrgScopeProvider(props: { children?: ReactNode }) {
   const { children } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
+  const params = useParams<{ orgSlug?: string | string[] }>()
+  const pathOrgSlug =
+    typeof params?.orgSlug === 'string' ? params.orgSlug : null
   const [orgs, setOrgs] = useState<UserOrgMembership[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
@@ -146,14 +159,31 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
   }, [])
 
   const currentOrg = useMemo(() => {
+    const bySlug = (slug: string | null) =>
+      (slug && orgs.find((org) => org.slug === slug)) || null
     const byId = (orgId: string | null) =>
       (orgId && orgs.find((org) => org.$id === orgId)) || null
-    return byId(subdomainOrgId) ?? byId(selectedOrgId) ?? orgs[0] ?? null
-  }, [orgs, subdomainOrgId, selectedOrgId])
+    // The URL path is authoritative on org-scoped routes; everything else is
+    // a fallback for routes without an `[orgSlug]` (the jump page, manage/*).
+    return (
+      bySlug(pathOrgSlug) ??
+      byId(subdomainOrgId) ??
+      byId(selectedOrgId) ??
+      orgs[0] ??
+      null
+    )
+  }, [orgs, pathOrgSlug, subdomainOrgId, selectedOrgId])
 
   const context = useMemo(
-    () => ({ orgs, currentOrg, selectOrg, orgSlug, loading }),
-    [orgs, currentOrg, selectOrg, orgSlug, loading],
+    () => ({
+      orgs,
+      currentOrg,
+      selectOrg,
+      orgSlug,
+      pathOrgSlug,
+      loading,
+    }),
+    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading],
   )
 
   return (
@@ -166,6 +196,16 @@ OrgScopeProvider.displayName = 'OrgScopeProvider'
 
 export function useOrgScope(): OrgScopeContextValue {
   return useContext(OrgScopeContext)
+}
+
+/**
+ * The active org slug for building `/[orgSlug]/…` links (AGL-621). The URL
+ * path is authoritative; the current org's slug is the fallback while the
+ * path is being resolved. Empty string only before anything resolves.
+ */
+export function useOrgSlug(): string {
+  const { pathOrgSlug, currentOrg } = useContext(OrgScopeContext)
+  return pathOrgSlug ?? currentOrg?.slug ?? ''
 }
 
 export default useOrgScope

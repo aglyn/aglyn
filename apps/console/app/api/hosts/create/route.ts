@@ -156,7 +156,12 @@ async function handler(request: Request): Promise<Response> {
       })
     // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
     await registerOrgHost(orgMembership.orgId, hostId, subdomain)
-    return Response.json({ hostId, orgId: orgMembership.orgId }, { status: 200 })
+    // orgSlug lets the client route to /[orgSlug]/hosts/[hostId]/setup even
+    // when the workspace was just auto-created for a first-time user (AGL-621).
+    return Response.json(
+      { hostId, orgId: orgMembership.orgId, orgSlug: org?.['slug'] ?? null },
+      { status: 200 },
+    )
   } catch (error) {
     console.error(error)
     return Response.json({ error: 'Site creation failed' }, { status: 500 })

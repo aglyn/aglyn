@@ -25,7 +25,10 @@ import {
   query,
 } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
+import { useHostSubdomain } from '../../components/host-id-provider'
+import { useOrgSlug } from '../../hooks/use-org-scope'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
 /**
@@ -36,6 +39,8 @@ import useFirestoreCollection from '../../hooks/use-firestore-collection'
 export function NewestSiteUsersCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
       query(
@@ -50,6 +55,12 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
   return (
     <CardDisplay
       header={'Newest site users'}
+      help={docsHelp('members', {
+        anchor: '#4-manage-members-from-the-console',
+        excerpt:
+          'The five newest visitor accounts on this site — the Users page ' +
+          'has the full, searchable list.',
+      })}
       contentGutterX
       contentGutterY
       HeaderProps={{
@@ -57,7 +68,7 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
           <Button
             component={AppLink as any}
             {...({ componentVariant: 'naked' } as any)}
-            href={buildRoute(Route.HOST_USERS, { hostId })}
+            href={buildRoute(Route.HOST_USERS, { orgSlug,  host })}
             size="small"
             color="secondary"
           >

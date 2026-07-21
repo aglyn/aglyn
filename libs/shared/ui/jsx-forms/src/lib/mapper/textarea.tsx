@@ -53,6 +53,7 @@ export const Textarea = (props: TextareaProps) => {
     description,
     validateOnMount,
     meta,
+    help,
     FormFieldGridProps = {},
     inputProps = {},
     TextFieldProps = {},
@@ -62,7 +63,7 @@ export const Textarea = (props: TextareaProps) => {
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <MuiTextField
         {...input}
         fullWidth

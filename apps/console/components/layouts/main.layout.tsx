@@ -27,7 +27,9 @@ import {
 } from '@aglyn/shared-data-enums'
 import {
   mdiAccountGroupOutline,
+  mdiBookOpenVariant,
   mdiCreditCardOutline,
+  mdiOpenInNew,
 } from '@aglyn/shared-data-mdi'
 import {
   AglynBesignerLogoFull,
@@ -63,7 +65,9 @@ import {
 } from '@mui/material'
 import { useColorScheme } from '@mui/material/styles'
 import { Fragment, useMemo } from 'react'
-import { Route } from '../../constants/route-links'
+import { buildDocsUrl } from '../../constants/docs-links'
+import { buildRoute, Route } from '../../constants/route-links'
+import { useOrgSlug } from '../../hooks/use-org-scope'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationsMenu from '../notifications-menu.component'
 import OrgSwitcherNav from '../org-switcher-nav.component'
@@ -159,6 +163,10 @@ const TopAppBar = (props: TopAppBarProps) => {
     besigner,
     backButton,
   } = props
+  // The logo returns to the active org's home (AGL-631); the jump page when no
+  // org has resolved yet.
+  const orgSlug = useOrgSlug()
+  const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
 
   return (
     <ScrollReaction>
@@ -231,7 +239,7 @@ const TopAppBar = (props: TopAppBarProps) => {
                 paddingRight: 3
               }}>
               <AppLink
-                href="/"
+                href={orgHome}
                 componentVariant="button-base"
                 color="inherit"
                 disableRipple
@@ -372,6 +380,11 @@ export function MainLayout(props: MainLayoutProps) {
   const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
   const { mode, setMode } = useColorScheme()
   const themeModeDisplayName = getThemeModeDisplayName(mode)
+  // The active workspace for org-scoped chrome links (AGL-631). Empty only
+  // before any org resolves (a brand-new account); those links then fall back
+  // to the jump page.
+  const orgSlug = useOrgSlug()
+  const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
   const layoutTitle = useMemo(() => {
     return title ? [...(_isArr(title) ? title : [title]), 'Secure'] : 'Secure'
   }, [title])
@@ -477,13 +490,17 @@ export function MainLayout(props: MainLayoutProps) {
                 {
                   children: 'Billing',
                   component: AppLink,
-                  href: Route.MANAGE_BILLING,
+                  href: orgSlug
+                    ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+                    : orgHome,
                   icon: { path: mdiCreditCardOutline.path },
                 },
                 {
                   children: 'Community profile',
                   component: AppLink,
-                  href: Route.MANAGE_COMMUNITY_PROFILE,
+                  href: orgSlug
+                    ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug })
+                    : orgHome,
                   icon: { path: mdiAccountGroupOutline.path },
                 },
                 {
@@ -491,6 +508,18 @@ export function MainLayout(props: MainLayoutProps) {
                   component: AppLink,
                   href: Route.ADMIN_OVERVIEW,
                   icon: { path: ICON_VARIANT_USER_SETTINGS.path },
+                },
+                {
+                  type: 'divider',
+                },
+                {
+                  children: 'Documentation',
+                  component: 'a',
+                  href: buildDocsUrl(),
+                  target: '_blank',
+                  rel: 'noopener noreferrer',
+                  icon: { path: mdiBookOpenVariant.path },
+                  endIcon: { path: mdiOpenInNew.path },
                 },
                 {
                   type: 'divider',

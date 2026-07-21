@@ -41,6 +41,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 
@@ -169,6 +170,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
           { children: 'Staff', href: buildRoute(Route.ADMIN_OVERVIEW) },
           { children: 'Overview', href: buildRoute(Route.ADMIN_OVERVIEW) },
         ]}
+        help="staffConsole"
         header={{
           children: 'Platform Overview',
           icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -200,19 +202,36 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
               spacing={3}
               items={[
                 ...[
-                  { label: 'Organizations', value: metrics?.orgs },
-                  { label: 'Signups (30d)', value: metrics?.signups30d },
-                  { label: 'Sites', value: metrics?.hosts },
+                  {
+                    label: 'Organizations',
+                    value: metrics?.orgs,
+                    help: 'Total organizations on the platform — one per customer workspace.',
+                  },
+                  {
+                    label: 'Signups (30d)',
+                    value: metrics?.signups30d,
+                    help: 'Organizations created in the last 30 days.',
+                  },
+                  {
+                    label: 'Sites',
+                    value: metrics?.hosts,
+                    help: 'Sites (hosts) across every organization, published and draft.',
+                  },
                   {
                     label: 'MRR estimate',
                     value:
                       metrics?.mrrUsd != null ? `$${metrics.mrrUsd}` : null,
+                    help: 'Monthly recurring revenue estimated from active plan subscriptions.',
                   },
                 ].map((metric) => ({
                   size: { xs: 6, md: 3 },
                   children: (
                     <CardDisplay
                       header={metric.label}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt: metric.help,
+                      })}
                       contentGutterX
                       contentGutterY
                     >
@@ -227,6 +246,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Newest organizations'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'The most recently created organizations with their plan — open the Organizations page to manage one.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >
@@ -269,6 +293,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Marketplace purchases'}
+                      help={docsHelp('publisherHandbook', {
+                        anchor: '#getting-paid',
+                        excerpt:
+                          'Recent paid plugin purchases with the platform fee taken from each sale.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >
@@ -312,6 +341,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={`Top usage (${metrics?.rollupMonth ?? 'last month'})`}
+                      help={docsHelp('architectureMultiTenancy', {
+                        anchor: '#billing--cost-attribution',
+                        excerpt:
+                          'The organizations with the highest monthly usage rollups — storage, page views, form submissions, and attributed cost.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >
@@ -356,6 +390,11 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
                   children: (
                     <CardDisplay
                       header={'Broadcast announcement'}
+                      help={docsHelp('staffConsole', {
+                        anchor: '#whats-there',
+                        excerpt:
+                          'Send an in-app announcement to every organization owner and admin, optionally one plan tier. Audited, and mute preferences are respected.',
+                      })}
                       contentGutterX
                       contentGutterY
                     >

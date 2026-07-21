@@ -60,6 +60,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import adminNavTabItems from '../../../../constants/admin-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
@@ -392,6 +393,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           { children: 'Staff', href: buildRoute(Route.ADMIN_ORGS) },
           { children: 'Organizations', href: buildRoute(Route.ADMIN_ORGS) },
         ]}
+        help="staffConsole"
         header={{
           children: 'Organization Management',
           icon: { path: ICON_VARIANT_SYMBOL_SECURE.path },
@@ -409,6 +411,11 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
             // user-management page.
             <CardDisplay
               header={'Organizations'}
+              help={docsHelp('billing', {
+                anchor: '#tiers--entitlements',
+                excerpt:
+                  'Audited staff controls per organization — override the plan and entitlements, inspect usage, suspend its sites, or flag GDPR erasure.',
+              })}
               contentGutterX
               contentGutterY
             >

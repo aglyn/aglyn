@@ -17,15 +17,17 @@
 'use client'
 
 import { mdiFunctionVariant } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import { HelpTip, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Button,
   Dialog,
   DialogActions,
   DialogContent,
+  DialogTitle,
   Tooltip,
 } from '@mui/material'
 import { useState } from 'react'
+import { docsHelp } from '../constants/docs-links'
 import PluginWidgetSlot from './plugin-widget-slot.component'
 import useCurrentOrg from '../hooks/use-current-org'
 
@@ -61,6 +63,19 @@ export function BesignerFunctionsButton(props: BesignerFunctionsButtonProps) {
         maxWidth="sm"
         fullWidth
       >
+        <DialogTitle
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+        >
+          {'Variables & functions'}
+          <HelpTip
+            {...docsHelp('bindings', {
+              anchor: '#no-code-functions',
+              excerpt:
+                'Define typed variables and no-code functions, then bind them into content anywhere on the canvas.',
+            })}
+            sx={{ fontSize: '0.7em' }}
+          />
+        </DialogTitle>
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >

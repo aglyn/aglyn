@@ -35,6 +35,7 @@ import AuthenticatedLayout from '../../../../components/layouts/authenticated.la
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import manageNavTabItems from '../../../../constants/manage-nav-tabs'
+import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import MediaUrlField from '../../../../components/media-url-field.component'
@@ -139,7 +140,17 @@ const ManageCommunityProfile: NextPageWithLayout<Record<string, never>> = () => 
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <CardDisplay header={'Profile'} contentGutterX contentGutterY>
+          <CardDisplay
+            header={'Profile'}
+            help={docsHelp('publisherHandbook', {
+              anchor: '#before-your-first-publish',
+              excerpt:
+                'Your personal identity on community listings and comments ' +
+                '— separate from any organization profile.',
+            })}
+            contentGutterX
+            contentGutterY
+          >
             <Stack spacing={2} sx={{ maxWidth: 480 }}>
               <Typography variant="body2" color="text.secondary">
                 {'How you appear on community listings and comments — ' +

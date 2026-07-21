@@ -157,6 +157,7 @@ function InternalSelect<T = OptionValue>({
   onChange,
   onFocus,
   onBlur,
+  help,
   FormFieldGridProps = {},
   TextFieldProps: { inputProps: textFieldInputProps, ...TextFieldProps } = {},
   inputProps = {},
@@ -178,7 +179,7 @@ function InternalSelect<T = OptionValue>({
   )
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <Autocomplete
         filterSelectedOptions={hideSelectedOptions}
         disabled={isDisabled}

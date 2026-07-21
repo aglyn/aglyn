@@ -20,6 +20,7 @@ import type { OrgPermission } from '@aglyn/aglyn'
 import { useMemo } from 'react'
 import orgNavTabItems from '../constants/org-nav-tabs'
 import useOrgPermissions from './use-org-permissions'
+import { useOrgSlug } from './use-org-scope'
 
 /** Org tabs a permission gates (AGL-243); ungated tabs show for members. */
 const TAB_PERMISSIONS: Record<string, OrgPermission> = {
@@ -35,16 +36,17 @@ const TAB_PERMISSIONS: Record<string, OrgPermission> = {
  */
 export function useOrgNavTabItems() {
   const { can, loaded } = useOrgPermissions()
+  const orgSlug = useOrgSlug()
   return useMemo(
     () =>
-      orgNavTabItems().filter((item) => {
+      orgNavTabItems(orgSlug).filter((item) => {
         if (!loaded) return true
         const permission = TAB_PERMISSIONS[item.id]
         return !permission || can(permission)
       }),
     // `can` is stable per granted-map; loaded flips once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loaded, can],
+    [loaded, can, orgSlug],
   )
 }
 

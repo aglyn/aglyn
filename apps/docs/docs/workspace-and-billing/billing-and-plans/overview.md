@@ -63,6 +63,23 @@ Stripe's payment-processing fees. Upgrading is the way to reduce them.
   on Business); storage beyond the included size is **metered overage** at $0.25 per
   GB-month on your monthly invoice.
 
+## API access
+
+The **customer REST API** is a **Business & Advanced** feature — mint scoped API keys and
+call the versioned `/v1` endpoints from anywhere. Requests are **metered per organization**:
+
+| Plan | Included requests / month | Overage |
+|---|---|---|
+| Business | 100,000 | $0.50 per additional 1,000 |
+| Advanced | 1,000,000 | $0.20 per additional 1,000 |
+
+- Requests past the included quota **keep working** and bill as metered overage on your
+  monthly invoice — never a hard wall mid-integration.
+- The billing page shows an **API requests** meter, and the usage-cap banner warns at 80%
+  and 100% of the included quota.
+- Only requests that pass authentication and the rate limit are counted — rejected calls
+  (bad key, wrong plan, rate-limited) are never billed.
+
 ## Payments
 
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the

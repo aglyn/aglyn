@@ -125,6 +125,12 @@ function Pricing() {
                 ? 'Abandoned-cart recovery'
                 : null,
               quota(entitlements.inventoryLocations, 'inventory locations'),
+              entitlements.apiRequestsPerMonth > 0
+                ? `${entitlements.apiRequestsPerMonth.toLocaleString()} API requests/mo` +
+                  (pricing.extraApiRequestsUsdPer1k != null
+                    ? ` (+$${pricing.extraApiRequestsUsdPer1k}/1k)`
+                    : '')
+                : null,
             ].filter(Boolean) as string[]
             return {
               size: { xs: 12, sm: 6, md: 2.4 },

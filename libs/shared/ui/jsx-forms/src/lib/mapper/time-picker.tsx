@@ -53,6 +53,7 @@ export const TimePicker = (props: TimePickerProps) => {
     description,
     validateOnMount,
     meta,
+    help,
     FormFieldGridProps = {},
     TimePickerProps = {},
     ...rest
@@ -61,7 +62,7 @@ export const TimePicker = (props: TimePickerProps) => {
   const invalid = validationError(meta as ExtendedFieldMeta, validateOnMount)
 
   return (
-    <FormFieldGrid {...FormFieldGridProps}>
+    <FormFieldGrid help={help} {...FormFieldGridProps}>
       <MuiTimePicker
         slotProps={{
           textField: {

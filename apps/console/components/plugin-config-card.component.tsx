@@ -41,6 +41,7 @@ import {
   useFirestoreDoc,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 
 /**
  * Generic per-plugin settings form (AGL-428): renders every field a
@@ -186,7 +187,17 @@ function SchemaForm({
   }
 
   return (
-    <CardDisplay header={`${label} settings`} contentGutterX contentGutterY>
+    <CardDisplay
+      header={`${label} settings`}
+      help={docsHelp('plugins', {
+        anchor: '#configure',
+        excerpt:
+          'Settings this plugin exposes for your workspace — saved per ' +
+          'organization and read by the plugin wherever it runs.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
       <Stack spacing={2} sx={{ maxWidth: 480 }}>
         {schema.fields.map(renderField)}
         <Stack direction="row">

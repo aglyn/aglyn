@@ -43,6 +43,8 @@ import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
 import { observer } from 'mobx-react-lite'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { HelpTip } from '@aglyn/shared-ui-jsx'
+import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import { buildInteractionCandidate } from './interaction-builder-doc'
 
@@ -434,8 +436,15 @@ export function InteractionBuilderDialog(props: InteractionBuilderDialogProps) {
 
   return (
     <Dialog open={!minimized} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {state.id ? 'Edit interaction' : 'New interaction'}
+        <HelpTip
+          {...docsHelp('interactions', {
+            excerpt:
+              'Interactions run steps (show, hide, toggle, navigate…) when a trigger fires — on click, hover, load, and more. Pick a target by clicking it on the canvas.',
+          })}
+          sx={{ fontSize: '0.7em' }}
+        />
       </DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <TextField

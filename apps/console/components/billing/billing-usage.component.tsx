@@ -281,6 +281,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // org-scoped, so they meter once here instead of per host.
   const [orgDatasets, setOrgDatasets] = useState<number | null>(null)
   const [dataStorageMb, setDataStorageMb] = useState<number | null>(null)
+  // API requests this month (AGL-635): the live per-request counter, so the
+  // current month is authoritative (not the monthly rollup).
+  const [apiRequests, setApiRequests] = useState<number | null>(null)
   useEffect(() => {
     if (!orgId) return
     let active = true
@@ -294,6 +297,25 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
       .then((snapshot) => {
         if (active) setOrgDatasets(snapshot.data().count)
+      })
+      .catch(() => {
+        // Meter keeps its "not yet metered" state on failure.
+      })
+    void getDoc(
+      doc(
+        firestore,
+        'orgs',
+        orgId,
+        'apiUsage',
+        new Date().toISOString().slice(0, 7),
+      ),
+    )
+      .then((snapshot) => {
+        if (active) {
+          setApiRequests(
+            snapshot.exists() ? Number(snapshot.data()?.count ?? 0) : 0,
+          )
+        }
       })
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
@@ -349,6 +371,13 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.dataStorageMbPerOrg}
         unit="MB"
       />
+      {entitlements.apiRequestsPerMonth > 0 ? (
+        <UsageMeter
+          label="API requests (this month)"
+          used={apiRequests}
+          limit={entitlements.apiRequestsPerMonth}
+        />
+      ) : null}
       {hosts.map((host) => (
         <HostUsageMeters
           key={host.$id}

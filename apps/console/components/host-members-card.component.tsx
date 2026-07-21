@@ -35,8 +35,10 @@ import {
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../constants/docs-links'
 import { checkOrgSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
@@ -63,6 +65,7 @@ export interface HostMembersCardProps {
 export function HostMembersCard(props: HostMembersCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const orgSlug = useOrgSlug()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -179,6 +182,12 @@ export function HostMembersCard(props: HostMembersCardProps) {
   return (
     <CardDisplay
       header={'Users'}
+      help={docsHelp('team', {
+        anchor: '#site-membership',
+        excerpt:
+          'Teammates with console access to this site — add by email ' +
+          'with a role; membership uses your plan’s member seats.',
+      })}
       contentGutterX
       contentGutterY
       contentBordered="all"
@@ -186,7 +195,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
       <Stack spacing={1.5}>
         <Typography variant="caption" color="text.secondary">
           {'Site users are organization members scoped to this site — the '}
-          <Link href={buildRoute(Route.MANAGE_TEAM)} color="secondary">
+          <Link href={buildRoute(Route.MANAGE_TEAM, { orgSlug })} color="secondary">
             {'organization Team page'}
           </Link>
           {' manages everyone in one place.'}

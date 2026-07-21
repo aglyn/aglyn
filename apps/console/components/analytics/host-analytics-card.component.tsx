@@ -30,6 +30,7 @@ import {
 import { doc, getDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { docsHelp } from '../../constants/docs-links'
 
 interface DayStat {
   day: string
@@ -143,6 +144,11 @@ export function HostAnalyticsCard(props: {
   return (
     <CardDisplay
       header={'Traffic'}
+      help={docsHelp('analytics', {
+        excerpt:
+          'Pageviews from the built-in beacon — daily totals, top ' +
+          'pages, top referrers, and the device split.',
+      })}
       contentGutterX
       contentGutterY
       HeaderProps={{

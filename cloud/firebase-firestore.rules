@@ -85,6 +85,19 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Monthly usage rollups (AGL-41) + the live API-request meter
+      // (AGL-635): member-readable so the Billing page usage meters show real
+      // numbers. Written only by the server — the report-usage cron and the
+      // customer-API auth chokepoint via the Admin SDK, which bypasses rules.
+      match /usage/{month} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if false;
+      }
+      match /apiUsage/{month} {
+        allow read: if isStaff() || isOrgMember();
+        allow write: if false;
+      }
+
       // Per-plugin settings (AGL-428): overrides for a plugin's declared
       // config schema. Readers defensively coerce types (the doc is
       // manager-writable), so junk here can misconfigure only that
@@ -182,6 +195,20 @@ service cloud.firestore {
     match /hostIndex/{hostId} {
       allow read: if isSignedIn();
       allow write: if false;
+    }
+
+    // Customer API keys (AGL-616). Secret material: only a SHA-256 hash of
+    // the token is stored (doc id = hash). Deny ALL client access — minting,
+    // listing (metadata only), verification, and revocation happen through
+    // the Admin SDK. Clients never read this collection.
+    match /apiKeys/{keyHash} {
+      allow read, write: if false;
+    }
+
+    // REST API idempotency records (AGL-618): dedupe POSTs by Idempotency-Key.
+    // Written and read by the Admin SDK only.
+    match /apiIdempotency/{keyHash} {
+      allow read, write: if false;
     }
 
     // Hosts and everything under them (content-hardening review,
