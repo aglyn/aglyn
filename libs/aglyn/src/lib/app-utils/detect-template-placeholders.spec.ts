@@ -14,14 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { detectPlaceholders } from './save-as-template-dialog.component'
+import { detectTemplatePlaceholders as detectPlaceholders } from './detect-template-placeholders'
 
-jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useHostResourceApi: () => jest.fn(),
-}))
-jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
-}))
 
 describe('detectPlaceholders (AGL-672)', () => {
   it('finds plain named tokens anywhere in the node tree', () => {
