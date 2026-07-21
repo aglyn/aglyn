@@ -29,9 +29,10 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import UseTemplateDialog from './use-template-dialog.component'
 
 const KIND_ORDER: Array<{ kind: TemplateKind; heading: string; blurb: string }> =
   [
@@ -77,6 +78,9 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
+    null,
+  )
   const { data: templateDocs, status } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(200)),
     [firestore, hostId],
@@ -203,9 +207,20 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                       >
                         <Chip size="small" label={chip.label} color={chip.color} />
                       </Tooltip>
+                      {/* Named for screen readers — "Use" alone repeats
+                          once per row with no indication of which. */}
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        aria-label={`Use ${template.displayName ?? template.$id}`}
+                        onClick={() => setUseTemplate(template)}
+                      >
+                        {'Use'}
+                      </Button>
                       <Button
                         size="small"
                         color="error"
+                        aria-label={`Delete ${template.displayName ?? template.$id}`}
                         onClick={handleDelete(template)}
                       >
                         {'Delete'}
@@ -218,6 +233,11 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
           })}
         </Stack>
       )}
+      <UseTemplateDialog
+        hostId={hostId}
+        template={useTemplate}
+        onClose={() => setUseTemplate(null)}
+      />
     </CardDisplay>
   )
 }

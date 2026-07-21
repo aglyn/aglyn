@@ -36,6 +36,24 @@ first rather than saving an empty template that fails later.
 
 The original is never touched. Saving a template copies it.
 
+## Using a template
+
+**Use** creates something new from the template — the template itself stays in your
+library, so you can use it as many times as you like.
+
+- A **page** template asks for a name and an address, then creates the page and
+  publishes it. If the address is already taken, Aglyn adds a number rather than
+  overwriting the page that's there.
+- **Component** and **layout** templates just create the component or layout; there is
+  no address to pick.
+
+If a template defines placeholders, you'll be asked to fill them in first — the values
+are substituted into the content as it's created. A template might use `{{who}}` in its
+copy and ask you for "Who".
+
+Nothing you create is linked back to the template afterwards. Editing a page will never
+change the template, and updating a template will never change pages you already made.
+
 ## Where a template came from
 
 Every template shows a badge:

@@ -293,6 +293,71 @@ try {
       (await page.getByRole('link', { name: 'Templates' }).count()) > 0,
   )
 
+  // ── Use a template (AGL-670) ───────────────────────────────────────────
+  // Placeholders on purpose: nothing authors them yet, so this is the only
+  // coverage that token substitution actually runs on instantiation.
+  await hostRef.collection('templates').doc('e2e-usable').set({
+    kind: 'page',
+    displayName: `${TEMPLATE_NAME} usable`,
+    // 'home' is already taken by the seed — proves de-confliction.
+    slug: 'home',
+    nodes: {
+      root: { componentId: 'text', props: { text: 'Hello {{who}}' } },
+    },
+    placeholders: [{ name: 'who', label: 'Who', defaultValue: 'world' }],
+    source: { type: 'authored' },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  const useButton = page.locator(
+    `button[aria-label="Use ${TEMPLATE_NAME} usable"]`,
+  )
+  await useButton.waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+  await useButton.click()
+  const useDialog = page.locator('div[role="dialog"]:has-text("Use this template")')
+  await useDialog.waitFor({ state: 'visible', timeout: TIMEOUT_MS })
+  check('use dialog opens', true)
+
+  const placeholderField = useDialog.getByLabel('Who')
+  check('placeholder field rendered', (await placeholderField.count()) > 0)
+  await placeholderField.fill('Aglyn')
+  const createdPageName = `${TEMPLATE_NAME} created`
+  await useDialog.locator('input').first().fill(createdPageName)
+  await useDialog.getByRole('button', { name: /^Create page$/ }).click()
+  await useDialog.waitFor({ state: 'hidden', timeout: TIMEOUT_MS })
+
+  const createdScreens = await hostRef
+    .collection('screens')
+    .where('displayName', '==', createdPageName)
+    .get()
+  check('screen created from template', createdScreens.size === 1)
+  if (createdScreens.size === 1) {
+    const screenDoc = createdScreens.docs[0]
+    const versionId = screenDoc.get('versionId')
+    const versionSnapshot = await screenDoc.ref
+      .collection('versions')
+      .doc(String(versionId))
+      .get()
+    const rendered = JSON.stringify(versionSnapshot.get('nodes'))
+    check(
+      'placeholder substituted',
+      rendered.includes('Hello Aglyn') && !rendered.includes('{{who}}'),
+      rendered.slice(0, 80),
+    )
+    const routing = (await hostRef.get()).get('screens') ?? {}
+    const publishedSlug = routing[screenDoc.id]
+    check('route published', !!publishedSlug, `slug=${publishedSlug}`)
+    check(
+      'slug de-conflicted against the seeded /home',
+      publishedSlug !== 'home',
+      `got ${publishedSlug}`,
+    )
+    // The template itself must survive being used.
+    const stillThere = await hostRef.collection('templates').doc('e2e-usable').get()
+    check('template not consumed', stillThere.exists && !stillThere.get('deletedAt'))
+  }
+
   // "Could not reach Cloud Firestore backend" fires when the SDK briefly
   // drops its listen channel across a client-side navigation and retries.
   // It is ignorable HERE only because every write in this run is asserted
