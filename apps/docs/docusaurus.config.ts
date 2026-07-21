@@ -148,12 +148,14 @@ const config: Config = {
     },
     navbar: {
       // The wordmark carries the name (AGL-449), so no navbar title text.
-      // The console-themed navbar is dark slate in BOTH color modes, so
-      // both modes use the light-word variant (aglyn-docs-logo.svg is the
-      // dark-word one for light surfaces elsewhere).
+      // The navbar now matches the console app bar — light in light mode, dark
+      // in dark mode (AGL-633) — so each mode needs its own wordmark: the
+      // dark-word variant on the light bar (`src`), the light-word variant on
+      // the dark bar (`srcDark`). Docusaurus swaps them by color mode.
       logo: {
         alt: 'Aglyn Documentation',
-        src: 'img/aglyn-docs-logo-dark.svg',
+        src: 'img/aglyn-docs-logo.svg',
+        srcDark: 'img/aglyn-docs-logo-dark.svg',
         height: 24,
         width: 220,
       },
