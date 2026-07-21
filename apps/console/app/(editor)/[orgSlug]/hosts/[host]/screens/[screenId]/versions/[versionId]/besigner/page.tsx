@@ -99,6 +99,8 @@ import { useOrgSlug } from '../../../../../../../../../../hooks/use-org-scope'
 import { syncScreenRouteEntries } from '../../../../../../../../../../constants/screen-publishing'
 import { buildScreenLiveUrl } from '../../../../../../../../../../constants/tenant-links'
 import useFirestoreCollection from '../../../../../../../../../../hooks/use-firestore-collection'
+import usePresence from '../../../../../../../../../../hooks/use-presence'
+import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
@@ -140,6 +142,10 @@ function BesignerPage(props) {
   const host = useHostSubdomain()
   const {queueLoading} = useLoading()
   const logActivity = useHostActivityLogger(hostId)
+  // Who else is in this document (AGL-675). Fails quiet — an editor that
+  // will not open because nobody could be listed is far worse than an
+  // empty avatar stack.
+  const presence = usePresence({ hostId, docType: 'screen', docId: screenId })
   const saveAvailable = !Aglyn.canvas.isInitialSame
   const [screenDialog, setScreenDialog] = useState(false)
   // Screen SEO fields (SEO Toolkit); null = untouched, falls back to doc.
@@ -962,6 +968,7 @@ function BesignerPage(props) {
           LOADING_OVERLAY_ELEMENT
         ) : (
           <>
+            <PresenceAvatars entries={presence} />
             <BesignerAppBarComponent
               detailsUrl={detailUrl}
               onSave={handleSave}
