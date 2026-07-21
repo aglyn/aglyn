@@ -396,6 +396,8 @@ describe('nav menu schemas & presets (AGL-562)', () => {
         'muiStack',
         'muiTypography',
         'muiScreenLink',
+        // The AGL-589 Dropdown Panel preset triggers off a button.
+        'muiButton',
       ]).toContain(id)
     }
   })
