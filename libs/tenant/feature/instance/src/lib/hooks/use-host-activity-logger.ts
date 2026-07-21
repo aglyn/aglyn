@@ -34,6 +34,10 @@ export interface HostActivityTarget {
     | 'function'
     | 'workflow'
     | 'member'
+    // Standalone editors (AGL-680/681) — both are edited on their own now,
+    // so their saves belong in the same log as screens and layouts.
+    | 'component'
+    | 'template'
   id?: string
   name?: string
 }

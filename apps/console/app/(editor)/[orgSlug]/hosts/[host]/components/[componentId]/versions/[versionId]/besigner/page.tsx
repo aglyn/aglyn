@@ -45,6 +45,7 @@ import {
   useComponent,
   useComponentVersion,
   useHost,
+  useHostActivityLogger,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
@@ -112,6 +113,7 @@ function ComponentBesignerPage(props) {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const { queueLoading } = useLoading()
+  const logActivity = useHostActivityLogger(hostId)
   const saveAvailable = !Aglyn.canvas.isInitialSame
   const handleAddElementClick = useAddElementDrawerCallback()
   const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug,  host })
@@ -255,6 +257,11 @@ function ComponentBesignerPage(props) {
     )
       .then(() => {
         Aglyn.canvas.updateInitialNodes(nodes)
+        // Attribution (AGL-676): `updatedAt` is stamped on every write but
+        // carries no actor, so "someone changed this" could never become
+        // "Sam changed this". Fire-and-forget — an audit miss must not
+        // break the edit that triggered it.
+        logActivity('Saved the component', { type: 'component', id: componentId })
         // Our own write moves the stamp; the new value arrives on the next
         // snapshot, so mark it as ours rather than somebody else's edit.
         expectOwnWriteRef.current = true

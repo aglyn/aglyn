@@ -40,7 +40,7 @@ import {
   getGoogleFontsUrl,
   HostThemeDocumentContext,
 } from '@aglyn/shared-ui-theme'
-import { useHost, useLayout, useLayoutVersion } from '@aglyn/tenant-feature-instance'
+import { useHost, useLayout, useLayoutVersion, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -107,6 +107,7 @@ function LayoutBesignerPage(props) {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const { queueLoading } = useLoading()
+  const logActivity = useHostActivityLogger(hostId)
   const saveAvailable = !Aglyn.canvas.isInitialSame
   const handleAddElementClick = useAddElementDrawerCallback()
   const listUrl = buildRoute(Route.LAYOUT_LIST, { orgSlug,  host })
@@ -264,6 +265,11 @@ function LayoutBesignerPage(props) {
     )
       .then(() => {
         Aglyn.canvas.updateInitialNodes(nodes)
+        // Attribution (AGL-676): `updatedAt` is stamped on every write but
+        // carries no actor, so "someone changed this" could never become
+        // "Sam changed this". Fire-and-forget — an audit miss must not
+        // break the edit that triggered it.
+        logActivity('Saved the layout', { type: 'layout', id: layoutId })
         // Our own write moves the stamp; the new value arrives on the next
         // snapshot, so mark it as ours rather than somebody else's edit.
         expectOwnWriteRef.current = true

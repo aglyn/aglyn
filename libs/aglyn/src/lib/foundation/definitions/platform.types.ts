@@ -320,11 +320,13 @@ export interface AglynScreen extends AglynDocument {
   // CONCEPT: Contextual visibility
   visibility?: HostScreenVisibility
 
-  // CONCEPT: Attribute editors
-  owner?: UserUid
-  contributors?: {
-    [P in string & UserUid]: true
-  }
+  // NOTE (AGL-676): `owner` and `contributors` were declared here and NEVER
+  // read or written by anything — zero call sites across the whole repo.
+  // Removed rather than left dangling: a declared-but-unmaintained field is
+  // how the next person builds on something that was never real. Editor
+  // attribution lives in `hosts/{hostId}/activity`, which is actually
+  // written. If a contributor set is wanted later, add one that is kept up
+  // to date.
 
   /** Shared layout this screen renders inside (see {@link AglynLayout}). */
   layoutId?: LayoutUid
@@ -419,7 +421,7 @@ export interface AglynLayout extends AglynDocument {
   versions?: Array<VersionUid>
   displayName?: string
   description?: string
-  contributors?: Array<UserUid>
+  // `contributors` removed here too — see the note on AglynScreen (AGL-676).
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
 }

@@ -48,6 +48,7 @@ import {
 } from '@aglyn/shared-ui-theme'
 import {
   useHost,
+  useHostActivityLogger,
   useLayout,
   useLayoutVersion,
   useScreen,
@@ -138,6 +139,7 @@ function BesignerPage(props) {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const {queueLoading} = useLoading()
+  const logActivity = useHostActivityLogger(hostId)
   const saveAvailable = !Aglyn.canvas.isInitialSame
   const [screenDialog, setScreenDialog] = useState(false)
   // Screen SEO fields (SEO Toolkit); null = untouched, falls back to doc.
@@ -310,6 +312,11 @@ function BesignerPage(props) {
     )
       .then(() => {
         Aglyn.canvas.updateInitialNodes(nodes)
+        // Attribution (AGL-676): `updatedAt` is stamped on every write but
+        // carries no actor, so "someone changed this" could never become
+        // "Sam changed this". Fire-and-forget — an audit miss must not
+        // break the edit that triggered it.
+        logActivity('Saved the screen', { type: 'screen', id: screenId })
         // Our own write moves the stamp too. The new value arrives on the
         // next snapshot, so mark it as ours — otherwise our own save comes
         // back looking like somebody else's edit.
