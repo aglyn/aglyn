@@ -22,11 +22,20 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
 import { requireActiveMember } from './membership'
 import { checkMemberEntitlement } from './gate'
+import { tokenSigningSecret } from './download'
 
 const TTL_MS = 15 * 60 * 1000
 
+/**
+ * Signed with the dedicated, fail-closed `TOKEN_SIGNING_SECRET` (AGL-509).
+ * AGL-509 converted the download and supplier tokens but missed this call
+ * site (AGL-689): the old `STRIPE_SECRET_KEY ?? 'aglyn'` key left the whole
+ * payload — `stream:${hostId}:${productId}:${video}:${exp}`, all public
+ * identifiers — forgeable on any deploy without the Stripe key, and the
+ * short TTL bought nothing because the forger chooses `exp`.
+ */
 function sign(hostId: string, productId: string, video: number, exp: number) {
-  return createHmac('sha256', process.env.STRIPE_SECRET_KEY ?? 'aglyn')
+  return createHmac('sha256', tokenSigningSecret())
     .update(`stream:${hostId}:${productId}:${video}:${exp}`)
     .digest('hex')
     .slice(0, 32)
