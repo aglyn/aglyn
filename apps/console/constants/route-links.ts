@@ -73,6 +73,7 @@ export enum Route {
   HOST_REDIRECTS = '/[orgSlug]/hosts/[host]/redirects',
   HOST_USERS = '/[orgSlug]/hosts/[host]/users',
   HOST_ANALYTICS = '/[orgSlug]/hosts/[host]/analytics',
+  COMPONENT_BESIGNER = '/[orgSlug]/hosts/[host]/components/[componentId]/versions/[versionId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
   LAYOUT_LIST = '/[orgSlug]/hosts/[host]/layouts/list',
   SCREEN_BESIGNER = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner',
@@ -141,6 +142,12 @@ export interface RoutePayload extends Record<keyof any, any> {
   [Route.HOST_REDIRECTS]: { orgSlug: string; host: string }
   [Route.HOST_USERS]: { orgSlug: string; host: string }
   [Route.HOST_ANALYTICS]: { orgSlug: string; host: string }
+  [Route.COMPONENT_BESIGNER]: {
+    orgSlug: string
+    host: string
+    componentId: string
+    versionId: string
+  }
   [Route.LAYOUT_BESIGNER]: {
     orgSlug: string
     host: string
