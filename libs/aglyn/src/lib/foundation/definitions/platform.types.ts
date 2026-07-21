@@ -467,6 +467,13 @@ export interface AglynTemplate<N = AglynNodeSchema> extends AglynDocument {
     image?: HostMediaUid
   }
   placeholders?: Array<TemplatePlaceholder>
+  /**
+   * Theme the template was designed against, carried over from a site
+   * template's snapshot. Held rather than applied: applying a theme changes
+   * the whole site's appearance, which is exactly the kind of instant,
+   * site-wide change installing is not allowed to make (AGL-669).
+   */
+  theme?: Record<string, unknown>
   source?: TemplateSource
   createdAt?: ITimestamp
   updatedAt?: ITimestamp

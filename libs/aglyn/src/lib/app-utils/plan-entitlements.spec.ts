@@ -402,8 +402,11 @@ describe('plan entitlements', () => {
     expect(checkQuota(created, 'storagePerHostMb', 0).allowed).toBe(true)
     // hosts/create (hostLimit 1) — a plan-less org already has 1 host.
     expect(checkQuota(created, 'hostLimit', 1).allowed).toBe(false)
-    // community/install-template (screensPerHost 5)
+    // pages created from a template (screensPerHost 5). Installing a
+    // marketplace template no longer creates screens — it fills the
+    // template library, capped separately (AGL-669).
     expect(checkQuota(created, 'screensPerHost', 5).allowed).toBe(false)
+    expect(checkQuota(created, 'templatesPerHost', 10).allowed).toBe(false)
     // hosts/members seat quota (free members cap is 1, no addons)
     const seats = checkSeatQuota(created, 'members', 1)
     expect(seats.allowed).toBe(false)

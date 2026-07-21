@@ -122,10 +122,13 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             },
           )
         }
+        // Installing adds to the template library and publishes nothing
+        // (AGL-669), so the message must not imply pages appeared.
+        const added = Number(payload.templates ?? 0)
         enqueueSnackbar(
-          `Added ${payload.screens} screen${payload.screens === 1 ? '' : 's'}` +
-            ` from "${listing.displayName}"` +
-            (payload.themeApplied ? ' (theme applied)' : ''),
+          `Saved ${added} template${added === 1 ? '' : 's'} from ` +
+            `"${listing.displayName}" to your library — open Templates to ` +
+            'create pages from them.',
           { variant: 'success', persist: false },
         )
         onClose()

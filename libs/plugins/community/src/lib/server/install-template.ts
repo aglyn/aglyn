@@ -23,12 +23,23 @@ import { canActAsPublisher } from './publisher-profile'
 import { listingArtifactType } from '../model/community'
 
 /**
- * Installs a site template into a host (AGL-137): instantiates the
- * snapshot's screens with fresh ids, registers routing-map entries (slug
- * conflicts get numeric suffixes — existing screens are never touched),
- * and optionally applies the template theme. Access mirrors component
- * installs (free, purchased, or own listing); server-side because version
- * snapshots aren't client-readable.
+ * Installs a site template into a host's TEMPLATE LIBRARY (AGL-137,
+ * reworked by AGL-669).
+ *
+ * This used to instantiate screens and write routing-map entries in the
+ * same call, which made installed pages public the instant you clicked
+ * install — browsing the marketplace could publish to a production site by
+ * mis-click. Now it only writes to `hosts/{hostId}/templates`; creating
+ * pages is a separate, deliberate step (AGL-670).
+ *
+ * The snapshot's screens become one page template each, sharing a
+ * `source.listingId` so the library can group them and the user can pick
+ * which ones to use. The theme is carried on the templates rather than
+ * applied — a theme change is site-wide and instant, the same class of
+ * surprise this removed.
+ *
+ * Access is unchanged: free, purchased, or your own listing. Still
+ * server-side because version snapshots are not client-readable.
  */
 export const installTemplateHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -36,7 +47,9 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
   }
   const listingId = String(req.body?.listingId ?? '')
   const hostId = String(req.body?.hostId ?? '')
-  const applyTheme = req.body?.applyTheme !== false
+  // `applyTheme` is accepted and ignored (AGL-669): installing no longer
+  // touches the host doc, so there is nothing to apply. Kept in the
+  // signature so existing callers don't break.
   if (!listingId || !hostId) {
     return res.status(400).json({ error: 'Missing listingId or hostId' })
   }
@@ -112,71 +125,64 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       return res.status(500).json({ error: 'Template version missing' })
     }
 
-    // Screen quota via the owning org — enforced for every org, since a
+    // Template-library quota, not screensPerHost: nothing becomes a screen
+    // here. The screen cap is enforced later, when pages are actually
+    // created from these (AGL-670). Enforced for every org, since a
     // plan-less org resolves as `free` (not unmetered).
     const org = (await getOrgForHost(hostId))?.org
     {
       const count = (
-        await hostRef.collection('screens').count().get()
+        await hostRef.collection('templates').count().get()
       ).data().count
       const quota = checkQuota(
         org as any,
-        'screensPerHost',
+        'templatesPerHost',
         count + screens.length - 1,
       )
       if (!quota.allowed) {
         return res.status(403).json({
           error:
-            `This template needs ${screens.length} screens — your plan ` +
-            `allows ${quota.limit}. See Billing to upgrade.`,
+            `This template adds ${screens.length} template${
+              screens.length === 1 ? '' : 's'
+            } to your library — your plan allows ${quota.limit}. ` +
+            'See Billing to upgrade.',
         })
       }
     }
 
-    const routingMap = (hostSnapshot.get('screens') ?? {}) as Record<
-      string,
-      string
-    >
-    const usedSlugs = new Set(Object.values(routingMap))
     const now = firebaseAdmin.firestore.FieldValue.serverTimestamp()
-    const routingUpdates: Record<string, string> = {}
+    // Shared across the bundle so the library can group these as one
+    // install and offer them together.
+    const source = {
+      type: 'marketplace' as const,
+      listingId,
+      version: listing.latestVersion ?? null,
+    }
+    const batch = firestore.batch()
     let created = 0
     for (const screen of screens) {
-      const screenId = createResourceUid()
-      const versionId = createResourceUid()
-      let slug = String(screen.slug ?? '') || 'page'
-      let attempt = 2
-      while (usedSlugs.has(slug)) slug = `${screen.slug || 'page'}-${attempt++}`
-      usedSlugs.add(slug)
-
-      await hostRef.collection('screens').doc(screenId).set({
-        displayName: String(screen.displayName ?? 'Screen').slice(0, 80),
+      const templateRef = hostRef.collection('templates').doc(createResourceUid())
+      batch.set(templateRef, {
+        kind: 'page',
+        displayName: String(screen.displayName ?? 'Page').slice(0, 80),
         ...(screen.description && { description: screen.description }),
         ...(screen.seo && { seo: screen.seo }),
-        versionId,
+        // A suggestion only — de-conflicted against the routing map when a
+        // page is actually created from this.
+        ...(screen.slug && { slug: String(screen.slug) }),
+        nodes: screen.nodes,
+        // Carried, not applied: see the note on AglynTemplate.theme. The
+        // `applyTheme` request flag is now meaningless here — nothing is
+        // applied at install — so the theme always travels with the
+        // template and the decision moves to whoever uses it.
+        ...(template.theme ? { theme: template.theme } : {}),
+        source,
         createdAt: now,
         updatedAt: now,
       })
-      await hostRef
-        .collection('screens')
-        .doc(screenId)
-        .collection('versions')
-        .doc(versionId)
-        .set({
-          screenId,
-          displayName: 'Installed from template',
-          nodes: screen.nodes,
-          createdAt: now,
-          updatedAt: now,
-        })
-      routingUpdates[`screens.${screenId}`] = slug
       created += 1
     }
-    await hostRef.update({
-      ...routingUpdates,
-      ...(applyTheme && template.theme ? { theme: template.theme } : {}),
-      updatedAt: now,
-    })
+    await batch.commit()
 
     await listingRef
       .update({
@@ -186,8 +192,10 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
 
     return res.status(200).json({
       installed: true,
-      screens: created,
-      themeApplied: Boolean(applyTheme && template.theme),
+      templates: created,
+      // Retained so an older client doesn't render "Added undefined screens".
+      screens: 0,
+      themeApplied: false,
     })
   } catch (error) {
     console.error(error)

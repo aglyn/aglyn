@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 import { initializeApp, getApps } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -76,11 +77,41 @@ function chromeExecutable() {
 if (!getApps().length) initializeApp({ projectId: 'aglyn-main' })
 const db = getFirestore()
 
+/**
+ * An ID token for the seeded owner, via a custom token — no password, and
+ * it exercises the same verifyIdToken path the route uses in production.
+ */
+let cachedIdToken
+async function idToken() {
+  if (cachedIdToken) return cachedIdToken
+  const customToken = await getAuth().createCustomToken('e2e-owner')
+  const response = await fetch(
+    `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake-api-key`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+    },
+  )
+  const payload = await response.json()
+  if (!payload.idToken) throw new Error('token exchange failed')
+  cachedIdToken = payload.idToken
+  return cachedIdToken
+}
+
 // The shared seed has no layouts and no reusable components, so this
 // harness makes its own — otherwise two of the three kinds would skip and a
 // green run would overstate what it covered. Admin SDK, so rules don't
 // apply: this is fixture setup, not part of what's under test.
 const hostRef = db.collection('hosts').doc(HOST_ID)
+
+// `seed:e2e` does not clear the templates subcollection, so a re-run would
+// otherwise accumulate — and count assertions below would drift upward and
+// fail for the wrong reason. Start each run from an empty library.
+{
+  const stale = await hostRef.collection('templates').get()
+  await Promise.all(stale.docs.map((entry) => entry.ref.delete()))
+}
 const FIXTURE_NODES = {
   'layout-root': { componentId: 'box', childIds: ['layout-slot'] },
   'layout-slot': { componentId: 'layoutSlot' },
@@ -356,6 +387,106 @@ try {
     // The template itself must survive being used.
     const stillThere = await hostRef.collection('templates').doc('e2e-usable').get()
     check('template not consumed', stillThere.exists && !stillThere.get('deletedAt'))
+  }
+
+  // ── Marketplace install lands in the library (AGL-669) ─────────────────
+  // The regression this guards: install used to write screens AND routing
+  // entries in one call, so a mis-click published pages to a live site.
+  const listingId = 'e2e-listing-template'
+  const listingRef = db.collection('communityListings').doc(listingId)
+  await listingRef.set({
+    kind: 'template',
+    artifactType: 'template',
+    profileId: 'e2e-owner',
+    displayName: 'E2E Marketplace Site',
+    priceUsd: 0,
+    latestVersion: 1,
+    screenCount: 2,
+    createdAt: new Date(),
+  })
+  await listingRef.collection('versions').doc('1').set({
+    template: {
+      theme: { palette: { primary: '#123456' } },
+      screens: [
+        { displayName: 'Installed Home', slug: 'home', nodes: { a: { componentId: 'box' } } },
+        { displayName: 'Installed About', slug: 'about', nodes: { b: { componentId: 'box' } } },
+      ],
+    },
+    publishedAt: new Date(),
+  })
+
+  const beforeHost = await hostRef.get()
+  const routingBefore = JSON.stringify(beforeHost.get('screens') ?? {})
+  const themeBefore = JSON.stringify(beforeHost.get('theme') ?? null)
+  const screensBefore = (await hostRef.collection('screens').count().get()).data()
+    .count
+
+  const unauthed = await fetch(`${BASE_URL}/api/community/install-template`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ listingId, hostId: HOST_ID }),
+  })
+  check(
+    'install rejects an unauthenticated call',
+    unauthed.status === 401,
+    `got ${unauthed.status}`,
+  )
+
+  const installResponse = await fetch(
+    `${BASE_URL}/api/community/install-template`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${await idToken()}`,
+      },
+      body: JSON.stringify({ listingId, hostId: HOST_ID }),
+    },
+  )
+  const installed = {
+    status: installResponse.status,
+    body: await installResponse.json().catch(() => ({})),
+  }
+  check(
+    'install succeeds',
+    installed.status === 200,
+    `${installed.status} ${JSON.stringify(installed.body)}`,
+  )
+  if (installed.status === 200) {
+    check(
+      'reports templates, not screens',
+      installed.body.templates === 2 && installed.body.screens === 0,
+      JSON.stringify(installed.body),
+    )
+    const installedTemplates = await hostRef
+      .collection('templates')
+      .where('source.listingId', '==', listingId)
+      .get()
+    check('two page templates written', installedTemplates.size === 2)
+    const first = installedTemplates.docs[0]?.data()
+    check(
+      'provenance is marketplace',
+      first?.source?.type === 'marketplace',
+      JSON.stringify(first?.source),
+    )
+    check('theme carried, not applied', !!first?.theme)
+
+    const afterHost = await hostRef.get()
+    check(
+      'routing map untouched',
+      JSON.stringify(afterHost.get('screens') ?? {}) === routingBefore,
+    )
+    check(
+      'site theme untouched',
+      JSON.stringify(afterHost.get('theme') ?? null) === themeBefore,
+    )
+    const screensAfter = (await hostRef.collection('screens').count().get()).data()
+      .count
+    check(
+      'no screens created by install',
+      screensAfter === screensBefore,
+      `${screensBefore} → ${screensAfter}`,
+    )
   }
 
   // "Could not reach Cloud Firestore backend" fires when the SDK briefly

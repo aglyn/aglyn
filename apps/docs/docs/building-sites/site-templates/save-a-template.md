@@ -17,8 +17,11 @@ from the community gallery.
 
 ## Start from a template
 
-Open the **starter template gallery** and install a template. It **instantiates the published
-screens** into a new site so you have a working starting point.
+Open the **starter template gallery** and install a template. It lands in
+[your templates library](./templates-library.md) as one page template per page —
+publishing nothing until you choose which pages you want. Aglyn's own starter
+templates still create their pages straight away, since you pick those when a site
+is empty.
 
 ## Save your site as a template
 

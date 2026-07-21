@@ -22,6 +22,16 @@ Components — the three things a template can produce.
 | **Component** | An element tree | A reusable component, or a drop onto a screen |
 | **Layout** | Page chrome — header, footer, navigation | A new shared layout |
 
+## Installing from the marketplace
+
+Installing a marketplace template **adds it to your library and publishes nothing**.
+A site template arrives as one page template per page it contains, so you choose which
+of them you actually want, and when.
+
+This is deliberate: browsing and installing should never be able to change a site that
+real people are looking at. If the template was designed around a particular theme, that
+theme travels with it rather than being applied to your site.
+
 ## Saving something as a template
 
 Look for **Save as template**:
