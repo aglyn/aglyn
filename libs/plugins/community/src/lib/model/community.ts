@@ -364,13 +364,29 @@ export type CommunityDefinitionNodes = Record<
  * SAFE_HREF), which also covers definitions written to Firestore directly
  * (see docs/SECURITY_CONTENT_REVIEW.md).
  */
-export function sanitizeCommunityDefinition(definition: {
-  rootId: string
-  nodes: Record<string, any>
-}):
+export function sanitizeCommunityDefinition(
+  definition: {
+    rootId: string
+    nodes: Record<string, any>
+  },
+  options?: {
+    /**
+     * Additional component ids permitted for this artifact type.
+     *
+     * `layoutSlot` is excluded from the shared allowlist because a slot in
+     * page content has nowhere to graft — but a published LAYOUT is
+     * meaningless without one (AGL-671). Scoped per call rather than added
+     * globally so page and component publishing stay unchanged.
+     */
+    extraComponentIds?: readonly string[]
+  },
+):
   | { ok: true; rootId: string; nodes: CommunityDefinitionNodes }
   | { ok: false; error: string } {
   const { rootId, nodes } = definition
+  const allowed = options?.extraComponentIds?.length
+    ? [...COMMUNITY_COMPONENT_ID_ALLOWLIST, ...options.extraComponentIds]
+    : COMMUNITY_COMPONENT_ID_ALLOWLIST
   if (!rootId || !nodes?.[rootId]) {
     return { ok: false, error: 'Definition has no root node' }
   }
@@ -381,7 +397,7 @@ export function sanitizeCommunityDefinition(definition: {
     if (sanitized[id]) continue
     const node = nodes[id]
     if (!node) return { ok: false, error: `Missing node "${id}"` }
-    if (!COMMUNITY_COMPONENT_ID_ALLOWLIST.includes(node.componentId)) {
+    if (!allowed.includes(node.componentId)) {
       return {
         ok: false,
         error: `Component "${node.componentId}" cannot be published`,

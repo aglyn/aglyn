@@ -79,6 +79,55 @@ describe('sanitizeCommunityDefinition', () => {
     })
   })
 
+  /**
+   * `extraComponentIds` widens the allowlist for one call (AGL-671). The
+   * risk it introduces is scope creep: if it leaked, `layoutSlot` — or
+   * anything else a caller passed — would become publishable everywhere.
+   */
+  it('permits extra component ids only for the call that asks', () => {
+    const layoutNodes = {
+      root: {
+        $id: 'root',
+        componentId: 'layoutSlot',
+        parentId: null,
+        props: {},
+      },
+    }
+    // Default: still refused, exactly as before.
+    expect(
+      sanitizeCommunityDefinition({ rootId: 'root', nodes: layoutNodes }),
+    ).toEqual({
+      ok: false,
+      error: 'Component "layoutSlot" cannot be published',
+    })
+    // Opted in: accepted.
+    const allowed = sanitizeCommunityDefinition(
+      { rootId: 'root', nodes: layoutNodes },
+      { extraComponentIds: ['layoutSlot'] },
+    )
+    expect(allowed.ok).toBe(true)
+    // The opt-in does not widen anything else — reusable instances stay
+    // refused even when layoutSlot is permitted, since a nested instance
+    // could smuggle another tenant's private definition.
+    const smuggled = sanitizeCommunityDefinition(
+      {
+        rootId: 'root',
+        nodes: {
+          root: {
+            $id: 'root',
+            componentId: 'reusableInstance',
+            parentId: null,
+            props: { refId: 'private' },
+          },
+        },
+      },
+      { extraComponentIds: ['layoutSlot'] },
+    )
+    expect(smuggled.ok).toBe(false)
+    // And the shared allowlist itself is untouched by the call.
+    expect(COMMUNITY_COMPONENT_ID_ALLOWLIST).not.toContain('layoutSlot')
+  })
+
   it('rejects missing roots and broken child references', () => {
     expect(
       sanitizeCommunityDefinition({ rootId: 'nope', nodes }).ok,
