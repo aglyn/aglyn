@@ -48,12 +48,18 @@ import {
   where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
 import useOrgHosts from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import {
+  playNotificationChime,
+  showDesktopNotification,
+  unreadBadge,
+} from '../utils/notification-alerts'
 import { normalizeNotificationLink } from '../utils/notification-links'
 
 /**
@@ -122,6 +128,101 @@ export function NotificationsMenu() {
     return Math.max(explicit, implicit)
   }, [unreadDocs, recent])
 
+  // ---- Alerts (AGL-650): sound, desktop notification, tab badge ----------
+  const [alertPrefs] = useNotificationAlertPrefs()
+
+  const resolveLink = useCallback(
+    (notification: AglynNotification) =>
+      normalizeNotificationLink(notification.link, {
+        orgSlug:
+          (notification.orgId ? slugByOrgId.get(notification.orgId) : null) ??
+          orgSlug,
+        hostId: notification.hostId,
+        hostSubdomain: notification.hostId
+          ? subdomainByHostId.get(notification.hostId)
+          : undefined,
+      }),
+    [orgSlug, slugByOrgId, subdomainByHostId],
+  )
+
+  // Detect arrivals by DIFFING DOCUMENT IDS, not by watching the count.
+  // Two traps make the count useless as a trigger: emitters never write
+  // `readAt`, so the unread figure is only an approximation of a 10-doc
+  // window; and `useFirestoreCollection` clears `data` to [] on every dep
+  // change, so the count legitimately drops to 0 and back on re-subscribe.
+  // Keyed on ids, a re-subscribe is a no-op.
+  const seenIdsRef = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const list = (recent ?? []) as Array<AglynNotification & { $id: string }>
+    // An empty snapshot is the hook resetting, never a real state — ignoring
+    // it also stops a re-subscribe from re-alerting the whole window.
+    if (list.length === 0) return
+    const ids = new Set(list.map((item) => item.$id))
+    if (seenIdsRef.current === null) {
+      // First real snapshot: everything in it predates this session.
+      seenIdsRef.current = ids
+      return
+    }
+    const arrived = list.filter(
+      (item) => !seenIdsRef.current?.has(item.$id) && !item.readAt,
+    )
+    seenIdsRef.current = ids
+    if (arrived.length === 0) return
+
+    if (alertPrefs.sound) playNotificationChime()
+    if (alertPrefs.desktop) {
+      // One notification for a burst — a batch write (an org-wide broadcast,
+      // say) should not stack N toasts.
+      const [newest] = arrived
+      const extra = arrived.length - 1
+      showDesktopNotification({
+        title: newest.title,
+        body:
+          extra > 0
+            ? `${newest.body ?? ''}${newest.body ? ' ' : ''}(+${extra} more)`
+            : newest.body,
+        tag: newest.$id,
+        onActivate: () => {
+          const target = resolveLink(newest)
+          if (target) router.push(target)
+        },
+      })
+    }
+  }, [recent, alertPrefs.sound, alertPrefs.desktop, resolveLink, router])
+
+  // Unread badge in the tab title.
+  //
+  // This writes `document.title` directly and re-applies under a
+  // MutationObserver. The obvious route — the shared page-title controller —
+  // does nothing here: it renders through `next/head`, which is inert in the
+  // App Router, so the console's title is fixed by static metadata (it never
+  // changes per page today). Next also rewrites the title on navigation, so a
+  // one-shot write would be dropped; observing the head catches that whether
+  // Next mutates the <title> node or replaces it.
+  //
+  // `apply` is idempotent and strips any existing badge first, so reacting to
+  // our own write neither loops nor compounds `(1) (1) …`.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const badge = alertPrefs.tabBadge ? unreadBadge(unreadCount) : ''
+    const apply = () => {
+      const base = document.title.replace(/^\(\d+\+?\)\s+/, '')
+      const next = badge ? `${badge} ${base}` : base
+      if (document.title !== next) document.title = next
+    }
+    apply()
+    const observer = new MutationObserver(apply)
+    observer.observe(document.head, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+    return () => {
+      observer.disconnect()
+      document.title = document.title.replace(/^\(\d+\+?\)\s+/, '')
+    }
+  }, [unreadCount, alertPrefs.tabBadge])
+
   if (!uid) return null
 
   const markRead = (notification: AglynNotification & { $id: string }) => {
@@ -136,15 +237,7 @@ export function NotificationsMenu() {
   ) => {
     if (!notification.readAt) markRead(notification)
     setAnchor(null)
-    const target = normalizeNotificationLink(notification.link, {
-      orgSlug:
-        (notification.orgId ? slugByOrgId.get(notification.orgId) : null) ??
-        orgSlug,
-      hostId: notification.hostId,
-      hostSubdomain: notification.hostId
-        ? subdomainByHostId.get(notification.hostId)
-        : undefined,
-    })
+    const target = resolveLink(notification)
     if (target) void router.push(target)
   }
 

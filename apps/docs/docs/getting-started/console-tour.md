@@ -86,3 +86,21 @@ Your in-app notification feed — billing, publishing, workflow failures —
 lives under **Notifications**, with per-category mutes:
 
 ![The notifications feed](/img/getting-started/notifications-page.png)
+
+### Alerts on this device
+
+Below the category mutes, three switches control how a new notification
+reaches you in **this browser**:
+
+- **Unread count in tab title** — badges the browser tab, e.g. `(3) Aglyn`,
+  so you can see new activity from another tab. On by default.
+- **Sound** — a short chime when a notification arrives. Off by default.
+- **Desktop notifications** — a system notification, shown only while the
+  Aglyn tab is in the background (in the foreground, the bell and chime
+  already tell you). Off by default; switching it on asks your browser for
+  permission. If you previously blocked notifications for the site, re-allow
+  them in your browser settings first.
+
+These are per-device, not per-account: notification permission is granted
+per browser, so muting sound on your laptop leaves your other devices alone.
+The **category mutes** above are account-wide and apply everywhere.

@@ -492,7 +492,7 @@ export const DOCS_HELP_ANCHORS = {
   components: ['#promote', '#insert-instances', '#manage', '#tips', '#related'],
   connectADomain: ['#steps', '#registrar-quick-reference', '#related'],
   consoleAndSite: ['#add-a-console-page', '#add-a-widget-to-a-shell-zone', '#wrap-every-console-page-providers', '#add-a-canvas-component-besigner--published-sites', '#add-a-site-runtime', '#troubleshooting'],
-  consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#a-sites-dashboard', '#next', '#workspace-settings--notifications'],
+  consoleTour: ['#the-app-bar', '#in-context-help', '#primary-navigation', '#editing-vs-managing', '#a-sites-dashboard', '#next', '#workspace-settings--notifications', '#alerts-on-this-device'],
   contacts: ['#unified-ingestion', '#the-contacts-page', '#segments', '#related'],
   content: ['#site-templates--starter-gallery', '#section--block-library', '#content-collections--blog', '#related'],
   copyAssist: ['#use-it', '#tips', '#related'],

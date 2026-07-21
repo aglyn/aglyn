@@ -63,8 +63,13 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import useNotificationAlertPrefs from '../../../../hooks/use-notification-prefs'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
+import {
+  desktopNotificationPermission,
+  requestDesktopNotifications,
+} from '../../../../utils/notification-alerts'
 import { normalizeNotificationLink } from '../../../../utils/notification-links'
 
 const PAGE_SIZE = 25
@@ -82,6 +87,27 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   // org-slug/subdomain routes and can't be migrated in place.
   const orgSlug = useOrgSlug()
   const { currentOrg, orgs } = useOrgScope()
+  // Per-device alert settings (AGL-650) — separate from the category mutes
+  // below, which are account-wide on the user doc.
+  const [alertPrefs, setAlertPrefs] = useNotificationAlertPrefs()
+  const [permission, setPermission] = useState<
+    NotificationPermission | 'unsupported'
+  >('default')
+  useEffect(() => {
+    setPermission(desktopNotificationPermission())
+  }, [])
+  const handleDesktopToggle = useCallback(async () => {
+    if (alertPrefs.desktop) {
+      setAlertPrefs({ desktop: false })
+      return
+    }
+    // The prompt only works from a user gesture, which is why this lives on
+    // the toggle rather than firing on page load.
+    let current = desktopNotificationPermission()
+    if (current === 'default') current = await requestDesktopNotifications()
+    setPermission(current)
+    setAlertPrefs({ desktop: current === 'granted' })
+  }, [alertPrefs.desktop, setAlertPrefs])
   const { hosts } = useOrgHosts(firestore, uid, currentOrg?.$id ?? undefined)
   const [rows, setRows] = useState<any[]>([])
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
@@ -280,6 +306,67 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
                     slotProps={{ typography: { variant: 'caption' } }}
                   />
                 ))}
+              </Stack>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'center' }}
+              >
+                <Typography variant="caption" color="text.secondary">
+                  {'Alerts on this device:'}
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={alertPrefs.tabBadge}
+                      onChange={() =>
+                        setAlertPrefs({ tabBadge: !alertPrefs.tabBadge })
+                      }
+                    />
+                  }
+                  label="Unread count in tab title"
+                  slotProps={{ typography: { variant: 'caption' } }}
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={alertPrefs.sound}
+                      onChange={() =>
+                        setAlertPrefs({ sound: !alertPrefs.sound })
+                      }
+                    />
+                  }
+                  label="Sound"
+                  slotProps={{ typography: { variant: 'caption' } }}
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={alertPrefs.desktop}
+                      disabled={
+                        permission === 'unsupported' || permission === 'denied'
+                      }
+                      onChange={() => void handleDesktopToggle()}
+                    />
+                  }
+                  label="Desktop notifications"
+                  slotProps={{ typography: { variant: 'caption' } }}
+                />
+                {permission === 'denied' || permission === 'unsupported' ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {permission === 'denied'
+                      ? 'Blocked for this site — re-allow notifications in your ' +
+                        'browser settings to switch this on.'
+                      : 'This browser does not support desktop notifications.'}
+                  </Typography>
+                ) : (
+                  <Typography variant="caption" color="text.secondary">
+                    {'Shown only while this tab is in the background.'}
+                  </Typography>
+                )}
               </Stack>
               {rows.length === 0 && !loading ? (
                 <Typography variant="body2" color="text.secondary">
