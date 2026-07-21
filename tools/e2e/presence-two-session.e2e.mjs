@@ -111,6 +111,27 @@ await db
   .collection('hosts')
   .doc(HOST_ID)
   .set({ memberRoles: { [SECOND.uid]: 'editor' } }, { merge: true })
+// The MIRROR, not just the membership. `orgs/{orgId}/members/{uid}` is what
+// the token broker checks, but the console resolves the `/[orgSlug]/…` in
+// the URL against `users/{uid}/orgs` (useOrgScope) — with only the former,
+// the second account signs in fine, gets a 200 from the broker if asked,
+// and never asks, because the editor route bounces it to "This page isn't
+// here" before presence ever mounts. Writing one side of the pair made a
+// routing failure look exactly like a presence failure.
+const org = await db.collection('orgs').doc(orgId).get()
+await db
+  .collection('users')
+  .doc(SECOND.uid)
+  .collection('orgs')
+  .doc(orgId)
+  .set(
+    {
+      orgName: org.get('name') ?? org.get('orgName') ?? 'E2E Bakery Co',
+      slug: org.get('slug'),
+      role: 'editor',
+    },
+    { merge: true },
+  )
 
 const editorUrl = `${BASE_URL}/${ORG_SLUG}/hosts/${HOST_ID}/screens/seed-home/versions/${versionId}/besigner`
 
