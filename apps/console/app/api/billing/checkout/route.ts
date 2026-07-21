@@ -109,6 +109,17 @@ async function handler(request: Request): Promise<Response> {
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })
 
+    // Attach the shared metered price (AGL-635) as a second subscription
+    // item so usage overage — storage AND API requests, both reported to
+    // the aglyn_metered_usage Billing Meter by the report-usage cron —
+    // actually lands on the invoice. Metered prices carry no quantity in
+    // Checkout, and the item bills $0 until usage is reported, so it is safe
+    // on every paid plan. Absent env (Stripe unprovisioned) → plan-only.
+    const meteredPriceId = process.env.STRIPE_PRICE_METERED
+    if (meteredPriceId) {
+      params.set('line_items[1][price]', meteredPriceId)
+    }
+
     const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {

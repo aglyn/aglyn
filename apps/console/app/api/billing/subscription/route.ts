@@ -243,6 +243,21 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // Ensure the shared metered price (AGL-635) rides the subscription so
+    // usage overage — storage AND API requests, reported to the
+    // aglyn_metered_usage Billing Meter — can bill. Subscriptions created
+    // before the checkout attachment lack it, so a plan switch is where
+    // they gain it. A new item (no id, no quantity) — Stripe adds it; it
+    // bills $0 until usage is reported, so it never moves the proration
+    // preview. Skipped when already present or Stripe is unprovisioned.
+    const meteredPriceId = process.env.STRIPE_PRICE_METERED
+    if (
+      meteredPriceId &&
+      !items.some((item: any) => item?.price?.id === meteredPriceId)
+    ) {
+      itemChanges.push([['price', meteredPriceId]])
+    }
+
     if (action === 'switch') {
       const params = new URLSearchParams({
         proration_behavior: 'create_prorations',
