@@ -35,6 +35,8 @@ export type AglynNotificationType =
   | 'content.booking'
   | 'content.order'
   | 'content.lowStock'
+  // Marketplace review verdicts (AGL-432/653).
+  | 'community.review'
   | 'system.announcement'
 
 export interface AglynNotification {
@@ -63,11 +65,17 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.booking': 'New booking',
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
+    'community.review': 'Listing review',
     'system.announcement': 'Announcement',
   }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
-export type NotificationCategory = 'billing' | 'team' | 'content' | 'system'
+export type NotificationCategory =
+  | 'billing'
+  | 'team'
+  | 'content'
+  | 'community'
+  | 'system'
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<
   NotificationCategory,
@@ -76,6 +84,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<
   billing: 'Billing',
   team: 'Team & access',
   content: 'Forms & bookings',
+  community: 'Marketplace',
   system: 'Product & system',
 }
 
@@ -84,7 +93,7 @@ export function notificationCategory(
 ): NotificationCategory {
   const prefix = String(type).split('.')[0]
   return (
-    ['billing', 'team', 'content', 'system'].includes(prefix)
+    ['billing', 'team', 'content', 'community', 'system'].includes(prefix)
       ? prefix
       : 'system'
   ) as NotificationCategory

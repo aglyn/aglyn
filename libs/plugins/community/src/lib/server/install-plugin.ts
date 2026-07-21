@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
+import { listingArtifactType } from '../model/community'
 
 /**
  * Installs (or upgrades) a community plugin into a host (AGL-45), pinning a
@@ -155,7 +156,11 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
       .doc(listingId)
     const listingSnapshot = await listingRef.get()
     const listing = listingSnapshot.data() as any
-    if (!listing || listing.deletedAt || listing.type !== 'plugin') {
+    if (
+      !listing ||
+      listing.deletedAt ||
+      listingArtifactType(listing) !== 'plugin'
+    ) {
       return res.status(404).json({ error: 'Unknown plugin listing' })
     }
 

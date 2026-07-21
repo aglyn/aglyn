@@ -23,6 +23,7 @@ import { observer } from 'mobx-react-lite'
 // next/head is a no-op in the App Router; the <Head> blocks below are inert
 // and real metadata comes from the route's generateMetadata (AGL-398).
 import Head from 'next/head'
+import Script from 'next/script'
 import {
   type CSSProperties,
   use,
@@ -550,27 +551,29 @@ const CatchAllPage = observer(function CatchAllPage(props: Props) {
         {props.notFoundFallback || props.maintenanceFallback || unlisted ? (
           <meta key="robots" name="robots" content="noindex" />
         ) : null}
-        {/* Google Analytics (AGL-138): tenant-configured measurement id. */}
-        {gaMeasurementId ? (
-          <>
-            <script
-              key="ga-src"
-              async
-              src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
-            />
-            <script
-              key="ga-init"
-              dangerouslySetInnerHTML={{
-                __html:
-                  'window.dataLayer=window.dataLayer||[];' +
-                  'function gtag(){dataLayer.push(arguments);}' +
-                  "gtag('js', new Date());" +
-                  `gtag('config', '${gaMeasurementId}');`,
-              }}
-            />
-          </>
-        ) : null}
       </Head>
+      {/* Google Analytics (AGL-138/661): tenant-configured measurement id.
+          This used to live inside the <Head> above, which is `next/head` and
+          therefore INERT under the App Router — so every site that configured
+          GA collected nothing. `next/script` renders for real, and Next
+          stamps it with the CSP nonce from the request header that
+          middleware sets, so it keeps working when AGL-523 flips the policy
+          from report-only to enforcing. */}
+      {gaMeasurementId ? (
+        <>
+          <Script
+            id="ga-src"
+            strategy="afterInteractive"
+            src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
+          />
+          <Script id="ga-init" strategy="afterInteractive">
+            {'window.dataLayer=window.dataLayer||[];' +
+              'function gtag(){dataLayer.push(arguments);}' +
+              "gtag('js', new Date());" +
+              `gtag('config', '${gaMeasurementId}');`}
+          </Script>
+        </>
+      ) : null}
       {/* Shared hidden class (AGL-562): ships in the SSR HTML so
           elements authors start hidden (interaction show/hide targets)
           paint hidden from the first frame — no flash before the

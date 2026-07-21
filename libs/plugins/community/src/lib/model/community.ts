@@ -94,10 +94,21 @@ export interface CommunityListing {
   description?: string
   category?: string
   /**
-   * Declarative component (default) or executable plugin (AGL-45).
-   * Plugins version by semver string; components by integer.
+   * What this listing publishes (AGL-654). One discriminator for every
+   * artifact type — the previous scheme split across two orthogonal fields
+   * (`type: 'component'|'plugin'` plus a separate `kind: 'template'`), so a
+   * template was "kind template with no type" and each installer branched on
+   * whichever field it happened to care about. That does not survive adding
+   * layouts, dataset schemas and email templates.
+   *
+   * Read it through `listingArtifactType()`, never directly — listings
+   * written before this field still carry only the legacy pair.
    */
+  artifactType?: CommunityArtifactType
+  /** @deprecated Legacy discriminator; use `artifactType` (AGL-654). */
   type?: 'component' | 'plugin'
+  /** @deprecated Legacy discriminator; use `artifactType` (AGL-654). */
+  kind?: 'template'
   latestVersion: number | string
   /** Plugin manifest id, for `type: 'plugin'` listings (AGL-45). */
   pluginId?: string
@@ -124,6 +135,53 @@ export interface CommunityListing {
    * listings appear in browse for non-owners.
    */
   reviewStatus?: ListingReviewStatus
+  // Server-managed. These were written by the publish/install/review paths
+  // but never declared, so callers reached for `as any` (AGL-654).
+  /** Publishing org id — the publisher profile's doc id (AGL-652). */
+  publisherOrgId?: string
+  /** Source component for a `component` listing. */
+  sourceComponentId?: string
+  /** Source site for a `template` listing. */
+  sourceHostId?: string
+  /** Incremented by the install API; frozen from client writes. */
+  installCount?: number
+  previewImageUrl?: string
+  screenCount?: number
+  versionHistory?: Array<{ version: number | string; publishedAt?: unknown }>
+  createdAt?: unknown
+  updatedAt?: unknown
+  /** Staff review audit (AGL-432); server-owned (AGL-651). */
+  reviewedBy?: string
+  reviewedAt?: unknown
+  rejectionReason?: string
+}
+
+/** Everything an org can publish to the marketplace (AGL-654). */
+export type CommunityArtifactType =
+  | 'component'
+  | 'template'
+  | 'plugin'
+  | 'layout'
+  | 'datasetSchema'
+  | 'emailTemplate'
+
+/**
+ * The listing's artifact type, tolerating the pre-AGL-654 shape.
+ *
+ * Legacy listings carry `type`/`kind` instead; a component was the absence
+ * of both, which is why this defaults there rather than throwing. Keeping
+ * the fallback means old docs keep resolving correctly instead of silently
+ * becoming un-installable.
+ */
+export function listingArtifactType(listing: {
+  artifactType?: string
+  type?: string
+  kind?: string
+}): CommunityArtifactType {
+  if (listing.artifactType) return listing.artifactType as CommunityArtifactType
+  if (listing.kind === 'template') return 'template'
+  if (listing.type === 'plugin') return 'plugin'
+  return 'component'
 }
 
 export type ListingReviewStatus =
@@ -135,10 +193,12 @@ export type ListingReviewStatus =
 
 /** Whether a plugin listing is publicly browsable (AGL-432). */
 export function isListingBrowsable(listing: {
+  artifactType?: string
   type?: string
+  kind?: string
   reviewStatus?: string
 }): boolean {
-  if (listing.type !== 'plugin') return true
+  if (listingArtifactType(listing) !== 'plugin') return true
   return (
     listing.reviewStatus === undefined ||
     listing.reviewStatus === 'listed' ||

@@ -65,13 +65,23 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const authorName = async () => {
-      const profile = await firestore
-        .collection('profiles')
-        .doc(decoded.uid)
-        .get()
+      // Prefer the personal account the user actually edits (Manage →
+      // Profile writes users/{uid}). `profiles/{uid}` used to be the only
+      // source, but its editor was the community page — retiring that with
+      // AGL-653 would have silently dropped every forum author back to an
+      // email prefix. Legacy profile values still win over that fallback.
+      const [account, profile] = await Promise.all([
+        firestore.collection('users').doc(decoded.uid).get(),
+        firestore.collection('profiles').doc(decoded.uid).get(),
+      ])
+      const fullName = [account.get('firstName'), account.get('lastName')]
+        .filter((part) => typeof part === 'string' && part.trim())
+        .join(' ')
+        .trim()
       return (
-        profile.get('displayName') ??
-        profile.get('handle') ??
+        fullName ||
+        profile.get('displayName') ||
+        profile.get('handle') ||
         (decoded.email ? String(decoded.email).split('@')[0] : 'member')
       )
     }

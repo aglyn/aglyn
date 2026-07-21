@@ -30,6 +30,21 @@ import { NextResponse, type NextRequest } from 'next/server'
  * sites' own subdomain space must not be claimed by accident.
  */
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN
+
+/**
+ * First path segments that are never org-scoped (AGL-627). These live at the
+ * apex path on every host, so the workspace-subdomain rewrite must leave them
+ * alone or `/signin` would become `/{slug}/signin` and 404.
+ */
+const APEX_PATH_SEGMENTS = new Set([
+  'manage',
+  'admin',
+  'signin',
+  'signout',
+  'signup',
+  'verify-email',
+  'account-recovery',
+])
 const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
 const API_KEY = process.env.NEXT_PUBLIC_FIREBASE_PUBLIC_API_KEY
 
@@ -94,6 +109,13 @@ export async function middleware(request: NextRequest) {
     res.headers.set('Content-Security-Policy-Report-Only', csp)
     return res
   }
+  const rewriteTo = (url: URL) => {
+    const res = NextResponse.rewrite(url, {
+      request: { headers: requestHeaders },
+    })
+    res.headers.set('Content-Security-Policy-Report-Only', csp)
+    return res
+  }
 
   if (!WORKSPACE_DOMAIN || !PROJECT_ID || !API_KEY) {
     return pass()
@@ -113,6 +135,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(moved, 308)
   }
   if (verdict.known) {
+    // On a workspace subdomain the org IS the hostname, so the path should
+    // not repeat it (AGL-627): `acme.aglyn.io/hosts/x`, never
+    // `acme.aglyn.io/acme/hosts/x`. Routes are still the canonical
+    // `/[orgSlug]/…` underneath, so rewrite the org segment back in.
+    //
+    // Account, staff and auth routes are NOT org-scoped and must not be
+    // rewritten — they exist at the apex path on every host. An already
+    // prefixed path passes through so canonical links keep working.
+    const segments = request.nextUrl.pathname.split('/').filter(Boolean)
+    const first = segments[0]
+    if (first !== slug && !APEX_PATH_SEGMENTS.has(first ?? '')) {
+      const rewritten = request.nextUrl.clone()
+      rewritten.pathname = `/${slug}${
+        request.nextUrl.pathname === '/' ? '' : request.nextUrl.pathname
+      }`
+      return rewriteTo(rewritten)
+    }
     return pass()
   }
   const apex = request.nextUrl.clone()

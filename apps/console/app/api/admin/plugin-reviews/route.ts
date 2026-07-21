@@ -26,6 +26,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review
@@ -155,21 +156,27 @@ async function handler(request: Request): Promise<Response> {
 
     // Tell the publisher their listing moved (rejections especially).
     if (listing.profileId && (action === 'reject' || action === 'list' || action === 'verify')) {
-      await firestore
-        .collection('users')
-        .doc(String(listing.profileId))
-        .collection('notifications')
-        .add({
+      // Publishers are ORGS now (AGL-652), so `profileId` is an org id —
+      // writing to users/{profileId}/notifications silently dropped every
+      // verdict into a user document nobody reads. Notify the org's managers.
+      const publisherOrgId = String(listing.profileId ?? '')
+      const publisherSlug = publisherOrgId
+        ? ((
+            await firestore.collection('orgs').doc(publisherOrgId).get()
+          ).get('slug') as string | undefined)
+        : undefined
+      if (publisherOrgId) {
+        await notifyOrgAdmins(publisherOrgId, {
           type: 'community.review',
           title:
             action === 'reject'
               ? `"${listing.displayName}" was rejected`
               : `"${listing.displayName}" is now ${nextStatus}`,
           body: action === 'reject' ? reason : 'Your plugin passed review.',
-          link: '/manage/community',
-          createdAt: FieldValue.serverTimestamp(),
-        })
-        .catch(() => undefined)
+          orgId: publisherOrgId,
+          link: publisherSlug ? `/${publisherSlug}/community` : '/',
+        }).catch(() => undefined)
+      }
     }
 
     await firestore.collection('adminAudit').add({

@@ -19,6 +19,7 @@
 import {
   LISTING_CATEGORIES,
   LISTING_README_MAX_CHARS,
+  listingArtifactType,
 } from '../model/community'
 import {
   parseMarkdownLite,
@@ -344,7 +345,7 @@ export function CommunityListingContent({
   // subset (version/changelog/trust/hostAbi/date).
   const [versions, setVersions] = useState<ListingVersionEntry[]>([])
   useEffect(() => {
-    if (listing?.type !== 'plugin' || !listingId) return
+    if (!listing || listingArtifactType(listing) !== 'plugin' || !listingId) return
     let active = true
     void fetch(
       `/api/community/listing-versions?listingId=${encodeURIComponent(listingId)}`,

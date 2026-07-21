@@ -20,6 +20,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { canActAsPublisher } from './publisher-profile'
+import { listingArtifactType } from '../model/community'
 
 /**
  * Installs a site template into a host (AGL-137): instantiates the
@@ -70,7 +71,11 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       .doc(listingId)
     const listingSnapshot = await listingRef.get()
     const listing = listingSnapshot.data() as any
-    if (!listing || listing.deletedAt || listing.kind !== 'template') {
+    if (
+      !listing ||
+      listing.deletedAt ||
+      listingArtifactType(listing) !== 'template'
+    ) {
       return res.status(404).json({ error: 'Unknown template' })
     }
 

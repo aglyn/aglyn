@@ -16,8 +16,9 @@
  */
 'use client'
 
-import { useParams } from 'next/navigation'
-import { createContext, useContext } from 'react'
+import { collection, getDocs, limit, query, where } from 'firebase/firestore'
+import { useParams, usePathname, useRouter } from 'next/navigation'
+import { createContext, useContext, useEffect, useRef } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope } from '../hooks/use-org-scope'
@@ -42,7 +43,9 @@ export function HostIdProvider({ children }) {
   const hostSubdomain = typeof params?.host === 'string' ? params.host : null
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { currentOrg } = useOrgScope()
+  const { currentOrg, orgs } = useOrgScope()
+  const router = useRouter()
+  const pathname = usePathname()
 
   // Resolve the URL subdomain to a host doc id within the CURRENT org
   // (AGL-622). Scoping the query by orgId is what the security rules allow (an
@@ -63,6 +66,53 @@ export function HostIdProvider({ children }) {
       )
     : undefined
   const hostReady = !hostSubdomain || Boolean(currentOrg && ready)
+
+  // Cross-org deep links (AGL-628). A subdomain belonging to ANOTHER org the
+  // user is a member of resolves to nothing above — the org-scoped query is
+  // all the rules allow — and the guard 404s a site they can actually open.
+  //
+  // `hostIndex` is signed-in readable and already mirrors `subdomain`, so a
+  // single lookup finds the owning org without a new global index. If it is
+  // an org the user belongs to, redirect to the canonical URL; if not, leave
+  // the 404 standing, because that IS the right answer for a site they
+  // cannot open. Either way we never sign anyone out (AGL-623).
+  const redirectedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!hostSubdomain || !ready || match || !currentOrg) return
+    if (redirectedRef.current === hostSubdomain) return
+    let active = true
+    void getDocs(
+      query(
+        collection(firestore, 'hostIndex'),
+        where('subdomain', '==', hostSubdomain),
+        limit(1),
+      ),
+    )
+      .then((snapshot) => {
+        if (!active) return
+        const owningOrgId = snapshot.docs[0]?.get('orgId') as string | undefined
+        if (!owningOrgId || owningOrgId === currentOrg.$id) return
+        const target = (orgs ?? []).find((org) => org.$id === owningOrgId)
+        if (!target?.slug || !pathname) return
+        // Swap only the org segment; the rest of the deep link is still valid.
+        const next = pathname.replace(/^\/[^/]+/, `/${target.slug}`)
+        redirectedRef.current = hostSubdomain
+        router.replace(next)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [
+    hostSubdomain,
+    ready,
+    match,
+    currentOrg,
+    orgs,
+    firestore,
+    pathname,
+    router,
+  ])
 
   return (
     <HostReadyContext.Provider value={hostReady}>

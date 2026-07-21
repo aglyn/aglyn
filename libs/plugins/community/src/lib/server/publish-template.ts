@@ -177,7 +177,10 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
 
     await listingRef.set(
       {
+        // `kind` retained alongside artifactType so listings published by
+        // an older build still resolve (AGL-654).
         kind: 'template',
+        artifactType: 'template',
         profileId: publisher.orgId,
         sourceHostId: hostId,
         displayName: displayName.trim(),

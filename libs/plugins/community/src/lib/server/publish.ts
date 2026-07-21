@@ -148,6 +148,7 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     await listingRef.set(
       {
         profileId: publisher.orgId,
+        artifactType: 'component',
         sourceComponentId: componentId,
         displayName: displayName.trim(),
         ...(description.trim() && { description: description.trim() }),
