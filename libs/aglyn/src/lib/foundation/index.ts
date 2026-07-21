@@ -57,6 +57,7 @@ export type {
   AglynLayout,
   AglynRedirect,
   AglynScreen,
+  AglynTemplate,
   AglynUser,
   ComponentDefUid,
   HostAnnouncementBar,

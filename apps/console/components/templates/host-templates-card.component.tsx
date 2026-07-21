@@ -17,7 +17,7 @@
 'use client'
 
 import type { TemplateKind } from '@aglyn/aglyn'
-import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -38,6 +38,9 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
+import { buildRoute, Route } from '../../constants/route-links'
+import { useHostSubdomain } from '../host-id-provider'
+import { useOrgSlug } from '../../hooks/use-org-scope'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import UseTemplateDialog from './use-template-dialog.component'
 
@@ -60,12 +63,32 @@ const KIND_ORDER: Array<{ kind: TemplateKind; heading: string; blurb: string }> 
     },
   ]
 
-function sourceChip(source: { type?: string; listingId?: string } | undefined) {
+/**
+ * Provenance badge (AGL-666), qualified once the copy has been edited
+ * locally (AGL-681).
+ *
+ * `source` is server-managed so a marketplace claim cannot be forged. But
+ * once someone edits a downloaded template, "Marketplace" alone starts
+ * vouching for content the publisher never wrote — so an edited copy says
+ * so. `editedAt` is client-written on purpose: it is a claim nobody gains
+ * anything by faking about their own copy.
+ */
+function sourceChip(
+  source: { type?: string; listingId?: string } | undefined,
+  editedAt?: unknown,
+) {
+  const edited = Boolean(editedAt)
   if (source?.type === 'marketplace') {
-    return { label: 'Marketplace', color: 'secondary' as const }
+    return {
+      label: edited ? 'Marketplace · edited' : 'Marketplace',
+      color: 'secondary' as const,
+    }
   }
   if (source?.type === 'starter') {
-    return { label: 'Starter', color: 'default' as const }
+    return {
+      label: edited ? 'Starter · edited' : 'Starter',
+      color: 'default' as const,
+    }
   }
   return { label: 'Saved here', color: 'default' as const }
 }
@@ -86,6 +109,8 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { data: user } = useUser()
+  const orgSlug = useOrgSlug()
+  const host = useHostSubdomain()
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
   )
@@ -181,6 +206,25 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     (template: any) => async () => {
       const listingId = template.source?.listingId
       if (!listingId || updating) return
+      // Updating re-installs and replaces the bundle (AGL-671). If this copy
+      // was edited locally (AGL-681) those edits go with it, so ask first —
+      // silently discarding someone's work to fetch a newer version is the
+      // worst possible reading of "update".
+      if (template.editedAt) {
+        const confirmed = await confirm({
+          title: 'Replace your edited copy?',
+          description:
+            `You have edited "${template.displayName ?? template.$id}" since ` +
+            'installing it. Updating replaces it with the publisher’s latest ' +
+            'version, and your changes to this template are lost. Pages you ' +
+            'already created from it are unaffected.',
+          confirmationText: 'Replace',
+          confirmationButtonProps: { color: 'error' },
+        })
+          .then(() => true)
+          .catch(() => false)
+        if (!confirmed) return
+      }
       setUpdating(template.$id)
       try {
         const idToken = await (user as any)?.getIdToken?.()
@@ -214,7 +258,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
         setUpdating(null)
       }
     },
-    [updating, user, hostId, enqueueSnackbar],
+    [updating, confirm, user, hostId, enqueueSnackbar],
   )
 
   const handleDelete = useCallback(
@@ -277,7 +321,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                   </Typography>
                 </Stack>
                 {entries.map((template: any) => {
-                  const chip = sourceChip(template.source)
+                  const chip = sourceChip(template.source, template.editedAt)
                   return (
                     <Stack
                       key={template.$id}
@@ -332,6 +376,21 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                             : 'Update available'}
                         </Button>
                       ) : null}
+                      <Button
+                        size="small"
+                        aria-label={`Edit ${
+                          template.displayName ?? template.$id
+                        }`}
+                        component={AppLink as any}
+                        {...({ componentVariant: 'naked' } as any)}
+                        href={buildRoute(Route.TEMPLATE_BESIGNER, {
+                          orgSlug,
+                          host,
+                          templateId: template.$id,
+                        })}
+                      >
+                        {'Edit'}
+                      </Button>
                       {/* Named for screen readers — "Use" alone repeats
                           once per row with no indication of which. */}
                       <Button

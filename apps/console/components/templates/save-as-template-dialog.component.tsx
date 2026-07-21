@@ -30,35 +30,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
-
-/**
- * Bare `{{name}}` tokens in the captured content (AGL-672).
- *
- * Deliberately ignores the id-form `{{var:…}}` and `{{fn:…}}` host bindings:
- * those resolve against the site's own variables and functions at render
- * time, so turning one into a template placeholder would break the binding
- * it already has. Only the plain named form is a placeholder candidate,
- * which is the same form `resolveNamedTokens` substitutes.
- */
-export function detectPlaceholders(nodes: Record<string, unknown>): string[] {
-  const found = new Set<string>()
-  const pattern = /\{\{\s*([a-zA-Z][\w.-]*)\s*\}\}/g
-  const walk = (value: unknown) => {
-    if (typeof value === 'string') {
-      for (const match of value.matchAll(pattern)) {
-        const name = match[1]
-        if (name && !name.includes(':')) found.add(name)
-      }
-      return
-    }
-    if (Array.isArray(value)) return void value.forEach(walk)
-    if (value && typeof value === 'object') {
-      Object.values(value as Record<string, unknown>).forEach(walk)
-    }
-  }
-  walk(nodes)
-  return Array.from(found).sort()
-}
+import { detectTemplatePlaceholders } from '@aglyn/aglyn'
 
 export interface SaveAsTemplateSource {
   kind: TemplateKind
@@ -126,7 +98,7 @@ export function SaveAsTemplateDialog({
       // Declared from what the content already contains, so using the
       // template prompts for them (AGL-670). Nothing is rewritten — the
       // tokens were authored in the page itself.
-      const placeholders = detectPlaceholders(captured.nodes).map((token) => ({
+      const placeholders = detectTemplatePlaceholders(captured.nodes).map((token) => ({
         name: token,
       }))
       await createHostResource({
