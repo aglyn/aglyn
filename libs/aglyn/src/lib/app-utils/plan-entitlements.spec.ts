@@ -16,6 +16,7 @@
  */
 
 import {
+  checkApiRequestQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
@@ -138,6 +139,7 @@ describe('plan entitlements', () => {
         extraMemberMonthlyUsd: null,
         extraDatasetMonthlyUsd: null,
         extraDataGbMonthlyUsd: null,
+        extraApiRequestsUsdPer1k: null,
       },
       starter: {
         basePriceMonthlyUsd: 25,
@@ -147,6 +149,7 @@ describe('plan entitlements', () => {
         extraMemberMonthlyUsd: 3,
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.25,
+        extraApiRequestsUsdPer1k: null,
       },
       pro: {
         basePriceMonthlyUsd: 56,
@@ -156,6 +159,7 @@ describe('plan entitlements', () => {
         extraMemberMonthlyUsd: 2,
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.25,
+        extraApiRequestsUsdPer1k: null,
       },
       business: {
         basePriceMonthlyUsd: 139,
@@ -165,6 +169,7 @@ describe('plan entitlements', () => {
         extraMemberMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
+        extraApiRequestsUsdPer1k: 0.5,
       },
       advanced: {
         basePriceMonthlyUsd: 399,
@@ -174,6 +179,7 @@ describe('plan entitlements', () => {
         extraMemberMonthlyUsd: 1,
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
+        extraApiRequestsUsdPer1k: 0.2,
       },
     })
   })
@@ -424,6 +430,29 @@ describe('plan entitlements', () => {
     const free = checkDataStorageQuota({ plan: 'free' } as any, 1)
     expect(free.allowed).toBe(false)
     expect(free.overageRateUsd).toBeNull()
+  })
+
+  it('checkApiRequestQuota meters overage on Business/Advanced, blocks below (AGL-634)', () => {
+    // Business includes 100k requests; 150k used → 50k over at $0.50/1k = $25.
+    const business = checkApiRequestQuota({ plan: 'business' } as any, 150_000)
+    expect(business.allowed).toBe(true)
+    expect(business.included).toBe(100_000)
+    expect(business.overageRequests).toBe(50_000)
+    expect(business.overageMonthlyUsd).toBeCloseTo(25)
+    expect(business.overageRateUsd).toBe(0.5)
+    // Advanced: 1M included, cheaper overage ($0.20/1k). 1.1M → 100k over = $20.
+    const advanced = checkApiRequestQuota({ plan: 'advanced' } as any, 1_100_000)
+    expect(advanced.included).toBe(1_000_000)
+    expect(advanced.overageMonthlyUsd).toBeCloseTo(20)
+    // Within the included quota there is no overage; remaining is tracked.
+    const within = checkApiRequestQuota({ plan: 'business' } as any, 40_000)
+    expect(within.overageRequests).toBe(0)
+    expect(within.remaining).toBe(60_000)
+    // Plans without API access have zero included and always block.
+    const pro = checkApiRequestQuota({ plan: 'pro' } as any, 1)
+    expect(pro.allowed).toBe(false)
+    expect(pro.included).toBe(0)
+    expect(pro.overageRateUsd).toBeNull()
   })
 
   it('gates commerce features per the AGL-278 matrix', () => {

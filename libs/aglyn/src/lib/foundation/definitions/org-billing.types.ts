@@ -161,6 +161,10 @@ export interface OrgEntitlements {
   emailSendsPerMonth?: number
   /** Action runs per calendar month (AGL-148). */
   actionRunsPerMonth?: number
+  /** Included customer REST API requests per calendar month (AGL-634);
+   * beyond it, metered overage per 1,000 where the plan prices it. Only
+   * Business/Advanced carry `apiAccess`, so lower tiers are 0. */
+  apiRequestsPerMonth?: number
   /** Dynamic data caps — org-scoped (AGL-239/240): datasets are shared
    * by every host in the org, so counts and size meter per org. */
   datasetsPerOrg?: number

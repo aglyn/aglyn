@@ -66,6 +66,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 100,
     emailSendsPerMonth: 0,
     actionRunsPerMonth: 0,
+    apiRequestsPerMonth: 0,
     datasetsPerOrg: 0,
     maxDatasetsPerOrg: 0,
     recordsPerDataset: 0,
@@ -131,6 +132,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 1000,
     emailSendsPerMonth: 500,
     actionRunsPerMonth: 0,
+    apiRequestsPerMonth: 0,
     datasetsPerOrg: 3,
     maxDatasetsPerOrg: 10,
     recordsPerDataset: 1000,
@@ -196,6 +198,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 10000,
     emailSendsPerMonth: 5000,
     actionRunsPerMonth: 5000,
+    apiRequestsPerMonth: 0,
     datasetsPerOrg: 15,
     maxDatasetsPerOrg: 50,
     recordsPerDataset: 10000,
@@ -261,6 +264,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 100000,
     emailSendsPerMonth: 50000,
     actionRunsPerMonth: 50000,
+    apiRequestsPerMonth: 100_000,
     datasetsPerOrg: 100,
     maxDatasetsPerOrg: 250,
     recordsPerDataset: 100000,
@@ -326,6 +330,7 @@ export const PLAN_ENTITLEMENTS: Record<OrgPlan, ResolvedOrgEntitlements> = {
     contactsPerHost: 1000000,
     emailSendsPerMonth: 250000,
     actionRunsPerMonth: 250000,
+    apiRequestsPerMonth: 1_000_000,
     datasetsPerOrg: 500,
     maxDatasetsPerOrg: 1000,
     recordsPerDataset: 1000000,
@@ -422,6 +427,12 @@ export interface PlanPricing {
    * when the plan hard-blocks at the included size instead of metering.
    */
   extraDataGbMonthlyUsd: number | null
+  /**
+   * Metered overage per 1,000 customer REST API requests beyond
+   * `apiRequestsPerMonth` (AGL-634). Only Business/Advanced carry API
+   * access, so lower tiers are null (no API to meter).
+   */
+  extraApiRequestsUsdPer1k: number | null
 }
 
 /**
@@ -438,6 +449,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraMemberMonthlyUsd: null,
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
+    extraApiRequestsUsdPer1k: null,
   },
   starter: {
     basePriceMonthlyUsd: 25,
@@ -447,6 +459,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraMemberMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.25,
+    extraApiRequestsUsdPer1k: null,
   },
   pro: {
     basePriceMonthlyUsd: 56,
@@ -456,6 +469,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraMemberMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.25,
+    extraApiRequestsUsdPer1k: null,
   },
   business: {
     basePriceMonthlyUsd: 139,
@@ -465,6 +479,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraMemberMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
+    extraApiRequestsUsdPer1k: 0.5,
   },
   advanced: {
     basePriceMonthlyUsd: 399,
@@ -474,6 +489,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraMemberMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
+    extraApiRequestsUsdPer1k: 0.2,
   },
 }
 
@@ -774,6 +790,53 @@ export function checkDataStorageQuota(
       overageRateUsd === null
         ? 0
         : Math.round(overageGb * overageRateUsd * 100) / 100,
+    overageRateUsd,
+  }
+}
+
+export interface ApiRequestQuotaResult {
+  /** Metered plans always allow; plans without API access block. */
+  allowed: boolean
+  /** Included requests this month at the plan. */
+  included: number
+  used: number
+  /** Remaining included requests; 0 once into overage. */
+  remaining: number
+  /** Requests beyond the included quota (0 within the plan). */
+  overageRequests: number
+  /** Estimated overage this month at the plan's per-1,000 rate. */
+  overageMonthlyUsd: number
+  /** Per-1,000 overage rate; null when the plan has no API. */
+  overageRateUsd: number | null
+}
+
+/**
+ * Customer REST API request meter (AGL-634): the monthly request count for an
+ * org. Business/Advanced carry `apiAccess` and an `extraApiRequestsUsdPer1k`
+ * rate, so requests past the included quota meter onto the monthly invoice
+ * (cost-plus, like storage overage — never a hard wall mid-integration); plans
+ * without API access have `included: 0` and always block.
+ */
+export function checkApiRequestQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedRequests: number,
+): ApiRequestQuotaResult {
+  const entitlements = resolveOrgEntitlements(org)
+  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const included = entitlements.apiRequestsPerMonth
+  const overageRateUsd = pricing.extraApiRequestsUsdPer1k
+  const used = Math.max(0, usedRequests)
+  const overageRequests = Math.max(0, used - included)
+  return {
+    allowed: overageRateUsd !== null ? true : used < included,
+    included,
+    used,
+    remaining: Math.max(0, included - used),
+    overageRequests,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round((overageRequests / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
   }
 }
