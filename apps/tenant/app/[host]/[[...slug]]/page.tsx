@@ -192,16 +192,54 @@ function buildJsonLd(props: Props): string[] {
       }
     : undefined
 
-  // Content entry → Article.
+  // Content entry → Article; collection list → ItemList (AGL-660).
   if (props.content) {
-    const entry = (props.content as any).entry
-    if (!entry) return []
+    const content = props.content as any
+    const entry = content.entry
+    const collectionSlug: string | undefined = content.collection?.slug
+    // Entry routing is /{collectionSlug}/{entrySlug} (list is
+    // /{collectionSlug}), so entry URLs are derivable rather than guessed.
+    const entryUrl = (slug?: string) =>
+      canonicalBase && collectionSlug && slug
+        ? `${canonicalBase}/${collectionSlug}/${slug}`
+        : undefined
+
+    // A list page carries `entries` but no `entry`, and used to emit nothing
+    // at all — so /blog had no structured data whatsoever.
+    if (!entry) {
+      const entries: any[] = Array.isArray(content.entries)
+        ? content.entries
+        : []
+      if (!canonicalBase || !collectionSlug || entries.length === 0) return []
+      return [
+        Aglyn.safeJsonLd({
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: content.collection?.displayName ?? collectionSlug,
+          url: `${canonicalBase}/${collectionSlug}`,
+          numberOfItems: entries.length,
+          itemListElement: entries.map((item, index) => ({
+            '@type': 'ListItem',
+            // Position is 1-based and must reflect the page the reader is
+            // on, or paginated lists all claim positions 1..n.
+            position:
+              ((Number(content.pagination?.page) || 1) - 1) *
+                (Number(content.pagination?.perPage) || entries.length) +
+              index +
+              1,
+            ...(entryUrl(item.slug) && { url: entryUrl(item.slug) }),
+            name: item.title,
+          })),
+        }),
+      ]
+    }
     // Category name resolves against the collection taxonomy (AGL-582):
     // stable categoryId lookup first, legacy free-typed string fallback.
     const categoryName = Aglyn.resolveEntryCategoryName(
       entry,
-      (props.content as any).collection?.categories,
+      content.collection?.categories,
     )
+    const articleUrl = entryUrl(entry.slug)
     return [
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
@@ -222,6 +260,20 @@ function buildJsonLd(props: Props): string[] {
           dateModified: new Date(entry.updatedAt.seconds * 1000).toISOString(),
         }),
         ...(publisher && { author: publisher }),
+        // The site is the publisher; the byline is the same entity only
+        // because entries carry no per-entry author field yet.
+        ...(publisher && {
+          publisher: {
+            ...publisher,
+            ...(host?.seo?.entity?.logo && { logo: host.seo.entity.logo }),
+          },
+        }),
+        // Google wants an article to say which page it IS — without these it
+        // is a floating description with no canonical anchor.
+        ...(articleUrl && {
+          url: articleUrl,
+          mainEntityOfPage: { '@type': 'WebPage', '@id': articleUrl },
+        }),
       }),
     ]
   }
