@@ -75,12 +75,17 @@ export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
         { variant: 'warning', persist: false },
       )
     }
-    const accepted = await confirm({
-      title: 'Uninstall from the whole organization?',
-      description: `"${install.displayName ?? install.$id}" stops loading on every site.`,
-      confirmationButtonProps: { color: 'error' },
-    })
-    if (!accepted) return
+    // confirm() resolves on accept and REJECTS on cancel (it carries no
+    // boolean) — so a catch is the cancel path, not a falsy return value.
+    try {
+      await confirm({
+        title: 'Uninstall from the whole organization?',
+        description: `"${install.displayName ?? install.$id}" stops loading on every site.`,
+        confirmationButtonProps: { color: 'error' },
+      })
+    } catch {
+      return
+    }
     try {
       const idToken = await (user as any)?.getIdToken?.()
       const response = await fetch('/api/community/install-plugin', {

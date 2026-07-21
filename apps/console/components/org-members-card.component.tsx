@@ -406,15 +406,24 @@ export function OrgMembersCard() {
                         void confirm({
                           title: 'Remove member?',
                           description: `${member.email ?? member.$id} loses access to every site in this organization.`,
-                        }).then(async (accepted) => {
-                          if (!accepted) return
-                          const ok = await request('/api/orgs/members', 'POST', {
-                            orgId,
-                            action: 'remove',
-                            uid: member.$id,
-                          })
-                          if (ok) await refresh()
                         })
+                          // confirm() resolves on accept and REJECTS on
+                          // cancel — the catch is the cancel path.
+                          .then(async () => {
+                            const ok = await request(
+                              '/api/orgs/members',
+                              'POST',
+                              {
+                                orgId,
+                                action: 'remove',
+                                uid: member.$id,
+                              },
+                            )
+                            if (ok) await refresh()
+                          })
+                          .catch(() => {
+                            // Cancelled — nothing to do.
+                          })
                       }
                     >
                       {'Remove'}

@@ -122,12 +122,17 @@ export function OrgRolesCard() {
   }
 
   const handleDelete = async (role: RoleDraft & { $id: string }) => {
-    const accepted = await confirm({
-      title: 'Delete role?',
-      description: `Members assigned "${role.name ?? role.$id}" fall back to their org role's default permissions.`,
-      confirmationButtonProps: { color: 'error' },
-    })
-    if (!accepted) return
+    // confirm() resolves on accept and REJECTS on cancel (it carries no
+    // boolean) — so a catch is the cancel path, not a falsy return value.
+    try {
+      await confirm({
+        title: 'Delete role?',
+        description: `Members assigned "${role.name ?? role.$id}" fall back to their org role's default permissions.`,
+        confirmationButtonProps: { color: 'error' },
+      })
+    } catch {
+      return
+    }
     const deleted = await request('POST', {
       action: 'delete',
       roleId: role.$id,

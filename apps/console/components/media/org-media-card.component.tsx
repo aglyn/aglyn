@@ -191,9 +191,15 @@ export function OrgMediaCard(props: { orgId: string | null }) {
                       void confirm({
                         title: 'Delete org media?',
                         description: `${item.fileName} disappears from every site using it.`,
-                      }).then(async (accepted) => {
-                        if (accepted) await request({ action: 'delete', mediaId: item.$id })
                       })
+                        // confirm() resolves on accept and REJECTS on
+                        // cancel — the catch is the cancel path.
+                        .then(async () => {
+                          await request({ action: 'delete', mediaId: item.$id })
+                        })
+                        .catch(() => {
+                          // Cancelled — nothing to do.
+                        })
                     }
                   >
                     {'Delete'}
