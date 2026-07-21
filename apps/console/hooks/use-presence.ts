@@ -20,6 +20,7 @@ import {
   FIREBASE_AUTH_EMULATOR_ENABLED,
   FIREBASE_DATABASE_EMULATOR_ENABLED,
 } from '@aglyn/shared-data-enums'
+import { FIREBASE_CLIENT_APP_NAME } from '@aglyn/tenant-feature-instance'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { getApp, getApps, initializeApp } from 'firebase/app'
 import {
@@ -125,7 +126,10 @@ export function usePresence(options: {
         const { token, orgId } = await response.json()
         if (!active || !token) return
 
-        const primary = getApp('DEFAULT_AGLYN')
+        // The shared constant, not a literal: the primary app is
+        // registered under a non-default name and a stale copy of it here
+        // would fail silently.
+        const primary = getApp(FIREBASE_CLIENT_APP_NAME)
         const presenceApp = getApps().some(
           (app) => app.name === PRESENCE_APP_NAME,
         )
@@ -143,8 +147,13 @@ export function usePresence(options: {
         }
         await signInWithCustomToken(auth, token)
         if (active) setSession({ orgId })
-      } catch {
-        // No presence rather than no editor.
+      } catch (error) {
+        // Quiet for the USER — an editor that will not open because nobody
+        // could be listed is far worse than an empty avatar stack. Not
+        // quiet for developers: swallowing this entirely made a broken
+        // presence session indistinguishable from an empty room, which
+        // cost real time to diagnose.
+        console.warn('[presence] could not start a session', error)
       }
     })()
     return () => {
@@ -166,7 +175,8 @@ export function usePresence(options: {
           // Already connected.
         }
       }
-    } catch {
+    } catch (error) {
+      console.warn('[presence] no database handle', error)
       return
     }
 
@@ -185,7 +195,7 @@ export function usePresence(options: {
       colour: colourFor(uid),
       ...(photoURL ? { photoURL: String(photoURL).slice(0, 512) } : {}),
       ...(selectedNodeId ? { selectedNodeId } : {}),
-    }).catch(() => undefined)
+    }).catch((error) => console.warn('[presence] could not announce', error))
     // Server-side cleanup: a closed tab or a slept laptop leaves no ghost.
     void onDisconnect(meRef).remove().catch(() => undefined)
 
@@ -199,7 +209,10 @@ export function usePresence(options: {
             .map(([entryUid, entry]) => ({ ...entry, uid: entryUid })),
         )
       },
-      () => setEntries([]),
+      (error) => {
+        console.warn('[presence] lost the room', error)
+        setEntries([])
+      },
     )
 
     return () => {
