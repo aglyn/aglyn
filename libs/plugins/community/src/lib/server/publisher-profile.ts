@@ -58,6 +58,31 @@ export async function resolvePublisherProfile(
   }
 }
 
+/**
+ * Whether a user may act for a publishing org (AGL-652).
+ *
+ * Ownership checks used to read `listing.profileId === decoded.uid`. With
+ * org-owned listings that comparison can NEVER be true — a uid is not an org
+ * id — so leaving them would lock every publisher out of their own listing
+ * and make every paid listing chargeable to its own publisher. Managers
+ * (owner/admin) act for the org, matching the gate the profile rules apply.
+ */
+export async function canActAsPublisher(
+  firestore: FirebaseFirestore.Firestore,
+  uid: string,
+  publisherOrgId: string | undefined | null,
+): Promise<boolean> {
+  if (!uid || !publisherOrgId) return false
+  const member = await firestore
+    .collection('orgs')
+    .doc(publisherOrgId)
+    .collection('members')
+    .doc(uid)
+    .get()
+  const role = member.get('role')
+  return role === 'owner' || role === 'admin'
+}
+
 export class PublisherHandleTakenError extends Error {
   constructor(public readonly handle: string) {
     super(`Handle "${handle}" is already taken`)

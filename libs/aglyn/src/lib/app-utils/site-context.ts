@@ -29,6 +29,18 @@ import { createContext, useContext } from 'react'
 export interface SiteContextValue {
   /** Host document id of the rendered site. */
   hostId?: string
+  /**
+   * Data a site-page resolver already loaded on the server for THIS page,
+   * keyed by plugin (AGL-659).
+   *
+   * Blocks whose primary content came from a `useEffect` fetch rendered a
+   * skeleton during SSR — so the crawler saw a product page with no product
+   * in it. Seeding from here lets a block render its real content in the
+   * server HTML and still hydrate normally, without giving up ISR caching.
+   *
+   * Absent in the besigner/preview, so blocks must keep working without it.
+   */
+  pageData?: Record<string, unknown>
 }
 
 export const SiteContext = createContext<SiteContextValue>({})

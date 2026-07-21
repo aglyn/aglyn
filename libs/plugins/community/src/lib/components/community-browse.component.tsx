@@ -69,6 +69,21 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const { permissions } = props
   const { install: runInstall, buy: runBuy } = useCommunityActions(hostId)
   const [handles, setHandles] = useState<Record<string, string>>({})
+  // Listings are org-owned (AGL-652), so "is this mine" is an org comparison.
+  // Resolved from the routing mirror rather than a new prop so the component
+  // stays self-contained; hostIndex is signed-in readable.
+  const [viewerOrgId, setViewerOrgId] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    void getDoc(doc(firestore, 'hostIndex', hostId))
+      .then((snapshot) => {
+        if (active) setViewerOrgId((snapshot.get('orgId') as string) ?? null)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId])
 
   const { data: listings } = useFirestoreCollection<any>(
     () =>
@@ -124,7 +139,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     Promise.all(
       profileIds.map(async (profileId) => {
         const snapshot = await getDoc(
-          doc(firestore, 'profiles', String(profileId)),
+          doc(firestore, 'publisherProfiles', String(profileId)),
         ).catch(() => null)
         return [profileId, snapshot?.get('handle') ?? ''] as const
       }),
@@ -170,7 +185,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
       // stay off the public browse; the owner still sees their own (the
       // detail page shows them the status). UX-level only — the docs are
       // public-readable by design.
-      if (!isListingBrowsable(listing) && listing.profileId !== user?.uid) {
+      if (!isListingBrowsable(listing) && listing.profileId !== viewerOrgId) {
         return false
       }
       if (category && listing.category !== category) return false
@@ -238,7 +253,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
             const mustBuy =
               priceUsd > 0 &&
               !purchased[listing.$id] &&
-              listing.profileId !== user?.uid &&
+              listing.profileId !== viewerOrgId &&
               !install
             return (
               <Grid key={listing.$id} size={{ xs: 12, sm: 6, md: 4 }}>

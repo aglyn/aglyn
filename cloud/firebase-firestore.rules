@@ -417,12 +417,15 @@ service cloud.firestore {
           request.resource.data.displayName.size() <= 80;
       }
       // The payout keys decide who receives money — Connect route only.
-      allow create: if publisherManager() && publisherFieldsValid() &&
-        !request.resource.data.keys()
-          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+      // `handle` is equally server-owned: it must be claimed transactionally
+      // in `publisherHandles` (AGL-652), and a client read-then-write lets
+      // two orgs racing for one handle both "succeed", silently taking each
+      // other's marketplace URL. Creates go through the save route entirely;
+      // updates may edit the cosmetic fields but never the handle.
+      allow create: if false;
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['stripeAccountId', 'stripeChargesEnabled']);
+          .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled']);
       allow delete: if isStaff();
     }
 
@@ -486,9 +489,12 @@ service cloud.firestore {
     // webhook (Admin SDK). Buyers read their own purchases (install
     // gating); sellers read sales of their listings (revenue ledger).
     match /communityPurchases/{purchaseId} {
+      // The seller is an ORG (AGL-652), so the sales side is a membership
+      // check, not a uid match — a uid never equals an org id, and leaving
+      // the old comparison would hide every publisher's own revenue.
       allow read: if isStaff() || (isSignedIn() &&
         (resource.data.buyerUid == request.auth.uid ||
-         resource.data.sellerUid == request.auth.uid));
+         exists(/databases/$(database)/documents/orgs/$(resource.data.sellerOrgId)/members/$(request.auth.uid))));
       allow write: if false;
     }
 

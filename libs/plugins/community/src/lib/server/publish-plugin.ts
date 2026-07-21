@@ -26,6 +26,10 @@ import {
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import {
+  canActAsPublisher,
+  resolvePublisherProfile,
+} from './publisher-profile'
 import { createHash } from 'crypto'
 import {
   COMMUNITY_MAX_PRICE_USD,
@@ -69,7 +73,14 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     if (!listing || listing.deletedAt) {
       return res.status(404).json({ error: 'Unknown listing' })
     }
-    if (listing.profileId !== decoded.uid && decoded['staff'] !== true) {
+    // Org-owned listings (AGL-652): a uid never equals an org id, so the
+    // old identity comparison would lock publishers out of their own listing.
+    const isPublisher = await canActAsPublisher(
+      firebaseAdmin.app().firestore(),
+      decoded.uid,
+      listing.profileId,
+    )
+    if (!isPublisher && decoded['staff'] !== true) {
       return res.status(403).json({ error: 'Not your listing' })
     }
     const description = req.body?.description
@@ -146,7 +157,8 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
 
     // Plan gate rides the caller's org doc (AGL-238).
-    const org = (await getOrgForUser(decoded.uid))?.org ?? {}
+    const orgForUser = await getOrgForUser(decoded.uid)
+    const org = orgForUser?.org ?? {}
     if (!checkEntitlement(org, 'marketplaceSelling')) {
       return res
         .status(403)
@@ -155,10 +167,15 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
 
     // Publish rate limit (AGL-437): a runaway or abusive publisher can't
     // flood the artifacts bucket/review queue — 20 publishes per UTC day.
+    // Scoped to the publishing ORG (AGL-652): per-user it would multiply by
+    // headcount, letting a big team flood the queue 20 publishes at a time.
     const dayKey = new Date().toISOString().slice(0, 10)
+    if (!orgForUser?.orgId) {
+      return res.status(409).json({ error: 'No publishing organization' })
+    }
     const limiterRef = firestore
-      .collection('profiles')
-      .doc(decoded.uid)
+      .collection('publisherProfiles')
+      .doc(orgForUser.orgId)
       .collection('meta')
       .doc('publishWindow')
     const allowed = await firestore.runTransaction(async (transaction) => {
@@ -174,19 +191,17 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         .json({ error: 'Daily publish limit reached — try again tomorrow' })
     }
 
-    const profileSnapshot = await firestore
-      .collection('profiles')
-      .doc(decoded.uid)
-      .get()
-    if (!profileSnapshot.exists || !profileSnapshot.get('handle')) {
+    const publisher = await resolvePublisherProfile(firestore, orgForUser.orgId)
+    if (!publisher) {
       return res.status(412).json({
         error:
-          'Create your community profile first (Manage → Community profile)',
+          'Set up your organization’s publisher profile first ' +
+          '(Organization → Community)',
       })
     }
-    if (priceUsd > 0 && !profileSnapshot.get('stripeChargesEnabled')) {
+    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
       return res.status(412).json({
-        error: 'Set up payouts first (Manage → Community profile) to sell',
+        error: 'Set up payouts first (Organization → Community) to sell',
       })
     }
 
@@ -224,7 +239,7 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     // One listing per publisher+plugin id: re-publishing bumps the version.
     const existing = await firestore
       .collection('communityListings')
-      .where('profileId', '==', decoded.uid)
+      .where('profileId', '==', publisher.orgId)
       .where('pluginId', '==', manifest.id)
       .limit(1)
       .get()
@@ -255,7 +270,7 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     await listingRef.set(
       {
         type: 'plugin',
-        profileId: decoded.uid,
+        profileId: publisher.orgId,
         pluginId: manifest.id,
         displayName: displayName.trim(),
         ...(description.trim() && { description: description.trim() }),

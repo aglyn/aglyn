@@ -144,8 +144,14 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
         {aggregate.count > 0 ? (
           <script
             type="application/ld+json"
+            // Every other JSON-LD site uses safeJsonLd (AGL-496): plain
+            // JSON.stringify leaves `<` unescaped, so a `</script>` inside any
+            // embedded string breaks out of the element. Only two numbers go
+            // in today, so this isn't exploitable — but it is the one call
+            // site primed to become stored XSS the moment someone adds a
+            // reviewer name or review body here.
             dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
+              __html: Aglyn.safeJsonLd({
                 '@context': 'https://schema.org',
                 '@type': 'AggregateRating',
                 ratingValue: aggregate.average,

@@ -32,6 +32,14 @@ export interface Props {
     }
   }
   nodes: Record<Aglyn.NodeId, Aglyn.NodeSchema> | null
+  /**
+   * Data a site-page resolver or enricher already loaded on the server for
+   * this page, keyed by plugin (AGL-659). Reaches blocks through
+   * `SiteContext.pageData` so they can render primary content during SSR
+   * instead of fetching it in an effect, and feeds server-side structured
+   * data (AGL-660).
+   */
+  pageData?: Record<string, unknown>
   /** Org-enabled site plugins the client must load pre-canvas (AGL-417). */
   enabledPlugins?: string[]
   /**

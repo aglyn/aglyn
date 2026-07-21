@@ -23,6 +23,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { canActAsPublisher } from './publisher-profile'
 
 /**
  * Installs (or upgrades) a community plugin into a host (AGL-45), pinning a
@@ -159,7 +160,15 @@ export const installPluginHandler: PluginApiHandler = async (req, res) => {
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    if (priceUsd > 0 && listing.profileId !== decoded.uid) {
+    // The publisher installs their own listing for free. Org-owned now
+    // (AGL-652), so this is a role check — comparing a uid to an org id
+    // would never match and would charge publishers for their own work.
+    const ownsListing = await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listing.profileId,
+    )
+    if (priceUsd > 0 && !ownsListing) {
       const purchases = await firestore
         .collection('communityPurchases')
         .where('buyerUid', '==', decoded.uid)

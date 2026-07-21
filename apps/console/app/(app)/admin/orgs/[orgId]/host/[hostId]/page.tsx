@@ -322,7 +322,14 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                           {`Locales: ${(host?.locales ?? []).join(', ') || '—'}`}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {`GA measurement id: ${host?.gaMeasurementId ?? '—'}`}
+                          {/* The field lives at analytics.gaMeasurementId —
+                              what the Setup form writes and the tenant reads.
+                              The flat path never existed, so this always
+                              showed '—' even for hosts with GA configured. */}
+                          {`GA measurement id: ${
+                            (host as { analytics?: { gaMeasurementId?: string } })
+                              ?.analytics?.gaMeasurementId ?? '—'
+                          }`}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           {`Password protected: ${host?.protectPassword ? 'yes' : 'no'}`}

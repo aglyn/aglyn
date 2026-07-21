@@ -36,9 +36,10 @@ export const communityBillingWebhookHandler: BillingWebhookHandler = async ({
       object?.metadata?.type === 'community-purchase' &&
       object?.payment_status === 'paid'
     ) {
-      const { listingId, buyerUid, sellerUid, feeCents } =
+      // Sellers are orgs (AGL-652) — the ledger records which ORG earned it.
+      const { listingId, buyerUid, sellerOrgId, feeCents } =
         object.metadata ?? {}
-      if (listingId && buyerUid && sellerUid) {
+      if (listingId && buyerUid && sellerOrgId) {
         await firebaseAdmin
           .app()
           .firestore()
@@ -47,7 +48,7 @@ export const communityBillingWebhookHandler: BillingWebhookHandler = async ({
           .set({
             listingId,
             buyerUid,
-            sellerUid,
+            sellerOrgId,
             amountCents: Number(object?.amount_total ?? 0),
             feeCents: Number(feeCents ?? 0),
             createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),

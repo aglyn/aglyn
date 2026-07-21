@@ -58,7 +58,7 @@ const CommunityPublisher: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
   const { data: profile, status } = useFirestoreDoc<any>(
-    () => doc(firestore, 'profiles', profileId || '-missing-'),
+    () => doc(firestore, 'publisherProfiles', profileId || '-missing-'),
     [firestore, profileId],
     { idField: '$id' },
   )

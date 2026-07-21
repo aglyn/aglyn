@@ -39,7 +39,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { collection, doc, limit, query, where } from 'firebase/firestore'
+import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
@@ -297,6 +297,20 @@ export function CommunityListingContent({
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { install, buy } = useCommunityActions(hostId)
+  // Listings are org-owned (AGL-652) — "did I publish this" is an org
+  // comparison, resolved from the routing mirror like the browse grid.
+  const [viewerOrgId, setViewerOrgId] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    void getDoc(doc(firestore, 'hostIndex', hostId))
+      .then((snapshot) => {
+        if (active) setViewerOrgId((snapshot.get('orgId') as string) ?? null)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId])
 
   const { data: listing, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'communityListings', listingId || '-missing-'),
@@ -304,7 +318,7 @@ export function CommunityListingContent({
     { idField: '$id' },
   )
   const { data: profile } = useFirestoreDoc<any>(
-    () => doc(firestore, 'profiles', listing?.profileId ?? '-anonymous-'),
+    () => doc(firestore, 'publisherProfiles', listing?.profileId ?? '-anonymous-'),
     [firestore, listing?.profileId],
     { idField: '$id' },
   )
@@ -373,7 +387,7 @@ export function CommunityListingContent({
   const upToDate = install_ && installedVersion >= listing?.latestVersion
   const priceUsd = Number(listing?.priceUsd ?? 0)
   const mustBuy =
-    priceUsd > 0 && !purchased && listing?.profileId !== user?.uid && !install_
+    priceUsd > 0 && !purchased && listing?.profileId !== viewerOrgId && !install_
   const versionHistory: any[] = Array.isArray(listing?.versionHistory)
     ? [...listing.versionHistory].sort((a, b) => b.version - a.version)
     : []

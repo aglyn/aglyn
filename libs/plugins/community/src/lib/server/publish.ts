@@ -20,6 +20,7 @@ import { COMMUNITY_MAX_PRICE_USD, sanitizeCommunityDefinition } from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { resolvePublisherProfile } from './publisher-profile'
 
 /**
  * Publishes a host reusable component to the community (AGL-44). Runs
@@ -81,29 +82,33 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     }
 
     // Plan gate rides the owning org's doc (AGL-238).
-    const org = (await getOrgForHost(hostId))?.org ?? {}
+    const orgForHost = await getOrgForHost(hostId)
+    const org = orgForHost?.org ?? {}
     if (!checkEntitlement(org, 'marketplaceSelling')) {
       return res.status(403).json({
         error: 'Publishing to the community requires a Pro plan',
       })
     }
+    if (!orgForHost?.orgId) {
+      return res.status(409).json({ error: 'Site has no owning organization' })
+    }
 
-    const profileSnapshot = await firestore
-      .collection('profiles')
-      .doc(decoded.uid)
-      .get()
-    if (!profileSnapshot.exists || !profileSnapshot.get('handle')) {
+    // Publishing is ORG-ONLY (AGL-652): the publisher is the org, not
+    // whoever clicked publish. `profileId` keeps its name — it is still the
+    // publisher profile's doc id, which is now the org id.
+    const publisher = await resolvePublisherProfile(firestore, orgForHost.orgId)
+    if (!publisher) {
       return res.status(412).json({
         error:
-          'Create your community profile first (Manage → Community profile)',
+          'Set up your organization’s publisher profile first ' +
+          '(Organization → Community)',
       })
     }
     // Paid listings require completed Stripe Connect onboarding (AGL-46).
-    if (priceUsd > 0 && !profileSnapshot.get('stripeChargesEnabled')) {
+    if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
       return res.status(412).json({
         error:
-          'Set up payouts first (Manage → Community profile) to sell ' +
-          'components',
+          'Set up payouts first (Organization → Community) to sell components',
       })
     }
 
@@ -128,7 +133,7 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     // One listing per source component: re-publish bumps latestVersion.
     const existing = await firestore
       .collection('communityListings')
-      .where('profileId', '==', decoded.uid)
+      .where('profileId', '==', publisher.orgId)
       .where('sourceComponentId', '==', componentId)
       .limit(1)
       .get()
@@ -142,7 +147,7 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
 
     await listingRef.set(
       {
-        profileId: decoded.uid,
+        profileId: publisher.orgId,
         sourceComponentId: componentId,
         displayName: displayName.trim(),
         ...(description.trim() && { description: description.trim() }),

@@ -405,6 +405,11 @@ describe('pre-release hardening guards', () => {
       await setDoc(doc(db, 'communityListings', LISTING), {
         profileId: OWNER, name: 'Plugin', installCount: 5, priceUsd: 10,
       })
+      // Org publisher profile (AGL-652) — created server-side, so the rules
+      // tests seed it rather than creating it through a client write.
+      await setDoc(doc(db, 'publisherProfiles', ORG), {
+        handle: 'seeded-handle', displayName: 'Acme Labs',
+      })
     })
   })
 
@@ -490,8 +495,10 @@ describe('pre-release hardening guards', () => {
   it('org publisher profiles are manager-written, payout keys server-only (AGL-652)', async () => {
     // Public read — buyers see who they install from.
     await assertSucceeds(getDoc(doc(anon(), 'publisherProfiles', ORG)))
-    // Org managers write it.
-    await assertSucceeds(
+    // Creates and handle writes are server-only: the handle must be claimed
+    // transactionally, and a client read-then-write lets two orgs racing for
+    // one handle both win (AGL-652).
+    await assertFails(
       setDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
         handle: 'acme-labs',
         displayName: 'Acme Labs',
@@ -528,6 +535,20 @@ describe('pre-release hardening guards', () => {
     await assertFails(
       updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
         stripeChargesEnabled: true,
+      }),
+    )
+    // ...but a manager may still edit the cosmetic fields on an existing
+    // profile, so the handle freeze doesn't lock the page entirely.
+    await assertSucceeds(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        handle: 'seeded-handle',
+        displayName: 'Acme Labs Renamed',
+        bio: 'We make things.',
+      }),
+    )
+    await assertFails(
+      updateDoc(doc(authed(OWNER), 'publisherProfiles', ORG), {
+        handle: 'stolen-handle',
       }),
     )
     // Malformed handles are rejected.

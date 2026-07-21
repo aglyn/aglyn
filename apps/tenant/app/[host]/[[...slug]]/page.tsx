@@ -192,16 +192,54 @@ function buildJsonLd(props: Props): string[] {
       }
     : undefined
 
-  // Content entry → Article.
+  // Content entry → Article; collection list → ItemList (AGL-660).
   if (props.content) {
-    const entry = (props.content as any).entry
-    if (!entry) return []
+    const content = props.content as any
+    const entry = content.entry
+    const collectionSlug: string | undefined = content.collection?.slug
+    // Entry routing is /{collectionSlug}/{entrySlug} (list is
+    // /{collectionSlug}), so entry URLs are derivable rather than guessed.
+    const entryUrl = (slug?: string) =>
+      canonicalBase && collectionSlug && slug
+        ? `${canonicalBase}/${collectionSlug}/${slug}`
+        : undefined
+
+    // A list page carries `entries` but no `entry`, and used to emit nothing
+    // at all — so /blog had no structured data whatsoever.
+    if (!entry) {
+      const entries: any[] = Array.isArray(content.entries)
+        ? content.entries
+        : []
+      if (!canonicalBase || !collectionSlug || entries.length === 0) return []
+      return [
+        Aglyn.safeJsonLd({
+          '@context': 'https://schema.org',
+          '@type': 'ItemList',
+          name: content.collection?.displayName ?? collectionSlug,
+          url: `${canonicalBase}/${collectionSlug}`,
+          numberOfItems: entries.length,
+          itemListElement: entries.map((item, index) => ({
+            '@type': 'ListItem',
+            // Position is 1-based and must reflect the page the reader is
+            // on, or paginated lists all claim positions 1..n.
+            position:
+              ((Number(content.pagination?.page) || 1) - 1) *
+                (Number(content.pagination?.perPage) || entries.length) +
+              index +
+              1,
+            ...(entryUrl(item.slug) && { url: entryUrl(item.slug) }),
+            name: item.title,
+          })),
+        }),
+      ]
+    }
     // Category name resolves against the collection taxonomy (AGL-582):
     // stable categoryId lookup first, legacy free-typed string fallback.
     const categoryName = Aglyn.resolveEntryCategoryName(
       entry,
-      (props.content as any).collection?.categories,
+      content.collection?.categories,
     )
+    const articleUrl = entryUrl(entry.slug)
     return [
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
@@ -222,12 +260,100 @@ function buildJsonLd(props: Props): string[] {
           dateModified: new Date(entry.updatedAt.seconds * 1000).toISOString(),
         }),
         ...(publisher && { author: publisher }),
+        // The site is the publisher; the byline is the same entity only
+        // because entries carry no per-entry author field yet.
+        ...(publisher && {
+          publisher: {
+            ...publisher,
+            ...(host?.seo?.entity?.logo && { logo: host.seo.entity.logo }),
+          },
+        }),
+        // Google wants an article to say which page it IS — without these it
+        // is a floating description with no canonical anchor.
+        ...(articleUrl && {
+          url: articleUrl,
+          mainEntityOfPage: { '@type': 'WebPage', '@id': articleUrl },
+        }),
       }),
     ]
   }
 
   // Screen render → WebSite (+ BreadcrumbList for nested paths).
   const ld: string[] = []
+
+  // Product detail → Product/Offer (AGL-660). Emitted HERE, on the server,
+  // from the payload the commerce resolver already resolved (AGL-659). The
+  // PDP block used to build this from client state, so it never reached the
+  // HTML a crawler reads — which is the whole point of product structured
+  // data (rich results, Merchant listings).
+  const seededProduct = (
+    props.pageData as
+      | {
+          commerce?: {
+            product?: {
+              name: string
+              slug: string
+              description?: string
+              mediaUrls?: string[]
+              variants?: Array<{ priceUsd: number; soldOut?: boolean }>
+            }
+          }
+        }
+      | undefined
+  )?.commerce?.product
+  if (seededProduct && canonicalBase) {
+    const prices = (seededProduct.variants ?? [])
+      .map((variant) => Number(variant.priceUsd))
+      .filter((price) => Number.isFinite(price))
+    const low = prices.length ? Math.min(...prices) : undefined
+    const high = prices.length ? Math.max(...prices) : undefined
+    // Out of stock only when EVERY variant is — one available size still
+    // makes the product purchasable.
+    const inStock = (seededProduct.variants ?? []).some(
+      (variant) => !variant.soldOut,
+    )
+    const availability = `https://schema.org/${
+      inStock ? 'InStock' : 'OutOfStock'
+    }`
+    ld.push(
+      Aglyn.safeJsonLd({
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: seededProduct.name,
+        ...(seededProduct.description && {
+          description: seededProduct.description,
+        }),
+        ...(seededProduct.mediaUrls?.length && {
+          image: seededProduct.mediaUrls,
+        }),
+        url: `${canonicalBase}/products/${seededProduct.slug}`,
+        ...(publisher && { brand: publisher }),
+        // Currency isn't modelled on the product yet, so USD is assumed —
+        // the same assumption the client block made. Revisit with
+        // multi-currency. `sku` is absent because the public DTO strips it.
+        ...(low != null && {
+          offers:
+            low === high
+              ? {
+                  '@type': 'Offer',
+                  price: low,
+                  priceCurrency: 'USD',
+                  availability,
+                  url: `${canonicalBase}/products/${seededProduct.slug}`,
+                }
+              : {
+                  '@type': 'AggregateOffer',
+                  lowPrice: low,
+                  highPrice: high,
+                  priceCurrency: 'USD',
+                  offerCount: prices.length,
+                  availability,
+                },
+        }),
+      }),
+    )
+  }
+
   const screen = props.data?.screen?.data as any
   const siteTitle: string | undefined = host?.seo?.title ?? host?.displayName
   if (canonicalBase) {

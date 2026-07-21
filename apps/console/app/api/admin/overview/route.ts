@@ -141,7 +141,7 @@ async function handler(request: Request): Promise<Response> {
         $id: doc.id,
         listingId: data['listingId'] ?? null,
         buyerUid: data['buyerUid'] ?? null,
-        sellerUid: data['sellerUid'] ?? null,
+        sellerOrgId: data['sellerOrgId'] ?? null,
         amountCents: data['amountCents'] ?? 0,
         feeCents: data['feeCents'] ?? 0,
         createdAt: data['createdAt']?.toMillis?.() ?? null,

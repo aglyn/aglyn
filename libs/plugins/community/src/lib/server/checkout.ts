@@ -16,8 +16,12 @@
  */
 
 import { COMMUNITY_PLATFORM_FEE_PERCENT, COMMUNITY_PLATFORM_FEE_PERCENT_FREE_PLAN } from '../model'
-import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import {
+  canActAsPublisher,
+  resolvePublisherProfile,
+} from './publisher-profile'
 
 /**
  * Checkout for a paid community listing (AGL-46): one-time destination
@@ -60,24 +64,23 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     if (!(priceUsd > 0)) {
       return res.status(400).json({ error: 'Listing is free' })
     }
-    if (listing.profileId === decoded.uid) {
-      return res.status(400).json({ error: 'You published this listing' })
+    // Publishing is org-owned (AGL-652): `profileId` IS the publisher org id.
+    const sellerOrgId = String(listing.profileId ?? '')
+    if (await canActAsPublisher(firestore, decoded.uid, sellerOrgId)) {
+      return res.status(400).json({ error: 'Your organization published this listing' })
     }
-    const profileSnapshot = await firestore
-      .collection('profiles')
-      .doc(listing.profileId)
-      .get()
-    const accountId = profileSnapshot.get('stripeAccountId')
-    if (!accountId || !profileSnapshot.get('stripeChargesEnabled')) {
+    const publisher = await resolvePublisherProfile(firestore, sellerOrgId)
+    const accountId = publisher?.stripeAccountId
+    if (!accountId || !publisher?.stripeChargesEnabled) {
       return res
         .status(409)
         .json({ error: 'The publisher has not enabled payouts yet' })
     }
 
-    // Publisher's plan sets the platform share (free plan pays more);
-    // it rides the seller's org doc (AGL-238).
-    const sellerOrg = await getOrgForUser(String(listing.profileId))
-    const sellerPlan = sellerOrg?.org?.plan ?? 'free'
+    // Publisher's plan sets the platform share (free plan pays more); read
+    // the seller org directly now that profileId is its id (AGL-652).
+    const sellerOrgDoc = await firestore.collection('orgs').doc(sellerOrgId).get()
+    const sellerPlan = (sellerOrgDoc.get('plan') as string | undefined) ?? 'free'
     const feePercent =
       sellerPlan === 'free'
         ? COMMUNITY_PLATFORM_FEE_PERCENT_FREE_PLAN
@@ -103,7 +106,7 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
       'metadata[type]': 'community-purchase',
       'metadata[listingId]': listingId,
       'metadata[buyerUid]': decoded.uid,
-      'metadata[sellerUid]': String(listing.profileId),
+      'metadata[sellerOrgId]': sellerOrgId,
       'metadata[feeCents]': String(feeCents),
       ...(decoded.email ? { customer_email: decoded.email } : {}),
     })

@@ -20,6 +20,7 @@ import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
+import { toPublicProductDetail } from './product'
 
 /**
  * Commerce page resolver (AGL-292/298/418), relocated verbatim from the
@@ -87,6 +88,16 @@ export const commerceSitePageResolver: SitePageResolver = async ({
           return {
             props: JSON.parse(
               JSON.stringify({
+                // The PDP block used to fetch this in an effect, so the
+                // server rendered a skeleton and crawlers saw a product page
+                // with no product in it (AGL-659). The product is already
+                // loaded here — hand it down so it renders server-side.
+                pageData: {
+                  commerce: { product: toPublicProductDetail(
+                    productSnapshot.docs[0].id,
+                    product,
+                  ) },
+                },
                 data: {
                   host: hostRes.host,
                   screen: {

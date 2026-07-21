@@ -19,6 +19,7 @@ import { checkQuota, createResourceUid } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { canActAsPublisher } from './publisher-profile'
 
 /**
  * Installs a site template into a host (AGL-137): instantiates the
@@ -74,7 +75,15 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
     }
 
     const priceUsd = Number(listing.priceUsd ?? 0)
-    if (priceUsd > 0 && listing.profileId !== decoded.uid) {
+    // The publisher installs their own listing for free. Org-owned now
+    // (AGL-652), so this is a role check — comparing a uid to an org id
+    // would never match and would charge publishers for their own work.
+    const ownsListing = await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listing.profileId,
+    )
+    if (priceUsd > 0 && !ownsListing) {
       const purchases = await firestore
         .collection('communityPurchases')
         .where('buyerUid', '==', decoded.uid)

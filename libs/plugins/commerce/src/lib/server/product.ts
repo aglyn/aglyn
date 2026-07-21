@@ -44,6 +44,52 @@ export interface PublicProductDetail {
 }
 
 /**
+ * Map a lifted product onto the public PDP DTO.
+ *
+ * Extracted (AGL-659) so the site-page resolver can put the SAME payload
+ * into page props as the API returns — the PDP block used to fetch this in
+ * an effect, which meant the server rendered a skeleton and crawlers saw a
+ * product page with no product in it. One definition keeps the server-
+ * rendered and client-fetched shapes from drifting.
+ *
+ * Display-only by design: stock is a `soldOut` boolean rather than a raw
+ * count, and the charge still prices server-side.
+ */
+export function toPublicProductDetail(
+  id: string,
+  product: ReturnType<typeof CommerceModel.liftLegacyProduct>,
+): PublicProductDetail {
+  return {
+    id,
+    name: product.name,
+    slug: product.slug,
+    ...(product.description ? { description: product.description } : {}),
+    type: product.type,
+    mediaUrls:
+      product.mediaUrls ?? (product.imageUrl ? [product.imageUrl] : []),
+    options: product.options ?? [],
+    variants: product.variants.map((variant) => ({
+      id: variant.id,
+      ...(variant.options ? { options: variant.options } : {}),
+      priceUsd: variant.priceUsd,
+      ...(variant.compareAtPriceUsd
+        ? { compareAtPriceUsd: variant.compareAtPriceUsd }
+        : {}),
+      soldOut:
+        variant.inventory != null &&
+        Number(variant.inventory) <= 0 &&
+        product.oversellPolicy !== 'backorder',
+      ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
+    })),
+    ...(product.tags?.length ? { tags: product.tags } : {}),
+    ...(product.subscription ? { subscription: product.subscription } : {}),
+    ...(product.subscription && product.subscriptionOptional
+      ? { subscriptionOptional: true }
+      : {}),
+  }
+}
+
+/**
  * Public product detail by slug (AGL-292): everything the PDP block
  * needs — variants with per-option prices and stock booleans, never raw
  * counts. Display-only; the charge still prices server-side.
@@ -69,34 +115,7 @@ export const productHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown product' })
     }
     const product = CommerceModel.liftLegacyProduct(raw)
-    const detail: PublicProductDetail = {
-      id: docSnapshot.id,
-      name: product.name,
-      slug: product.slug,
-      ...(product.description ? { description: product.description } : {}),
-      type: product.type,
-      mediaUrls:
-        product.mediaUrls ?? (product.imageUrl ? [product.imageUrl] : []),
-      options: product.options ?? [],
-      variants: product.variants.map((variant) => ({
-        id: variant.id,
-        ...(variant.options ? { options: variant.options } : {}),
-        priceUsd: variant.priceUsd,
-        ...(variant.compareAtPriceUsd
-          ? { compareAtPriceUsd: variant.compareAtPriceUsd }
-          : {}),
-        soldOut:
-          variant.inventory != null &&
-          Number(variant.inventory) <= 0 &&
-          product.oversellPolicy !== 'backorder',
-        ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
-      })),
-      ...(product.tags?.length ? { tags: product.tags } : {}),
-      ...(product.subscription ? { subscription: product.subscription } : {}),
-      ...(product.subscription && product.subscriptionOptional
-        ? { subscriptionOptional: true }
-        : {}),
-    }
+    const detail = toPublicProductDetail(docSnapshot.id, product)
     res.setHeader(
       'Cache-Control',
       'public, s-maxage=60, stale-while-revalidate=300',
