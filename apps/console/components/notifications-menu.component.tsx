@@ -52,6 +52,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
+import useHostSubdomains from '../hooks/use-host-subdomains'
 import useNotificationAlertPrefs from '../hooks/use-notification-prefs'
 import useOrgHosts from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
@@ -131,6 +132,14 @@ export function NotificationsMenu() {
   // ---- Alerts (AGL-650): sound, desktop notification, tab badge ----------
   const [alertPrefs] = useNotificationAlertPrefs()
 
+  // `useOrgHosts` above only covers the org currently open, so a notification
+  // from any other org had no subdomain and fell through to its stored
+  // `/{hostDocId}/…` link — a dead route (AGL-672). `hostIndex` resolves
+  // hosts in every org the user can see.
+  const indexedSubdomains = useHostSubdomains(
+    useMemo(() => (recent ?? []).map((item) => item.hostId), [recent]),
+  )
+
   const resolveLink = useCallback(
     (notification: AglynNotification) =>
       normalizeNotificationLink(notification.link, {
@@ -139,10 +148,11 @@ export function NotificationsMenu() {
           orgSlug,
         hostId: notification.hostId,
         hostSubdomain: notification.hostId
-          ? subdomainByHostId.get(notification.hostId)
+          ? (subdomainByHostId.get(notification.hostId) ??
+            indexedSubdomains.get(notification.hostId))
           : undefined,
       }),
-    [orgSlug, slugByOrgId, subdomainByHostId],
+    [orgSlug, slugByOrgId, subdomainByHostId, indexedSubdomains],
   )
 
   // Detect arrivals by DIFFING DOCUMENT IDS, not by watching the count.

@@ -55,7 +55,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -65,6 +65,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useNotificationAlertPrefs from '../../../../hooks/use-notification-prefs'
+import useHostSubdomains from '../../../../hooks/use-host-subdomains'
 import useOrgHosts from '../../../../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import {
@@ -145,6 +146,9 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   }, [alertPrefs.desktop, setAlertPrefs])
   const { hosts } = useOrgHosts(firestore, uid, currentOrg?.$id ?? undefined)
   const [rows, setRows] = useState<any[]>([])
+  const indexedSubdomains = useHostSubdomains(
+    useMemo(() => rows.map((row) => row.hostId), [rows]),
+  )
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
@@ -264,9 +268,11 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
           ? (orgs ?? []).find((org) => org.$id === notification.orgId)?.slug
           : null) ?? orgSlug,
       hostId: notification.hostId,
+      // `hosts` only covers the org currently open; hostIndex covers the
+      // rest, so cross-org notifications resolve too (AGL-672).
       hostSubdomain: notification.hostId
-        ? (hosts ?? []).find((host) => host.$id === notification.hostId)
-            ?.subdomain
+        ? ((hosts ?? []).find((host) => host.$id === notification.hostId)
+            ?.subdomain ?? indexedSubdomains.get(notification.hostId))
         : undefined,
     })
     if (target) void router.push(target)
