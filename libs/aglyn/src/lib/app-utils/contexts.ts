@@ -26,5 +26,6 @@
  */
 export * from './entity-picker-context'
 export * from './media-picker-context'
+export * from './node-identity'
 export * from './screen-link-context'
 export * from './site-context'
