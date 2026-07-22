@@ -89,6 +89,9 @@ export enum Route {
   TEMPLATE_BESIGNER = '/[orgSlug]/hosts/[host]/templates/[templateId]/besigner',
   LAYOUT_BESIGNER = '/[orgSlug]/hosts/[host]/layouts/[layoutId]/versions/[versionId]/besigner',
   LAYOUT_LIST = '/[orgSlug]/hosts/[host]/layouts/list',
+  // Layout detail (AGL-695), completing the list → detail → besigner shape
+  // across screens, components, templates and layouts.
+  LAYOUT_DETAILS = '/[orgSlug]/hosts/[host]/layouts/[layoutId]',
   SCREEN_BESIGNER = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/besigner',
   SCREEN_DETAILS = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/view',
   SCREEN_PREVIEW = '/[orgSlug]/hosts/[host]/screens/[screenId]/versions/[versionId]/preview',
@@ -198,6 +201,7 @@ export interface RoutePayload {
     versionId: string
   }
   [Route.LAYOUT_LIST]: { orgSlug: string; host: string }
+  [Route.LAYOUT_DETAILS]: { orgSlug: string; host: string; layoutId: string }
   [Route.SCREEN_DETAILS]: {
     orgSlug: string
     host: string

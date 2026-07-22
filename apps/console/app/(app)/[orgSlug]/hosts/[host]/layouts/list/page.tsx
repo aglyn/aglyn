@@ -340,6 +340,19 @@ function Layouts(props) {
       headerName: 'Display name',
       minWidth: 220,
       type: 'string',
+      // The name leads to the detail page (AGL-695); the row's edit action
+      // still goes straight to the besigner for anyone who wants that.
+      renderCell: ({ id, value }: any) => (
+        <AppLink
+          href={buildRoute(Route.LAYOUT_DETAILS, {
+            orgSlug,
+            host,
+            layoutId: id as string,
+          })}
+        >
+          {value || (id as string)}
+        </AppLink>
+      ),
     },
     {
       field: 'description',
