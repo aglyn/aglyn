@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { useLoading } from '@aglyn/shared-ui-jsx'
+import { MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Box,
@@ -26,9 +26,15 @@ import {
   CardContent,
   Chip,
   Dialog,
+  AppBar,
+  Collapse,
+  IconButton,
   DialogActions,
   DialogContent,
-  DialogTitle,
+  Divider,
+  InputAdornment,
+  InputBase,
+  Toolbar,
   Grid,
   Typography,
 } from '@mui/material'
@@ -44,11 +50,24 @@ import { useRouter } from 'next/navigation'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useHostSubdomain } from '../host-id-provider'
 import { useOrgSlug } from '../../hooks/use-org-scope'
+import {
+  ICON_VARIANT_CLEAR,
+  ICON_VARIANT_CLOSE,
+  ICON_VARIANT_FILTER,
+  ICON_VARIANT_SEARCH,
+} from '@aglyn/shared-data-enums'
 import { STARTER_TEMPLATES } from '../../constants/starter-templates'
 import createPageFromTemplate from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
+
+/** What one item of each kind is called, for the zero-state copy. */
+const KIND_NOUN: Record<'page' | 'component' | 'layout', string> = {
+  page: 'screen',
+  component: 'component',
+  layout: 'layout',
+}
 
 export interface TemplateGalleryDialogProps {
   hostId: string
@@ -58,6 +77,17 @@ export interface TemplateGalleryDialogProps {
   existingSlugs: string[]
   /** Current screen count, for the plan quota check. */
   screenCount: number
+  /**
+   * Which template kind to offer (AGL-699). Screens pick page templates,
+   * the layouts page picks layout templates, the components page picks
+   * component templates — one dialog, three filtered views, rather than
+   * three near-identical pickers.
+   */
+  kind?: 'page' | 'component' | 'layout'
+  /** Dialog heading; defaults to the screens wording. */
+  title?: string
+  /** Sub-heading under the search bar. */
+  blurb?: string
 }
 
 /**
@@ -82,7 +112,20 @@ export interface TemplateGalleryDialogProps {
  * the one-click "add all five shop pages" behaviour.
  */
 export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
-  const { hostId, open, onClose, existingSlugs, screenCount } = props
+  const {
+    hostId,
+    open,
+    onClose,
+    existingSlugs,
+    screenCount,
+    kind = 'page',
+    title = 'Start from a template',
+    blurb = 'Templates add ready-made, published screens you can restyle in ' +
+      'the besigner. Existing screens are never touched.',
+  } = props
+  // Search over name and description, like the besigner element picker.
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filter, setFilter] = useState('')
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
@@ -104,25 +147,41 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     [firestore],
     { idField: '$id' },
   )
-  const communityTemplates = (templateListings ?? []).filter(
-    (listing: any) => !listing.deletedAt,
+  // Community listings are whole-site page bundles, so — like the starters
+  // below — they belong only in the page-kind picker (AGL-699). Offering a
+  // five-page site on the components list would install pages nobody asked
+  // for.
+  const communityAll = useMemo(
+    () =>
+      kind !== 'page'
+        ? []
+        : (templateListings ?? []).filter((listing: any) => !listing.deletedAt),
+    [templateListings, kind],
   )
   // The host's own library (AGL-672) — saved templates and marketplace
-  // installs, the same collection the Templates page renders. Page kind
-  // only: a component or layout template has nothing to do with "start
-  // from a template" on the screens list.
+  // installs, the same collection the Templates page renders, narrowed to
+  // the kind this surface picks (AGL-699).
   const { data: libraryDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(50)),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const libraryPages = (libraryDocs ?? []).filter(
-    (entry: any) => !entry.deletedAt && (entry.kind ?? 'page') === 'page',
+  // Memoized rather than rebuilt inline: every downstream `useMemo` keys off
+  // these arrays, so a fresh identity each render made the whole filtering
+  // chain recompute on every keystroke for nothing.
+  const libraryPages = useMemo(
+    () =>
+      (libraryDocs ?? []).filter(
+        (entry: any) => !entry.deletedAt && (entry.kind ?? 'page') === kind,
+      ),
+    [libraryDocs, kind],
   )
   // Seeded starters are presented as the bundles they were authored as; the
   // rest of the library stays a flat list of individual templates.
-  const savedPages = libraryPages.filter(
-    (entry: any) => entry.source?.type !== 'starter',
+  const savedPagesAll = useMemo(
+    () =>
+      libraryPages.filter((entry: any) => entry.source?.type !== 'starter'),
+    [libraryPages],
   )
   const starterGroups = useMemo(() => {
     const groups = new Map<string, { id: string; displayName: string; description?: string; category?: string; screens: any[] }>()
@@ -158,7 +217,9 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   )
   const virtualStarters = useMemo(
     () =>
-      STARTER_TEMPLATES.filter(
+      // Starters are whole-site page bundles, so they only belong in the
+      // page-kind picker (AGL-699).
+      (kind !== 'page' ? [] : STARTER_TEMPLATES).filter(
         (starter) => !materializedStarterIds.has(starter.id),
       ).map((starter) => ({
         id: starter.id,
@@ -174,16 +235,52 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           nodes: screen.nodes,
         })),
       })),
-    [materializedStarterIds],
+    [materializedStarterIds, kind],
   )
   // One list so the grid does not care which side a card came from.
-  const starterCards = useMemo(
+  const allStarterCards = useMemo(
     () => [
       ...starterGroups.map((group) => ({ ...group, virtual: false as const })),
       ...virtualStarters,
     ],
     [starterGroups, virtualStarters],
   )
+  const matches = useCallback(
+    (name?: string, description?: string, category?: string) => {
+      const needle = filter.trim().toLowerCase()
+      if (!needle) return true
+      return [name, description, category]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle))
+    },
+    [filter],
+  )
+  const starterCards = useMemo(
+    () =>
+      allStarterCards.filter((entry: any) =>
+        matches(entry.displayName, entry.description, entry.category),
+      ),
+    [allStarterCards, matches],
+  )
+  const savedPages = useMemo(
+    () =>
+      savedPagesAll.filter((entry: any) =>
+        matches(entry.displayName, entry.description, entry.category),
+      ),
+    [savedPagesAll, matches],
+  )
+  // Search covers every section on screen, not just the two local ones —
+  // leaving community cards visible under a query that excluded everything
+  // else would read as a broken filter.
+  const communityTemplates = useMemo(
+    () =>
+      communityAll.filter((listing: any) =>
+        matches(listing.displayName, listing.description, listing.category),
+      ),
+    [communityAll, matches],
+  )
+  const isEmpty =
+    !savedPages.length && !starterCards.length && !communityTemplates.length
 
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
@@ -378,12 +475,99 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>{'Start from a template'}</DialogTitle>
+      {/* Chrome mirrors the besigner's element picker (AGL-699) — app bar
+          with a close affordance, a filter toggle and a collapsing search —
+          wrapped around the template cards this dialog already had. One
+          picker idiom across the product instead of two. */}
+      <AppBar position="relative">
+        <Toolbar>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={onClose}
+            aria-label="close"
+          >
+            <MdiIcon path={ICON_VARIANT_CLOSE.path} />
+          </IconButton>
+          <Typography
+            variant="h6"
+            component="div"
+            noWrap
+            sx={{ textOverflow: 'ellipsis', ml: 2, flex: 1 }}
+          >
+            {title}
+          </Typography>
+          <IconButton
+            type="button"
+            color="inherit"
+            aria-label="search templates"
+            onClick={() => setFilterOpen((prev) => !prev)}
+          >
+            <MdiIcon path={ICON_VARIANT_FILTER.path} />
+          </IconButton>
+          <Divider sx={{ height: 28, m: 0.5 }} orientation="vertical" />
+          <Button color="inherit" onClick={onClose}>
+            {'Close'}
+          </Button>
+        </Toolbar>
+        <Collapse orientation="vertical" in={filterOpen}>
+          <Toolbar
+            component="form"
+            variant="dense"
+            onSubmit={(event) => event.preventDefault()}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              width: 1,
+              borderTop: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <InputBase
+              sx={{ flex: 1, color: 'inherit' }}
+              placeholder="Search templates"
+              inputProps={{ 'aria-label': 'search templates' }}
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              startAdornment={
+                <InputAdornment sx={{ color: 'inherit' }} position="start">
+                  <MdiIcon path={ICON_VARIANT_SEARCH.path} />
+                </InputAdornment>
+              }
+              endAdornment={
+                filter ? (
+                  <InputAdornment sx={{ color: 'inherit' }} position="end">
+                    <IconButton
+                      type="button"
+                      color="inherit"
+                      aria-label="clear search"
+                      onClick={() => setFilter('')}
+                    >
+                      <MdiIcon path={ICON_VARIANT_CLEAR.path} />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null
+              }
+            />
+          </Toolbar>
+        </Collapse>
+      </AppBar>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {'Templates add ready-made, published screens you can restyle in ' +
-            'the besigner. Existing screens are never touched.'}
+          {blurb}
         </Typography>
+        {/* An empty body reads as a broken dialog, and the layout and
+            component kinds ship no starters — so say which of the two empties
+            this is: nothing matched the search, or there is nothing here yet
+            (AGL-699). */}
+        {isEmpty ? (
+          <Typography variant="body2" color="text.secondary">
+            {filter.trim()
+              ? 'Nothing matches — try a different search.'
+              : `You have no ${KIND_NOUN[kind]} templates yet. Save one from ` +
+                `an existing ${KIND_NOUN[kind]}, or start blank.`}
+          </Typography>
+        ) : null}
         {/* Your own library first (AGL-672): saved and installed templates
             are the ones a returning user is looking for, and they open the
             same Use flow as the Templates page rather than a second

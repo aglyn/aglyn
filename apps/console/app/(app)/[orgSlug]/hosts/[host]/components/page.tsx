@@ -21,7 +21,8 @@ import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button } from '@mui/material'
+import { Button, Stack } from '@mui/material'
+import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, setDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
@@ -54,6 +55,8 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   // Create lives in the page header, not inside the card — that is where
   // Screens and Layouts put theirs, and a create action buried in the list
   // it creates into reads as part of the list (AGL-693).
+  // Component templates, not components (AGL-699).
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const handleCreate = useCallback(async () => {
     if (creating) return
@@ -113,18 +116,37 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
           icon: { path: ICON_VARIANT_APP_SETTINGS.path },
         }}
         headerRight={
-          <Button
-            size="small"
-            variant="contained"
-            disabled={creating}
-            onClick={handleCreate}
-          >
-            {creating ? 'Creating…' : 'Create Component'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setTemplatesOpen(true)}
+            >
+              {'Templates'}
+            </Button>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={creating}
+              onClick={handleCreate}
+            >
+              {creating ? 'Creating…' : 'Create Component'}
+            </Button>
+          </Stack>
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <HostComponentsCard hostId={hostId} />
+          <TemplateGalleryDialog
+            hostId={hostId}
+            open={templatesOpen}
+            onClose={() => setTemplatesOpen(false)}
+            existingSlugs={[]}
+            screenCount={0}
+            kind="component"
+            title="Start from a component template"
+            blurb="Component templates add a ready-made element tree you can restyle in the besigner. Existing components are never touched."
+          />
         </Container>
       </DashboardLayout>
     </>

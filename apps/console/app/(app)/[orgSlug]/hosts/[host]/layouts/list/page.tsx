@@ -48,7 +48,8 @@ import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, IconButton, Typography } from '@mui/material'
+import { Button, IconButton, Stack, Typography } from '@mui/material'
+import TemplateGalleryDialog from '../../../../../../../components/templates/template-gallery-dialog.component'
 import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
   collection,
@@ -95,6 +96,9 @@ function Layouts(props) {
   const params = useParams<{ hostId: string }>()
   const orgSlug = useOrgSlug()
   const router = useRouter()
+  // Layout templates, not layouts (AGL-699) — the same picker the screens
+  // page uses, filtered to the layout kind.
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const host = useHostSubdomain()
   const hostId = useHostId()
   const { queueLoading, loading } = useLoading()
@@ -413,9 +417,18 @@ function Layouts(props) {
           icon: { path: mdiPageLayoutBody.path },
         }}
         headerRight={
-          <Button size="small" variant="contained" onClick={handleFormOpen}>
-            {'Create New Layout'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setTemplatesOpen(true)}
+            >
+              {'Templates'}
+            </Button>
+            <Button size="small" variant="contained" onClick={handleFormOpen}>
+              {'Create New Layout'}
+            </Button>
+          </Stack>
         }
         aside={
           <NavigationDrawerComponent
@@ -468,6 +481,16 @@ function Layouts(props) {
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          <TemplateGalleryDialog
+            hostId={hostId}
+            open={templatesOpen}
+            onClose={() => setTemplatesOpen(false)}
+            existingSlugs={[]}
+            screenCount={0}
+            kind="layout"
+            title="Start from a layout template"
+            blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
+          />
           <CardDisplay>
             <DataTableComponent
               rowHeight={TABLE_ROW_HEIGHT}

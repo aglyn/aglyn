@@ -23,6 +23,24 @@ publishing nothing until you choose which pages you want. Aglyn's own starter
 templates still create their pages straight away, since you pick those when a site
 is empty.
 
+### Where to find it
+
+**Templates** sits next to the create button on three lists, and each one offers
+templates of its own kind:
+
+| List | What the picker offers |
+| --- | --- |
+| **Screens** | Page templates, plus Aglyn's starter sites and community templates |
+| **Layouts** | Layout templates |
+| **Components** | Component templates |
+
+Starter sites and community templates are whole-site page bundles, so they appear
+only on **Screens** — a layout or component picker would have nothing to do with
+them.
+
+Use the filter icon in the dialog's header to search by name, description or
+category.
+
 ## Save your site as a template
 
 1. From the site, choose **save as template**.
