@@ -87,6 +87,11 @@ A multi-page starter arrives as one template per page (the Shop starters are fiv
 **Start from a template** still shows them grouped as one card that creates all of the
 pages at once.
 
+Your Templates list groups them the same way: one row per starter, labelled with its page
+count, and its actions act on **all** of those pages — **Use** creates every page, and
+**Delete** removes every page. Open the row to see the pages individually; each one is an
+ordinary template you can edit, use or delete on its own from there.
+
 Because your copy is yours, editing a starter is safe: Aglyn will not overwrite it
 later. Delete one you don't want and it stays deleted.
 

@@ -44,6 +44,31 @@ renders. Bind a screen to a layout in the Besigner and the layout chrome wraps t
 both in the editor and on the published site. Layouts have their own versions and admin
 converters, just like screens.
 
+### Nested layouts
+
+A layout can render inside **another layout**. Set **Renders inside** on a layout's detail
+page and its chrome is wrapped by the outer layout's, exactly as a screen is wrapped by
+its own — so site-wide furniture can live in one place while a section keeps a more
+specific frame around it.
+
+A screen inherits the whole chain: bind it to the inner layout and it renders inside that,
+which renders inside the outer one, up to five layouts deep.
+
+A layout can never sit inside itself, or inside a layout already nested within it — that
+would be a loop with no outermost frame to render. The picker only offers layouts that
+are legal choices, so you cannot select one by mistake.
+
+### Used by
+
+A layout's detail page has a **Used by** card listing everything that renders inside it,
+so you can see what a change or a deletion would reach:
+
+- **screens** bound to it, published or not, and
+- **layouts nested inside it** — deleting the outer one unwraps every screen underneath
+  those too.
+
+A layout used by neither is genuinely unused.
+
 ## Reusable components
 
 Promote a subtree into a **reusable component** and insert instances anywhere. Instances

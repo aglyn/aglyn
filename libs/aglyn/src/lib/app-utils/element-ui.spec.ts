@@ -36,6 +36,7 @@ import {
   VISIBILITY_BAND_MEDIA,
   VISIBILITY_BANDS,
 } from './element-ui'
+import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
 
 describe('applyElementVisibility (AGL-562)', () => {
   beforeEach(() => {
@@ -235,16 +236,34 @@ describe('layout-namespace-insensitive id matching (AGL-573)', () => {
   })
 
   describe('expandLeafSelector', () => {
-    it('adds the layout-namespaced alternative to a raw leaf selector', () => {
-      expect(expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)).toBe(
-        `[data-aglyn="leaf:${RAW}"], [data-aglyn="leaf:${NAMESPACED}"]`,
+    // One alternative per layout-chain depth (AGL-703): a node in a layout
+    // nested inside another carries `layout2__`, and an interaction
+    // authored on it has to match there too.
+    const allForms = [
+      `[data-aglyn="leaf:${RAW}"]`,
+      ...LAYOUT_NODE_ID_PREFIXES.map(
+        (prefix) => `[data-aglyn="leaf:${prefix}${RAW}"]`,
+      ),
+    ].join(', ')
+
+    it('adds a layout-namespaced alternative per chain depth', () => {
+      expect(expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)).toBe(allForms)
+      // The depth-1 form is still the original prefix, unchanged.
+      expect(expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)).toContain(
+        `[data-aglyn="leaf:${NAMESPACED}"]`,
       )
     })
 
-    it('normalizes an already-namespaced selector to cover both forms', () => {
+    it('normalizes an already-namespaced selector to cover every form', () => {
       expect(expandLeafSelector(`[data-aglyn="leaf:${NAMESPACED}"]`)).toBe(
-        `[data-aglyn="leaf:${RAW}"], [data-aglyn="leaf:${NAMESPACED}"]`,
+        allForms,
       )
+    })
+
+    it('matches a node nested two layouts deep', () => {
+      document.body.innerHTML = `<div data-aglyn="leaf:layout2__${RAW}">Shop</div>`
+      const expanded = expandLeafSelector(`[data-aglyn="leaf:${RAW}"]`)
+      expect(document.querySelector(expanded)).not.toBeNull()
     })
 
     it('passes hand-typed CSS selectors through unchanged', () => {

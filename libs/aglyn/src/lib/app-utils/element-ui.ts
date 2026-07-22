@@ -24,7 +24,7 @@
  * that touches `window`/`document` is only ever called client-side.
  */
 
-import { LAYOUT_NODE_ID_PREFIX } from './compose-layout-nodes'
+import { LAYOUT_NODE_ID_PREFIXES } from './compose-layout-nodes'
 
 /**
  * Class the show/hide steps toggle. The tenant page ships
@@ -206,14 +206,18 @@ export function runElementVisibilityStep(
 /**
  * Composition namespace prefixes the live runtime can graft onto a node's
  * canvas id. Layout nodes are namespaced during screen composition
- * ({@link LAYOUT_NODE_ID_PREFIX}) so they can never collide with screen
+ * ({@link LAYOUT_NODE_ID_PREFIXES}) so they can never collide with screen
  * ids — which means an interaction authored against the RAW canvas id
  * (what the besigner builder emits: `menuNodeId` and the
  * `[data-aglyn="leaf:<id>"]` selector) is not byte-equal to the id the
- * live, layout-composed DOM carries. Kept as a list so a future screen
- * namespace slots in here and every matcher below inherits it.
+ * live, layout-composed DOM carries.
+ *
+ * One entry per level of the layout chain (AGL-703): a layout nested
+ * inside another carries `layout2__`, and an interaction authored on it
+ * must still match. Being a list was already the design; nesting is the
+ * case it was left open for.
  */
-const LEAF_ID_NAMESPACE_PREFIXES = [LAYOUT_NODE_ID_PREFIX] as const
+const LEAF_ID_NAMESPACE_PREFIXES = LAYOUT_NODE_ID_PREFIXES
 
 /**
  * Strips a single leading composition namespace prefix from a node/leaf id

@@ -16,7 +16,6 @@
  */
 'use client'
 
-import * as Aglyn from '@aglyn/aglyn'
 import type { TemplateKind } from '@aglyn/aglyn'
 import {
   AppLink,
@@ -24,66 +23,52 @@ import {
   DataTableComponent,
   MdiIcon,
   useConfirmationContext,
+  useLoading,
 } from '@aglyn/shared-ui-jsx'
 import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
   mdiDownloadOutline,
+  mdiFileMultipleOutline,
   mdiPencilOutline,
   mdiPlusBoxOutline,
   mdiTrashCanOutline,
 } from '@aglyn/shared-data-mdi'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
-  Button,
-  Chip,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+  useFirestore,
+  useHostResourceApi,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
+import { Chip, Tooltip } from '@mui/material'
 import {
   collection,
   doc,
+  getCountFromServer,
   getDoc,
   limit,
   query,
-  setDoc,
   updateDoc,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { docsHelp } from '../../constants/docs-links'
+import { checkOrgQuota } from '../../constants/entitlements'
 import { TABLE_ROW_HEIGHT } from '../../constants/shared'
 import { buildRoute, Route } from '../../constants/route-links'
 import { useHostSubdomain } from '../host-id-provider'
+import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import createPageFromTemplate from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
 
-const KIND_ORDER: Array<{ kind: TemplateKind; heading: string; blurb: string }> =
-  [
-    {
-      kind: 'page',
-      heading: 'Pages',
-      blurb: 'Start a new screen from a saved layout of content.',
-    },
-    {
-      kind: 'component',
-      heading: 'Components',
-      blurb: 'Drop a saved element tree onto any screen.',
-    },
-    {
-      kind: 'layout',
-      heading: 'Layouts',
-      blurb: 'Reuse saved page chrome — header, footer, navigation.',
-    },
-  ]
+/**
+ * Row order for the table's default sort. The three kinds are used in
+ * completely different places — a page template makes a screen, a component
+ * template goes onto one — and grouping them that way was the useful part of
+ * the sectioned layout this table replaced.
+ */
+const KIND_ORDER: TemplateKind[] = ['page', 'component', 'layout']
 
 /**
  * Provenance badge (AGL-666), qualified once the copy has been edited
@@ -130,7 +115,10 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  const { queueLoading } = useLoading()
   const { data: user } = useUser()
+  const { org } = useCurrentOrg()
+  const createHostResource = useHostResourceApi()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
@@ -156,32 +144,32 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
 
   /**
    * One row per template, EXCEPT that a starter's pages collapse into a
-   * single row keyed by `source.starterId` (Zach's call, AGL-694).
+   * single row keyed by `source.starterId`.
    *
    * A multi-page starter materializes one document per screen (AGL-687), so
    * flat it would put five rows in the library for something the gallery
-   * presents as one card. Grouping keeps the two surfaces agreeing. The row
-   * points at the FIRST page in authored order; its detail page lists the
-   * siblings, so nothing is hidden — the pages remain individually editable,
-   * usable and deletable from there.
-   *
-   * Whether this is the right trade is deliberately left open — AGL-696
-   * revisits it once a multi-page starter can actually be looked at.
+   * presents as one card. Grouping keeps the two surfaces agreeing, and
+   * AGL-696 confirmed it after looking at a real five-page starter — but
+   * only once the row's ACTIONS were made to mean the bundle rather than
+   * silently mean its first page. A grouped row now uses and deletes all of
+   * its pages; per-page Edit and Use live on the detail page, which lists the
+   * siblings. `pages` is what makes that possible, so it is carried on the
+   * row rather than recomputed per action.
    */
   const rows = useMemo(() => {
     const seenStarters = new Set<string>()
     const out: Array<{
       key: string
+      /** Row's representative document — the first page of a bundle. */
       template: any
+      /** Every document the row stands for; length 1 when not a bundle. */
+      pages: any[]
       displayName: string
       description?: string
-      pageCount: number
     }> = []
     const live = (templateDocs ?? []).filter((entry: any) => !entry.deletedAt)
-    // Kind order first, then name — the sections this table replaced were
-    // ordered that way and the ordering was the useful part of them.
-    const kindRank = (kind: string) =>
-      KIND_ORDER.findIndex((entry) => entry.kind === kind)
+    // Kind order first, then name.
+    const kindRank = (kind: string) => KIND_ORDER.indexOf(kind as TemplateKind)
     const sorted = [...live].sort((a: any, b: any) => {
       const byRank = kindRank(a.kind ?? 'page') - kindRank(b.kind ?? 'page')
       if (byRank !== 0) return byRank
@@ -204,43 +192,23 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
         out.push({
           key: `starter:${starterId}`,
           template: pages[0] ?? template,
+          pages: pages.length ? pages : [template],
           displayName:
             template.source?.starterName ?? template.displayName ?? starterId,
           description: template.source?.starterDescription,
-          pageCount: pages.length,
         })
         continue
       }
       out.push({
         key: template.$id,
         template,
+        pages: [template],
         displayName: template.displayName ?? template.$id,
         description: template.description,
-        pageCount: 1,
       })
     }
     return out
   }, [templateDocs])
-
-  const byKind = useMemo(() => {
-    const groups = new Map<string, any[]>()
-    for (const template of templateDocs ?? []) {
-      if (template.deletedAt) continue
-      const kind = template.kind ?? 'page'
-      groups.set(kind, [...(groups.get(kind) ?? []), template])
-    }
-    for (const list of groups.values()) {
-      list.sort((a, b) =>
-        String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
-      )
-    }
-    return groups
-  }, [templateDocs])
-
-  const total = useMemo(
-    () => (templateDocs ?? []).filter((entry: any) => !entry.deletedAt).length,
-    [templateDocs],
-  )
 
   const listingIds = useMemo(() => {
     const ids = new Set<string>()
@@ -352,14 +320,32 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     [updating, confirm, user, hostId, enqueueSnackbar],
   )
 
+  /**
+   * Deletes everything the ROW stands for, which for a grouped starter is
+   * all of its pages (AGL-696).
+   *
+   * Deleting only the representative page — what a row-shaped action did
+   * before — left the row in place reading "(4 pages)" after a confirm that
+   * said the template had been removed. Either the row means the bundle or
+   * it does not; it means the bundle, so this does too.
+   */
   const handleDelete = useCallback(
-    (template: any) => async () => {
+    (row: { displayName: string; pages: any[] }) => async () => {
+      const count = row.pages.length
       const confirmed = await confirm({
-        title: 'Delete this template?',
+        title: count > 1 ? `Delete all ${count} pages?` : 'Delete this template?',
         description:
-          `"${template.displayName ?? template.$id}" is removed from your ` +
-          'library. Anything you already created from it is unaffected.',
-        confirmationText: 'Delete',
+          count > 1
+            ? `"${row.displayName}" is a starter of ${count} page templates, ` +
+              'and all of them are removed from your library: ' +
+              `${row.pages
+                .map((page: any) => page.displayName ?? page.$id)
+                .join(', ')}. Pages you already created from it are ` +
+              'unaffected. To remove just one, open the starter and delete ' +
+              'that page from its detail page.'
+            : `"${row.displayName}" is removed from your library. Anything ` +
+              'you already created from it is unaffected.',
+        confirmationText: count > 1 ? `Delete ${count} pages` : 'Delete',
         confirmationButtonProps: { color: 'error' },
       })
         .then(() => true)
@@ -367,13 +353,128 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
       if (!confirmed) return
       // Soft delete, matching reusable components — a template may be the
       // only remaining copy of a page someone deleted.
-      await updateDoc(
-        doc(firestore, 'hosts', hostId, 'templates', template.$id),
-        { deletedAt: Timestamp.now() },
+      const deletedAt = Timestamp.now()
+      await Promise.all(
+        row.pages.map((page: any) =>
+          updateDoc(doc(firestore, 'hosts', hostId, 'templates', page.$id), {
+            deletedAt,
+          }),
+        ),
       )
-      enqueueSnackbar('Template deleted', { variant: 'success', persist: false })
+      enqueueSnackbar(
+        count > 1 ? `Deleted ${count} page templates` : 'Template deleted',
+        { variant: 'success', persist: false },
+      )
     },
     [confirm, firestore, hostId, enqueueSnackbar],
+  )
+
+  /**
+   * Uses a whole starter bundle: one screen per page, in authored order
+   * (AGL-696).
+   *
+   * This is what "Use" has to mean on a grouped row — the gallery card for
+   * the same starter already creates all five pages, and a row-level Use
+   * that quietly created only the first would be the grouping lying about
+   * its own scope. Per-page Use stays reachable from the detail page.
+   */
+  const handleUseBundle = useCallback(
+    (row: { displayName: string; pages: any[] }) => async () => {
+      const pages = row.pages
+      const confirmed = await confirm({
+        title: `Add ${pages.length} pages from "${row.displayName}"?`,
+        description:
+          `Creates one page per template — ${pages
+            .map((page: any) => page.displayName ?? page.$id)
+            .join(', ')} — and publishes each at its own address. Existing ` +
+          'screens are never touched, and the templates stay in your library.',
+        confirmationText: `Add ${pages.length} pages`,
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      const dequeue = queueLoading()
+      // Tracked outside the try so a failure part-way can say how far it
+      // actually got. Creating five pages is five writes, not one — there
+      // is no transaction to roll back, and silently reporting only the
+      // error would leave pages on the site the message never mentioned.
+      let created = 0
+      try {
+        // Read the routing map fresh so the slug check reflects anything
+        // published since this page loaded.
+        const hostSnapshot = await getDoc(doc(firestore, 'hosts', hostId))
+        const routes = (hostSnapshot.get('screens') ?? {}) as Record<
+          string,
+          string
+        >
+        // Count screen DOCUMENTS, which is what the server's quota counts —
+        // NOT the routing map, which holds only routed screens and so
+        // under-counts. Getting this wrong lets a doomed run start and
+        // abort half way, which is exactly what it did before this.
+        const screenCount = (
+          await getCountFromServer(
+            collection(firestore, 'hosts', hostId, 'screens'),
+          )
+        ).data().count
+        // `- 1` because checkQuota allows while usage is BELOW the limit, so
+        // this asks "is the count after adding them still within plan?"
+        const quota = checkOrgQuota(
+          org,
+          'screensPerHost',
+          screenCount + pages.length - 1,
+        )
+        if (!quota.allowed) {
+          return void enqueueSnackbar(
+            `This starter needs ${pages.length} screens and this site has ` +
+              `${screenCount} — your plan allows ${quota.limit}. See Billing ` +
+              'to upgrade.',
+            { variant: 'warning', persist: false },
+          )
+        }
+        const used = new Set<string>(Object.values(routes))
+        for (const page of pages) {
+          // Same helper the single-template Use flow calls (AGL-672), so
+          // create-screen → write-version → publish-route and its slug
+          // de-confliction have one implementation.
+          await createPageFromTemplate(firestore, createHostResource as any, {
+            hostId,
+            displayName: page.displayName ?? page.$id,
+            nodes: (page.nodes ?? {}) as Record<string, unknown>,
+            description: page.description,
+            seo: page.seo,
+            slug: page.slug,
+            usedSlugs: used,
+          })
+          created += 1
+        }
+        enqueueSnackbar(
+          `Added ${pages.length} screens from "${row.displayName}"`,
+          { variant: 'success', persist: false },
+        )
+      } catch (error) {
+        console.error(error)
+        const reason =
+          error instanceof Error ? error.message : 'Could not use the starter.'
+        enqueueSnackbar(
+          created
+            ? `Added ${created} of ${pages.length} pages, then stopped: ` +
+              `${reason} The pages already created are on your site.`
+            : reason,
+          { variant: 'error', allowDuplicate: true },
+        )
+      } finally {
+        dequeue()
+      }
+    },
+    [
+      confirm,
+      queueLoading,
+      firestore,
+      hostId,
+      org,
+      createHostResource,
+      enqueueSnackbar,
+    ],
   )
 
   // Matches the layouts and screens column/action shape (AGL-694).
@@ -391,8 +492,8 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
             templateId: row.template.$id,
           })}
         >
-          {row.pageCount > 1
-            ? `${row.displayName} (${row.pageCount} pages)`
+          {row.pages.length > 1
+            ? `${row.displayName} (${row.pages.length} pages)`
             : row.displayName}
         </AppLink>
       ),
@@ -465,32 +566,55 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
       width: 160,
       getActions: ({ row }: any) => {
         const template = row.template
+        const bundle = row.pages.length > 1
         const actions = [
-          <GridActionsCellItem
-            key="action-edit"
-            icon={<MdiIcon path={mdiPencilOutline.path} />}
-            label="Edit in besigner"
-            LinkComponent={AppLink as any}
-            {...({
-              href: buildRoute(Route.TEMPLATE_BESIGNER, {
-                orgSlug,
-                host,
-                templateId: template.$id,
-              }),
-            } as any)}
-          />,
+          // Edit is per-page and has no bundle meaning — there is no single
+          // canvas behind five documents — so a grouped row offers the page
+          // list instead, and the detail page carries the per-page Edit
+          // (AGL-696).
+          bundle ? (
+            <GridActionsCellItem
+              key="action-pages"
+              icon={<MdiIcon path={mdiFileMultipleOutline.path} />}
+              label={`Open ${row.pages.length} pages`}
+              LinkComponent={AppLink as any}
+              {...({
+                href: buildRoute(Route.TEMPLATE_DETAILS, {
+                  orgSlug,
+                  host,
+                  templateId: template.$id,
+                }),
+              } as any)}
+            />
+          ) : (
+            <GridActionsCellItem
+              key="action-edit"
+              icon={<MdiIcon path={mdiPencilOutline.path} />}
+              label="Edit in besigner"
+              LinkComponent={AppLink as any}
+              {...({
+                href: buildRoute(Route.TEMPLATE_BESIGNER, {
+                  orgSlug,
+                  host,
+                  templateId: template.$id,
+                }),
+              } as any)}
+            />
+          ),
           <GridActionsCellItem
             key="action-use"
             icon={<MdiIcon path={mdiPlusBoxOutline.path} />}
-            label="Use"
-            onClick={() => setUseTemplate(template)}
+            label={bundle ? `Use all ${row.pages.length} pages` : 'Use'}
+            onClick={
+              bundle ? handleUseBundle(row) : () => setUseTemplate(template)
+            }
           />,
           <GridActionsCellItem
             key="action-delete"
             icon={<MdiIcon path={mdiTrashCanOutline.path} />}
-            label="Delete"
+            label={bundle ? `Delete all ${row.pages.length} pages` : 'Delete'}
             showInMenu
-            onClick={handleDelete(template)}
+            onClick={handleDelete(row)}
           />,
         ]
         if (hasUpdate(template)) {

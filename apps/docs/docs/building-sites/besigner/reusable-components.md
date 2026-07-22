@@ -28,6 +28,23 @@ drift.
 From the site dashboard you can **rename**, **demote** (turn an instance back into normal
 nodes), or **delete** a reusable component.
 
+## Used by
+
+A component's detail page has a **Used by** card listing everything that places an
+instance of it, so deleting one is not a guess. Because instances graft at render time,
+deleting a component that is still in use empties it out of every page it appears on.
+
+Three places are searched, which is everywhere the renderer expands an instance:
+
+- the **published version** of every screen,
+- the **published version** of every layout,
+- and **other reusable components** — a component can be placed inside another one, so
+  one used nowhere else can still be very much in use.
+
+Unpublished drafts and templates in your library are not searched. If the check fails —
+a dropped connection, say — the card says so and shows a **Try again** button. It never
+reports "nothing uses this" when it could not actually look.
+
 ## Tips
 
 - Reusable components are perfect for anything that repeats across pages — headers, CTAs,

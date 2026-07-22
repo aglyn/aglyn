@@ -25,10 +25,15 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import {
+  scanComponentUsage,
+  scanLayoutUsage,
+  type UsageCandidate,
+} from '../../../../utils/server/scan-artifact-usage'
 
 export interface WhereUsedDependent {
   /** Resource collection the dependent lives in. */
-  type: 'screen' | 'layout' | 'workflow' | 'variable'
+  type: 'screen' | 'layout' | 'workflow' | 'variable' | 'component'
   id: string
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */
@@ -37,14 +42,37 @@ export interface WhereUsedDependent {
   versionId?: string
 }
 
+/** Every `kind` this endpoint knows how to scan for. */
+const SCANNABLE_KINDS = [
+  'variable',
+  'function',
+  'workflow',
+  'component',
+  'layout',
+] as const
+
 /**
- * Where-used scan (AGL-187): finds host content referencing a variable,
- * function, or workflow. Screens/layouts are scanned on their PUBLISHED
- * version's nodes (matching what visitors see); workflow steps are
- * checked for function calls and variables for workflow backings. The
- * `via` field distinguishes rename-safe id references from legacy name
- * tokens — renames only endanger the latter. Auth: Firebase ID token,
- * host admin.
+ * Where-used scan (AGL-187, extended for components and layouts by
+ * AGL-703): finds host content referencing a variable, function, workflow,
+ * reusable component, or layout.
+ *
+ * Screens/layouts are scanned on their PUBLISHED version's nodes (matching
+ * what visitors see); workflow steps are checked for function calls and
+ * variables for workflow backings. The `via` field distinguishes rename-safe
+ * id references from legacy name tokens — renames only endanger the latter.
+ * Auth: Firebase ID token, host admin.
+ *
+ * The two AGL-703 kinds follow the runtime's own reference model:
+ *
+ * - A COMPONENT is referenced by an instance node (`reusableInstance` with
+ *   `props.refId`). Those live in screens, in layouts, AND in other
+ *   component definitions — `composeReusableComponentNodes` expands nested
+ *   instances — so all three are scanned. Skipping definitions would report
+ *   "used nowhere" for a component used only inside another one.
+ * - A LAYOUT is referenced by a `layoutId` pointer — on screens bound to it,
+ *   and on layouts NESTED inside it, which AGL-703 made possible. Both are
+ *   scanned: a nested layout is a real dependent, because deleting the outer
+ *   layout unwraps every screen underneath the inner one too.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -53,16 +81,13 @@ async function handler(request: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
   }
   const hostId = String(body?.hostId ?? '')
-  const kind = String(body?.kind ?? '') as
-    | 'variable'
-    | 'function'
-    | 'workflow'
+  const kind = String(body?.kind ?? '') as (typeof SCANNABLE_KINDS)[number]
   const refId = String(body?.id ?? '')
   const refName = String(body?.name ?? '')
   if (
     !hostId ||
     !refId ||
-    !['variable', 'function', 'workflow'].includes(kind)
+    !(SCANNABLE_KINDS as readonly string[]).includes(kind)
   ) {
     return Response.json({ error: 'Missing hostId, id, or kind' }, { status: 400 })
   }
@@ -115,7 +140,15 @@ async function handler(request: Request): Promise<Response> {
             dependents.push({
               type: collectionName === 'screens' ? 'screen' : 'layout',
               id: docSnapshot.id,
-              name: String(docSnapshot.get('name') ?? docSnapshot.id),
+              // `displayName` first: screens and layouts have never stored a
+              // `name`, so reading only that showed every dependent as a raw
+              // document id — the one thing a "where is this used" list must
+              // not do. Workflows and variables below genuinely use `name`.
+              name: String(
+                docSnapshot.get('displayName') ??
+                  docSnapshot.get('name') ??
+                  docSnapshot.id,
+              ),
               via,
               versionId: String(versionId),
             })
@@ -143,6 +176,64 @@ async function handler(request: Request): Promise<Response> {
             via: ['name'],
           })
         }
+      }
+    }
+
+    if (kind === 'component' || kind === 'layout') {
+      /** Documents plus, for screens/layouts, their published nodes. */
+      const readCandidates = async (
+        collectionName: 'screens' | 'layouts' | 'components',
+        withNodes: boolean,
+      ): Promise<UsageCandidate[]> => {
+        const docs = await hostRef.collection(collectionName).limit(200).get()
+        return Promise.all(
+          docs.docs.map(async (docSnapshot) => {
+            const versionId = docSnapshot.get('versionId')
+            // Components keep their tree on the document; screens and
+            // layouts keep it on the published version.
+            const nodes =
+              collectionName === 'components'
+                ? docSnapshot.get('nodes')
+                : withNodes && versionId
+                  ? await docSnapshot.ref
+                      .collection('versions')
+                      .doc(String(versionId))
+                      .get()
+                      .then((version) => version.get('nodes'))
+                      .catch(() => null)
+                  : null
+            return {
+              id: docSnapshot.id,
+              displayName: docSnapshot.get('displayName'),
+              name: docSnapshot.get('name'),
+              deletedAt: docSnapshot.get('deletedAt'),
+              nodes,
+              ...(versionId ? { versionId: String(versionId) } : {}),
+              ...(docSnapshot.get('layoutId')
+                ? { layoutId: String(docSnapshot.get('layoutId')) }
+                : {}),
+            }
+          }),
+        )
+      }
+
+      if (kind === 'layout') {
+        // No node search needed: the reference is a `layoutId` field, on
+        // screens and — since AGL-703 — on nested layouts too.
+        const [screens, layouts] = await Promise.all([
+          readCandidates('screens', false),
+          readCandidates('layouts', false),
+        ])
+        dependents.push(...scanLayoutUsage(refId, screens, layouts))
+      } else {
+        const [screens, layouts, components] = await Promise.all([
+          readCandidates('screens', true),
+          readCandidates('layouts', true),
+          readCandidates('components', true),
+        ])
+        dependents.push(
+          ...scanComponentUsage(refId, { screens, layouts, components }),
+        )
       }
     }
 

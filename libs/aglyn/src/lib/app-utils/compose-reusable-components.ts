@@ -125,4 +125,28 @@ export function composeReusableComponentNodes<
   return composed
 }
 
+/**
+ * Whether a node map contains an instance of `definitionId` (AGL-703).
+ *
+ * The inverse of the graft above, and deliberately in the same file: a
+ * "Used by" card that disagreed with {@link composeReusableComponentNodes}
+ * about what counts as a reference would report "used nowhere" for
+ * something the renderer does expand, which is an invitation to delete it.
+ *
+ * Scans ONLY direct instances. Callers wanting transitive usage must scan
+ * definitions too — a definition may nest instances of other definitions,
+ * so "used by no screen" does not mean "used by nothing".
+ */
+export function nodesReferenceComponent(
+  nodes: Record<string, AglynNodeSchema | undefined> | undefined | null,
+  definitionId: string,
+): boolean {
+  if (!nodes || !definitionId) return false
+  return Object.values(nodes).some(
+    (node) =>
+      node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID &&
+      (node.props as { refId?: unknown } | undefined)?.refId === definitionId,
+  )
+}
+
 export default composeReusableComponentNodes

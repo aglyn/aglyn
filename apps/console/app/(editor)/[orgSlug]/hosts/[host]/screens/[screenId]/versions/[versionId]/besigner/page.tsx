@@ -63,7 +63,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { collection, deleteField, limit, query } from 'firebase/firestore'
+import { collection, deleteField, doc, getDoc, limit, query } from 'firebase/firestore'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { observer } from 'mobx-react-lite'
 import dynamic from 'next/dynamic'
@@ -712,12 +712,58 @@ function BesignerPage(props) {
     ],
   )
 
-  const handlePreview = useCallback(() => {
+  const handlePreview = useCallback(async () => {
     const ids = { hostId, screenId, versionId }
-    // Preview what the site will render: the draft screen composed into its
-    // bound layout's published version.
-    const composed = Aglyn.composeLayoutAndScreenNodes(
-      layoutId ? (layoutVersionResult?.data?.nodes as any) : undefined,
+    /**
+     * Preview what the site will render: the draft screen composed through
+     * its whole layout CHAIN, since a layout may itself render inside
+     * another (AGL-703).
+     *
+     * Fetched here rather than through hooks because the chain's length is
+     * only known by walking it, and a hook count cannot vary. The already
+     * subscribed layout supplies the first link, so the common case (no
+     * nesting) makes no extra read at all.
+     */
+    const chain: Array<Record<string, any> | undefined> = []
+    if (layoutId) {
+      chain.push(layoutVersionResult?.data?.nodes as any)
+      const seen = new Set<string>([String(layoutId)])
+      let parentId = layoutResult?.data?.layoutId
+      while (
+        parentId &&
+        !seen.has(String(parentId)) &&
+        chain.length < Aglyn.MAX_LAYOUT_CHAIN_DEPTH
+      ) {
+        seen.add(String(parentId))
+        try {
+          const layoutSnapshot = await getDoc(
+            doc(firestore, 'hosts', hostId as string, 'layouts', String(parentId)),
+          )
+          const parentVersionId = layoutSnapshot.get('versionId')
+          if (!parentVersionId) break
+          const versionSnapshot = await getDoc(
+            doc(
+              firestore,
+              'hosts',
+              hostId as string,
+              'layouts',
+              String(parentId),
+              'versions',
+              String(parentVersionId),
+            ),
+          )
+          chain.push(versionSnapshot.get('nodes'))
+          parentId = layoutSnapshot.get('layoutId')
+        } catch (error) {
+          // A preview is worth showing without the outer chrome; it is not
+          // worth failing over.
+          console.error(error)
+          break
+        }
+      }
+    }
+    const composed = Aglyn.composeLayoutChainAndScreenNodes(
+      chain as any,
       Aglyn.canvas.toJSON().nodes as any,
     )
     writePreviewState(ids, composed as any, hostTheme)
@@ -730,8 +776,12 @@ function BesignerPage(props) {
     screenId,
     versionId,
     layoutId,
+    layoutResult?.data?.layoutId,
     layoutVersionResult?.data?.nodes,
+    firestore,
     hostTheme,
+    orgSlug,
+    host,
   ])
 
   const handleJsonSave = useCallback((e, value) => {

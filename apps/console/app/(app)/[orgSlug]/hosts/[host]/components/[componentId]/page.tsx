@@ -58,6 +58,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
+import UsedByCard from '../../../../../../../components/used-by-card.component'
 
 /**
  * Component detail (AGL-693).
@@ -386,6 +387,20 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               </Table>
             )}
           </CardDisplay>
+                ),
+              },
+              {
+                // Sits under Details, beside Versions: what USES this
+                // component is a property of the component, not of any one
+                // version (AGL-703).
+                size: { xs: 12, lg: 5 },
+                children: (
+                  <UsedByCard
+                    hostId={hostId}
+                    kind="component"
+                    id={componentId}
+                    noun="component"
+                  />
                 ),
               },
             ]}
