@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { resolveOrgEntitlements, UNLIMITED } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
@@ -180,7 +180,9 @@ async function handler(request: Request): Promise<Response> {
           // Billing is org-scoped now (AGL-621/644); links are frozen at write
           // time, so emit canonical and let the reader repair the legacy ones.
           link: (org.get('slug') as string | undefined)
-            ? `/${org.get('slug')}/billing`
+            ? buildRoute(Route.MANAGE_BILLING, {
+                orgSlug: org.get('slug') as string,
+              })
             : '/org/billing',
         })
         alerted.push({ orgId: org.id, quota: check.key, threshold })

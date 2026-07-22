@@ -19,23 +19,32 @@
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
-import { useHostId } from '../../../../../../components/host-id-provider'
+import { useHostSubdomain } from '../../../../../../components/host-id-provider'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
+import { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 
 /**
  * The theme editor moved under Setup → Theme (AGL-114); this route only
  * survives so old links and bookmarks keep working.
+ *
+ * It was passing `{ hostId }` to a route templated on `{ orgSlug, host }`,
+ * which produced the literal path `/<orgSlug?>/hosts/<host?>/setup` — the
+ * bookmark-compatibility route was itself a dead end (AGL-685). It only
+ * compiled because `Route.HOST_SETUP` had no `RoutePayload` entry.
  */
 const HostTheme: NextPageWithLayout<Record<string, never>> = () => {
-  const hostId = useHostId()
+  const host = useHostSubdomain()
+  const orgSlug = useOrgSlug()
   const router = useRouter()
 
   useEffect(() => {
-    if (hostId) {
-      router.replace(`${buildRoute(Route.HOST_SETUP, { hostId })}?tab=theme`)
+    if (host && orgSlug) {
+      router.replace(
+        `${buildRoute(Route.HOST_SETUP, { orgSlug, host })}?tab=theme`,
+      )
     }
-  }, [hostId, router])
+  }, [host, orgSlug, router])
 
   return null
 }

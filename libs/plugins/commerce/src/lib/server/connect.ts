@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
 async function stripe(path: string, params?: URLSearchParams) {
   const response = await fetch(`https://api.stripe.com/v1/${path}`, {
@@ -110,13 +110,38 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     }
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`
+    // Stripe bakes these into the onboarding link, so they have to be real
+    // console paths. They were `/{hostDocId}/products` — the pre-AGL-621/622
+    // shape — so finishing Connect onboarding dropped the seller on a 404
+    // (AGL-685). Console products is the plugin route under the org slug and
+    // the host SUBDOMAIN, both of which have to be resolved here; the client
+    // hook (useConsoleHostRoute) is not available to server code.
+    const index = await firebaseAdmin
+      .app()
+      .firestore()
+      .collection('hostIndex')
+      .doc(hostId)
+      .get()
+    const subdomain = index.get('subdomain') as string | undefined
+    const orgSlug = ownerOrg?.org?.slug as string | undefined
+    // No slug/subdomain means no route to send them to; Stripe requires
+    // both URLs, so fall back to the origin root rather than a fabricated
+    // path that 404s.
+    const productsUrl =
+      orgSlug && subdomain
+        ? `${origin}${buildRoute(Route.HOST_PLUGIN, {
+            orgSlug,
+            host: subdomain,
+            pluginSlug: 'products',
+          })}`
+        : origin
     const link = await stripe(
       'account_links',
       new URLSearchParams({
         account: accountId as string,
         type: 'account_onboarding',
-        refresh_url: `${origin}/${hostId}/products?connect=refresh`,
-        return_url: `${origin}/${hostId}/products?connect=done`,
+        refresh_url: `${productsUrl}?connect=refresh`,
+        return_url: `${productsUrl}?connect=done`,
       }),
     )
     return res

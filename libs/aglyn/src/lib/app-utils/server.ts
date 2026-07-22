@@ -25,6 +25,7 @@
 export * from './binding-token-catalog'
 export * from './binding-tokens'
 export * from './collection-entries'
+export * from './console-routes'
 export * from './contacts'
 export * from './compose-layout-nodes'
 export * from './functions'

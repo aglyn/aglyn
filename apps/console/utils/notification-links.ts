@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { buildRoute, Route } from '../constants/route-links'
+
 /**
  * Rewrites a stored notification link onto the current URL scheme (AGL-644).
  *
@@ -59,17 +61,22 @@ export function normalizeNotificationLink(
   if (orgSlug && hostId && hostSubdomain) {
     const prefix = `/${hostId}`
     if (link === prefix || link.startsWith(`${prefix}/`)) {
-      return `/${orgSlug}/hosts/${hostSubdomain}${link.slice(prefix.length)}`
+      return `${buildRoute(Route.HOST_DASHBOARD, {
+        orgSlug,
+        host: hostSubdomain,
+      })}${link.slice(prefix.length)}`
     }
   }
 
   if (orgSlug) {
     if (link === '/org' || link.startsWith('/org/')) {
-      return `/${orgSlug}${link.slice('/org'.length)}`
+      return `${buildRoute(Route.ORG_HOME, { orgSlug })}${link.slice(
+        '/org'.length,
+      )}`
     }
     // Only the bare list — `/hosts/{docId}` would still need a subdomain, and
     // guessing one is worse than leaving the link alone.
-    if (link === '/hosts') return `/${orgSlug}/hosts`
+    if (link === '/hosts') return buildRoute(Route.HOST_LIST, { orgSlug })
   }
 
   return link

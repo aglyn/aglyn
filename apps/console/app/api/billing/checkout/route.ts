@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -106,7 +106,9 @@ async function handler(request: Request): Promise<Response> {
       .collection('orgs')
       .doc(orgId)
       .get()).get('slug') as string | undefined
-    const billingPath = orgSlug ? `/${orgSlug}/billing` : '/'
+    const billingPath = orgSlug
+      ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+      : '/'
 
     const params = new URLSearchParams({
       mode: 'subscription',

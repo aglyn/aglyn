@@ -23,8 +23,10 @@ import {
   installTargetsFor,
 } from '../model/community'
 import {
+  buildRoute,
   parseMarkdownLite,
   PLUGIN_HOST_ABI_VERSION,
+  Route,
   type MarkdownBlock,
   type MarkdownInline,
 } from '@aglyn/aglyn'
@@ -44,6 +46,7 @@ import {
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
@@ -296,6 +299,11 @@ export function CommunityListingContent({
   listingId,
   permissions,
 }: CommunityListingContentProps) {
+  // The publisher link was `/{hostDocId}/community/publisher/{id}` — the
+  // pre-AGL-621 shape, dead since. The sibling browse grid was fixed for
+  // exactly this (AGL-673) and this file was missed; both now build the
+  // route from the shared table (AGL-685).
+  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -628,7 +636,15 @@ export function CommunityListingContent({
                       >
                         <Stack spacing={0.5}>
                           <MuiLink
-                            href={`/${hostId}/community/publisher/${listing?.profileId ?? ''}`}
+                            href={
+                              orgSlug && subdomain && listing?.profileId
+                                ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
+                                    orgSlug,
+                                    host: subdomain,
+                                    profileId: listing.profileId,
+                                  })
+                                : undefined
+                            }
                             color="secondary"
                             underline="hover"
                             variant="body2"

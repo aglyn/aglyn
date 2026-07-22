@@ -16,7 +16,7 @@
  */
 
 import { firebaseAdmin, getOrgForUser } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 import { canActAsPublisher } from './publisher-profile'
 
 async function stripe(path: string, params?: URLSearchParams) {
@@ -114,7 +114,9 @@ export const connectHandler: PluginApiHandler = async (req, res) => {
     const orgSlug = (
       await firestore.collection('orgs').doc(orgId).get()
     ).get('slug') as string | undefined
-    const payoutsPath = orgSlug ? `/${orgSlug}/community` : '/manage/community'
+    const payoutsPath = orgSlug
+      ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug })
+      : Route.MANAGE_MY_COMMUNITY
     const link = await stripe(
       'account_links',
       new URLSearchParams({

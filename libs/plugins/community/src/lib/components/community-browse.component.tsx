@@ -31,7 +31,7 @@ import {
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
-import type { OrgPermissions } from '@aglyn/aglyn'
+import { buildRoute, type OrgPermissions, Route } from '@aglyn/aglyn'
 import {
   useConsoleHostRoute,
   useFirestore,
@@ -41,12 +41,9 @@ import {
 import { isListingBrowsable } from '../model/community'
 import useCommunityActions from '../hooks/use-community-actions'
 
-// Community console routes live in the app's route table; the patterns are
-// stable, so the plugin builds them directly (AGL-395).
-const listingHref = (base: string, listingId: string) =>
-  `${base}/community/${listingId}`
-const publisherHref = (base: string, profileId: string) =>
-  `${base}/community/publisher/${profileId}`
+// The console route table is shared (AGL-685), so these go through
+// buildRoute rather than being reassembled from a base string — the shape
+// of `/[orgSlug]/hosts/[host]/community/…` is not this plugin's to know.
 
 export interface CommunityBrowseProps {
   hostId: string
@@ -89,7 +86,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   // not resolved since AGL-621/622 — every listing and publisher link on
   // this grid 404'd. One shared resolution (AGL-673); null renders plain
   // text rather than a link to nowhere.
-  const { base: routeBase } = useConsoleHostRoute(hostId)
+  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
 
   const { data: listings } = useFirestoreCollection<any>(
     () =>
@@ -303,7 +300,15 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     sx={{ alignItems: 'center' }}
                   >
                     <MuiLink
-                      href={routeBase ? listingHref(routeBase, listing.$id) : undefined}
+                      href={
+                        orgSlug && subdomain
+                          ? buildRoute(Route.HOST_COMMUNITY_LISTING, {
+                              orgSlug,
+                              host: subdomain,
+                              listingId: listing.$id,
+                            })
+                          : undefined
+                      }
                       color="inherit"
                       underline="hover"
                       variant="subtitle2"
@@ -329,7 +334,15 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       <>
                         {' · by '}
                         <MuiLink
-                          href={routeBase ? publisherHref(routeBase, listing.profileId) : undefined}
+                          href={
+                            orgSlug && subdomain
+                              ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
+                                  orgSlug,
+                                  host: subdomain,
+                                  profileId: listing.profileId,
+                                })
+                              : undefined
+                          }
                           color="secondary"
                           underline="hover"
                         >

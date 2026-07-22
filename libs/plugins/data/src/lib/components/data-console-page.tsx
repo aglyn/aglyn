@@ -16,7 +16,8 @@
  */
 'use client'
 
-import type { ConsolePluginPageProps } from '@aglyn/aglyn'
+import { buildRoute, type ConsolePluginPageProps, Route } from '@aglyn/aglyn'
+import { useConsoleHostRoute } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Stack } from '@mui/material'
 import HostDatasetsCard from './host-datasets-card.component'
 
@@ -29,15 +30,26 @@ import HostDatasetsCard from './host-datasets-card.component'
  */
 export function DataConsolePage(props: ConsolePluginPageProps) {
   const { hostId, org } = props
+  // The org Data page is `/[orgSlug]/data` (AGL-621). This used to hardcode
+  // `/org/data`, which stopped being a route at that migration and had been
+  // a dead link ever since (AGL-685); the slug is not a prop, so resolve it
+  // from the host.
+  const { orgSlug } = useConsoleHostRoute(hostId)
   return (
     <Stack spacing={2}>
       <Alert
         severity="info"
         action={
-          // Org-scoped route owned by the console app (stable path).
-          <Button color="inherit" size="small" href="/org/data">
-            {'Open organization data'}
-          </Button>
+          // Rendered only once the slug resolves — no link beats a dead one.
+          orgSlug ? (
+            <Button
+              color="inherit"
+              size="small"
+              href={buildRoute(Route.ORG_DATA, { orgSlug })}
+            >
+              {'Open organization data'}
+            </Button>
+          ) : undefined
         }
       >
         {'Datasets belong to your organization and are shared across every ' +

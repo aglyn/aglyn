@@ -18,7 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
  * Draft orders (AGL-287, Shopify parity): a manager builds an order in
@@ -88,6 +88,26 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       return res.status(409).json({ error: 'Payments are not set up yet' })
     }
 
+    // Stripe returns the merchant to the console Products page. This was
+    // `/{hostDocId}/products`, the pre-AGL-621/622 shape, so paying (or
+    // cancelling) a draft order landed on a 404 (AGL-685). Console products
+    // is the plugin route keyed by org slug + host SUBDOMAIN; server code
+    // cannot call useConsoleHostRoute, so resolve them here. Without both,
+    // fall back to the origin root rather than a fabricated dead path.
+    const consoleSubdomain = (
+      await firestore.collection('hostIndex').doc(hostId).get()
+    ).get('subdomain') as string | undefined
+    const consoleOrgSlug = ownerOrg?.org?.slug as string | undefined
+    const origin = req.headers.origin ?? `https://${req.headers.host}`
+    const consoleProductsUrl =
+      consoleOrgSlug && consoleSubdomain
+        ? `${origin}${buildRoute(Route.HOST_PLUGIN, {
+            orgSlug: consoleOrgSlug,
+            host: consoleSubdomain,
+            pluginSlug: 'products',
+          })}`
+        : origin
+
     const unitAmountCents = Math.round(Number(variant.priceUsd) * 100)
     const lineItems: CommerceModel.OrderLineItem[] = [
       {
@@ -135,7 +155,6 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
       })
     })
 
-    const origin = req.headers.origin ?? `https://${req.headers.host}`
     const params = new URLSearchParams({
       mode: 'payment',
       'line_items[0][quantity]': String(quantity),
@@ -150,8 +169,8 @@ export const draftOrderHandler: PluginApiHandler = async (req, res) => {
         : {}),
       'payment_intent_data[transfer_data][destination]': String(accountId),
       ...(email ? { customer_email: email } : {}),
-      success_url: `${origin}/${hostId}/products?draft=paid`,
-      cancel_url: `${origin}/${hostId}/products?draft=canceled`,
+      success_url: `${consoleProductsUrl}?draft=paid`,
+      cancel_url: `${consoleProductsUrl}?draft=canceled`,
       'metadata[type]': 'commerce-draft',
       'metadata[hostId]': hostId,
       'metadata[orderId]': orderRef.id,
