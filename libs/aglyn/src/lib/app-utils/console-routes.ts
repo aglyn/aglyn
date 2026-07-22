@@ -74,6 +74,10 @@ export enum Route {
   // straight into the editor.
   COMPONENT_DETAILS = '/[orgSlug]/hosts/[host]/components/[componentId]',
   HOST_TEMPLATES = '/[orgSlug]/hosts/[host]/templates',
+  // Template detail (AGL-694), the counterpart to COMPONENT_DETAILS. Note
+  // TEMPLATE_BESIGNER carries no versionId — templates version but never
+  // publish, so there is no "current" pointer to route through.
+  TEMPLATE_DETAILS = '/[orgSlug]/hosts/[host]/templates/[templateId]',
   HOST_MARKETING = '/[orgSlug]/hosts/[host]/marketing',
   HOST_BOOKINGS = '/[orgSlug]/hosts/[host]/bookings',
   // Events now come from the events-calendar plugin, served by the generic
@@ -166,6 +170,11 @@ export interface RoutePayload {
     componentId: string
   }
   [Route.HOST_TEMPLATES]: { orgSlug: string; host: string }
+  [Route.TEMPLATE_DETAILS]: {
+    orgSlug: string
+    host: string
+    templateId: string
+  }
   [Route.HOST_MARKETING]: { orgSlug: string; host: string }
   [Route.HOST_BOOKINGS]: { orgSlug: string; host: string }
   [Route.HOST_REDIRECTS]: { orgSlug: string; host: string }

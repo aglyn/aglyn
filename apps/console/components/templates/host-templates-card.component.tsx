@@ -16,6 +16,7 @@
  */
 'use client'
 
+import * as Aglyn from '@aglyn/aglyn'
 import type { TemplateKind } from '@aglyn/aglyn'
 import { AppLink, CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -25,6 +26,11 @@ import {
   Button,
   Chip,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -34,8 +40,10 @@ import {
   getDoc,
   limit,
   query,
+  setDoc,
   updateDoc,
 } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -111,6 +119,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
   const { data: user } = useUser()
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
+  const router = useRouter()
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
   )
@@ -130,6 +139,74 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     [firestore, hostId],
     { idField: '$id' },
   )
+
+  /**
+   * One row per template, EXCEPT that a starter's pages collapse into a
+   * single row keyed by `source.starterId` (Zach's call, AGL-694).
+   *
+   * A multi-page starter materializes one document per screen (AGL-687), so
+   * flat it would put five rows in the library for something the gallery
+   * presents as one card. Grouping keeps the two surfaces agreeing. The row
+   * points at the FIRST page in authored order; its detail page lists the
+   * siblings, so nothing is hidden — the pages remain individually editable,
+   * usable and deletable from there.
+   *
+   * Whether this is the right trade is deliberately left open — AGL-696
+   * revisits it once a multi-page starter can actually be looked at.
+   */
+  const rows = useMemo(() => {
+    const seenStarters = new Set<string>()
+    const out: Array<{
+      key: string
+      template: any
+      displayName: string
+      description?: string
+      pageCount: number
+    }> = []
+    const live = (templateDocs ?? []).filter((entry: any) => !entry.deletedAt)
+    // Kind order first, then name — the sections this table replaced were
+    // ordered that way and the ordering was the useful part of them.
+    const kindRank = (kind: string) =>
+      KIND_ORDER.findIndex((entry) => entry.kind === kind)
+    const sorted = [...live].sort((a: any, b: any) => {
+      const byRank = kindRank(a.kind ?? 'page') - kindRank(b.kind ?? 'page')
+      if (byRank !== 0) return byRank
+      return String(a.displayName ?? '').localeCompare(
+        String(b.displayName ?? ''),
+      )
+    })
+    for (const template of sorted) {
+      const starterId = template.source?.starterId as string | undefined
+      if (starterId) {
+        if (seenStarters.has(starterId)) continue
+        seenStarters.add(starterId)
+        const pages = live
+          .filter((entry: any) => entry.source?.starterId === starterId)
+          .sort(
+            (a: any, b: any) =>
+              Number(a.source?.starterOrder ?? 0) -
+              Number(b.source?.starterOrder ?? 0),
+          )
+        out.push({
+          key: `starter:${starterId}`,
+          template: pages[0] ?? template,
+          displayName:
+            template.source?.starterName ?? template.displayName ?? starterId,
+          description: template.source?.starterDescription,
+          pageCount: pages.length,
+        })
+        continue
+      }
+      out.push({
+        key: template.$id,
+        template,
+        displayName: template.displayName ?? template.$id,
+        description: template.description,
+        pageCount: 1,
+      })
+    }
+    return out
+  }, [templateDocs])
 
   const byKind = useMemo(() => {
     const groups = new Map<string, any[]>()
@@ -285,6 +362,44 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
     [confirm, firestore, hostId, enqueueSnackbar],
   )
 
+  // Create from the listing (AGL-694). Templates could previously only be
+  // born from "Save as template" elsewhere in the product, so the page that
+  // lists them offered no way to make one.
+  //
+  // Written with `source.type: 'authored'` explicitly rather than left
+  // absent: provenance is what the badge and the marketplace update path key
+  // off, and an absent source reads as "unknown" rather than "mine".
+  const [creating, setCreating] = useState(false)
+  const handleCreate = useCallback(async () => {
+    if (creating) return
+    setCreating(true)
+    try {
+      const templateId = Aglyn.createResourceUid()
+      const timestamp = Timestamp.now()
+      await setDoc(doc(firestore, 'hosts', hostId, 'templates', templateId), {
+        hostId,
+        kind: 'page',
+        displayName: 'Untitled template',
+        description: '',
+        nodes: {},
+        source: { type: 'authored' },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+      router.push(
+        buildRoute(Route.TEMPLATE_DETAILS, { orgSlug, host, templateId }),
+      )
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('Could not create the template', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setCreating(false)
+    }
+  }, [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar])
+
   return (
     <CardDisplay
       header={'Templates'}
@@ -297,52 +412,79 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
           {'Loading…'}
         </Typography>
       ) : total === 0 ? (
-        <Stack spacing={1}>
+        <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
           <Typography variant="body2" color="text.secondary">
-            {'No templates yet. Save one from the Screens, Layouts or ' +
-              'Components list — look for “Save as template” — or install ' +
-              'one from the marketplace.'}
+            {'No templates yet. Create one here, save one from the Screens, ' +
+              'Layouts or Components list — look for “Save as template” — ' +
+              'or install one from the marketplace.'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {'Templates stay out of your live site until you use them.'}
           </Typography>
+          <Button
+            variant="contained"
+            color="secondary"
+            size="small"
+            disabled={creating}
+            onClick={handleCreate}
+          >
+            {creating ? 'Creating…' : 'Create template'}
+          </Button>
         </Stack>
       ) : (
-        <Stack spacing={3}>
-          {KIND_ORDER.map(({ kind, heading, blurb }) => {
-            const entries = byKind.get(kind) ?? []
-            if (!entries.length) return null
-            return (
-              <Stack key={kind} spacing={1}>
-                <Stack spacing={0.25}>
-                  <Typography variant="subtitle2">{heading}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {blurb}
-                  </Typography>
-                </Stack>
-                {entries.map((template: any) => {
-                  const chip = sourceChip(template.source, template.editedAt)
-                  return (
-                    <Stack
-                      key={template.$id}
-                      direction="row"
-                      spacing={1}
-                      sx={{ alignItems: 'center' }}
-                    >
-                      <Stack sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" noWrap>
-                          {template.displayName ?? template.$id}
-                        </Typography>
-                        {template.description ? (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            noWrap
-                          >
-                            {template.description}
+        <>
+          <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 1.5 }}>
+            <Button
+              variant="contained"
+              color="secondary"
+              size="small"
+              disabled={creating}
+              onClick={handleCreate}
+            >
+              {creating ? 'Creating…' : 'Create template'}
+            </Button>
+          </Stack>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>{'Display name'}</TableCell>
+                <TableCell>{'Kind'}</TableCell>
+                <TableCell>{'Source'}</TableCell>
+                <TableCell>{'Description'}</TableCell>
+                <TableCell>{'Updated'}</TableCell>
+                <TableCell align="right">{'Actions'}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.map((row) => {
+                const template = row.template
+                const chip = sourceChip(template.source, template.editedAt)
+                return (
+                  <TableRow key={row.key} hover>
+                    <TableCell>
+                      <Stack spacing={0.25}>
+                        <AppLink
+                          href={buildRoute(Route.TEMPLATE_DETAILS, {
+                            orgSlug,
+                            host,
+                            templateId: template.$id,
+                          })}
+                        >
+                          {row.displayName}
+                        </AppLink>
+                        {row.pageCount > 1 ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {`${row.pageCount} pages`}
                           </Typography>
                         ) : null}
                       </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {template.kind ?? 'page'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       {/* Provenance is server-managed (AGL-666), so this
                           badge means something — a client cannot claim a
                           marketplace origin for its own work. */}
@@ -355,20 +497,30 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                                   : ''
                               }`
                             : template.source?.type === 'starter'
-                              ? 'A first-party starter template'
+                              ? 'A first-party starter'
                               : 'Saved from this site'
                         }
                       >
                         <Chip size="small" label={chip.label} color={chip.color} />
                       </Tooltip>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {row.description || '--'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {template.updatedAt?.toDate?.().toLocaleString() ?? '--'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                       {hasUpdate(template) ? (
                         <Button
                           size="small"
                           color="secondary"
                           disabled={updating === template.$id}
-                          aria-label={`Update ${
-                            template.displayName ?? template.$id
-                          }`}
+                          aria-label={`Update ${row.displayName}`}
                           onClick={handleUpdate(template)}
                         >
                           {updating === template.$id
@@ -378,9 +530,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                       ) : null}
                       <Button
                         size="small"
-                        aria-label={`Edit ${
-                          template.displayName ?? template.$id
-                        }`}
+                        aria-label={`Edit ${row.displayName}`}
                         component={AppLink as any}
                         {...({ componentVariant: 'naked' } as any)}
                         href={buildRoute(Route.TEMPLATE_BESIGNER, {
@@ -396,7 +546,7 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                       <Button
                         size="small"
                         variant="outlined"
-                        aria-label={`Use ${template.displayName ?? template.$id}`}
+                        aria-label={`Use ${row.displayName}`}
                         onClick={() => setUseTemplate(template)}
                       >
                         {'Use'}
@@ -404,18 +554,18 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
                       <Button
                         size="small"
                         color="error"
-                        aria-label={`Delete ${template.displayName ?? template.$id}`}
+                        aria-label={`Delete ${row.displayName}`}
                         onClick={handleDelete(template)}
                       >
                         {'Delete'}
                       </Button>
-                    </Stack>
-                  )
-                })}
-              </Stack>
-            )
-          })}
-        </Stack>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </>
       )}
       <UseTemplateDialog
         hostId={hostId}
