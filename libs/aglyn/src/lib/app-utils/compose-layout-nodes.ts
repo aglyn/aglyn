@@ -28,16 +28,47 @@ export const LAYOUT_SLOT_COMPONENT_ID = 'layoutSlot'
  */
 export const LAYOUT_NODE_ID_PREFIX = 'layout__'
 
-type NormalizedNodes<N extends AglynNodeSchema> = Record<NodeId, N>
+/**
+ * How many layouts deep a chain may nest (AGL-703).
+ *
+ * A layout can render inside another layout, so the chain is walked rather
+ * than read once. This bounds it: a cycle is already refused at both write
+ * time and resolution time, and this is the belt to that pair of braces —
+ * a hand-edited document must not be able to hang a render.
+ */
+export const MAX_LAYOUT_CHAIN_DEPTH = 5
 
-function prefixLayoutId(id: NodeId): NodeId {
-  return id === NODE_ROOT_ID ? id : `${LAYOUT_NODE_ID_PREFIX}${id}`
+/**
+ * Namespace for one level of the layout chain (AGL-703).
+ *
+ * Depth 1 — the layout a screen names directly — keeps the original
+ * `layout__` exactly. Every interaction authored before nesting existed
+ * stores raw canvas ids that {@link normalizeLeafId} matches against this
+ * prefix, so changing it would silently break them. Outer levels take
+ * `layout2__`, `layout3__`, … which is what keeps a grandparent layout's
+ * node ids from colliding with its child's: without a per-level namespace,
+ * two layouts in one chain sharing a node id would collapse into one node.
+ */
+export function layoutNodeIdPrefix(depth = 1): string {
+  return depth <= 1 ? LAYOUT_NODE_ID_PREFIX : `layout${depth}__`
 }
 
-function prefixChildIds(nodes: AglynNodeSchema['nodes']) {
+/** Every namespace a composed tree can carry, outermost depth first. */
+export const LAYOUT_NODE_ID_PREFIXES = Array.from(
+  { length: MAX_LAYOUT_CHAIN_DEPTH },
+  (_unused, index) => layoutNodeIdPrefix(index + 1),
+)
+
+type NormalizedNodes<N extends AglynNodeSchema> = Record<NodeId, N>
+
+function prefixLayoutId(id: NodeId, prefix: string): NodeId {
+  return id === NODE_ROOT_ID ? id : `${prefix}${id}`
+}
+
+function prefixChildIds(nodes: AglynNodeSchema['nodes'], prefix: string) {
   if (!Array.isArray(nodes)) return nodes
   return (nodes as NodeId[]).map((id) =>
-    typeof id === 'string' ? prefixLayoutId(id) : id,
+    typeof id === 'string' ? prefixLayoutId(id, prefix) : id,
   )
 }
 
@@ -60,6 +91,8 @@ export function composeLayoutAndScreenNodes<
 >(
   layoutNodes: NormalizedNodes<N> | undefined,
   screenNodes: NormalizedNodes<N>,
+  /** Position in the layout chain; 1 = the layout the screen names. */
+  depth = 1,
 ): NormalizedNodes<N> {
   if (!layoutNodes || !layoutNodes[NODE_ROOT_ID]) return screenNodes
 
@@ -68,25 +101,31 @@ export function composeLayoutAndScreenNodes<
   )
   if (!slotEntry) return screenNodes
 
+  const prefix = layoutNodeIdPrefix(depth)
   const composed: NormalizedNodes<N> = {}
 
   for (const [id, node] of Object.entries(layoutNodes)) {
-    const nextId = prefixLayoutId(id)
+    const nextId = prefixLayoutId(id, prefix)
     composed[nextId] = {
       ...node,
       // Early seeds stored roots without $id or componentId, letting the
       // canvas assign fallbacks — trust the map key so root identity stays
       // canonical, and pin the root to a plain container so production
       // renderers (which have no canvas defaults) can resolve it.
-      $id: id === NODE_ROOT_ID ? NODE_ROOT_ID : prefixLayoutId(node.$id ?? id),
+      $id:
+        id === NODE_ROOT_ID
+          ? NODE_ROOT_ID
+          : prefixLayoutId(node.$id ?? id, prefix),
       ...(id === NODE_ROOT_ID &&
         !node.componentId && { componentId: 'div' as N['componentId'] }),
-      ...(node.parentId != null && { parentId: prefixLayoutId(node.parentId) }),
-      ...(node.nodes != null && { nodes: prefixChildIds(node.nodes) }),
+      ...(node.parentId != null && {
+        parentId: prefixLayoutId(node.parentId, prefix),
+      }),
+      ...(node.nodes != null && { nodes: prefixChildIds(node.nodes, prefix) }),
     }
   }
 
-  const slotId = prefixLayoutId(slotEntry[0])
+  const slotId = prefixLayoutId(slotEntry[0], prefix)
   const screenRoot = screenNodes[NODE_ROOT_ID]
   const screenRootChildIds = Array.isArray(screenRoot?.nodes)
     ? ([...screenRoot.nodes] as NodeId[])
@@ -114,6 +153,86 @@ export function composeLayoutAndScreenNodes<
   }
 
   return composed
+}
+
+/**
+ * Grafts a screen through a CHAIN of layouts, innermost first (AGL-703).
+ *
+ * `layoutNodesChain[0]` is the layout the screen names, `[1]` is that
+ * layout's own layout, and so on outward. Each step drops the previous
+ * result into the next layout's slot, so the outermost layout ends up as
+ * the root — the same relationship a screen has always had with its layout,
+ * applied one more time.
+ *
+ * A layout with no slot is skipped rather than fatal, and skipping it does
+ * not strand the layouts outside it: the accumulated tree simply passes
+ * through. That matches the single-layout behaviour, where a broken layout
+ * degrades to the bare screen instead of taking a published page down.
+ *
+ * Cycles are refused before this point (see `resolveLayoutChainIds`), and
+ * the chain is capped at {@link MAX_LAYOUT_CHAIN_DEPTH} regardless.
+ */
+export function composeLayoutChainAndScreenNodes<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  layoutNodesChain: Array<NormalizedNodes<N> | undefined>,
+  screenNodes: NormalizedNodes<N>,
+): NormalizedNodes<N> {
+  let composed = screenNodes
+  const chain = layoutNodesChain.slice(0, MAX_LAYOUT_CHAIN_DEPTH)
+  for (const [index, layoutNodes] of chain.entries()) {
+    composed = composeLayoutAndScreenNodes(layoutNodes, composed, index + 1)
+  }
+  return composed
+}
+
+/**
+ * Walks a layout's ancestry into a flat chain, innermost first (AGL-703).
+ *
+ * `parentOf` returns the layout a given layout renders inside, or undefined
+ * at the top. The walk stops on:
+ *
+ * - **self-reference** — a layout naming itself, which is the case worth
+ *   naming out loud because it is the easy mistake to make;
+ * - **any repeat** — A → B → A would otherwise recurse forever, and a
+ *   guard that only catches self-reference would miss it;
+ * - **depth** — {@link MAX_LAYOUT_CHAIN_DEPTH}.
+ *
+ * Stopping (rather than throwing) is deliberate: a cycle in stored data
+ * should render the layouts up to the repeat, not blank the site.
+ */
+export function resolveLayoutChainIds(
+  layoutId: string | undefined | null,
+  parentOf: (layoutId: string) => string | undefined | null,
+): string[] {
+  const chain: string[] = []
+  const seen = new Set<string>()
+  let current = layoutId ? String(layoutId) : undefined
+  while (current && !seen.has(current) && chain.length < MAX_LAYOUT_CHAIN_DEPTH) {
+    chain.push(current)
+    seen.add(current)
+    const parent = parentOf(current)
+    current = parent ? String(parent) : undefined
+  }
+  return chain
+}
+
+/**
+ * Whether `candidateParentId` may be set as `layoutId`'s parent layout.
+ *
+ * Refuses self-reference and any candidate that already has this layout
+ * somewhere above it — picking one would close a loop. This is the
+ * write-time half; `resolveLayoutChainIds` stays defensive anyway, because
+ * a document can be edited by something that never called this.
+ */
+export function canNestLayout(
+  layoutId: string,
+  candidateParentId: string,
+  parentOf: (layoutId: string) => string | undefined | null,
+): boolean {
+  if (!layoutId || !candidateParentId) return false
+  if (layoutId === candidateParentId) return false
+  return !resolveLayoutChainIds(candidateParentId, parentOf).includes(layoutId)
 }
 
 export default composeLayoutAndScreenNodes

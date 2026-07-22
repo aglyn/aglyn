@@ -136,12 +136,40 @@ export async function composeNodesWithChrome(options: {
 }): Promise<Record<string, any>> {
   const { hostId, layoutId, screenNodes } = options
 
-  const layoutRes = layoutId
-    ? await getPublishedLayoutVersion({ hostId, layoutId })
-    : undefined
+  /**
+   * The layout chain, innermost first (AGL-703).
+   *
+   * A layout may itself render inside another layout, so this walks the
+   * `layoutId` pointers rather than reading one. Fetching is sequential
+   * because each step's parent is only known once the previous layout
+   * document is in hand — but the walk is short by construction
+   * (MAX_LAYOUT_CHAIN_DEPTH) and every layout is already a cached read.
+   *
+   * `seen` stops a cycle from looping forever. Stored data can hold one
+   * even though both the console and `canNestLayout` refuse to create it:
+   * the API, a script, or a restored backup can all write a layout
+   * document directly, and a render must degrade rather than hang.
+   */
+  const layoutNodesChain: Array<Record<string, any> | undefined> = []
+  const seen = new Set<string>()
+  let currentLayoutId = layoutId ? String(layoutId) : undefined
+  while (
+    currentLayoutId &&
+    !seen.has(currentLayoutId) &&
+    layoutNodesChain.length < Aglyn.MAX_LAYOUT_CHAIN_DEPTH
+  ) {
+    seen.add(currentLayoutId)
+    const layoutRes = await getPublishedLayoutVersion({
+      hostId,
+      layoutId: currentLayoutId,
+    })
+    layoutNodesChain.push(layoutRes?.version?.nodes as any)
+    const parentId = (layoutRes?.layout as any)?.layoutId
+    currentLayoutId = parentId ? String(parentId) : undefined
+  }
 
-  const composedNodes = Aglyn.composeLayoutAndScreenNodes(
-    layoutRes?.version?.nodes as any,
+  const composedNodes = Aglyn.composeLayoutChainAndScreenNodes(
+    layoutNodesChain as any,
     screenNodes as any,
   )
   const componentsRes = await getComponents({ hostId })

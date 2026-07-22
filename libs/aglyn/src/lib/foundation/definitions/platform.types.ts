@@ -421,6 +421,13 @@ export interface AglynLayout extends AglynDocument {
   versions?: Array<VersionUid>
   displayName?: string
   description?: string
+  /**
+   * Layout this layout renders inside (AGL-703) — the same relationship
+   * `AglynScreen.layoutId` expresses, one level up, so shared chrome can
+   * sit outside a more specific frame. Must not be this layout, or any
+   * layout already below it; see `canNestLayout`.
+   */
+  layoutId?: LayoutUid
   // `contributors` removed here too — see the note on AglynScreen (AGL-676).
   createdAt?: ITimestamp
   updatedAt?: ITimestamp

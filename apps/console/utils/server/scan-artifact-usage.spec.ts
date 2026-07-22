@@ -169,6 +169,32 @@ describe('scanLayoutUsage', () => {
     },
   ]
 
+  const layouts: UsageCandidate[] = [
+    // Nested inside lay-main (AGL-703).
+    { id: 'lay-inner', displayName: 'Inner Layout', layoutId: 'lay-main' },
+    { id: 'lay-main', displayName: 'Main Layout' },
+    {
+      id: 'lay-gone',
+      displayName: 'Retired Layout',
+      layoutId: 'lay-main',
+      deletedAt: { seconds: 1 },
+    },
+  ]
+
+  it('lists a layout nested inside this one as a dependent', () => {
+    const found = scanLayoutUsage('lay-main', screens, layouts)
+    expect(found).toContainEqual({
+      type: 'layout',
+      id: 'lay-inner',
+      name: 'Inner Layout',
+      via: ['id'],
+    })
+    // Deleted nested layouts are not dependents.
+    expect(found.some((entry) => entry.id === 'lay-gone')).toBe(false)
+    // A layout is never its own dependent, however the data reads.
+    expect(found.some((entry) => entry.id === 'lay-main')).toBe(false)
+  })
+
   it('lists every live screen rendering inside the layout', () => {
     const found = scanLayoutUsage('lay-main', screens)
     expect(found).toEqual([

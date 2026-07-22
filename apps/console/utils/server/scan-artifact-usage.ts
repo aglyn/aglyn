@@ -97,25 +97,46 @@ export function scanComponentUsage(
 }
 
 /**
- * Every screen rendering inside a layout (AGL-703).
+ * Everything rendering inside a layout (AGL-703).
  *
- * `screen.layoutId` is the ONLY reference to a layout that exists — layout
- * composition takes exactly one layout id and reads it from the screen, so
- * layout-inside-layout is not a thing the data model can express. Screens are
- * therefore the complete answer here, not a partial one.
+ * Two kinds of dependent, both expressed by the same `layoutId` pointer:
+ *
+ * - **screens**, which name the layout they render inside;
+ * - **other layouts**, since a layout can itself sit inside one. A nested
+ *   layout is a real dependent — deleting its parent unwraps every screen
+ *   underneath it — so leaving layouts out would report a parent layout as
+ *   used only by the screens that name it directly, and none of the ones
+ *   that reach it through a child.
+ *
+ * A layout never counts as its own dependent; `canNestLayout` refuses that,
+ * and this refuses to report it even if stored data holds one.
  */
 export function scanLayoutUsage(
   layoutId: string,
   screens: UsageCandidate[],
+  layouts: UsageCandidate[] = [],
 ): UsageDependent[] {
   if (!layoutId) return []
-  return screens
-    .filter((screen) => isLive(screen) && screen.layoutId === layoutId)
-    .map((screen) => ({
-      type: 'screen' as const,
-      id: screen.id,
-      name: labelFor(screen),
-      via: ['id' as const],
-      ...(screen.versionId ? { versionId: screen.versionId } : {}),
-    }))
+  const dependentsOf = (
+    candidates: UsageCandidate[],
+    type: 'screen' | 'layout',
+  ) =>
+    candidates
+      .filter(
+        (candidate) =>
+          isLive(candidate) &&
+          candidate.layoutId === layoutId &&
+          candidate.id !== layoutId,
+      )
+      .map((candidate) => ({
+        type,
+        id: candidate.id,
+        name: labelFor(candidate),
+        via: ['id' as const],
+        ...(candidate.versionId ? { versionId: candidate.versionId } : {}),
+      }))
+  return [
+    ...dependentsOf(screens, 'screen'),
+    ...dependentsOf(layouts, 'layout'),
+  ]
 }

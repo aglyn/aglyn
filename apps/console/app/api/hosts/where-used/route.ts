@@ -69,10 +69,10 @@ const SCANNABLE_KINDS = [
  *   component definitions — `composeReusableComponentNodes` expands nested
  *   instances — so all three are scanned. Skipping definitions would report
  *   "used nowhere" for a component used only inside another one.
- * - A LAYOUT is referenced by `screen.layoutId`, and by nothing else.
- *   Layout-inside-layout does not exist in the data model: composition takes
- *   exactly one layout id, read from the screen. So screens are the whole
- *   scan, not a partial one.
+ * - A LAYOUT is referenced by a `layoutId` pointer — on screens bound to it,
+ *   and on layouts NESTED inside it, which AGL-703 made possible. Both are
+ *   scanned: a nested layout is a real dependent, because deleting the outer
+ *   layout unwraps every screen underneath the inner one too.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -140,7 +140,15 @@ async function handler(request: Request): Promise<Response> {
             dependents.push({
               type: collectionName === 'screens' ? 'screen' : 'layout',
               id: docSnapshot.id,
-              name: String(docSnapshot.get('name') ?? docSnapshot.id),
+              // `displayName` first: screens and layouts have never stored a
+              // `name`, so reading only that showed every dependent as a raw
+              // document id — the one thing a "where is this used" list must
+              // not do. Workflows and variables below genuinely use `name`.
+              name: String(
+                docSnapshot.get('displayName') ??
+                  docSnapshot.get('name') ??
+                  docSnapshot.id,
+              ),
               via,
               versionId: String(versionId),
             })
@@ -210,11 +218,13 @@ async function handler(request: Request): Promise<Response> {
       }
 
       if (kind === 'layout') {
-        // Screens are the whole scan: no node search needed, since the
-        // reference is the screen's own `layoutId` field.
-        dependents.push(
-          ...scanLayoutUsage(refId, await readCandidates('screens', false)),
-        )
+        // No node search needed: the reference is a `layoutId` field, on
+        // screens and — since AGL-703 — on nested layouts too.
+        const [screens, layouts] = await Promise.all([
+          readCandidates('screens', false),
+          readCandidates('layouts', false),
+        ])
+        dependents.push(...scanLayoutUsage(refId, screens, layouts))
       } else {
         const [screens, layouts, components] = await Promise.all([
           readCandidates('screens', true),

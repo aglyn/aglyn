@@ -43,8 +43,9 @@ const SCOPE_NOTE: Record<'component' | 'layout', string> = {
     'components — a component can be placed inside another one. Unpublished ' +
     'drafts and library templates are not scanned.',
   layout:
-    'Screens are the only thing that can use a layout: a layout cannot ' +
-    'contain another layout. Every screen is scanned, published or not.',
+    'Scanned: every screen that renders inside this layout, and every ' +
+    'layout nested inside it — deleting this one unwraps the screens ' +
+    'under those too. Published or not, everything is scanned.',
 }
 
 /**

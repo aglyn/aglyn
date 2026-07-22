@@ -45,7 +45,7 @@ import {
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
@@ -114,9 +114,40 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
   )
   const publishedVersionId = definition?.versionId as string | undefined
 
+  // Every layout on the host, for the parent picker below (AGL-703).
+  const { data: layoutDocs } = useFirestoreCollection<any>(
+    () => query(collection(firestore, 'hosts', hostId, 'layouts'), limit(100)),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+
   const [name, setName] = useState<string | null>(null)
   const [description, setDescription] = useState<string | null>(null)
+  const [parentLayoutId, setParentLayoutId] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
+
+  /**
+   * Layouts this one may render inside (AGL-703).
+   *
+   * Excludes itself and anything already below it — picking either would
+   * close a loop. `canNestLayout` does the ancestry walk; offering an
+   * impossible option and rejecting it on save would be a worse way to
+   * teach the same rule.
+   */
+  const parentOptions = useMemo(() => {
+    const byId = new Map<string, any>()
+    for (const entry of layoutDocs ?? []) {
+      if (!entry.deletedAt) byId.set(entry.$id, entry)
+    }
+    const parentOf = (id: string) => byId.get(id)?.layoutId
+    return Array.from(byId.values())
+      .filter((entry: any) =>
+        Aglyn.canNestLayout(layoutId, entry.$id, parentOf),
+      )
+      .sort((a: any, b: any) =>
+        String(a.displayName ?? '').localeCompare(String(b.displayName ?? '')),
+      )
+  }, [layoutDocs, layoutId])
 
   const handleSave = useCallback(async () => {
     const dequeue = queueLoading()
@@ -124,10 +155,15 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
       await updateDoc(doc(firestore, 'hosts', hostId, 'layouts', layoutId), {
         ...(name != null ? { displayName: name.trim() } : {}),
         ...(description != null ? { description: description.trim() } : {}),
+        // '' clears it: deleteField() would be the tidier write, but an
+        // absent field and an empty one both read as "no parent" here and
+        // in the runtime walk.
+        ...(parentLayoutId != null ? { layoutId: parentLayoutId } : {}),
         updatedAt: Timestamp.now(),
       })
       setName(null)
       setDescription(null)
+      setParentLayoutId(null)
       enqueueSnackbar('Layout saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -138,7 +174,16 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       dequeue()
     }
-  }, [firestore, hostId, layoutId, name, description, queueLoading, enqueueSnackbar])
+  }, [
+    firestore,
+    hostId,
+    layoutId,
+    name,
+    description,
+    parentLayoutId,
+    queueLoading,
+    enqueueSnackbar,
+  ])
 
   /**
    * Opens a version in the besigner, minting the first one when the component
@@ -214,7 +259,7 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
   )
 
   const listUrl = buildRoute(Route.LAYOUT_LIST, { orgSlug, host })
-  const dirty = name != null || description != null
+  const dirty = name != null || description != null || parentLayoutId != null
 
   return (
     <>
@@ -302,6 +347,32 @@ const LayoutDetails: NextPageWithLayout<Record<string, never>> = () => {
                 minRows={2}
                 helperText="Shown in the components list and the element drawer"
               />
+              {/* Nested layouts (AGL-703): shared chrome can sit OUTSIDE a
+                  more specific frame, the same relationship a screen has
+                  with its layout, one level up. */}
+              <TextField
+                select
+                label="Renders inside"
+                size="small"
+                value={parentLayoutId ?? definition?.layoutId ?? ''}
+                onChange={(event) => setParentLayoutId(event.target.value)}
+                fullWidth
+                slotProps={{ select: { native: true } }}
+                helperText={
+                  parentOptions.length
+                    ? 'Wrap this layout in another one. A layout cannot sit ' +
+                      'inside itself, or inside a layout already nested in it.'
+                    : 'No other layout can wrap this one yet — create a ' +
+                      'second layout first.'
+                }
+              >
+                <option value="">{'— None —'}</option>
+                {parentOptions.map((entry: any) => (
+                  <option key={entry.$id} value={entry.$id}>
+                    {entry.displayName ?? entry.$id}
+                  </option>
+                ))}
+              </TextField>
               <Typography variant="caption" color="text.secondary">
                 {`ID ${layoutId} — persisted in screen documents, so it never changes`}
               </Typography>
