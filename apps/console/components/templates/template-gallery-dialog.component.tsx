@@ -33,7 +33,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, query, where } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
@@ -42,10 +42,6 @@ import {
 import { checkOrgQuota } from '../../constants/entitlements'
 import createPageFromTemplate from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
-import {
-  STARTER_TEMPLATES,
-  type StarterTemplate,
-} from '../../constants/starter-templates'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
 
@@ -60,10 +56,20 @@ export interface TemplateGalleryDialogProps {
 }
 
 /**
- * Starter-template gallery (AGL-78/79): instantiates a template's screens
- * into the host — fresh screen/version ids, published routing-map entries
- * (slug conflicts get a numeric suffix), SEO fields carried over. Templates
- * ship in code (STARTER_TEMPLATES), so there is nothing to seed.
+ * Template gallery (AGL-78/79, single-sourced by AGL-687).
+ *
+ * Every card here is now a real document in the host's own template library.
+ * The first-party starters used to be rendered straight from code, which
+ * made them a second kind of template — no version history, no editor, no
+ * placeholders — sitting in the same grid as the editable ones. They are now
+ * seeded into `hosts/{hostId}/templates` (see
+ * `utils/server/seed-starter-templates.ts`), so a starter card and a saved
+ * card differ only in the provenance recorded on the document.
+ *
+ * Multi-page starters seed one page template per screen and are regrouped
+ * here by `source.starterId`, which keeps the one-click "add all five shop
+ * pages" behaviour while leaving each page individually editable, versionable
+ * and usable from the Templates library.
  */
 export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { hostId, open, onClose, existingSlugs, screenCount } = props
@@ -100,6 +106,36 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const libraryPages = (libraryDocs ?? []).filter(
     (entry: any) => !entry.deletedAt && (entry.kind ?? 'page') === 'page',
   )
+  // Seeded starters are presented as the bundles they were authored as; the
+  // rest of the library stays a flat list of individual templates.
+  const savedPages = libraryPages.filter(
+    (entry: any) => entry.source?.type !== 'starter',
+  )
+  const starterGroups = useMemo(() => {
+    const groups = new Map<string, { id: string; displayName: string; description?: string; category?: string; screens: any[] }>()
+    for (const entry of libraryPages) {
+      if (entry.source?.type !== 'starter') continue
+      const starterId = String(entry.source.starterId ?? entry.$id)
+      const group = groups.get(starterId) ?? {
+        id: starterId,
+        displayName: entry.source.starterName ?? entry.displayName,
+        description: entry.source.starterDescription ?? entry.description,
+        category: entry.category,
+        screens: [],
+      }
+      group.screens.push(entry)
+      groups.set(starterId, group)
+    }
+    for (const group of groups.values()) {
+      // Authored order, not Firestore's: a starter's pages are written in
+      // the order its author intended them to be created.
+      group.screens.sort(
+        (a: any, b: any) =>
+          Number(a.source?.starterOrder ?? 0) - Number(b.source?.starterOrder ?? 0),
+      )
+    }
+    return Array.from(groups.values())
+  }, [libraryPages])
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
   )
@@ -153,8 +189,37 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     [installingId, user, hostId, queueLoading, enqueueSnackbar, onClose],
   )
 
+  // Backfill for hosts that predate AGL-687 — new hosts are seeded at
+  // creation. Idempotent and marker-guarded server-side, so a repeat open
+  // costs one host-doc read and writes nothing.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const idToken = await (user as any)?.getIdToken?.()
+        if (cancelled || !idToken) return
+        await fetch('/api/hosts/seed-starter-templates', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ hostId }),
+        })
+      } catch (error) {
+        // A gallery showing only the user's own templates is a worse
+        // gallery, not a broken one — never block opening on this.
+        console.error(error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, hostId, user])
+
   const handleUse = useCallback(
-    (template: StarterTemplate) => async () => {
+    (template: { displayName: string; screens: any[] }) => async () => {
       const quota = checkOrgQuota(
         org,
         'screensPerHost',
@@ -227,13 +292,13 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             are the ones a returning user is looking for, and they open the
             same Use flow as the Templates page rather than a second
             implementation. */}
-        {libraryPages.length ? (
+        {savedPages.length ? (
           <>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {'Your templates'}
             </Typography>
             <Grid container spacing={2} sx={{ mb: 3 }}>
-              {libraryPages.map((template: any) => (
+              {savedPages.map((template: any) => (
                 <Grid key={template.$id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined" sx={{ height: '100%' }}>
                     <CardContent>
@@ -270,51 +335,63 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                 </Grid>
               ))}
             </Grid>
+          </>
+        ) : null}
+        {/* Seeded first-party starters (AGL-687), regrouped by the starter
+            they came from so a multi-page starter is still one card that
+            creates all of its pages — while each of those pages remains an
+            ordinary, editable template in the library. */}
+        {starterGroups.length ? (
+          <>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {'Starter sites'}
             </Typography>
+            <Grid container spacing={2}>
+              {starterGroups.map((starter) => (
+                <Grid key={starter.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    <CardContent>
+                      <Typography variant="h6">
+                        {starter.displayName}
+                      </Typography>
+                      {starter.category ? (
+                        <Chip
+                          label={starter.category}
+                          size="small"
+                          variant="outlined"
+                          sx={{ my: 1 }}
+                        />
+                      ) : null}
+                      <Typography variant="body2" color="text.secondary">
+                        {starter.description}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        component="div"
+                        sx={{ mt: 1 }}
+                      >
+                        {`${starter.screens.length} screen${
+                          starter.screens.length === 1 ? '' : 's'
+                        }`}
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="secondary"
+                        onClick={handleUse(starter)}
+                      >
+                        {'Use template'}
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
           </>
         ) : null}
-        <Grid container spacing={2}>
-          {STARTER_TEMPLATES.map((template) => (
-            <Grid key={template.id} size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card variant="outlined" sx={{ height: '100%' }}>
-                <CardContent>
-                  <Typography variant="h6">{template.displayName}</Typography>
-                  <Chip
-                    label={template.category}
-                    size="small"
-                    variant="outlined"
-                    sx={{ my: 1 }}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    {template.description}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    component="div"
-                    sx={{ mt: 1 }}
-                  >
-                    {`${template.screens.length} screen${
-                      template.screens.length === 1 ? '' : 's'
-                    }`}
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button
-                    size="small"
-                    variant="contained"
-                    color="secondary"
-                    onClick={handleUse(template)}
-                  >
-                    {'Use template'}
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
         {communityTemplates.length ? (
           <>
             <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>

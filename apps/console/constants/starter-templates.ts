@@ -15,15 +15,35 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
+// Server entry, not the barrel: this file is now reached from an API route
+// (the seed), and `@aglyn/aglyn` pulls React contexts into the RSC graph.
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/server'
 
 /**
- * First-party starter templates (AGL-78/79). Shipped in code so they
- * version with the app and need no seeded data; node ids are template-local
- * (unique within each screen's version doc). The apply util re-keys screen
- * and version ids at instantiation.
+ * First-party starter definitions (AGL-78/79), now SEED INPUT ONLY
+ * (AGL-687).
+ *
+ * These used to be rendered straight into the gallery and instantiated from
+ * code, which made a starter a second kind of template: no version history,
+ * no placeholders, no editor, changeable only by shipping a release. Now
+ * they are seeded into each host's own template library as ordinary
+ * `hosts/{hostId}/templates` documents (see
+ * `utils/server/seed-starter-templates.ts` for why copy-on-use rather than a
+ * global read-only collection), and nothing reads this file at render time.
+ *
+ * Node ids stay template-local (unique within each screen's version doc);
+ * `createPageFromTemplate` re-keys screen and version ids at instantiation.
+ *
+ * PERSISTED IDENTIFIERS: `StarterTemplate.id`, `StarterTemplateScreen.key`
+ * and every node id below appear in stored documents (seeded template doc
+ * ids are derived from the first two). They must never be renamed.
  */
 export interface StarterTemplateScreen {
+  /**
+   * Stable, starter-local key. Part of the seeded document id, so it is a
+   * persisted identifier — never rename one.
+   */
+  key: string
   displayName: string
   description?: string
   /** Routing-map slug ('' = home). */
@@ -39,6 +59,68 @@ export interface StarterTemplate {
   description: string
   category: string
   screens: StarterTemplateScreen[]
+}
+
+/** A seeded starter template document, keyed by its deterministic id. */
+export interface StarterTemplateDoc {
+  id: string
+  data: Record<string, unknown>
+}
+
+/**
+ * Deterministic document id for a seeded starter screen (AGL-687).
+ *
+ * Derived from the starter id and the screen key — never randomly generated
+ * — so re-running the seed addresses the same documents instead of stacking
+ * duplicate copies of every starter on every run.
+ */
+export function starterTemplateDocId(
+  starterId: string,
+  screenKey: string,
+): string {
+  return `starter-${starterId}-${screenKey}`
+}
+
+/**
+ * Expands one starter into the template documents it seeds as.
+ *
+ * One page template per screen, matching what a marketplace install of a
+ * multi-screen site template already produces (AGL-669) — the alternative,
+ * a bespoke multi-page template shape, would be a third lifecycle on top of
+ * the two this issue exists to merge. The bundle's name/description/order
+ * ride `source` so the gallery can still present the starter as one card.
+ */
+export function buildStarterTemplateDocs(
+  starter: StarterTemplate,
+): StarterTemplateDoc[] {
+  return starter.screens.map((screen, index) => ({
+    id: starterTemplateDocId(starter.id, screen.key),
+    data: {
+      kind: 'page',
+      displayName: screen.displayName,
+      // Only the screen's own description, never the starter blurb: a
+      // template's `description` is carried onto the page it creates, and a
+      // screen description is the live site's meta-description fallback.
+      // The bundle blurb lives on `source.starterDescription` instead.
+      ...(screen.description ? { description: screen.description } : {}),
+      category: starter.category,
+      ...(screen.slug ? { slug: screen.slug } : {}),
+      ...(screen.seo ? { seo: screen.seo } : {}),
+      nodes: screen.nodes,
+      source: {
+        type: 'starter',
+        starterId: starter.id,
+        starterName: starter.displayName,
+        starterDescription: starter.description,
+        starterOrder: index,
+      },
+    },
+  }))
+}
+
+/** Every document the starter seed is responsible for, in bundle order. */
+export function buildAllStarterTemplateDocs(): StarterTemplateDoc[] {
+  return STARTER_TEMPLATES.flatMap(buildStarterTemplateDocs)
 }
 
 type NodeSpec = {
@@ -155,6 +237,7 @@ const commerceBlock = (
 function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] {
   return [
     {
+      key: 'home',
       displayName: 'Home',
       slug: '',
       seo: {
@@ -181,6 +264,7 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       ]),
     },
     {
+      key: 'shop',
       displayName: 'Shop',
       slug: 'shop',
       seo: { title: 'All products' },
@@ -194,6 +278,7 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       ]),
     },
     {
+      key: 'product',
       displayName: 'Product page',
       slug: 'product',
       seo: { title: 'Product' },
@@ -202,6 +287,7 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       ]),
     },
     {
+      key: 'cart',
       displayName: 'Cart',
       slug: 'cart',
       seo: { title: 'Your cart' },
@@ -214,6 +300,7 @@ function shopScreens(prefix: string, digital: boolean): StarterTemplateScreen[] 
       ]),
     },
     {
+      key: 'account',
       displayName: 'Account',
       slug: 'account',
       seo: { title: 'Your account' },
@@ -235,6 +322,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     category: 'Marketing',
     screens: [
       {
+        key: 'landing',
         displayName: 'Landing',
         slug: 'landing',
         seo: {
@@ -290,6 +378,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     category: 'Business',
     screens: [
       {
+        key: 'home',
         displayName: 'Business Home',
         slug: 'home',
         seo: { title: 'Home' },
@@ -312,6 +401,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
         ]),
       },
       {
+        key: 'about-us',
         displayName: 'About Us',
         slug: 'about-us',
         seo: { title: 'About us' },
@@ -333,6 +423,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
         ]),
       },
       {
+        key: 'contact-us',
         displayName: 'Contact Us',
         slug: 'contact-us',
         seo: { title: 'Contact' },
@@ -363,6 +454,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     category: 'Personal',
     screens: [
       {
+        key: 'portfolio',
         displayName: 'Portfolio',
         slug: 'portfolio',
         seo: { title: 'Portfolio' },

@@ -19,7 +19,9 @@ scale with your tier.
 ## Site templates & starter gallery
 
 - Spin up a new site from the **starter template gallery**, which instantiates published
-  screens for you.
+  screens for you. Starters are copied into your site's own
+  [template library](./templates-library.md), so you can edit and version them like any
+  other template.
 - **Save a site as a template**, then browse and install community templates.
 
 ## Section & block library

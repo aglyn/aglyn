@@ -32,6 +32,9 @@ import {
   registerOrgHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
+import seedStarterTemplates, {
+  type SeedFirestore,
+} from '../../../../utils/server/seed-starter-templates'
 
 /**
  * Creates a host (user request 2026-07-07 — the hosts page had no create
@@ -156,6 +159,17 @@ async function handler(request: Request): Promise<Response> {
       })
     // Org directory + hostIndex mirror + memberRoles projection (AGL-233).
     await registerOrgHost(orgMembership.orgId, hostId, subdomain)
+    // First-party starters land in the new site's template library (AGL-687)
+    // so "start from a template" has something in it on day one. Best-effort:
+    // a site with no starters is a working site, and the gallery re-runs the
+    // same idempotent seed when it opens.
+    await seedStarterTemplates(
+      firestore as unknown as SeedFirestore,
+      hostId,
+      { now: firebaseAdmin.firestore.Timestamp.now() },
+    ).catch((error) => {
+      console.error('Starter seed failed for new host', hostId, error)
+    })
     // orgSlug lets the client route to /[orgSlug]/hosts/[host]/setup even when
     // the workspace was just auto-created for a first-time user (AGL-621), and
     // the route is keyed by the SUBDOMAIN, not the doc id (AGL-622) — so hand
