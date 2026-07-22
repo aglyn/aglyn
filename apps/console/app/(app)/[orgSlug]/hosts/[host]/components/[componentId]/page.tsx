@@ -153,7 +153,16 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
               componentId,
               hostId,
               displayName: 'Initial version',
-              nodes: definition?.nodes ?? {},
+              // Falls back to a root-only canvas, never `{}` — an empty map
+              // renders as "Invalid node" (AGL-693).
+              nodes:
+                definition?.nodes ?? {
+                  [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+                    $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+                    componentId: 'div',
+                    nodes: [],
+                  },
+                },
               ...(definition?.rootId ? { rootId: definition.rootId } : {}),
               createdAt: timestamp,
               updatedAt: timestamp,

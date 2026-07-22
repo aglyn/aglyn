@@ -273,6 +273,17 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         hostId,
         displayName: 'Untitled component',
         description: '',
+        // A canvas needs a ROOT node to render (AGL-693). Created empty as
+        // `{}`, the besigner showed "Invalid node" — same shape the screens
+        // list writes for a new screen.
+        rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+        nodes: {
+          [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+            $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+            componentId: 'div',
+            nodes: [],
+          },
+        },
         createdAt: timestamp,
         updatedAt: timestamp,
       })

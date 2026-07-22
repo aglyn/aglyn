@@ -381,7 +381,16 @@ export function HostTemplatesCard({ hostId }: { hostId: string }) {
         kind: 'page',
         displayName: 'Untitled template',
         description: '',
-        nodes: {},
+        // A canvas needs a ROOT node to render (AGL-693/694) — an empty
+        // `{}` makes the besigner show "Invalid node".
+        rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+        nodes: {
+          [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
+            $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
+            componentId: 'div',
+            nodes: [],
+          },
+        },
         source: { type: 'authored' },
         createdAt: timestamp,
         updatedAt: timestamp,
