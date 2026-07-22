@@ -21,56 +21,56 @@ import {
 } from '../../constants/starter-templates'
 
 /**
- * Starter-template seed (AGL-687).
+ * Starter-template materialization (AGL-687).
  *
- * ## Why the starters are COPIED into each host's library
+ * ## Nothing is installed automatically
  *
- * A starter is a *starting point* — its entire value is that you then change
- * it. Serving the starters from a global, read-only collection would keep
- * one upstream copy that a fix reaches everywhere, but that advantage does
- * not apply to content the user is expected to fork the moment they touch
- * it; what it would actually reproduce is the two-lifecycle split this issue
- * exists to remove — a template you can see but not edit, version or
- * publish, sitting in the same grid as one you can.
+ * Starters render in the gallery straight from the code definitions
+ * (`constants/starter-templates.ts`). No document is written until a user
+ * actually **uses** or **edits** one, and then only for that one starter.
  *
- * So the starters are seeded as real `hosts/{hostId}/templates` documents,
- * carrying `source.type = 'starter'` to record provenance. Every read stays
- * inside the host's own collections (no cross-org, cross-host reads) and the
- * existing Firestore rules already cover the collection unchanged — a seeded
- * starter is an ordinary template in every respect except the badge.
+ * The first cut of AGL-687 seeded all of them eagerly — on host creation and
+ * again on every gallery open. That is wrong for content we intend to keep
+ * improving: an eager copy is a frozen snapshot, so once every host holds
+ * one, no upstream change ever reaches anybody. Left virtual, an untouched
+ * starter keeps tracking the definitions and picks up improvements for free;
+ * only a user who has forked one by acting on it opts out of that, which is
+ * exactly the moment they should.
+ *
+ * ## Why acting on one COPIES it into the host's library
+ *
+ * A starter is a *starting point* — its value is that you then change it.
+ * Serving them read-only from a global collection would keep one upstream
+ * copy, but a template you can see and not edit, version or publish, sitting
+ * in the same grid as one you can, is the two-lifecycle split this issue
+ * exists to remove. So the moment a user commits to a starter it becomes a
+ * real `hosts/{hostId}/templates` document carrying `source.type = 'starter'`
+ * for provenance. Every read stays inside the host's own collections, and the
+ * existing Firestore rules cover the collection unchanged.
  *
  * ## Idempotency
  *
  * Document ids are DERIVED from the starter id and screen key
- * (`starterTemplateDocId`), never randomly generated, so a re-run addresses
- * the same documents. A document that already exists is left completely
- * alone: the user's edits to a seeded starter — and their deletion of one,
- * which is a `deletedAt` on a document that still exists — outrank anything
- * this would write. Seeding therefore only ever *adds what is missing*.
+ * (`starterTemplateDocId`), never randomly generated, so materializing twice
+ * — a double-click, a use after an edit — addresses the same documents. An
+ * existing document is left completely alone: the user's edits, and their
+ * deletion of one (a `deletedAt` on a document that still exists), outrank
+ * anything this would write. It only ever *adds what is missing*.
  *
- * A consequence, deliberately accepted: changing a starter's content in code
- * does NOT rewrite copies already seeded. Once seeded, the copy belongs to
- * the host, and silently rewriting someone's starting point is exactly the
- * surprise AGL-669 removed from marketplace installs.
+ * A consequence, deliberately accepted: changing a starter in code does NOT
+ * rewrite copies already materialized. Once materialized the copy belongs to
+ * the host, and silently rewriting someone's starting point is the surprise
+ * AGL-669 removed from marketplace installs. Untouched starters, which are
+ * now the overwhelming majority, do get the update.
  *
  * ## Quota
  *
- * Seeded starters are platform-provided, so they are excluded from the
- * `templatesPerHost` count enforced by /api/hosts/resources — a free plan's
- * ten-template allowance is for the user's own work, not for content we put
- * there.
+ * Materialized starters stay excluded from the `templatesPerHost` count in
+ * /api/hosts/resources. That mattered more when fifteen were installed
+ * unasked; it still holds, because the copy is platform-authored content the
+ * user adopted rather than something they built, and a free plan's ten
+ * templates are for their own work.
  */
-
-/**
- * Bumped only when the SET of starters changes (a starter added or
- * removed). It is a fast-path marker, not a content version: existing
- * documents are never rewritten, so a bump only makes the seed look for
- * newly-missing documents again.
- */
-export const STARTER_TEMPLATE_SEED_VERSION = 1
-
-/** Host-doc field holding the last seed version applied. */
-export const STARTER_SEED_MARKER_FIELD = 'starterTemplatesSeedVersion'
 
 /** Minimal firebase-admin Firestore surface the seed needs. */
 export interface SeedDocumentSnapshot {
@@ -96,48 +96,45 @@ export interface SeedFirestore {
   batch(): SeedWriteBatch
 }
 
-export interface SeedStarterTemplatesResult {
+export interface MaterializeStarterResult {
   /** Documents written by this run. */
   created: number
   /** Documents already present and therefore untouched. */
   skipped: number
-  /** True when the marker short-circuited the run before any read. */
-  alreadySeeded: boolean
 }
 
 /**
- * Seeds any missing starter templates into a host's library.
+ * Materializes ONE starter into a host's template library.
  *
- * Safe to call on every host, repeatedly, in any order. Server-side only:
- * Firestore rules deny client `create` on `templates` (AGL-473), and
- * `source` is server-managed by design.
+ * Called only when a user uses or edits that starter — never on a schedule,
+ * never on host creation, never on gallery open. See the module comment for
+ * why nothing is written until somebody actually acts on a starter.
+ *
+ * Safe to call repeatedly for the same starter: ids are derived, and an
+ * existing document is left completely alone.
+ *
+ * Server-side only: Firestore rules deny client `create` on `templates`
+ * (AGL-473), and `source` is server-managed by design.
  */
-export async function seedStarterTemplates(
+export async function materializeStarterTemplate(
   firestore: SeedFirestore,
   hostId: string,
+  starterId: string,
   options: {
     /** Value stamped as createdAt/updatedAt. */
     now?: unknown
-    /** Skip the marker fast-path and re-check every document. */
-    force?: boolean
     /** Injectable for tests; defaults to the shipped starters. */
     docs?: StarterTemplateDoc[]
   } = {},
-): Promise<SeedStarterTemplatesResult> {
+): Promise<MaterializeStarterResult> {
   const hostRef = firestore.collection('hosts').doc(hostId)
-  const docs = options.docs ?? buildAllStarterTemplateDocs()
+  const all = options.docs ?? buildAllStarterTemplateDocs()
+  // Every page of exactly this starter. A starter is materialized whole:
+  // its pages are authored as a set, and half a shop is not a usable
+  // starting point.
+  const docs = all.filter((entry) => entry.starterId === starterId)
+  if (!docs.length) return { created: 0, skipped: 0 }
   const now = options.now ?? new Date()
-
-  if (!options.force) {
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return { created: 0, skipped: 0, alreadySeeded: false }
-    }
-    const seeded = Number(hostSnapshot.get(STARTER_SEED_MARKER_FIELD) ?? 0)
-    if (seeded >= STARTER_TEMPLATE_SEED_VERSION) {
-      return { created: 0, skipped: 0, alreadySeeded: true }
-    }
-  }
 
   const templates = hostRef.collection('templates')
   const existing = await Promise.all(
@@ -151,14 +148,14 @@ export async function seedStarterTemplates(
     if (existing[index]) {
       // Already there — including the case where it is there with
       // `deletedAt` set, i.e. the user removed it. Re-creating a starter
-      // somebody deliberately deleted is not "seeding", it is undoing them.
+      // somebody deliberately deleted is not materializing, it is undoing
+      // them.
       skipped += 1
       return
     }
-    // `set`, not `create`: two seeds racing (host creation and a gallery
-    // open, say) would both write byte-identical platform content, whereas
-    // `create` would abort the whole batch and leave the loser's genuinely
-    // missing documents unwritten.
+    // `set`, not `create`: a double-click would abort a `create` batch and
+    // leave genuinely missing pages unwritten, whereas both writers here
+    // produce byte-identical platform content.
     batch.set(templates.doc(entry.id), {
       ...entry.data,
       hostId,
@@ -167,16 +164,10 @@ export async function seedStarterTemplates(
     })
     created += 1
   })
-  // The marker rides the same batch as the documents it describes: written
-  // separately, a failure between the two would leave a host marked seeded
-  // with nothing in its library.
-  batch.update(hostRef, {
-    [STARTER_SEED_MARKER_FIELD]: STARTER_TEMPLATE_SEED_VERSION,
-    updatedAt: now,
-  })
+  if (!created) return { created: 0, skipped }
   await batch.commit()
 
-  return { created, skipped, alreadySeeded: false }
+  return { created, skipped }
 }
 
-export default seedStarterTemplates
+export default materializeStarterTemplate

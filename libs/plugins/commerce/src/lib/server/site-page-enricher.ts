@@ -48,26 +48,38 @@ interface ComposedNode {
   componentId?: string
   props?: Record<string, unknown>
   resolvedProps?: Record<string, unknown>
-  children?: ComposedNode[]
+  /** Child node IDS — denormalized nodes do not nest (see below). */
+  nodes?: string[]
 }
 
-/** Depth-first walk collecting every product-grid node, in render order. */
-function collectGridNodes(root: unknown): ComposedNode[] {
+/**
+ * Every product-grid node on the page.
+ *
+ * `composeScreenNodes` returns `Record<string, node>` — a DENORMALIZED FLAT
+ * MAP keyed by node id, whose children are id STRINGS in `nodes`. It does not
+ * return a tree, and there is no `children` array anywhere in it.
+ *
+ * The first version of this walked `children` recursively and therefore
+ * matched nothing at all, on any page. It shipped green because the unit
+ * tests fed it a nested fixture — the fixture encoded the assumption instead
+ * of the actual contract, so the tests only ever proved the walker was
+ * self-consistent. Iterating the map's values is both correct and simpler;
+ * the flat shape means no recursion is needed.
+ *
+ * Sorted by id so that the MAX_SEEDED_GRIDS cap takes a deterministic subset
+ * rather than whichever ones the map happened to enumerate first.
+ */
+function collectGridNodes(nodes: unknown): ComposedNode[] {
+  if (!nodes || typeof nodes !== 'object') return []
   const found: ComposedNode[] = []
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== 'object') return
-    if (Array.isArray(node)) {
-      node.forEach(visit)
-      return
-    }
-    const shaped = node as ComposedNode
+  for (const value of Object.values(nodes as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const shaped = value as ComposedNode
     if (shaped.componentId === PRODUCT_GRID_ID && shaped.$id) {
       found.push(shaped)
     }
-    shaped.children?.forEach(visit)
   }
-  visit(root)
-  return found
+  return found.sort((a, b) => String(a.$id).localeCompare(String(b.$id)))
 }
 
 /** Positive integer from a props value that may arrive as a string. */

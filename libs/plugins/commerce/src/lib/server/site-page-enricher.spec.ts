@@ -26,12 +26,25 @@ const mockQuery = queryPublicCatalog as jest.MockedFunction<
   typeof queryPublicCatalog
 >
 
-/** A composed page holding the given nodes under a container. */
-const page = (...nodes: unknown[]) => ({
-  $id: 'root',
-  componentId: 'container',
-  children: [{ $id: 'section', componentId: 'container', children: nodes }],
-})
+/**
+ * A composed page in the shape `composeScreenNodes` ACTUALLY returns
+ * (AGL-659): a denormalized flat map keyed by node id, children carried as
+ * id strings in `nodes`. The original fixtures here were nested trees with
+ * a `children` array — a shape the composer never produces — which is why a
+ * walker that matched nothing still passed every test.
+ */
+const page = (...nodes: Array<{ $id: string }>) => {
+  const map: Record<string, unknown> = {
+    root: { $id: 'root', componentId: 'container', nodes: ['section'] },
+    section: {
+      $id: 'section',
+      componentId: 'container',
+      nodes: nodes.map((n) => n.$id),
+    },
+  }
+  for (const node of nodes) map[node.$id] = node
+  return map
+}
 
 const grid = ($id: string, props: Record<string, unknown> = {}) => ({
   $id,
@@ -55,7 +68,7 @@ describe('commerceSitePageEnricher (AGL-659)', () => {
   })
 
   it('returns nothing when the page has no grid', async () => {
-    expect(await run(page({ $id: 'text', componentId: 'mui-typography' })))
+    expect(await run(page({ $id: 'text', componentId: 'mui-typography' } as never)))
       .toBeUndefined()
     expect(mockQuery).not.toHaveBeenCalled()
   })
@@ -67,18 +80,19 @@ describe('commerceSitePageEnricher (AGL-659)', () => {
     })
   })
 
-  it('finds grids nested anywhere in the composed tree', async () => {
-    const nested = {
-      $id: 'root',
-      componentId: 'container',
-      children: [
-        { $id: 'col', componentId: 'container', children: [grid('deep')] },
-      ],
+  it('finds a grid however deep its container nesting goes', async () => {
+    // Depth is irrelevant in a denormalized map — every node is a top-level
+    // entry regardless of where it sits in the rendered tree. This asserts
+    // the walker reads the map, not a tree.
+    const deepMap = {
+      root: { $id: 'root', componentId: 'container', nodes: ['col'] },
+      col: { $id: 'col', componentId: 'container', nodes: ['deep'] },
+      deep: grid('deep'),
     }
-    const result = await run(nested)
-    expect(Object.keys((result as never as any).pageData.commerce.grids))
-      .toEqual(['deep'])
+    const result = (await run(deepMap)) as any
+    expect(Object.keys(result.pageData.commerce.grids)).toEqual(['deep'])
   })
+
 
   it('keys two grids separately rather than sharing one seed', async () => {
     mockQuery

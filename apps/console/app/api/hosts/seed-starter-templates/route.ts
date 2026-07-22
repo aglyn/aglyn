@@ -22,23 +22,25 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
-import seedStarterTemplates, {
+import materializeStarterTemplate, {
   type SeedFirestore,
 } from '../../../../utils/server/seed-starter-templates'
 
 /**
- * Backfills the first-party starter templates into a host's library
- * (AGL-687).
+ * Copies ONE first-party starter into a host's template library (AGL-687).
  *
- * Hosts created after AGL-687 are seeded at creation; this is how every host
- * that existed BEFORE it gets them — the template gallery calls this when it
- * opens, so the backfill happens on demand, per host, with no migration run
- * against live data. The seed is idempotent and marker-guarded, so the call
- * costs one host-doc read once the host is up to date.
+ * Called only when the user uses or edits that starter. Nothing is written
+ * on host creation or when the gallery opens — starters stay virtual, served
+ * from the code definitions, until somebody commits to one, so untouched
+ * starters keep receiving upstream improvements.
+ *
+ * Idempotent: ids are derived from the starter and screen, so a double-click
+ * or a use-after-edit addresses the same documents and leaves existing ones
+ * untouched.
  *
  * Server-side because Firestore rules deny client `create` on `templates`
  * (AGL-473) and `source` is server-managed — a client that could write it
- * could forge provenance. No quota is charged: platform-provided content
+ * could forge provenance. No quota is charged: platform-authored content
  * must not spend the user's `templatesPerHost` allowance.
  */
 async function handler(request: Request): Promise<Response> {
@@ -49,6 +51,11 @@ async function handler(request: Request): Promise<Response> {
   }
   const hostId = String(body?.hostId ?? '')
   if (!hostId) return Response.json({ error: 'Missing hostId' }, { status: 400 })
+  // Required: this endpoint materializes one named starter, never the set.
+  const starterId = String(body?.starterId ?? '')
+  if (!starterId) {
+    return Response.json({ error: 'Missing starterId' }, { status: 400 })
+  }
 
   const authorization = headers.authorization ?? ''
   const idToken = authorization.startsWith('Bearer ')
@@ -72,15 +79,16 @@ async function handler(request: Request): Promise<Response> {
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return Response.json({ error: 'Editing requires the editor role' }, { status: 403 })
     }
-    const result = await seedStarterTemplates(
+    const result = await materializeStarterTemplate(
       firestore as unknown as SeedFirestore,
       hostId,
+      starterId,
       { now: Timestamp.now() },
     )
     return Response.json({ ok: true, ...result }, { status: 200 })
   } catch (error) {
     console.error(error)
-    return Response.json({ error: 'Seeding starters failed' }, { status: 500 })
+    return Response.json({ error: 'Adding the starter failed' }, { status: 500 })
   }
 }
 
