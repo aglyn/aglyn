@@ -57,6 +57,7 @@ import {
   Typography,
 } from '@mui/material'
 import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
+import { TABLE_HEAD_HEIGHT } from '../constants/shared'
 
 export interface ScreenHierarchyRow {
   $id: ScreenUid
@@ -408,7 +409,11 @@ export function ScreensHierarchyTableComponent(
       {loading && <LinearProgress color="secondary" />}
       <TableContainer>
         <Table size="small" aria-label="Screens hierarchy">
-          <TableHead>
+          {/* Header height matches the DataTable used by layouts, components
+              and templates (AGL-693/694/695) — a size="small" TableHead is
+              shorter than a DataGrid column header, so without this the
+              screens table reads as a different, cramped design. */}
+          <TableHead sx={{ '& .MuiTableCell-head': { height: TABLE_HEAD_HEIGHT } }}>
             <TableRow>
               <TableCell sx={{ minWidth: 240 }}>Display name</TableCell>
               <TableCell sx={{ minWidth: 130 }}>ID</TableCell>

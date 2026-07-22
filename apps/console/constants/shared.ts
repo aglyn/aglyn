@@ -20,6 +20,13 @@ export const DRAWER_WIDTH = 290
 export const TAB_HEIGHT = 40
 export const TOP_BAR_HEIGHT = 48
 export const TABLE_ROW_HEIGHT = 48
+/**
+ * Table header height, shared by the DataTable (layouts, components,
+ * templates) and the bespoke screens hierarchy table. MUI's size="small"
+ * TableHead and MUI X's DataGrid column header default to different heights,
+ * so the console showed two table designs until both were pinned here.
+ */
+export const TABLE_HEAD_HEIGHT = 48
 
 export const mainNavigation = [
   // {
