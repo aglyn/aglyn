@@ -221,7 +221,7 @@ await put(firestore.collection('hosts').doc(hostId), {
   displayName: 'Demo Bakery',
   orgId,
   memberRoles: { [E2E_UID]: 'admin' },
-  screens: { 'seed-home': 'home' },
+  screens: { 'seed-home': 'home', 'seed-guide-survey-screen': 'survey' },
   createdAt: now,
 })
 const hostRef = firestore.collection('hosts').doc(hostId)
@@ -369,6 +369,24 @@ for (const [index, [name, role, photo]] of teamRows.entries()) {
   })
 }
 
+// Target of the /survey screen's Form (matched by `displayName`), so the
+// seeded form can actually submit rather than pointing at nothing. Same
+// doc id capture-docs-shots.mjs uses, for the same convergence reason.
+await put(orgRef.collection('datasets').doc('seed-guide-survey'), {
+  name: 'Survey responses',
+  displayName: 'Survey responses',
+  singularName: 'Survey response',
+  fields: ['satisfaction', 'comments'],
+  model: {
+    fields: {
+      satisfaction: { name: 'Satisfaction', type: 'int32' },
+      comments: { name: 'Comments', type: 'text' },
+    },
+    order: ['satisfaction', 'comments'],
+  },
+  createdAt: now,
+})
+
 const contacts = [
   ['seed-contact-1', 'wholesale@example.com', 'Robin Wholesale', ['b2b']],
   ['seed-contact-2', 'events@example.com', 'Casey Events', ['events']],
@@ -509,6 +527,89 @@ await put(homeScreen.collection('versions').doc('seed-home-v1'), {
   },
   createdAt: now,
 })
+
+// Interactive screen — a Form with client-side state — published at
+// /survey. The tenant production smoke (tools/e2e/tenant-prod-smoke.mjs)
+// asserts this route: it is the richest client-component route in the
+// seed, and therefore the one that would catch another AGL-594-class
+// request-time render failure. The screen id is deliberately the same one
+// capture-docs-shots.mjs uses, so running the guide fixtures on top of
+// this seed overwrites one screen instead of registering a second screen
+// on the same slug.
+const surveyScreen = hostRef.collection('screens').doc('seed-guide-survey-screen')
+await put(surveyScreen, {
+  displayName: 'Survey',
+  slug: 'survey',
+  versionId: 'seed-guide-survey-screen-v1',
+  createdAt: now,
+})
+await put(
+  surveyScreen.collection('versions').doc('seed-guide-survey-screen-v1'),
+  {
+    screenId: 'seed-guide-survey-screen',
+    nodes: {
+      '_@_': { $id: '_@_', componentId: 'root', nodes: ['wrap'] },
+      wrap: {
+        $id: 'wrap',
+        componentId: 'muiContainer',
+        parentId: '_@_',
+        nodes: ['stack'],
+        props: { maxWidth: 'sm' },
+      },
+      stack: {
+        $id: 'stack',
+        componentId: 'muiStack',
+        parentId: 'wrap',
+        nodes: ['title', 'form'],
+        props: { spacing: 3 },
+        sx: { py: 8 },
+      },
+      title: {
+        $id: 'title',
+        componentId: 'muiTypography',
+        parentId: 'stack',
+        props: { children: 'Tell us how we did', variant: 'h4' },
+      },
+      // Non-mui-prefixed component ids carry an explicit pluginId.
+      form: {
+        $id: 'form',
+        componentId: 'form',
+        pluginId: 'mui',
+        parentId: 'stack',
+        nodes: ['f1', 'f2'],
+        props: {
+          formName: 'Visitor survey',
+          datasetName: 'Survey responses',
+          submitLabel: 'Send my feedback',
+          successMessage: 'Thanks — your feedback helps us improve!',
+        },
+      },
+      f1: {
+        $id: 'f1',
+        componentId: 'formField',
+        pluginId: 'mui',
+        parentId: 'form',
+        props: {
+          fieldName: 'satisfaction',
+          label: 'How satisfied are you?',
+          fieldType: 'rating',
+        },
+      },
+      f2: {
+        $id: 'f2',
+        componentId: 'formField',
+        pluginId: 'mui',
+        parentId: 'form',
+        props: {
+          fieldName: 'comments',
+          label: 'Anything else?',
+          fieldType: 'textarea',
+        },
+      },
+    },
+    createdAt: now,
+  },
+)
 
 // Designed email template as an email-kind screen (docs screenshots for
 // the email designer, AGL-451; mirrors the seed-demo-host fixture).
