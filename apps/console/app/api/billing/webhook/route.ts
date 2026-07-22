@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { runBillingWebhookHandlers } from '@aglyn/aglyn/server'
+import { buildRoute, Route, runBillingWebhookHandlers } from '@aglyn/aglyn/server'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
@@ -231,7 +231,9 @@ async function handler(request: Request): Promise<Response> {
                 ? `Payment failed for your $${dollars} invoice`
                 : `Your $${dollars} invoice is available`,
             orgId,
-            link: orgSlug ? `/${orgSlug}/billing` : '/org/billing',
+            link: orgSlug
+              ? buildRoute(Route.MANAGE_BILLING, { orgSlug })
+              : '/org/billing',
           })
         }
       }

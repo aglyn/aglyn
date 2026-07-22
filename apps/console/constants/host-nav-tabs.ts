@@ -106,13 +106,18 @@ export function hostNavTabItems(orgSlug: string, host: string) {
   ]
 
   // Plugin-contributed tabs from the ConsoleExtension registry. The href
-  // is host-relative ('/events'); mount it under the active host. Ids fall
-  // back to the navTabId so DashboardLayout's release-flag gating applies.
-  const hostBase = buildRoute(Route.HOST_DASHBOARD, { orgSlug, host })
+  // is host-relative ('/events'); mount it under the active host via the
+  // `[pluginSlug]` route that actually serves it, so this and the page's own
+  // `activeTab` cannot drift apart (AGL-649/685). Ids fall back to the
+  // navTabId so DashboardLayout's release-flag gating applies.
   const pluginTabs = listConsoleNavItems().map((item) => ({
     id: item.navTabId ?? `nav-plugin-${item.href.replace(/[^\w]+/g, '-')}`,
     label: item.label,
-    href: `${hostBase}${item.href}`,
+    href: buildRoute(Route.HOST_PLUGIN, {
+      orgSlug,
+      host,
+      pluginSlug: item.href.replace(/^\//, ''),
+    }),
   }))
   if (!pluginTabs.length) return staticTabs
 

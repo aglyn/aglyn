@@ -31,6 +31,7 @@ import { listingVersionsHandler } from './server/listing-versions'
 import { RATING_FIELD } from './model/rating-field'
 import { installLayoutHandler } from './server/install-layout'
 import { installTemplateHandler } from './server/install-template'
+import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
 import { reportHandler } from './server/report'
 import { reviewsHandler } from './server/reviews'
@@ -41,10 +42,15 @@ import { publishTemplateHandler } from './server/publish-template'
 /**
  * Registers the community plugin's console-side API routes (AGL-396):
  * marketplace publish/install of templates and plugins, and the Stripe
- * Connect + checkout flows for paid listings. The upload-bodied routes
- * (publish-plugin's 8 MB bundle, preview-image's 3 MB image) stay as named
- * console routes — the shared body-parsed dispatcher can't grant per-route
- * bodyParser limits.
+ * Connect + checkout flows for paid listings.
+ *
+ * Upload-bodied routes register here too. The note that used to sit here —
+ * that they had to stay as named console routes because the dispatcher
+ * "can't grant per-route bodyParser limits" — was a Pages Router leftover:
+ * `runLegacyHandler` reads the request through the same
+ * `pluginRequestFromWeb` a named App Router route would, and imposes no
+ * limit of its own. publish-plugin's 8 MB bundle has been going through the
+ * dispatcher the whole time.
  */
 export function registerCommunityConsoleApi(): void {
   // Server side of the rating custom field (AGL-434): validators run
@@ -57,6 +63,7 @@ export function registerCommunityConsoleApi(): void {
   registerPluginApiRoute('community/install-layout', installLayoutHandler)
   registerPluginApiRoute('community/install-template', installTemplateHandler)
   registerPluginApiRoute('community/listing-versions', listingVersionsHandler)
+  registerPluginApiRoute('community/preview-image', previewImageHandler)
   registerPluginApiRoute('community/publish', publishHandler)
   registerPluginApiRoute('community/report', reportHandler)
   registerPluginApiRoute('community/reviews', reviewsHandler)

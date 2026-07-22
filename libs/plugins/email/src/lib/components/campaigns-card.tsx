@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { buildRoute, Route } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -31,6 +32,7 @@ import { createEmailScreen } from '../utils/create-email-screen'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import {
+  useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
   useHostOrgId,
@@ -38,13 +40,18 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 
-/**
- * Besigner deep-link for an email screen. The route lives in the console
- * app's route table; the pattern is stable, so the plugin builds it
- * directly rather than importing app-only route constants.
- */
-const besignerHref = (hostId: string, screenId: string, versionId: string) =>
-  `/${hostId}/screens/${screenId}/versions/${versionId}/besigner`
+// The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
+// versions/[versionId]/besigner`. This built `/{hostDocId}/screens/…`, the
+// pre-AGL-621/622 shape — so every "Edit"/"Design" jump out of the Emails
+// page landed on a 404, including the one right after creating a new email
+// (AGL-685). Takes the resolved org slug + subdomain, not a host doc id.
+const besignerHref = (
+  orgSlug: string,
+  host: string,
+  screenId: string,
+  versionId: string,
+) =>
+  buildRoute(Route.SCREEN_BESIGNER, { orgSlug, host, screenId, versionId })
 
 /**
  * Email campaigns (AGL-161): compose + send to leads or site members via
@@ -53,6 +60,7 @@ const besignerHref = (hostId: string, screenId: string, versionId: string) =>
  */
 export function HostCampaignsCard(props: { hostId: string }) {
   const { hostId } = props
+  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   // Org-shared data root (AGL-237); the host path is the pre-migration
   // fallback for hosts not yet org-wired.
   const hostOrgId = useHostOrgId(hostId)
@@ -157,7 +165,11 @@ export function HostCampaignsCard(props: { hostId: string }) {
         hostId,
         createHostResource,
       )
-      void router.push(besignerHref(hostId, screenId, versionId))
+      if (orgSlug && subdomain) {
+        void router.push(
+          besignerHref(orgSlug, subdomain, screenId, versionId),
+        )
+      }
     } catch (error: any) {
       console.error(error)
       enqueueSnackbar(error?.message ?? 'Creating the email template failed', {
@@ -406,10 +418,12 @@ export function HostCampaignsCard(props: { hostId: string }) {
           {selectedTemplate ? (
             <Button
               size="small"
+              disabled={!orgSlug || !subdomain}
               onClick={() =>
                 void router.push(
                   besignerHref(
-                    hostId,
+                    orgSlug,
+                    subdomain,
                     selectedTemplate.$id,
                     selectedTemplate.versionId,
                   ),

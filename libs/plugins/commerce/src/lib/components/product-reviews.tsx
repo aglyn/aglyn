@@ -141,25 +141,14 @@ const ProductReviews = forwardRef<HTMLDivElement, ProductReviewsProps>(
 
     return (
       <Box ref={ref} {...rest} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        {aggregate.count > 0 ? (
-          <script
-            type="application/ld+json"
-            // Every other JSON-LD site uses safeJsonLd (AGL-496): plain
-            // JSON.stringify leaves `<` unescaped, so a `</script>` inside any
-            // embedded string breaks out of the element. Only two numbers go
-            // in today, so this isn't exploitable — but it is the one call
-            // site primed to become stored XSS the moment someone adds a
-            // reviewer name or review body here.
-            dangerouslySetInnerHTML={{
-              __html: Aglyn.safeJsonLd({
-                '@context': 'https://schema.org',
-                '@type': 'AggregateRating',
-                ratingValue: aggregate.average,
-                reviewCount: aggregate.count,
-              }),
-            }}
-          />
-        ) : null}
+        {/* No JSON-LD here any more (AGL-686). This block used to emit a
+            free-standing `AggregateRating` node, which schema.org ignores —
+            a rating has to be a PROPERTY of the Product it rates. The PDP's
+            server-rendered Product node now carries `aggregateRating`,
+            built from the same `readProductReviews` reader this block's API
+            uses, so the structured data and the visible stars cannot
+            disagree. It also removes the one call site that was primed to
+            become stored XSS the moment a reviewer name went into it. */}
         <Typography variant="h6">
           {heading || 'Reviews'}
           {aggregate.count > 0 ? ` (${aggregate.average} ★ · ${aggregate.count})` : ''}

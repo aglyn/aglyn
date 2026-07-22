@@ -22,7 +22,7 @@ import {
   getOrgForHost,
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
-import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { buildRoute, Route, type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
  * POS sale (AGL-312): manager-gated, server-priced. Cash sales create a
@@ -189,6 +189,25 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         })
       })
+      // Stripe returns the cashier to the console POS page. This was
+      // `/{hostDocId}/pos`, the pre-AGL-621/622 shape, so completing a card
+      // sale dropped the register on a 404 (AGL-685). POS is the plugin
+      // route keyed by org slug + host SUBDOMAIN; server code cannot call
+      // useConsoleHostRoute, so resolve them here, and fall back to the
+      // origin root rather than a fabricated dead path.
+      const posOrigin = `https://${req.headers.host}`
+      const posSubdomain = (
+        await firestore.collection('hostIndex').doc(hostId).get()
+      ).get('subdomain') as string | undefined
+      const posOrgSlug = ownerOrg?.org?.slug as string | undefined
+      const posUrl =
+        posOrgSlug && posSubdomain
+          ? `${posOrigin}${buildRoute(Route.HOST_PLUGIN, {
+              orgSlug: posOrgSlug,
+              host: posSubdomain,
+              pluginSlug: 'pos',
+            })}`
+          : posOrigin
       const params = new URLSearchParams({
         mode: 'payment',
         'line_items[0][quantity]': '1',
@@ -196,8 +215,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         'line_items[0][price_data][unit_amount]': String(totals.totalCents),
         'line_items[0][price_data][product_data][name]': 'In-store purchase',
         'payment_intent_data[transfer_data][destination]': String(accountId),
-        success_url: `https://${req.headers.host}/${hostId}/pos?paid=1`,
-        cancel_url: `https://${req.headers.host}/${hostId}/pos?paid=0`,
+        success_url: `${posUrl}?paid=1`,
+        cancel_url: `${posUrl}?paid=0`,
         'metadata[type]': 'commerce-draft',
         'metadata[hostId]': hostId,
         'metadata[orderId]': orderRef.id,

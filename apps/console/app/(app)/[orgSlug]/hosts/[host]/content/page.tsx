@@ -329,6 +329,13 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     // comma-separated STRING while editing; saved as string[].
     seoTitle: string
     seoDescription: string
+    /**
+     * Byline for THIS entry (AGL-686). Without it every post attributes to
+     * the site itself, so `Article.author` was the same entity on every
+     * entry — which is not what a byline means, and not what
+     * Article/BlogPosting wants.
+     */
+    authorName: string
     // Category taxonomy (AGL-582): entries reference the collection's
     // categories by stable id (lookup, not typed) so renames never touch
     // entries. `legacyCategory` is the old free-typed string, shown
@@ -480,6 +487,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
         // Entry model v2 (AGL-582): SEO overrides + taxonomy.
         seoTitle: editor.seoTitle.trim(),
         seoDescription: editor.seoDescription.trim(),
+        authorName: editor.authorName.trim(),
         // Category lookup (AGL-582): the entry stores the STABLE
         // categoryId; picking one clears the legacy free-typed field.
         // "None" only clears the id — the legacy value stays untouched so
@@ -726,6 +734,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       coverImage: '',
                       seoTitle: '',
                       seoDescription: '',
+                      authorName: '',
                       categoryId: '',
                       legacyCategory: '',
                       tags: '',
@@ -796,6 +805,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                                 coverImage: entry.coverImage ?? '',
                                 seoTitle: entry.seoTitle ?? '',
                                 seoDescription: entry.seoDescription ?? '',
+                                authorName: entry.authorName ?? '',
                                 categoryId: entry.categoryId ?? '',
                                 legacyCategory: entry.category ?? '',
                                 tags: Array.isArray(entry.tags)
@@ -1108,6 +1118,17 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
               helperText="Comma-separated, e.g. nextjs, seo"
             />
           </Stack>
+          <TextField
+            label="Author"
+            value={editor?.authorName ?? ''}
+            onChange={(event) =>
+              setEditor((prev) =>
+                prev ? { ...prev, authorName: event.target.value } : prev,
+              )
+            }
+            size="small"
+            helperText="Byline for this entry — falls back to the site name"
+          />
           <TextField
             label="SEO title"
             value={editor?.seoTitle ?? ''}

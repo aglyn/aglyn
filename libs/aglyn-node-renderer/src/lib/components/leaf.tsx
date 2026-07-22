@@ -99,9 +99,14 @@ export const Leaf = observer(
       sx: transformSx ? (transformSx(mergedSx) as typeof mergedSx) : mergedSx,
     }
 
-    if (selfClosing) return <Component {...leafProps} />
-
-    return (
+    // Node identity (AGL-659): components get their node id through a
+    // context rather than a prop, so a block can look up the server-seeded
+    // slice of `pageData` that belongs to IT — two grids on one page have
+    // different queries and must not share a seed. Nothing is added to any
+    // component's props, so no unknown attribute reaches the DOM.
+    const element = selfClosing ? (
+      <Component {...leafProps} />
+    ) : (
       <Component {...leafProps}>
         {children}
 
@@ -109,6 +114,12 @@ export const Leaf = observer(
           <ShadowDom.AglynText>{textContent as any}</ShadowDom.AglynText>
         )}
       </Component>
+    )
+
+    return (
+      <Aglyn.NodeIdentityContext.Provider value={node?.$id ?? ''}>
+        {element}
+      </Aglyn.NodeIdentityContext.Provider>
     )
   }),
 )

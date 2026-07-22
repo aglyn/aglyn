@@ -520,6 +520,10 @@ export const loadPageData = cache(
       slugSegments: [...(slug ?? [])],
       screenId,
       screen: screenRes.screen,
+      // Composed nodes (AGL-659): commerce walks them to seed each product
+      // grid's first page into `pageData`, so /products server-renders its
+      // catalog instead of a skeleton.
+      nodes: denormalized,
     })
 
     // Trusted-realm marketplace plugins (AGL-420): the workspace's install

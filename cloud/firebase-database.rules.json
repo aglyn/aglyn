@@ -1,6 +1,42 @@
 {
   "rules": {
     ".read": false,
-    ".write": false
+    ".write": false,
+
+    "presence": {
+      "$orgId": {
+        ".read": "auth != null && auth.token.presenceOrg === $orgId",
+
+        "$docType": {
+          "$docId": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && auth.token.presenceOrg === $orgId",
+
+              ".validate": "newData.hasChildren(['displayName', 'lastSeenAt'])",
+
+              "displayName": {
+                ".validate": "newData.isString() && newData.val().length <= 80"
+              },
+              "lastSeenAt": {
+                ".validate": "newData.isNumber()"
+              },
+              "selectedNodeId": {
+                ".validate": "newData.isString() && newData.val().length <= 128"
+              },
+              "photoURL": {
+                ".validate": "newData.isString() && newData.val().length <= 512"
+              },
+              "colour": {
+                ".validate": "newData.isString() && newData.val().length <= 16"
+              },
+
+              "$other": {
+                ".validate": false
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

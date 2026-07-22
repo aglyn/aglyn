@@ -98,6 +98,18 @@ interface CatalogPriceBounds {
   maxCents: number
 }
 
+/**
+ * This grid's first page, resolved server-side by the commerce site-page
+ * enricher (AGL-659). Same shape the catalog endpoint returns, because both
+ * go through `queryPublicCatalog`.
+ */
+interface CatalogSeed {
+  items?: CatalogItem[]
+  categories?: CatalogCategory[]
+  priceBounds?: CatalogPriceBounds
+  nextOffset?: number
+}
+
 const SAMPLE_ITEMS: CatalogItem[] = [
   { id: 's1', name: 'Sample product', slug: '#', priceUsd: 29, maxPriceUsd: 29, soldOut: false },
   { id: 's2', name: 'Another product', slug: '#', priceUsd: 49, maxPriceUsd: 59, compareAtPriceUsd: 79, soldOut: false },
@@ -173,8 +185,23 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       pageSize,
       ...rest
     } = props
-    const { hostId } = Aglyn.useSite()
-    const [items, setItems] = useState<CatalogItem[] | null>(null)
+    const site = Aglyn.useSite()
+    const { hostId } = site
+    // Server-rendered first page (AGL-659). The site-page enricher ran this
+    // grid's own query on the server and keyed the result by node id — two
+    // grids on a page have different queries, so an unkeyed seed would put
+    // the wrong products in one of them. Absent in the besigner and preview,
+    // where there is no pageData at all and the effect below still fetches.
+    const nodeId = Aglyn.useNodeId()
+    const seed = (
+      site.pageData as
+        | { commerce?: { grids?: Record<string, CatalogSeed> } }
+        | undefined
+    )?.commerce?.grids?.[nodeId]
+
+    const [items, setItems] = useState<CatalogItem[] | null>(
+      seed?.items ?? null,
+    )
     const [sort, setSort] = useState(sortProp)
     const [inStockOnly, setInStockOnly] = useState(false)
     const [activeTag, setActiveTag] = useState('')
@@ -185,17 +212,21 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const [query, setQuery] = useState('')
     const [activeCategoryId, setActiveCategoryId] = useState('')
     const [activeType, setActiveType] = useState('')
-    const [categories, setCategories] = useState<CatalogCategory[]>([])
+    const [categories, setCategories] = useState<CatalogCategory[]>(
+      seed?.categories ?? [],
+    )
     // Price filter (AGL-564): the slider drags into `priceInput` (whole
     // dollars) and debounces into `priceFilter`, which drives the query;
     // null = untouched (no price params sent). Bounds come from the
     // handler's price facets.
     const [priceBounds, setPriceBounds] = useState<CatalogPriceBounds | null>(
-      null,
+      seed?.priceBounds ?? null,
     )
     const [priceInput, setPriceInput] = useState<number[] | null>(null)
     const [priceFilter, setPriceFilter] = useState<number[] | null>(null)
-    const [nextOffset, setNextOffset] = useState<number | null>(null)
+    const [nextOffset, setNextOffset] = useState<number | null>(
+      seed?.nextOffset ?? null,
+    )
     const [loadingMore, setLoadingMore] = useState(false)
     const fetchSeq = useRef(0)
     const collectionSlug =
@@ -300,8 +331,16 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       ],
     )
 
+    // A seeded grid already holds exactly what `loadPage(0)` would return,
+    // so the first pass skips the fetch (AGL-659) — every later run, after
+    // a filter or sort change, goes to the API as before.
+    const seededRef = useRef(Boolean(seed))
     useEffect(() => {
       if (!hostId) return
+      if (seededRef.current) {
+        seededRef.current = false
+        return
+      }
       void loadPage(0)
       // Invalidate any in-flight request on dep change or unmount.
       return () => {

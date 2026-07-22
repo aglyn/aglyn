@@ -388,11 +388,14 @@ function TemplateBesignerPage(props) {
         actionsPrefix={
           <>
             <BesignerFunctionsButton hostId={hostId} />
-            {/* No version switcher yet: BesignerVersionsComponent maps any
-                non-screen parent to the "layouts" collection, so pointing
-                it at a component would write its versions to the wrong
-                place entirely. Tracked separately rather than shipped
-                broken (AGL-680). */}
+            {/* No version switcher here, on purpose (AGL-688). Templates
+                have versions but no publish step, so TEMPLATE_BESIGNER
+                carries no versionId segment — there is no per-version URL
+                to navigate to, and no parent pointer for "published" to
+                mean anything against. Giving templates a switcher needs a
+                route change and a decision about what "current" means for
+                a document that never publishes; until then this stays
+                empty rather than shipping a control that half-works. */}
           </>
         }
         backButton={

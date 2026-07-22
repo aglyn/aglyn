@@ -25,6 +25,7 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import { buildRoute, Route } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 
@@ -220,7 +221,11 @@ async function handler(request: Request): Promise<Response> {
               : `"${listing.displayName}" is now ${nextStatus}`,
           body: action === 'reject' ? reason : 'Your plugin passed review.',
           orgId: publisherOrgId,
-          link: publisherSlug ? `/${publisherSlug}/community` : '/',
+          link: publisherSlug
+            ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, {
+                orgSlug: publisherSlug,
+              })
+            : '/',
         }).catch(() => undefined)
       }
     }

@@ -16,9 +16,11 @@
  */
 'use client'
 
+import { buildRoute, Route } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
@@ -35,8 +37,18 @@ import {
 import { useRouter } from 'next/navigation'
 import { createEmailScreen } from '../utils/create-email-screen'
 
-const besignerHref = (hostId: string, screenId: string, versionId: string) =>
-  `/${hostId}/screens/${screenId}/versions/${versionId}/besigner`
+// The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
+// versions/[versionId]/besigner`. This built `/{hostDocId}/screens/…`, the
+// pre-AGL-621/622 shape — so every "Edit"/"Design" jump out of the Emails
+// page landed on a 404, including the one right after creating a new email
+// (AGL-685). Takes the resolved org slug + subdomain, not a host doc id.
+const besignerHref = (
+  orgSlug: string,
+  host: string,
+  screenId: string,
+  versionId: string,
+) =>
+  buildRoute(Route.SCREEN_BESIGNER, { orgSlug, host, screenId, versionId })
 
 /**
  * Email screens list (AGL-395): designed emails are besigner documents with
@@ -46,6 +58,7 @@ const besignerHref = (hostId: string, screenId: string, versionId: string) =>
  */
 export function EmailScreensCard(props: { hostId: string }) {
   const { hostId } = props
+  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const router = useRouter()
@@ -70,7 +83,11 @@ export function EmailScreensCard(props: { hostId: string }) {
         hostId,
         createHostResource,
       )
-      void router.push(besignerHref(hostId, screenId, versionId))
+      if (orgSlug && subdomain) {
+        void router.push(
+          besignerHref(orgSlug, subdomain, screenId, versionId),
+        )
+      }
     } catch (error: any) {
       console.error(error)
       enqueueSnackbar(error?.message ?? 'Creating the email failed', {
@@ -115,9 +132,15 @@ export function EmailScreensCard(props: { hostId: string }) {
               </Typography>
               <Button
                 size="small"
+                disabled={!orgSlug || !subdomain}
                 onClick={() =>
                   void router.push(
-                    besignerHref(hostId, screen.$id, screen.versionId),
+                    besignerHref(
+                      orgSlug,
+                      subdomain,
+                      screen.$id,
+                      screen.versionId,
+                    ),
                   )
                 }
               >

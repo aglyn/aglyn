@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { buildRoute, pluginRequestFromWeb, Route } from '@aglyn/aglyn/server'
 import {
   checkSeatQuota,
   type HostAccessRole,
@@ -221,7 +221,9 @@ async function handler(request: Request): Promise<Response> {
         // dead route. Links are frozen at write time, so emit canonical here
         // and let the reader repair anything already stored.
         link: (orgSnapshot.get('slug') as string | undefined)
-          ? `/${orgSnapshot.get('slug')}/hosts`
+          ? buildRoute(Route.HOST_LIST, {
+              orgSlug: orgSnapshot.get('slug') as string,
+            })
           : '/hosts',
       })
       return Response.json({ ok: true, uid: targetUid }, { status: 200 })

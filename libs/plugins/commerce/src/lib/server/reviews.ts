@@ -20,6 +20,71 @@ import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 
+export interface PublicProductReview {
+  id: string
+  rating: number
+  body: string
+  authorName: string
+  verified: boolean
+  reply: string | null
+  createdAtMs: number
+}
+
+export interface ProductReviewAggregate {
+  count: number
+  /** Mean rating, one decimal. */
+  average: number
+}
+
+/**
+ * Approved reviews for a product, newest first, plus their aggregate.
+ *
+ * Extracted from the handler (AGL-686) so the site-page resolver can nest
+ * `aggregateRating` inside the server-rendered `Product` node. Schema.org
+ * wants it as a PROPERTY of the product; the reviews block was emitting a
+ * free-standing `AggregateRating` node alongside it, which is orphaned and
+ * ignored. One reader means the rating in the structured data and the rating
+ * on the page cannot disagree.
+ */
+export async function readProductReviews(
+  hostId: string,
+  productId: string,
+): Promise<{
+  reviews: PublicProductReview[]
+  aggregate: ProductReviewAggregate
+}> {
+  const hostRef = firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(hostId)
+  const reviewsSnapshot = await hostRef
+    .collection('reviews')
+    .where('productId', '==', productId)
+    .where('status', '==', 'approved')
+    .limit(100)
+    .get()
+  const reviews = reviewsSnapshot.docs
+    .map((docSnapshot) => ({
+      id: docSnapshot.id,
+      rating: Number(docSnapshot.get('rating') ?? 0),
+      body: String(docSnapshot.get('body') ?? ''),
+      authorName: String(docSnapshot.get('authorName') ?? 'Anonymous'),
+      verified: Boolean(docSnapshot.get('verified')),
+      reply: (docSnapshot.get('reply') as string | undefined) ?? null,
+      createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
+    }))
+    .sort((a, b) => b.createdAtMs - a.createdAtMs)
+  const count = reviews.length
+  const average = count
+    ? reviews.reduce((sum, review) => sum + review.rating, 0) / count
+    : 0
+  return {
+    reviews,
+    aggregate: { count, average: Math.round(average * 10) / 10 },
+  }
+}
+
 /**
  * Product reviews (AGL-324). GET returns approved reviews + aggregate;
  * POST submits into the moderation queue, marking `verified` when the
@@ -84,35 +149,12 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
       return res.status(200).json({ ok: true, pending: true })
     }
 
-    const reviewsSnapshot = await hostRef
-      .collection('reviews')
-      .where('productId', '==', productId)
-      .where('status', '==', 'approved')
-      .limit(100)
-      .get()
-    const reviews = reviewsSnapshot.docs
-      .map((docSnapshot) => ({
-        id: docSnapshot.id,
-        rating: Number(docSnapshot.get('rating') ?? 0),
-        body: String(docSnapshot.get('body') ?? ''),
-        authorName: String(docSnapshot.get('authorName') ?? 'Anonymous'),
-        verified: Boolean(docSnapshot.get('verified')),
-        reply: (docSnapshot.get('reply') as string | undefined) ?? null,
-        createdAtMs: Number(docSnapshot.get('createdAtMs') ?? 0),
-      }))
-      .sort((a, b) => b.createdAtMs - a.createdAtMs)
-    const count = reviews.length
-    const average = count
-      ? reviews.reduce((sum, review) => sum + review.rating, 0) / count
-      : 0
+    const { reviews, aggregate } = await readProductReviews(hostId, productId)
     res.setHeader(
       'Cache-Control',
       'public, s-maxage=120, stale-while-revalidate=300',
     )
-    return res.status(200).json({
-      reviews,
-      aggregate: { count, average: Math.round(average * 10) / 10 },
-    })
+    return res.status(200).json({ reviews, aggregate })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Reviews unavailable' })

@@ -31,7 +31,7 @@ const DataConsolePage = lazy(() => import('./components/data-console-page'))
  * through binding resolution, not a canvas element of their own, so there
  * is no UI bundle. The console half declares the host Data nav + page
  * through the ConsoleExtension registry, gated by the `dataStore`
- * entitlement. The org Data page (`/org/data`) is an org-scoped app route
+ * entitlement. The org Data page (`Route.ORG_DATA`) is an org-scoped app route
  * that imports {@link HostDatasetsCard} directly.
  */
 export function registerDataConsole(): void {

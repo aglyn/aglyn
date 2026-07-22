@@ -185,7 +185,20 @@ async function handler(request: Request): Promise<Response> {
 
     const collectionRef = hostRef.collection(resource.collection)
     if (resource.quotaKey) {
-      const used = (await collectionRef.count().get()).data().count
+      // Platform-seeded starters (AGL-687) are excluded from the template
+      // count: they are content WE put in the library, and charging a free
+      // plan's ten-template allowance for them would leave no room for the
+      // user's own work. Every other template carries source.type
+      // 'authored' or 'marketplace', both of which still count.
+      const used =
+        resourceKey === 'template'
+          ? (
+              await collectionRef
+                .where('source.type', '!=', 'starter')
+                .count()
+                .get()
+            ).data().count
+          : (await collectionRef.count().get()).data().count
       const quota = checkQuota(org, resource.quotaKey as any, used)
       if (!quota.allowed) {
         return Response.json({

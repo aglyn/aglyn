@@ -259,9 +259,16 @@ function buildJsonLd(props: Props): string[] {
         ...(entry.updatedAt?.seconds && {
           dateModified: new Date(entry.updatedAt.seconds * 1000).toISOString(),
         }),
-        ...(publisher && { author: publisher }),
-        // The site is the publisher; the byline is the same entity only
-        // because entries carry no per-entry author field yet.
+        // Byline (AGL-686): the entry's own author when the editor set one,
+        // otherwise the site. Every post used to attribute to the same
+        // entity, which is not what Article.author means.
+        ...(entry.authorName
+          ? { author: { '@type': 'Person', name: entry.authorName } }
+          : publisher
+            ? { author: publisher }
+            : {}),
+        // The site remains the PUBLISHER regardless — that is the org that
+        // put the piece out, distinct from who wrote it.
         ...(publisher && {
           publisher: {
             ...publisher,
@@ -286,7 +293,7 @@ function buildJsonLd(props: Props): string[] {
   // PDP block used to build this from client state, so it never reached the
   // HTML a crawler reads — which is the whole point of product structured
   // data (rich results, Merchant listings).
-  const seededProduct = (
+  const seededCommerce = (
     props.pageData as
       | {
           commerce?: {
@@ -295,12 +302,18 @@ function buildJsonLd(props: Props): string[] {
               slug: string
               description?: string
               mediaUrls?: string[]
-              variants?: Array<{ priceUsd: number; soldOut?: boolean }>
+              variants?: Array<{
+                priceUsd: number
+                soldOut?: boolean
+                sku?: string
+              }>
             }
+            reviews?: { aggregate?: { count: number; average: number } }
           }
         }
       | undefined
-  )?.commerce?.product
+  )?.commerce
+  const seededProduct = seededCommerce?.product
   if (seededProduct && canonicalBase) {
     const prices = (seededProduct.variants ?? [])
       .map((variant) => Number(variant.priceUsd))
@@ -315,6 +328,13 @@ function buildJsonLd(props: Props): string[] {
     const availability = `https://schema.org/${
       inStock ? 'InStock' : 'OutOfStock'
     }`
+    const variants = seededProduct.variants ?? []
+    const skus = variants
+      .map((variant) => variant.sku)
+      .filter((value): value is string => Boolean(value))
+    // One variant, one SKU — anything else is ambiguous (see below).
+    const sku = variants.length === 1 && skus.length === 1 ? skus[0] : undefined
+    const ratingAggregate = seededCommerce?.reviews?.aggregate
     ld.push(
       Aglyn.safeJsonLd({
         '@context': 'https://schema.org',
@@ -328,9 +348,28 @@ function buildJsonLd(props: Props): string[] {
         }),
         url: `${canonicalBase}/products/${seededProduct.slug}`,
         ...(publisher && { brand: publisher }),
+        // `sku` only when it is unambiguous (AGL-686). Schema.org Product.sku
+        // is a single value, but a SKU belongs to a VARIANT — emitting the
+        // first of several would advertise one variant's code for the whole
+        // product, which is worse than omitting it. Multi-variant products
+        // want a ProductGroup, which is a larger modelling change.
+        ...(sku && { sku }),
+        // Rating nested as a PROPERTY of the product (AGL-686). The reviews
+        // block used to emit a free-standing AggregateRating node, which is
+        // orphaned and ignored. Only emitted when reviews exist — Google
+        // rejects a rating with no reviews behind it.
+        ...(ratingAggregate?.count
+          ? {
+              aggregateRating: {
+                '@type': 'AggregateRating',
+                ratingValue: ratingAggregate.average,
+                reviewCount: ratingAggregate.count,
+              },
+            }
+          : {}),
         // Currency isn't modelled on the product yet, so USD is assumed —
         // the same assumption the client block made. Revisit with
-        // multi-currency. `sku` is absent because the public DTO strips it.
+        // multi-currency.
         ...(low != null && {
           offers:
             low === high

@@ -21,6 +21,7 @@ import getScreen from '@aglyn/tenant-runtime/get-screen'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import * as CommerceModel from '../model'
 import { toPublicProductDetail } from './product'
+import { readProductReviews } from './reviews'
 
 /**
  * Commerce page resolver (AGL-292/298/418), relocated verbatim from the
@@ -68,6 +69,15 @@ export const commerceSitePageResolver: SitePageResolver = async ({
       })
       if (templateRes.screen) {
         const [minPrice, maxPrice] = CommerceModel.productPriceRange(product)
+        // Best-effort: a reviews read that fails costs the page its rating
+        // snippet, not the page.
+        const productReviews = await readProductReviews(
+          hostId,
+          productSnapshot.docs[0].id,
+        ).catch((error) => {
+          console.error('product review aggregate failed', error)
+          return { reviews: [], aggregate: { count: 0, average: 0 } }
+        })
         const templateNodes = await composeScreenNodes({
           hostId,
           screenId: pdpScreenId,
@@ -93,10 +103,20 @@ export const commerceSitePageResolver: SitePageResolver = async ({
                 // with no product in it (AGL-659). The product is already
                 // loaded here — hand it down so it renders server-side.
                 pageData: {
-                  commerce: { product: toPublicProductDetail(
-                    productSnapshot.docs[0].id,
-                    product,
-                  ) },
+                  commerce: {
+                    product: toPublicProductDetail(
+                      productSnapshot.docs[0].id,
+                      product,
+                    ),
+                    // Rating aggregate (AGL-686): needed HERE because
+                    // `aggregateRating` belongs nested inside the Product
+                    // structured data, and that is emitted server-side.
+                    // The reviews block used to publish a free-standing
+                    // AggregateRating node, which schema.org ignores.
+                    ...(productReviews.aggregate.count
+                      ? { reviews: productReviews }
+                      : {}),
+                  },
                 },
                 data: {
                   host: hostRes.host,

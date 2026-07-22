@@ -28,11 +28,13 @@
 import {
   registerBillingWebhookHandler,
   registerPluginApiRoute,
+  registerSitePageEnricher,
   registerSitePageResolver,
   registerPluginPermissions,
 } from '@aglyn/aglyn/server'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
 import { COMMERCE_PERMISSIONS } from './model/plugin-permissions'
+import { commerceSitePageEnricher } from './server/site-page-enricher'
 import { commerceSitePageResolver } from './server/site-page-resolver'
 import { cartCheckoutHandler } from './server/cart-checkout'
 import { cartHandler } from './server/cart'
@@ -73,6 +75,10 @@ export function registerCommerceApi(): void {
   registerPluginPermissions(COMMERCE_PERMISSIONS)
   // PDP/PLP template pages (AGL-418): /products/* + /collections/*.
   registerSitePageResolver(commerceSitePageResolver)
+  // Seeds product grids on ordinary screens (AGL-659) — the resolver above
+  // only covers /products/* and /collections/*, so /products itself, and any
+  // designed page with a grid on it, needed this to render server-side.
+  registerSitePageEnricher(commerceSitePageEnricher)
   registerPluginApiRoute('commerce/cart-checkout', cartCheckoutHandler)
   registerPluginApiRoute('commerce/cart', cartHandler)
   registerPluginApiRoute('commerce/catalog', catalogHandler)

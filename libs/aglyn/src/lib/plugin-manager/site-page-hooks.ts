@@ -49,6 +49,17 @@ export interface SitePageContext {
   /** The resolved screen doc (enrichers only). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   screen?: any
+  /**
+   * The composed node tree for the page — layout applied, versions and
+   * references denormalized (enrichers only, AGL-659).
+   *
+   * An enricher that wants to seed a block's data server-side has to know
+   * which blocks are actually on the page and how each one is configured;
+   * the screen doc alone does not say, because composition pulls in layout
+   * and referenced nodes.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  nodes?: any
 }
 
 export interface SiteRedirectAnswer {

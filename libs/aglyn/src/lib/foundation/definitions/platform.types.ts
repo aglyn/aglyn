@@ -473,6 +473,17 @@ export interface TemplateSource {
   version?: number | string
   /** First-party starter id from `starter-templates.ts`. */
   starterId?: string
+  /**
+   * Bundle-level identity for a seeded starter (AGL-687). A multi-page
+   * starter seeds one page template per screen, exactly as a marketplace
+   * install does; these carry the name/description/order of the bundle the
+   * screens belong to so the gallery can present them as the single starter
+   * they were authored as, without a second, code-side template source.
+   */
+  starterName?: string
+  starterDescription?: string
+  /** Position within the starter; fixes the order pages are created in. */
+  starterOrder?: number
 }
 
 /**

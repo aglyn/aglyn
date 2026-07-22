@@ -135,9 +135,14 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       // Templates from THIS listing are about to be replaced, so counting
       // them would make a re-install look like it doubles the library and
       // fail the quota on an update the user is entitled to.
+      // Platform-seeded starters are excluded for the same reason the
+      // resources route excludes them (AGL-687): they are not the user's
+      // spend of their template allowance.
       const count = existing.docs.filter(
         (entry) =>
-          !entry.get('deletedAt') && entry.get('source.listingId') !== listingId,
+          !entry.get('deletedAt') &&
+          entry.get('source.type') !== 'starter' &&
+          entry.get('source.listingId') !== listingId,
       ).length
       const quota = checkQuota(
         org as any,

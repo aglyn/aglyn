@@ -35,6 +35,14 @@ export interface PublicProductDetail {
     compareAtPriceUsd?: number
     soldOut: boolean
     imageUrl?: string
+    /**
+     * Merchant's stock-keeping unit (AGL-686). Carried into the public DTO
+     * so the server can put `sku` on the Product structured data — Google
+     * Merchant treats it as required for a product offer, and without it a
+     * listing is simply ineligible for rich results rather than warned about.
+     * It is already public information: it prints on receipts and invoices.
+     */
+    sku?: string
   }>
   tags?: string[]
   /** Recurring billing (AGL-303) so the PDP frames the price. */
@@ -80,6 +88,7 @@ export function toPublicProductDetail(
         Number(variant.inventory) <= 0 &&
         product.oversellPolicy !== 'backorder',
       ...(variant.imageUrl ? { imageUrl: variant.imageUrl } : {}),
+      ...(variant.sku ? { sku: variant.sku } : {}),
     })),
     ...(product.tags?.length ? { tags: product.tags } : {}),
     ...(product.subscription ? { subscription: product.subscription } : {}),

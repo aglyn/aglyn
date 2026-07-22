@@ -29,6 +29,13 @@
     "hub": {
       "port": 4420,
       "host": "127.0.0.1"
+    },
+    "database": {
+      "port": 9000,
+      "host": "127.0.0.1"
     }
+  },
+  "database": {
+    "rules": "firebase-database.rules.json"
   }
 }

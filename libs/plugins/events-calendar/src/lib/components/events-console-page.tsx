@@ -16,12 +16,15 @@
  */
 'use client'
 
-import { createResourceUid } from '@aglyn/aglyn'
+import { buildRoute, createResourceUid, Route } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  useConsoleHostRoute,
+  useFirestore,
+} from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Button,
@@ -145,6 +148,11 @@ function toLocalInput(ms: number | null | undefined): string {
  */
 export function EventsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, entitled } = props
+  // Console routes are `/[orgSlug]/…` (AGL-621); this component only has a
+  // host doc id, so the org slug has to be resolved before any console link
+  // can be built. `/org/billing` — what this used to hardcode — has not been
+  // a route since that migration (AGL-685).
+  const { orgSlug } = useConsoleHostRoute(hostId)
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -229,16 +237,18 @@ export function EventsConsolePage(props: ConsolePluginPageProps) {
         <Alert
           severity="info"
           action={
-            // Self-serve enable (AGL-530): the Billing add-ons card sells
-            // it; plain href since plugin components can't import console
-            // routing.
-            <Button
-              size="small"
-              color="inherit"
-              href="/org/billing#addons"
-            >
-              {'Enable in Billing'}
-            </Button>
+            // Self-serve enable (AGL-530): the Billing add-ons card sells it.
+            // Rendered only once the org slug resolves — a link to a route
+            // that does not exist is worse than no link at all.
+            orgSlug ? (
+              <Button
+                size="small"
+                color="inherit"
+                href={`${buildRoute(Route.MANAGE_BILLING, { orgSlug })}#addons`}
+              >
+                {'Enable in Billing'}
+              </Button>
+            ) : undefined
           }
         >
           {'The Event Calendar is a paid add-on ($9/mo for your whole ' +

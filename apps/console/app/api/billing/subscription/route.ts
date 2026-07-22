@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb, type OrgPlan } from '@aglyn/aglyn/server'
+import { buildRoute, pluginRequestFromWeb, Route, type OrgPlan } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -161,7 +161,9 @@ async function handler(request: Request): Promise<Response> {
         'billing_portal/sessions',
         new URLSearchParams({
           customer: String(customerId),
-          return_url: `${origin}${orgSlug ? `/${orgSlug}/billing` : '/'}`,
+          return_url: `${origin}${
+            orgSlug ? buildRoute(Route.MANAGE_BILLING, { orgSlug }) : '/'
+          }`,
         }),
       )
       return Response.json({ url: session.url }, { status: 200 })

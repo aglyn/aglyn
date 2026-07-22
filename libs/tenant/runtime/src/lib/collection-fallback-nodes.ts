@@ -35,6 +35,8 @@ interface FallbackEntry {
   title?: string
   slug?: string
   excerpt?: string
+  /** Per-entry byline (AGL-686); falls back to the site as author. */
+  authorName?: string
   body?: string
   coverImage?: string
   /** Stable taxonomy reference (AGL-582); wins over `category`. */

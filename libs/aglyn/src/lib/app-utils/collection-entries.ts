@@ -87,6 +87,8 @@ export interface CollectionEntryRecord {
   title?: string
   slug?: string
   excerpt?: string
+  /** Per-entry byline (AGL-686); falls back to the site as author. */
+  authorName?: string
   body?: string
   coverImage?: string
   /** Search-result title override (AGL-582); falls back to `title`. */
@@ -333,6 +335,8 @@ export interface CollectionRelatedItem {
   url: string
   date?: string
   excerpt?: string
+  /** Per-entry byline (AGL-686); falls back to the site as author. */
+  authorName?: string
   category?: string
 }
 

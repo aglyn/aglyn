@@ -418,11 +418,12 @@ function ComponentBesignerPage(props) {
         actionsPrefix={
           <>
             <BesignerFunctionsButton hostId={hostId} />
-            {/* No version switcher yet: BesignerVersionsComponent maps any
-                non-screen parent to the "layouts" collection, so pointing
-                it at a component would write its versions to the wrong
-                place entirely. Tracked separately rather than shipped
-                broken (AGL-680). */}
+            <BesignerVersionsComponent
+              hostId={hostId}
+              parent={{ kind: 'component', id: componentId }}
+              versionId={versionId}
+              publishedVersionId={publishedVersionId}
+            />
           </>
         }
         backButton={

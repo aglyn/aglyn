@@ -173,6 +173,9 @@ const fetchMock = jest.fn(
 beforeAll(() => {
   global.fetch = fetchMock as unknown as typeof fetch
   process.env.STRIPE_SECRET_KEY = 'sk_test_suspension_spec'
+  // Stream tokens sign with the dedicated fail-closed secret (AGL-689), not
+  // the Stripe key — without this the mint throws instead of returning a URL.
+  process.env.TOKEN_SIGNING_SECRET = 'test-token-signing-secret'
 })
 
 beforeEach(() => {
