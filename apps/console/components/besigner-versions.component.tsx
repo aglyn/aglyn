@@ -75,10 +75,74 @@ import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 
+/**
+ * Every document type that owns a `versions` subcollection and has a
+ * per-version besigner route (AGL-688).
+ *
+ * This used to be `kind === 'screen' ? 'screens' : 'layouts'`, written when
+ * screens and layouts were the only two. Reusable components then got
+ * versions of their own (AGL-679/680/681) and silently fell into the layouts
+ * branch — the switcher would have read and written a component's versions
+ * under `hosts/{hostId}/layouts/{componentId}/versions`, which is why the
+ * component editor shipped with no switcher at all rather than a broken one.
+ * An explicit map means the next document type is a compile error here, not
+ * a wrong collection at runtime.
+ *
+ * TEMPLATES ARE DELIBERATELY ABSENT. They have versions, but no publish
+ * step — `TEMPLATE_BESIGNER` carries no `versionId` segment, so there is no
+ * per-version URL to navigate to and no parent pointer for "published" to
+ * mean anything against. A switcher there would need a route change and a
+ * different notion of "current" first; that is a decision, not an omission.
+ */
+interface VersionRouteArgs {
+  orgSlug: string
+  host: string
+  id: string
+  versionId: string
+}
+
+const PARENT_TYPES = {
+  screen: {
+    collection: 'screens',
+    // Each type builds its own URL rather than the map holding a param
+    // name: `buildRoute` is typed per route, so a computed key would erase
+    // exactly the checking that makes this table worth having.
+    besignerUrl: ({ orgSlug, host, id, versionId }: VersionRouteArgs) =>
+      buildRoute(Route.SCREEN_BESIGNER, {
+        orgSlug,
+        host,
+        screenId: id,
+        versionId,
+      }),
+  },
+  layout: {
+    collection: 'layouts',
+    besignerUrl: ({ orgSlug, host, id, versionId }: VersionRouteArgs) =>
+      buildRoute(Route.LAYOUT_BESIGNER, {
+        orgSlug,
+        host,
+        layoutId: id,
+        versionId,
+      }),
+  },
+  component: {
+    collection: 'components',
+    besignerUrl: ({ orgSlug, host, id, versionId }: VersionRouteArgs) =>
+      buildRoute(Route.COMPONENT_BESIGNER, {
+        orgSlug,
+        host,
+        componentId: id,
+        versionId,
+      }),
+  },
+} as const
+
+export type BesignerVersionParentKind = keyof typeof PARENT_TYPES
+
 export interface BesignerVersionsProps {
   hostId: string
   /** Parent document holding the versions subcollection. */
-  parent: { kind: 'screen' | 'layout'; id: string }
+  parent: { kind: BesignerVersionParentKind; id: string }
   /** Version currently open in the besigner. */
   versionId: string
   /** Published version pointer from the parent doc (`versionId` field). */
@@ -113,7 +177,8 @@ export const BesignerVersionsComponent = observer(
     const [scheduleFor, setScheduleFor] = useState<string | null>(null)
     const [scheduleAt, setScheduleAt] = useState('')
 
-    const parentCollection = parent.kind === 'screen' ? 'screens' : 'layouts'
+    const parentType = PARENT_TYPES[parent.kind]
+    const parentCollection = parentType.collection
     const parentPath = ['hosts', hostId, parentCollection, parent.id] as const
     // No orderBy: Firestore drops docs missing the ordered field, and the
     // oldest version docs predate `createdAt`. Sort client-side instead.
@@ -138,18 +203,13 @@ export const BesignerVersionsComponent = observer(
 
     const besignerUrl = useCallback(
       (targetVersionId: string) =>
-        parent.kind === 'screen'
-          ? buildRoute(Route.SCREEN_BESIGNER, { orgSlug, 
-              host,
-              screenId: parent.id,
-              versionId: targetVersionId,
-            })
-          : buildRoute(Route.LAYOUT_BESIGNER, { orgSlug, 
-              host,
-              layoutId: parent.id,
-              versionId: targetVersionId,
-            }),
-      [hostId, parent],
+        parentType.besignerUrl({
+          orgSlug,
+          host,
+          id: parent.id,
+          versionId: targetVersionId,
+        }),
+      [parentType, orgSlug, host, parent.id],
     )
 
     const handleOpenVersion = useCallback(
