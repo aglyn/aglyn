@@ -82,6 +82,7 @@ import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance
 import AuthErrorAlertComponent from '../../../../../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../../../../../components/auth-form-template.component'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import RowActionsMenu from '../../../../../../../components/row-actions-menu.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
@@ -584,28 +585,39 @@ function Screens(props) {
             <MdiIcon path={mdiTranslate.path} size={0.8} />
           </IconButton>
         ) : null}
-        {/* Named for screen readers — the action repeats once per row, so
-            "Save as template" alone says nothing about which screen. */}
-        <IconButton
-          size="small"
-          aria-label={`Save ${
-            (row as { displayName?: string }).displayName ?? row.$id
-          } as template`}
-          onClick={() => setSaveTemplateFor(buildTemplateSource(row))}
-        >
-          <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />
-        </IconButton>
-        <IconButton
-          size="small"
-          aria-label="Delete"
-          onClick={handleDeleteScreen(row.$id, row.versionId as string)}
-        >
-          <MdiIcon
-            path={ICON_VARIANT_MODIFY_DELETE.path}
-            color="error"
-            size={0.8}
-          />
-        </IconButton>
+        {/* Secondary and destructive actions live behind the overflow menu
+            the components list already uses (AGL-701) — a delete sitting
+            inline is one mis-click from the row's open handler. Labelled per
+            row: the menu repeats once per screen, so "More actions" alone
+            says nothing about which one. */}
+        <RowActionsMenu
+          label={(row as { displayName?: string }).displayName ?? row.$id}
+          items={[
+            {
+              key: 'save-template',
+              label: 'Save as template',
+              icon: <MdiIcon path={mdiBookmarkOutline.path} size={0.8} />,
+              onClick: () => setSaveTemplateFor(buildTemplateSource(row)),
+            },
+            {
+              key: 'delete',
+              label: 'Delete',
+              destructive: true,
+              icon: (
+                <MdiIcon
+                  path={ICON_VARIANT_MODIFY_DELETE.path}
+                  color="error"
+                  size={0.8}
+                />
+              ),
+              onClick: () =>
+                void handleDeleteScreen(
+                  row.$id,
+                  row.versionId as string,
+                )(),
+            },
+          ]}
+        />
       </>
       )
     },
