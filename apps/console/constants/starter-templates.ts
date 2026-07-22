@@ -17,7 +17,13 @@
 
 // Server entry, not the barrel: this file is now reached from an API route
 // (the seed), and `@aglyn/aglyn` pulls React contexts into the RSC graph.
-import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/server'
+// Deep leaf import, deliberately (AGL-687). This module is imported from
+// BOTH graphs — the client gallery renders virtual starters from it, and the
+// server materializes them — and neither barrel works in both: the full
+// `@aglyn/aglyn` barrel breaks the RSC/server-route graph, while
+// `@aglyn/aglyn/server` drags `node:fs` into the client bundle. The constants
+// module is a leaf with no imports of its own, so it is safe on either side.
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 
 /**
  * First-party starter definitions (AGL-78/79), now SEED INPUT ONLY
@@ -61,9 +67,11 @@ export interface StarterTemplate {
   screens: StarterTemplateScreen[]
 }
 
-/** A seeded starter template document, keyed by its deterministic id. */
+/** A materialized starter template document, keyed by its deterministic id. */
 export interface StarterTemplateDoc {
   id: string
+  /** Which starter this page belongs to — lets one starter be selected. */
+  starterId: string
   data: Record<string, unknown>
 }
 
@@ -95,6 +103,7 @@ export function buildStarterTemplateDocs(
 ): StarterTemplateDoc[] {
   return starter.screens.map((screen, index) => ({
     id: starterTemplateDocId(starter.id, screen.key),
+    starterId: starter.id,
     data: {
       kind: 'page',
       displayName: screen.displayName,
@@ -118,7 +127,7 @@ export function buildStarterTemplateDocs(
   }))
 }
 
-/** Every document the starter seed is responsible for, in bundle order. */
+/** Every document a starter COULD materialize as, in bundle order. */
 export function buildAllStarterTemplateDocs(): StarterTemplateDoc[] {
   return STARTER_TEMPLATES.flatMap(buildStarterTemplateDocs)
 }

@@ -21,8 +21,7 @@ import {
   starterTemplateDocId,
   STARTER_TEMPLATES,
 } from '../../constants/starter-templates'
-import seedStarterTemplates, {
-  STARTER_SEED_MARKER_FIELD,
+import materializeStarterTemplate, {
   type SeedFirestore,
 } from './seed-starter-templates'
 
@@ -87,109 +86,97 @@ function createFakeFirestore(hostDoc: Record<string, unknown> | null = {}) {
   }
 }
 
-describe('seedStarterTemplates', () => {
-  it('seeds one document per starter screen', async () => {
-    const fake = createFakeFirestore()
-    const result = await seedStarterTemplates(fake.firestore, 'host1')
-    const expected = buildAllStarterTemplateDocs().length
+const FIRST = STARTER_TEMPLATES[0]
+const SECOND = STARTER_TEMPLATES[1]
 
-    expect(result.created).toBe(expected)
-    expect(fake.templates.size).toBe(expected)
-    expect(fake.hosts.get('host1')?.[STARTER_SEED_MARKER_FIELD]).toBe(1)
+describe('materializeStarterTemplate (AGL-687)', () => {
+  it('copies in only the starter that was asked for', async () => {
+    const { firestore, templates } = createFakeFirestore()
+    const result = await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore,
+      'host1',
+      FIRST.id,
+    )
+    expect(result.created).toBe(FIRST.screens.length)
+    expect(templates.size).toBe(FIRST.screens.length)
+    // The other starters stay virtual — nothing of theirs was written.
+    for (const doc of buildStarterTemplateDocs(SECOND)) {
+      expect(templates.has(doc.id)).toBe(false)
+    }
   })
 
-  it('stamps starter provenance the rules freeze', async () => {
-    const fake = createFakeFirestore()
-    await seedStarterTemplates(fake.firestore, 'host1')
-    const landing = fake.templates.get(starterTemplateDocId('landing', 'landing'))
-
-    expect(landing).toBeDefined()
-    expect((landing as any).kind).toBe('page')
-    expect((landing as any).source).toMatchObject({
-      type: 'starter',
-      starterId: 'landing',
-    })
+  it('writes nothing for a starter nobody asked for', async () => {
+    const { firestore, templates } = createFakeFirestore()
+    const result = await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore,
+      'host1',
+      'no-such-starter',
+    )
+    expect(result).toEqual({ created: 0, skipped: 0 })
+    expect(templates.size).toBe(0)
   })
 
-  // The point of the whole exercise: this runs against orgs that already
-  // exist, so a second run must reconcile, not duplicate.
-  it('is idempotent — running twice leaves one document per starter screen', async () => {
-    const fake = createFakeFirestore()
-    const first = await seedStarterTemplates(fake.firestore, 'host1')
-    const second = await seedStarterTemplates(fake.firestore, 'host1', {
-      force: true,
-    })
-
+  it('is idempotent — twice leaves one copy, not two', async () => {
+    const { firestore, templates } = createFakeFirestore()
+    await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    const second = await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
     expect(second.created).toBe(0)
-    expect(second.skipped).toBe(first.created)
-    expect(fake.templates.size).toBe(first.created)
+    expect(second.skipped).toBe(FIRST.screens.length)
+    expect(templates.size).toBe(FIRST.screens.length)
   })
 
-  it('short-circuits on the marker without re-reading the templates', async () => {
-    const fake = createFakeFirestore()
-    await seedStarterTemplates(fake.firestore, 'host1')
-    const commitsAfterSeed = fake.commits
-    const repeat = await seedStarterTemplates(fake.firestore, 'host1')
-
-    expect(repeat.alreadySeeded).toBe(true)
-    expect(repeat.created).toBe(0)
-    expect(fake.commits).toBe(commitsAfterSeed)
+  it('never clobbers a user edit to an already-materialized starter', async () => {
+    const { firestore, templates } = createFakeFirestore()
+    await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    const id = starterTemplateDocId(FIRST.id, FIRST.screens[0].key)
+    templates.set(id, { ...templates.get(id), displayName: 'My renamed page' })
+    await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    expect(templates.get(id)?.displayName).toBe('My renamed page')
   })
 
-  it('never clobbers a user edit to a previously seeded starter', async () => {
-    const fake = createFakeFirestore()
-    await seedStarterTemplates(fake.firestore, 'host1')
-    const id = starterTemplateDocId('business', 'about-us')
-    fake.templates.set(id, {
-      ...(fake.templates.get(id) as Record<string, unknown>),
-      displayName: 'Our story',
-      nodes: { root: { $id: 'root', componentId: 'div', nodes: [] } },
-      editedAt: 'yesterday',
+  it('does not resurrect a starter page the user deleted', async () => {
+    const { firestore, templates } = createFakeFirestore()
+    await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    const id = starterTemplateDocId(FIRST.id, FIRST.screens[0].key)
+    templates.set(id, { ...templates.get(id), deletedAt: 'yes' })
+    await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    expect(templates.get(id)?.deletedAt).toBe('yes')
+  })
+
+  it('fills in only the pages that are missing', async () => {
+    const { firestore, templates } = createFakeFirestore()
+    const docs = buildStarterTemplateDocs(FIRST)
+    templates.set(docs[0].id, { displayName: 'already here' })
+    const result = await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    expect(result.created).toBe(docs.length - 1)
+    expect(result.skipped).toBe(1)
+  })
+
+  it('does not consult a host-level seed marker', async () => {
+    // There is no "this host is seeded" state any more: whether a starter
+    // is present is a property of that starter's documents, not the host.
+    const { firestore, templates } = createFakeFirestore({
+      starterTemplatesSeedVersion: 99,
     })
-
-    await seedStarterTemplates(fake.firestore, 'host1', { force: true })
-
-    expect(fake.templates.get(id)).toMatchObject({
-      displayName: 'Our story',
-      editedAt: 'yesterday',
-    })
-    expect(Object.keys((fake.templates.get(id) as any).nodes)).toEqual(['root'])
-  })
-
-  it('does not resurrect a starter the user deleted', async () => {
-    const fake = createFakeFirestore()
-    await seedStarterTemplates(fake.firestore, 'host1')
-    const id = starterTemplateDocId('portfolio', 'portfolio')
-    fake.templates.set(id, {
-      ...(fake.templates.get(id) as Record<string, unknown>),
-      deletedAt: 'yesterday',
-    })
-
-    await seedStarterTemplates(fake.firestore, 'host1', { force: true })
-
-    expect((fake.templates.get(id) as any).deletedAt).toBe('yesterday')
-  })
-
-  it('fills in only the documents that are missing', async () => {
-    const fake = createFakeFirestore()
-    await seedStarterTemplates(fake.firestore, 'host1')
-    const id = starterTemplateDocId('landing', 'landing')
-    fake.templates.delete(id)
-
-    const result = await seedStarterTemplates(fake.firestore, 'host1', {
-      force: true,
-    })
-
-    expect(result.created).toBe(1)
-    expect(fake.templates.has(id)).toBe(true)
-  })
-
-  it('does nothing for an unknown host', async () => {
-    const fake = createFakeFirestore(null)
-    const result = await seedStarterTemplates(fake.firestore, 'host1')
-
-    expect(result).toEqual({ created: 0, skipped: 0, alreadySeeded: false })
-    expect(fake.templates.size).toBe(0)
+    const result = await materializeStarterTemplate(
+      firestore as unknown as SeedFirestore, 'host1', FIRST.id,
+    )
+    expect(result.created).toBe(FIRST.screens.length)
+    expect(templates.size).toBe(FIRST.screens.length)
   })
 })
 
