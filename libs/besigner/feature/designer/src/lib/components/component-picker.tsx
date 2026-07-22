@@ -161,7 +161,10 @@ export const ComponentPicker = observer(
         slots={{ transition: Transition }}
         {...rest}
       >
-        <AppBar position="relative">
+        {/* Shared app-bar treatment (AGL-704) — see the console's
+            secondary-app-bar. enableColorOnDark is required or AppBar
+            substitutes its own dark-mode colour. */}
+        <AppBar position="relative" color="surface" enableColorOnDark>
           <Toolbar>
             <IconButton
               edge="start"
