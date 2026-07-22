@@ -28,6 +28,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import {
   useHostId,
@@ -57,17 +58,24 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
 
   // Create sits in the page header alongside Screens and Layouts (AGL-694).
   const [creating, setCreating] = useState(false)
-  const handleCreate = useCallback(async () => {
+  // Name and kind first, then create (AGL-700). Kind is asked here because
+  // it decides which picker the template shows up in (AGL-699), and it is
+  // not something a later rename fixes.
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createError, setCreateError] = useState<unknown>(null)
+  const handleCreate = useCallback(
+    async (values: Record<string, any>) => {
     if (creating) return
     setCreating(true)
+    setCreateError(null)
     try {
       const templateId = Aglyn.createResourceUid()
       const timestamp = Timestamp.now()
       await setDoc(doc(firestore, 'hosts', hostId, 'templates', templateId), {
         hostId,
-        kind: 'page',
-        displayName: 'Untitled template',
-        description: '',
+        kind: values.kind ?? 'page',
+        displayName: values.displayName,
+        description: values.description ?? '',
         // A canvas needs a ROOT node — `{}` renders as "Invalid node".
         rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
         nodes: {
@@ -83,11 +91,13 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
         createdAt: timestamp,
         updatedAt: timestamp,
       })
+      setCreateOpen(false)
       router.push(
         buildRoute(Route.TEMPLATE_DETAILS, { orgSlug, host, templateId }),
       )
     } catch (error) {
       console.error(error)
+      setCreateError(error)
       enqueueSnackbar('Could not create the template', {
         variant: 'error',
         allowDuplicate: true,
@@ -95,7 +105,9 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       setCreating(false)
     }
-  }, [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar])
+    },
+    [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar],
+  )
 
   return (
     <>
@@ -123,10 +135,20 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
             size="small"
             variant="contained"
             disabled={creating}
-            onClick={handleCreate}
+            onClick={() => setCreateOpen(true)}
           >
             {creating ? 'Creating…' : 'Create Template'}
           </Button>
+        }
+        aside={
+          <CreateArtifactDrawer
+            open={createOpen}
+            onClose={() => setCreateOpen(false)}
+            title="Create new template"
+            onSubmit={handleCreate}
+            error={createError}
+            extraFields={TEMPLATE_KIND_FIELD}
+          />
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
@@ -136,6 +158,29 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
     </>
   )
 }
+/**
+ * Which picker the template will appear in (AGL-699): page templates on the
+ * screens list, layout templates on layouts, component templates on
+ * components. Defaulted to `page`, which is what every template created
+ * before AGL-700 was hardcoded to.
+ */
+const TEMPLATE_KIND_FIELD = [
+  {
+    component: 'select',
+    name: 'kind',
+    label: 'Kind',
+    helperText: 'Decides which list offers this template',
+    initialValue: 'page',
+    isRequired: true,
+    options: [
+      { label: 'Page', value: 'page' },
+      { label: 'Layout', value: 'layout' },
+      { label: 'Component', value: 'component' },
+    ],
+    validate: [{ type: 'required', message: 'Pick a kind' }],
+  },
+]
+
 HostTemplates.displayName = 'Page:HostTemplates'
 
 export default HostTemplates

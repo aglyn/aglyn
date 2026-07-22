@@ -23,7 +23,6 @@ import {
 } from '@aglyn/aglyn'
 import { MUI_BUNDLE_ID } from '@aglyn/aglyn'
 import {
-  ICON_VARIANT_CLOSE,
   ICON_VARIANT_MODIFY_DELETE,
   ICON_VARIANT_MODIFY_EDIT,
 } from '@aglyn/shared-data-enums'
@@ -39,16 +38,13 @@ import {
   Container,
   DataTableComponent,
   MdiIcon,
-  NavigationDrawerComponent,
-  SrOnly,
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import { FormRenderer, simpleComponentMapper } from '@aglyn/shared-ui-jsx-forms'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, IconButton, Stack, Typography } from '@mui/material'
+import { Button, Stack } from '@mui/material'
 import TemplateGalleryDialog from '../../../../../../../components/templates/template-gallery-dialog.component'
 import { GridActionsCellItem, type GridColDef } from '@mui/x-data-grid'
 import {
@@ -63,8 +59,7 @@ import {
 import { useParams, useRouter } from 'next/navigation'
 import { forwardRef, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useHostResourceApi } from '@aglyn/tenant-feature-instance'
-import AuthErrorAlertComponent from '../../../../../../../components/auth-error-alert.component'
-import AuthFormTemplateComponent from '../../../../../../../components/auth-form-template.component'
+import CreateArtifactDrawer from '../../../../../../../components/create-artifact-drawer.component'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import PublishArtifactDialog, {
@@ -431,53 +426,15 @@ function Layouts(props) {
           </Stack>
         }
         aside={
-          <NavigationDrawerComponent
+          // Shared with the component and template creates (AGL-700); this
+          // drawer's chrome and field schema were lifted from here.
+          <CreateArtifactDrawer
             open={quickDrawerOpen}
-            anchor="right"
-            variant="temporary"
             onClose={handleFormClose}
-            AppBarProps={{ color: 'surface' }}
-            appBarLeft={
-              <>
-                <IconButton
-                  color="inherit"
-                  edge="start"
-                  onClick={handleFormClose}
-                  sx={{ mr: 2 }}
-                >
-                  <MdiIcon path={ICON_VARIANT_CLOSE.path} />
-                  <SrOnly>close drawer</SrOnly>
-                </IconButton>
-                <Typography variant="h6" component="div">
-                  {'Create new layout'}
-                </Typography>
-              </>
-            }
-            appBarRight={
-              <Button
-                variant="outlined"
-                color="inherit"
-                onClick={handleFormClose}
-              >
-                {'Cancel'}
-              </Button>
-            }
-          >
-            <Container gutterY>
-              <FormRenderer
-                FormTemplate={AuthFormTemplateComponent}
-                componentMapper={simpleComponentMapper}
-                onSubmit={handleFormSubmit}
-                schema={formSchema}
-                subscription={{ values: true }}
-                clearOnUnmount
-              />
-              <AuthErrorAlertComponent
-                error={error as any}
-                sx={{ mt: 2, mb: 1 }}
-              />
-            </Container>
-          </NavigationDrawerComponent>
+            title="Create new layout"
+            onSubmit={handleFormSubmit}
+            error={error}
+          />
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
@@ -528,39 +485,6 @@ function Layouts(props) {
       />
     </>
   )
-}
-const formSchema = {
-  fields: [
-    {
-      component: 'text-field',
-      name: 'displayName',
-      helperText: 'Friendly name for internal reference',
-      type: 'text',
-      label: 'Display name',
-      isRequired: true,
-      validate: [
-        { type: 'required', message: 'Provide a display name' },
-        {
-          type: 'max-length',
-          threshold: 25,
-          message: 'Must not exceed 25 characters',
-        },
-      ],
-    },
-    {
-      component: 'textarea',
-      name: 'description',
-      label: 'Description',
-      helperText: 'Brief description for internal reference',
-      validate: [
-        {
-          type: 'max-length',
-          threshold: 80,
-          message: 'Must not exceed 80 characters',
-        },
-      ],
-    },
-  ],
 }
 Layouts.displayName = 'Page:Layouts'
 

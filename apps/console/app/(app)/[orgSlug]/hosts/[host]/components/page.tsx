@@ -22,6 +22,7 @@ import { Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack } from '@mui/material'
+import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { doc, setDoc } from 'firebase/firestore'
@@ -58,16 +59,22 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
   // Component templates, not components (AGL-699).
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const handleCreate = useCallback(async () => {
+  // Name first, then create (AGL-700) — writing "Untitled component" and
+  // navigating left the library full of rows nobody could tell apart.
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createError, setCreateError] = useState<unknown>(null)
+  const handleCreate = useCallback(
+    async (values: Record<string, any>) => {
     if (creating) return
     setCreating(true)
+    setCreateError(null)
     try {
       const componentId = Aglyn.createResourceUid()
       const timestamp = Timestamp.now()
       await setDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
         hostId,
-        displayName: 'Untitled component',
-        description: '',
+        displayName: values.displayName,
+        description: values.description ?? '',
         // A canvas needs a ROOT node to render — an empty `{}` renders as
         // "Invalid node" in the besigner (AGL-693).
         rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
@@ -81,11 +88,13 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
         createdAt: timestamp,
         updatedAt: timestamp,
       })
+      setCreateOpen(false)
       router.push(
         buildRoute(Route.COMPONENT_DETAILS, { orgSlug, host, componentId }),
       )
     } catch (error) {
       console.error(error)
+      setCreateError(error)
       enqueueSnackbar('Could not create the component', {
         variant: 'error',
         allowDuplicate: true,
@@ -93,7 +102,9 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
     } finally {
       setCreating(false)
     }
-  }, [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar])
+    },
+    [creating, firestore, hostId, router, orgSlug, host, enqueueSnackbar],
+  )
 
   return (
     <>
@@ -128,11 +139,20 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
               size="small"
               variant="contained"
               disabled={creating}
-              onClick={handleCreate}
+              onClick={() => setCreateOpen(true)}
             >
               {creating ? 'Creating…' : 'Create Component'}
             </Button>
           </Stack>
+        }
+        aside={
+          <CreateArtifactDrawer
+            open={createOpen}
+            onClose={() => setCreateOpen(false)}
+            title="Create new component"
+            onSubmit={handleCreate}
+            error={createError}
+          />
         }
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
