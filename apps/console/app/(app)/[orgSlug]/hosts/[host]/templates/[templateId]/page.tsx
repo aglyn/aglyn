@@ -23,6 +23,7 @@ import {
   Container,
   GridItems,
   MdiIcon,
+  useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
@@ -56,6 +57,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../../../constants/shared'
 import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
 import useFirestoreCollection from '../../../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../../../hooks/use-firestore-doc'
+import UseTemplateDialog from '../../../../../../../components/templates/use-template-dialog.component'
 
 /** Human label + colour for the frozen `source.type` (AGL-666/687). */
 function sourceLabel(source: { type?: string; version?: string } | undefined) {
@@ -106,6 +108,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
+  const { confirm } = useConfirmationContext()
 
   const { data: template, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'templates', templateId),
@@ -140,6 +143,77 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
 
   const [name, setName] = useState<string | null>(null)
   const [description, setDescription] = useState<string | null>(null)
+  const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
+    null,
+  )
+
+  /**
+   * Deletes ONE page of a starter bundle (AGL-696).
+   *
+   * The library row for a starter acts on the whole bundle, so this is where
+   * "remove just the checkout page" lives — without it, grouping would have
+   * taken a per-page action away rather than merely relocating it.
+   */
+  const handleDeleteSibling = useCallback(
+    (entry: any) => async () => {
+      const confirmed = await confirm({
+        title: 'Delete this page?',
+        description:
+          `"${entry.displayName ?? entry.$id}" is removed from your library. ` +
+          'The rest of the starter and anything you already created from it ' +
+          'are unaffected.',
+        confirmationText: 'Delete',
+        confirmationButtonProps: { color: 'error' },
+      })
+        .then(() => true)
+        .catch(() => false)
+      if (!confirmed) return
+      const dequeue = queueLoading()
+      try {
+        // Soft delete, matching the library card.
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'templates', entry.$id),
+          { deletedAt: Timestamp.now() },
+        )
+        enqueueSnackbar('Page deleted', { variant: 'success', persist: false })
+        // Deleting the page you are looking at leaves this route pointing at
+        // a soft-deleted document, which renders as not-found (AGL-706) —
+        // land on a sibling instead, or the list when none is left.
+        if (entry.$id === templateId) {
+          const next = siblings.find((other: any) => other.$id !== templateId)
+          router.push(
+            next
+              ? buildRoute(Route.TEMPLATE_DETAILS, {
+                  orgSlug,
+                  host,
+                  templateId: next.$id,
+                })
+              : buildRoute(Route.HOST_TEMPLATES, { orgSlug, host }),
+          )
+        }
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Could not delete the page', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeue()
+      }
+    },
+    [
+      confirm,
+      queueLoading,
+      firestore,
+      hostId,
+      templateId,
+      siblings,
+      router,
+      orgSlug,
+      host,
+      enqueueSnackbar,
+    ],
+  )
 
   const handleSave = useCallback(async () => {
     const dequeue = queueLoading()
@@ -318,8 +392,10 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                 color="text.secondary"
                 sx={{ mb: 1.5 }}
               >
-                {'This starter was authored as a set of pages. Each one is a ' +
-                  'separate template you can edit, use or delete on its own.'}
+                {'This starter was authored as a set of pages. The Templates ' +
+                  'list shows it as one row and acts on all of them at once; ' +
+                  'here each page is the separate template it really is, and ' +
+                  'can be edited, used or deleted on its own.'}
               </Typography>
               <Table size="small">
                 <TableHead>
@@ -339,21 +415,58 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Button
-                          size="small"
-                          disabled={entry.$id === templateId}
-                          onClick={() =>
-                            router.push(
-                              buildRoute(Route.TEMPLATE_DETAILS, {
-                                orgSlug,
-                                host,
-                                templateId: entry.$id,
-                              }),
-                            )
-                          }
+                        {/* Per-page Edit / Use / Delete: the library row
+                            covers the bundle, so this is the only place a
+                            single page of a starter can be acted on
+                            (AGL-696). */}
+                        <Stack
+                          direction="row"
+                          spacing={0.5}
+                          sx={{ justifyContent: 'flex-end' }}
                         >
-                          {entry.$id === templateId ? 'Viewing' : 'Open'}
-                        </Button>
+                          <Button
+                            size="small"
+                            disabled={entry.$id === templateId}
+                            onClick={() =>
+                              router.push(
+                                buildRoute(Route.TEMPLATE_DETAILS, {
+                                  orgSlug,
+                                  host,
+                                  templateId: entry.$id,
+                                }),
+                              )
+                            }
+                          >
+                            {entry.$id === templateId ? 'Viewing' : 'Open'}
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() =>
+                              router.push(
+                                buildRoute(Route.TEMPLATE_BESIGNER, {
+                                  orgSlug,
+                                  host,
+                                  templateId: entry.$id,
+                                }),
+                              )
+                            }
+                          >
+                            {'Edit'}
+                          </Button>
+                          <Button
+                            size="small"
+                            onClick={() => setUseTemplate(entry)}
+                          >
+                            {'Use'}
+                          </Button>
+                          <Button
+                            size="small"
+                            color="error"
+                            onClick={handleDeleteSibling(entry)}
+                          >
+                            {'Delete'}
+                          </Button>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -365,6 +478,11 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
                   ]
                 : []),
             ]}
+          />
+          <UseTemplateDialog
+            hostId={hostId}
+            template={useTemplate}
+            onClose={() => setUseTemplate(null)}
           />
         </Container>
         )}
