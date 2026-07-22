@@ -48,6 +48,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, doc, limit, query, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
+import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
@@ -77,11 +78,15 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
 
-  const { data: definition } = useFirestoreDoc<any>(
+  const { data: definition, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'components', componentId),
     [firestore, hostId, componentId],
     { idField: '$id' },
   )
+  // Three states, not two (AGL-706): a document that is still loading and one
+  // that does not exist both arrive as `undefined`, and rendering an empty
+  // editable form for the second made a mistyped id look like data loss.
+  const notFound = status === 'success' && !definition
   // No orderBy: the oldest version docs predate `createdAt`, and Firestore
   // drops documents missing the ordered field. Sort client-side, same as
   // BesignerVersionsComponent.
@@ -249,20 +254,34 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
         // The besigner is what this page exists to reach, so it belongs in
         // the hero like the screen detail page's, not as a text button at
         // the bottom of a card (AGL-702).
+        // Withheld when there is no component: Open Besigner would mint a
+        // version document under an id that has none (AGL-706).
         headerRight={
-          <Button
-            size="small"
-            variant="contained"
-            disabled={opening}
-            onClick={handleOpen()}
-            startIcon={
-              <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
-            }
-          >
-            {opening ? 'Opening…' : 'Open Besigner'}
-          </Button>
+          notFound ? null : (
+            <Button
+              size="small"
+              variant="contained"
+              disabled={opening}
+              onClick={handleOpen()}
+              startIcon={
+                <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
+              }
+            >
+              {opening ? 'Opening…' : 'Open Besigner'}
+            </Button>
+          )
         }
       >
+        {notFound ? (
+          <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+            <ArtifactNotFound
+              noun="component"
+              listUrl={listUrl}
+              listLabel="components"
+              id={componentId}
+            />
+          </Container>
+        ) : (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <GridItems
             spacing={3}
@@ -372,6 +391,7 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
             ]}
           />
         </Container>
+        )}
       </DashboardLayout>
     </>
   )
