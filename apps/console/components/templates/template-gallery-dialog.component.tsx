@@ -40,6 +40,11 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { checkOrgQuota } from '../../constants/entitlements'
+import { useRouter } from 'next/navigation'
+import { buildRoute, Route } from '../../constants/route-links'
+import { useHostSubdomain } from '../host-id-provider'
+import { useOrgSlug } from '../../hooks/use-org-scope'
+import { STARTER_TEMPLATES } from '../../constants/starter-templates'
 import createPageFromTemplate from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
@@ -56,20 +61,25 @@ export interface TemplateGalleryDialogProps {
 }
 
 /**
- * Template gallery (AGL-78/79, single-sourced by AGL-687).
+ * Template gallery (AGL-78/79, AGL-687).
  *
- * Every card here is now a real document in the host's own template library.
- * The first-party starters used to be rendered straight from code, which
- * made them a second kind of template — no version history, no editor, no
- * placeholders — sitting in the same grid as the editable ones. They are now
- * seeded into `hosts/{hostId}/templates` (see
- * `utils/server/seed-starter-templates.ts`), so a starter card and a saved
- * card differ only in the provenance recorded on the document.
+ * Two sources, presented identically:
  *
- * Multi-page starters seed one page template per screen and are regrouped
- * here by `source.starterId`, which keeps the one-click "add all five shop
- * pages" behaviour while leaving each page individually editable, versionable
- * and usable from the Templates library.
+ * - The host's own library — saved templates and marketplace installs.
+ * - The first-party starters, rendered VIRTUALLY from the code definitions
+ *   (`constants/starter-templates.ts`). Nothing is written for these until
+ *   the user uses or edits one, at which point that one starter is copied
+ *   into the library and behaves like any other template — versions, editor,
+ *   placeholders and all.
+ *
+ * Keeping untouched starters virtual is what lets us keep improving them:
+ * an eagerly-copied starter is a frozen snapshot, and once every host holds
+ * one no upstream change reaches anybody.
+ *
+ * A starter that HAS been materialized is rendered from its documents and
+ * suppressed as a virtual entry, so it appears once. `source.starterId` is
+ * the join key. Multi-page starters stay one card either way, which keeps
+ * the one-click "add all five shop pages" behaviour.
  */
 export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { hostId, open, onClose, existingSlugs, screenCount } = props
@@ -79,6 +89,9 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const { org } = useCurrentOrg()
   const { data: user } = useUser()
   const createHostResource = useHostResourceApi()
+  const router = useRouter()
+  const orgSlug = useOrgSlug()
+  const hostSubdomain = useHostSubdomain()
 
   // Community site templates (AGL-137): published bundles with previews.
   const { data: templateListings } = useFirestoreCollection<any>(
@@ -136,6 +149,42 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     }
     return Array.from(groups.values())
   }, [libraryPages])
+  // Starters the host has NOT materialized yet, rendered straight from the
+  // code definitions (AGL-687). Anything already in the library is dropped
+  // here so a materialized starter shows once, from its documents.
+  const materializedStarterIds = useMemo(
+    () => new Set(starterGroups.map((group) => group.id)),
+    [starterGroups],
+  )
+  const virtualStarters = useMemo(
+    () =>
+      STARTER_TEMPLATES.filter(
+        (starter) => !materializedStarterIds.has(starter.id),
+      ).map((starter) => ({
+        id: starter.id,
+        displayName: starter.displayName,
+        description: starter.description,
+        category: starter.category,
+        virtual: true as const,
+        screens: starter.screens.map((screen) => ({
+          displayName: screen.displayName,
+          description: screen.description,
+          slug: screen.slug,
+          seo: screen.seo,
+          nodes: screen.nodes,
+        })),
+      })),
+    [materializedStarterIds],
+  )
+  // One list so the grid does not care which side a card came from.
+  const starterCards = useMemo(
+    () => [
+      ...starterGroups.map((group) => ({ ...group, virtual: false as const })),
+      ...virtualStarters,
+    ],
+    [starterGroups, virtualStarters],
+  )
+
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
   )
@@ -189,37 +238,76 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     [installingId, user, hostId, queueLoading, enqueueSnackbar, onClose],
   )
 
-  // Backfill for hosts that predate AGL-687 — new hosts are seeded at
-  // creation. Idempotent and marker-guarded server-side, so a repeat open
-  // costs one host-doc read and writes nothing.
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    void (async () => {
+  /**
+   * Copies a starter into the library (AGL-687). Called on use and on edit —
+   * the two moments a user commits to a starter — and never before, so an
+   * untouched starter keeps tracking the code definitions.
+   *
+   * Best-effort on the use path: the pages are built from the same
+   * definitions either way, so a failed copy costs the library entry, not
+   * the user's pages.
+   */
+  const materializeStarter = useCallback(
+    async (starterId: string) => {
+      const idToken = await (user as any)?.getIdToken?.()
+      if (!idToken) return
+      await fetch('/api/hosts/seed-starter-templates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ hostId, starterId }),
+      })
+    },
+    [user, hostId],
+  )
+
+  /**
+   * Editing a starter is the other commitment (AGL-687): copy it in, then
+   * send the user to the library where its pages are ordinary templates
+   * with an editor, versions and placeholders.
+   */
+  const handleEditStarter = useCallback(
+    (starter: { id: string; virtual?: boolean }) => async () => {
+      const dequeue = queueLoading()
       try {
-        const idToken = await (user as any)?.getIdToken?.()
-        if (cancelled || !idToken) return
-        await fetch('/api/hosts/seed-starter-templates', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ hostId }),
-        })
-      } catch (error) {
-        // A gallery showing only the user's own templates is a worse
-        // gallery, not a broken one — never block opening on this.
+        if (starter.virtual) await materializeStarter(starter.id)
+        onClose()
+        router.push(
+          buildRoute(Route.HOST_TEMPLATES, {
+            orgSlug,
+            host: hostSubdomain,
+          }),
+        )
+      } catch (error: any) {
         console.error(error)
+        enqueueSnackbar(error?.message ?? 'An error has occurred', {
+          variant: 'error',
+          allowDuplicate: true,
+        })
+      } finally {
+        dequeue()
       }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [open, hostId, user])
+    },
+    [
+      materializeStarter,
+      queueLoading,
+      onClose,
+      router,
+      orgSlug,
+      hostSubdomain,
+      enqueueSnackbar,
+    ],
+  )
 
   const handleUse = useCallback(
-    (template: { displayName: string; screens: any[] }) => async () => {
+    (template: {
+      id?: string
+      displayName: string
+      screens: any[]
+      virtual?: boolean
+    }) => async () => {
       const quota = checkOrgQuota(
         org,
         'screensPerHost',
@@ -234,6 +322,13 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       }
       const dequeue = queueLoading()
       try {
+        // Using a starter is a commitment to it, so it becomes a real
+        // library template now. Never blocks the pages being created.
+        if (template.virtual && template.id) {
+          await materializeStarter(template.id).catch((error) => {
+            console.error('Could not copy starter into the library', error)
+          })
+        }
         const used = new Set(existingSlugs)
         for (const screen of template.screens) {
           // Same helper the library's Use flow calls (AGL-672) — one
@@ -277,6 +372,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
       queueLoading,
       enqueueSnackbar,
       onClose,
+      materializeStarter,
     ],
   )
 
@@ -341,13 +437,13 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             they came from so a multi-page starter is still one card that
             creates all of its pages — while each of those pages remains an
             ordinary, editable template in the library. */}
-        {starterGroups.length ? (
+        {starterCards.length ? (
           <>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {'Starter sites'}
             </Typography>
             <Grid container spacing={2}>
-              {starterGroups.map((starter) => (
+              {starterCards.map((starter) => (
                 <Grid key={starter.id} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Card variant="outlined" sx={{ height: '100%' }}>
                     <CardContent>
@@ -384,6 +480,12 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                         onClick={handleUse(starter)}
                       >
                         {'Use template'}
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={handleEditStarter(starter)}
+                      >
+                        {starter.virtual ? 'Edit a copy' : 'Edit'}
                       </Button>
                     </CardActions>
                   </Card>
