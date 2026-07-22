@@ -46,6 +46,7 @@ import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
+import ArtifactNotFound from '../../../../../../../components/artifact-not-found.component'
 import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
@@ -106,11 +107,15 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
 
-  const { data: template } = useFirestoreDoc<any>(
+  const { data: template, status } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId, 'templates', templateId),
     [firestore, hostId, templateId],
     { idField: '$id' },
   )
+  // Three states, not two (AGL-706): a document that is still loading and one
+  // that does not exist both arrive as `undefined`, and rendering an empty
+  // editable form for the second made a mistyped id look like data loss.
+  const notFound = status === 'success' && !template
   const { data: templateDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'templates'), limit(100)),
     [firestore, hostId],
@@ -207,19 +212,33 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
         // The besigner is what this page exists to reach, so it belongs in
         // the hero like the screen detail page's, not as a text button at
         // the bottom of a card (AGL-702).
+        // Withheld when there is no template: the besigner would open on an
+        // id with no document behind it (AGL-706).
         headerRight={
-          <Button
-            size="small"
-            variant="contained"
-            onClick={() => router.push(besignerUrl)}
-            startIcon={
-              <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
-            }
-          >
-            {'Open Besigner'}
-          </Button>
+          notFound ? null : (
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => router.push(besignerUrl)}
+              startIcon={
+                <MdiIcon color="inherit" path={ICON_VARIANT_BESIGNER.path} />
+              }
+            >
+              {'Open Besigner'}
+            </Button>
+          )
         }
       >
+        {notFound ? (
+          <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+            <ArtifactNotFound
+              noun="template"
+              listUrl={listUrl}
+              listLabel="templates"
+              id={templateId}
+            />
+          </Container>
+        ) : (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           <GridItems
             spacing={3}
@@ -348,6 +367,7 @@ const TemplateDetails: NextPageWithLayout<Record<string, never>> = () => {
             ]}
           />
         </Container>
+        )}
       </DashboardLayout>
     </>
   )
