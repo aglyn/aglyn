@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
-import {
-  emailUnverifiedResponse,
-  firebaseAdmin,
-  isImpersonationSession,
-} from '@aglyn/tenant-data-admin'
-import { canActAsPublisher } from '@aglyn/plugins-community/server/publisher-profile'
+import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { randomUUID } from 'crypto'
+import { canActAsPublisher } from './publisher-profile'
 
 // Base64 JSON payloads: 2MB of image encodes to ~2.7MB of body.
 const MAX_FILE_BYTES = 2 * 1024 * 1024
+
+const PREVIEW_PATH = (listingId: string) =>
+  `communityListings/${listingId}/preview`
 
 /**
  * Listing preview image (AGL-95): the publisher uploads one screenshot per
@@ -33,32 +32,44 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024
  * client writes, so the mutation runs here — Firebase ID token, listing
  * ownership, image-only, 2MB cap. POST replaces the image and sets
  * `previewImageUrl` on the listing; DELETE removes both.
+ *
+ * Lives in the plugin, like every other `community/*` operation. It was the
+ * one that didn't: it sat in the console app and imported this plugin's
+ * `canActAsPublisher` across the `scope:app` → `aglyn:addons` boundary, which
+ * failed lint on main. Registered at the same path, so the URL clients call
+ * is unchanged — `/api/community/preview-image` reaches the plugin catch-all
+ * with exactly the shape it had as a named app route.
+ *
+ * The email-verified gate (AGL-479) is carried over deliberately: the plugin
+ * API dispatcher does NOT apply it centrally, so dropping it here would have
+ * quietly widened who can write listing images.
  */
-async function handler(request: Request): Promise<Response> {
-  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
-  const headers = rawHeaders as Partial<Record<string, string>>
-  if (method !== 'POST' && method !== 'DELETE') {
-    return Response.json({ error: 'Method not allowed' }, { status: 405 })
+export const previewImageHandler: PluginApiHandler = async (req, res) => {
+  if (req.method !== 'POST' && req.method !== 'DELETE') {
+    return res.status(405).json({ error: 'Method not allowed' })
   }
-  const listingId = String(body?.listingId ?? '')
-  if (!listingId) return Response.json({ error: 'Missing listingId' }, { status: 400 })
+  const listingId = String(req.body?.listingId ?? '')
+  if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
 
-  const authorization = headers.authorization ?? ''
+  const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
     : undefined
-  if (!idToken) return Response.json({ error: 'Unauthenticated' }, { status: 401 })
+  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
-      return emailUnverifiedResponse()
+      return res.status(403).json({
+        error: 'Verify your email to continue',
+        reason: 'email-unverified',
+      })
     }
     const firestore = firebaseAdmin.app().firestore()
     const listingRef = firestore.collection('communityListings').doc(listingId)
     const listingSnapshot = await listingRef.get()
     if (!listingSnapshot.exists) {
-      return Response.json({ error: 'Unknown listing' }, { status: 404 })
+      return res.status(404).json({ error: 'Unknown listing' })
     }
     // Listings are org-owned since AGL-652, so `profileId` holds an ORG id.
     // Comparing it to a uid can never be true — it silently 403'd every
@@ -69,15 +80,15 @@ async function handler(request: Request): Promise<Response> {
       listingSnapshot.get('profileId') as string | undefined,
     )
     if (!canEdit) {
-      return Response.json({ error: 'Not your listing' }, { status: 403 })
+      return res.status(403).json({ error: 'Not your listing' })
     }
     const bucket = firebaseAdmin
       .app()
       .storage()
       .bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
-    const file = bucket.file(`communityListings/${listingId}/preview`)
+    const file = bucket.file(PREVIEW_PATH(listingId))
 
-    if (method === 'DELETE') {
+    if (req.method === 'DELETE') {
       await file.delete().catch(() => undefined)
       await listingRef.set(
         {
@@ -86,17 +97,21 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
-      return Response.json({ deleted: true }, { status: 200 })
+      return res.status(200).json({ deleted: true })
     }
 
-    const contentType = String(body?.contentType ?? '')
-    const data = String(body?.data ?? '')
+    const contentType = String(req.body?.contentType ?? '')
+    const data = String(req.body?.data ?? '')
     if (!contentType.startsWith('image/')) {
-      return Response.json({ error: 'Only image uploads are supported' }, { status: 415 })
+      return res
+        .status(415)
+        .json({ error: 'Only image uploads are supported' })
     }
     const buffer = Buffer.from(data, 'base64')
     if (!buffer.length || buffer.length > MAX_FILE_BYTES) {
-      return Response.json({ error: 'File is empty or too large (2MB)' }, { status: 413 })
+      return res
+        .status(413)
+        .json({ error: 'File is empty or too large (2MB)' })
     }
 
     const token = randomUUID()
@@ -106,7 +121,7 @@ async function handler(request: Request): Promise<Response> {
     })
     const url =
       `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/` +
-      `${encodeURIComponent(`communityListings/${listingId}/preview`)}` +
+      `${encodeURIComponent(PREVIEW_PATH(listingId))}` +
       `?alt=media&token=${token}`
 
     await listingRef.set(
@@ -116,12 +131,11 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
-    return Response.json({ url }, { status: 200 })
+    return res.status(200).json({ url })
   } catch (error) {
     console.error(error)
-    return Response.json({ error: 'Upload failed' }, { status: 500 })
+    return res.status(500).json({ error: 'Upload failed' })
   }
 }
 
-export const dynamic = 'force-dynamic'
-export { handler as POST, handler as DELETE }
+export default previewImageHandler
