@@ -479,7 +479,12 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           with a close affordance, a filter toggle and a collapsing search —
           wrapped around the template cards this dialog already had. One
           picker idiom across the product instead of two. */}
-      <AppBar position="relative">
+      {/* `surface` + enableColorOnDark is the shared app-bar treatment
+          (secondary-app-bar, the navigation drawers) — near-white in light
+          mode. The default `primary` made this the one slate-grey bar in the
+          product (AGL-704). AppBar overrides its own colour in dark mode
+          unless enableColorOnDark is set. */}
+      <AppBar position="relative" color="surface" enableColorOnDark>
         <Toolbar>
           <IconButton
             edge="start"
