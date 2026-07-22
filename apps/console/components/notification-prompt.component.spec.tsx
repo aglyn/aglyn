@@ -105,12 +105,40 @@ describe('NotificationPrompt gating (AGL-663)', () => {
     expect(window.localStorage.getItem(DISMISSED_KEY)).toBe('never')
   })
 
-  it('does not persist anything for "Not now", so it can offer again later', () => {
+  it('snoozes on "Not now" so the answer actually holds', () => {
     renderAndSettle()
     act(() => {
       screen.getByText('Not now').click()
     })
-    expect(window.localStorage.getItem(DISMISSED_KEY)).toBeNull()
+    const stored = window.localStorage.getItem(DISMISSED_KEY)
+    expect(stored).toMatch(/^snooze:\d+$/)
+    expect(Number(stored?.slice('snooze:'.length))).toBeGreaterThan(Date.now())
+  })
+
+  it('stays hidden while a "Not now" snooze is live', () => {
+    window.localStorage.setItem(
+      DISMISSED_KEY,
+      `snooze:${Date.now() + 60_000}`,
+    )
+    renderAndSettle()
+    expect(screen.queryByText('Enable notifications')).toBeNull()
+  })
+
+  it('offers again once the snooze has expired', () => {
+    // The whole point of a snooze rather than a permanent dismissal: a soft
+    // no is temporary, and must not silently become a forever no.
+    window.localStorage.setItem(
+      DISMISSED_KEY,
+      `snooze:${Date.now() - 60_000}`,
+    )
+    renderAndSettle()
+    expect(screen.getByText('Enable notifications')).toBeTruthy()
+  })
+
+  it('ignores a malformed snooze rather than hiding forever', () => {
+    window.localStorage.setItem(DISMISSED_KEY, 'snooze:not-a-number')
+    renderAndSettle()
+    expect(screen.getByText('Enable notifications')).toBeTruthy()
   })
 
   it('switches the desktop pref on only when the browser actually grants', async () => {
