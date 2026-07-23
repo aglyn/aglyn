@@ -21,6 +21,7 @@ import manageNavTabItems from '../constants/manage-nav-tabs'
 import orgNavTabItems from '../constants/org-nav-tabs'
 import { buildRoute, Route } from '../constants/route-links'
 import {
+  isAddressableSection,
   resolveActiveTab,
   resolveNavSection,
 } from '../hooks/use-secondary-nav'
@@ -130,4 +131,70 @@ describe('resolveActiveTab', () => {
       resolveActiveTab(`${hostBase}/not-a-tab`, hostBase, hostTabs),
     ).toBeUndefined()
   })
+})
+
+describe('isAddressableSection', () => {
+  const resolved = {
+    orgsLoaded: true,
+    knownOrgSlugs: [ORG],
+    hostResolved: true,
+    hostFound: true,
+  }
+
+  it('rejects an org slug the user does not belong to', () => {
+    // `/login` while signed in matches `[orgSlug]` and renders the (app)
+    // not-found; without this the bar builds a strip of `/login/…` tabs.
+    expect(
+      isAddressableSection(resolveNavSection('/login'), resolved),
+    ).toBe(false)
+  })
+
+  it('accepts a real org slug', () => {
+    expect(isAddressableSection(resolveNavSection(`/${ORG}/team`), resolved))
+      .toBe(true)
+  })
+
+  it('holds the strip while the org list is still loading', () => {
+    // Hiding it here would reintroduce the blink the hoist exists to remove.
+    expect(
+      isAddressableSection(resolveNavSection('/login'), {
+        ...resolved,
+        orgsLoaded: false,
+        knownOrgSlugs: [],
+      }),
+    ).toBe(true)
+  })
+
+  it('rejects a subdomain that resolved to no site', () => {
+    expect(
+      isAddressableSection(resolveNavSection(`/${ORG}/hosts/nope`), {
+        ...resolved,
+        hostFound: false,
+      }),
+    ).toBe(false)
+  })
+
+  it('holds the strip while the subdomain is still resolving', () => {
+    expect(
+      isAddressableSection(resolveNavSection(`/${ORG}/hosts/${HOST}`), {
+        ...resolved,
+        hostResolved: false,
+        hostFound: false,
+      }),
+    ).toBe(true)
+  })
+
+  it.each(['/admin/orgs', '/manage/user'])(
+    'never gates the staff or personal strips (%s)',
+    (pathname) => {
+      expect(
+        isAddressableSection(resolveNavSection(pathname), {
+          orgsLoaded: true,
+          knownOrgSlugs: [],
+          hostResolved: true,
+          hostFound: false,
+        }),
+      ).toBe(true)
+    },
+  )
 })

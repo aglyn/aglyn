@@ -18,10 +18,12 @@
 
 import { usePathname } from 'next/navigation'
 import { useMemo } from 'react'
+import { useHostId, useHostReady } from '../components/host-id-provider'
 import adminNavTabItems from '../constants/admin-nav-tabs'
 import hostNavTabItems from '../constants/host-nav-tabs'
 import manageNavTabItems from '../constants/manage-nav-tabs'
 import useOrgNavTabItems from './use-org-nav-tabs'
+import { useOrgScope } from './use-org-scope'
 
 export interface NavTabItem {
   id?: string
@@ -95,6 +97,45 @@ export function resolveActiveTab(
     ?.href
 }
 
+/** What the route's org/site segments have resolved to, so far. */
+export interface SectionScope {
+  /** True once the user's org list has loaded. */
+  orgsLoaded: boolean
+  /** Slugs of the orgs the user belongs to. */
+  knownOrgSlugs: string[]
+  /** True once subdomain→doc-id resolution has settled (true off sites). */
+  hostResolved: boolean
+  /** True when the URL's subdomain resolved to a site. */
+  hostFound: boolean
+}
+
+/**
+ * Whether a section names something the user can actually open.
+ *
+ * `/[orgSlug]` is the only top-level dynamic segment in the `(app)` group, so
+ * ANY unrecognised path — `/login` while signed in, a dead bookmark — matches
+ * it and renders the not-found page. Without this check the bar happily builds
+ * an org strip for it, with every tab pointing at `/login/hosts` and friends.
+ *
+ * Unresolved counts as addressable: the strip must not blink out while the org
+ * list or the subdomain lookup is still in flight, which is the whole point of
+ * hoisting the bar in the first place (AGL-755).
+ */
+export function isAddressableSection(
+  section: NavSection,
+  scope: SectionScope,
+): boolean {
+  if (section.kind === 'org') {
+    return (
+      !scope.orgsLoaded || scope.knownOrgSlugs.includes(section.orgSlug ?? '')
+    )
+  }
+  if (section.kind === 'host') {
+    return !scope.hostResolved || scope.hostFound
+  }
+  return true
+}
+
 /**
  * The secondary app bar's strip for the current route. Mounted once in the
  * `(app)` layout, so it must not depend on anything a page provides.
@@ -109,8 +150,25 @@ export function useSecondaryNav(): {
   // Hooks can't be called conditionally, so the org strip is always built;
   // it is only handed out on org routes.
   const orgNavTabItems = useOrgNavTabItems()
+  const { orgs, loading: orgsLoading } = useOrgScope()
+  const hostResolved = useHostReady()
+  const hostId = useHostId()
+
+  const addressable = useMemo(
+    () =>
+      isAddressableSection(section, {
+        orgsLoaded: !orgsLoading,
+        knownOrgSlugs: orgs
+          .map((org) => org.slug)
+          .filter((slug): slug is string => Boolean(slug)),
+        hostResolved,
+        hostFound: Boolean(hostId),
+      }),
+    [section, orgs, orgsLoading, hostResolved, hostId],
+  )
 
   const navTabItems = useMemo(() => {
+    if (!addressable) return []
     switch (section.kind) {
       case 'host':
         return hostNavTabItems(section.orgSlug ?? '', section.host ?? '')
@@ -123,7 +181,7 @@ export function useSecondaryNav(): {
       default:
         return []
     }
-  }, [section, orgNavTabItems])
+  }, [addressable, section, orgNavTabItems])
 
   const activeTab = useMemo(
     () => resolveActiveTab(pathname, section.base, navTabItems),
