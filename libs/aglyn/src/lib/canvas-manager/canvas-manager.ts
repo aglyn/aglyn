@@ -83,7 +83,9 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
   }
   get children(): NodeSchema<any>[] {
     const res: NodeSchema[] = []
-    for (const $id of (this.nodes ||= [])) {
+    // `?? []`, not `||= []` — a computed getter must not assign to observable
+    // state, and this only reads (AGL-763).
+    for (const $id of this.nodes ?? []) {
       const node = this.store.getNode($id)
       if (node) res.push(node)
     }
@@ -561,8 +563,16 @@ export class CanvasManager {
     if (oldIndex > -1) oldParent?.nodes?.splice(oldIndex, 1)
     if (oldParent?.$id !== newParent.$id) node.parentId = newParent?.$id
 
-    if (isNaN(index)) (newParent.nodes ||= []).push(node?.$id)
-    else (newParent.nodes ||= []).splice(index, 0, node?.$id)
+    // Assign then read back, never `(x.nodes ||= []).push()` (AGL-763). A
+    // live node is a `makeAutoObservable` proxy: assigning a fresh `[]` stores
+    // an observable copy, but the `||=` expression evaluates to the plain
+    // array that was assigned — so pushing onto it writes to a detached array
+    // and the child silently orphans. `AglynNode`'s constructor seeds `nodes`
+    // so this never actually fires today, but relying on that invariant from
+    // here is how the same defect returned as AGL-759.
+    if (!newParent.nodes) newParent.nodes = []
+    if (isNaN(index)) newParent.nodes.push(node?.$id)
+    else newParent.nodes.splice(index, 0, node?.$id)
     return node
   }
   public reorderNode(node: NodeSchema<any>, index = NaN): typeof node {
@@ -610,7 +620,10 @@ export class CanvasManager {
     const index =
       nodeIndex === -1 ? parent.nodes?.length ?? 0 : nodeIndex + 1
     const newNode = duplicateNodeAndChildren(node, node.parentId!)
-    ;(parent.nodes ||= []).splice(index, 0, newNode.$id)
+    // Read-back, not `(parent.nodes ||= []).splice()` — see reparentNode
+    // (AGL-763): the `||=` value is the detached plain array on an observable.
+    if (!parent.nodes) parent.nodes = []
+    parent.nodes.splice(index, 0, newNode.$id)
 
     return newNode
   }
@@ -654,8 +667,11 @@ export class CanvasManager {
     // observers never see the intermediate detached state.
     runInAction(() => {
       this.setNodes(parsed, true)
-      if (isNaN(index)) (target.nodes ||= []).push(duplicate.$id)
-      else (target.nodes ||= []).splice(index, 0, duplicate.$id)
+      // Read-back, not `(target.nodes ||= []).push()` — see reparentNode
+      // (AGL-763): the `||=` value is the detached plain array on an observable.
+      if (!target.nodes) target.nodes = []
+      if (isNaN(index)) target.nodes.push(duplicate.$id)
+      else target.nodes.splice(index, 0, duplicate.$id)
     })
 
     return this.getNode(duplicate.$id)!
@@ -677,7 +693,9 @@ export class CanvasManager {
     if (!rootNode) throw new Error('Invalid root node')
     const response = { ...(rootNode as unknown as NodeSchemaNested<any>) }
     const children: NodeSchemaNested<any>[] = []
-    for (const id of (rootNode.nodes ||= [])) {
+    // `?? []`, not `||= []` — a read-only walk should not mutate its input
+    // (AGL-763).
+    for (const id of rootNode.nodes ?? []) {
       const child = { ...nodes[id] }
       const nestedChild = this.nestDenormalizedNodes(nodes, child.$id)
       children.push(nestedChild)

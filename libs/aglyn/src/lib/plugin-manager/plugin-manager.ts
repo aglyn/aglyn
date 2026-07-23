@@ -238,8 +238,23 @@ export class PluginManager {
     for (const dependentId of Object.keys(
       this.getDependency(dependencyId)?.dependencies || {},
     )) {
-      const dependents = (this.dependencyDependentsById[dependentId] ||= {})
-      dependents[dependencyId] = true
+      // Read the bucket back instead of using the value of `||= {}` (AGL-759).
+      // This class is `makeAutoObservable`, so assigning a plain `{}` stores an
+      // observable COPY of it — while `x ||= {}` evaluates to the plain object
+      // that was assigned, not the copy that was stored. Mutating that captured
+      // object wrote into something already detached from the manager.
+      //
+      // Only the FIRST dependent of any given dependency was lost, because
+      // every later one found the key present and short-circuited onto the real
+      // observable. In manifest order that made `bookings` — the first bundle
+      // depending on mui — permanently WAITING on every besigner, with no
+      // error: its components simply never registered and the drawer was short
+      // a category. `plugins.dependencyDependentsById` reads empty for that
+      // first edge, which is the fingerprint.
+      if (!this.dependencyDependentsById[dependentId]) {
+        this.dependencyDependentsById[dependentId] = {}
+      }
+      this.dependencyDependentsById[dependentId][dependencyId] = true
     }
     return
   }

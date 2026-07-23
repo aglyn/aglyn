@@ -348,6 +348,77 @@ describe('Aglyn: Screen Manager', () => {
     })
   })
 
+  // AGL-763: the AGL-759 MobX defect — `const x = (observable.field ||= []);
+  // x.push(...)` mutates a detached copy — recurs textually at the
+  // reparent/duplicate/preset call sites (`(parent.nodes ||= []).push(id)`).
+  // These prove it does NOT bite here: `AglynNode`'s constructor always seeds
+  // `this.nodes` to an array, so a live node never has `nodes` undefined and
+  // `||=` short-circuits onto the real observable array rather than assigning
+  // a fresh one. The guard is that a move/duplicate into a genuinely childless
+  // container lands, and leaves no node in the map unreferenced by any parent.
+  describe('mutating a childless parent lands the child (AGL-763)', () => {
+    const makeCanvas = () => {
+      const canvas = new CanvasManager(undefined as any)
+      canvas.setNodes(nodes)
+      return canvas
+    }
+    const orphans = (canvas: CanvasManager): NodeId[] => {
+      const referenced = new Set<NodeId>([NODE_ROOT_ID])
+      for (const node of canvas.nodes.values())
+        for (const id of node.nodes ?? []) referenced.add(id)
+      return [...canvas.nodes.keys()].filter((id) => !referenced.has(id))
+    }
+
+    it('reparentNode into an empty container', () => {
+      const canvas = makeCanvas()
+      // child2 starts with nodes: [] — the case that would expose the defect.
+      expect(canvas.getNode('child2')!.nodes).toEqual([])
+
+      canvas.reparentNode(canvas.getNode('child1-1')!, canvas.getNode('child2')!)
+
+      expect(canvas.getNode('child2')!.nodes).toContain('child1-1')
+      expect(canvas.getNode('child1-1')!.parentId).toBe('child2')
+      expect(orphans(canvas)).toEqual([])
+    })
+
+    it('duplicateNode whose parent chain reaches a fresh node', () => {
+      const canvas = makeCanvas()
+      // Seed a brand-new empty container, then duplicate a node into it.
+      const box = canvas.setNode(
+        canvas.createNode({ componentId: 'div', parentId: NODE_ROOT_ID }),
+      )!
+      canvas.getNode(NODE_ROOT_ID)!.nodes!.push(box.$id!)
+      canvas.reparentNode(canvas.getNode('child1-1')!, box)
+
+      const copy = canvas.duplicateNode(canvas.getNode('child1-1')!)
+
+      expect(canvas.getNode(box.$id!)!.nodes).toContain(copy.$id)
+      expect(orphans(canvas)).toEqual([])
+    })
+
+    it('a node built without a nodes field still gets an array', () => {
+      const canvas = makeCanvas()
+      // Exercises the constructor default (schema.nodes undefined). If the
+      // seed came through with `nodes: undefined`, the `||=` sites would be
+      // live — but the constructor forecloses that.
+      const bare = canvas.setNode(
+        canvas.createNode({
+          $id: 'bare',
+          componentId: 'div',
+          parentId: NODE_ROOT_ID,
+          nodes: undefined as never,
+        }),
+      )!
+      expect(Array.isArray(bare.nodes)).toBe(true)
+
+      canvas.getNode(NODE_ROOT_ID)!.nodes!.push('bare')
+      canvas.reparentNode(canvas.getNode('child1-2')!, canvas.getNode('bare')!)
+
+      expect(canvas.getNode('bare')!.nodes).toContain('child1-2')
+      expect(orphans(canvas)).toEqual([])
+    })
+  })
+
   describe('applyNodes history', () => {
     it('makes a raw-json replacement undoable and redoable', () => {
       const canvas = new CanvasManager(undefined as any)

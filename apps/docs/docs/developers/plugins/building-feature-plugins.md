@@ -154,7 +154,10 @@ export default function BookingsConsolePage({
    general console bundle.
 2. `hostNavTabItems` splices `listConsoleNavItems()` into the host tab strip.
    Nav gating is unchanged: an item's `navTabId` maps to a release flag, so
-   staff still preview flagged-off surfaces.
+   staff still preview flagged-off surfaces. The strip itself is built by
+   `useSecondaryNav()` from the current route and rendered once by
+   `app/(app)/layout.tsx` — a plugin never passes tabs to a page, and pages
+   have no nav props to set (AGL-754/755).
 3. The generic `[hostId]/[pluginSlug]` route resolves the page with
    `resolveConsolePluginPage('/'+slug)`, renders it inside `DashboardLayout`
    under `Suspense`, and applies the release-flag `FeatureGate`. Named routes
