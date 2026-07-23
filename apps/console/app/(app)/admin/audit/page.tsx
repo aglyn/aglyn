@@ -21,7 +21,6 @@ import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
-  Alert,
   Button,
   Chip,
   Stack,
@@ -29,9 +28,10 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useMemo, useState } from 'react'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -47,24 +47,7 @@ import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
  * page also hides itself without the claim, matching the orgs page.
  */
 const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
-  const { data: user } = useUser()
   const firestore = useFirestore()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
 
   const { data: entryDocs } = useFirestoreCollection<any>(
     () =>
@@ -139,11 +122,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="error">
-              {'This area requires the staff role.'}
-            </Alert>
-          ) : (
+          <StaffOnly>
             <CardDisplay
               header={'Admin actions'}
               help={docsHelp('staffConsole', {
@@ -239,7 +218,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                 )}
               </Stack>
             </CardDisplay>
-          )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

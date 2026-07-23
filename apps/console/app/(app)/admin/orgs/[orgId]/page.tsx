@@ -55,6 +55,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
@@ -62,6 +63,7 @@ import { docsHelp } from '../../../../../constants/docs-links'
 import MediaUrlField from '../../../../../components/media-url-field.component'
 import { buildRoute, Route } from '../../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
+import { useIsStaff } from '../../../../../hooks/use-is-staff'
 import useFirestoreCollection from '../../../../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 
@@ -79,22 +81,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
   const auth = useAuth()
   const { enqueueSnackbar } = useSnackbar()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
+  const isStaff = useIsStaff()
 
   const { data: org } = useFirestoreDoc<any>(
     () => doc(firestore, 'orgs', orgId || 'missing'),
@@ -418,11 +405,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="error">
-              {'This area requires the staff role.'}
-            </Alert>
-          ) : (
+          <StaffOnly>
             <>
               <Alert severity="info" sx={{ mb: 3 }}>
                 {'Plan/entitlement overrides happen on the Organizations ' +
@@ -1068,7 +1051,7 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                 ]}
               />
             </>
-          )}
+          </StaffOnly>
           {/* Plugin zone (AGL-433): staff adminOrgDetail widgets. */}
           <PluginWidgetSlot slot="adminOrgDetail" orgId={orgId} />
         </Container>

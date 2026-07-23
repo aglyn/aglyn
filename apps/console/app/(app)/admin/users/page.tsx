@@ -26,7 +26,6 @@ import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-pr
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  Alert,
   Button,
   Chip,
   MenuItem,
@@ -42,6 +41,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../components/staff-only.component'
+import { useIsStaff } from '../../../../hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -70,25 +71,10 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
+  const isStaff = useIsStaff()
   const [users, setUsers] = useState<AdminUser[]>([])
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
 
   const loadPage = useCallback(
     async (pageToken?: string | null, email?: string) => {
@@ -234,11 +220,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="error">
-              {'This area requires the staff role.'}
-            </Alert>
-          ) : (
+          <StaffOnly>
             <CardDisplay
               header={'Accounts'}
               help={docsHelp('staffConsole', {
@@ -413,7 +395,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 ) : null}
               </Stack>
             </CardDisplay>
-          )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

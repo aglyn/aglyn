@@ -22,7 +22,6 @@ import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-pr
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  Alert,
   Button,
   Chip,
   Link as MuiLink,
@@ -39,6 +38,7 @@ import { useParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../../../../components/staff-only.component'
 import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../../../constants/docs-links'
@@ -60,22 +60,6 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
 
   const { data: host } = useFirestoreDoc<any>(
     () => doc(firestore, 'hosts', hostId || 'missing'),
@@ -185,9 +169,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="error">{'This area requires the staff role.'}</Alert>
-          ) : (
+          <StaffOnly>
             <GridItems
               spacing={3}
               items={[
@@ -340,7 +322,7 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 },
               ]}
             />
-          )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

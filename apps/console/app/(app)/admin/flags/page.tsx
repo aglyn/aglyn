@@ -39,6 +39,8 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../components/staff-only.component'
+import { useIsStaff } from '../../../../hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -62,28 +64,13 @@ interface FlagRow {
 const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
+  const isStaff = useIsStaff()
   const [rows, setRows] = useState<FlagRow[]>([])
   const [etag, setEtag] = useState<string | null>(null)
   const [role, setRole] = useState<string>('support')
   const [loading, setLoading] = useState(true)
   const [savingKey, setSavingKey] = useState<string | null>(null)
   const canEdit = role === 'super'
-
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
 
   const refresh = useCallback(async () => {
     const idToken = await (user as any)?.getIdToken?.()
@@ -192,11 +179,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="error">
-              {'This area requires the staff role.'}
-            </Alert>
-          ) : (
+          <StaffOnly>
             <Stack spacing={2}>
               <Alert severity="warning">
                 {
@@ -342,7 +325,7 @@ const AdminFlags: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </CardDisplay>
             </Stack>
-          )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

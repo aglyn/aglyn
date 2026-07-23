@@ -28,7 +28,6 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
-  Alert,
   Button,
   Chip,
   Dialog,
@@ -54,9 +53,10 @@ import {
   query,
   setDoc,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -126,22 +126,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
 
   // Pagination (AGL-359): grow the page instead of one hard 200 cap.
   const [pageLimit, setPageLimit] = useState(50)
@@ -397,15 +381,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="warning">
-              {'Staff only. Grant access with ' +
-                'tools/scripts/set-staff-claim.mjs, then sign out and back ' +
-                'in to refresh the claim.'}
-            </Alert>
-          ) : (
-            // Card-framed header + filters (AGL-385), consistent with the
-            // user-management page.
+          {/* Card-framed header + filters (AGL-385), consistent with the
+              user-management page. */}
+          <StaffOnly>
             <CardDisplay
               header={'Organizations'}
               help={docsHelp('billing', {
@@ -629,7 +607,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
               )}
               </Stack>
             </CardDisplay>
-          )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
       <Dialog

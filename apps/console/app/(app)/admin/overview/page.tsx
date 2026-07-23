@@ -38,6 +38,8 @@ import {
 import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../components/staff-only.component'
+import { useIsStaff } from '../../../../hooks/use-is-staff'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -58,7 +60,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
+  const isStaff = useIsStaff()
   const [data, setData] = useState<any | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Staff broadcast (wave v5): system.announcement to org admins.
@@ -121,21 +123,6 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
   }
 
   useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
-
-  useEffect(() => {
     if (!isStaff || !user) return
     let active = true
     void (async () => {
@@ -174,13 +161,8 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {isStaff === null ? null : !isStaff ? (
-            <Alert severity="warning">
-              {'Staff only. Grant access with ' +
-                'tools/scripts/set-staff-claim.mjs, then sign out and back ' +
-                'in to refresh the claim.'}
-            </Alert>
-          ) : error ? (
+          <StaffOnly>
+            {error ? (
             <Alert severity="error">{error}</Alert>
           ) : (
             <>
@@ -481,6 +463,7 @@ const AdminOverview: NextPageWithLayout<Record<string, never>> = () => {
             />
             </>
           )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>
