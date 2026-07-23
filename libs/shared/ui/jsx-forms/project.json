@@ -6,38 +6,13 @@
   "tags": ["scope:lib", "scope:shared", "scope:ui"],
   "targets": {
     "build": {
-      "executor": "@nx/rollup:rollup",
+      "executor": "@nx/js:swc",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/shared/ui/jsx-forms",
+        "main": "libs/shared/ui/jsx-forms/src/index.ts",
         "tsConfig": "libs/shared/ui/jsx-forms/tsconfig.lib.json",
-        "project": "libs/shared/ui/jsx-forms/package.json",
-        "entryFile": "libs/shared/ui/jsx-forms/src/index.ts",
-        "external": [
-          "react/jsx-runtime",
-          "@aglyn/shared-ui-color-picker",
-          "@aglyn/shared-data-mdi",
-          "@aglyn/shared-ui-jsx",
-          "@aglyn/shared-ui-theme",
-          "@aglyn/shared-util-tools",
-          "@aglyn/shared-util-vendor"
-        ],
-        "rollupConfig": [
-          "@nx/react/plugins/bundle-rollup",
-          "tools/rollup-external-packages.js",
-          "tools/rollup-suppress-use-client.js",
-          "tools/rollup-skip-typecheck.js"
-        ],
-        "compiler": "swc",
-        "skipTypeCheck": true,
-        "assets": [
-          {
-            "glob": "libs/shared/ui/jsx-forms/README.md",
-            "input": ".",
-            "output": "."
-          }
-        ],
-        "updateBuildableProjectDepsInPackageJson": true
+        "assets": ["libs/shared/ui/jsx-forms/*.md"]
       }
     },
     "lint": {

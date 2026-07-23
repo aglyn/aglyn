@@ -38,7 +38,7 @@ import { useLoading } from '../contexts/loading.context'
  * `useLoading()` returns a no-op context when no `LoadingProvider` sits above
  * it, so this is safe for links rendered outside an app shell.
  */
-export function LinkNavigationReporter() {
+export function LinkNavigationReporter(): null {
   const { pending } = useLinkStatus()
   const { queueLoading } = useLoading()
   const dequeueRef = useRef<(() => void) | null>(null)

@@ -3,52 +3,25 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/mui/src",
   "projectType": "library",
-  "tags": [
-    "aglyn:addons"
-  ],
+  "tags": ["aglyn:addons"],
   "targets": {
     "build": {
-      "executor": "@nx/rollup:rollup",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/plugins/mui",
+        "main": "libs/plugins/mui/src/index.ts",
         "tsConfig": "libs/plugins/mui/tsconfig.lib.json",
-        "project": "libs/plugins/mui/package.json",
-        "entryFile": "libs/plugins/mui/src/index.ts",
-        "external": [
-          "react/jsx-runtime"
-        ],
-        "rollupConfig": [
-          "@nx/react/plugins/bundle-rollup",
-          "tools/rollup-external-packages.js",
-          "tools/rollup-suppress-use-client.js",
-          "tools/rollup-skip-typecheck.js"
-        ],
-        "compiler": "swc",
-        "assets": [
-          {
-            "glob": "libs/plugins/mui/README.md",
-            "input": ".",
-            "output": "."
-          }
-        ],
-        "updateBuildableProjectDepsInPackageJson": true,
-        "skipTypeCheck": true
+        "assets": ["libs/plugins/mui/*.md"]
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/plugins/mui"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/mui"],
       "options": {
         "jestConfig": "libs/plugins/mui/jest.config.ts"
       }

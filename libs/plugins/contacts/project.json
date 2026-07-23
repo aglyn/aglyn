@@ -3,52 +3,25 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/contacts/src",
   "projectType": "library",
-  "tags": [
-    "aglyn:addons"
-  ],
+  "tags": ["aglyn:addons"],
   "targets": {
     "build": {
-      "executor": "@nx/rollup:rollup",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/plugins/contacts",
+        "main": "libs/plugins/contacts/src/index.ts",
         "tsConfig": "libs/plugins/contacts/tsconfig.lib.json",
-        "project": "libs/plugins/contacts/package.json",
-        "entryFile": "libs/plugins/contacts/src/index.ts",
-        "external": [
-          "react/jsx-runtime"
-        ],
-        "rollupConfig": [
-          "@nx/react/plugins/bundle-rollup",
-          "tools/rollup-external-packages.js",
-          "tools/rollup-suppress-use-client.js",
-          "tools/rollup-skip-typecheck.js"
-        ],
-        "compiler": "swc",
-        "assets": [
-          {
-            "glob": "libs/plugins/contacts/README.md",
-            "input": ".",
-            "output": "."
-          }
-        ],
-        "updateBuildableProjectDepsInPackageJson": true,
-        "skipTypeCheck": true
+        "assets": ["libs/plugins/contacts/*.md"]
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/plugins/contacts"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/contacts"],
       "options": {
         "jestConfig": "libs/plugins/contacts/jest.config.ts"
       }

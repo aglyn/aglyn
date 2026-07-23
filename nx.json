@@ -105,7 +105,7 @@
     },
     "@nx/next:build": {
       "cache": true,
-      "dependsOn": ["^build"],
+      "dependsOn": [],
       "inputs": ["production", "^production"]
     }
   },
@@ -130,7 +130,7 @@
   },
   "useDaemonProcess": true,
   "neverConnectToCloud": true,
-  "parallel": 1,
+  "parallel": 3,
   "defaultBase": "main",
   "analytics": true,
   "pluginsConfig": {}

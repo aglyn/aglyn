@@ -6,30 +6,13 @@
   "tags": ["scope:lib", "scope:aglyn", "scope:feature", "aglyn:besigner"],
   "targets": {
     "build": {
-      "executor": "@nx/rollup:rollup",
+      "executor": "@nx/js:swc",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/besigner/feature/designer",
+        "main": "libs/besigner/feature/designer/src/index.ts",
         "tsConfig": "libs/besigner/feature/designer/tsconfig.lib.json",
-        "project": "libs/besigner/feature/designer/package.json",
-        "entryFile": "libs/besigner/feature/designer/src/index.ts",
-        "external": ["react/jsx-runtime"],
-        "rollupConfig": [
-          "@nx/react/plugins/bundle-rollup",
-          "tools/rollup-external-packages.js",
-          "tools/rollup-suppress-use-client.js",
-          "tools/rollup-skip-typecheck.js"
-        ],
-        "skipTypeCheck": true,
-        "compiler": "swc",
-        "assets": [
-          {
-            "glob": "libs/besigner/feature/designer/README.md",
-            "input": ".",
-            "output": "."
-          }
-        ],
-        "updateBuildableProjectDepsInPackageJson": true
+        "assets": ["libs/besigner/feature/designer/*.md"]
       }
     },
     "lint": {
