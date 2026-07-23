@@ -66,6 +66,41 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
     }
   })
 
+  describe('defaultBody (AGL-764)', () => {
+    it('gives every editable template a non-empty starting body', () => {
+      // The editor seeds the first version from this; without it staff start
+      // from a blank placeholder instead of the email the product sends.
+      for (const entry of SYSTEM_EMAIL_TEMPLATES) {
+        if (!isSystemEmailEditable(entry)) continue
+        expect(entry.defaultBody?.length ?? 0).toBeGreaterThan(0)
+      }
+    })
+
+    it('only references tokens it declares, across every default block', () => {
+      for (const entry of SYSTEM_EMAIL_TEMPLATES) {
+        const declared = new Set(entry.mergeTokens.map((token) => token.name))
+        for (const block of entry.defaultBody ?? []) {
+          const text = block.block === 'button' ? block.href : block.text
+          const used = [...text.matchAll(/\{\{([^}]+)\}\}/g)].map((m) =>
+            m[1].trim(),
+          )
+          for (const token of used) {
+            // A token the template does not supply is blanked before sending
+            // (AGL-750), so a typo here ships an email with a gap.
+            expect(declared.has(token)).toBe(true)
+          }
+        }
+      }
+    })
+
+    it('gives Firebase-delivered templates no body (they have no editor)', () => {
+      for (const entry of SYSTEM_EMAIL_TEMPLATES) {
+        if (isSystemEmailEditable(entry)) continue
+        expect(entry.defaultBody).toBeUndefined()
+      }
+    })
+  })
+
   describe('delivery ownership', () => {
     it('marks the auth emails as Firebase-delivered', () => {
       // These are the ones a besigner template cannot reach yet (AGL-751).

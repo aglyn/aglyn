@@ -38,6 +38,22 @@ export interface SystemEmailMergeToken {
   sample: string
 }
 
+/**
+ * One block of a template's starting content (AGL-764). Declarative on
+ * purpose: the catalog stays a dependency-free data module, and the console
+ * turns these into email-plugin nodes (`emailSection` → `emailText`/
+ * `emailButton`) when it seeds the first version. Mirror the copy the send
+ * site uses today, with the same `{{tokens}}`, so a staffer who opens the
+ * editor starts from what recipients actually get rather than a blank canvas.
+ */
+export type SystemEmailDefaultBlock =
+  | {
+      block: 'text'
+      text: string
+      variant?: 'heading' | 'subheading' | 'body' | 'caption'
+    }
+  | { block: 'button'; label: string; href: string }
+
 export interface SystemEmailTemplateDefinition {
   /** Stable storage key — the Firestore document id. Never rename. */
   key: string
@@ -47,6 +63,12 @@ export interface SystemEmailTemplateDefinition {
   /** Subject used when no template has been published. */
   defaultSubject: string
   mergeTokens: SystemEmailMergeToken[]
+  /**
+   * Starting content for the first version staff design (AGL-764). Every
+   * `resend` template should carry one; a `firebase` template has no editor
+   * so it needs none. Absent → the editor seeds a minimal placeholder.
+   */
+  defaultBody?: readonly SystemEmailDefaultBlock[]
   /**
    * Where the fallback copy lives, for staff wondering what recipients get
    * today. Informational — nothing reads it at runtime.
@@ -93,6 +115,22 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'https://app.aglyn.com',
         },
       ],
+      // Mirrors the fallbackText in invites/route.ts.
+      defaultBody: [
+        {
+          block: 'text',
+          text: "You've been invited to join {{org.name}} as {{invite.role}}.",
+          variant: 'body',
+        },
+        {
+          block: 'text',
+          text:
+            'Sign in with this email address and accept the invite from ' +
+            'your dashboard.',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
+      ],
       source: 'apps/console/app/api/orgs/invites/route.ts',
     },
     {
@@ -120,6 +158,16 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           sample: 'Page views: 12,400',
         },
       ],
+      // Mirrors the summary lines assembled in usage-email/route.ts.
+      defaultBody: [
+        { block: 'text', text: 'Usage summary for {{org.name}}', variant: 'heading' },
+        {
+          block: 'text',
+          text: 'Here is your Aglyn usage summary for {{month}}.',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{usage.summary}}', variant: 'body' },
+      ],
       source: 'apps/console/app/api/billing/usage-email/route.ts',
     },
     {
@@ -141,6 +189,17 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           description: 'The organizations, one per line',
           sample: '- Test Org (org_123), requested 2026-07-01',
         },
+      ],
+      // Mirrors the staff-alert text in audit-archive/route.ts.
+      defaultBody: [
+        {
+          block: 'text',
+          text:
+            'These organizations are past their GDPR erasure hold. Run ' +
+            'tools/scripts/erase-tenant.mjs to export and hard-delete:',
+          variant: 'body',
+        },
+        { block: 'text', text: '{{orgs.list}}', variant: 'body' },
       ],
       source: 'apps/console/app/api/admin/audit-archive/route.ts',
     },
