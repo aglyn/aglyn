@@ -17,7 +17,13 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  isEmailConfigured,
+  loadHostEmail,
+  renderLoadedHostEmail,
+  sendEmail,
+  type LoadedHostEmail,
+} from '@aglyn/shared-util-email'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 const REMIND_AFTER_MS = 60 * 60 * 1000
@@ -56,6 +62,8 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
       .get()
     let sent = 0
     const entitledHosts = new Map<string, boolean>()
+    // Resolve each host's designed template once per run (AGL-770).
+    const templateCache = new Map<string, LoadedHostEmail | null>()
     for (const docSnapshot of openCheckouts.docs) {
       const data = docSnapshot.data() as any
       const createdAtMs = Number(data.createdAtMs ?? 0)
@@ -77,13 +85,25 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
         )
       }
       if (!entitledHosts.get(hostId)) continue
+      let loaded = templateCache.get(hostId)
+      if (loaded === undefined) {
+        loaded = await loadHostEmail(firestore, hostId, 'abandoned-cart')
+        templateCache.set(hostId, loaded)
+      }
+      const designed = loaded
+        ? renderLoadedHostEmail(loaded, {
+            'cart.url': String(data.resumeUrl ?? ''),
+          })
+        : null
       await sendEmail({
         to: String(data.email),
-        subject: 'You left something in your cart',
+        subject: designed?.subject ?? 'You left something in your cart',
         text:
+          designed?.text ||
           'Your cart is still waiting — pick up where you left off:\n\n' +
-          `${data.resumeUrl ?? ''}\n\n` +
-          'Your items are held but not reserved, so they may sell out.',
+            `${data.resumeUrl ?? ''}\n\n` +
+            'Your items are held but not reserved, so they may sell out.',
+        ...(designed?.html ? { html: designed.html } : {}),
         context: 'abandoned cart',
       })
       await docSnapshot.ref

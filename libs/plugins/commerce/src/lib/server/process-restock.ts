@@ -18,7 +18,13 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  isEmailConfigured,
+  loadHostEmail,
+  renderLoadedHostEmail,
+  sendEmail,
+  type LoadedHostEmail,
+} from '@aglyn/shared-util-email'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
@@ -46,6 +52,8 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
       .get()
     let sent = 0
     const productCache = new Map<string, CommerceModel.HostProduct | null>()
+    // Resolve each host's designed template once per run (AGL-770).
+    const templateCache = new Map<string, LoadedHostEmail | null>()
     for (const docSnapshot of alerts.docs) {
       const hostRef = docSnapshot.ref.parent.parent
       if (!hostRef) continue
@@ -72,12 +80,26 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
       }
       const total = CommerceModel.productInventory(product)
       if (total != null && total <= 0) continue
+      const productUrl = `/products/${product.slug}`
+      let loaded = templateCache.get(hostRef.id)
+      if (loaded === undefined) {
+        loaded = await loadHostEmail(firestore, hostRef.id, 'back-in-stock')
+        templateCache.set(hostRef.id, loaded)
+      }
+      const designed = loaded
+        ? renderLoadedHostEmail(loaded, {
+            'product.name': String(product.name ?? ''),
+            'product.url': productUrl,
+          })
+        : null
       await sendEmail({
         to: String(data.email),
-        subject: `Back in stock: ${product.name}`,
+        subject: designed?.subject ?? `Back in stock: ${product.name}`,
         text:
+          designed?.text ||
           `${product.name} is available again — grab it before it sells ` +
-          `out:\n\n/products/${product.slug}`,
+            `out:\n\n${productUrl}`,
+        ...(designed?.html ? { html: designed.html } : {}),
         context: 'restock alert',
       })
       await docSnapshot.ref

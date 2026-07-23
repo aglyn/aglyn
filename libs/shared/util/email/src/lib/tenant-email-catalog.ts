@@ -185,7 +185,29 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     description: 'Tells a customer a product they watched is available again.',
     pluginId: 'commerce',
     plugin: 'Commerce',
-    control: 'fixed',
+    control: 'besigner',
+    defaultSubject: 'Back in stock: {{product.name}}',
+    mergeTokens: [
+      {
+        name: 'product.name',
+        description: 'The product that restocked',
+        sample: 'House Blend',
+      },
+      {
+        name: 'product.url',
+        description: 'Link to the product page',
+        sample: '/products/house-blend',
+      },
+    ],
+    defaultBody: [
+      {
+        block: 'text',
+        text:
+          '{{product.name}} is available again — grab it before it sells out.',
+        variant: 'body',
+      },
+      { block: 'button', label: 'View product', href: '{{product.url}}' },
+    ],
   },
   {
     key: 'abandoned-cart',
@@ -193,7 +215,29 @@ export const TENANT_EMAILS: readonly TenantEmailEntry[] = [
     description: 'Reminds a shopper of items left in their cart.',
     pluginId: 'commerce',
     plugin: 'Commerce',
-    control: 'fixed',
+    control: 'besigner',
+    defaultSubject: 'You left something in your cart',
+    mergeTokens: [
+      {
+        name: 'cart.url',
+        description: 'Link back to the shopper cart',
+        sample: 'https://shop.example.com/cart',
+      },
+    ],
+    defaultBody: [
+      {
+        block: 'text',
+        text: 'Your cart is still waiting — pick up where you left off.',
+        variant: 'body',
+      },
+      { block: 'button', label: 'Return to cart', href: '{{cart.url}}' },
+      {
+        block: 'text',
+        text:
+          'Your items are held but not reserved, so they may sell out.',
+        variant: 'caption',
+      },
+    ],
   },
   {
     key: 'member-post',
