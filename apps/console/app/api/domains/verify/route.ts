@@ -28,10 +28,24 @@ const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/i
 /**
  * DNS verification for the connect-a-domain wizard (Custom Domain
  * Self-Service): resolves the domain's CNAME chain and reports whether it
- * points at the tenant edge (`AGLYN_TENANT_HOST_CNAME`). With the env unset
- * (local/dev) it reports the found records and treats any CNAME as a soft
- * pass so the flow remains testable.
+ * points at the tenant edge.
+ *
+ * Reads the SAME variable the wizard shows the customer
+ * (`NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME`, AGL-733). It previously read a
+ * server-only `AGLYN_TENANT_HOST_CNAME`, so the displayed target and the
+ * verified target were configured independently — and when the server one was
+ * unset in production the check silently degraded to "any CNAME passes",
+ * meaning a domain pointed anywhere at all verified successfully.
+ *
+ * The soft pass is deliberate but belongs to local dev only, where there is no
+ * real DNS pointing at the tenant edge. Off Vercel it still accepts any CNAME
+ * so the flow stays testable; on Vercel the target must match exactly.
+ * `CNAME_TARGET` mirrors the wizard's own fallback so a missing env var fails
+ * closed rather than disabling the check.
  */
+const CNAME_TARGET = (
+  process.env['NEXT_PUBLIC_AGLYN_TENANT_HOST_CNAME'] ?? 'sites.aglyn.app'
+).toLowerCase()
 async function handler(request: Request): Promise<Response> {
   // Require an authenticated console user (AGL-513): this backs the
   // connect-a-domain wizard, not a public DNS lookup service.
@@ -58,8 +72,6 @@ async function handler(request: Request): Promise<Response> {
   if (!DOMAIN_PATTERN.test(domain)) {
     return Response.json({ error: 'Invalid domain' }, { status: 400 })
   }
-  const expected = (process.env.AGLYN_TENANT_HOST_CNAME ?? '').toLowerCase()
-
   let records: string[] = []
   try {
     records = (await dns.resolveCname(domain)).map((record) =>
@@ -68,13 +80,15 @@ async function handler(request: Request): Promise<Response> {
   } catch {
     // NXDOMAIN / no CNAME — reported as unverified below.
   }
-  const verified = expected
-    ? records.includes(expected)
-    : records.length > 0
+  // Local dev has no DNS pointing at the tenant edge, so any CNAME is a soft
+  // pass there. On Vercel the target must match exactly (AGL-733).
+  const softPass = !process.env.VERCEL
+  const verified =
+    records.includes(CNAME_TARGET) || (softPass && records.length > 0)
   return Response.json({
     domain,
     records,
-    expected: expected || null,
+    expected: CNAME_TARGET,
     verified,
   }, { status: 200 })
 }
