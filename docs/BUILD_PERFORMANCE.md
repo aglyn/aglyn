@@ -64,27 +64,61 @@ Two consequences worth knowing:
 * Do not raise this much further without measuring. These are Rollup and SWC processes and 8 GB
   is not much; the app build already OOM-killed once under webpack (AGL-563).
 
+## Every library builds on `@nx/js:swc` (AGL-737)
+
+There is no `@nx/rollup:rollup` target left in the workspace. 22 libraries moved to `@nx/js:swc`,
+joining the 21 already on it; `shared-svg-icons` stays on Vite because it compiles `.svg` imports.
+
+Same 44 projects, same machine, `parallel: 3`, `--skip-nx-cache`:
+
+| Executor | Wall | CPU |
+| --- | --- | --- |
+| `@nx/rollup:rollup` | 2m 21.8s | 459.0s |
+| `@nx/js:swc` | **1m 5.5s** | 228.2s |
+
+Three helper scripts went with it — `tools/rollup-external-packages.js`,
+`tools/rollup-suppress-use-client.js` and `tools/rollup-skip-typecheck.js`. All three existed to
+work around Rollup-specific breakage, and `'use client'` directives now survive into the output
+instead of being stripped and warned about.
+
+The migration is worth understanding, because almost none of the work was the executor swap.
+
+### Stale config, not incompatibility
+
+Switching executors surfaced 32 "type errors" in `shared-ui-jsx` — `theme.palette.tertiary` and
+`theme.shape.appIconBorderRadius` not existing, i.e. the MUI module augmentation in
+`libs/shared/ui/theme/src/vendor/mui.ts` not being in scope. That reads like a real cross-library
+augmentation problem. It was not. Every one of them was downstream of a single unresolved import.
+
+`@nx/js:swc` writes `types` into the generated `dist` package.json with `??=`, so a `types` field
+in the **source** `package.json` wins. Three libraries — `shared-ui-theme`, `shared-ui-jsx`,
+`shared-ui-next` — hardcoded `"types": "./libs/shared/ui/<name>/src/index.d.ts"`, a path that does
+not exist inside the output directory. Consumers therefore could not resolve the library at all,
+every imported type widened to `any`, and the augmentation errors followed. Deleting those three
+fields — nx computes the correct `./src/index.d.ts` — took all 32 errors with them.
+
+Two related cleanups landed in the same pass:
+
+* **`rootDir` removed from 10 `tsconfig.lib.json` files**, where it pointed at the workspace root.
+  This is what made the Rollup TypeScript plugin emit `.d.ts` paths starting with `..`, which
+  `rollup-skip-typecheck.js` had to intercept to avoid a fatal Rollup error.
+* **Asset globs normalized** to the string form (`libs/<path>/*.md`) rather than the object form
+  anchored at the workspace root, which was reproducing the full source path inside `dist`.
+
+Do not add `compilerOptions.paths`, `compilerOptions.rootDir`, or a `types` field to a library.
+`tsconfig.base.json` and the executor own those. Every build problem in this document traced back
+to a local override of something that already had a correct workspace-level answer.
+
 ## Unresolved imports fail the build (AGL-739)
 
-`tools/rollup-skip-typecheck.js` downgrades TypeScript diagnostics to warnings, because the
-`@nx/rollup:rollup` executor sets `rootDir` to the project directory on Vercel and floods the log
-with TS6059 (see the header comment in that file). **`TS2307` is exempt and stays fatal.**
+Under Rollup this needed enforcing by hand: `skipTypeCheck: true` plus a patch script downgraded
+every TypeScript diagnostic to a warning, so `shared-ui-theme` printed 13 of them — including
+TS2307, "Cannot find module" — on every green build. The cause was a stale local `paths` override
+in its `tsconfig.lib.json` mapping `@aglyn/shared-util-guards`, a library that no longer exists.
 
-TS2307 means an import did not resolve at all, so everything downstream of it widens to `any` —
-which then hides whatever real type errors that module was catching. `shared-ui-theme` shipped 13
-such diagnostics on every green build until AGL-739; the cause was a stale local `paths` override
-in its `tsconfig.lib.json`, mapping a library (`@aglyn/shared-util-guards`) that no longer exists.
+`@nx/js:swc` runs a real `tsc` for declaration emit, so **any** type error now fails the build.
+That is strictly stronger than the TS2307-only rule the Rollup path was given, and it is why the
+patch script could be deleted rather than kept.
 
-Libraries should **not** declare their own `compilerOptions.paths`. `tsconfig.base.json` is the
-single source of truth; a local override re-anchors resolution and the rollup executor then
-resolves the entries against the workspace root rather than the tsconfig that declared them.
-
-Type-level diagnostics (TS2339, TS2488, …) remain warnings here. `npm run typecheck` is the gate
-for those.
-
-## `@nx/rollup:rollup` is deprecated (AGL-737)
-
-22 libraries still use it and it is removed in Nx v24. That migration is deliberately deferred to
-the Nx upgrade rather than done here: with app builds no longer running the dependency phase, the
-executor is off the deploy critical path, and migrating it now would mean re-validating 22 bundle
-outputs for a saving that no longer lands on any deploy.
+`npm run typecheck` (135/135) remains the repo-wide gate and covers configurations the build does
+not, such as the spec tsconfigs.

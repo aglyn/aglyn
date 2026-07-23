@@ -3,52 +3,25 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "libs/plugins/commerce/src",
   "projectType": "library",
-  "tags": [
-    "aglyn:addons"
-  ],
+  "tags": ["aglyn:addons"],
   "targets": {
     "build": {
-      "executor": "@nx/rollup:rollup",
-      "outputs": [
-        "{options.outputPath}"
-      ],
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/libs/plugins/commerce",
+        "main": "libs/plugins/commerce/src/index.ts",
         "tsConfig": "libs/plugins/commerce/tsconfig.lib.json",
-        "project": "libs/plugins/commerce/package.json",
-        "entryFile": "libs/plugins/commerce/src/index.ts",
-        "external": [
-          "react/jsx-runtime"
-        ],
-        "rollupConfig": [
-          "@nx/react/plugins/bundle-rollup",
-          "tools/rollup-external-packages.js",
-          "tools/rollup-suppress-use-client.js",
-          "tools/rollup-skip-typecheck.js"
-        ],
-        "compiler": "swc",
-        "assets": [
-          {
-            "glob": "libs/plugins/commerce/README.md",
-            "input": ".",
-            "output": "."
-          }
-        ],
-        "updateBuildableProjectDepsInPackageJson": true,
-        "skipTypeCheck": true
+        "assets": ["libs/plugins/commerce/*.md"]
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ]
+      "outputs": ["{options.outputFile}"]
     },
     "test": {
       "executor": "@nx/jest:jest",
-      "outputs": [
-        "{workspaceRoot}/coverage/libs/plugins/commerce"
-      ],
+      "outputs": ["{workspaceRoot}/coverage/libs/plugins/commerce"],
       "options": {
         "jestConfig": "libs/plugins/commerce/jest.config.ts"
       }
