@@ -23,7 +23,7 @@ const TENANT_PRODUCTION_ROOT = 'aglyn.app'
 // no tenant subdomain and resolves the host via the ?tenantHost= override.
 const TENANT_PREVIEW_HOST =
   process.env.NEXT_PUBLIC_AGLYN_TENANT_PREVIEW_HOST ||
-  'tenant-aglyn-app-git-main-zach-govers-projects.vercel.app'
+  'aglyn-tenant-git-main-aglyn.vercel.app'
 
 /**
  * The site's public address for display (AGL-632): its custom domain when

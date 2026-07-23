@@ -1,14 +1,18 @@
 # Vercel deployments
 
-Four Vercel projects on the `zach-govers-projects` (Hobby) team deploy from this repo, all connected
-to the `zgover/core` fork:
+Four Vercel projects on the `aglyn` (Hobby) team deploy from this repo, all connected to
+`aglyn/aglyn`:
 
 | Project | Root directory | App |
 | --- | --- | --- |
-| `app-aglyn-io` | `.` (repo root) | `apps/console` |
-| `tenant-aglyn-app` | `.` (repo root) | `apps/tenant` |
+| `aglyn-console` | `.` (repo root) | `apps/console` |
+| `aglyn-tenant` | `.` (repo root) | `apps/tenant` |
 | `www-aglyn-io` | `.` (repo root) | `apps/www` |
-| `docs-aglyn-io` | `apps/docs` | `apps/docs` |
+| `aglyn-docs` | `apps/docs` | `apps/docs` |
+
+Projects are named after the app they deploy, never after the domain they serve — domains move
+between projects, names should not (AGL-730). `www-aglyn-io` keeps its old name because it is being
+retired once the marketing site is rebuilt in Aglyn itself (AGL-724).
 
 ## Only the `production` branch deploys (AGL-522)
 
@@ -52,7 +56,7 @@ Notes:
 
 The tenant wildcard (`*.aglyn.app`) has repeatedly stayed aliased to a stale deployment after a
 promote — usually because a tenant-scoped `vercel` command ran outside `apps/tenant` and the root
-`.vercel/repo.json` (which maps every directory to `app-aglyn-io`) silently redirected it to the
+`.vercel/repo.json` (which maps every directory to `aglyn-console`) silently redirected it to the
 console project. Verify (and repair) with:
 
 ```bash

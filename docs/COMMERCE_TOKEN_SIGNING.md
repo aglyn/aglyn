@@ -38,7 +38,7 @@ plan to re-issue, and never as a routine hygiene step.
 ## Current state — check before you change anything
 
 As of 2026-07-21 this is **already provisioned** as a shared variable on `development`,
-`preview` and `production`, linked to both `app-aglyn-io` and `tenant-aglyn-app`. Setting a
+`preview` and `production`, linked to both `aglyn-console` and `aglyn-tenant`. Setting a
 "new" value would be a live rotation with the consequences in rule 2. Audit first, always.
 
 ### Recreating a shared variable silently drops its project links
@@ -101,13 +101,13 @@ openssl rand -hex 32
 ```
 
 If you do fall back to per-project variables, run from the app directory and link explicitly
-— the root `.vercel/repo.json` maps EVERY directory to `app-aglyn-io`, so an unlinked tenant
+— the root `.vercel/repo.json` maps EVERY directory to `aglyn-console`, so an unlinked tenant
 command silently writes to the console project (AGL-542):
 
 | Vercel project | Directory to run from |
 | --- | --- |
-| `app-aglyn-io` (console) | `apps/console` |
-| `tenant-aglyn-app` (tenant) | `apps/tenant` |
+| `aglyn-console` (console) | `apps/console` |
+| `aglyn-tenant` (tenant) | `apps/tenant` |
 
 Env values are snapshotted per deployment, so **existing deployments do not pick this up** —
 redeploy each project after changing it.
