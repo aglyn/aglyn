@@ -122,3 +122,35 @@ patch script could be deleted rather than kept.
 
 `npm run typecheck` (135/135) remains the repo-wide gate and covers configurations the build does
 not, such as the spec tsconfigs.
+
+## The console's 41-library graph is justified (AGL-740)
+
+Audited rather than pruned. Counting import sites across the console's 320 source files, all 35
+direct dependencies are genuinely used and none is present in the graph without one:
+
+| | Libraries | Shape |
+| --- | --- | --- |
+| Static imports | 22 | `@aglyn/aglyn` alone is 172 sites across 140 files; `shared-ui-jsx` 126/112; `tenant-feature-instance` 124/115 |
+| Dynamic imports only | 13 | every `plugins-*`, reached solely through `import()` in the generated manifests |
+| Unused | 0 | — |
+
+The remaining 6 of the 41 are transitive, pulled in by libraries rather than by the console.
+
+The issue's premise — that the console statically depends on every plugin, undermining the plugin
+platform — does not hold. `apps/console/constants/plugins.{client,server}.generated.ts` reach every
+plugin through `import()`, and the build code-splits them accordingly: plugin code appears in
+per-plugin server chunks (`server/chunks/libs_plugins_<name>_…`) and in **no** client chunk. Nx
+still records a graph edge, which is correct — a statically analyzable `import()` is a build-time
+dependency — but a graph edge is not the same as eager bundling, and the bundle-size and cold-start
+argument for pruning does not apply.
+
+Removing these edges would mean resolving plugins at runtime instead, which is the signed
+remote-realm-bundle path, and that is deliberately default-OFF.
+
+One real consequence to know: because the plugins are graph dependencies, `inputs: ["^production"]`
+means a source change to any plugin invalidates the console's build cache. That is correct — the
+console does compile that plugin's code — but it means plugin churn costs full console rebuilds.
+
+The tenant-scoped libraries flagged as suspicious in the issue (`tenant-feature-instance`,
+`tenant-data-admin`, `tenant-runtime`) are not misplaced: the besigner renders tenant feature
+instances, and the first two are among the console's most heavily used dependencies.
