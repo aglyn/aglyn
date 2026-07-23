@@ -18,7 +18,9 @@
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import { EMAIL_NODE_ROOT_ID } from '@aglyn/shared-util-email'
 import {
+  loadSystemEmail,
   renderEffectiveSystemEmail,
+  renderLoadedSystemEmail,
   renderSystemEmail,
 } from '../app/api/_lib/render-system-email'
 
@@ -186,6 +188,38 @@ describe('renderSystemEmail', () => {
     it('returns null for a Firebase-delivered or unknown key', async () => {
       expect(await renderEffectiveSystemEmail('password-reset')).toBeNull()
       expect(await renderEffectiveSystemEmail('not-a-template')).toBeNull()
+    })
+  })
+
+  // The batch split (AGL-768): a usage-email run resolves the template once
+  // and renders it per recipient. renderSystemEmail is these two composed.
+  describe('loadSystemEmail + renderLoadedSystemEmail', () => {
+    it('reads Firestore once, then renders per recipient with no more reads', async () => {
+      mockGet.mockResolvedValue(
+        snapshot({ versionId: 'v1', subject: 'Join {{org.name}}' }),
+      )
+      mockVersionGet.mockResolvedValue(snapshot({ nodes: NODES }))
+
+      const loaded = await loadSystemEmail('org-invite')
+      expect(loaded).not.toBeNull()
+      expect(mockGet).toHaveBeenCalledTimes(1)
+      expect(mockVersionGet).toHaveBeenCalledTimes(1)
+
+      const a = renderLoadedSystemEmail(loaded!, { 'org.name': 'Org A' })
+      const b = renderLoadedSystemEmail(loaded!, { 'org.name': 'Org B' })
+      expect(a?.subject).toBe('Join Org A')
+      expect(b?.subject).toBe('Join Org B')
+      expect(a?.html).toContain('Hello Org A')
+      expect(b?.html).toContain('Hello Org B')
+      // Rendering touched Firestore no further — the whole point of the split.
+      expect(mockGet).toHaveBeenCalledTimes(1)
+      expect(mockVersionGet).toHaveBeenCalledTimes(1)
+    })
+
+    it('loads null for a non-Resend key without reading Firestore', async () => {
+      expect(await loadSystemEmail('password-reset')).toBeNull()
+      expect(await loadSystemEmail('stripe-receipt')).toBeNull()
+      expect(mockGet).not.toHaveBeenCalled()
     })
   })
 

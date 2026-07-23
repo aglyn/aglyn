@@ -18,6 +18,10 @@
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import {
+  loadSystemEmail,
+  renderLoadedSystemEmail,
+} from '../../_lib/render-system-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /** Previous calendar month as YYYY-MM (the default summary target). */
@@ -72,6 +76,10 @@ async function handler(request: Request): Promise<Response> {
     // the org owner's account address.
     const orgsSnapshot = await firestore.collection('orgs').limit(1000).get()
 
+    // Resolve the staff-designed template ONCE for the whole batch (AGL-768),
+    // not once per recipient; null keeps every org's built-in summary copy.
+    const template = await loadSystemEmail('usage-summary')
+
     const results: Record<string, any> = {}
     for (const orgDoc of orgsSnapshot.docs) {
       const orgId = orgDoc.id
@@ -106,9 +114,9 @@ async function handler(request: Request): Promise<Response> {
       const costUsd = Number(rollup.get('costUsd') ?? 0)
       const dataStorageMb = Number(rollup.get('dataStorageMb') ?? 0)
       const dataOverageUsd = Number(rollup.get('dataOverageUsd') ?? 0)
-      const lines = [
-        `Here is your Aglyn usage summary for ${month}.`,
-        '',
+      // The metric block, reused as the built-in body and as the
+      // {{usage.summary}} token a staff-designed template drops in.
+      const usageSummary = [
         `Plan: ${plan}`,
         `Storage: ${storageGb.toFixed(2)} GB`,
         `Page views: ${pageViews}`,
@@ -120,11 +128,23 @@ async function handler(request: Request): Promise<Response> {
         `Metered usage estimate: ${formatUsd(costUsd + dataOverageUsd)}`,
         '',
         'Full meters and plan limits: your console → Manage → Billing.',
-      ]
+      ].join('\n')
+      const fallbackText = `Here is your Aglyn usage summary for ${month}.\n\n${usageSummary}`
+      const orgName = orgDoc.get('name') ?? 'your organization'
+      // Render the batch-resolved template for this org's values (AGL-768);
+      // null falls back to the built-in copy above.
+      const designed = template
+        ? renderLoadedSystemEmail(template, {
+            month,
+            'org.name': String(orgName),
+            'usage.summary': usageSummary,
+          })
+        : null
       const result = await sendEmail({
         to: email,
-        subject: `Your Aglyn usage summary for ${month}`,
-        text: lines.join('\n'),
+        subject: designed?.subject ?? `Your Aglyn usage summary for ${month}`,
+        text: designed?.text || fallbackText,
+        ...(designed?.html ? { html: designed.html } : {}),
         context: `usage summary (${orgId})`,
       })
       if (!result.sent) {

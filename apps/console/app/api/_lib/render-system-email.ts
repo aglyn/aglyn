@@ -23,6 +23,7 @@ import {
   isSystemEmailEditable,
   renderEmailHtml,
   substituteMergeTokens,
+  type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
@@ -46,29 +47,36 @@ export interface RenderedSystemEmail {
 }
 
 /**
- * Renders a staff-designed system email template (AGL-750).
- *
- * **Returns `null` whenever there is nothing usable to render** — no
- * template document, no published version, an empty node map, an unknown
- * key, or a Firestore failure. That is the entire safety story of this
- * feature: every caller keeps its existing hard-coded copy as the fallback,
- * so a missing, half-saved or broken template can never mean a customer
- * receives no email at all. It degrades to the status quo, never to silence.
+ * A staff-designed template loaded from Firestore, ready to render for any
+ * number of recipients without touching Firestore again (AGL-768).
+ */
+export interface LoadedSystemEmail {
+  definition: SystemEmailTemplateDefinition
+  nodes: Record<string, unknown>
+  subjectTemplate: string
+  preheaderTemplate: string
+}
+
+/**
+ * Loads the published staff-designed template for a key — ONE Firestore read
+ * — or `null` when there is nothing usable (no document, no published
+ * version, an empty node map, an unknown or non-Resend key, or a read
+ * failure). Split out from {@link renderSystemEmail} so a batch send resolves
+ * the template once and renders it per recipient, rather than one read each
+ * (AGL-768): a Firestore read per invite is fine, one per recipient in a
+ * usage-email batch is not.
  *
  * Reads through the Admin SDK, which bypasses the staff-only rules on the
  * collection — the send path runs as the server, not as a signed-in user.
- *
- * Resolve this **once per run**, not once per recipient: a Firestore read
- * per invite is fine, one per recipient in a usage-email batch is not.
  */
-export async function renderSystemEmail(
+export async function loadSystemEmail(
   templateKey: string,
-  merge: Record<string, string> = {},
-): Promise<RenderedSystemEmail | null> {
+): Promise<LoadedSystemEmail | null> {
   const definition = getSystemEmailTemplate(templateKey)
   if (!definition) return null
-  // A Firebase-delivered email is sent by Firebase from its own templates,
-  // so rendering one here would produce output nothing ever sends (AGL-751).
+  // A Firebase- or Stripe-delivered email is sent by that service from its
+  // own templates, so rendering one here would produce output nothing ever
+  // sends (AGL-751/767).
   if (definition.deliveredBy !== 'resend') return null
 
   try {
@@ -93,37 +101,72 @@ export async function renderSystemEmail(
       | undefined
     if (!nodes || !Object.keys(nodes).length) return null
 
-    const subjectTemplate =
-      String(templateSnapshot.get('subject') ?? '') ||
-      definition.defaultSubject
-    const rendered = renderEmailHtml({
-      nodes: nodes as never,
-      // Besigner maps are rooted at '_@_', not renderEmailHtml's default
-      // 'root' — without this a designed template rendered empty and the send
-      // fell back to built-in copy, so designing did nothing (AGL-765).
-      rootId: EMAIL_NODE_ROOT_ID,
-      subject: substituteMergeTokens(subjectTemplate, merge),
-      preheader: substituteMergeTokens(
-        String(templateSnapshot.get('preheader') ?? ''),
-        merge,
-      ),
-      merge,
-    })
-    if (!rendered?.html) return null
-
     return {
-      subject: blankUnresolvedTokens(
-        substituteMergeTokens(subjectTemplate, merge),
-      ),
-      html: blankUnresolvedTokens(rendered.html),
-      text: blankUnresolvedTokens(rendered.text ?? ''),
+      definition,
+      nodes,
+      subjectTemplate:
+        String(templateSnapshot.get('subject') ?? '') ||
+        definition.defaultSubject,
+      preheaderTemplate: String(templateSnapshot.get('preheader') ?? ''),
     }
   } catch (error) {
     // Never let a template problem block the send — the caller falls back to
     // its built-in copy and the recipient still gets their email.
-    console.error(`system email template ${templateKey} failed to render`, error)
+    console.error(`system email template ${templateKey} failed to load`, error)
     return null
   }
+}
+
+/**
+ * Renders a pre-loaded template for one recipient's merge values (AGL-768).
+ * No Firestore access — call {@link loadSystemEmail} once, then this per
+ * recipient. Returns `null` if the node map renders empty, so the caller
+ * still falls back to its built-in copy.
+ */
+export function renderLoadedSystemEmail(
+  loaded: LoadedSystemEmail,
+  merge: Record<string, string> = {},
+): RenderedSystemEmail | null {
+  const rendered = renderEmailHtml({
+    nodes: loaded.nodes as never,
+    // Besigner maps are rooted at '_@_', not renderEmailHtml's default
+    // 'root' — without this a designed template rendered empty and the send
+    // fell back to built-in copy, so designing did nothing (AGL-765).
+    rootId: EMAIL_NODE_ROOT_ID,
+    subject: substituteMergeTokens(loaded.subjectTemplate, merge),
+    preheader: substituteMergeTokens(loaded.preheaderTemplate, merge),
+    merge,
+  })
+  if (!rendered?.html) return null
+  return {
+    subject: blankUnresolvedTokens(
+      substituteMergeTokens(loaded.subjectTemplate, merge),
+    ),
+    html: blankUnresolvedTokens(rendered.html),
+    text: blankUnresolvedTokens(rendered.text ?? ''),
+  }
+}
+
+/**
+ * Renders a staff-designed system email template (AGL-750).
+ *
+ * **Returns `null` whenever there is nothing usable to render** — no
+ * template document, no published version, an empty node map, an unknown
+ * key, or a Firestore failure. That is the entire safety story of this
+ * feature: every caller keeps its existing hard-coded copy as the fallback,
+ * so a missing, half-saved or broken template can never mean a customer
+ * receives no email at all. It degrades to the status quo, never to silence.
+ *
+ * A single-recipient convenience over {@link loadSystemEmail} +
+ * {@link renderLoadedSystemEmail}; a batch should call those two directly so
+ * it reads the template once.
+ */
+export async function renderSystemEmail(
+  templateKey: string,
+  merge: Record<string, string> = {},
+): Promise<RenderedSystemEmail | null> {
+  const loaded = await loadSystemEmail(templateKey)
+  return loaded ? renderLoadedSystemEmail(loaded, merge) : null
 }
 
 /**
