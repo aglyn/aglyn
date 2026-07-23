@@ -47,6 +47,7 @@ import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.co
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import AuthScreensCard from '../../../../../../components/auth-screens-card.component'
 import CustomDomainCard from '../../../../../../components/custom-domain-card.component'
+import SiteEmailsCard from '../../../../../../components/site-emails-card.component'
 import FaviconCard from '../../../../../../components/favicon-card.component'
 import LogoCard from '../../../../../../components/logo-card.component'
 import ErrorScreensCard from '../../../../../../components/error-screens-card.component'
@@ -311,6 +312,8 @@ const THEME_TAB_ID = 'theme'
 const DOMAIN_TAB_ID = 'domain'
 /** Activity tab id (AGL-249); `/setup?tab=activity` deep links. */
 const ACTIVITY_TAB_ID = 'activity'
+/** Emails reference tab id (AGL-769); `/setup?tab=emails` deep links here. */
+const EMAILS_TAB_ID = 'emails'
 
 const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const { enqueueSnackbar } = useSnackbar()
@@ -322,6 +325,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
     requestedTab === THEME_TAB_ID ||
       requestedTab === DOMAIN_TAB_ID ||
       requestedTab === ACTIVITY_TAB_ID ||
+      requestedTab === EMAILS_TAB_ID ||
       requestedTab === seoSchema.id
       ? requestedTab
       : basicSchema.id,
@@ -556,6 +560,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                         ))}
                         <Tab value={THEME_TAB_ID} label={'Theme'} />
                         <Tab value={DOMAIN_TAB_ID} label={'Custom Domain'} />
+                        <Tab value={EMAILS_TAB_ID} label={'Emails'} />
                         <Tab value={ACTIVITY_TAB_ID} label={'Activity'} />
                       </TabList>
                     </CardDisplay>
@@ -628,6 +633,9 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
                       </TabPanel>
                       <TabPanel value={DOMAIN_TAB_ID} sx={{ padding: 'unset' }}>
                         <CustomDomainCard hostId={hostId} />
+                      </TabPanel>
+                      <TabPanel value={EMAILS_TAB_ID} sx={{ padding: 'unset' }}>
+                        <SiteEmailsCard />
                       </TabPanel>
                       <TabPanel
                         value={ACTIVITY_TAB_ID}
