@@ -213,6 +213,127 @@ export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
       source: 'apps/console/app/api/admin/audit-archive/route.ts',
     },
     {
+      key: 'welcome',
+      name: 'Welcome',
+      description:
+        'Sent to a new owner the first time they create an organization ' +
+        '(not on every organization they later create).',
+      deliveredBy: 'resend',
+      defaultSubject: 'Welcome to Aglyn',
+      mergeTokens: [
+        {
+          name: 'name',
+          description: "The new owner's display name",
+          sample: 'Alex',
+        },
+        {
+          name: 'org.name',
+          description: 'The organization they just created',
+          sample: 'Test Org',
+        },
+        {
+          name: 'consoleUrl',
+          description: 'Console dashboard URL',
+          sample: 'https://app.aglyn.com',
+        },
+      ],
+      // Mirrors the fallbackText in orgs/create/route.ts.
+      defaultBody: [
+        { block: 'text', text: 'Welcome to Aglyn', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Hi {{name}}, thanks for creating {{org.name}}. Your workspace ' +
+            'is ready.',
+          variant: 'body',
+        },
+        {
+          block: 'text',
+          text:
+            'From your dashboard you can add a site, invite your team, and ' +
+            'start building.',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Open your dashboard', href: '{{consoleUrl}}' },
+      ],
+      source: 'apps/console/app/api/orgs/create/route.ts',
+    },
+    {
+      key: 'member-added',
+      name: 'Added to an organization',
+      description:
+        'Sent when an existing Aglyn account is added directly to an ' +
+        'organization. People who do not have an account yet get the ' +
+        'organization invite email instead.',
+      deliveredBy: 'resend',
+      defaultSubject: "You've been added to {{org.name}}",
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The organization they were added to',
+          sample: 'Test Org',
+        },
+        {
+          name: 'member.role',
+          description: 'Role they were given',
+          sample: 'editor',
+        },
+        {
+          name: 'signInUrl',
+          description: 'Console URL to open the organization',
+          sample: 'https://app.aglyn.com',
+        },
+      ],
+      // Mirrors the fallbackText in orgs/members/route.ts.
+      defaultBody: [
+        {
+          block: 'text',
+          text: 'You were added to {{org.name}} as {{member.role}}.',
+          variant: 'body',
+        },
+        {
+          block: 'text',
+          text: 'Sign in to switch to it from your dashboard.',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Open Aglyn', href: '{{signInUrl}}' },
+      ],
+      source: 'apps/console/app/api/orgs/members/route.ts',
+    },
+    {
+      key: 'erasure-confirmation',
+      name: 'Erasure completed',
+      description:
+        'Sent to an organization owner once its data has been permanently ' +
+        'erased under a GDPR request.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Your Aglyn data has been erased',
+      mergeTokens: [
+        {
+          name: 'org.name',
+          description: 'The organization that was erased',
+          sample: 'Test Org',
+        },
+      ],
+      // Mirrors the fallbackText in admin/run-erasures/route.ts.
+      defaultBody: [
+        { block: 'text', text: 'Your data has been erased', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            '{{org.name}} and all of its data have been permanently erased ' +
+            'from Aglyn, as requested.',
+          variant: 'body',
+        },
+        {
+          block: 'text',
+          text: 'This is complete and cannot be undone.',
+          variant: 'body',
+        },
+      ],
+      source: 'apps/console/app/api/admin/run-erasures/route.ts',
+    },
+    {
       key: 'password-reset',
       name: 'Forgot password',
       description:

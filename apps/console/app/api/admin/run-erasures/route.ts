@@ -17,6 +17,8 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { renderSystemEmail } from '../../_lib/render-system-email'
 import { ERASURE_HOLD_MS, eraseOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /**
@@ -54,12 +56,51 @@ async function handler(request: Request): Promise<Response> {
       .limit(MAX_PER_RUN)
       .get()
 
+    const auth = firebaseAdmin.app().auth()
+    const emailConfigured = isEmailConfigured()
     const erased: string[] = []
     const skipped: Array<{ orgId: string; reason?: string }> = []
     for (const org of due.docs) {
+      // Capture before erasing — eraseOrg deletes the org document, but the
+      // owner's auth account survives it, so the address stays reachable.
+      const orgName = org.get('name') ?? 'your organization'
+      const ownerUid = String(org.get('ownerUid') ?? '')
+      const ownerEmail =
+        emailConfigured && ownerUid
+          ? await auth
+              .getUser(ownerUid)
+              .then((user) => user.email)
+              .catch(() => undefined)
+          : undefined
+
       const result = await eraseOrg(org.id)
-      if (result.ok) erased.push(org.id)
-      else skipped.push({ orgId: org.id, reason: result.skippedReason })
+      if (!result.ok) {
+        skipped.push({ orgId: org.id, reason: result.skippedReason })
+        continue
+      }
+      erased.push(org.id)
+
+      // Confirm completion to the owner (AGL-768). Best-effort and wrapped so
+      // a send problem never affects the erasure result.
+      if (ownerEmail) {
+        try {
+          const fallbackText =
+            `${orgName} and all of its data have been permanently erased ` +
+            'from Aglyn, as requested. This is complete and cannot be undone.'
+          const designed = await renderSystemEmail('erasure-confirmation', {
+            'org.name': String(orgName),
+          })
+          await sendEmail({
+            to: ownerEmail,
+            subject: designed?.subject ?? 'Your Aglyn data has been erased',
+            text: designed?.text || fallbackText,
+            ...(designed?.html ? { html: designed.html } : {}),
+            context: 'erasure-confirmation',
+          })
+        } catch (confirmError) {
+          console.error('erasure-confirmation email skipped', confirmError)
+        }
+      }
     }
 
     return Response.json({ erased, skipped, scanned: due.size }, { status: 200 })

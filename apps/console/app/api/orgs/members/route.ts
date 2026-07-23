@@ -21,6 +21,8 @@ import {
   type HostAccessRole,
   isOrgRole,
 } from '@aglyn/aglyn/server'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -234,6 +236,33 @@ async function handler(request: Request): Promise<Response> {
             })
           : '/hosts',
       })
+      // Email a genuinely-new member too (AGL-768). This path only reaches
+      // existing accounts — a missing account 404s to "invite instead", and
+      // invites send the org-invite email — so the two never overlap.
+      // Best-effort and wrapped so a send problem never fails the upsert.
+      if (!existedAlready && email && isEmailConfigured()) {
+        try {
+          const orgName = orgSnapshot.get('name') ?? 'an organization'
+          const origin = headers.origin ?? `https://${headers.host}`
+          const fallbackText =
+            `You were added to ${orgName} as ${role}.\n\n` +
+            `Sign in at ${origin} to switch to it from your dashboard.`
+          const designed = await renderSystemEmail('member-added', {
+            'org.name': String(orgName),
+            'member.role': role,
+            signInUrl: origin,
+          })
+          await sendEmail({
+            to: email,
+            subject: designed?.subject ?? `You've been added to ${orgName}`,
+            text: designed?.text || fallbackText,
+            ...(designed?.html ? { html: designed.html } : {}),
+            context: 'member-added',
+          })
+        } catch (memberEmailError) {
+          console.error('member-added email skipped', memberEmailError)
+        }
+      }
       return Response.json({ ok: true, uid: targetUid }, { status: 200 })
     }
 

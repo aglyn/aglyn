@@ -17,6 +17,8 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { generateOrgSlug, isValidOrgSlug } from '@aglyn/aglyn/server'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   createOrganization,
   emailUnverifiedResponse,
@@ -69,6 +71,48 @@ async function handler(request: Request): Promise<Response> {
       ownerEmail: decoded.email ?? null,
       ownerDisplayName: (decoded['name'] as string | undefined) ?? null,
     })
+
+    // Welcome email on the owner's FIRST org only (AGL-768): someone who
+    // creates their second workspace does not get welcomed again. Counted
+    // after creation — they now own exactly one — and wrapped so nothing in
+    // the send can turn a created org into a 500. Best-effort like every
+    // other send; `renderSystemEmail` returns null to fall back to the copy
+    // below, `sendEmail` never throws.
+    try {
+      if (decoded.email && isEmailConfigured()) {
+        const ownedCount = (
+          await firebaseAdmin
+            .app()
+            .firestore()
+            .collection('orgs')
+            .where('ownerUid', '==', decoded.uid)
+            .limit(2)
+            .get()
+        ).size
+        if (ownedCount === 1) {
+          const origin = headers.origin ?? `https://${headers.host}`
+          const ownerName = (decoded['name'] as string | undefined) || 'there'
+          const fallbackText =
+            `Hi ${ownerName}, thanks for creating ${name}. Your workspace ` +
+            `is ready.\n\nOpen your dashboard at ${origin}.`
+          const designed = await renderSystemEmail('welcome', {
+            name: ownerName,
+            'org.name': name,
+            consoleUrl: origin,
+          })
+          await sendEmail({
+            to: decoded.email,
+            subject: designed?.subject ?? 'Welcome to Aglyn',
+            text: designed?.text || fallbackText,
+            ...(designed?.html ? { html: designed.html } : {}),
+            context: 'welcome',
+          })
+        }
+      }
+    } catch (welcomeError) {
+      console.error('welcome email skipped', welcomeError)
+    }
+
     return Response.json({ orgId, slug }, { status: 200 })
   } catch (error) {
     if (error instanceof OrgSlugTakenError) {
