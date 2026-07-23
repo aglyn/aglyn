@@ -23,7 +23,6 @@ import {
   ICON_VARIANT_SYMBOL_CONFIRMED,
 } from '@aglyn/shared-data-enums'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Box,
   Button,
@@ -34,62 +33,39 @@ import {
   MenuItem,
   Typography,
 } from '@mui/material'
-import { useParams, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { type MouseEvent, useMemo, useState } from 'react'
 import { buildRoute, Route } from '../constants/route-links'
 import { hostDisplayDomain } from '../constants/tenant-links'
-import { useHostId } from '../components/host-id-provider'
-import { useOrgHosts } from '../hooks/use-org-hosts'
-import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import {
+  useHostId,
+  useHostSubdomain,
+  useOrgHostsContext,
+} from '../components/host-id-provider'
+import { useOrgSlug } from '../hooks/use-org-scope'
 import CreateHostDialog from './create-host-dialog.component'
 import HostIcon from './host-icon.component'
 import SwitcherSearchField from './switcher-search-field.component'
-
-function HostsPlainLink() {
-  const orgSlug = useOrgSlug()
-  return (
-    <Button
-      id="center-nav-hosts"
-      color="inherit"
-      component={AppLink as any}
-      {...({ componentVariant: 'button', nativeButton: false } as any)}
-      href={buildRoute(Route.HOST_LIST, { orgSlug })}
-    >
-      {'Sites'}
-    </Button>
-  )
-}
 
 /**
  * Site switcher for the primary app bar (AGL-629, Vercel project-switcher UI):
  * the button shows the current site (or "All sites" off a site); the dropdown
  * filters the org's sites, marks the current one, and offers a create row. The
  * URL addresses sites by subdomain (AGL-622).
+ *
+ * The site list comes from `HostIdProvider`'s context, NOT a local
+ * `useOrgHosts` subscription: this component is rendered by the per-page
+ * `DashboardLayout`, so it remounts on every navigation, and a local
+ * subscription restarted from empty each time — flashing "Sites", then
+ * "All sites", then the real name (AGL-745).
  */
 export function HostSwitcherNavComponent() {
-  const { data: user } = useUser()
-  // Firestore hooks need a uid; render the plain link until signed in.
-  if (!user) {
-    return <HostsPlainLink />
-  }
-  return <HostSwitcherMenu uid={user.uid} />
-}
-HostSwitcherNavComponent.displayName = 'HostSwitcherNavComponent'
-
-function HostSwitcherMenu(props: { uid: string }) {
-  const { uid } = props
-  const params = useParams<{ host?: string }>()
   const hostId = useHostId()
+  const hostSubdomain = useHostSubdomain()
   const router = useRouter()
   const orgSlug = useOrgSlug()
-  const firestore = useFirestore()
-  const { currentOrg, loading: orgsLoading } = useOrgScope()
-  // Workspace-scoped (AGL-236): the switcher lists the selected org's sites.
-  const { hosts } = useOrgHosts(
-    firestore,
-    uid,
-    orgsLoading ? undefined : (currentOrg?.$id ?? null),
-  )
+  // Workspace-scoped (AGL-236): the provider lists the selected org's sites.
+  const { hosts } = useOrgHostsContext()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
@@ -119,7 +95,10 @@ function HostSwitcherMenu(props: { uid: string }) {
   }
 
   const current = (hosts ?? []).find((host: any) => host.$id === hostId)
-  const label = current?.displayName ?? current?.$id ?? 'All sites'
+  // On a site route the URL subdomain is known synchronously, so it labels
+  // the button during a cold load rather than the misleading "All sites".
+  const label =
+    current?.displayName ?? current?.$id ?? hostSubdomain ?? 'All sites'
 
   return (
     <>
@@ -245,5 +224,6 @@ function HostSwitcherMenu(props: { uid: string }) {
     </>
   )
 }
+HostSwitcherNavComponent.displayName = 'HostSwitcherNavComponent'
 
 export default HostSwitcherNavComponent

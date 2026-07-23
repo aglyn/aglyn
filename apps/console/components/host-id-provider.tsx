@@ -18,9 +18,9 @@
 
 import { collection, getDocs, limit, query, where } from 'firebase/firestore'
 import { useParams, usePathname, useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { useOrgHosts } from '../hooks/use-org-hosts'
+import { useOrgHosts, type OrgHost } from '../hooks/use-org-hosts'
 import { useOrgScope } from '../hooks/use-org-scope'
 
 /** The resolved host DOC ID — the internal key for all host data reads. */
@@ -33,10 +33,27 @@ export const HostSubdomainContext = createContext<string | null>(null)
  * until resolution finishes, then 404s an unknown subdomain.
  */
 export const HostReadyContext = createContext<boolean>(true)
+/**
+ * The org's host list, shared from this provider's single subscription.
+ *
+ * This provider sits in the root layout's provider stack, so its listen — and
+ * the list it produces — survives every route change. Consumers that live in
+ * the per-page `DashboardLayout` (the app-bar site switcher) remount on each
+ * navigation; reading the list from here instead of opening their own
+ * `useOrgHosts` keeps them from replaying an empty-then-loaded state on every
+ * page, which is what made the switcher label flash back to "All sites"
+ * (AGL-745). It also drops a duplicate Firestore listener.
+ */
+export const OrgHostsContext = createContext<{
+  hosts: OrgHost[]
+  ready: boolean
+}>({ hosts: [], ready: false })
 
 export const useHostId = () => useContext(HostIdContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
+/** The org's hosts, from the provider-level subscription (never remounts). */
+export const useOrgHostsContext = () => useContext(OrgHostsContext)
 
 export function HostIdProvider({ children }) {
   const params = useParams<{ orgSlug?: string; host?: string }>()
@@ -114,11 +131,15 @@ export function HostIdProvider({ children }) {
     router,
   ])
 
+  const orgHosts = useMemo(() => ({ hosts, ready }), [hosts, ready])
+
   return (
     <HostReadyContext.Provider value={hostReady}>
       <HostSubdomainContext.Provider value={hostSubdomain}>
         <HostIdContext.Provider value={match?.$id ?? null}>
-          {children}
+          <OrgHostsContext.Provider value={orgHosts}>
+            {children}
+          </OrgHostsContext.Provider>
         </HostIdContext.Provider>
       </HostSubdomainContext.Provider>
     </HostReadyContext.Provider>
