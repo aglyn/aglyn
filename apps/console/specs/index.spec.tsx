@@ -20,6 +20,31 @@ import React from 'react'
 
 import Index from '../app/(app)/[orgSlug]/hosts/[host]/page'
 
+// The site switcher reads the router unconditionally since AGL-745 moved it
+// off its own `useOrgHosts` subscription (it used to bail out to a plain link
+// before any hook ran, when there was no signed-in user). `render` mounts
+// outside Next's app router, so `useRouter` throws "expected app router to be
+// mounted" without this. STABLE IDENTITIES ONLY, same reason as below.
+jest.mock('next/navigation', () => {
+  const router = {
+    push: jest.fn(),
+    replace: jest.fn(),
+    refresh: jest.fn(),
+    back: jest.fn(),
+    forward: jest.fn(),
+    prefetch: jest.fn(),
+  }
+  const params = {}
+  const searchParams = new URLSearchParams()
+  return {
+    ...jest.requireActual('next/navigation'),
+    useRouter: () => router,
+    useParams: () => params,
+    usePathname: () => '/',
+    useSearchParams: () => searchParams,
+  }
+})
+
 // The page tree reads Firebase services from FirebaseServicesProvider, which
 // needs a real firebase app; stub the hooks so the smoke test can render.
 //
