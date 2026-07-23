@@ -16,17 +16,18 @@
  */
 
 import { redirect } from 'next/navigation'
-import { buildRoute, Route } from '../../../../../../../constants/route-links'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 
 /**
- * Community listing detail moved to org scope (AGL-775). The listing id maps
- * 1:1 to the org marketplace route; the host context is dropped.
+ * The per-site community/marketplace tab moved to org scope (AGL-775). Old
+ * `/[orgSlug]/hosts/[host]/community` links land on the org marketplace; the
+ * host context is dropped because browse is now org-wide.
  */
-export default async function HostCommunityListingRedirect({
+export default async function HostCommunityRedirect({
   params,
 }: {
-  params: Promise<{ orgSlug: string; host: string; listingId: string }>
+  params: Promise<{ orgSlug: string; host: string }>
 }) {
-  const { orgSlug, listingId } = await params
-  redirect(buildRoute(Route.ORG_MARKETPLACE_LISTING, { orgSlug, listingId }))
+  const { orgSlug } = await params
+  redirect(buildRoute(Route.ORG_MARKETPLACE, { orgSlug }))
 }

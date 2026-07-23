@@ -168,20 +168,10 @@ export function OrgPluginInstallsCard(props: OrgPluginInstallsCardProps) {
         ))}
         {installs.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'No organization-wide installs yet.'}
-            {hosts?.[0]?.$id ? (
-              <>
-                {' '}
-                <a
-                  href={buildRoute(Route.HOST_COMMUNITY, {
-                    orgSlug,
-                    host: hosts[0].subdomain,
-                  })}
-                >
-                  {'Browse the marketplace'}
-                </a>
-              </>
-            ) : null}
+            {'No organization-wide installs yet.'}{' '}
+            <a href={buildRoute(Route.ORG_MARKETPLACE, { orgSlug })}>
+              {'Browse the marketplace'}
+            </a>
           </Typography>
         ) : (
           <Table size="small">
