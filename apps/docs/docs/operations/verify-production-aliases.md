@@ -29,8 +29,9 @@ node tools/deploy/verify-production-aliases.mjs --json   # machine-readable outp
 
 | Project | Domain(s) checked |
 | --- | --- |
-| `app-aglyn-io` (console) | `app.aglyn.io` |
-| `tenant-aglyn-app` (tenant) | `northwind-coffee.aglyn.app` (wildcard probe) |
+| `aglyn-console` (console) | `app.aglyn.io` |
+| `aglyn-tenant` (tenant) | `northwind-coffee.aglyn.app` (wildcard probe) |
+| `aglyn-docs` (docs) | `docs.aglyn.io` |
 | `www-aglyn-io` (marketing) | `aglyn.app` (the apex serves the marketing site, not the tenant wildcard) |
 
 For each project it finds the newest **Ready** production deployment
@@ -47,7 +48,7 @@ output).
 ## The `repo.json` gotcha (why staleness happens)
 
 The repo-root `.vercel/repo.json` maps **every** directory in the monorepo to
-the console project `app-aglyn-io`, and `apps/tenant` has no link files of its
+the console project `aglyn-console`, and `apps/tenant` has no link files of its
 own — so any `vercel` command that relies on the *directory link* to pick the
 project silently operates on the **console** project: the promote "succeeds",
 but `*.aglyn.app` never moves.
@@ -55,7 +56,7 @@ but `*.aglyn.app` never moves.
 The script therefore never uses directory links at all:
 
 1. Deployments are listed by explicit project name
-   (`vercel ls tenant-aglyn-app --prod`), which works from any directory.
+   (`vercel ls aglyn-tenant --prod`), which works from any directory.
 2. Promotes target an explicit deployment URL, which pins the project by
    itself.
 3. Every `vercel inspect` result must report the expected project `name` —
@@ -68,10 +69,10 @@ name or a full deployment URL**; never trust the directory link in this repo.
 ## Reading the output
 
 ```text
-PROJECT           DOMAIN                      NEWEST READY            SERVING                 VERDICT
-----------------  --------------------------  ----------------------  ----------------------  -------
-app-aglyn-io      app.aglyn.io                app-aglyn-xxxx…         app-aglyn-xxxx…         current
-tenant-aglyn-app  northwind-coffee.aglyn.app  tenant-aglyn-new…       tenant-aglyn-old…       STALE
+PROJECT        DOMAIN                      NEWEST READY            SERVING                 VERDICT
+-------------  --------------------------  ----------------------  ----------------------  -------
+aglyn-console  app.aglyn.io                app-aglyn-xxxx…         app-aglyn-xxxx…         current
+aglyn-tenant   northwind-coffee.aglyn.app  tenant-aglyn-new…       tenant-aglyn-old…       STALE
 ```
 
 A `STALE` row means the domain still serves an older deployment: re-run with
