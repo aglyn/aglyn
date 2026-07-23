@@ -24,6 +24,7 @@ import {
   isOrgRole,
 } from '@aglyn/aglyn/server'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
+import { renderSystemEmail } from '../../_lib/render-system-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -196,13 +197,23 @@ async function handler(request: Request): Promise<Response> {
           (await firestore.collection('orgs').doc(orgId).get()).get('name') ??
           'an organization'
         const origin = headers.origin ?? `https://${headers.host}`
+        const fallbackText =
+          `You've been invited to join ${orgName} as ${role}.\n\n` +
+          `Sign in at ${origin} with this email address and accept ` +
+          'the invite from your dashboard.'
+        // Staff-designed template when one is published (AGL-750); null
+        // whenever it is missing or unusable, so this copy still goes out.
+        const designed = await renderSystemEmail('org-invite', {
+          'org.name': String(orgName),
+          'invite.role': role,
+          signInUrl: origin,
+        })
         const result = await sendEmail({
           to: email,
-          subject: `You've been invited to ${orgName} on Aglyn`,
-          text:
-            `You've been invited to join ${orgName} as ${role}.\n\n` +
-            `Sign in at ${origin} with this email address and accept ` +
-            'the invite from your dashboard.',
+          subject:
+            designed?.subject ?? `You've been invited to ${orgName} on Aglyn`,
+          text: designed?.text || fallbackText,
+          ...(designed?.html ? { html: designed.html } : {}),
           context: 'invite',
         })
         emailed = result.sent
