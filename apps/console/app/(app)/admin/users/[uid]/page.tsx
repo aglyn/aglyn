@@ -41,6 +41,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import StaffOnly from '../../../../../components/staff-only.component'
 import MainLayout from '../../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -210,6 +211,10 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* The detail fetch is staff-gated server-side, so a non-staff
+              visitor otherwise sits on "Loading…" or a bare API error with
+              no idea which of the two it is (AGL-760). */}
+          <StaffOnly>
           {error ? (
             <Alert severity="warning">{error}</Alert>
           ) : !detail ? (
@@ -486,6 +491,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
               ]}
             />
           )}
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

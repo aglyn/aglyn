@@ -33,6 +33,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -185,6 +186,10 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Without this a non-staff visitor is told "No plugin submissions
+              waiting for review" — the queue fetch 403s and the empty result
+              reads as good news rather than as a refusal (AGL-760). */}
+          <StaffOnly>
           <Stack spacing={3}>
             {loaded && queue.length === 0 ? (
               <Alert severity="success">
@@ -344,6 +349,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
               </CardDisplay>
             ))}
           </Stack>
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

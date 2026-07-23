@@ -39,6 +39,7 @@ import { collection, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
+import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -154,6 +155,12 @@ function AdminEmails() {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* The rows come from the code-defined catalog rather than
+              Firestore, so without this the whole list of mail Aglyn sends —
+              internal staff alerts included — renders for anyone signed in.
+              The rules deny the per-row reads either way, which is why the
+              gap was invisible: the page merely looked empty. */}
+          <StaffOnly>
           <Stack spacing={2}>
             <CardDisplay
               header={'System emails'}
@@ -271,6 +278,7 @@ function AdminEmails() {
                 'it can never advertise one that does not exist.'}
             </Typography>
           </Stack>
+          </StaffOnly>
         </Container>
       </DashboardLayout>
     </>

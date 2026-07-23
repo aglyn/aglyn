@@ -56,6 +56,7 @@ import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
 import useFirestoreDoc from '../../../../../../../../hooks/use-firestore-doc'
+import { useIsStaff } from '../../../../../../../../hooks/use-is-staff'
 
 const WorkspaceEditorComponent = dynamic<WorkspaceEditorComponentProps>(
   () =>
@@ -108,27 +109,6 @@ function useSystemEmailComponentsReady(): boolean {
     }
   }, [])
   return ready
-}
-
-/** Staff claim, read the same way the rest of `/admin/*` reads it. */
-function useIsStaff(): boolean | null {
-  const { data: user } = useUser()
-  const [isStaff, setIsStaff] = useState<boolean | null>(null)
-  useEffect(() => {
-    let active = true
-    void (user as any)
-      ?.getIdTokenResult?.()
-      .then((result: any) => {
-        if (active) setIsStaff(Boolean(result?.claims?.staff))
-      })
-      .catch(() => {
-        if (active) setIsStaff(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [user])
-  return isStaff
 }
 
 interface SystemEmailTemplateState {
