@@ -67,7 +67,7 @@ export function NewestSiteUsersCard(props: { hostId: string }) {
         action: (
           <Button
             component={AppLink as any}
-            {...({ componentVariant: 'naked' } as any)}
+            {...({ componentVariant: 'naked', nativeButton: false } as any)}
             href={buildRoute(Route.HOST_USERS, { orgSlug,  host })}
             size="small"
             color="secondary"

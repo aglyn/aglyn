@@ -61,7 +61,7 @@ export function ArtifactNotFound(props: ArtifactNotFoundProps) {
           variant="contained"
           color="secondary"
           component={AppLink as any}
-          {...({ componentVariant: 'naked' } as any)}
+          {...({ componentVariant: 'naked', nativeButton: false } as any)}
           href={listUrl}
         >
           {`Back to ${listLabel}`}

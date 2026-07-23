@@ -157,7 +157,7 @@ export function HostAnalyticsCard(props: {
           {viewAllHref ? (
             <Button
               component={AppLink as any}
-              {...({ componentVariant: 'naked' } as any)}
+              {...({ componentVariant: 'naked', nativeButton: false } as any)}
               href={viewAllHref}
               size="small"
               color="secondary"

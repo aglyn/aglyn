@@ -181,6 +181,7 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                 {actingHost ? (
                   <Button
                     component={AppLink}
+                    nativeButton={false}
                     href={buildRoute(Route.HOST_COMMUNITY, {
                       orgSlug,
                       host: actingHostSubdomain,

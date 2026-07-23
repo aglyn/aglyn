@@ -47,7 +47,7 @@ export function NotFoundContent() {
               variant="contained"
               color="secondary"
               component={AppLink as any}
-              {...({ componentVariant: 'naked' } as any)}
+              {...({ componentVariant: 'naked', nativeButton: false } as any)}
               href={'/'}
             >
               {'Go to my workspaces'}

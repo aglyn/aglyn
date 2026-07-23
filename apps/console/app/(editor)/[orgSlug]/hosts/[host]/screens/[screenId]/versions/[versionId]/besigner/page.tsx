@@ -941,6 +941,7 @@ function BesignerPage(props) {
                     size="small"
                     component={AppLink}
                     componentVariant="naked"
+                    nativeButton={false}
                     disabled={!layoutVersionId}
                     href={
                       layoutVersionId

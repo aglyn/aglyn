@@ -99,7 +99,7 @@ export function CommerceGlanceCard(props: { hostId: string }) {
         action: (
           <Button
             component={AppLink as any}
-            {...({ componentVariant: 'naked' } as any)}
+            {...({ componentVariant: 'naked', nativeButton: false } as any)}
             href={consoleRoute.base ? `${consoleRoute.base}/products` : undefined}
             size="small"
             color="secondary"
