@@ -83,27 +83,23 @@ const JsonEditor = dynamic<JsonEditorProps>(
  * exactly wrong here: a platform email belongs to no workspace, so whether
  * the signed-in staffer's current org happens to have the Email plugin
  * switched on must not decide whether the drawer has any blocks in it. The
- * one id is fixed because the EMAIL view type only ever offers email blocks.
+ * one id is fixed because the EMAIL view type only ever offers email blocks;
+ * the always-on `mui` bundle activates alongside it either way.
  *
- * The two `ensure` calls are SEQUENTIAL on purpose. A single call activates
- * its targets with `Promise.all`, so the email bundle can register before
- * the always-on `mui` bundle it declares a dependency on — and a bundle
- * whose dependency is not yet loaded stays WAITING, which shows up as an
- * empty component drawer on a canvas that otherwise looks fine. The
- * host-scoped editors get away with one call because they activate a dozen
- * plugins at once; that is luck, not a guarantee. Loading the base bundle
- * first makes the order explicit instead.
+ * This was two sequential `ensure` calls at first, forcing mui to register
+ * before the bundle that depends on it. That was a workaround for AGL-759:
+ * `ensure` activates with `Promise.all`, and the plugin manager was losing
+ * the reverse-dependency edge for the FIRST dependent of any dependency, so
+ * email registering ahead of mui left it permanently WAITING and the drawer
+ * empty. With that fixed, either order resolves and one call is enough.
  */
 function useSystemEmailComponentsReady(): boolean {
   const [ready, setReady] = useState(false)
   useEffect(() => {
     let active = true
-    void (async () => {
-      // Always-on entries only — the base `mui` components.
-      await consolePluginLoader.ensure([], ['site'])
-      await consolePluginLoader.ensure(['email'], ['site'])
+    void consolePluginLoader.ensure(['email'], ['site']).then(() => {
       if (active) setReady(true)
-    })()
+    })
     return () => {
       active = false
     }
