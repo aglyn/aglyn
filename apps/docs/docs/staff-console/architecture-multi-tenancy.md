@@ -123,10 +123,10 @@ workspace subdomain scopes the **console**, not published sites:
 
 ```mermaid
 flowchart LR
-  B["Browser:<br/>business1.aglyn.io"] --> MW{"Next middleware:<br/>slug known?<br/>(public orgSlugs read, cached)"}
+  B["Browser:<br/>business1.aglyn.com"] --> MW{"Next middleware:<br/>slug known?<br/>(public orgSlugs read, cached)"}
   MW -- "yes" --> CON["Console renders;<br/>OrgScopeProvider pins the org scope"]
   MW -- "no" --> APEX["Redirect to apex console<br/>?unknown-workspace=slug"]
-  A2["Browser: app.aglyn.io"] --> SW["Org switcher<br/>(users/#lcub;uid#rcub;/orgs)"]
+  A2["Browser: app.aglyn.com"] --> SW["Org switcher<br/>(users/#lcub;uid#rcub;/orgs)"]
   SW --> CON
 ```
 

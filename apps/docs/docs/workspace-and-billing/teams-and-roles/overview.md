@@ -29,7 +29,7 @@ Aglyn is built around **organization workspaces**: an organization subscribes on
 multiple websites, and shares media, plugins, dynamic data and billing across them. You
 can belong to several organizations with a different role in each (owner, admin, editor,
 viewer), and editors/viewers can be limited to specific sites. Each organization gets a
-Slack-style workspace address (`your-org.aglyn.io`).
+Slack-style workspace address (`your-org.aglyn.com`).
 
 Every account operates inside an organization — solo accounts simply get a personal
 workspace automatically. The team features above keep working unchanged.

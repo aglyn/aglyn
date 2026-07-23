@@ -26,7 +26,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { deleteField, doc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { useCallback, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
@@ -95,9 +95,11 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           { variant: 'warning', persist: false },
         )
       }
-      await updateDoc(doc(firestore, 'hosts', hostId), { cname: value })
-      // Vercel attachment provisions SSL; 501 means the platform env isn't
-      // configured yet — DNS side is done either way (reuses idToken above).
+      // `/api/domains/attach` claims the domain and persists `host.cname` in a
+      // single transaction (AGL-743) — the client must NOT write `cname` itself,
+      // or a losing 409 leaves this host still holding another org's domain.
+      // Attachment also provisions SSL; 501 means the platform env isn't
+      // configured yet, but the domain is saved either way.
       const attachResponse = await fetch('/api/domains/attach', {
         method: 'POST',
         headers: {
@@ -111,10 +113,16 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
           'Domain saved — platform attachment pending (Vercel env not set)',
           { variant: 'info', persist: false },
         )
+      } else if (attachResponse.status === 409) {
+        const conflict = await attachResponse.json().catch(() => undefined)
+        return void enqueueSnackbar(
+          conflict?.error ?? 'That domain is already connected to another site',
+          { variant: 'error', allowDuplicate: true },
+        )
       } else if (!attachResponse.ok) {
-        enqueueSnackbar('Domain saved, but platform attachment failed', {
-          variant: 'warning',
-          persist: false,
+        enqueueSnackbar('Could not connect the domain — please try again', {
+          variant: 'error',
+          allowDuplicate: true,
         })
       } else {
         enqueueSnackbar(`"${value}" connected`, {
@@ -133,7 +141,7 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
       setChecking(false)
       dequeue()
     }
-  }, [domain, firestore, hostId, user, queueLoading, enqueueSnackbar])
+  }, [domain, hostId, user, queueLoading, enqueueSnackbar])
 
   // Retry attachment (AGL-166): re-runs the Vercel attach for a saved
   // cname whose platform attachment never happened (501/5xx path).
@@ -174,14 +182,41 @@ export function CustomDomainCard(props: CustomDomainCardProps) {
   }, [connected, hostId, user, enqueueSnackbar])
 
   const handleDisconnect = useCallback(async () => {
-    await updateDoc(doc(firestore, 'hosts', hostId), {
-      cname: deleteField(),
-    })
-    enqueueSnackbar('Custom domain disconnected', {
-      variant: 'success',
-      persist: false,
-    })
-  }, [firestore, hostId, enqueueSnackbar])
+    // Goes through the server (AGL-742) so the hostname is also removed from
+    // the tenant Vercel project. Clearing `host.cname` alone left the domain
+    // attached there indefinitely — still served, but resolving to no host.
+    const dequeue = queueLoading()
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/domains/detach', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ hostId }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => undefined)
+        return void enqueueSnackbar(
+          payload?.error ?? 'Could not disconnect the domain — please try again',
+          { variant: 'error', allowDuplicate: true },
+        )
+      }
+      enqueueSnackbar('Custom domain disconnected', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      dequeue()
+    }
+  }, [hostId, user, enqueueSnackbar, queueLoading])
 
   return (
     <CardDisplay

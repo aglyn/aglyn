@@ -83,13 +83,26 @@ async function handler(request: Request): Promise<Response> {
 
     // Cname uniqueness (AGL-166): middleware resolution maps hostname ->
     // host 1:1; a duplicate would make it ambiguous.
+    //
+    // Claiming the domain and persisting `host.cname` happen in ONE
+    // transaction (AGL-743). The write used to be a client-side `updateDoc`
+    // that ran BEFORE this check, so losing the 409 still left the losing host
+    // holding the domain — and `get-host.ts` then resolved the duplicate by
+    // Firestore document order, i.e. one org could be served on another org's
+    // domain. A cross-document invariant cannot be enforced from the client, so
+    // this route is now the only writer of `cname`.
     const firestore = firebaseAdmin.app().firestore()
-    const duplicates = await firestore
-      .collection('hosts')
-      .where('cname', '==', domain)
-      .limit(2)
-      .get()
-    if (duplicates.docs.some((docSnapshot) => docSnapshot.id !== hostId)) {
+    const claimed = await firestore.runTransaction(async (tx) => {
+      const duplicates = await tx.get(
+        firestore.collection('hosts').where('cname', '==', domain).limit(2),
+      )
+      if (duplicates.docs.some((docSnapshot) => docSnapshot.id !== hostId)) {
+        return false
+      }
+      tx.set(hostSnapshot.ref, { cname: domain }, { merge: true })
+      return true
+    })
+    if (!claimed) {
       return Response.json({ error: 'That domain is already connected to another site' }, { status: 409 })
     }
 

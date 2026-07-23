@@ -41,7 +41,7 @@ APIs this is always `org`. → [Glossary](glossary.md),
 ### Workspace
 
 The same entity as an organization, in the product's user-facing language —
-"your workspace", including the `{slug}.aglyn.io` workspace URL. Workspace
+"your workspace", including the `{slug}.aglyn.com` workspace URL. Workspace
 never names anything in code; it's the word the UI uses for your org.
 → [Glossary](glossary.md)
 

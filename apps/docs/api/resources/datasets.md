@@ -44,7 +44,7 @@ wrong-typed field returns `400` with `code: "validation_failed"`.
 `GET /v1/datasets` — scope `datasets:read`. [Paginated](../conventions.md#pagination).
 
 ```bash
-curl "https://app.aglyn.io/api/v1/datasets" \
+curl "https://app.aglyn.com/api/v1/datasets" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
@@ -57,7 +57,7 @@ curl "https://app.aglyn.io/api/v1/datasets" \
 `GET /v1/datasets/{id}/records` — scope `datasets:read`. [Paginated](../conventions.md#pagination).
 
 ```bash
-curl "https://app.aglyn.io/api/v1/datasets/ds_team/records?limit=50" \
+curl "https://app.aglyn.com/api/v1/datasets/ds_team/records?limit=50" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
@@ -71,7 +71,7 @@ curl "https://app.aglyn.io/api/v1/datasets/ds_team/records?limit=50" \
 [`Idempotency-Key`](../conventions.md#idempotency). Returns `201`.
 
 ```bash
-curl -X POST "https://app.aglyn.io/api/v1/datasets/ds_team/records" \
+curl -X POST "https://app.aglyn.com/api/v1/datasets/ds_team/records" \
   -H "Authorization: Bearer aglyn_sk_…" \
   -H "Content-Type: application/json" \
   -d '{"values":{"name":"Sam Rivera","role":"Pastry Chef"}}'
@@ -83,7 +83,7 @@ curl -X POST "https://app.aglyn.io/api/v1/datasets/ds_team/records" \
 the supplied `values` over the stored ones (send only what changes).
 
 ```bash
-curl -X PATCH "https://app.aglyn.io/api/v1/datasets/ds_team/records/rec_abc123" \
+curl -X PATCH "https://app.aglyn.com/api/v1/datasets/ds_team/records/rec_abc123" \
   -H "Authorization: Bearer aglyn_sk_…" \
   -H "Content-Type: application/json" \
   -d '{"values":{"role":"Lead Baker"}}'

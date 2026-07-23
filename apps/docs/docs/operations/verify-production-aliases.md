@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Verify production aliases
-description: Post-release runbook — confirm app.aglyn.io and the *.aglyn.app wildcard point at the newest Ready deployment, and repair a stale alias with one command.
+description: Post-release runbook — confirm app.aglyn.com and the *.aglyn.app wildcard point at the newest Ready deployment, and repair a stale alias with one command.
 ---
 
 # Verify production aliases (AGL-542)
@@ -14,7 +14,7 @@ Aglyn team scope; the script never reads or stores secrets itself.
 After a production promote on Vercel, the tenant wildcard domain (`*.aglyn.app`)
 has repeatedly stayed aliased to a **stale** deployment instead of advancing to
 the newly built one — customer sites keep serving the previous release while
-`app.aglyn.io` looks fine. `tools/deploy/verify-production-aliases.mjs` makes
+`app.aglyn.com` looks fine. `tools/deploy/verify-production-aliases.mjs` makes
 the check (and the repair) a single command.
 
 **Run it after every production promote.**
@@ -29,9 +29,9 @@ node tools/deploy/verify-production-aliases.mjs --json   # machine-readable outp
 
 | Project | Domain(s) checked |
 | --- | --- |
-| `aglyn-console` (console) | `app.aglyn.io` |
+| `aglyn-console` (console) | `app.aglyn.com` |
 | `aglyn-tenant` (tenant) | `northwind-coffee.aglyn.app` (wildcard probe) |
-| `aglyn-docs` (docs) | `docs.aglyn.io` |
+| `aglyn-docs` (docs) | `docs.aglyn.com` |
 | `www-aglyn-io` (marketing) | `aglyn.app` (the apex serves the marketing site, not the tenant wildcard) |
 
 For each project it finds the newest **Ready** production deployment
@@ -71,7 +71,7 @@ name or a full deployment URL**; never trust the directory link in this repo.
 ```text
 PROJECT        DOMAIN                      NEWEST READY            SERVING                 VERDICT
 -------------  --------------------------  ----------------------  ----------------------  -------
-aglyn-console  app.aglyn.io                app-aglyn-xxxx…         app-aglyn-xxxx…         current
+aglyn-console  app.aglyn.com                app-aglyn-xxxx…         app-aglyn-xxxx…         current
 aglyn-tenant   northwind-coffee.aglyn.app  tenant-aglyn-new…       tenant-aglyn-old…       STALE
 ```
 

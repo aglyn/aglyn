@@ -20,7 +20,7 @@ The REST API is included on the **Business** plan. Create keys from
 ## Base URL
 
 ```
-https://app.aglyn.io/api/v1
+https://app.aglyn.com/api/v1
 ```
 
 All requests are made over HTTPS. Every response is JSON.
@@ -28,7 +28,7 @@ All requests are made over HTTPS. Every response is JSON.
 ## Quick start
 
 ```bash
-curl https://app.aglyn.io/api/v1/me \
+curl https://app.aglyn.com/api/v1/me \
   -H "Authorization: Bearer aglyn_sk_your_key_here"
 ```
 

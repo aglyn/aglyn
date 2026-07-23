@@ -28,7 +28,7 @@ List the sites in your organization and read the submissions collected by their
 `GET /v1/sites` — scope `sites:read`. [Paginated](../conventions.md#pagination).
 
 ```bash
-curl "https://app.aglyn.io/api/v1/sites" \
+curl "https://app.aglyn.com/api/v1/sites" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
@@ -42,7 +42,7 @@ curl "https://app.aglyn.io/api/v1/sites" \
 [Paginated](../conventions.md#pagination). Filter to one form with `?form=`.
 
 ```bash
-curl "https://app.aglyn.io/api/v1/sites/host_demo/form-submissions?form=contact" \
+curl "https://app.aglyn.com/api/v1/sites/host_demo/form-submissions?form=contact" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 

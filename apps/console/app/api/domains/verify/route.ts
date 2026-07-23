@@ -21,9 +21,51 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
-import { promises as dns } from 'dns'
+import { promises as dns, Resolver as CallbackResolver } from 'dns'
 
 const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/i
+
+/**
+ * Resolve against public resolvers rather than the runtime's default (AGL-734).
+ *
+ * A stale zone left over from a nameserver migration made Vercel's own resolver
+ * return NXDOMAIN for records that every public resolver could see — so a
+ * correctly-configured domain reported "no CNAME record found" indefinitely,
+ * while `dig` from anywhere else resolved it fine. Pinning the resolver makes
+ * the check depend on public DNS, which is what the customer's browser will use
+ * anyway, instead of on whatever cache a given lambda inherited.
+ *
+ * Falls back to the default resolver if the pinned ones are unreachable, so a
+ * blocked egress path degrades to today's behaviour rather than failing shut.
+ */
+const PUBLIC_RESOLVERS = ['1.1.1.1', '8.8.8.8']
+
+async function resolveCnameRecords(domain: string): Promise<string[]> {
+  const normalise = (records: string[]) =>
+    records.map((record) => record.toLowerCase().replace(/\.$/, ''))
+  try {
+    const resolver = new CallbackResolver()
+    resolver.setServers(PUBLIC_RESOLVERS)
+    const records = await new Promise<string[]>((resolve, reject) => {
+      resolver.resolveCname(domain, (error, addresses) =>
+        error ? reject(error) : resolve(addresses),
+      )
+    })
+    return normalise(records)
+  } catch (error) {
+    // ENOTFOUND/ENODATA are real answers — the name has no CNAME. Only fall
+    // back when the pinned resolvers could not be reached at all.
+    const code = (error as NodeJS.ErrnoException)?.code
+    if (code === 'ENOTFOUND' || code === 'ENODATA' || code === 'NXDOMAIN') {
+      return []
+    }
+    try {
+      return normalise(await dns.resolveCname(domain))
+    } catch {
+      return []
+    }
+  }
+}
 
 /**
  * DNS verification for the connect-a-domain wizard (Custom Domain
@@ -72,14 +114,8 @@ async function handler(request: Request): Promise<Response> {
   if (!DOMAIN_PATTERN.test(domain)) {
     return Response.json({ error: 'Invalid domain' }, { status: 400 })
   }
-  let records: string[] = []
-  try {
-    records = (await dns.resolveCname(domain)).map((record) =>
-      record.toLowerCase().replace(/\.$/, ''),
-    )
-  } catch {
-    // NXDOMAIN / no CNAME — reported as unverified below.
-  }
+  // NXDOMAIN / no CNAME comes back as an empty list — reported as unverified.
+  const records = await resolveCnameRecords(domain)
   // Local dev has no DNS pointing at the tenant edge, so any CNAME is a soft
   // pass there. On Vercel the target must match exactly (AGL-733).
   const softPass = !process.env.VERCEL

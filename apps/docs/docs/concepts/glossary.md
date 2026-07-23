@@ -39,7 +39,7 @@ permission is org-named: `AglynOrganization`, `resolveOrgPermissions`,
 
 **The same entity, in the user's language.** "Your workspace" is what we
 call an organization in UI copy and user docs — Slack-style, including
-the `{slug}.aglyn.io` workspace subdomain. It intentionally never names a
+the `{slug}.aglyn.com` workspace subdomain. It intentionally never names a
 collection or a type.
 
 **Rule: `workspace` appears in UI copy and docs only, never in code

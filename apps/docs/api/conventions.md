@@ -23,11 +23,11 @@ Pass `?limit=` (1–100, default 25) and `?cursor=` to page:
 
 ```bash
 # first page
-curl "https://app.aglyn.io/api/v1/datasets/ds_1/records?limit=50" \
+curl "https://app.aglyn.com/api/v1/datasets/ds_1/records?limit=50" \
   -H "Authorization: Bearer aglyn_sk_…"
 
 # next page — pass the previous response's next_cursor
-curl "https://app.aglyn.io/api/v1/datasets/ds_1/records?limit=50&cursor=c2VlZC0x" \
+curl "https://app.aglyn.com/api/v1/datasets/ds_1/records?limit=50&cursor=c2VlZC0x" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 
@@ -60,7 +60,7 @@ Send the same key to retry a request safely — if the original succeeded, the
 same resource is returned instead of creating a duplicate:
 
 ```bash
-curl -X POST https://app.aglyn.io/api/v1/datasets/ds_1/records \
+curl -X POST https://app.aglyn.com/api/v1/datasets/ds_1/records \
   -H "Authorization: Bearer aglyn_sk_…" \
   -H "Idempotency-Key: 2b9f1c4e-…" \
   -H "Content-Type: application/json" \

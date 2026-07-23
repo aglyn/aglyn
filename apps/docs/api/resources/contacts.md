@@ -32,7 +32,7 @@ API exposes read access.
 `GET /v1/contacts` — scope `contacts:read`. [Paginated](../conventions.md#pagination).
 
 ```bash
-curl "https://app.aglyn.io/api/v1/contacts?limit=50" \
+curl "https://app.aglyn.com/api/v1/contacts?limit=50" \
   -H "Authorization: Bearer aglyn_sk_…"
 ```
 

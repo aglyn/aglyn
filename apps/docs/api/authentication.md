@@ -24,7 +24,7 @@ Only organization **owners and admins** can create or revoke keys.
 Pass the key as a bearer token:
 
 ```bash
-curl https://app.aglyn.io/api/v1/datasets \
+curl https://app.aglyn.com/api/v1/datasets \
   -H "Authorization: Bearer aglyn_sk_your_key_here"
 ```
 
