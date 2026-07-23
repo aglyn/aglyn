@@ -38,6 +38,16 @@ The **staff console** is where Aglyn operators manage the platform and support c
 - **Impersonation** — staff can open the console as a customer account (audited; a
   pinned warning banner with one-click exit shows for the entire session; staff
   accounts cannot be impersonated).
+- **System emails** — the mail Aglyn itself sends (organization invites, the monthly
+  usage summary, internal alerts). Each one ships with built-in copy and can be
+  replaced with a designed template built in the besigner, using email-safe blocks
+  only. Set the subject and preheader from the editor's **Properties** panel; merge
+  tokens the email supplies are listed there, and any token left unresolved is blanked
+  before sending. **Reset to default** puts the built-in copy back.
+  The list is generated from the emails the product actually sends, so staff edit the
+  system emails that exist — adding one is a code change. Password reset and email
+  verification are sent by Firebase Auth from its own templates and are shown as
+  non-editable until Aglyn takes those sends over.
 - **[Feature flags](feature-flags.md)** — release-gate console features via Remote
   Config, with percentage rollout; staff preview everything.
 - **[Multi-tenant architecture](architecture-multi-tenancy.md)** — how organizations,

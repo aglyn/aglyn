@@ -33,6 +33,10 @@ export enum Route {
   ADMIN_FLAGS = '/admin/flags',
   ADMIN_PLUGIN_REVIEWS = '/admin/plugin-reviews',
   ADMIN_EMAILS = '/admin/emails',
+  // The one besigner route with no host and no org in it (AGL-749). A system
+  // email belongs to the platform, not to a workspace, so it is staff-scoped
+  // like the rest of `/admin/*` rather than nested under `[orgSlug]`.
+  ADMIN_EMAIL_BESIGNER = '/admin/emails/[templateKey]/versions/[versionId]/besigner',
   ORG_HOME = '/[orgSlug]',
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
@@ -133,6 +137,7 @@ export interface RoutePayload {
   [Route.ADMIN_FLAGS]: undefined
   [Route.ADMIN_PLUGIN_REVIEWS]: undefined
   [Route.ADMIN_EMAILS]: undefined
+  [Route.ADMIN_EMAIL_BESIGNER]: { templateKey: string; versionId: string }
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }

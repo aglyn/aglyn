@@ -36,6 +36,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, updateDoc } from 'firebase/firestore'
+import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -44,6 +45,7 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
+import { openSystemEmailVersion } from '../../../../utils/open-system-email-version'
 
 /** Firebase's own template settings, for the rows we do not control. */
 const FIREBASE_TEMPLATES_URL =
@@ -69,8 +71,10 @@ interface TemplateState {
  */
 function AdminEmails() {
   const firestore = useFirestore()
+  const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const [resetting, setResetting] = useState<string | null>(null)
+  const [opening, setOpening] = useState<string | null>(null)
 
   const { data: templateDocs } = useFirestoreCollection<TemplateState>(
     () => collection(firestore, SYSTEM_EMAIL_COLLECTION),
@@ -79,6 +83,34 @@ function AdminEmails() {
   )
   const byKey = new Map(
     (templateDocs ?? []).map((entry) => [entry.$id, entry]),
+  )
+
+  /**
+   * Opens the besigner editor (AGL-749), creating the template document and
+   * a seeded first version if this email has never been designed. There is
+   * no separate "create" action because the catalog is code — pressing Edit
+   * on an undesigned email IS the create.
+   */
+  const openEditor = useCallback(
+    async (definition: SystemEmailTemplateDefinition) => {
+      setOpening(definition.key)
+      try {
+        const versionId = await openSystemEmailVersion(firestore, definition)
+        router.push(
+          buildRoute(Route.ADMIN_EMAIL_BESIGNER, {
+            templateKey: definition.key,
+            versionId,
+          }),
+        )
+      } catch (error) {
+        enqueueSnackbar(
+          `Could not open ${definition.name}: ${(error as Error)?.message}`,
+          { variant: 'error', allowDuplicate: true },
+        )
+        setOpening(null)
+      }
+    },
+    [firestore, router, enqueueSnackbar],
   )
 
   const resetToDefault = useCallback(
@@ -198,19 +230,13 @@ function AdminEmails() {
                                 {'Reset to default'}
                               </Button>
                             ) : null}
-                            {/* The besigner editor route lands in AGL-749.
-                                Disabled with the reason on it beats a button
-                                that navigates to a 404. */}
                             <Button
                               size="small"
                               variant="contained"
-                              disabled
-                              title={
-                                'The template editor is not built yet ' +
-                                '(AGL-749)'
-                              }
+                              disabled={opening === definition.key}
+                              onClick={() => void openEditor(definition)}
                             >
-                              {'Edit'}
+                              {customized ? 'Edit' : 'Design'}
                             </Button>
                           </>
                         ) : (
