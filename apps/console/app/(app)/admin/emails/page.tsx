@@ -40,6 +40,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import SystemEmailTestDrawer from '../../../../components/system-email-test-drawer.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -76,6 +77,9 @@ function AdminEmails() {
   const { enqueueSnackbar } = useSnackbar()
   const [resetting, setResetting] = useState<string | null>(null)
   const [opening, setOpening] = useState<string | null>(null)
+  // The template whose test drawer is open, or null (AGL-766).
+  const [testDefinition, setTestDefinition] =
+    useState<SystemEmailTemplateDefinition | null>(null)
 
   const { data: templateDocs } = useFirestoreCollection<TemplateState>(
     () => collection(firestore, SYSTEM_EMAIL_COLLECTION),
@@ -239,6 +243,13 @@ function AdminEmails() {
                             ) : null}
                             <Button
                               size="small"
+                              color="inherit"
+                              onClick={() => setTestDefinition(definition)}
+                            >
+                              {'Send test'}
+                            </Button>
+                            <Button
+                              size="small"
                               variant="contained"
                               disabled={opening === definition.key}
                               onClick={() => void openEditor(definition)}
@@ -281,6 +292,11 @@ function AdminEmails() {
           </StaffOnly>
         </Container>
       </DashboardLayout>
+      <SystemEmailTestDrawer
+        open={Boolean(testDefinition)}
+        definition={testDefinition}
+        onClose={() => setTestDefinition(null)}
+      />
     </>
   )
 }

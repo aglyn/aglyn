@@ -18,7 +18,9 @@
 import {
   EMAIL_NODE_ROOT_ID,
   SYSTEM_EMAIL_COLLECTION,
+  buildDefaultEmailNodeMap,
   getSystemEmailTemplate,
+  isSystemEmailEditable,
   renderEmailHtml,
   substituteMergeTokens,
 } from '@aglyn/shared-util-email'
@@ -121,6 +123,44 @@ export async function renderSystemEmail(
     // its built-in copy and the recipient still gets their email.
     console.error(`system email template ${templateKey} failed to render`, error)
     return null
+  }
+}
+
+/**
+ * Renders the email a template would send RIGHT NOW: the staff-designed
+ * version if one is published, otherwise the catalog default (AGL-766).
+ *
+ * Unlike {@link renderSystemEmail}, which returns null when nothing is
+ * published so a send site can fall back to its own hard-coded copy, this
+ * always returns something for an editable template — the default is rendered
+ * from the same `defaultBody` the editor seeds, so "test" and "design" agree.
+ * Returns null only for an unknown or Firebase-delivered key, which have no
+ * body to render. Used by the test-send endpoint; not on any real send path.
+ */
+export async function renderEffectiveSystemEmail(
+  templateKey: string,
+  merge: Record<string, string> = {},
+): Promise<RenderedSystemEmail | null> {
+  const definition = getSystemEmailTemplate(templateKey)
+  if (!definition || !isSystemEmailEditable(definition)) return null
+
+  const designed = await renderSystemEmail(templateKey, merge)
+  if (designed) return designed
+
+  // Nothing published — render the catalog default the editor would seed.
+  const nodes = buildDefaultEmailNodeMap(definition)
+  const rendered = renderEmailHtml({
+    nodes: nodes as never,
+    rootId: EMAIL_NODE_ROOT_ID,
+    subject: substituteMergeTokens(definition.defaultSubject, merge),
+    merge,
+  })
+  return {
+    subject: blankUnresolvedTokens(
+      substituteMergeTokens(definition.defaultSubject, merge),
+    ),
+    html: blankUnresolvedTokens(rendered.html),
+    text: blankUnresolvedTokens(rendered.text ?? ''),
   }
 }
 

@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { EMAIL_NODE_ROOT_ID } from './email-render'
+
 /**
  * Who actually puts the message on the wire.
  *
@@ -250,4 +252,74 @@ export interface SystemEmailTemplateDoc {
   versionId?: string
   updatedAt?: unknown
   updatedByEmail?: string
+}
+
+/** A besigner node in the flat, denormalized map a version stores. */
+export interface SystemEmailNode {
+  $id: string
+  componentId: string
+  pluginId?: string
+  parentId?: string
+  props?: Record<string, unknown>
+  nodes?: string[]
+}
+
+const PLACEHOLDER_DEFAULT_BODY: readonly SystemEmailDefaultBlock[] = [
+  { block: 'text', text: 'Hello,', variant: 'body' },
+]
+
+/**
+ * Turns a template's `defaultBody` into the besigner node map the editor
+ * seeds and the send-time default renders (AGL-764/766).
+ *
+ * One place builds this so the two never diverge — the version a staffer
+ * opens is byte-for-byte what a test/send renders when nothing is published.
+ * Rooted at {@link EMAIL_NODE_ROOT_ID} so `renderEmailHtml` finds it (AGL-765),
+ * with deterministic ids: a version doc only needs ids unique within itself,
+ * and determinism keeps the map stable and diffable.
+ */
+export function buildDefaultEmailNodeMap(
+  definition: SystemEmailTemplateDefinition,
+): Record<string, SystemEmailNode> {
+  const blocks = definition.defaultBody?.length
+    ? definition.defaultBody
+    : PLACEHOLDER_DEFAULT_BODY
+  const sectionId = 'default-section'
+  const childIds: string[] = []
+  const map: Record<string, SystemEmailNode> = {}
+
+  blocks.forEach((block, index) => {
+    const id = `default-${index}`
+    childIds.push(id)
+    map[id] =
+      block.block === 'button'
+        ? {
+            $id: id,
+            componentId: 'emailButton',
+            pluginId: 'email',
+            parentId: sectionId,
+            props: { children: block.label, href: block.href },
+          }
+        : {
+            $id: id,
+            componentId: 'emailText',
+            pluginId: 'email',
+            parentId: sectionId,
+            props: { children: block.text, variant: block.variant ?? 'body' },
+          }
+  })
+
+  map[EMAIL_NODE_ROOT_ID] = {
+    $id: EMAIL_NODE_ROOT_ID,
+    componentId: 'div',
+    nodes: [sectionId],
+  }
+  map[sectionId] = {
+    $id: sectionId,
+    componentId: 'emailSection',
+    pluginId: 'email',
+    parentId: EMAIL_NODE_ROOT_ID,
+    nodes: childIds,
+  }
+  return map
 }

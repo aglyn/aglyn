@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-import { CANVAS_ROOT_ELEMENT_ID, createResourceUid } from '@aglyn/aglyn'
+import { createResourceUid } from '@aglyn/aglyn'
 import {
   SYSTEM_EMAIL_COLLECTION,
-  type SystemEmailDefaultBlock,
+  buildDefaultEmailNodeMap,
   type SystemEmailTemplateDefinition,
 } from '@aglyn/shared-util-email'
 import {
@@ -28,68 +28,6 @@ import {
   Timestamp,
   type Firestore,
 } from 'firebase/firestore'
-
-/** Placeholder when a template declares no `defaultBody` (AGL-764). */
-const PLACEHOLDER_BODY: readonly SystemEmailDefaultBlock[] = [
-  { block: 'text', text: 'Hello,', variant: 'body' },
-]
-
-/**
- * Builds the starting canvas for a system email nobody has designed yet:
- * one email section wrapping the template's declared `defaultBody`, so the
- * editor opens on the email the product already sends rather than a blank
- * placeholder (AGL-764).
- *
- * The catalog stays a dependency-free data module — it describes the blocks;
- * this turns them into email-plugin nodes and mints the ids here. A rooted
- * node map is required or the canvas has no root and renders nothing
- * (AGL-680), which is why even the placeholder wraps a section.
- */
-function seedNodes(definition: SystemEmailTemplateDefinition) {
-  const sectionId = createResourceUid()
-  const blocks = definition.defaultBody?.length
-    ? definition.defaultBody
-    : PLACEHOLDER_BODY
-
-  const childIds: string[] = []
-  const childNodes: Record<string, unknown> = {}
-  for (const block of blocks) {
-    const id = createResourceUid()
-    childIds.push(id)
-    childNodes[id] =
-      block.block === 'button'
-        ? {
-            $id: id,
-            componentId: 'emailButton',
-            pluginId: 'email',
-            parentId: sectionId,
-            props: { children: block.label, href: block.href },
-          }
-        : {
-            $id: id,
-            componentId: 'emailText',
-            pluginId: 'email',
-            parentId: sectionId,
-            props: { children: block.text, variant: block.variant ?? 'body' },
-          }
-  }
-
-  return {
-    [CANVAS_ROOT_ELEMENT_ID]: {
-      $id: CANVAS_ROOT_ELEMENT_ID,
-      componentId: 'div',
-      nodes: [sectionId],
-    },
-    [sectionId]: {
-      $id: sectionId,
-      componentId: 'emailSection',
-      pluginId: 'email',
-      parentId: CANVAS_ROOT_ELEMENT_ID,
-      nodes: childIds,
-    },
-    ...childNodes,
-  }
-}
 
 /**
  * Resolves the version a staff editor should open for a system email,
@@ -127,7 +65,9 @@ export async function openSystemEmailVersion(
       templateKey: definition.key,
       createdAt: timestamp,
       updatedAt: timestamp,
-      nodes: seedNodes(definition),
+      // Same builder the send-time default render uses (AGL-766), so the
+      // version staff open is exactly what a test/send produces.
+      nodes: buildDefaultEmailNodeMap(definition),
     },
   )
   await setDoc(

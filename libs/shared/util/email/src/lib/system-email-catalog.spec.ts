@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
+import { EMAIL_NODE_ROOT_ID, renderEmailHtml } from './email-render'
 import {
   SYSTEM_EMAIL_TEMPLATES,
+  buildDefaultEmailNodeMap,
   getSystemEmailTemplate,
   isSystemEmailEditable,
 } from './system-email-catalog'
@@ -126,6 +128,46 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
           entry.deliveredBy === 'resend',
         )
       }
+    })
+  })
+
+  describe('buildDefaultEmailNodeMap (AGL-766)', () => {
+    it('roots the map at EMAIL_NODE_ROOT_ID so the renderer finds it', () => {
+      const map = buildDefaultEmailNodeMap(getSystemEmailTemplate('org-invite')!)
+      expect(map[EMAIL_NODE_ROOT_ID]?.componentId).toBe('div')
+      // Every node reachable from the root — no orphans, no dangling child ids.
+      const seen = new Set<string>()
+      const walk = (id: string) => {
+        const node = map[id]
+        if (!node || seen.has(id)) return
+        seen.add(id)
+        for (const child of node.nodes ?? []) {
+          expect(map[child]).toBeTruthy()
+          walk(child)
+        }
+      }
+      walk(EMAIL_NODE_ROOT_ID)
+      expect(seen.size).toBe(Object.keys(map).length)
+    })
+
+    it('renders the org-invite default to non-empty html with its tokens', () => {
+      const map = buildDefaultEmailNodeMap(getSystemEmailTemplate('org-invite')!)
+      const { html } = renderEmailHtml({
+        nodes: map as never,
+        rootId: EMAIL_NODE_ROOT_ID,
+        merge: { 'org.name': 'Test Org', 'invite.role': 'editor' },
+      })
+      expect(html).toContain('invited to join Test Org as editor')
+      // The Sign in button block made it through too.
+      expect(html.toLowerCase()).toContain('sign in')
+    })
+
+    it('turns button blocks into emailButton nodes with the href', () => {
+      const map = buildDefaultEmailNodeMap(getSystemEmailTemplate('org-invite')!)
+      const button = Object.values(map).find(
+        (node) => node.componentId === 'emailButton',
+      )
+      expect(button?.props?.href).toBe('{{signInUrl}}')
     })
   })
 

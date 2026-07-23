@@ -17,7 +17,10 @@
 
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn'
 import { EMAIL_NODE_ROOT_ID } from '@aglyn/shared-util-email'
-import { renderSystemEmail } from '../app/api/_lib/render-system-email'
+import {
+  renderEffectiveSystemEmail,
+  renderSystemEmail,
+} from '../app/api/_lib/render-system-email'
 
 const mockGet = jest.fn()
 const mockVersionGet = jest.fn()
@@ -150,6 +153,39 @@ describe('renderSystemEmail', () => {
     it('never leaves an unresolved token in the subject', async () => {
       const result = await renderSystemEmail('org-invite', {})
       expect(result?.subject).not.toContain('{{')
+    })
+  })
+
+  // The test-send path renders the effective email — designed if published,
+  // else the catalog default — so a test never sends an empty message (AGL-766).
+  describe('renderEffectiveSystemEmail', () => {
+    it('returns the designed version when one is published', async () => {
+      mockGet.mockResolvedValue(
+        snapshot({ versionId: 'v1', subject: 'Join {{org.name}}' }),
+      )
+      mockVersionGet.mockResolvedValue(snapshot({ nodes: NODES }))
+      const result = await renderEffectiveSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(result?.subject).toBe('Join Test Org')
+      expect(result?.html).toContain('Hello Test Org')
+    })
+
+    it('falls back to the catalog default when nothing is published', async () => {
+      // No version pointer → renderSystemEmail returns null → default renders.
+      mockGet.mockResolvedValue(snapshot({ versionId: null }))
+      const result = await renderEffectiveSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+        'invite.role': 'editor',
+      })
+      expect(result?.html).toContain('invited to join Test Org as editor')
+      expect(result?.subject).toContain('Test Org')
+      expect(result?.subject).not.toContain('{{')
+    })
+
+    it('returns null for a Firebase-delivered or unknown key', async () => {
+      expect(await renderEffectiveSystemEmail('password-reset')).toBeNull()
+      expect(await renderEffectiveSystemEmail('not-a-template')).toBeNull()
     })
   })
 
