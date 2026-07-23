@@ -54,6 +54,7 @@ export interface PluginLoader {
 }
 
 import { setRegisteringPluginId } from '../app-utils/api-plugins'
+import { plugins } from '../aglyn'
 
 export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
   const loads = new Map<string, Promise<Record<string, unknown>>>()
@@ -151,6 +152,27 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
     }
   }
 
+  /**
+   * After a batch settles, any target still WAITING is stuck: a dependency it
+   * declared was never activated, so its register fn never ran and its
+   * besigner category is empty (AGL-759). Before the reverse-dependency fix
+   * this was silent — say so now, naming the bundle and what it waited on, so
+   * the failure is a console line rather than a mysteriously empty drawer.
+   */
+  const warnStuck = (targets: readonly PluginLoadEntry[]): void => {
+    const targetIds = new Set(targets.map((entry) => entry.id))
+    for (const { id, waitingOn } of plugins.getStuckDependencies()) {
+      if (!targetIds.has(id)) continue
+      console.warn(
+        `[plugin-loader] ${id} is stuck WAITING on ` +
+          `${waitingOn.join(', ') || 'an unregistered dependency'} — its ` +
+          'components never registered, so its besigner category will be ' +
+          'empty. Check that the dependency is in the manifest and activated ' +
+          '(AGL-759).',
+      )
+    }
+  }
+
   const ensure = (
     ids: readonly string[],
     surfaces: readonly string[],
@@ -164,6 +186,7 @@ export function createPluginLoader(manifest: PluginLoadManifest): PluginLoader {
       const run = async (): Promise<void> => {
         await Promise.all(targets.map((entry) => activate(entry, surfaces)))
         await bootstrap(targets, surfaces)
+        warnStuck(targets)
       }
       promise = run()
       ensures.set(key, promise)

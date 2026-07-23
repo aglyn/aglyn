@@ -217,6 +217,34 @@ export class PluginManager {
     return dependency ? { ...dependency } : undefined
   }
 
+  /**
+   * Every registered dependency still parked in WAITING, paired with the
+   * dependencies it is waiting on that have not loaded (AGL-759).
+   *
+   * A bundle lands here when a dependency it declared never reached LOADED.
+   * With the reverse-dependency edge fixed, a bundle that registers before
+   * its dependency is recovered as soon as the dependency finishes — so the
+   * only thing left in this list once a batch has settled is a bundle whose
+   * dependency was never activated at all (a manifest/enablement gap). That
+   * used to present as an empty besigner drawer with no error: the bundle's
+   * components simply never registered. Callers report this at a settle
+   * point (the plugin loader, after an `ensure`) so the gap says so instead.
+   */
+  public getStuckDependencies(): Array<{
+    id: PluginId
+    waitingOn: PluginId[]
+  }> {
+    const stuck: Array<{ id: PluginId; waitingOn: PluginId[] }> = []
+    for (const id of Object.keys(this.dependencyStatusById)) {
+      if (!this.isDependencyWaiting(id)) continue
+      const waitingOn = Object.keys(
+        this.getDependency(id)?.dependencies || {},
+      ).filter((dependencyId) => !this.isDependencyLoaded(dependencyId))
+      stuck.push({ id, waitingOn })
+    }
+    return stuck
+  }
+
   //     ____  __________  _____             ____ _    ________
   //    / __ \/ ____/ __ \/ ___/            / __ \ |  / /_  __/
   //   / / / / __/ / /_/ /\__ \   ______   / /_/ / | / / / /

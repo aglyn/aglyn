@@ -106,4 +106,24 @@ describe('PluginManager dependency ordering (AGL-759)', () => {
 
     expect(loaded).toEqual(['mui', 'middle', 'leaf'])
   })
+
+  it('reports a bundle stuck on a dependency that never registered', () => {
+    const loaded: string[] = []
+    const manager = new PluginManager()
+
+    // `email` declares `mui`, which is never activated — the manifest/
+    // enablement gap that survives the reverse-edge fix. Nothing crashes; the
+    // bundle just sits WAITING with its components unregistered, which used to
+    // read as an empty drawer. `getStuckDependencies` makes it legible so a
+    // caller can say so.
+    manager.addDependency(bundle('email', { mui: true }, loaded))
+
+    expect(manager.getStuckDependencies()).toEqual([
+      { id: 'email', waitingOn: ['mui'] },
+    ])
+
+    // Once the dependency arrives the bundle loads and nothing is stuck.
+    manager.addDependency(bundle('mui', undefined, loaded))
+    expect(manager.getStuckDependencies()).toEqual([])
+  })
 })
