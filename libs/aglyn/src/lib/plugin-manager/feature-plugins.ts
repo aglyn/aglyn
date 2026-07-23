@@ -206,6 +206,12 @@ export const CONSOLE_WIDGET_SLOTS = {
   besignerFunctions: 'besignerFunctions',
   /** Community listing detail body. Props: hostId, listingId, permissions. */
   communityListing: 'communityListing',
+  /**
+   * Org marketplace browse body (AGL-772). Props: hostId (acting site),
+   * permissions, orgScoped. The single org-scope place to browse + install,
+   * replacing the per-site community tab.
+   */
+  orgMarketplace: 'orgMarketplace',
   /** Plugins & add-ons hub installs section. Props: hostId. */
   orgAddons: 'orgAddons',
   /** Bottom of the host dashboard. Props: hostId, org. (AGL-433) */

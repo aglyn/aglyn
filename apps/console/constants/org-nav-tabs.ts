@@ -50,6 +50,15 @@ export function orgNavTabItems(orgSlug: string) {
       label: 'Plugins',
       href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
     },
+    // The unified marketplace destination (AGL-772): browse, view and
+    // install marketplace items at org scope, replacing the per-site
+    // Community tab. The seller area (profile/listings/payouts) stays under
+    // 'Community' for now.
+    {
+      id: 'nav-tab-org-marketplace',
+      label: 'Marketplace',
+      href: buildRoute(Route.ORG_MARKETPLACE, { orgSlug }),
+    },
     {
       id: 'nav-tab-org-billing',
       label: 'Billing',

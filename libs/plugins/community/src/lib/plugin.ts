@@ -20,6 +20,7 @@ import * as PluginSdk from '@aglyn/aglyn'
 import { mdiAccountGroupOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { AiAssistProvider } from './components/ai-assist-provider.component'
+import CommunityBrowse from './components/community-browse.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import { CommunityListingContent } from './components/listing-content.component'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -54,6 +55,15 @@ export function registerCommunityConsole(): void {
         slot: 'communityListing',
         widgetId: 'community-listing-content',
         Component: CommunityListingContent,
+      },
+      // Org marketplace browse (AGL-772): the org-scope `/marketplace`
+      // page renders this with an acting hostId + orgScoped, so listing
+      // links resolve to the org route. The single place to browse/install,
+      // replacing the per-site community tab.
+      {
+        slot: 'orgMarketplace',
+        widgetId: 'community-org-marketplace',
+        Component: CommunityBrowse,
       },
       // Installed add-ons management (AGL-423): the org "Plugins &
       // add-ons" hub renders this with an acting hostId — the card lists

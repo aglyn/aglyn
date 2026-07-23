@@ -288,6 +288,13 @@ export interface CommunityListingContentProps {
   listingId: string
   /** Org-role permissions resolved by the shell (install gating). */
   permissions: Record<string, boolean | undefined>
+  /**
+   * Rendered under the org-scope `/marketplace` route (AGL-772) rather than
+   * a site's community tab. The publisher page has no org route yet, so the
+   * publisher renders as text at org scope instead of linking to a per-site
+   * page being retired.
+   */
+  orgScoped?: boolean
 }
 
 /**
@@ -300,6 +307,7 @@ export function CommunityListingContent({
   hostId,
   listingId,
   permissions,
+  orgScoped,
 }: CommunityListingContentProps) {
   // The publisher link was `/{hostDocId}/community/publisher/{id}` — the
   // pre-AGL-621 shape, dead since. The sibling browse grid was fixed for
@@ -710,13 +718,15 @@ export function CommunityListingContent({
                         <Stack spacing={0.5}>
                           <MuiLink
                             href={
-                              orgSlug && subdomain && listing?.profileId
-                                ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
-                                    orgSlug,
-                                    host: subdomain,
-                                    profileId: listing.profileId,
-                                  })
-                                : undefined
+                              orgScoped
+                                ? undefined
+                                : orgSlug && subdomain && listing?.profileId
+                                  ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
+                                      orgSlug,
+                                      host: subdomain,
+                                      profileId: listing.profileId,
+                                    })
+                                  : undefined
                             }
                             color="secondary"
                             underline="hover"

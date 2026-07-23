@@ -54,6 +54,14 @@ export interface CommunityBrowseProps {
   hostId: string
   /** Signed-in user's org permissions, supplied by the shell (AGL-395). */
   permissions?: Partial<OrgPermissions>
+  /**
+   * Rendered inside the org-scope `/marketplace` route (AGL-772) rather
+   * than a site's community tab. Only affects link targets — the grid
+   * still installs through the acting `hostId` until targeting lands
+   * (AGL-773) — so detail links resolve to the org route, not a per-site
+   * one that is being retired.
+   */
+  orgScoped?: boolean
 }
 
 /**
@@ -69,7 +77,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { permissions } = props
+  const { permissions, orgScoped } = props
   const { install: runInstall, buy: runBuy } = useCommunityActions(hostId)
   const [handles, setHandles] = useState<Record<string, string>>({})
   // Listings are org-owned (AGL-652), so "is this mine" is an org comparison.
@@ -92,6 +100,33 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   // this grid 404'd. One shared resolution (AGL-673); null renders plain
   // text rather than a link to nowhere.
   const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
+
+  // Link targets differ by surface (AGL-772): the org marketplace resolves
+  // to the org route (`/[orgSlug]/marketplace/[listingId]`), the per-site tab
+  // to the host route. Null → plain text, never a link to nowhere. Publisher
+  // pages have no org route yet, so they stay text at org scope for now.
+  const listingHref = (listingId: string) =>
+    orgScoped
+      ? orgSlug
+        ? buildRoute(Route.ORG_MARKETPLACE_LISTING, { orgSlug, listingId })
+        : undefined
+      : orgSlug && subdomain
+        ? buildRoute(Route.HOST_COMMUNITY_LISTING, {
+            orgSlug,
+            host: subdomain,
+            listingId,
+          })
+        : undefined
+  const publisherHref = (profileId: string) =>
+    orgScoped
+      ? undefined
+      : orgSlug && subdomain
+        ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
+            orgSlug,
+            host: subdomain,
+            profileId,
+          })
+        : undefined
 
   const { data: listings } = useFirestoreCollection<any>(
     () =>
@@ -356,15 +391,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     sx={{ alignItems: 'center' }}
                   >
                     <MuiLink
-                      href={
-                        orgSlug && subdomain
-                          ? buildRoute(Route.HOST_COMMUNITY_LISTING, {
-                              orgSlug,
-                              host: subdomain,
-                              listingId: listing.$id,
-                            })
-                          : undefined
-                      }
+                      href={listingHref(listing.$id)}
                       color="inherit"
                       underline="hover"
                       variant="subtitle2"
@@ -398,15 +425,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                       <>
                         {' · by '}
                         <MuiLink
-                          href={
-                            orgSlug && subdomain
-                              ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
-                                  orgSlug,
-                                  host: subdomain,
-                                  profileId: listing.profileId,
-                                })
-                              : undefined
-                          }
+                          href={publisherHref(listing.profileId)}
                           color="secondary"
                           underline="hover"
                         >
