@@ -26,6 +26,7 @@ import {
   getOrgForHost,
 } from '@aglyn/tenant-data-admin'
 import { createHash, createHmac } from 'crypto'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 
 const MAX_RECIPIENTS_PER_SEND = 500
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -149,11 +150,9 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
 export async function performCampaignSend(
   options: CampaignSendOptions,
 ): Promise<{ campaignId: string; recipients: number; sent: number }> {
-  const resendKey = process.env.RESEND_API_KEY
-  const emailFrom = process.env.USAGE_EMAIL_FROM
   const unsubscribeSecret =
     process.env.EMAIL_UNSUBSCRIBE_SECRET || process.env.CRON_SECRET
-  if (!resendKey || !emailFrom || !unsubscribeSecret) {
+  if (!isEmailConfigured() || !unsubscribeSecret) {
     throw new CampaignSendError(
       'Campaigns are not configured (RESEND_API_KEY, USAGE_EMAIL_FROM, ' +
         'EMAIL_UNSUBSCRIBE_SECRET).',
@@ -373,33 +372,26 @@ export async function performCampaignSend(
         ),
       })
     }
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: emailFrom,
-        to: [email],
-        subject: recipientSubject,
-        ...(rendered ? { html: rendered.html } : {}),
-        text: rendered
-          ? `${rendered.text}\n\n—\nUnsubscribe: ${unsubscribeUrl}`
-          : `${recipientBody}\n\n—\nUnsubscribe: ${unsubscribeUrl}`,
-        headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
-        // Event attribution (AGL-268): the opens/clicks webhook maps
-        // deliveries back to the campaign (and experiment) via tags.
-        tags: [
-          { name: 'hostId', value: hostId },
-          { name: 'campaignId', value: campaignId },
-          ...(experiment
-            ? [{ name: 'experimentId', value: experiment.$id }]
-            : []),
-        ],
-      }),
-    }).catch(() => null)
-    if (response?.ok) {
+    const result = await sendEmail({
+      to: email,
+      subject: recipientSubject,
+      ...(rendered ? { html: rendered.html } : {}),
+      text: rendered
+        ? `${rendered.text}\n\n—\nUnsubscribe: ${unsubscribeUrl}`
+        : `${recipientBody}\n\n—\nUnsubscribe: ${unsubscribeUrl}`,
+      headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>` },
+      // Event attribution (AGL-268): the opens/clicks webhook maps
+      // deliveries back to the campaign (and experiment) via tags.
+      tags: [
+        { name: 'hostId', value: hostId },
+        { name: 'campaignId', value: campaignId },
+        ...(experiment
+          ? [{ name: 'experimentId', value: experiment.$id }]
+          : []),
+      ],
+      context: 'campaign',
+    })
+    if (result.sent) {
       sent += 1
       if (variant) {
         variantSends[variant.id] = (variantSends[variant.id] ?? 0) + 1

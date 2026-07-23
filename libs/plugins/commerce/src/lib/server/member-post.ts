@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 const LIVE_STATUSES = new Set(['active', 'trialing', 'past_due'])
@@ -63,9 +64,7 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
     })
 
     let emailed = 0
-    const resendKey = process.env.RESEND_API_KEY
-    const emailFrom = process.env.USAGE_EMAIL_FROM
-    if (emailSubscribers && resendKey && emailFrom) {
+    if (emailSubscribers && isEmailConfigured()) {
       const subscriptions = await hostRef
         .collection('subscriptions')
         .limit(500)
@@ -84,19 +83,12 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
         ),
       ].slice(0, 200)
       for (const to of recipients) {
-        await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${resendKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from: emailFrom,
-            to: [to],
-            subject: title,
-            text: postBody || title,
-          }),
-        }).catch(() => undefined)
+        await sendEmail({
+          to,
+          subject: title,
+          text: postBody || title,
+          context: 'member post',
+        })
         emailed += 1
       }
     }

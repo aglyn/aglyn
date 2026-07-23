@@ -23,6 +23,7 @@ import {
   type HostAccessRole,
   isOrgRole,
 } from '@aglyn/aglyn/server'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -190,41 +191,21 @@ async function handler(request: Request): Promise<Response> {
       // whether a message actually went out so it can say so honestly
       // (AGL-708): unconfigured or a failed send both report false.
       let emailed = false
-      const resendKey = process.env.RESEND_API_KEY
-      const from = process.env.USAGE_EMAIL_FROM
-      if (resendKey && from) {
-        try {
-          const orgName =
-            (await firestore.collection('orgs').doc(orgId).get()).get('name') ??
-            'an organization'
-          const origin = headers.origin ?? `https://${headers.host}`
-          const emailResponse = await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${resendKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from,
-              to: email,
-              subject: `You've been invited to ${orgName} on Aglyn`,
-              text:
-                `You've been invited to join ${orgName} as ${role}.\n\n` +
-                `Sign in at ${origin} with this email address and accept ` +
-                'the invite from your dashboard.',
-            }),
-          })
-          emailed = emailResponse.ok
-          if (!emailed) {
-            console.error(
-              'invite email failed',
-              emailResponse.status,
-              await emailResponse.text().catch(() => ''),
-            )
-          }
-        } catch (error) {
-          console.error('invite email failed', error)
-        }
+      if (isEmailConfigured()) {
+        const orgName =
+          (await firestore.collection('orgs').doc(orgId).get()).get('name') ??
+          'an organization'
+        const origin = headers.origin ?? `https://${headers.host}`
+        const result = await sendEmail({
+          to: email,
+          subject: `You've been invited to ${orgName} on Aglyn`,
+          text:
+            `You've been invited to join ${orgName} as ${role}.\n\n` +
+            `Sign in at ${origin} with this email address and accept ` +
+            'the invite from your dashboard.',
+          context: 'invite',
+        })
+        emailed = result.sent
       } else {
         console.warn(
           'invite email skipped — set RESEND_API_KEY and USAGE_EMAIL_FROM ' +

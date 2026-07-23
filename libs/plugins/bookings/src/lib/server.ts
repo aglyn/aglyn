@@ -70,6 +70,7 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 
 const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -393,31 +394,22 @@ const bookHandler: PluginApiHandler = async (req, res) => {
     })
 
     // Env-gated confirmation email (same provider as AGL-98).
-    const resendKey = process.env.RESEND_API_KEY
-    const emailFrom = process.env.USAGE_EMAIL_FROM
-    if (resendKey && emailFrom) {
+    if (isEmailConfigured()) {
       const timezone = service.timezone || 'UTC'
       const when = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
         dateStyle: 'full',
         timeStyle: 'short',
       }).format(new Date(startsAtMs))
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [email],
-          subject: `Booking confirmed: ${service.name}`,
-          text:
-            `Hi ${name},\n\nYour booking for "${service.name}" is ` +
-            `confirmed for ${when} (${timezone}).\n\n` +
-            `Reference: ${bookingId}`,
-        }),
-      }).catch((error) => console.error('booking email failed', error))
+      await sendEmail({
+        to: email,
+        subject: `Booking confirmed: ${service.name}`,
+        text:
+          `Hi ${name},\n\nYour booking for "${service.name}" is ` +
+          `confirmed for ${when} (${timezone}).\n\n` +
+          `Reference: ${bookingId}`,
+        context: 'booking confirmation',
+      })
     }
 
     return res.status(200).json({ bookingId, startsAtMs, endsAtMs, alerts })
@@ -453,9 +445,7 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
   if (req.headers['x-cron-secret'] !== cronSecret) {
     return res.status(401).json({ error: 'Unauthenticated' })
   }
-  const resendKey = process.env.RESEND_API_KEY
-  const emailFrom = process.env.USAGE_EMAIL_FROM
-  if (!resendKey || !emailFrom) {
+  if (!isEmailConfigured()) {
     return res.status(501).json({
       error: 'Reminders are not configured (RESEND_API_KEY, USAGE_EMAIL_FROM).',
     })
@@ -488,23 +478,16 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
         'en-US',
         { dateStyle: 'full', timeStyle: 'short' },
       )
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [data['email']],
-          subject: `Reminder: ${data['serviceName'] ?? 'your booking'} tomorrow`,
-          text:
-            `Hi ${data['name'] ?? ''},\n\nA reminder that "${
-              data['serviceName'] ?? 'your booking'
-            }" is scheduled for ${when}.\n\nReference: ${doc.id}`,
-        }),
-      }).catch(() => null)
-      if (response?.ok) {
+      const result = await sendEmail({
+        to: String(data['email']),
+        subject: `Reminder: ${data['serviceName'] ?? 'your booking'} tomorrow`,
+        text:
+          `Hi ${data['name'] ?? ''},\n\nA reminder that "${
+            data['serviceName'] ?? 'your booking'
+          }" is scheduled for ${when}.\n\nReference: ${doc.id}`,
+        context: 'booking reminder',
+      })
+      if (result.sent) {
         sent += 1
         await doc.ref
           .set(

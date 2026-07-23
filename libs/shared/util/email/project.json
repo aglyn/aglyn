@@ -1,0 +1,30 @@
+{
+  "name": "shared-util-email",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/email/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:util"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/email",
+        "main": "libs/shared/util/email/src/index.ts",
+        "tsConfig": "libs/shared/util/email/tsconfig.lib.json",
+        "assets": ["libs/shared/util/email/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/email"],
+      "options": {
+        "jestConfig": "libs/shared/util/email/jest.config.ts"
+      }
+    }
+  }
+}

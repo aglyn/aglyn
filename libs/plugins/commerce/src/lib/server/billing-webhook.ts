@@ -24,6 +24,7 @@ import {
   upsertHostContact,
 } from '@aglyn/tenant-data-admin'
 import { createHmac } from 'crypto'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import * as CommerceModel from '../model'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 
@@ -213,30 +214,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               summary: 'Reserved a stay',
             },
           })
-          const reservationResendKey = process.env.RESEND_API_KEY
-          const reservationEmailFrom = process.env.USAGE_EMAIL_FROM
           const guestEmail = object?.customer_details?.email
-          if (reservationResendKey && reservationEmailFrom && guestEmail) {
+          if (guestEmail) {
             const checkIn = new Date(
               Number(snapshot.get('checkInDayMs')),
             ).toUTCString()
-            await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${reservationResendKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                from: reservationEmailFrom,
-                to: [guestEmail],
-                subject: 'Reservation confirmed',
-                text:
-                  `Your stay is confirmed!\n\nCheck-in: ${checkIn.slice(0, 16)}\n` +
-                  `Nights: ${snapshot.get('nights')}\n` +
-                  `Paid today: $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}\n` +
-                  `Reference: ${reservationId}`,
-              }),
-            }).catch(() => undefined)
+            await sendEmail({
+              to: guestEmail,
+              subject: 'Reservation confirmed',
+              text:
+                `Your stay is confirmed!\n\nCheck-in: ${checkIn.slice(0, 16)}\n` +
+                `Nights: ${snapshot.get('nights')}\n` +
+                `Paid today: $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}\n` +
+                `Reference: ${reservationId}`,
+              context: 'reservation confirmation',
+            })
           }
         }
       }
@@ -369,10 +361,8 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
           .set({ status: 'completed', completedAtMs: Date.now() }, { merge: true })
           .catch(() => undefined)
         // Branded receipt (AGL-296): env-gated like every outbound email.
-        const cartResendKey = process.env.RESEND_API_KEY
-        const cartEmailFrom = process.env.USAGE_EMAIL_FROM
         const buyerEmailForReceipt = object?.customer_details?.email
-        if (cartResendKey && cartEmailFrom && buyerEmailForReceipt) {
+        if (isEmailConfigured() && buyerEmailForReceipt) {
           const receiptSettings = await hostRef
             .collection('settings')
             .doc('store')
@@ -433,25 +423,18 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 `&productId=${line.productId}&token=${downloadToken}`,
             )
             .join('\n')
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${cartResendKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              from: cartEmailFrom,
-              to: [buyerEmailForReceipt],
-              subject: `Receipt for your order`,
-              text:
-                `Thanks for your purchase!\n\n${linesText}\n\n` +
-                (licenseText ? `${licenseText}\n\n` : '') +
-                (downloadLines ? `${downloadLines}\n\n` : '') +
-                `Total: $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}\n` +
-                `Order reference: ${object.id}` +
-                (receiptFooter ? `\n\n${receiptFooter}` : ''),
-            }),
-          }).catch(() => undefined)
+          await sendEmail({
+            to: buyerEmailForReceipt,
+            subject: `Receipt for your order`,
+            text:
+              `Thanks for your purchase!\n\n${linesText}\n\n` +
+              (licenseText ? `${licenseText}\n\n` : '') +
+              (downloadLines ? `${downloadLines}\n\n` : '') +
+              `Total: $${(Number(object?.amount_total ?? 0) / 100).toFixed(2)}\n` +
+              `Order reference: ${object.id}` +
+              (receiptFooter ? `\n\n${receiptFooter}` : ''),
+            context: 'cart receipt',
+          })
         }
         // Inventory per line (AGL-281 semantics).
         for (const line of cart.lines) {
@@ -573,26 +556,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 createdAtMs: Date.now(),
               })
               .catch(() => undefined)
-            const giftResendKey = process.env.RESEND_API_KEY
-            const giftEmailFrom = process.env.USAGE_EMAIL_FROM
             const giftTo = object?.customer_details?.email
-            if (giftResendKey && giftEmailFrom && giftTo) {
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${giftResendKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  from: giftEmailFrom,
-                  to: [giftTo],
-                  subject: 'Your gift card',
-                  text:
-                    `Gift card code: ${code}\n` +
-                    `Value: $${(line.unitAmountCents / 100).toFixed(2)}\n\n` +
-                    'Enter it at checkout to apply the balance.',
-                }),
-              }).catch(() => undefined)
+            if (giftTo) {
+              await sendEmail({
+                to: giftTo,
+                subject: 'Your gift card',
+                text:
+                  `Gift card code: ${code}\n` +
+                  `Value: $${(line.unitAmountCents / 100).toFixed(2)}\n\n` +
+                  'Enter it at checkout to apply the balance.',
+                context: 'gift card',
+              })
             }
           }
         }
@@ -844,25 +818,16 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 body,
               }).catch(() => undefined)
             }
-            const resendKeyForSupplier = process.env.RESEND_API_KEY
-            const supplierEmailFrom = process.env.USAGE_EMAIL_FROM
-            if (supplier.email && resendKeyForSupplier && supplierEmailFrom) {
-              await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${resendKeyForSupplier}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  from: supplierEmailFrom,
-                  to: [supplier.email],
-                  subject: `New order to fulfill: ${payload.productName}`,
-                  text:
-                    `${payload.quantity}× ${payload.productName}\n` +
-                    `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
-                    `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
-                }),
-              }).catch(() => undefined)
+            if (supplier.email) {
+              await sendEmail({
+                to: supplier.email,
+                subject: `New order to fulfill: ${payload.productName}`,
+                text:
+                  `${payload.quantity}× ${payload.productName}\n` +
+                  `Ship to: ${payload.shippingName ?? payload.customerEmail ?? 'see order'}\n\n` +
+                  `Add tracking: ${payload.updateUrl}&trackingNumber=TRACKING&carrier=CARRIER`,
+                context: 'dropship supplier notice',
+              })
             }
           } catch (routingError) {
             console.error('Dropship routing failed', routingError)
@@ -956,30 +921,21 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
         // Receipt + seller notification (AGL-96): env-gated like every
         // other outbound email; failures never fail the webhook.
-        const resendKey = process.env.RESEND_API_KEY
-        const emailFrom = process.env.USAGE_EMAIL_FROM
-        if (resendKey && emailFrom) {
+        if (isEmailConfigured()) {
           const productName = String(
             productSnapshot.get('name') ?? 'your purchase',
           )
           const amount = (Number(object?.amount_total ?? 0) / 100).toFixed(2)
-          const sendEmail = (to: string, subject: string, text: string) =>
-            fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${resendKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ from: emailFrom, to: [to], subject, text }),
-            }).catch(() => undefined)
           const buyerEmail = object?.customer_details?.email
           if (buyerEmail) {
-            await sendEmail(
-              String(buyerEmail),
-              `Receipt: ${productName}`,
-              `Thanks for your purchase!\n\n${productName} — $${amount}` +
+            await sendEmail({
+              to: String(buyerEmail),
+              subject: `Receipt: ${productName}`,
+              text:
+                `Thanks for your purchase!\n\n${productName} — $${amount}` +
                 `\nOrder reference: ${object.id}`,
-            )
+              context: 'receipt',
+            })
           }
           const hostSnapshot = await hostRef.get()
           const sellerUid = (await getOrgForHost(String(hostId)))?.org
@@ -991,15 +947,17 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               .getUser(sellerUid)
               .catch(() => null)
             if (seller?.email) {
-              await sendEmail(
-                seller.email,
-                `New order: ${productName}`,
-                `You made a sale on ${String(
-                  hostSnapshot.get('displayName') ?? hostId,
-                )}!\n\n${productName} — $${amount}` +
+              await sendEmail({
+                to: seller.email,
+                subject: `New order: ${productName}`,
+                text:
+                  `You made a sale on ${String(
+                    hostSnapshot.get('displayName') ?? hostId,
+                  )}!\n\n${productName} — $${amount}` +
                   (buyerEmail ? `\nBuyer: ${buyerEmail}` : '') +
                   `\nOrder reference: ${object.id}`,
-              )
+                context: 'seller order notice',
+              })
             }
           }
         }

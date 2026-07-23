@@ -18,6 +18,7 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 /**
@@ -33,9 +34,7 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
   if (!cronSecret || req.headers['x-cron-secret'] !== cronSecret) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-  const resendKey = process.env.RESEND_API_KEY
-  const emailFrom = process.env.USAGE_EMAIL_FROM
-  if (!resendKey || !emailFrom) {
+  if (!isEmailConfigured()) {
     return res.status(501).json({ error: 'Email is not configured.' })
   }
   try {
@@ -73,21 +72,14 @@ export const processRestockHandler: PluginApiHandler = async (req, res) => {
       }
       const total = CommerceModel.productInventory(product)
       if (total != null && total <= 0) continue
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [String(data.email)],
-          subject: `Back in stock: ${product.name}`,
-          text:
-            `${product.name} is available again — grab it before it sells ` +
-            `out:\n\n/products/${product.slug}`,
-        }),
-      }).catch(() => undefined)
+      await sendEmail({
+        to: String(data.email),
+        subject: `Back in stock: ${product.name}`,
+        text:
+          `${product.name} is available again — grab it before it sells ` +
+          `out:\n\n/products/${product.slug}`,
+        context: 'restock alert',
+      })
       await docSnapshot.ref
         .set({ notifiedAtMs: Date.now() }, { merge: true })
         .catch(() => undefined)

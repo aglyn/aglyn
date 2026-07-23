@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 
 const REMIND_AFTER_MS = 60 * 60 * 1000
@@ -40,9 +41,7 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
   if (req.headers['x-cron-secret'] !== cronSecret) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
-  const resendKey = process.env.RESEND_API_KEY
-  const emailFrom = process.env.USAGE_EMAIL_FROM
-  if (!resendKey || !emailFrom) {
+  if (!isEmailConfigured()) {
     return res.status(501).json({ error: 'Email is not configured.' })
   }
 
@@ -78,22 +77,15 @@ export const processAbandonedHandler: PluginApiHandler = async (req, res) => {
         )
       }
       if (!entitledHosts.get(hostId)) continue
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [String(data.email)],
-          subject: 'You left something in your cart',
-          text:
-            'Your cart is still waiting — pick up where you left off:\n\n' +
-            `${data.resumeUrl ?? ''}\n\n` +
-            'Your items are held but not reserved, so they may sell out.',
-        }),
-      }).catch(() => undefined)
+      await sendEmail({
+        to: String(data.email),
+        subject: 'You left something in your cart',
+        text:
+          'Your cart is still waiting — pick up where you left off:\n\n' +
+          `${data.resumeUrl ?? ''}\n\n` +
+          'Your items are held but not reserved, so they may sell out.',
+        context: 'abandoned cart',
+      })
       await docSnapshot.ref
         .set({ remindedAtMs: now }, { merge: true })
         .catch(() => undefined)

@@ -91,19 +91,71 @@ Variable** in Vercel so every project inherits it:
   projects, for Production (and Preview if you want previews to send).
 - ⚠️ Gotcha: `vercel env ls` and the project env API **omit** team-level shared
   vars — so after adding them, don't trust `vercel env ls` showing them as
-  "missing." Verify in the Team Settings UI. Redeploy for the change to take.
+  "missing." Verify in the Team Settings UI, or run
+  `vercel env pull` and inspect the **resolved** result. Redeploy for the
+  change to take.
+
+### ⚠️ Two things the Vercel Resend integration does not do
+
+Installing the Resend integration from the Vercel marketplace sets
+`RESEND_API_KEY` — and that is *all* it does. Two gaps are easy to miss
+because neither produces an error; mail just silently never sends:
+
+1. **It does not set `USAGE_EMAIL_FROM`.** Every sender is guarded on *both*
+   vars, so a valid API key on its own delivers exactly nothing. Add
+   `USAGE_EMAIL_FROM="Aglyn <noreply@aglyn.com>"` by hand.
+2. **It only sets the key on the project you installed it into.** The
+   integration writes a *project-level* var, not a team-level shared one. The
+   tenant app sends its own mail (receipts, booking confirmations, campaigns,
+   abandoned-cart, restock), so the tenant project needs the key too — either
+   install the integration there as well, or promote both vars to team-level
+   shared and link them to both projects.
+
+Use `/api/admin/email-health` (below) to see what a given deployment actually
+resolved, rather than inferring it from the dashboard.
 
 ## How the code uses it
 
-Every sender reads the same two vars and no-ops safely when they're unset:
+All outbound app mail goes through one helper,
+[`@aglyn/shared-util-email`](../libs/shared/util/email/README.md) (AGL-709).
+Before it, the same ~30 lines of `fetch` were copy-pasted across 10 files.
+
 ```ts
-const resendKey = process.env.RESEND_API_KEY
-const from = process.env.USAGE_EMAIL_FROM
-if (resendKey && from) { /* POST https://api.resend.com/emails */ }
+import { sendEmail } from '@aglyn/shared-util-email'
+
+const result = await sendEmail({
+  to: 'someone@example.com',
+  subject: 'You have been invited',
+  text: 'Sign in to accept.',
+  context: 'invite', // labels the log line on failure
+})
+if (!result.sent) { /* 'unconfigured' | 'no-recipient' | 'rejected' | 'network' */ }
 ```
-The org-invite route additionally returns an `emailed` boolean so the console
-can tell the user whether a message actually went out (AGL-708). When the vars
-are unset it logs a `console.warn` instead of silently doing nothing.
+
+`sendEmail()` reads the two env vars **at call time**, never throws, and
+returns a result instead — outbound mail is best-effort everywhere, so a
+checkout must not fail because a receipt bounced. With the vars unset it
+warns and returns `{ sent: false, reason: 'unconfigured' }`.
+
+Routes that answer an HTTP request use `isEmailConfigured()` to return a 501
+instead of pretending. The org-invite route returns an `emailed` boolean so
+the console can tell the user honestly whether a message went out (AGL-708).
+
+## Checking a deployment
+
+`GET /api/admin/email-health` (staff claim required) reports what that
+runtime actually resolved — which vars are present, the sender and its
+domain, and a plain-language list of `blockers`. The API key is never
+returned.
+
+Add `?probe=1` to also ask Resend whether the key is accepted. The probe
+**sends nothing**: it POSTs an empty body and reads the rejection — `401`/
+`403` means the key was refused, `422`/`400` means the key was fine and only
+the empty payload was rejected.
+
+Its one blind spot: a sending-scoped key has no read permissions, so there is
+no way to confirm *domain verification* short of a real send. A `healthy:
+true` report with an unverified domain will still bounce.
 
 ## Test it
 
@@ -119,5 +171,5 @@ are unset it logs a `console.warn` instead of silently doing nothing.
 
 - Tighten DMARC from `p=none` to `p=quarantine` once Resend traffic looks clean.
 - Consider a monitored `hello@aglyn.com` reply-to for a human touch.
-- Consolidating the ~18 copy-pasted Resend call sites behind one `sendEmail()`
-  helper would make future provider/config changes one-line.
+- ~~Consolidate the ~18 copy-pasted Resend call sites~~ — done in AGL-709; see
+  [`@aglyn/shared-util-email`](../libs/shared/util/email/README.md).

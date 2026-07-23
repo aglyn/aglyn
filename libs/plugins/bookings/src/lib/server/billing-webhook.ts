@@ -17,6 +17,7 @@
 
 import type { BillingWebhookHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { sendEmail } from '@aglyn/shared-util-email'
 
 /**
  * Paid-booking section of the platform Stripe webhook (AGL-170/418):
@@ -51,35 +52,25 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
           },
           { merge: true },
         )
-        // Confirmation email now that payment cleared (env-gated).
-        const resendKey = process.env.RESEND_API_KEY
-        const emailFrom = process.env.USAGE_EMAIL_FROM
-        if (resendKey && emailFrom) {
-          const booking = (await bookingRef.get()).data() ?? {}
-          if (booking['email']) {
-            const when = new Date(
-              Number(booking['startsAtMs']),
-            ).toLocaleString('en-US', {
-              dateStyle: 'full',
-              timeStyle: 'short',
-            })
-            await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${resendKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                from: emailFrom,
-                to: [booking['email']],
-                subject: `Booking confirmed: ${booking['serviceName'] ?? ''}`,
-                text:
-                  `Hi ${booking['name'] ?? ''},\n\nPayment received — ` +
-                  `"${booking['serviceName'] ?? 'your booking'}" is ` +
-                  `confirmed for ${when}.\n\nReference: ${bookingId}`,
-              }),
-            }).catch(() => undefined)
-          }
+        // Confirmation email now that payment cleared (env-gated inside
+        // sendEmail, which no-ops when Resend isn't configured).
+        const booking = (await bookingRef.get()).data() ?? {}
+        if (booking['email']) {
+          const when = new Date(
+            Number(booking['startsAtMs']),
+          ).toLocaleString('en-US', {
+            dateStyle: 'full',
+            timeStyle: 'short',
+          })
+          await sendEmail({
+            to: String(booking['email']),
+            subject: `Booking confirmed: ${booking['serviceName'] ?? ''}`,
+            text:
+              `Hi ${booking['name'] ?? ''},\n\nPayment received — ` +
+              `"${booking['serviceName'] ?? 'your booking'}" is ` +
+              `confirmed for ${when}.\n\nReference: ${bookingId}`,
+            context: 'paid booking confirmation',
+          })
         }
       }
     }

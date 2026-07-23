@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 /** Previous calendar month as YYYY-MM (the default summary target). */
@@ -54,9 +55,7 @@ async function handler(request: Request): Promise<Response> {
   if (!isCronAuthorized(headers)) {
     return Response.json({ error: 'Unauthenticated' }, { status: 401 })
   }
-  const resendKey = process.env.RESEND_API_KEY
-  const emailFrom = process.env.USAGE_EMAIL_FROM
-  if (!resendKey || !emailFrom) {
+  if (!isEmailConfigured()) {
     return Response.json({
       error:
         'Usage email is not configured (RESEND_API_KEY, USAGE_EMAIL_FROM).',
@@ -122,21 +121,13 @@ async function handler(request: Request): Promise<Response> {
         '',
         'Full meters and plan limits: your console → Manage → Billing.',
       ]
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [email],
-          subject: `Your Aglyn usage summary for ${month}`,
-          text: lines.join('\n'),
-        }),
+      const result = await sendEmail({
+        to: email,
+        subject: `Your Aglyn usage summary for ${month}`,
+        text: lines.join('\n'),
+        context: `usage summary (${orgId})`,
       })
-      if (!response.ok) {
-        console.error('usage email failed', orgId, await response.text())
+      if (!result.sent) {
         results[orgId] = { sent: false }
         continue
       }

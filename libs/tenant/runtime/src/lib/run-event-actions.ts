@@ -33,6 +33,7 @@ import {
   resolveOrgEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn/server'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
   firebaseAdmin,
   getOrgForHost,
@@ -298,12 +299,10 @@ async function executeAction(
           link: `/${hostId}`,
         })
       } else if (step.type === 'sendEmail') {
-        const resendKey = process.env.RESEND_API_KEY
-        const from = process.env.USAGE_EMAIL_FROM
         const to = String(
           (payload as any)[step.toField?.trim() || 'email'] ?? '',
         ).trim()
-        if (!resendKey || !from) {
+        if (!isEmailConfigured()) {
           stepErrors.push('email is not configured')
           continue
         }
@@ -311,20 +310,13 @@ async function executeAction(
           stepErrors.push('no recipient email in the event payload')
           continue
         }
-        const response = await fetch('https://api.resend.com/emails', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${resendKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            from,
-            to: [to],
-            subject: String(step.subject ?? '').slice(0, 200),
-            text: String(step.body ?? '').slice(0, 5000),
-          }),
+        const result = await sendEmail({
+          to,
+          subject: String(step.subject ?? '').slice(0, 200),
+          text: String(step.body ?? '').slice(0, 5000),
+          context: 'event action',
         })
-        if (!response.ok) stepErrors.push('email delivery failed')
+        if (!result.sent) stepErrors.push('email delivery failed')
       } else if (step.type === 'enrollList') {
         const orgId = await resolveOrgIdForHost(hostId)
         const email = String((payload as any).email ?? '')

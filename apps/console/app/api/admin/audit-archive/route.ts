@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import { isCronAuthorized } from '../../../../utils/cron-auth'
+import { sendEmail } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 
 const RETENTION_DAYS = 90
@@ -120,32 +121,23 @@ async function handler(request: Request): Promise<Response> {
       name: doc.get('name') ?? null,
       requestedAt: doc.get('erasureRequestedAt')?.toDate?.() ?? null,
     }))
-    const resendKey = process.env.RESEND_API_KEY
-    const emailFrom = process.env.USAGE_EMAIL_FROM
     const staffEmail = process.env.STAFF_ALERT_EMAIL
-    if (due.length && resendKey && emailFrom && staffEmail) {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [staffEmail],
-          subject: `${due.length} erasure request(s) past the 7-day hold`,
-          text:
-            'These organizations are past their GDPR erasure hold. Run ' +
-            'tools/scripts/erase-tenant.mjs to export and hard-delete:\n\n' +
-            due
-              .map(
-                (entry) =>
-                  `- ${entry.name ?? entry.orgId} (${entry.orgId}), ` +
-                  `requested ${entry.requestedAt?.toISOString() ?? '?'}`,
-              )
-              .join('\n'),
-        }),
-      }).catch(() => undefined)
+    if (due.length && staffEmail) {
+      await sendEmail({
+        to: staffEmail,
+        subject: `${due.length} erasure request(s) past the 7-day hold`,
+        text:
+          'These organizations are past their GDPR erasure hold. Run ' +
+          'tools/scripts/erase-tenant.mjs to export and hard-delete:\n\n' +
+          due
+            .map(
+              (entry) =>
+                `- ${entry.name ?? entry.orgId} (${entry.orgId}), ` +
+                `requested ${entry.requestedAt?.toISOString() ?? '?'}`,
+            )
+            .join('\n'),
+        context: 'erasure-hold staff alert',
+      })
     }
 
     return Response.json({

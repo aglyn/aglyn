@@ -105,6 +105,8 @@
       "@aglyn/shared-ui-theme/*": ["./libs/shared/ui/theme/src/lib/*"],
       "@aglyn/shared-util-dom": ["./libs/shared/util/dom/src/index.ts"],
       "@aglyn/shared-util-dom/*": ["./libs/shared/util/dom/src/lib/*"],
+      "@aglyn/shared-util-email": ["./libs/shared/util/email/src/index.ts"],
+      "@aglyn/shared-util-email/*": ["./libs/shared/util/email/src/lib/*"],
       "@aglyn/shared-util-errors": ["./libs/shared/util/errors/src/index.ts"],
       "@aglyn/shared-util-errors/*": ["./libs/shared/util/errors/src/lib/*"],
       "@aglyn/shared-util-fbclient": ["./libs/shared/util/fbclient/src/index.ts"],

@@ -17,6 +17,7 @@
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { mintPasswordResetToken } from './membership'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -81,9 +82,7 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
     ) {
       return res.status(200).json({ ok: true })
     }
-    const resendKey = process.env.RESEND_API_KEY
-    const emailFrom = process.env.USAGE_EMAIL_FROM
-    if (!resendKey || !emailFrom) {
+    if (!isEmailConfigured()) {
       // Config gaps must not become an existence oracle either; log for
       // the operator and keep the visitor-facing contract.
       console.error('membership/recover: email is not configured')
@@ -104,25 +103,18 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
     const siteName = String(
       hostSnapshot.get('displayName') ?? subdomain ?? 'your site',
     )
-    await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: emailFrom,
-        to: [email],
-        subject: `Reset your ${siteName} password`,
-        text:
-          `Someone asked to reset the password for your ${siteName} ` +
-          'account. If that was you, set a new password here:\n\n' +
-          `${resetUrl}\n\n` +
-          'The link works once and expires in 1 hour. If you did not ' +
-          'ask for this, you can safely ignore this email — your ' +
-          'password is unchanged.',
-      }),
-    }).catch((error) => console.error(error))
+    await sendEmail({
+      to: email,
+      subject: `Reset your ${siteName} password`,
+      text:
+        `Someone asked to reset the password for your ${siteName} ` +
+        'account. If that was you, set a new password here:\n\n' +
+        `${resetUrl}\n\n` +
+        'The link works once and expires in 1 hour. If you did not ' +
+        'ask for this, you can safely ignore this email — your ' +
+        'password is unchanged.',
+      context: 'membership recovery',
+    })
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)
