@@ -3,7 +3,8 @@
   "compilerOptions": {
     "types": ["@tshelpers", "node", "jest", "@jsx"],
     "isolatedModules": true,
-    "incremental": true
+    "incremental": true,
+    "ignoreDeprecations": "6.0"
   },
   "include": ["**/*.ts", "**/*.tsx", "next-env.d.ts"],
   "exclude": ["node_modules", "jest.config.ts"]

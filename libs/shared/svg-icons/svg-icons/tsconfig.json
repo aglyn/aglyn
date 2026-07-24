@@ -5,7 +5,8 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "moduleResolution": "bundler",
-    "types": ["@tshelpers", "@jsx"]
+    "types": ["@tshelpers", "@jsx"],
+    "ignoreDeprecations": "6.0"
   },
   "files": [],
   "include": [],
