@@ -72,11 +72,6 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
   )
   const [selectedHost, setSelectedHost] = useState('')
   const actingHost = selectedHost || hostIds[0] || ''
-  // Links address hosts by subdomain (AGL-622); resolve the acting host's.
-  const actingHostSubdomain =
-    (hosts as Array<{ $id: string; subdomain?: string }> | undefined)?.find(
-      (host) => host.$id === actingHost,
-    )?.subdomain ?? ''
 
   const saveEnabledPlugins = async (enabledPlugins: string[]) => {
     const idToken = await (
@@ -174,20 +169,15 @@ const OrgPlugins: NextPageWithLayout<Record<string, never>> = () => {
                     ))}
                   </TextField>
                 ) : null}
-                {actingHost ? (
-                  <Button
-                    component={AppLink}
-                    nativeButton={false}
-                    href={buildRoute(Route.HOST_COMMUNITY, {
-                      orgSlug,
-                      host: actingHostSubdomain,
-                    })}
-                    variant="outlined"
-                    size="small"
-                  >
-                    {'Browse the marketplace'}
-                  </Button>
-                ) : null}
+                <Button
+                  component={AppLink}
+                  nativeButton={false}
+                  href={buildRoute(Route.ORG_MARKETPLACE, { orgSlug })}
+                  variant="outlined"
+                  size="small"
+                >
+                  {'Browse the marketplace'}
+                </Button>
               </Stack>
 
               {actingHost ? (

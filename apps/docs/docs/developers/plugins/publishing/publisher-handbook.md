@@ -15,10 +15,29 @@ the marketplace side.
 ## Before your first publish
 
 1. **Community profile** (Manage → Community profile) — your handle and
-   display name appear on every listing.
+   display name appear on every listing. Publishing is **organization-owned**:
+   the listing belongs to your organization, not your personal account.
 2. **Plan**: publishing requires a Pro plan.
 3. **Payouts** (paid listings only): complete Stripe Connect onboarding
    from your profile. The platform fee is 20% (30% on free plans).
+
+## Where to publish from
+
+Publishing lives at the organization level — **Marketplace → Publish**. Pick
+a **source site**, then what to publish:
+
+- **A component** — a reusable component from that site.
+- **A layout** — a published layout from that site.
+- **This entire site** — its published screens and theme, as an installable
+  template.
+
+The per-site shortcuts still exist for convenience — the **Publish** actions
+on a site's **Components** and **Layouts** pages, and **Publish as template**
+on the **Setup** page — and open the same listing form.
+
+**Plugins are different**: a plugin is a code bundle, not a site artifact, so
+it's published from your built bundle (below) rather than the source-site
+picker.
 
 ## Publishing a version
 

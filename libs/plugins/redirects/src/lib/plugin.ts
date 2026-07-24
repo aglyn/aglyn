@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiSignDirection } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -34,7 +33,7 @@ const RedirectsConsolePage = lazy(
  * registry, gated by the `redirects` entitlement.
  */
 export function registerRedirectsConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Redirects',
     featureFlag: 'redirects',

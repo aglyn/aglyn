@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { COMMERCE_BUNDLE, registerCommercePlugin } from './plugin'
 
@@ -25,7 +24,7 @@ describe('commerce plugin', () => {
     registerCommercePlugin()
     const bundle = Aglyn.plugins.getDependency(BUNDLE_ID)
     expect(bundle?.$id).toBe(BUNDLE_ID)
-    expect(bundle?.dependencies).toMatchObject({ [PluginSdk.MUI_BUNDLE_ID]: true })
+    expect(bundle?.dependencies).toMatchObject({ [Aglyn.MUI_BUNDLE_ID]: true })
     // Idempotent: a second call is a no-op, not a duplicate.
     registerCommercePlugin()
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBe(bundle)

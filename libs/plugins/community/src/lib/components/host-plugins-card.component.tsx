@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { PLUGIN_COMPONENT_ID } from '@aglyn/aglyn'
+import {
+  FIRST_PARTY_PLUGINS,
+  PLUGIN_COMPONENT_ID,
+  resolveEnabledPlugins,
+} from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -40,6 +44,7 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
   useHostOrgId,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -47,33 +52,6 @@ import {
 export interface HostPluginsCardProps {
   hostId: string
 }
-
-/**
- * Platform bundles every host gets (AGL-370): listed for visibility,
- * never uninstallable — screens depend on their component ids.
- */
-const CORE_PLUGINS: Array<{ id: string; name: string; description: string }> = [
-  {
-    id: 'mui',
-    name: 'Material UI components',
-    description: 'The core component and theme library every screen uses.',
-  },
-  {
-    id: 'commerce',
-    name: 'Commerce storefront',
-    description: 'Product grids, detail pages, cart, checkout, accounts.',
-  },
-  {
-    id: 'events-calendar',
-    name: 'Events Calendar',
-    description: 'Published events list with schema.org markup.',
-  },
-  {
-    id: 'email',
-    name: 'Email Designer',
-    description: 'Email-safe blocks for designing campaign emails.',
-  },
-]
 
 /**
  * Installed community plugins (AGL-45): lists the host's pinned plugin
@@ -93,6 +71,19 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   const [busy, setBusy] = useState<string | null>(null)
 
   const orgId = useHostOrgId(hostId)
+  // First-party plugins active for this org (AGL-779): derived from the
+  // registry + the org's switchboard, not a hardcoded list of four. `mui`
+  // (always-on) reads as locked "Core"; the rest show as enabled. Absent
+  // `enabledPlugins` ⇒ default-open, so everything first-party shows.
+  const { data: org } = useFirestoreDoc<any>(
+    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
+    [firestore, orgId],
+    { idField: '$id' },
+  )
+  const firstPartyPlugins = useMemo(() => {
+    const enabled = new Set(resolveEnabledPlugins(org))
+    return FIRST_PARTY_PLUGINS.filter((plugin) => enabled.has(plugin.id))
+  }, [org])
   const { data: installDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
     [firestore, hostId],
@@ -331,8 +322,11 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   return (
     <CardDisplay header="Installed plugins" contentGutterX contentGutterY>
       <Stack spacing={1.5}>
-        {/* Core platform bundles (AGL-370) — visible, locked. */}
-        {CORE_PLUGINS.map((plugin) => (
+        {/* First-party plugins active for this org (AGL-779), from the
+            registry. Always-on is locked "Core"; the rest are toggled in
+            the org Plugins settings, so they're shown here but not
+            uninstalled from this card. */}
+        {firstPartyPlugins.map((plugin) => (
           <Stack
             key={plugin.id}
             direction="row"
@@ -347,15 +341,21 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
           >
             <Stack sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" noWrap>
-                {plugin.name}
+                {plugin.label}
               </Typography>
               <Typography variant="caption" color="text.secondary" noWrap>
                 {plugin.description}
               </Typography>
             </Stack>
-            <Tooltip title="Part of the platform — screens rely on its components, so it cannot be uninstalled.">
-              <Chip size="small" color="secondary" label="Core" />
-            </Tooltip>
+            {plugin.alwaysOn ? (
+              <Tooltip title="Part of the platform — screens rely on its components, so it cannot be uninstalled.">
+                <Chip size="small" color="secondary" label="Core" />
+              </Tooltip>
+            ) : (
+              <Tooltip title="A first-party plugin, enabled for this organization. Turn it on or off in the Plugins settings.">
+                <Chip size="small" variant="outlined" label="Enabled" />
+              </Tooltip>
+            )}
           </Stack>
         ))}
         {installs.length === 0 ? (

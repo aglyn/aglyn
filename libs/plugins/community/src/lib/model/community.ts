@@ -204,6 +204,106 @@ export function installTargetsFor(listing: {
   return INSTALL_TARGETS[listingArtifactType(listing)] ?? ['host']
 }
 
+/** A plugin install pin — the version-pinned doc the install API writes. */
+export interface InstallPin {
+  version?: number | string
+}
+
+/**
+ * The install state of a plugin listing for one site, told honestly (AGL-656).
+ *
+ * A plugin can be pinned at two scopes: the org pin
+ * (`orgs/{orgId}/installs/{listingId}`) applies to every site, and a host pin
+ * (`hosts/{hostId}/installs/{listingId}`) applies to just this one AND shadows
+ * the org pin. Detecting installs from `hosts/{h}/components` — the COMPONENT
+ * collection — never sees either pin, so an installed plugin used to read as
+ * "not installed" on both the browse grid and the detail page. This resolves
+ * the effective state from the two pins the way the loader does.
+ */
+export interface PluginInstallState {
+  /** Effective pin scope for this site — host wins over org — or null. */
+  scope: InstallTarget | null
+  /** Version pinned at the effective scope, or null when not installed. */
+  installedVersion: string | null
+  /** Both pins exist: the host pin takes precedence, shadowing the org one. */
+  shadowed: boolean
+  /** Installed, but the pinned version is behind the listing's latest. */
+  updateAvailable: boolean
+}
+
+/**
+ * Resolves a plugin listing's install state for a site from its two pins
+ * (AGL-656). The host pin shadows the org pin, mirroring the loader, so the
+ * effective version and update prompt always describe what actually runs here.
+ */
+export function resolvePluginInstallState(
+  latestVersion: number | string | undefined,
+  hostPin: InstallPin | null | undefined,
+  orgPin: InstallPin | null | undefined,
+): PluginInstallState {
+  const effective = hostPin ?? orgPin ?? null
+  const installedVersion =
+    effective?.version != null ? String(effective.version) : null
+  return {
+    scope: hostPin ? 'host' : orgPin ? 'org' : null,
+    installedVersion,
+    shadowed: Boolean(hostPin && orgPin),
+    // Any difference is an upgrade prompt, matching the installed-plugins card
+    // — pins only ever move forward, so "different" means "behind".
+    updateAvailable:
+      installedVersion != null &&
+      latestVersion != null &&
+      String(latestVersion) !== installedVersion,
+  }
+}
+
+/** How the admin chose to target an install from the org marketplace. */
+export type InstallTargeting = 'all-sites' | 'selected-sites'
+
+/** One concrete install operation: an org pin, or a pin on a named host. */
+export interface InstallPlanStep {
+  scope: InstallTarget
+  /** Present iff `scope === 'host'`. */
+  hostId?: string
+}
+
+/**
+ * Turns a targeting choice into the concrete install operations for a listing
+ * (AGL-773), honoring what each artifact type physically supports (see
+ * {@link INSTALL_TARGETS}).
+ *
+ * The rules aren't uniform, and the picker must not promise what an artifact
+ * can't do:
+ * - **Org-pinnable** (plugin, datasetSchema) + "all sites" → a SINGLE org pin,
+ *   which also covers sites created later.
+ * - **Host-scoped** (component, template, layout, emailTemplate) has no org
+ *   pin, so "all sites" fans out to every CURRENT host — new sites are NOT
+ *   covered automatically. The UI has to say so.
+ * - "Selected sites" is always host pins, even for an org-pinnable artifact:
+ *   the admin named specific sites, so honor that literally — UNLESS the
+ *   artifact can't host-pin at all (datasetSchema), where the per-site choice
+ *   is meaningless and collapses to the org pin.
+ */
+export function resolveInstallPlan(
+  listing: { artifactType?: string; type?: string; kind?: string },
+  targeting: InstallTargeting,
+  hosts: {
+    selectedHostIds: readonly string[]
+    allHostIds: readonly string[]
+  },
+): InstallPlanStep[] {
+  const targets = installTargetsFor(listing)
+  const canOrgPin = targets.includes('org')
+  const canHostPin = targets.includes('host')
+  if (targeting === 'all-sites') {
+    if (canOrgPin) return [{ scope: 'org' }]
+    return hosts.allHostIds.map((hostId) => ({ scope: 'host', hostId }))
+  }
+  // selected-sites
+  if (!canHostPin) return [{ scope: 'org' }]
+  return hosts.selectedHostIds.map((hostId) => ({ scope: 'host', hostId }))
+}
+
 /**
  * The listing's artifact type, tolerating the pre-AGL-654 shape.
  *
@@ -443,7 +543,20 @@ export function sanitizeCommunityDefinition(
     if (sanitized[id]) continue
     const node = nodes[id]
     if (!node) return { ok: false, error: `Missing node "${id}"` }
-    if (!allowed.includes(node.componentId)) {
+    // The root node is the virtual root-collection wrapper (canvas
+    // `NODE_ROOT_ID` = `_@_`): it declares "everything inside <body>" for
+    // drag/drop mapping, not a rendered component, so a `div`/absent
+    // componentId there is structural — not a real component to allowlist
+    // (AGL-783). Exempt ONLY that wrapper shape; a root carrying a real
+    // component id is still checked, so a disallowed component can't be
+    // smuggled in as the root. Every descendant is real content and always
+    // checked below.
+    const isRootWrapper =
+      id === rootId &&
+      (node.componentId == null ||
+        node.componentId === '' ||
+        node.componentId === 'div')
+    if (!isRootWrapper && !allowed.includes(node.componentId)) {
       return {
         ok: false,
         error: `Component "${node.componentId}" cannot be published`,
@@ -455,6 +568,9 @@ export function sanitizeCommunityDefinition(
     }
     plain.$id = id
     plain.parentId = id === rootId ? null : (node.parentId ?? null)
+    // Give the wrapper an explicit container id so the installed definition
+    // renders its root collection the same way it did on the source site.
+    if (isRootWrapper) plain.componentId = 'div'
     sanitized[id] = plain
     if (Array.isArray(node.nodes)) queue.push(...node.nodes)
   }

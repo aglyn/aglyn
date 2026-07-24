@@ -16,14 +16,13 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerLogicConsole } from './plugin'
 
 describe('logic plugin', () => {
   it('registers a console-only, always-on Logic page', () => {
     registerLogicConsole()
-    const extension = PluginSdk.listConsoleExtensions().find(
+    const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     // Not release-flagged: no entitlement gate on the surface.

@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 const PosConsolePage = lazy(() => import('./components/console/pos-page.component'))
@@ -52,7 +51,7 @@ const CommerceConsolePage = lazy(() => import('./components/commerce-console-pag
  * as they land (PLP AGL-291, PDP AGL-292, cart AGL-293, …); ids are
  * persisted in screen docs and never renamed.
  */
-export const COMMERCE_BUNDLE: PluginSdk.FeatureBundleEntry[] = [
+export const COMMERCE_BUNDLE: Aglyn.FeatureBundleEntry[] = [
   {
     component: ProductGrid.default,
     schema: ProductGrid.schema,
@@ -143,8 +142,8 @@ export const COMMERCE_BUNDLE: PluginSdk.FeatureBundleEntry[] = [
 export function registerCommerceConsole(): void {
   // Plugin-declared permissions (AGL-435): tier defaults ride every
   // resolved role set; custom roles override key-by-key.
-  PluginSdk.registerPluginPermissions(COMMERCE_PERMISSIONS)
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerPluginPermissions(COMMERCE_PERMISSIONS)
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Commerce',
     // Dashboard/analytics glance card (AGL-419): rendered through the
@@ -181,7 +180,7 @@ export function registerCommercePlugin(): void {
   registerCommerceConsole()
   if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
   Aglyn.plugins.addDependency(
-    PluginSdk.defineUiFeatureBundle(
+    Aglyn.defineUiFeatureBundle(
       {
         bundleId: BUNDLE_ID,
         displayName: 'Commerce',

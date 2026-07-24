@@ -16,19 +16,27 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerCommunityConsole } from './plugin'
 
 describe('community plugin', () => {
-  it('registers a console-only Community hub page', () => {
+  it('exposes the marketplace through widget slots, not a per-site nav tab', () => {
+    // The marketplace moved to org scope (AGL-772/775): no `/community` nav
+    // tab any more — the app renders browse/detail/installed through slots.
     registerCommunityConsole()
-    const extension = PluginSdk.listConsoleExtensions().find(
+    const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
-    expect(extension?.navItems?.[0]?.href).toBe('/community')
-    expect(extension?.navItems?.[0]?.navTabId).toBe('nav-tab-community')
-    expect(extension?.navItems?.[0]?.Component).toBeDefined()
+    expect(extension).toBeDefined()
+    expect(extension?.navItems ?? []).toHaveLength(0)
+    const slots = (extension?.widgets ?? []).map((widget) => widget.slot)
+    expect(slots).toEqual(
+      expect.arrayContaining([
+        'orgMarketplace',
+        'communityListing',
+        'orgAddons',
+      ]),
+    )
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
   })
 })

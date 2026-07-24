@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiSitemap } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { HostActivityCard } from './components/host-activity-card.component'
@@ -37,7 +36,7 @@ const WorkflowsConsolePage = lazy(
  * shared where-used tooling.
  */
 export function registerWorkflowsConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     // Host activity feed (AGL-419): rendered by the shell's
     // 'hostActivity' widget slot (dashboard + editor view page).
     widgets: [

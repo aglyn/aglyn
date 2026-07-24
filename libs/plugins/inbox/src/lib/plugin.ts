@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiInboxArrowDown } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -32,7 +31,7 @@ const InboxConsolePage = lazy(() => import('./components/inbox-console-page'))
  * the commerce + email plugins for the borrowed Orders/Campaigns tabs.
  */
 export function registerInboxConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Inbox',
     navItems: [

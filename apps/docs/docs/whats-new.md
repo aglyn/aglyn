@@ -10,7 +10,20 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## REST API & API keys (newest)
+## Marketplace at the organization level (newest)
+
+- **[One Marketplace for the whole organization](developers/plugins/overview.md)** — browse,
+  install, manage and publish marketplace items from a single **Marketplace** destination in
+  the organization navigation (**Browse**, **Installed**, and **Publish** tabs), instead of a
+  per-site Community tab. Old per-site links redirect here.
+- **Install targeting** — when you install, choose **All sites** (organization-wide, and any
+  sites you add later) or **Selected sites**. Site-scoped artifacts (components, templates,
+  layouts) install onto every current site and note that new sites aren't added automatically.
+- **[Publish from any site](developers/plugins/publishing/publisher-handbook.md#where-to-publish-from)** —
+  the **Publish** tab picks a source site, then a component, a layout, or the whole site as a
+  template. The per-site Publish shortcuts still work.
+
+## REST API & API keys
 
 - **[The Aglyn REST API](https://docs.aglyn.com/api)** — programmatic access to
   your organization's datasets and records (full CRUD), contacts, sites, and

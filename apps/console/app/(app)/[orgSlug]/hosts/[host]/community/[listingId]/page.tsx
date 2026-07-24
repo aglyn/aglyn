@@ -14,62 +14,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-'use client'
 
-import { ICON_VARIANT_APP_SETTINGS } from '@aglyn/shared-data-enums'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { useParams } from 'next/navigation'
-import HostDisplayNameComponent from '../../../../../../../components/host-display-name.component'
-import { useHostId, useHostSubdomain } from '../../../../../../../components/host-id-provider'
-import DashboardLayout from '../../../../../../../components/layouts/dashboard.layout'
-import PluginWidgetSlot from '../../../../../../../components/plugin-widget-slot.component'
+import { redirect } from 'next/navigation'
 import { buildRoute, Route } from '../../../../../../../constants/route-links'
-import { useOrgSlug } from '../../../../../../../hooks/use-org-scope'
-import useOrgPermissions from '../../../../../../../hooks/use-org-permissions'
 
 /**
- * Community listing detail route (AGL-95/419): the app owns only the
- * Dashboard chrome — the listing content is the community plugin's
- * 'communityListing' widget (the app never imports the plugin).
+ * Community listing detail moved to org scope (AGL-775). The listing id maps
+ * 1:1 to the org marketplace route; the host context is dropped.
  */
-const CommunityListingDetail: NextPageWithLayout<Record<string, never>> = () => {
-  const hostId = useHostId()
-  const orgSlug = useOrgSlug()
-  const host = useHostSubdomain()
-  const params = useParams<{ listingId: string }>()
-  const listingId = String(params.listingId ?? '')
-  const { permissions } = useOrgPermissions()
-
-  return (
-    <DashboardLayout
-      breadcrumbItems={[
-        {
-          children: <HostDisplayNameComponent hostId={hostId} />,
-          href: buildRoute(Route.HOST_DASHBOARD, { orgSlug,  host }),
-        },
-        {
-          children: 'Community',
-          href: buildRoute(Route.HOST_COMMUNITY, { orgSlug,  host }),
-        },
-        {
-          children: 'Listing',
-          href: buildRoute(Route.HOST_COMMUNITY_LISTING, { orgSlug,  host, listingId }),
-        },
-      ]}
-      header={{
-        children: 'Community listing',
-        icon: { path: ICON_VARIANT_APP_SETTINGS.path },
-      }}
-    >
-      <PluginWidgetSlot
-        slot="communityListing"
-        hostId={hostId}
-        listingId={listingId}
-        permissions={permissions}
-      />
-    </DashboardLayout>
-  )
+export default async function HostCommunityListingRedirect({
+  params,
+}: {
+  params: Promise<{ orgSlug: string; host: string; listingId: string }>
+}) {
+  const { orgSlug, listingId } = await params
+  redirect(buildRoute(Route.ORG_MARKETPLACE_LISTING, { orgSlug, listingId }))
 }
-CommunityListingDetail.displayName = 'Page:CommunityListingDetail'
-
-export default CommunityListingDetail

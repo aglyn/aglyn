@@ -16,14 +16,13 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerRedirectsConsole } from './plugin'
 
 describe('redirects plugin', () => {
   it('registers a console-only extension with a page + entitlement gate', () => {
     registerRedirectsConsole()
-    const extension = PluginSdk.listConsoleExtensions().find(
+    const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension?.featureFlag).toBe('redirects')

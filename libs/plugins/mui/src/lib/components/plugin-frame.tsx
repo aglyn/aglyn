@@ -17,7 +17,6 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import Box from '@mui/material/Box'
 import {
   forwardRef,
@@ -129,7 +128,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
     const allowedEvents = capabilities?.events
     const allowedProps = capabilities?.props
     const filteredProps = useMemo(
-      () => PluginSdk.filterPluginProps(pluginProps, allowedProps),
+      () => Aglyn.filterPluginProps(pluginProps, allowedProps),
       [pluginProps, allowedProps],
     )
     // Stable dependency for the props-update effect.
@@ -161,7 +160,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       const handleMessage = (event: MessageEvent) => {
         if (event.origin !== expectedOrigin) return
         if (event.source !== frameRef.current?.contentWindow) return
-        const message = PluginSdk.parseGuestMessage(event.data, allowedEvents)
+        const message = Aglyn.parseGuestMessage(event.data, allowedEvents)
         if (!message) return
         switch (message.type) {
           case 'ready':
@@ -169,7 +168,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
             frameRef.current?.contentWindow?.postMessage(
               {
                 type: 'init',
-                v: PluginSdk.PLUGIN_BRIDGE_VERSION,
+                v: Aglyn.PLUGIN_BRIDGE_VERSION,
                 props: filteredProps,
                 ...(scheme ? { scheme } : {}),
               },
@@ -198,7 +197,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
               error?: string
             }) =>
               frameRef.current?.contentWindow?.postMessage(
-                { type: 'fetch-response', v: PluginSdk.PLUGIN_BRIDGE_VERSION, id: requestId, ...payload },
+                { type: 'fetch-response', v: Aglyn.PLUGIN_BRIDGE_VERSION, id: requestId, ...payload },
                 expectedOrigin,
               )
             if (!hostId) {
@@ -248,7 +247,7 @@ const PluginFrame = forwardRef<HTMLIFrameElement, PluginFrameProps>(
       frameRef.current?.contentWindow?.postMessage(
         {
           type: 'props',
-          v: PluginSdk.PLUGIN_BRIDGE_VERSION,
+          v: Aglyn.PLUGIN_BRIDGE_VERSION,
           props: filteredProps,
         },
         expectedOrigin,

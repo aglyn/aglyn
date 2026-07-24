@@ -17,7 +17,6 @@
 
 import HostDatasetsCard from './components/host-datasets-card.component'
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiDatabaseOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -35,7 +34,7 @@ const DataConsolePage = lazy(() => import('./components/data-console-page'))
  * that imports {@link HostDatasetsCard} directly.
  */
 export function registerDataConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     // Org datasets card (AGL-419): org/data renders it through the
     // 'orgData' widget slot.
     widgets: [

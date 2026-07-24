@@ -17,9 +17,11 @@
 
 import { isReleaseFlagKey } from '../app-utils/release-flags'
 import {
+  classifyEnabledPlugins,
   DEFAULT_ENABLED_PLUGINS,
   FIRST_PARTY_PLUGINS,
   filterPluginsByReleaseFlags,
+  isFirstPartyPlugin,
   isPluginEnabled,
   pluginForReleaseFlag,
   resolveEnabledPlugins,
@@ -96,5 +98,40 @@ describe('filterPluginsByReleaseFlags (AGL-422)', () => {
       { staffBypass: true },
     )
     expect(filtered).toEqual(['bookings', 'email'])
+  })
+})
+
+/**
+ * `enabledPlugins` is a flat mix of first-party bundle ids and marketplace
+ * listing ids (AGL-777). This classifier is the single place that tells them
+ * apart, so an install sync can never toggle a platform bundle by accident.
+ */
+describe('classifyEnabledPlugins / isFirstPartyPlugin (AGL-777)', () => {
+  it('recognizes every registered first-party id as a bundle', () => {
+    for (const plugin of FIRST_PARTY_PLUGINS) {
+      expect(isFirstPartyPlugin(plugin.id)).toBe(true)
+    }
+  })
+
+  it('treats anything else (marketplace listing doc ids) as not first-party', () => {
+    expect(isFirstPartyPlugin('acme-widgets')).toBe(false)
+    // A realistic Firestore listing doc id.
+    expect(isFirstPartyPlugin('8sKQ2m1nZpLdRt09aBcd')).toBe(false)
+    expect(isFirstPartyPlugin('')).toBe(false)
+  })
+
+  it('splits a mixed list into bundles vs listings, order preserved', () => {
+    const { bundles, listings } = classifyEnabledPlugins([
+      'mui',
+      'acme-widgets',
+      'commerce',
+      '8sKQ2m1nZpLdRt09aBcd',
+    ])
+    expect(bundles).toEqual(['mui', 'commerce'])
+    expect(listings).toEqual(['acme-widgets', '8sKQ2m1nZpLdRt09aBcd'])
+  })
+
+  it('handles the empty list', () => {
+    expect(classifyEnabledPlugins([])).toEqual({ bundles: [], listings: [] })
   })
 })

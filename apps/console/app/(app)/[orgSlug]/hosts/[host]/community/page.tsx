@@ -15,18 +15,19 @@
  * limitations under the License.
  */
 
-import * as Aglyn from '@aglyn/aglyn'
-import { BUNDLE_ID } from './constants/bundle-common'
-import { registerInboxConsole } from './plugin'
+import { redirect } from 'next/navigation'
+import { buildRoute, Route } from '../../../../../../constants/route-links'
 
-describe('inbox plugin', () => {
-  it('registers a console-only Inbox page', () => {
-    registerInboxConsole()
-    const extension = Aglyn.listConsoleExtensions().find(
-      (entry) => entry.pluginId === BUNDLE_ID,
-    )
-    expect(extension?.navItems?.[0]?.href).toBe('/inbox')
-    expect(extension?.navItems?.[0]?.Component).toBeDefined()
-    expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
-  })
-})
+/**
+ * The per-site community/marketplace tab moved to org scope (AGL-775). Old
+ * `/[orgSlug]/hosts/[host]/community` links land on the org marketplace; the
+ * host context is dropped because browse is now org-wide.
+ */
+export default async function HostCommunityRedirect({
+  params,
+}: {
+  params: Promise<{ orgSlug: string; host: string }>
+}) {
+  const { orgSlug } = await params
+  redirect(buildRoute(Route.ORG_MARKETPLACE, { orgSlug }))
+}

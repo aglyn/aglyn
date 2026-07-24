@@ -89,30 +89,23 @@ export const checkoutHandler: PluginApiHandler = async (req, res) => {
     const feeCents = Math.round((amountCents * feePercent) / 100)
 
     const origin = req.headers.origin ?? `https://${req.headers.host}`
-    // Stripe returns the BUYER to the community page they bought from. This
-    // was `/{hostDocId}/community`, the pre-AGL-621/622 shape, so every
-    // completed marketplace purchase landed on a 404 (AGL-685). The route
-    // needs the buyer's org slug and the host SUBDOMAIN — `sellerOrgId` is
-    // the wrong org — and server code cannot call useConsoleHostRoute, so
-    // both are resolved from the host here. `/manage/community` (a real
-    // route, and the existing hostless fallback) covers the rest.
+    // Stripe returns the BUYER to the org marketplace (AGL-775) — the
+    // per-site community page it used to land on was retired. Only the
+    // buyer's org slug is needed now (`sellerOrgId` is the wrong org), and
+    // it's resolved from the host here since server code cannot call
+    // useConsoleHostRoute. `/manage/community` is the hostless fallback.
     const buyerIndex = hostId
       ? await firestore.collection('hostIndex').doc(hostId).get()
       : null
-    const buyerSubdomain = buyerIndex?.get('subdomain') as string | undefined
     const buyerOrgId = buyerIndex?.get('orgId') as string | undefined
     const buyerOrgSlug = buyerOrgId
       ? ((await firestore.collection('orgs').doc(buyerOrgId).get()).get(
           'slug',
         ) as string | undefined)
       : undefined
-    const returnPath =
-      buyerOrgSlug && buyerSubdomain
-        ? buildRoute(Route.HOST_COMMUNITY, {
-            orgSlug: buyerOrgSlug,
-            host: buyerSubdomain,
-          })
-        : Route.MANAGE_MY_COMMUNITY
+    const returnPath = buyerOrgSlug
+      ? buildRoute(Route.ORG_MARKETPLACE, { orgSlug: buyerOrgSlug })
+      : Route.MANAGE_MY_COMMUNITY
     const params = new URLSearchParams({
       mode: 'payment',
       'line_items[0][quantity]': '1',

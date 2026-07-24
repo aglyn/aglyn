@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiCardAccountDetailsOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -34,7 +33,7 @@ const ContactsConsolePage = lazy(
  * page reads the `contactsPerHost` quota off the shell-passed `org`.
  */
 export function registerContactsConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Contacts',
     navItems: [

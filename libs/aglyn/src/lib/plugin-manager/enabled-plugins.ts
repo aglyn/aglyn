@@ -74,6 +74,40 @@ const ALWAYS_ON: readonly string[] = FIRST_PARTY_PLUGINS.filter(
   (plugin) => plugin.alwaysOn,
 ).map((plugin) => plugin.id)
 
+const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
+  FIRST_PARTY_PLUGINS.map((plugin) => plugin.id),
+)
+
+/**
+ * Whether an `enabledPlugins` id is a first-party BUNDLE (vs a marketplace
+ * listing id) — AGL-777. `enabledPlugins` is a flat mix of the two: bundle
+ * ids are the short, stable names in {@link FIRST_PARTY_PLUGINS}; marketplace
+ * installs ride the same field under their Firestore listing doc id. This is
+ * the single classifier both writers and readers use so the two kinds never
+ * get confused — e.g. an install sync must never add/remove a bundle id.
+ */
+export function isFirstPartyPlugin(pluginId: string): boolean {
+  return FIRST_PARTY_IDS.has(pluginId)
+}
+
+/**
+ * Splits a mixed `enabledPlugins` array into first-party bundle ids and
+ * marketplace listing ids (AGL-777). The field stays a single flat list;
+ * this just names the two kinds for callers that need to treat them apart.
+ */
+export function classifyEnabledPlugins(pluginIds: readonly string[]): {
+  bundles: string[]
+  listings: string[]
+} {
+  const bundles: string[] = []
+  const listings: string[] = []
+  for (const id of pluginIds) {
+    if (isFirstPartyPlugin(id)) bundles.push(id)
+    else listings.push(id)
+  }
+  return { bundles, listings }
+}
+
 /**
  * The org's effective enabled-plugin set. Absent field → every first-party
  * plugin (existing orgs keep working untouched); always-on ids are unioned

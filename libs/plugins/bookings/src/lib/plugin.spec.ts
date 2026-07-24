@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { BOOKINGS_BUNDLE, registerBookingsPlugin } from './plugin'
 
@@ -31,8 +30,8 @@ describe('bookings plugin', () => {
   it('registers a mui-dependent bundle + console extension once', () => {
     registerBookingsPlugin()
     const bundle = Aglyn.plugins.getDependency(BUNDLE_ID)
-    expect(bundle?.dependencies).toMatchObject({ [PluginSdk.MUI_BUNDLE_ID]: true })
-    const extension = PluginSdk.listConsoleExtensions().find(
+    expect(bundle?.dependencies).toMatchObject({ [Aglyn.MUI_BUNDLE_ID]: true })
+    const extension = Aglyn.listConsoleExtensions().find(
       (entry) => entry.pluginId === BUNDLE_ID,
     )
     expect(extension?.featureFlag).toBe('bookings')

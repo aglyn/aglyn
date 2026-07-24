@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiCalendarMonthOutline } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import * as EventList from './components/event-list'
@@ -38,7 +37,7 @@ const EventsConsolePage = lazy(() => import('./components/events-console-page'))
  * nav/dashboard surface through the ConsoleExtension registry, gated by
  * the `eventCalendar` entitlement.
  */
-export const EVENTS_CALENDAR_BUNDLE: PluginSdk.FeatureBundleEntry[] = [
+export const EVENTS_CALENDAR_BUNDLE: Aglyn.FeatureBundleEntry[] = [
   {
     component: EventList.default,
     schema: EventList.schema,
@@ -54,7 +53,7 @@ export const EVENTS_CALENDAR_BUNDLE: PluginSdk.FeatureBundleEntry[] = [
  * surface exists without any edit to the console's own nav or page files.
  */
 export function registerEventsCalendarConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Events Calendar',
     featureFlag: 'eventCalendar',
@@ -78,7 +77,7 @@ export function registerEventsCalendarPlugin(): void {
   registerEventsCalendarConsole()
   if (Aglyn.plugins.getDependency(BUNDLE_ID)) return
   Aglyn.plugins.addDependency(
-    PluginSdk.defineUiFeatureBundle(
+    Aglyn.defineUiFeatureBundle(
       {
         bundleId: BUNDLE_ID,
         displayName: 'Events Calendar',

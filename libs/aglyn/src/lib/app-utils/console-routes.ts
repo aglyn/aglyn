@@ -41,6 +41,11 @@ export enum Route {
   ORG_MEDIA = '/[orgSlug]/media',
   ORG_DATA = '/[orgSlug]/data',
   ORG_PLUGINS = '/[orgSlug]/plugins',
+  // Org-scope marketplace (AGL-772): the single place to browse, view and
+  // install marketplace items — the per-site community tab
+  // (`HOST_COMMUNITY*`) is being retired in favor of this.
+  ORG_MARKETPLACE = '/[orgSlug]/marketplace',
+  ORG_MARKETPLACE_LISTING = '/[orgSlug]/marketplace/[listingId]',
   ORG_SETTINGS = '/[orgSlug]/settings',
   MANAGE_BILLING = '/[orgSlug]/billing',
   MANAGE_USER_SETTINGS = '/manage/user',
@@ -151,6 +156,8 @@ export interface RoutePayload {
   [Route.ORG_MEDIA]: { orgSlug: string }
   [Route.ORG_DATA]: { orgSlug: string }
   [Route.ORG_PLUGINS]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE]: { orgSlug: string }
+  [Route.ORG_MARKETPLACE_LISTING]: { orgSlug: string; listingId: string }
   [Route.MANAGE_USER_SETTINGS]: undefined
   [Route.MANAGE_NOTIFICATIONS]: undefined
   [Route.MANAGE_MY_COMMUNITY]: undefined

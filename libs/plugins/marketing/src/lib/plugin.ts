@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { registerSiteRuntime } from '@aglyn/aglyn'
 import { MarketingSiteRuntime } from './components/site-runtime'
 import { mdiBullhornOutline } from '@aglyn/shared-data-mdi'
@@ -38,7 +37,7 @@ const MarketingConsolePage = lazy(
  * uses the shell's media browser via `useMediaPicker`.
  */
 export function registerMarketingConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: 'Marketing',
     navItems: [

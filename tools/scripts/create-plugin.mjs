@@ -299,7 +299,7 @@ if (surfaces.includes('console') || surfaces.includes('site')) {
  * Add widgets/providers/dashboardCards/settingsSections as needed.
  */
 export function register${pascal}Console(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     pluginId: BUNDLE_ID,
     displayName: '${label}',
     navItems: [
@@ -321,13 +321,13 @@ export function register${pascal}Console(): void {
  * enricher wrote.
  */
 export function register${pascal}Site(): void {
-  // PluginSdk.registerSiteRuntime({ runtimeId: '${id}', Component: ... })
+  // Aglyn.registerSiteRuntime({ runtimeId: '${id}', Component: ... })
 }`)
   }
   write(
     'src/lib/plugin.ts',
     `${LICENSE}
-import * as PluginSdk from '@aglyn/aglyn'
+import * as Aglyn from '@aglyn/aglyn'
 ${surfaces.includes('console') ? "import { lazy } from 'react'\n" : ''}import { BUNDLE_ID } from './constants/bundle-common'
 
 ${

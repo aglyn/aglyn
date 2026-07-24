@@ -16,7 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import * as PluginSdk from '@aglyn/aglyn'
 import { mdiFunctionVariant } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import HostFunctionsCard from './components/host-functions-card.component'
@@ -35,7 +34,7 @@ const LogicConsolePage = lazy(() => import('./components/logic-console-page'))
  * "where used" reference tooling, consumed by the workflows surface.
  */
 export function registerLogicConsole(): void {
-  PluginSdk.registerConsoleExtension({
+  Aglyn.registerConsoleExtension({
     // Variables/functions cards (AGL-419): the besigner functions
     // drawer renders them through the 'besignerFunctions' slot.
     widgets: [

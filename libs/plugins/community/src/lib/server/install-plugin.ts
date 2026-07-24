@@ -19,6 +19,7 @@ import {
   resolveOrgIdForHost, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   isCompatibleHostAbi,
+  isFirstPartyPlugin,
   PLUGIN_HOST_ABI_VERSION,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
@@ -53,6 +54,12 @@ async function syncEnabledPlugins(
   action: 'add' | 'remove-if-unpinned',
 ): Promise<void> {
   if (!orgId) return
+  // `enabledPlugins` is a flat mix of first-party bundle ids and marketplace
+  // listing ids (AGL-777). A listing id is a Firestore doc id, so it can't
+  // normally collide with a bundle name — but guard anyway: an install sync
+  // must NEVER arrayUnion/arrayRemove a bundle id, which would silently
+  // enable or disable a platform plugin as a side effect of a purchase.
+  if (isFirstPartyPlugin(listingId)) return
   const orgRef = firestore.collection('orgs').doc(orgId)
   const configured = (await orgRef.get()).get('enabledPlugins')
   // Absent field = default-open workspace; nothing to sync.
