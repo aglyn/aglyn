@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   List,
   ListItem,
@@ -27,8 +27,13 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  activityHref,
+  activityPrimaryText,
+} from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 
@@ -50,6 +55,7 @@ export interface OrgActivityCardProps {
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
   const { orgId, max = 20, header = 'Recent Activity', actorId, targetId } = props
+  const { orgSlug } = useParams<{ orgSlug: string }>()
   const firestore = useFirestore()
   const { data: entries } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'orgs', orgId, 'activity'), limit(200)),
@@ -143,16 +149,28 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         </Typography>
       ) : (
         <List dense disablePadding>
-          {items.map((entry) => (
+          {items.map((entry) => {
+            const href = activityHref(entry, { orgSlug })
+            const label = activityPrimaryText(entry)
+            return (
             <ListItem key={entry.$id} disableGutters dense>
               <ListItemText
-                primary={entry.action}
+                primary={
+                  href ? (
+                    <AppLink href={href} color="inherit" underline="hover">
+                      {label}
+                    </AppLink>
+                  ) : (
+                    label
+                  )
+                }
                 secondary={`${entry.actorEmail ?? 'Someone'} · ${
                   entry.createdAt?.toDate?.().toLocaleString() ?? ''
                 }`}
               />
             </ListItem>
-          ))}
+            )
+          })}
         </List>
       )}
     </CardDisplay>

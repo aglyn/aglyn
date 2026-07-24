@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Link,
   List,
@@ -25,11 +25,16 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, limit, query } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
+import {
+  activityHref,
+  activityPrimaryText,
+} from '@aglyn/aglyn/app-utils/activity-presenter'
 
 export interface HostActivityCardProps {
   hostId: string
@@ -50,6 +55,7 @@ export interface HostActivityCardProps {
 export function HostActivityCard(props: HostActivityCardProps) {
   const { hostId, targetId, max = 20, header = 'Recent Activity', viewAllHref } =
     props
+  const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const firestore = useFirestore()
   const { data: entries } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'activity'), limit(200)),
@@ -80,13 +86,20 @@ export function HostActivityCard(props: HostActivityCardProps) {
         </Typography>
       ) : (
         <List dense disablePadding>
-          {items.map((entry) => (
+          {items.map((entry) => {
+            const href = activityHref(entry, { orgSlug, host })
+            const label = activityPrimaryText(entry)
+            return (
             <ListItem key={entry.$id} disableGutters dense>
               <ListItemText
                 primary={
-                  entry.target?.name
-                    ? `${entry.action} — ${entry.target.name}`
-                    : entry.action
+                  href ? (
+                    <AppLink href={href} color="inherit" underline="hover">
+                      {label}
+                    </AppLink>
+                  ) : (
+                    label
+                  )
                 }
                 secondary={
                   `${entry.actorEmail ?? 'Someone'} · ${
@@ -102,7 +115,8 @@ export function HostActivityCard(props: HostActivityCardProps) {
                 }
               />
             </ListItem>
-          ))}
+            )
+          })}
         </List>
       )}
       {viewAllHref ? (
