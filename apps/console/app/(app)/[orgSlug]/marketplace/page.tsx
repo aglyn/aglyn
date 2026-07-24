@@ -25,6 +25,7 @@ import { useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HubTabs from '../../../../components/hub-tabs.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import OrgPublishPanel from '../../../../components/org-publish-panel.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
@@ -145,6 +146,24 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                       <PluginWidgetSlot slot="orgAddons" hostId={actingHost} />
                     ),
                   },
+                  // Publish (AGL-776): one place to list a component, layout,
+                  // or whole site from any of the org's sites. Gated on the
+                  // publish permission; the server enforces it too.
+                  ...(permissions.publishToCommunity && currentOrg?.$id
+                    ? [
+                        {
+                          id: 'publish',
+                          label: 'Publish',
+                          content: (
+                            <OrgPublishPanel
+                              orgSlug={orgSlug}
+                              orgId={currentOrg.$id}
+                              hosts={hostList}
+                            />
+                          ),
+                        },
+                      ]
+                    : []),
                 ]}
               />
             </Stack>
