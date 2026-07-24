@@ -14,7 +14,7 @@ block library**, and a **blog** with content collections.
 scale with your tier.
 :::
 
-![Templates in the community marketplace](/img/plugins/community-page.png)
+![Templates in the community marketplace](/img/guides/marketplace-browse.png)
 
 ## Site templates & starter gallery
 

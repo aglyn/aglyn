@@ -13,7 +13,7 @@ site, and they run **sandboxed** so they can't compromise your site.
 The marketplace lives at the **organization** level — a single **Marketplace** destination
 with **Browse**, **Installed**, and **Publish** tabs — rather than inside each site.
 
-![The organization Marketplace in the Aglyn console — Browse, Installed and Publish tabs](/img/plugins/community-page.png)
+![The organization Marketplace in the Aglyn console — Browse, Installed and Publish tabs](/img/guides/marketplace-browse.png)
 
 ![The Plugins & add-ons hub, where workspace admins enable plugins and manage installs](/img/plugins/org-plugins-page.png)
 

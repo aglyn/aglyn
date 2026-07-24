@@ -39,6 +39,8 @@ Dataset schemas are the one exception to the source-site picker: datasets
 belong to the organization rather than to a site, so the picker is hidden and
 the schema publishes from the org directly.
 
+![Publishing from the organization Marketplace](/img/guides/marketplace-publish.png)
+
 The per-site shortcuts still exist for convenience — the **Publish** actions
 on a site's **Components** and **Layouts** pages, and **Publish as template**
 on the **Setup** page — and open the same listing form.

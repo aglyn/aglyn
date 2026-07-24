@@ -54,6 +54,9 @@ const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
 const CONSOLE_BASE = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const TENANT_BASE = process.env.E2E_TENANT_URL ?? 'http://localhost:4500'
 const HOST_ID = process.env.E2E_HOST ?? 'demo'
+// The console routes by ORG SLUG since AGL-621 (`/[orgSlug]/…`), which is not
+// the host subdomain. Kept in sync with E2E_ORG_SLUG in seed-e2e.mjs.
+const ORG_SLUG = process.env.E2E_ORG_SLUG ?? 'e2e-bakery'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
@@ -631,6 +634,105 @@ async function seedGuideFixtures() {
     },
   )
 
+  // ── Marketplace fixtures (AGL-782) ──────────────────────────────────────
+  // The org marketplace shots need a publisher identity plus listings that
+  // actually appear in Browse — an empty grid documents nothing. Two artifact
+  // types so the screenshot shows the org-level IA carrying more than
+  // components: a reusable component and a dataset schema (AGL-657).
+  await put(firestore.collection('publisherProfiles').doc(orgId), {
+    handle: 'northwind',
+    displayName: 'Northwind Coffee',
+    bio: 'Sample publisher for the Aglyn marketplace guides.',
+  })
+  await put(orgRef, {
+    // The Publish tab needs the selling entitlement to render its form.
+    'entitlements.features.marketplaceSelling': true,
+  })
+
+  // The reusable component the footer listing is published FROM. Also what
+  // the Publish tab's source picker lists — without it that shot documents an
+  // empty state.
+  await put(hostRef.collection('components').doc('seed-guide-footer'), {
+    name: 'Site footer',
+    displayName: 'Site footer',
+    rootId: '_@_',
+    nodes: {
+      '_@_': { $id: '_@_', componentId: 'div', parentId: null, nodes: ['t'] },
+      t: {
+        $id: 't',
+        componentId: 'muiTypography',
+        parentId: '_@_',
+        props: { children: '© Northwind Coffee' },
+      },
+    },
+    createdAt: now,
+  })
+
+  const listing = async (id, data, version) => {
+    const ref = firestore.collection('communityListings').doc(id)
+    await put(ref, {
+      profileId: orgId,
+      priceUsd: 0,
+      latestVersion: 1,
+      installCount: data.installCount ?? 0,
+      deletedAt: null,
+      createdAt: now,
+      ...data,
+    })
+    await put(ref.collection('versions').doc('1'), version)
+  }
+
+  await listing(
+    'seed-listing-footer',
+    {
+      artifactType: 'component',
+      displayName: 'Site footer',
+      description:
+        'A reusable footer with navigation links and social icons.',
+      category: 'design',
+      sourceComponentId: 'seed-guide-footer',
+      installCount: 12,
+    },
+    {
+      rootId: '_@_',
+      nodes: {
+        '_@_': { $id: '_@_', componentId: 'div', parentId: null, nodes: ['t'] },
+        t: {
+          $id: 't',
+          componentId: 'muiTypography',
+          parentId: '_@_',
+          props: { children: '© Northwind Coffee' },
+        },
+      },
+      publishedAt: now,
+    },
+  )
+  await listing(
+    'seed-listing-survey-schema',
+    {
+      artifactType: 'datasetSchema',
+      displayName: 'Customer survey schema',
+      description:
+        'Field model for a customer satisfaction survey. Structure only, no records.',
+      category: 'forms',
+      sourceDatasetId: 'seed-guide-survey',
+      fieldCount: 4,
+      installCount: 5,
+    },
+    {
+      datasetSchema: {
+        fields: {
+          satisfaction: { name: 'Satisfaction', type: 'text' },
+          visit: { name: 'Visit', type: 'text' },
+          topics: { name: 'Topics', type: 'text' },
+          comments: { name: 'Comments', type: 'text' },
+        },
+        order: ['satisfaction', 'visit', 'topics', 'comments'],
+      },
+      publishedAt: now,
+    },
+  )
+
   console.log(`seeded ${written} guide fixture docs`)
 }
 
@@ -1031,6 +1133,42 @@ await shot({
   path: '/account',
   waitFor: 'Your account',
   settleMs: 2500,
+})
+
+// ── 5b. Org marketplace (AGL-782) ─────────────────────────────────────────
+
+// The notifications pre-permission prompt (AGL-663) opens over the page on
+// first visit and lands square in the middle of a screenshot. Dismissed with
+// a real click rather than removed in `stripDevChrome`, because that helper
+// evaluates DOM removals and a React dialog needs an actual event to close
+// (and to record the dismissal) — otherwise the backdrop and scroll lock stay
+// behind. Optional so a shot still works when the prompt doesn't appear.
+const dismissNotificationsPrompt = [
+  { click: 'role=button[name="Not now"]', optional: true, settleMs: 400 },
+]
+// Replaces community-page.png, which still showed the per-site Community tab
+// that AGL-775 deleted — and whose alt text had since been rewritten to
+// describe tabs the picture didn't contain.
+
+await shot({
+  out: 'marketplace-browse.png',
+  base: CONSOLE_BASE,
+  path: `/${ORG_SLUG}/marketplace?tab=browse`,
+  waitFor: 'Marketplace',
+  // The grid is populated by Firestore subscriptions that settle after first
+  // paint; wait for a seeded listing rather than the frame, or the shot
+  // catches the empty state.
+  actions: [
+    ...dismissNotificationsPrompt,
+    { waitFor: 'Site footer', settleMs: 1200 },
+  ],
+})
+await shot({
+  out: 'marketplace-publish.png',
+  base: CONSOLE_BASE,
+  path: `/${ORG_SLUG}/marketplace?tab=publish`,
+  waitFor: 'Publish to the marketplace',
+  actions: [...dismissNotificationsPrompt, { settleMs: 800 }],
 })
 
 // ── 6. Tenant flows: auth pages, storefront, live survey ───────────────────
