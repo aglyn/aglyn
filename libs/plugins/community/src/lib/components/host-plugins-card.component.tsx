@@ -16,11 +16,7 @@
  */
 'use client'
 
-import {
-  FIRST_PARTY_PLUGINS,
-  PLUGIN_COMPONENT_ID,
-  resolveEnabledPlugins,
-} from '@aglyn/aglyn'
+import { PLUGIN_COMPONENT_ID } from '@aglyn/aglyn'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -44,7 +40,6 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
   useFirestoreCollection,
-  useFirestoreDoc,
   useHostOrgId,
   useUser,
 } from '@aglyn/tenant-feature-instance'
@@ -71,19 +66,6 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   const [busy, setBusy] = useState<string | null>(null)
 
   const orgId = useHostOrgId(hostId)
-  // First-party plugins active for this org (AGL-779): derived from the
-  // registry + the org's switchboard, not a hardcoded list of four. `mui`
-  // (always-on) reads as locked "Core"; the rest show as enabled. Absent
-  // `enabledPlugins` ⇒ default-open, so everything first-party shows.
-  const { data: org } = useFirestoreDoc<any>(
-    () => doc(firestore, 'orgs', orgId ?? '-pending-'),
-    [firestore, orgId],
-    { idField: '$id' },
-  )
-  const firstPartyPlugins = useMemo(() => {
-    const enabled = new Set(resolveEnabledPlugins(org))
-    return FIRST_PARTY_PLUGINS.filter((plugin) => enabled.has(plugin.id))
-  }, [org])
   const { data: installDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'installs'), limit(50)),
     [firestore, hostId],
@@ -320,44 +302,12 @@ export function HostPluginsCard(props: HostPluginsCardProps) {
   )
 
   return (
-    <CardDisplay header="Installed plugins" contentGutterX contentGutterY>
+    <CardDisplay header="Marketplace installs" contentGutterX contentGutterY>
       <Stack spacing={1.5}>
-        {/* First-party plugins active for this org (AGL-779), from the
-            registry. Always-on is locked "Core"; the rest are toggled in
-            the org Plugins settings, so they're shown here but not
-            uninstalled from this card. */}
-        {firstPartyPlugins.map((plugin) => (
-          <Stack
-            key={plugin.id}
-            direction="row"
-            spacing={1}
-            sx={{
-              alignItems: 'center',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-              p: 1.5,
-            }}
-          >
-            <Stack sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="body2" noWrap>
-                {plugin.label}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {plugin.description}
-              </Typography>
-            </Stack>
-            {plugin.alwaysOn ? (
-              <Tooltip title="Part of the platform — screens rely on its components, so it cannot be uninstalled.">
-                <Chip size="small" color="secondary" label="Core" />
-              </Tooltip>
-            ) : (
-              <Tooltip title="A first-party plugin, enabled for this organization. Turn it on or off in the Plugins settings.">
-                <Chip size="small" variant="outlined" label="Enabled" />
-              </Tooltip>
-            )}
-          </Stack>
-        ))}
+        {/* First-party plugins used to be re-listed here for context; that
+            moved out (AGL-802) now that the switchboard sits directly above
+            this card in Marketplace › Installed. This card is only the
+            marketplace install pins. */}
         {installs.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No community plugins installed. Install one from the ' +
