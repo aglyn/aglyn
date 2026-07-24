@@ -139,6 +139,12 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                   community plugin's widgets (the app stays plugin-free) and
                   render nothing if the community plugin is disabled. */}
               <HubTabs
+                // Lazy panels (AGL-785): Browse, Installed and Publish each
+                // run their own Firestore subscriptions; mounting all three at
+                // once on load made their settling re-renders collide and trip
+                // React's update-depth limit. Mount only the active tab, then
+                // keep it.
+                lazy
                 tabs={[
                   {
                     id: 'browse',

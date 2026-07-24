@@ -32,6 +32,17 @@ export interface HubTabsProps {
   tabs: HubTab[]
   /** Left nav card header (defaults to "Navigation"). */
   navHeader?: string
+  /**
+   * Defer mounting a panel's content until its tab is first activated, then
+   * keep it mounted (AGL-785). Off by default so the standard behavior —
+   * every panel mounted up front, subscriptions always live — is unchanged.
+   * Opt in when the tabs host several data-heavy panels whose subscriptions
+   * would otherwise all settle at once on load: mounting only the active
+   * panel keeps that first-paint re-render burst small enough not to trip
+   * React's nested-update limit. Panels stay mounted once visited, so
+   * switching back is still instant.
+   */
+  lazy?: boolean
 }
 
 /**
@@ -40,25 +51,33 @@ export interface HubTabsProps {
  * TabList, content on the right. Collapses to horizontal tabs on small
  * screens. The active tab mirrors into the `?tab=` query param (shallow
  * replace) so hub views deep-link and survive back/forward; panels are
- * kept mounted so content and its data subscriptions are always present.
+ * kept mounted so content and its data subscriptions are always present
+ * (unless `lazy`, which defers un-visited panels — see the prop).
  */
 export function HubTabs(props: HubTabsProps) {
-  const { tabs, navHeader = 'Navigation' } = props
+  const { tabs, navHeader = 'Navigation', lazy = false } = props
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const theme = useTheme()
   const stacked = useMediaQuery(theme.breakpoints.down('sm'))
   const requestedTab = searchParams?.get('tab')
-  const [tab, setTab] = useState(
-    tabs.some((item) => item.id === requestedTab)
-      ? (requestedTab as string)
-      : (tabs[0]?.id ?? ''),
+  const initialTab = tabs.some((item) => item.id === requestedTab)
+    ? (requestedTab as string)
+    : (tabs[0]?.id ?? '')
+  const [tab, setTab] = useState(initialTab)
+  // Which tabs have ever been active — the mount set when `lazy`. Seeded with
+  // the initial tab so it (and only it) mounts on first paint.
+  const [activated, setActivated] = useState<Set<string>>(
+    () => new Set(initialTab ? [initialTab] : []),
   )
 
   const handleChange = useCallback(
     (event: SyntheticEvent, value: string) => {
       setTab(value)
+      setActivated((prev) =>
+        prev.has(value) ? prev : new Set(prev).add(value),
+      )
       // App Router has no shallow `router.replace({ query })`: rebuild the
       // query string off the current params, set `tab`, and replace without
       // scrolling so the hub view still deep-links and survives back/forward.
@@ -113,7 +132,7 @@ export function HubTabs(props: HubTabsProps) {
                     keepMounted
                     sx={{ padding: 'unset' }}
                   >
-                    {item.content}
+                    {!lazy || activated.has(item.id) ? item.content : null}
                   </TabPanel>
                 ))}
               </>
