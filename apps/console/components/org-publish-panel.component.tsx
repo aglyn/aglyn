@@ -256,8 +256,8 @@ export function OrgPublishPanel({
     return (
       <CardDisplay header={'Publish to the marketplace'} contentGutterX contentGutterY>
         <Alert severity="info">
-          {'Set up your organization’s publisher profile in the Public ' +
-            'profile section below before publishing.'}
+          {'Set up your organization’s publisher profile in the Profile tab ' +
+            'before publishing.'}
         </Alert>
       </CardDisplay>
     )

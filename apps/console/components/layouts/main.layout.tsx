@@ -506,7 +506,7 @@ export function MainLayout(props: MainLayoutProps) {
                   href: orgSlug
                     ? `${buildRoute(Route.ORG_MARKETPLACE, {
                         orgSlug,
-                      })}?tab=publish`
+                      })}?tab=profile`
                     : orgHome,
                   icon: { path: mdiAccountGroupOutline.path },
                 },

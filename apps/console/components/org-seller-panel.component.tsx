@@ -23,6 +23,7 @@ import { Button, Stack, TextField, Typography } from '@mui/material'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
 import {
   type ChangeEvent,
+  type ReactElement,
   useCallback,
   useEffect,
   useRef,
@@ -35,24 +36,28 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
+export type OrgSellerSection = 'profile' | 'listings' | 'payouts' | 'sales'
+
 export interface OrgSellerPanelProps {
   orgId: string
+  /** Which seller card to render — one per Marketplace › seller tab. */
+  section: OrgSellerSection
 }
 
 /**
- * Seller area (AGL-44/798): the org's marketplace identity and its published
- * listings, folded out of the retired `/[orgSlug]/community` page into the
- * Marketplace › Publish tab. Rendered as a stack of cards (public profile,
- * listings, payouts, sales) beneath the publish action, so a publisher sees
- * everything about selling in one place. The old org plugin-inventory tab was
- * dropped — the Installed tab's `orgAddons` card is the canonical inventory.
+ * Seller area (AGL-44/798/801): the org's marketplace identity and its
+ * published listings, folded out of the retired `/[orgSlug]/community` page.
+ * Each section (profile, listings, payouts, sales) is its own Marketplace tab
+ * (AGL-801), so this renders exactly one card per the `section` prop. The
+ * shared Firestore hooks run regardless of section — Firebase dedupes
+ * identical listeners, and the marketplace HubTabs mounts tabs lazily, so only
+ * the visited sections ever subscribe.
  */
 export function OrgSellerPanel(props: OrgSellerPanelProps) {
-  const { orgId } = props
+  const { orgId, section } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const uid = user?.uid
   const { data: profile } = useFirestoreDoc<any>(
     // The org's marketplace identity (AGL-652), not the personal one.
     () => doc(firestore, 'publisherProfiles', orgId || '-none-'),
@@ -268,8 +273,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     [firestore, enqueueSnackbar],
   )
 
-  return (
-    <Stack spacing={3}>
+  const cards: Record<OrgSellerSection, ReactElement> = {
+    profile: (
       <CardDisplay
         header={'Public profile'}
         help={docsHelp('publisherHandbook', {
@@ -322,7 +327,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Button>
         </Stack>
       </CardDisplay>
-
+    ),
+    listings: (
       <CardDisplay
         header={'Your listings'}
         help={docsHelp('publisherHandbook', {
@@ -387,7 +393,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Stack>
         )}
       </CardDisplay>
-
+    ),
+    payouts: (
       <CardDisplay
         header={'Payouts'}
         help={docsHelp('publisherHandbook', {
@@ -422,7 +429,8 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Button>
         </Stack>
       </CardDisplay>
-
+    ),
+    sales: (
       <CardDisplay
         header={'Sales'}
         help={docsHelp('publishAPlugin', {
@@ -454,8 +462,10 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Stack>
         )}
       </CardDisplay>
-    </Stack>
-  )
+    ),
+  }
+
+  return cards[section]
 }
 OrgSellerPanel.displayName = 'OrgSellerPanel'
 

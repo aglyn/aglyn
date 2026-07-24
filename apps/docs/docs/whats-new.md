@@ -19,8 +19,8 @@ Each links into its section for the how-to.
 - **One section for everything pluggable and sellable** — the separate **Plugins** and
   **Community** org tabs were folded into the Marketplace. The **Installed** tab now holds the
   first-party plugin switchboard and per-plugin settings alongside marketplace installs, and
-  the **Publish** tab holds your publisher profile, listings, payouts, and sales. The old
-  `/plugins` and `/community` links redirect into the matching tab.
+  the seller area is its own set of tabs — **Publish**, **Profile**, **Listings**, **Payouts**,
+  and **Sales**. The old `/plugins` and `/community` links redirect into the matching tab.
 - **Install targeting** — when you install, choose **All sites** (organization-wide, and any
   sites you add later) or **Selected sites**. Site-scoped artifacts (components, templates,
   layouts) install onto every current site and note that new sites aren't added automatically.

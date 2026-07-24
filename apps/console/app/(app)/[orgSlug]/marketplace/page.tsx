@@ -221,24 +221,61 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     ),
                   },
-                  // Publish (AGL-776/798): list a component, layout, or whole
-                  // site from any of the org's sites, plus the seller area —
-                  // publisher profile, listings, payouts and sales — folded in
-                  // from the retired Community page. Gated on the publish
-                  // permission; the server enforces it too.
+                  // Seller area (AGL-776/798/801): one tab each for the
+                  // publish action and the seller sections — profile,
+                  // listings, payouts and sales — folded in from the retired
+                  // Community page. Gated on the publish permission; the server
+                  // enforces it too.
                   ...(permissions.publishToCommunity && currentOrg?.$id
                     ? [
                         {
                           id: 'publish',
                           label: 'Publish',
                           content: (
-                            <Stack spacing={3}>
-                              <OrgPublishPanel
-                                orgId={currentOrg.$id}
-                                hosts={hostList}
-                              />
-                              <OrgSellerPanel orgId={currentOrg.$id} />
-                            </Stack>
+                            <OrgPublishPanel
+                              orgId={currentOrg.$id}
+                              hosts={hostList}
+                            />
+                          ),
+                        },
+                        {
+                          id: 'profile',
+                          label: 'Profile',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="profile"
+                            />
+                          ),
+                        },
+                        {
+                          id: 'listings',
+                          label: 'Listings',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="listings"
+                            />
+                          ),
+                        },
+                        {
+                          id: 'payouts',
+                          label: 'Payouts',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="payouts"
+                            />
+                          ),
+                        },
+                        {
+                          id: 'sales',
+                          label: 'Sales',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="sales"
+                            />
                           ),
                         },
                       ]
