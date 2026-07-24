@@ -56,6 +56,12 @@ export function useSessionCookie(): void {
   const sawInitialState = useRef(false)
   const mintedForUid = useRef<string | null>(null)
   const restoreAttempted = useRef(false)
+  // Set right after a SILENT custom-token restore (cross-subdomain / a tab in
+  // its own storage partition, e.g. an automation browser). The very next
+  // auth emission would otherwise be mistaken for an interactive sign-in and
+  // re-mint the shared cookie — see the guard at the sign-in-mint branch
+  // below (AGL-804).
+  const restoredSilently = useRef(false)
 
   useEffect(() => {
     // Emulator mode (dev/e2e): the Auth emulator does not support
@@ -145,6 +151,17 @@ export function useSessionCookie(): void {
           // a same-tab flow can't leave it set for a later restore.
           clearInteractiveSignIn()
           mintedForUid.current = user.uid
+          // …UNLESS this "sign-in" is actually the silent custom-token restore
+          // we just performed from a still-valid shared cookie (AGL-804). That
+          // cookie is the source of truth we restored FROM, so re-minting here
+          // only writes a competing fresh cookie — and when the restoring tab
+          // lives in its own storage partition (an automation browser, a
+          // different subdomain), that fresh mint strands the tab that minted
+          // the original. A silent restore adopts the session; it never mints.
+          if (restoredSilently.current) {
+            restoredSilently.current = false
+            return
+          }
           try {
             const idToken = await user.getIdToken()
             await fetch('/api/auth/session', {
@@ -179,6 +196,9 @@ export function useSessionCookie(): void {
           if (!response.ok || !active) return
           const payload = await response.json()
           if (payload?.token && active) {
+            // Silent restore — the follow-up auth emission must NOT re-mint
+            // the shared cookie (AGL-804).
+            restoredSilently.current = true
             await signInWithCustomToken(auth, payload.token)
           }
         } catch {
@@ -194,6 +214,9 @@ export function useSessionCookie(): void {
         if (!response.ok || !active) return
         const payload = await response.json()
         if (payload?.token && active) {
+          // Silent restore — the follow-up auth emission must NOT re-mint
+          // the shared cookie (AGL-804).
+          restoredSilently.current = true
           await signInWithCustomToken(auth, payload.token)
         }
       } catch {
