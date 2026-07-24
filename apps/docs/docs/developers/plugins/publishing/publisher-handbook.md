@@ -14,7 +14,7 @@ the marketplace side.
 
 ## Before your first publish
 
-1. **Community profile** (Manage → Community profile) — your handle and
+1. **Publisher profile** (Marketplace → Publish) — your handle and
    display name appear on every listing. Publishing is **organization-owned**:
    the listing belongs to your organization, not your personal account.
 2. **Plan**: publishing requires a Pro plan.
@@ -147,5 +147,5 @@ require purchase before install; you see sales in your publisher ledger.
 
 One-time prices in whole USD (up to $1000). Purchases flow through the
 platform's Stripe; your share (80%, or 70% on free plans) pays out via
-your Connect account. The ledger on your community profile tracks every
-sale.
+your Connect account. The Sales ledger on the Marketplace → Publish tab
+tracks every sale.

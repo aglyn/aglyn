@@ -15,7 +15,7 @@ with **Browse**, **Installed**, and **Publish** tabs — rather than inside each
 
 ![The organization Marketplace in the Aglyn console — Browse, Installed and Publish tabs](/img/guides/marketplace-browse.png)
 
-![The Plugins & add-ons hub, where workspace admins enable plugins and manage installs](/img/plugins/org-plugins-page.png)
+![The Marketplace Installed tab, where workspace admins enable plugins and manage installs](/img/plugins/org-plugins-page.png)
 
 ```mermaid
 flowchart LR
@@ -39,9 +39,9 @@ are paid.
 - Installs are **version-pinned**, and you can **upgrade** deliberately.
 - Installed plugins appear as named entries in the Besigner **drawer**, alongside built-in
   components.
-- Manage everything from the marketplace's **Installed** tab (and the organization's
-  **Plugins & add-ons** page): first-party plugin toggles (with release state) plus every
-  marketplace install with upgrade, uninstall, and share-with-organization actions.
+- Manage everything from the marketplace's **Installed** tab: first-party plugin toggles
+  (with release state), per-plugin configuration, plus every marketplace install with
+  upgrade, uninstall, and share-with-organization actions.
 - Installing enables the plugin for the workspace automatically; uninstalling disables
   it once no site keeps its own pin. **Uninstalling never deletes the data a plugin
   created** — reinstall and it picks up where it left off.
