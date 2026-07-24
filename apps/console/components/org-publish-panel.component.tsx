@@ -28,7 +28,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, limit, query } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
@@ -101,11 +101,17 @@ export function OrgPublishPanel({
     [layoutDocs],
   )
 
-  // A new site or artifact-type resets the specific pick, so we never publish
-  // a stale id from the previous selection.
-  useEffect(() => {
-    setArtifactId('')
-  }, [hostId, kind])
+  // Validate the pick against the current list rather than resetting it in an
+  // effect (a classic render-loop source — the reset runs a `setState` after
+  // every host/kind change, adding renders that a transient flurry can push
+  // past React's update-depth limit). A stale id from another site or
+  // artifact type simply reads as "nothing selected" this render, so we never
+  // publish it, and the MUI <Select> value stays in range every render.
+  const activeList =
+    kind === 'component' ? components : kind === 'layout' ? layouts : []
+  const selectedId = activeList.some((entry: any) => entry.$id === artifactId)
+    ? artifactId
+    : ''
 
   const hostLabel = hosts.find((host) => host.id === hostId)?.label
 
@@ -119,24 +125,24 @@ export function OrgPublishPanel({
       })
     }
     if (kind === 'component') {
-      const chosen = components.find((entry: any) => entry.$id === artifactId)
+      const chosen = components.find((entry: any) => entry.$id === selectedId)
       return setTarget({
         endpoint: 'community/publish',
-        payload: { hostId, componentId: artifactId },
+        payload: { hostId, componentId: selectedId },
         displayName: artifactName(chosen),
         noun: 'component',
       })
     }
-    const chosen = layouts.find((entry: any) => entry.$id === artifactId)
+    const chosen = layouts.find((entry: any) => entry.$id === selectedId)
     setTarget({
       endpoint: 'community/publish-layout',
-      payload: { hostId, layoutId: artifactId },
+      payload: { hostId, layoutId: selectedId },
       displayName: artifactName(chosen),
       noun: 'layout',
     })
   }
 
-  const canPublish = Boolean(hostId && (kind === 'site' || artifactId))
+  const canPublish = Boolean(hostId && (kind === 'site' || selectedId))
 
   // A publisher profile (with a handle) is required server-side; guide the
   // user there rather than letting the publish 412.
@@ -197,7 +203,7 @@ export function OrgPublishPanel({
               select
               size="small"
               label="Component"
-              value={artifactId}
+              value={selectedId}
               onChange={(event) => setArtifactId(event.target.value)}
             >
               {components.map((entry: any) => (
@@ -217,7 +223,7 @@ export function OrgPublishPanel({
               select
               size="small"
               label="Layout"
-              value={artifactId}
+              value={selectedId}
               onChange={(event) => setArtifactId(event.target.value)}
             >
               {layouts.map((entry: any) => (

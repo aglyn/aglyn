@@ -56,14 +56,27 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
     user?.uid,
     loading ? undefined : (currentOrg?.$id ?? null),
   )
+  const typedHosts = (hosts as Array<{
+    $id: string
+    subdomain?: string
+    displayName?: string
+  }>) ?? []
+  // Key the memo on the hosts' content, not the array's identity: useOrgHosts
+  // hands back a fresh array on each snapshot, and passing a new-but-equal
+  // `hosts` prop into OrgPublishPanel on every parent render is exactly the
+  // churn AGL-785 fingered. A stable string key keeps hostList (and that prop)
+  // referentially stable until a host is actually added, removed, or renamed.
+  const hostsKey = typedHosts
+    .map((host) => `${host.$id}:${host.displayName || host.subdomain || ''}`)
+    .join('|')
   const hostList = useMemo(
     () =>
-      ((hosts as Array<{ $id: string; subdomain?: string; displayName?: string }>) ??
-        []).map((host) => ({
+      typedHosts.map((host) => ({
         id: host.$id,
         label: host.displayName || host.subdomain || host.$id,
       })),
-    [hosts],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hostsKey],
   )
   const [selectedHost, setSelectedHost] = useState('')
   const actingHost = selectedHost || hostList[0]?.id || ''

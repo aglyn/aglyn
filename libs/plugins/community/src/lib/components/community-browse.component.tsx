@@ -30,7 +30,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc, limit, query, where } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildRoute, type OrgPermissions, Route } from '@aglyn/aglyn'
 import {
   useConsoleHostRoute,
@@ -203,11 +203,25 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     return map
   }, [orgPinDocs])
 
+  // Resolve each listing's publisher handle once. `handles` must NOT be a
+  // dependency here: the effect writes `handles`, so listing it would make the
+  // effect re-run on its own output. During the post-load window, when
+  // `listings` arrives while every other subscription on this always-mounted
+  // grid is also settling, that self-retrigger adds render+effect cycles to an
+  // already dense flurry — enough that a concurrent update elsewhere can trip
+  // React's nested-update limit (AGL-785). A ref of already-requested ids
+  // dedupes instead, so the effect depends only on `listings`.
+  const requestedHandles = useRef<Set<string>>(new Set())
   useEffect(() => {
     const profileIds = [
       ...new Set((listings ?? []).map((listing: any) => listing.profileId)),
-    ].filter((profileId) => profileId && !(profileId in handles))
+    ].filter(
+      (profileId) =>
+        profileId && !requestedHandles.current.has(String(profileId)),
+    )
     if (!profileIds.length) return
+    for (const profileId of profileIds)
+      requestedHandles.current.add(String(profileId))
     let cancelled = false
     Promise.all(
       profileIds.map(async (profileId) => {
@@ -227,7 +241,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     return () => {
       cancelled = true
     }
-  }, [listings, handles, firestore])
+  }, [listings, firestore])
 
   // Server-side install (AGL-46): version snapshots aren't client-readable
   // (paid content), so the API verifies access and copies the definition.
