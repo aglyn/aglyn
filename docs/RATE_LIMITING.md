@@ -71,13 +71,44 @@ signs with an empty key when unset (see AGL-792).
 
 Each call writes `rateLimits/{hash}_{windowStart}` with an `expiresAt`
 timestamp. **Firestore does not act on that field by itself** — a TTL policy
-has to be configured once, or these documents accumulate forever:
+has to be configured once, or these documents accumulate forever (roughly one
+per caller per minute on the two protected endpoints — small, but unbounded).
 
-Firebase console → Firestore → **Time-to-live** → add a policy on collection
-`rateLimits`, field `expiresAt`.
+> **TTL is not in the Firebase console.** It is a Firestore/Cloud feature and
+> there is no Time-to-live tab under Firebase → Firestore. Looking for it
+> there is a dead end.
 
-Until that is enabled, the collection grows by roughly one document per
-(caller, minute) on the two protected endpoints. Small, but unbounded.
+Three ways to set it, in order of preference:
+
+```bash
+# 1. This repo's script (service-account auth, same pattern as the rules deploy)
+set -a && source .env && set +a && node tools/scripts/set-firestore-ttl.mjs
+#    --dry-run reports current state without changing anything
+```
+
+**Status: the script works but currently 403s** — `firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com`
+can deploy rules but lacks `datastore.indexes.update`. Grant it once and the
+script (and any future TTL policy added to its list) just works:
+
+```bash
+gcloud projects add-iam-policy-binding aglyn-main \
+  --member="serviceAccount:firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com" \
+  --role="roles/datastore.indexAdmin"
+```
+
+```bash
+# 2. gcloud directly, as a human with project access
+gcloud firestore fields ttls update expiresAt \
+  --collection-group=rateLimits --project=aglyn-main --enable-ttl
+```
+
+3. **Google Cloud console** (not Firebase): console.cloud.google.com →
+   Firestore → your database → **Time-to-live** → Create policy →
+   collection group `rateLimits`, field `expiresAt`.
+
+Firestore deletes expired documents *after* the timestamp, usually within 24h.
+That is cleanup, not a correctness boundary — buckets are keyed by window
+start, so a stale document is simply never read again.
 
 ## Privacy
 
