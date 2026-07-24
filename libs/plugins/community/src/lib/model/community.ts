@@ -487,6 +487,60 @@ const KEPT_NODE_KEYS = [
   'nodes',
 ] as const
 
+/** Only navigable protocols — mirrors ScreenLink/Image/Button hardening. */
+const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/|#)/i
+/** `src` additionally allows inline images, which are inert. */
+const SAFE_SRC = /^(https?:\/\/|data:image\/|\/|#)/i
+
+/**
+ * Strips props a published node must never carry into someone else's site
+ * (AGL-784).
+ *
+ * `Leaf` spreads a node's props straight onto the rendered component, and MUI
+ * passes unknown props through to its root DOM element, so whatever survives
+ * publishing reaches the DOM of every org that installs the listing. Community
+ * components are auto-listed with no review, and `hosts/{h}/components` is
+ * writable by any org member, so a hand-crafted doc is a realistic input here.
+ *
+ * What each stripped key actually does, measured rather than assumed:
+ * - `dangerouslySetInnerHTML` is NOT the stored-XSS it looks like — `Leaf`
+ *   always passes a children array, so React throws
+ *   "Can only set one of `children` or `props.dangerouslySetInnerHTML`"
+ *   (and the void-element variant for self-closing components like `image`).
+ *   That is worse in practice than it sounds: the throw happens during SSR,
+ *   which is the AGL-579 failure mode that 500s the page and wedges ISR for
+ *   the whole site. One published component would take down every consumer.
+ * - `on*` handlers can only survive JSON as strings, which React drops with a
+ *   warning. Removed for hygiene, and so a future renderer that does eval-ish
+ *   prop handling can't turn them back into a vector.
+ * - `href`/`src` get the render-time URL policy applied at publish time too.
+ *   React already neutralizes `javascript:` hrefs and the mui components run
+ *   SAFE_HREF themselves, so this is defense in depth for any component that
+ *   forgets to — cheap, and it keeps the stored artifact honest.
+ *
+ * Deliberately shallow: only top-level props are spread onto the DOM. A nested
+ * object (`icon: { path }`) is consumed by the component, never spread, so
+ * recursing would strip legitimate data for no security gain.
+ */
+function sanitizePublishedNodeProps(
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(props)) {
+    if (key === 'dangerouslySetInnerHTML') continue
+    if (/^on[A-Z]/.test(key)) continue
+    if ((key === 'href' || key === 'src') && typeof value === 'string') {
+      const trimmed = value.trim()
+      const pattern = key === 'href' ? SAFE_HREF : SAFE_SRC
+      if (!pattern.test(trimmed)) continue
+      safe[key] = trimmed
+      continue
+    }
+    safe[key] = value
+  }
+  return safe
+}
+
 export type CommunityDefinitionNodes = Record<
   string,
   {
@@ -505,10 +559,14 @@ export type CommunityDefinitionNodes = Record<
  * - only the persisted node keys (drops runtime fields like resolvedProps)
  * - the subtree reachable from `rootId` only, and a serialized size cap
  *
- * XSS note: rich-text `html` and link `href` props stay as-authored here —
- * both are sanitized at render time (sanitize-rich-text allowlist,
- * SAFE_HREF), which also covers definitions written to Firestore directly
- * (see docs/SECURITY_CONTENT_REVIEW.md).
+ * - per-node prop hardening (see `sanitizePublishedNodeProps`, AGL-784)
+ *
+ * XSS note: rich-text `html` props stay as-authored here — they are sanitized
+ * at render time (sanitize-rich-text allowlist), which also covers definitions
+ * written to Firestore directly (see docs/SECURITY_CONTENT_REVIEW.md). Props
+ * that are spread onto the DOM (`dangerouslySetInnerHTML`, `on*`, `href`,
+ * `src`) are hardened HERE as well, because publishing hands them to a
+ * different org's render tree.
  */
 export function sanitizeCommunityDefinition(
   definition: {
@@ -565,6 +623,10 @@ export function sanitizeCommunityDefinition(
     const plain: any = {}
     for (const key of KEPT_NODE_KEYS) {
       if (node[key] !== undefined) plain[key] = node[key]
+    }
+    // Per-node prop hardening (AGL-784) — see sanitizePublishedNodeProps.
+    if (plain.props && typeof plain.props === 'object') {
+      plain.props = sanitizePublishedNodeProps(plain.props)
     }
     plain.$id = id
     plain.parentId = id === rootId ? null : (node.parentId ?? null)

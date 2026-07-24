@@ -226,6 +226,65 @@ describe('sanitizeCommunityDefinition', () => {
       error: 'Definition is too large to publish',
     })
   })
+
+  // AGL-784. `Leaf` spreads node props onto the component and MUI forwards
+  // unknown props to the DOM, so these reach every installing org's render
+  // tree. `dangerouslySetInnerHTML` in particular is not stored XSS — React
+  // throws on it because Leaf always passes children — but that throw happens
+  // during SSR, which 500s the page and wedges ISR (the AGL-579 failure mode).
+  describe('node prop hardening (AGL-784)', () => {
+    const publishProps = (props: Record<string, unknown>) => {
+      const result = sanitizeCommunityDefinition({
+        rootId: 'root',
+        nodes: {
+          root: { $id: 'root', componentId: 'muiTypography', parentId: null, props },
+        },
+      })
+      if (result.ok === false) throw new Error(result.error)
+      return result.nodes['root'].props
+    }
+
+    it('strips dangerouslySetInnerHTML', () => {
+      expect(
+        publishProps({
+          children: 'Hi',
+          dangerouslySetInnerHTML: { __html: '<img src=x onerror=alert(1)>' },
+        }),
+      ).toEqual({ children: 'Hi' })
+    })
+
+    it('strips on* handlers', () => {
+      expect(
+        publishProps({ children: 'Hi', onClick: 'alert(1)', onError: 'x' }),
+      ).toEqual({ children: 'Hi' })
+    })
+
+    it('keeps props that merely start with "on"', () => {
+      expect(publishProps({ once: true, only: 'x' })).toEqual({
+        once: true,
+        only: 'x',
+      })
+    })
+
+    it('drops unsafe href/src and trims safe ones', () => {
+      expect(publishProps({ href: 'javascript:alert(1)' })).toEqual({})
+      expect(publishProps({ src: ' https://cdn.example/a.png ' })).toEqual({
+        src: 'https://cdn.example/a.png',
+      })
+      expect(publishProps({ href: '/about' })).toEqual({ href: '/about' })
+      // Inline images are inert, so `src` allows them where `href` does not.
+      expect(publishProps({ src: 'data:image/png;base64,AAA' })).toEqual({
+        src: 'data:image/png;base64,AAA',
+      })
+      expect(publishProps({ href: 'data:text/html,<script>' })).toEqual({})
+    })
+
+    it('leaves nested objects alone — they are consumed, not spread', () => {
+      expect(publishProps({ icon: { path: 'M0 0', onClick: 'x' } })).toEqual({
+        icon: { path: 'M0 0', onClick: 'x' },
+      })
+    })
+  })
 })
 
 describe('validateListingContent (AGL-430)', () => {
