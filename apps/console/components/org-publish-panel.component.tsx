@@ -21,7 +21,6 @@ import {
   Alert,
   Box,
   Button,
-  Link as MuiLink,
   MenuItem,
   Stack,
   TextField,
@@ -32,7 +31,6 @@ import { collection, doc, limit, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
-import { buildRoute, Route } from '../constants/route-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import PublishArtifactDialog, {
@@ -97,11 +95,9 @@ const PICKERS: Record<
  * in-context shortcuts; this is the one place that spans every site.
  */
 export function OrgPublishPanel({
-  orgSlug,
   orgId,
   hosts,
 }: {
-  orgSlug: string
   orgId: string
   hosts: ReadonlyArray<{ id: string; label: string }>
 }) {
@@ -260,14 +256,8 @@ export function OrgPublishPanel({
     return (
       <CardDisplay header={'Publish to the marketplace'} contentGutterX contentGutterY>
         <Alert severity="info">
-          {'Set up your organization’s publisher profile before publishing. '}
-          <MuiLink
-            href={buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug })}
-            color="secondary"
-            underline="hover"
-          >
-            {'Go to your Community profile'}
-          </MuiLink>
+          {'Set up your organization’s publisher profile in the Public ' +
+            'profile section below before publishing.'}
         </Alert>
       </CardDisplay>
     )

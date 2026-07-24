@@ -45,15 +45,11 @@ export function orgNavTabItems(orgSlug: string) {
       label: 'Data',
       href: buildRoute(Route.ORG_DATA, { orgSlug }),
     },
-    {
-      id: 'nav-tab-org-plugins',
-      label: 'Plugins',
-      href: buildRoute(Route.ORG_PLUGINS, { orgSlug }),
-    },
-    // The unified marketplace destination (AGL-772): browse, view and
-    // install marketplace items at org scope, replacing the per-site
-    // Community tab. The seller area (profile/listings/payouts) stays under
-    // 'Community' for now.
+    // The one marketplace destination (AGL-772/797/798/799): a single section
+    // with Browse / Installed / Publish. The former standalone 'Plugins' hub
+    // (switchboard + installs) and 'Community' seller area were folded in and
+    // now redirect here, so this is the sole nav entry for everything
+    // pluggable and everything sellable.
     {
       id: 'nav-tab-org-marketplace',
       label: 'Marketplace',
@@ -63,11 +59,6 @@ export function orgNavTabItems(orgSlug: string) {
       id: 'nav-tab-org-billing',
       label: 'Billing',
       href: buildRoute(Route.MANAGE_BILLING, { orgSlug }),
-    },
-    {
-      id: 'nav-tab-org-community',
-      label: 'Community',
-      href: buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug }),
     },
     {
       id: 'nav-tab-org-support',

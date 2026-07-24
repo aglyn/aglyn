@@ -234,7 +234,6 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                           content: (
                             <Stack spacing={3}>
                               <OrgPublishPanel
-                                orgSlug={orgSlug}
                                 orgId={currentOrg.$id}
                                 hosts={hostList}
                               />
