@@ -129,7 +129,8 @@
       "@aglyn/tenant-feature-instance/*": ["./libs/tenant/feature/instance/src/lib/*"]
     },
     "typeRoots": ["types", "node_modules/@types"],
-    "types": ["@tshelpers", "node"]
+    "types": ["@tshelpers", "node"],
+    "noUncheckedSideEffectImports": false
   },
   "exclude": ["node_modules", "tmp", "**/generated"]
 }
