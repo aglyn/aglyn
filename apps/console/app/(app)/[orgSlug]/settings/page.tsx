@@ -43,7 +43,6 @@ import { useEffect, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import MediaUrlField from '../../../../components/media-url-field.component'
 import OrgApiKeysCard from '../../../../components/org-api-keys-card.component'
-import OrgPluginsCard from '../../../../components/org-plugins-card.component'
 import useCurrentOrg from '../../../../hooks/use-current-org'
 import HubTabs from '../../../../components/hub-tabs.component'
 import { docsHelp } from '../../../../constants/docs-links'
@@ -516,28 +515,24 @@ const OrgSettings: NextPageWithLayout<Record<string, never>> = () => {
                         id: 'plugins',
                         label: 'Plugins',
                         content: (
-                          <Stack spacing={1}>
-                            <OrgPluginsCard
-                              org={org}
-                              disabled={!canManage || busy}
-                              onSave={async (enabledPlugins) => {
-                                await settingsRequest({
-                                  action: 'set-enabled-plugins',
-                                  enabledPlugins,
-                                })
-                                enqueueSnackbar('Plugins updated', {
-                                  variant: 'success',
-                                })
-                              }}
-                            />
-                            <Typography variant="body2">
-                              {'Marketplace add-ons (installs, upgrades, '}
+                          <CardDisplay
+                            header={'Plugins'}
+                            contentGutterX
+                            contentGutterY
+                          >
+                            <Typography variant="body2" color="text.secondary">
+                              {'Enabling plugins, configuring them, and ' +
+                                'managing marketplace installs now live in '}
                               <AppLink
-                                href={buildRoute(Route.ORG_PLUGINS, { orgSlug })}
-                              >{'uninstalls) live in Plugins & add-ons'}</AppLink>
+                                href={`${buildRoute(Route.ORG_MARKETPLACE, {
+                                  orgSlug,
+                                })}?tab=installed`}
+                              >
+                                {'Marketplace › Installed'}
+                              </AppLink>
                               {'.'}
                             </Typography>
-                          </Stack>
+                          </CardDisplay>
                         ),
                       },
                       {

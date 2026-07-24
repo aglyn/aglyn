@@ -14,7 +14,7 @@ the marketplace side.
 
 ## Before your first publish
 
-1. **Community profile** (Manage → Community profile) — your handle and
+1. **Publisher profile** (Marketplace → Profile) — your handle and
    display name appear on every listing. Publishing is **organization-owned**:
    the listing belongs to your organization, not your personal account.
 2. **Plan**: publishing requires a Pro plan.
@@ -38,6 +38,8 @@ a **source site**, then what to publish:
 Dataset schemas are the one exception to the source-site picker: datasets
 belong to the organization rather than to a site, so the picker is hidden and
 the schema publishes from the org directly.
+
+![Publishing from the organization Marketplace](/img/guides/marketplace-publish.png)
 
 The per-site shortcuts still exist for convenience — the **Publish** actions
 on a site's **Components** and **Layouts** pages, and **Publish as template**
@@ -145,5 +147,4 @@ require purchase before install; you see sales in your publisher ledger.
 
 One-time prices in whole USD (up to $1000). Purchases flow through the
 platform's Stripe; your share (80%, or 70% on free plans) pays out via
-your Connect account. The ledger on your community profile tracks every
-sale.
+your Connect account. The Marketplace → Sales tab tracks every sale.

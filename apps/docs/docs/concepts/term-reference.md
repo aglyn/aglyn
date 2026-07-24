@@ -291,7 +291,7 @@ First-party features and community submissions use the same system.
 ### Add-on
 
 The user-facing word for optional capability on top of your plan — installed
-plugins and purchasable extras, managed from the Plugins & add-ons hub.
+plugins and purchasable extras, managed from the Marketplace (Installed tab).
 → [Plugins overview](../developers/plugins/overview.md)
 
 ### Surface

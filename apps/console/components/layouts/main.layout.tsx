@@ -501,10 +501,12 @@ export function MainLayout(props: MainLayoutProps) {
                   icon: { path: mdiCreditCardOutline.path },
                 },
                 {
-                  children: 'Community profile',
+                  children: 'Publisher profile',
                   component: AppLink,
                   href: orgSlug
-                    ? buildRoute(Route.MANAGE_COMMUNITY_PROFILE, { orgSlug })
+                    ? `${buildRoute(Route.ORG_MARKETPLACE, {
+                        orgSlug,
+                      })}?tab=profile`
                     : orgHome,
                   icon: { path: mdiAccountGroupOutline.path },
                 },

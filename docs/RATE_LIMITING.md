@@ -63,9 +63,11 @@ would lock legitimate visitors out of a customer's site over an unrelated
 Firestore blip. Degrading to the per-instance cap keeps some protection, keeps
 sites usable, and reports which happened.
 
-Note this is the opposite of the fail-open default the pre-release audit
-flagged as systemic — `CSRF_SECRET = process.env.CSRF_SECRET || ''` still
-signs with an empty key when unset (see AGL-792).
+Note the distinction from a fail-*open* default, the pattern the pre-release
+audit flagged as systemic: `CSRF_SECRET = process.env.CSRF_SECRET || ''` used
+to sign with an empty key when unset, which made CSRF tokens forgeable while
+still reporting success. That one now fails closed (AGL-795). Degrading is
+only defensible here because the fallback still enforces *something*.
 
 ## Operational: enable the TTL policy
 
@@ -86,15 +88,22 @@ set -a && source .env && set +a && node tools/scripts/set-firestore-ttl.mjs
 #    --dry-run reports current state without changing anything
 ```
 
-**Status: the script works but currently 403s** — `firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com`
-can deploy rules but lacks `datastore.indexes.update`. Grant it once and the
-script (and any future TTL policy added to its list) just works:
+**Status: `rateLimits.expiresAt` is ACTIVE on `aglyn-main`** (enabled 2026-07-24).
+The script *reads* state fine with the service account, but **cannot apply**
+changes: `firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com` lacks
+`datastore.indexes.update`, and it cannot even read the project IAM policy —
+so it can never grant itself that role. Applying a NEW policy therefore needs
+a human-authenticated `gcloud` (below), or a one-time grant from an account
+with IAM admin:
 
 ```bash
 gcloud projects add-iam-policy-binding aglyn-main \
   --member="serviceAccount:firebase-adminsdk-fcgi3@aglyn-main.iam.gserviceaccount.com" \
   --role="roles/datastore.indexAdmin"
 ```
+
+That grant is optional — it only buys unattended future runs. The `gcloud`
+route below needs no widening at all.
 
 ```bash
 # 2. gcloud directly, as a human with project access

@@ -30,7 +30,7 @@ The **console** is where you manage a site. Here's what each part of the chrome 
   notifications (form submissions, bookings, invoices, team changes); "View all" opens
   the full paginated feed.
 - **Theme toggle** — cycle between light, dark, and system display mode.
-- **Account menu** — settings, billing, community profile, a **Documentation**
+- **Account menu** — settings, billing, publisher profile, a **Documentation**
   link that opens this docs site in a new tab, and sign-out.
 
 ## In-context help
@@ -77,8 +77,9 @@ lives under **Setup → Activity**).
 
 ## Workspace settings & notifications
 
-Organization-wide settings (name, workspace URL, enabled plugins) live under
-**Organization → Settings**:
+Organization-wide settings (name, workspace URL) live under
+**Organization → Settings**. Enabling plugins, configuring them, and managing
+marketplace installs live under **Organization → Marketplace → Installed**:
 
 ![Organization settings](/img/getting-started/org-settings-page.png)
 

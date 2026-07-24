@@ -59,7 +59,7 @@
     "serve:console:prod": "nx serve console --prod",
     "cz": "cz",
     "firebase:emulate": "firebase emulators:start --import=./.firebase --export-on-exit",
-    "prepare": "husky install",
+    "prepare": "husky",
     "readme:table-of-contents": "markdown-toc -i ./README.md",
     "vercel:env-pull": "vercel env pull",
     "profile:nx-run-console:serve:development": "cargo instruments -t time --bin nx run console:serve:development profile",

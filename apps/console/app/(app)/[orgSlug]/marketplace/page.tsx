@@ -16,20 +16,26 @@
  */
 'use client'
 
+import { canManageOrg } from '@aglyn/aglyn'
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HubTabs from '../../../../components/hub-tabs.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import OrgPluginsCard from '../../../../components/org-plugins-card.component'
 import OrgPublishPanel from '../../../../components/org-publish-panel.component'
+import OrgSellerPanel from '../../../../components/org-seller-panel.component'
+import PluginConfigCards from '../../../../components/plugin-config-card.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useOrgHosts } from '../../../../hooks/use-org-hosts'
+import useCurrentOrg from '../../../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 
@@ -47,9 +53,38 @@ import useOrgPermissions from '../../../../hooks/use-org-permissions'
 const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
   const orgSlug = useOrgSlug()
   const { currentOrg, loading } = useOrgScope()
+  const { org } = useCurrentOrg()
   const { data: user } = useUser()
   const firestore = useFirestore()
+  const { enqueueSnackbar } = useSnackbar()
   const { permissions } = useOrgPermissions()
+  const canManage = canManageOrg(currentOrg?.role)
+
+  // First-party switchboard save (AGL-797), ported from the retired Plugins
+  // page: the enable/disable set is org-owned, written through the settings
+  // API rather than a client SDK write.
+  const saveEnabledPlugins = async (enabledPlugins: string[]) => {
+    const idToken = await (
+      user as { getIdToken?: () => Promise<string> }
+    )?.getIdToken?.()
+    const response = await fetch('/api/orgs/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify({
+        orgId: currentOrg?.$id,
+        action: 'set-enabled-plugins',
+        enabledPlugins,
+      }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload?.error ?? 'Request failed')
+    }
+    enqueueSnackbar('Plugins updated', { variant: 'success' })
+  }
 
   const { hosts } = useOrgHosts(
     firestore,
@@ -162,12 +197,35 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                     id: 'installed',
                     label: 'Installed',
                     content: (
-                      <PluginWidgetSlot slot="orgAddons" hostId={actingHost} />
+                      <Stack spacing={3}>
+                        {/* First-party plugins (AGL-423/797): the org
+                            switchboard and each loaded plugin's settings,
+                            folded in from the retired Plugins page so
+                            "everything installed" lives in one tab. */}
+                        <OrgPluginsCard
+                          org={org}
+                          disabled={!canManage}
+                          onSave={saveEnabledPlugins}
+                        />
+                        <PluginConfigCards
+                          orgId={currentOrg?.$id ?? ''}
+                          disabled={!canManage}
+                        />
+                        {/* Marketplace install pins (host + org): the
+                            community plugin's orgAddons card. Renders nothing
+                            when that plugin is disabled for the workspace. */}
+                        <PluginWidgetSlot
+                          slot="orgAddons"
+                          hostId={actingHost}
+                        />
+                      </Stack>
                     ),
                   },
-                  // Publish (AGL-776): one place to list a component, layout,
-                  // or whole site from any of the org's sites. Gated on the
-                  // publish permission; the server enforces it too.
+                  // Seller area (AGL-776/798/801): one tab each for the
+                  // publish action and the seller sections — profile,
+                  // listings, payouts and sales — folded in from the retired
+                  // Community page. Gated on the publish permission; the server
+                  // enforces it too.
                   ...(permissions.publishToCommunity && currentOrg?.$id
                     ? [
                         {
@@ -175,9 +233,48 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                           label: 'Publish',
                           content: (
                             <OrgPublishPanel
-                              orgSlug={orgSlug}
                               orgId={currentOrg.$id}
                               hosts={hostList}
+                            />
+                          ),
+                        },
+                        {
+                          id: 'profile',
+                          label: 'Profile',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="profile"
+                            />
+                          ),
+                        },
+                        {
+                          id: 'listings',
+                          label: 'Listings',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="listings"
+                            />
+                          ),
+                        },
+                        {
+                          id: 'payouts',
+                          label: 'Payouts',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="payouts"
+                            />
+                          ),
+                        },
+                        {
+                          id: 'sales',
+                          label: 'Sales',
+                          content: (
+                            <OrgSellerPanel
+                              orgId={currentOrg.$id}
+                              section="sales"
                             />
                           ),
                         },

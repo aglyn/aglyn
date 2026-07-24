@@ -169,9 +169,21 @@ async function handler(request: Request): Promise<Response> {
     const baseline = resolveOrgEntitlements({ ...org, seatAddons: {} })
 
     const customerId = org?.stripeCustomerId
-    const subscription = customerId
-      ? await activeSubscription(secretKey, String(customerId))
-      : null
+    let subscription: any = null
+    if (customerId) {
+      try {
+        subscription = await activeSubscription(secretKey, String(customerId))
+      } catch (error) {
+        // A read-only `get` degrades to "no subscription" rather than failing
+        // the whole card: a stale/invalid Stripe customer or a transient
+        // Stripe outage shouldn't spam a warning on every billing-page load
+        // (the UI already handles `hasSubscription: false`). Write actions
+        // (`preview`/`set`) still surface the error — they need a live
+        // subscription to bill on.
+        if (action !== 'get') throw error
+        console.warn('addons: subscription lookup failed for get', error)
+      }
+    }
     const items: any[] = subscription?.items?.data ?? []
     // The base plan item is the one no add-on price claims; its price's
     // recurring interval decides which add-on variants attach (Stripe
