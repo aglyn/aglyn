@@ -33,6 +33,17 @@
       "autoPort": true
     },
     {
+      "name": "console-prod",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "nx",
+        "serve",
+        "console",
+        "--configuration=production"
+      ],
+      "port": 4200
+    },
+    {
       "name": "console-emulated",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
