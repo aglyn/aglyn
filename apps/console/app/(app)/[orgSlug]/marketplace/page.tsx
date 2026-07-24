@@ -29,6 +29,7 @@ import HubTabs from '../../../../components/hub-tabs.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import OrgPluginsCard from '../../../../components/org-plugins-card.component'
 import OrgPublishPanel from '../../../../components/org-publish-panel.component'
+import OrgSellerPanel from '../../../../components/org-seller-panel.component'
 import PluginConfigCards from '../../../../components/plugin-config-card.component'
 import PluginWidgetSlot from '../../../../components/plugin-widget-slot.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -220,20 +221,25 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                       </Stack>
                     ),
                   },
-                  // Publish (AGL-776): one place to list a component, layout,
-                  // or whole site from any of the org's sites. Gated on the
-                  // publish permission; the server enforces it too.
+                  // Publish (AGL-776/798): list a component, layout, or whole
+                  // site from any of the org's sites, plus the seller area —
+                  // publisher profile, listings, payouts and sales — folded in
+                  // from the retired Community page. Gated on the publish
+                  // permission; the server enforces it too.
                   ...(permissions.publishToCommunity && currentOrg?.$id
                     ? [
                         {
                           id: 'publish',
                           label: 'Publish',
                           content: (
-                            <OrgPublishPanel
-                              orgSlug={orgSlug}
-                              orgId={currentOrg.$id}
-                              hosts={hostList}
-                            />
+                            <Stack spacing={3}>
+                              <OrgPublishPanel
+                                orgSlug={orgSlug}
+                                orgId={currentOrg.$id}
+                                hosts={hostList}
+                              />
+                              <OrgSellerPanel orgId={currentOrg.$id} />
+                            </Stack>
                           ),
                         },
                       ]
