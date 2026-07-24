@@ -383,7 +383,8 @@ export function CommunityListingContent({
     [firestore, user?.uid],
     { idField: '$id' },
   )
-  const isPlugin = listing ? listingArtifactType(listing) === 'plugin' : false
+  const artifactType = listing ? listingArtifactType(listing) : null
+  const isPlugin = artifactType === 'plugin'
   // Plugin installs are version PINS, not component snapshots (AGL-656): a
   // host pin lives at `hosts/{h}/installs/{id}`, an org pin at
   // `orgs/{o}/installs/{id}` and applies to every site. Reading only
@@ -407,6 +408,42 @@ export function CommunityListingContent({
     [firestore, orgId, listingId],
     { idField: '$id' },
   )
+  // datasetSchema/emailTemplate installs live in neither collection above
+  // (AGL-789) — they become an org dataset or a draft email version, each
+  // stamped with the listing it came from. Scoped to this listing rather than
+  // reading the whole collection, since the detail page only speaks for one.
+  const { data: datasetInstalls } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'orgs', orgId ?? '-pending-', 'datasets'),
+        where('source.listingId', '==', listingId || '-missing-'),
+        limit(20),
+      ),
+    [firestore, orgId, listingId],
+    { idField: '$id' },
+  )
+  const { data: emailInstalls } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'emailTemplates'),
+        where('installedFrom.listingId', '==', listingId || '-missing-'),
+        limit(20),
+      ),
+    [firestore, hostId, listingId],
+    { idField: '$id' },
+  )
+  const artifactInstall = useMemo(() => {
+    if (artifactType === 'datasetSchema') {
+      const hit = (datasetInstalls ?? []).find((entry: any) => !entry.deletedAt)
+      return hit ? { version: hit.source?.version ?? null } : undefined
+    }
+    if (artifactType === 'emailTemplate') {
+      const hit = (emailInstalls ?? []).find((entry: any) => !entry.deletedAt)
+      return hit ? { version: hit.installedFrom?.version ?? null } : undefined
+    }
+    return undefined
+  }, [artifactType, datasetInstalls, emailInstalls])
+
   const pluginState = useMemo(
     () =>
       resolvePluginInstallState(
@@ -466,10 +503,10 @@ export function CommunityListingContent({
     status === 'success' && (!listing?.profileId || listing?.deletedAt)
   const installed = isPlugin
     ? pluginState.scope != null
-    : Boolean(componentInstall)
+    : Boolean(componentInstall ?? artifactInstall)
   const installedVersion = isPlugin
     ? pluginState.installedVersion
-    : componentInstall?.community?.version
+    : (componentInstall?.community?.version ?? artifactInstall?.version)
   const upToDate = isPlugin
     ? installed && !pluginState.updateAvailable
     : componentInstall && installedVersion >= listing?.latestVersion
@@ -794,13 +831,21 @@ export function CommunityListingContent({
                           >
                             {upToDate
                               ? `Installed (v${installedVersion})`
-                              : installed
-                                ? `Update to v${listing?.latestVersion}`
-                                : mustBuy
-                                  ? `Buy for $${priceUsd}`
-                                  : orgTargeting || installTargets.length > 1
-                                    ? 'Install'
-                                    : 'Add to this site'}
+                              : artifactInstall
+                                ? // Re-adding makes another dataset / another
+                                  // draft, so this stays enabled (AGL-789).
+                                  `${
+                                    artifactType === 'emailTemplate'
+                                      ? 'Draft added'
+                                      : 'Added'
+                                  } (v${installedVersion}) · add again`
+                                : installed
+                                  ? `Update to v${listing?.latestVersion}`
+                                  : mustBuy
+                                    ? `Buy for $${priceUsd}`
+                                    : orgTargeting || installTargets.length > 1
+                                      ? 'Install'
+                                      : 'Add to this site'}
                           </Button>
                         </Box>
                       </Stack>

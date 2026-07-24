@@ -169,9 +169,22 @@ export const installEmailTemplateHandler: PluginApiHandler = async (
     )
     // Create the template doc if this site has never designed this email, but
     // WITHOUT `versionId` — an absent pointer keeps the built-in copy sending.
+    //
+    // `installedFrom` is a read marker, not behavior (AGL-789): the installed
+    // design lives in a versions SUBcollection, which browse can only reach
+    // with a collectionGroup query that would collide with every other
+    // `versions` subcollection in the schema. Recording it on the flat
+    // template doc keeps "is this listing installed here?" a single read.
     batch.set(
       templateRef,
-      { updatedAt: now },
+      {
+        updatedAt: now,
+        installedFrom: {
+          listingId,
+          version: listing.latestVersion ?? null,
+          versionId,
+        },
+      },
       { merge: true },
     )
     await batch.commit()

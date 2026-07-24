@@ -88,6 +88,18 @@ function installCta(listing: unknown): string {
 }
 
 /**
+ * Past-tense state word for the types that don't "install" (AGL-789).
+ *
+ * Deliberately not "Installed": a schema became a dataset you now own and can
+ * edit, and an email template is a draft that is NOT sending. Reusing the
+ * component word would imply both a live artifact and a one-to-one relation,
+ * and neither holds.
+ */
+function addedLabel(artifactType: string): string {
+  return artifactType === 'emailTemplate' ? 'Draft added' : 'Added'
+}
+
+/**
  * Community components browse + install (AGL-44). Installing copies the
  * listing's pinned version snapshot into `hosts/{hostId}/components` (with
  * `community` source metadata), so the element drawer, editor grafting, and
@@ -215,6 +227,50 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
     [firestore, orgId],
     { idField: '$id' },
   )
+  // The AGL-657 types land in neither the components collection nor a pin
+  // (AGL-789): a dataset schema becomes an org dataset, an email template a
+  // draft version. Both installers stamp the source listing, so read those.
+  const { data: datasetDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'orgs', orgId ?? '-pending-', 'datasets'),
+        limit(200),
+      ),
+    [firestore, orgId],
+    { idField: '$id' },
+  )
+  const { data: emailDocs } = useFirestoreCollection<any>(
+    () =>
+      query(
+        collection(firestore, 'hosts', hostId, 'emailTemplates'),
+        limit(100),
+      ),
+    [firestore, hostId],
+    { idField: '$id' },
+  )
+  // listingId → the newest install of it. A schema install deliberately makes
+  // a NEW dataset every time, so this is genuinely one-to-many; the highest
+  // installed version is what the card should speak for.
+  const artifactInstalls = useMemo(() => {
+    const map: Record<string, { version: string | null }> = {}
+    const note = (listingId: unknown, version: unknown) => {
+      const id = listingId ? String(listingId) : ''
+      if (!id) return
+      const next = version != null ? String(version) : null
+      const seen = map[id]?.version
+      if (!seen || (next && next > seen)) map[id] = { version: next }
+    }
+    for (const dataset of datasetDocs ?? []) {
+      if (dataset.deletedAt) continue
+      note(dataset.source?.listingId, dataset.source?.version)
+    }
+    for (const template of emailDocs ?? []) {
+      if (template.deletedAt) continue
+      note(template.installedFrom?.listingId, template.installedFrom?.version)
+    }
+    return map
+  }, [datasetDocs, emailDocs])
+
   const hostPins = useMemo(() => {
     const map: Record<string, any> = {}
     for (const pin of hostPinDocs ?? []) map[pin.$id] = pin
@@ -371,19 +427,31 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
       ) : (
         <Grid container spacing={2}>
           {items.map((listing: any) => {
-            const isPlugin = listingArtifactType(listing) === 'plugin'
+            const artifactType = listingArtifactType(listing)
+            const isPlugin = artifactType === 'plugin'
             const pluginState = resolvePluginInstallState(
               listing.latestVersion,
               isPlugin ? hostPins[listing.$id] : null,
               isPlugin ? orgPins[listing.$id] : null,
             )
             const componentInstall = installed[listing.$id]
+            // datasetSchema/emailTemplate installs are tracked by the source
+            // listing stamped on what they created (AGL-789).
+            const artifactInstall =
+              artifactType === 'datasetSchema' ||
+              artifactType === 'emailTemplate'
+                ? artifactInstalls[listing.$id]
+                : undefined
             const isInstalled = isPlugin
               ? pluginState.scope != null
-              : Boolean(componentInstall)
+              : Boolean(componentInstall ?? artifactInstall)
             const installedVersion = isPlugin
               ? pluginState.installedVersion
-              : componentInstall?.community?.version
+              : (componentInstall?.community?.version ??
+                artifactInstall?.version)
+            // Re-adding a schema or an email draft is always legitimate — it
+            // makes another dataset / another draft — so these never reach the
+            // disabled "up to date" state the way a component does.
             const upToDate = isPlugin
               ? isInstalled && !pluginState.updateAvailable
               : componentInstall && installedVersion >= listing.latestVersion
@@ -515,11 +583,13 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                   >
                     {upToDate
                       ? `Installed (v${installedVersion})`
-                      : isInstalled
-                        ? `Update to v${listing.latestVersion}`
-                        : mustBuy
-                          ? `Buy for $${priceUsd}`
-                          : installCta(listing)}
+                      : artifactInstall
+                        ? `${addedLabel(artifactType)} (v${installedVersion}) · add again`
+                        : isInstalled
+                          ? `Update to v${listing.latestVersion}`
+                          : mustBuy
+                            ? `Buy for $${priceUsd}`
+                            : installCta(listing)}
                   </Button>
                 </Stack>
               </Grid>
