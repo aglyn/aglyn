@@ -83,13 +83,23 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
     if (!isPublisher && decoded['staff'] !== true) {
       return res.status(403).json({ error: 'Not your listing' })
     }
+    // Name and description are the whole first impression of a listing in
+    // browse, and until AGL-793 they were the only listing-content fields with
+    // no edit path — a typo in either could only be corrected by publishing a
+    // fake new version, which signals "there's an update" to every installer.
+    // Same caps the publish routes apply. An empty name is ignored rather than
+    // accepted: a nameless listing is unrecognisable in the catalogue.
     const description = req.body?.description
+    const displayName = req.body?.displayName
+    const nextName =
+      typeof displayName === 'string' ? displayName.trim().slice(0, 80) : ''
     await listingRef.set(
       {
         ...verdict.content,
         ...(typeof description === 'string'
           ? { description: description.slice(0, 500) }
           : {}),
+        ...(nextName ? { displayName: nextName } : {}),
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },

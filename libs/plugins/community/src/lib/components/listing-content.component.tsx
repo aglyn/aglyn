@@ -171,6 +171,8 @@ function ListingEditCard({
   const { enqueueSnackbar } = useSnackbar()
   const [busy, setBusy] = useState(false)
   const [values, setValues] = useState({
+    displayName: '',
+    description: '',
     readme: '',
     logoUrl: '',
     homepageUrl: '',
@@ -181,6 +183,8 @@ function ListingEditCard({
   })
   useEffect(() => {
     setValues({
+      displayName: listing?.displayName ?? '',
+      description: listing?.description ?? '',
       readme: listing?.readme ?? '',
       logoUrl: listing?.logoUrl ?? '',
       homepageUrl: listing?.homepageUrl ?? '',
@@ -206,6 +210,8 @@ function ListingEditCard({
         body: JSON.stringify({
           action: 'update-listing',
           listingId,
+          displayName: values.displayName,
+          description: values.description,
           readme: values.readme,
           logoUrl: values.logoUrl,
           homepageUrl: values.homepageUrl,
@@ -242,6 +248,24 @@ function ListingEditCard({
           {'Shown on this page for every visitor. Markdown supported in ' +
             'the README (headings, lists, links, images).'}
         </Typography>
+        {/* Name and description are what browse cards show, so they are
+            editable here rather than only at publish time — correcting a typo
+            should not require shipping a version nobody asked for (AGL-793). */}
+        <TextField
+          label="Listing name"
+          value={values.displayName}
+          onChange={set('displayName')}
+          size="small"
+        />
+        <TextField
+          label="Description"
+          helperText="One line, shown on every browse card"
+          multiline
+          minRows={2}
+          value={values.description}
+          onChange={set('description')}
+          size="small"
+        />
         <TextField
           label="README (markdown)"
           multiline
