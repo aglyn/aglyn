@@ -101,7 +101,6 @@ describe('OrgPublishPanel kind switching (AGL-788)', () => {
 
   const panel = (
     <OrgPublishPanel
-      orgSlug="test-org"
       orgId="org-1"
       hosts={[
         { id: 'h1', label: 'Northwind Coffee' },
