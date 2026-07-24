@@ -76,9 +76,11 @@ const CommunitySettings: NextPageWithLayout<Record<string, never>> = () => {
     () =>
       query(
         collection(firestore, 'communityListings'),
-        where('profileId', '==', uid ?? '-anonymous-'),
+        // Listings are org-owned (AGL-652): `profileId` is the org id, not a
+        // uid — filtering by uid left this list permanently empty (AGL-781).
+        where('profileId', '==', currentOrg?.$id ?? '-none-'),
       ),
-    [firestore, uid],
+    [firestore, currentOrg?.$id],
     { idField: '$id' },
   )
   // Seller ledger (AGL-46): purchase records written by the Stripe webhook.
