@@ -216,6 +216,7 @@ function ComponentBesignerPage(props) {
       logActivity('Saved the component', {
         type: 'component',
         id: componentId,
+        name: componentResult?.data?.displayName,
       }),
   })
 

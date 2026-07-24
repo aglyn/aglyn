@@ -180,7 +180,11 @@ function LayoutBesignerPage(props) {
     // Attribution (AGL-676): `updatedAt` carries no actor, so without this
     // "someone changed this" could never become "Sam changed this".
     onSaved: () =>
-      logActivity('Saved the layout', { type: 'layout', id: layoutId }),
+      logActivity('Saved the layout', {
+        type: 'layout',
+        id: layoutId,
+        name: layoutResult?.data?.displayName,
+      }),
   })
 
   const hostTheme = hostResult?.data?.theme

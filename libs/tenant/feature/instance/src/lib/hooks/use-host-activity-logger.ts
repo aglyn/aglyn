@@ -40,6 +40,12 @@ export interface HostActivityTarget {
     | 'template'
   id?: string
   name?: string
+  /**
+   * Version-addressed targets (screens) record this so the feed can deep-link
+   * straight to the exact version's detail view (AGL-812). Written only when
+   * truthy, like `id`/`name`.
+   */
+  versionId?: string
 }
 
 /**
@@ -62,6 +68,7 @@ export function useHostActivityLogger(hostId: string | undefined) {
           type: target.type,
           ...(target.id ? { id: target.id } : {}),
           ...(target.name ? { name: target.name } : {}),
+          ...(target.versionId ? { versionId: target.versionId } : {}),
         },
         createdAt: Timestamp.now(),
       }).catch(console.error)

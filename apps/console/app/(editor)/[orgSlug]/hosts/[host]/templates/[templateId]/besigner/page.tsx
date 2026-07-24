@@ -244,7 +244,11 @@ function TemplateBesignerPage(props) {
       return { nodes: unwrapped ? unwrapped.nodes : canvasNodes }
     },
     onSaved: () =>
-      logActivity('Saved the template', { type: 'template', id: templateId }),
+      logActivity('Saved the template', {
+        type: 'template',
+        id: templateId,
+        name: result?.data?.displayName,
+      }),
   })
 
   // No publish step: a template is inert by definition — nothing renders

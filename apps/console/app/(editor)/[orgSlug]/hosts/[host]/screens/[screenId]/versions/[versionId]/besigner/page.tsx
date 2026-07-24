@@ -231,7 +231,12 @@ function BesignerPage(props) {
     notify: enqueueSnackbar,
     queueLoading,
     onSaved: () =>
-      logActivity('Saved the screen', { type: 'screen', id: screenId }),
+      logActivity('Saved the screen', {
+        type: 'screen',
+        id: screenId,
+        name: screenResult?.data?.displayName,
+        versionId,
+      }),
   })
 
   const liveUrl = useMemo(
