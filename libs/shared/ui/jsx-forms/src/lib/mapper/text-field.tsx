@@ -31,6 +31,13 @@ export interface TextFieldProps extends BaseFieldProps {
   placeholder?: string
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputProps?: Record<string, any>
+  /**
+   * Props for the MUI Input slot (adornments, etc.). Kept under the legacy
+   * `InputProps` name because schemas author it that way via `resolveProps`;
+   * routed into `slotProps.input` here so it never reaches the DOM.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  InputProps?: Record<string, any>
   FormFieldGridProps?: FormFieldGridProps
 }
 
@@ -47,6 +54,7 @@ export const TextField = (props: TextFieldProps) => {
     validateOnMount,
     meta,
     inputProps,
+    InputProps,
     help,
     FormFieldGridProps = {},
     ...rest
@@ -70,7 +78,7 @@ export const TextField = (props: TextFieldProps) => {
         placeholder={placeholder}
         required={isRequired}
         slotProps={{
-          input: { readOnly: isReadOnly },
+          input: { readOnly: isReadOnly, ...InputProps },
           htmlInput: { ...inputProps },
         }}
         {...rest}
