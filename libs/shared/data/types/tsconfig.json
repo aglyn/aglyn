@@ -3,7 +3,8 @@
   "files": [],
   "include": [],
   "compilerOptions": {
-    "types": ["@tshelpers"]
+    "types": ["@tshelpers"],
+    "ignoreDeprecations": "6.0"
   },
   "references": [
     {

@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
-    "types": ["@tshelpers", "@jsx"]
+    "types": ["@tshelpers", "@jsx"],
+    "ignoreDeprecations": "6.0"
   },
   "files": [],
   "include": [],

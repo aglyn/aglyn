@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Button,
   Stack,
@@ -36,8 +36,13 @@ import {
   startAfter,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
+import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import {
+  activityHref,
+  activityTargetLabel,
+} from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
 
 export interface HostActivityTableProps {
@@ -52,6 +57,7 @@ export interface HostActivityTableProps {
  */
 export function HostActivityTable(props: HostActivityTableProps) {
   const { hostId, pageSize = 25 } = props
+  const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
   const firestore = useFirestore()
   const [rows, setRows] = useState<any[]>([])
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
@@ -127,16 +133,28 @@ export function HostActivityTable(props: HostActivityTableProps) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((entry) => (
+              {rows.map((entry) => {
+                const href = activityHref(entry, { orgSlug, host })
+                const label = activityTargetLabel(entry.target)
+                return (
                 <TableRow key={entry.$id}>
                   <TableCell>{entry.action}</TableCell>
-                  <TableCell>{entry.target?.name ?? entry.target?.id ?? '—'}</TableCell>
+                  <TableCell>
+                    {href ? (
+                      <AppLink href={href} color="secondary" underline="hover">
+                        {label}
+                      </AppLink>
+                    ) : (
+                      label
+                    )}
+                  </TableCell>
                   <TableCell>{entry.actorEmail ?? 'Someone'}</TableCell>
                   <TableCell>
                     {entry.createdAt?.toDate?.().toLocaleString() ?? ''}
                   </TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
           </Table>
         )}

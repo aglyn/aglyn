@@ -4,7 +4,8 @@
     "sourceMap": false,
     "outDir": "../../dist/out-tsc",
     "allowJs": true,
-    "types": ["@tshelpers", "node", "@jsx"]
+    "types": ["@tshelpers", "node", "@jsx"],
+    "ignoreDeprecations": "6.0"
   },
   // Cypress ships its own types (no @types/cypress); with explicit typeRoots,
   // TS 7 no longer resolves "types" entries from regular packages.

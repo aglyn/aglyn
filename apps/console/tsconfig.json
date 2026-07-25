@@ -1,10 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "typeRoots": [
-      "../../types",
-      "../../node_modules/@types"
-    ],
+    "typeRoots": ["../../types", "../../node_modules/@types"],
     "types": ["@tshelpers", "node", "jest", "@jsx"],
     "isolatedModules": true,
     "incremental": true,
@@ -14,7 +11,8 @@
         "name": "next"
       }
     ],
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "ignoreDeprecations": "6.0"
   },
   "include": [
     "**/*.ts",
@@ -24,8 +22,5 @@
     "../../apps/console/.next/types/**/*.ts",
     "../../dist/apps/console/.next/types/**/*.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "jest.config.ts"
-  ]
+  "exclude": ["node_modules", "jest.config.ts"]
 }
