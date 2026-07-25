@@ -34,7 +34,7 @@ import { useHost } from '@aglyn/tenant-feature-instance'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { InputAdornment, Tab } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useState } from 'react'
 import { useAnalytics, useUser } from '@aglyn/tenant-feature-instance'
 import HostActivityTable from '../../../../../../components/host-activity-table.component'
@@ -336,6 +336,7 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const orgSlug = useOrgSlug()
   const host = useHostSubdomain()
   const router = useRouter()
+  const pathname = usePathname()
   const {
     doc: { data, status },
     setDoc,
@@ -491,13 +492,18 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
   const onTabChange = useCallback(
     async (e, value) => {
       setTab(value)
+      // Mirror the active tab into `?tab=` (shallow replace, no scroll) so the
+      // section deep-links and survives back/forward — matching HubTabs.
+      const nextParams = new URLSearchParams(searchParams?.toString())
+      nextParams.set('tab', value)
+      router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
       const form = forms.find(({ schema }) => schema.id === value)
       logEvent(analytics, 'screen_view', {
         firebase_screen: (form?.schema.title as string) ?? 'Theme',
         firebase_screen_class: HostSetup.displayName,
       })
     },
-    [forms, analytics],
+    [forms, analytics, router, pathname, searchParams],
   )
 
   return (
