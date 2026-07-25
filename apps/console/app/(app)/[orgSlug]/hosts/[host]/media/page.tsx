@@ -28,7 +28,6 @@ import DashboardLayout from '../../../../../../components/layouts/dashboard.layo
 import MainLayout from '../../../../../../components/layouts/main.layout'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import MediaLibraryComponent from '../../../../../../components/media/media-library.component'
-import OrgMediaCard from '../../../../../../components/media/org-media-card.component'
 import useHostOrgId from '../../../../../../hooks/use-host-org-id'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
@@ -75,10 +74,25 @@ const HostMedia: NextPageWithLayout<Record<string, never>> = () => {
           >
             <MediaLibraryComponent hostId={hostId} />
           </CardDisplay>
-          {/* Shared org library (AGL-237) below the host-private one. */}
-          <Box sx={{ mt: 3 }}>
-            <OrgMediaCard orgId={hostOrgId} />
-          </Box>
+          {/* Shared org library (AGL-237/821) below the host-private one —
+              now the same canonical DAM component as the org media page. */}
+          {hostOrgId ? (
+            <Box sx={{ mt: 3 }}>
+              <CardDisplay
+                header={'Organization media (shared with all sites)'}
+                help={docsHelp('media', {
+                  excerpt:
+                    'A shared library for the whole organization — any site ' +
+                    'can use these assets, unlike the site-private library.',
+                })}
+                contentGutterX
+                contentGutterY
+                contentBordered="all"
+              >
+                <MediaLibraryComponent orgId={hostOrgId} />
+              </CardDisplay>
+            </Box>
+          ) : null}
         </Container>
       </DashboardLayout>
     </>
