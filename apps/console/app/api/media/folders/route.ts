@@ -27,6 +27,7 @@ import {
   folderStoragePath,
   mediaObjectPath,
   resolveMediaScope,
+  sanitizeCustomMetadata,
 } from '../../../../utils/server/media-scope'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
@@ -43,6 +44,8 @@ const MAX_ASSETS_PER_OP = 500
  * - `rename` {folderId, name}
  * - `delete` {folderId} — children and assets move up to the parent
  * - `move-assets` {mediaIds, folderId|null} — the grid's move/drag
+ * - `custom-metadata` {mediaId, customMetadata} — user key/value pairs,
+ *   written to the Storage object (token preserved) and the doc (AGL-822)
  */
 async function handler(request: Request): Promise<Response> {
   const { method, query, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -241,6 +244,41 @@ async function handler(request: Request): Promise<Response> {
         moved += 1
       }
       return Response.json({ ok: true, moved }, { status: 200 })
+    }
+
+    if (action === 'custom-metadata') {
+      const mediaId = String(body?.mediaId ?? '')
+      if (!mediaId) {
+        return Response.json({ error: 'Missing mediaId' }, { status: 400 })
+      }
+      const clean = sanitizeCustomMetadata(body?.customMetadata)
+      const snapshot = await mediaRef.doc(mediaId).get()
+      if (!snapshot.exists) {
+        return Response.json({ error: 'Unknown media' }, { status: 404 })
+      }
+      // Mirror onto the Storage object's customMetadata, preserving the
+      // download token (setMetadata replaces the whole custom map).
+      const path = mediaObjectPath(snapshot, scope.base)
+      const file = bucket.file(path)
+      const [exists] = await file.exists()
+      if (exists) {
+        const [metadata] = await file.getMetadata()
+        const token = (metadata?.metadata as any)?.firebaseStorageDownloadTokens
+        await file.setMetadata({
+          metadata: {
+            ...(token ? { firebaseStorageDownloadTokens: token } : {}),
+            ...clean,
+          },
+        })
+      }
+      await snapshot.ref.set(
+        {
+          customMetadata: clean,
+          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      return Response.json({ ok: true, customMetadata: clean }, { status: 200 })
     }
 
     return Response.json({ error: 'Unknown action' }, { status: 400 })

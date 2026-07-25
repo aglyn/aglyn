@@ -244,7 +244,14 @@ export interface AglynHostMedia {
   cdnPath?: string
   contentHash?: string
   variants?: number[]
+  /**
+   * User-defined key/value metadata (AGL-822), mirrored onto the Storage
+   * object's `customMetadata` by `/api/media/folders` (action
+   * `custom-metadata`); this doc copy is the source of truth for display.
+   */
+  customMetadata?: Record<string, string>
   createdAt?: ITimestamp
+  updatedAt?: ITimestamp
   deletedAt?: ITimestamp
 }
 

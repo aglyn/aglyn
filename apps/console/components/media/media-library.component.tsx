@@ -19,7 +19,9 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
 import { alpha } from '@mui/material/styles'
 import {
   DndContext,
@@ -41,6 +43,7 @@ import {
   DialogTitle,
   Drawer,
   Grid,
+  IconButton,
   LinearProgress,
   Link,
   Menu,
@@ -837,40 +840,83 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     tags: string
     alt: string
     description: string
+    // Custom metadata (AGL-822) edited as ordered rows, not a map, so
+    // blank/duplicate keys are tolerable mid-edit and reorder is stable.
+    customMeta: Array<{ key: string; value: string }>
   } | null>(null)
   const handleEditorSave = useCallback(async () => {
     if (!editor) return
     const folderId = editor.folderId || null
-    await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', editor.id), {
-      folderId,
-      // Legacy string kept in sync until every reader is on folderId.
-      folder: folderId ? (folderNameById[folderId] ?? '') : '',
-      // Rename (AGL-184): display-name only; the Storage object id/URL
-      // stays stable so existing references keep resolving.
-      ...(editor.fileName.trim()
-        ? { fileName: editor.fileName.trim().slice(0, 200) }
-        : {}),
-      tags: Aglyn.normalizeMediaTags(editor.tags),
-      alt: editor.alt.trim().slice(0, Aglyn.MEDIA_ALT_MAX_LENGTH),
-      description: editor.description.trim(),
-    })
-      .then(() => {
-        enqueueSnackbar('Media details saved', {
-          variant: 'success',
-          persist: false,
-        })
-        logActivity('Updated media details', {
-          type: 'media',
-          id: editor.id,
-          name: editor.media?.fileName ?? editor.id,
-        })
-        setEditor(null)
-        refresh()
-      })
-      .catch(() =>
-        enqueueSnackbar('An error has occurred', { variant: 'error' }),
+    // Custom metadata (AGL-822): rows → record (last write wins, blank
+    // keys dropped). Only round-trips to the server route — which touches
+    // the Storage object — when it actually changed.
+    const nextMeta = Object.fromEntries(
+      editor.customMeta
+        .map((row) => [row.key.trim(), row.value] as const)
+        .filter(([key]) => key),
+    )
+    const prevMeta = (editor.media?.customMetadata ?? {}) as Record<
+      string,
+      string
+    >
+    const metaChanged =
+      JSON.stringify(Object.entries(nextMeta).sort()) !==
+      JSON.stringify(Object.entries(prevMeta).sort())
+    try {
+      await updateDoc(
+        doc(firestore, scopeCollection, scopeId, 'media', editor.id),
+        {
+          folderId,
+          // Legacy string kept in sync until every reader is on folderId.
+          folder: folderId ? (folderNameById[folderId] ?? '') : '',
+          // Rename (AGL-184): display-name only; the Storage object id/URL
+          // stays stable so existing references keep resolving.
+          ...(editor.fileName.trim()
+            ? { fileName: editor.fileName.trim().slice(0, 200) }
+            : {}),
+          tags: Aglyn.normalizeMediaTags(editor.tags),
+          alt: editor.alt.trim().slice(0, Aglyn.MEDIA_ALT_MAX_LENGTH),
+          description: editor.description.trim(),
+        },
       )
-  }, [editor, folderNameById, firestore, scopeId, enqueueSnackbar, logActivity, refresh])
+      if (metaChanged) {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/media/folders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            ...scopeBody,
+            action: 'custom-metadata',
+            mediaId: editor.id,
+            customMetadata: nextMeta,
+          }),
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload?.error ?? 'Saving custom metadata failed')
+        }
+      }
+      enqueueSnackbar('Media details saved', {
+        variant: 'success',
+        persist: false,
+      })
+      logActivity('Updated media details', {
+        type: 'media',
+        id: editor.id,
+        name: editor.media?.fileName ?? editor.id,
+      })
+      setEditor(null)
+      refresh()
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [editor, folderNameById, firestore, scopeId, user, enqueueSnackbar, logActivity, refresh])
 
   // Asset editing (AGL-184): replace-file + image transforms.
   const replaceInputRef = useRef<HTMLInputElement>(null)
@@ -1660,6 +1706,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                       tags: ((media as any).tags ?? []).join(', '),
                       alt: (media as any).alt ?? '',
                       description: (media as any).description ?? '',
+                      customMeta: Object.entries(
+                        (media as any).customMetadata ?? {},
+                      ).map(([key, value]) => ({ key, value: String(value) })),
                     })
                   }
                   onDelete={handleDelete(media)}
@@ -1831,6 +1880,105 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             multiline
             minRows={2}
           />
+          <Box>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="div"
+              sx={{ mb: 0.5 }}
+            >
+              {'Custom metadata'}
+            </Typography>
+            <Stack spacing={1}>
+              {(editor?.customMeta ?? []).map((row, index) => (
+                <Stack
+                  key={index}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <TextField
+                    size="small"
+                    label="Key"
+                    value={row.key}
+                    onChange={(event) =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customMeta: prev.customMeta.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, key: event.target.value }
+                                  : item,
+                              ),
+                            }
+                          : prev,
+                      )
+                    }
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Value"
+                    value={row.value}
+                    onChange={(event) =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customMeta: prev.customMeta.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, value: event.target.value }
+                                  : item,
+                              ),
+                            }
+                          : prev,
+                      )
+                    }
+                    sx={{ flex: 1 }}
+                  />
+                  <IconButton
+                    size="small"
+                    aria-label="Remove field"
+                    onClick={() =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customMeta: prev.customMeta.filter(
+                                (_item, itemIndex) => itemIndex !== index,
+                              ),
+                            }
+                          : prev,
+                      )
+                    }
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() =>
+                  setEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          customMeta: [
+                            ...prev.customMeta,
+                            { key: '', value: '' },
+                          ],
+                        }
+                      : prev,
+                  )
+                }
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                {'Add field'}
+              </Button>
+            </Stack>
+          </Box>
           <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
             <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
             <Button

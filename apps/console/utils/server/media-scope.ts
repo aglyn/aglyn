@@ -107,6 +107,37 @@ export async function resolveMediaScope(
   }
 }
 
+/** Reserved object-metadata key we must never let callers set/clobber. */
+const RESERVED_METADATA_KEYS = new Set(['firebaseStorageDownloadTokens'])
+
+export const CUSTOM_METADATA_MAX_PAIRS = 30
+export const CUSTOM_METADATA_KEY_MAX = 64
+export const CUSTOM_METADATA_VALUE_MAX = 1024
+
+/**
+ * Normalize user-supplied custom metadata (AGL-822) before it touches the
+ * Storage object or the Firestore mirror: coerce to string/string, trim
+ * keys, drop empties/reserved keys, and cap key/value length and pair
+ * count so a client can't bloat object metadata.
+ */
+export function sanitizeCustomMetadata(
+  raw: unknown,
+): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const clean: Record<string, string> = {}
+  for (const [rawKey, rawValue] of Object.entries(
+    raw as Record<string, unknown>,
+  )) {
+    const key = String(rawKey ?? '').trim().slice(0, CUSTOM_METADATA_KEY_MAX)
+    if (!key || RESERVED_METADATA_KEYS.has(key)) continue
+    if (rawValue === null || rawValue === undefined) continue
+    const value = String(rawValue).slice(0, CUSTOM_METADATA_VALUE_MAX)
+    clean[key] = value
+    if (Object.keys(clean).length >= CUSTOM_METADATA_MAX_PAIRS) break
+  }
+  return clean
+}
+
 /** Folder names become real Storage path segments — keep them tame. */
 export function sanitizeFolderSegment(name: unknown): string {
   return (
