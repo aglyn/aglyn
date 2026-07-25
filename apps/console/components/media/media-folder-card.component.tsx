@@ -17,6 +17,7 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
 import FolderIcon from '@mui/icons-material/Folder'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import {
@@ -29,7 +30,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { type MouseEvent, useState } from 'react'
+import { type MouseEvent, useCallback, useState } from 'react'
 
 export interface MediaFolderCardProps {
   folder: Aglyn.AglynHostMediaFolder
@@ -42,17 +43,18 @@ export interface MediaFolderCardProps {
   onNewSubfolder?: () => void
   onRename?: () => void
   onDelete?: () => void
-  /** Highlight state driven by an active drag hovering over the card. */
-  isDropTarget?: boolean
 }
 
 const THUMB_HEIGHT = 116
 
 /**
- * A folder tile for the DAM grid (AGL-818). Mirrors MediaAssetCard's shape
- * so folders and files line up in one unified grid — folders render first.
- * The whole tile opens the folder; an overflow menu carries New subfolder /
- * Rename / Delete. In AGL-819 the card also becomes a drag/drop target.
+ * A folder tile for the DAM grid (AGL-818/819). Mirrors MediaAssetCard's
+ * shape so folders and files line up in one unified grid — folders render
+ * first. The whole tile opens the folder; an overflow menu carries New
+ * subfolder / Rename / Delete. It is also a dnd-kit drop target (drag files
+ * or folders onto it to reorganize) and draggable (drag it into another
+ * folder). Uses `gridfolder:` / `gridfolderdrag:` ids so it never collides
+ * with the rail's `folder:` droppables for the same folder.
  */
 export function MediaFolderCard(props: MediaFolderCardProps) {
   const {
@@ -63,7 +65,6 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     onNewSubfolder,
     onRename,
     onDelete,
-    isDropTarget,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const openMenu = (event: MouseEvent<HTMLElement>) => {
@@ -77,11 +78,34 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
     action?.()
   }
 
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `gridfolder:${folder.$id}`,
+    disabled: readOnly,
+  })
+  const {
+    setNodeRef: setDragRef,
+    attributes,
+    listeners,
+    isDragging,
+  } = useDraggable({ id: `gridfolderdrag:${folder.$id}`, disabled: readOnly })
+  const setCardRef = useCallback(
+    (node: HTMLElement | null) => {
+      setDropRef(node)
+      setDragRef(node)
+    },
+    [setDropRef, setDragRef],
+  )
+  const isDropTarget = isOver && !isDragging
+
   return (
     <Card
+      ref={setCardRef}
       variant="outlined"
       onClick={onOpen}
+      {...attributes}
+      {...listeners}
       sx={{
+        opacity: isDragging ? 0.4 : 1,
         position: 'relative',
         height: '100%',
         display: 'flex',
@@ -144,6 +168,7 @@ export function MediaFolderCard(props: MediaFolderCardProps) {
             className="media-card-affordance"
             size="small"
             aria-label="Folder actions"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={openMenu}
             sx={{
               mt: -0.25,

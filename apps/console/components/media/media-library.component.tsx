@@ -24,6 +24,7 @@ import {
   type DragEndEvent,
   PointerSensor,
   useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
@@ -126,6 +127,35 @@ function DraggableCard(props: {
   )
 }
 DraggableCard.displayName = 'DraggableCard'
+
+/**
+ * Breadcrumb drop target (AGL-819): dropping a dragged file/folder onto an
+ * ancestor crumb (or "All files" → root) moves it up and out. Uses the
+ * `gridfolder:` id space so it never collides with the rail's `folder:`.
+ */
+function CrumbDropZone(props: {
+  targetId: string | null
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: props.targetId === null ? 'gridfolder:root' : `gridfolder:${props.targetId}`,
+  })
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        borderRadius: 1,
+        px: 0.5,
+        transition: (theme) => theme.transitions.create(['background-color']),
+        bgcolor: isOver ? 'secondary.main' : undefined,
+        color: isOver ? 'secondary.contrastText' : undefined,
+      }}
+    >
+      {props.children}
+    </Box>
+  )
+}
+CrumbDropZone.displayName = 'CrumbDropZone'
 
 /** File → base64 (payload for the upload API). */
 function fileToBase64(file: File): Promise<string> {
@@ -714,16 +744,35 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     (event: DragEndEvent) => {
       const activeId = String(event.active.id)
       const overId = event.over ? String(event.over.id) : null
-      if (!overId || !overId.startsWith('folder:')) return
-      const targetId = overId === 'folder:root' ? null : overId.slice(7)
+      if (!overId) return
+      // Resolve the drop target folder (null = root). The rail uses
+      // `folder:` ids; grid folder cards and breadcrumb crumbs use
+      // `gridfolder:` so the two never register duplicate droppable ids.
+      let targetId: string | null
+      if (overId === 'folder:root' || overId === 'gridfolder:root') {
+        targetId = null
+      } else if (overId.startsWith('folder:')) {
+        targetId = overId.slice(7)
+      } else if (overId.startsWith('gridfolder:')) {
+        targetId = overId.slice(11)
+      } else {
+        return
+      }
       if (activeId.startsWith('media:')) {
         const mediaId = activeId.slice(6)
         const ids = selected.has(mediaId) ? [...selected] : [mediaId]
         void moveMedia(ids, targetId)
         return
       }
-      if (activeId.startsWith('folderdrag:')) {
-        const folderId = activeId.slice(11)
+      // Folder drags come from the rail (`folderdrag:`) or a grid card
+      // (`gridfolderdrag:`).
+      const draggedFolderId = activeId.startsWith('gridfolderdrag:')
+        ? activeId.slice(15)
+        : activeId.startsWith('folderdrag:')
+          ? activeId.slice(11)
+          : null
+      if (draggedFolderId) {
+        const folderId = draggedFolderId
         if (folderId === targetId) return
         if (
           targetId &&
@@ -1370,31 +1419,34 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       </Stack>
       {breadcrumb.length ? (
         <Breadcrumbs>
-          <Link
-            component="button"
-            variant="body2"
-            underline="hover"
-            color="inherit"
-            onClick={() => setCurrentFolder('all')}
-          >
-            {'All files'}
-          </Link>
+          <CrumbDropZone targetId={null}>
+            <Link
+              component="button"
+              variant="body2"
+              underline="hover"
+              color="inherit"
+              onClick={() => setCurrentFolder('all')}
+            >
+              {'All files'}
+            </Link>
+          </CrumbDropZone>
           {breadcrumb.map((folder, index) =>
             index === breadcrumb.length - 1 ? (
               <Typography key={folder.$id} variant="body2">
                 {folder.name}
               </Typography>
             ) : (
-              <Link
-                key={folder.$id}
-                component="button"
-                variant="body2"
-                underline="hover"
-                color="inherit"
-                onClick={() => setCurrentFolder(folder.$id)}
-              >
-                {folder.name}
-              </Link>
+              <CrumbDropZone key={folder.$id} targetId={folder.$id}>
+                <Link
+                  component="button"
+                  variant="body2"
+                  underline="hover"
+                  color="inherit"
+                  onClick={() => setCurrentFolder(folder.$id)}
+                >
+                  {folder.name}
+                </Link>
+              </CrumbDropZone>
             ),
           )}
         </Breadcrumbs>
