@@ -19,6 +19,8 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import { alpha } from '@mui/material/styles'
 import {
   DndContext,
   type DragEndEvent,
@@ -1062,31 +1064,32 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   }, [editorId, user, scopeId, firestore])
 
-  const handleUpload = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ''
-      if (!file) return
+  // Single-file upload (AGL-820): extracted from the input handler so the
+  // Upload button and drag-and-drop share one path. Returns bytes added on
+  // success (0 when skipped/failed) so a batch can keep a running quota
+  // estimate — the counter doc only refreshes after the whole batch.
+  const uploadOne = useCallback(
+    async (file: File, addedBytes: number): Promise<number> => {
       const allowed =
         file.type.startsWith('image/') ||
         ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type) ||
         file.type === 'application/pdf'
       if (!allowed) {
-        return void enqueueSnackbar(
-          'Supported uploads: images, mp4/webm video, PDF',
-          { variant: 'warning', persist: false },
+        enqueueSnackbar(
+          `"${file.name}" skipped — supported uploads: images, mp4/webm video, PDF`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
         )
+        return 0
       }
-      const usedMb = (usedBytes + file.size) / (1024 * 1024)
+      const usedMb = (usedBytes + addedBytes + file.size) / (1024 * 1024)
       const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
       if (!quota.allowed) {
-        return void enqueueSnackbar(
+        enqueueSnackbar(
           `Storage limit reached (${quota.limit} MB) — see Billing to upgrade`,
-          { variant: 'warning', persist: false },
+          { variant: 'warning', persist: false, allowDuplicate: true },
         )
+        return 0
       }
-
-      setBusy(true)
       // Uploads land in the currently open folder (AGL-172).
       const uploadFolderId =
         typeof currentFolder === 'string' && currentFolder !== 'all'
@@ -1113,10 +1116,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           })
           const minted = await mint.json().catch(() => ({}))
           if (!mint.ok || !minted?.uploadUrl) {
-            return void enqueueSnackbar(minted?.error ?? 'Upload failed', {
+            enqueueSnackbar(minted?.error ?? `Upload failed for "${file.name}"`, {
               variant: 'error',
               allowDuplicate: true,
             })
+            return 0
           }
           const put = await fetch(minted.uploadUrl, {
             method: 'PUT',
@@ -1124,10 +1128,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             body: file,
           })
           if (!put.ok) {
-            return void enqueueSnackbar('Upload failed — try again', {
+            enqueueSnackbar(`Upload failed for "${file.name}" — try again`, {
               variant: 'error',
               allowDuplicate: true,
             })
+            return 0
           }
           const finalize = await fetch('/api/media/upload-url', {
             method: 'PATCH',
@@ -1144,18 +1149,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           })
           const finalized = await finalize.json().catch(() => ({}))
           if (!finalize.ok) {
-            return void enqueueSnackbar(
-              finalized?.error ?? 'Upload failed',
-              { variant: 'error', allowDuplicate: true },
-            )
+            enqueueSnackbar(finalized?.error ?? `Upload failed for "${file.name}"`, {
+              variant: 'error',
+              allowDuplicate: true,
+            })
+            return 0
           }
           enqueueSnackbar(`Uploaded "${file.name}"`, {
             variant: 'success',
             persist: false,
           })
           logActivity('Uploaded media', { type: 'media', name: file.name })
-          refresh()
-          return
+          return file.size
         }
         const response = await fetch('/api/media/upload', {
           method: 'POST',
@@ -1173,28 +1178,94 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
-          return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
+          enqueueSnackbar(payload?.error ?? `Upload failed for "${file.name}"`, {
             variant: 'error',
             allowDuplicate: true,
           })
+          return 0
         }
         enqueueSnackbar(`Uploaded "${file.name}"`, {
           variant: 'success',
           persist: false,
         })
         logActivity('Uploaded media', { type: 'media', name: file.name })
-        refresh()
+        return file.size
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('Upload failed', {
+        enqueueSnackbar(`Upload failed for "${file.name}"`, {
           variant: 'error',
           allowDuplicate: true,
         })
-      } finally {
-        setBusy(false)
+        return 0
       }
     },
-    [user, scopeId, org, usedBytes, currentFolder, enqueueSnackbar, logActivity, refresh],
+    [user, scopeId, org, usedBytes, currentFolder, enqueueSnackbar, logActivity],
+  )
+
+  // Batch upload (AGL-820): sequential so quota + counter stay sane; one
+  // refresh at the end. Fed by the file input and by drag-and-drop.
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      if (!files.length) return
+      setBusy(true)
+      let added = 0
+      try {
+        for (const file of files) {
+          added += await uploadOne(file, added)
+        }
+      } finally {
+        setBusy(false)
+        refresh()
+      }
+    },
+    [uploadOne, refresh],
+  )
+
+  const handleUpload = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files ? Array.from(event.target.files) : []
+      event.target.value = ''
+      void handleFiles(files)
+    },
+    [handleFiles],
+  )
+
+  // Drag-and-drop upload (AGL-820): native HTML5 file drops are separate
+  // from dnd-kit's pointer-based card dragging, so they don't conflict. A
+  // depth counter tolerates dragenter/leave firing across child elements.
+  const [isFileDropActive, setIsFileDropActive] = useState(false)
+  const dropDepthRef = useRef(0)
+  const isFileDrag = (event: React.DragEvent) =>
+    Array.from(event.dataTransfer?.types ?? []).includes('Files')
+  const handleFileDragEnter = useCallback((event: React.DragEvent) => {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    dropDepthRef.current += 1
+    setIsFileDropActive(true)
+  }, [])
+  const handleFileDragOver = useCallback((event: React.DragEvent) => {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }, [])
+  const handleFileDragLeave = useCallback((event: React.DragEvent) => {
+    if (!isFileDrag(event)) return
+    dropDepthRef.current -= 1
+    if (dropDepthRef.current <= 0) {
+      dropDepthRef.current = 0
+      setIsFileDropActive(false)
+    }
+  }, [])
+  const handleFileDrop = useCallback(
+    (event: React.DragEvent) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      dropDepthRef.current = 0
+      setIsFileDropActive(false)
+      const files = Array.from(event.dataTransfer?.files ?? [])
+      void handleFiles(files)
+    },
+    [handleFiles],
   )
 
   const handleCopyUrl = useCallback(
@@ -1282,8 +1353,20 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [confirm, user, scopeId, enqueueSnackbar, logActivity, refresh],
   )
 
+  const currentFolderName =
+    typeof currentFolder === 'string' && currentFolder !== 'all'
+      ? folderNameById[currentFolder]
+      : null
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <Box
+        onDragEnter={handleFileDragEnter}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+        sx={{ position: 'relative' }}
+      >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
         <MediaFolderRail
           folders={folderList as any}
@@ -1331,6 +1414,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           component="input"
           ref={inputRef}
           type="file"
+          multiple
           accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf"
           onChange={handleUpload}
           sx={{ display: 'none' }}
@@ -1900,6 +1984,37 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       </Dialog>
         </Stack>
       </Stack>
+      {isFileDropActive ? (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: (theme) => theme.zIndex.modal - 1,
+            borderRadius: 1,
+            border: '2px dashed',
+            borderColor: 'secondary.main',
+            bgcolor: (theme) =>
+              alpha(theme.palette.background.paper, 0.9),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Stack spacing={1} sx={{ alignItems: 'center' }}>
+            <CloudUploadIcon color="secondary" sx={{ fontSize: 56 }} />
+            <Typography variant="h6" color="secondary">
+              {'Drop files to upload'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {currentFolderName
+                ? `into "${currentFolderName}"`
+                : 'into the library'}
+            </Typography>
+          </Stack>
+        </Box>
+      ) : null}
+      </Box>
     </DndContext>
   )
 }
