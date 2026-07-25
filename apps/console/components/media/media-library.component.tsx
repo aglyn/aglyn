@@ -81,6 +81,7 @@ import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
+import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
 
 export interface MediaLibraryComponentProps {
@@ -449,6 +450,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     sortBy,
   ])
 
+  // Folders-as-grid-items (AGL-818): render the current level's folders as
+  // cards ahead of the files. The "parent context" is the open folder when
+  // browsing into one, else root. The explicit "No folder" view and any
+  // active search hide folder cards (you're looking at files, not nav).
+  const folderParentContext =
+    typeof currentFolder === 'string' && currentFolder !== 'all'
+      ? currentFolder
+      : null
+  const showFolderCards = currentFolder !== null && !search.trim()
+  const visibleFolders = useMemo(
+    () =>
+      showFolderCards
+        ? folderList.filter(
+            (folder) => (folder.parentId ?? null) === folderParentContext,
+          )
+        : [],
+    [showFolderCards, folderList, folderParentContext],
+  )
+
   // Rail counts via server-side count() so they stay accurate past the
   // paginated window; `root` = total minus foldered.
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({})
@@ -628,6 +648,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       refresh,
     ],
   )
+
+  // Folder create/rename prompt (AGL-818): a single small dialog shared by
+  // the grid toolbar's "New folder" and each folder card's overflow menu.
+  const [folderPrompt, setFolderPrompt] = useState<{
+    title: string
+    value: string
+    action: (name: string) => Promise<void>
+  } | null>(null)
+  const [folderPromptBusy, setFolderPromptBusy] = useState(false)
+  const handleFolderPromptSave = useCallback(async () => {
+    if (!folderPrompt) return
+    setFolderPromptBusy(true)
+    try {
+      await folderPrompt.action(folderPrompt.value)
+      setFolderPrompt(null)
+    } finally {
+      setFolderPromptBusy(false)
+    }
+  }, [folderPrompt])
 
   // Multi-select + move (AGL-172): checkboxes are the accessible path;
   // dragging a selected card moves the whole selection.
@@ -1217,6 +1256,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         >
           {'Upload media'}
         </Button>
+        {onSelect ? null : (
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() =>
+              setFolderPrompt({
+                title: folderParentContext
+                  ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
+                  : 'New folder',
+                value: '',
+                action: async (name) => {
+                  await handleFolderCreate(name, folderParentContext)
+                },
+              })
+            }
+          >
+            {'New folder'}
+          </Button>
+        )}
         <Typography variant="body2" color="text.secondary">
           {`${items.length}${totalCount > items.length ? ` of ${totalCount}` : ''} file${totalCount === 1 ? '' : 's'} · ${formatBytes(usedBytes)} used`}
         </Typography>
@@ -1398,7 +1456,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Stack>
       ) : null}
       {busy || loadingMedia ? <LinearProgress /> : null}
-      {items.length === 0 ? (
+      {visibleFolders.length === 0 && visibleItems.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {loadingMedia
             ? 'Loading media…'
@@ -1406,6 +1464,36 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Typography>
       ) : (
         <Grid container spacing={2}>
+          {visibleFolders.map((folder) => (
+            <Grid
+              key={`folder-${folder.$id}`}
+              size={{ xs: 6, sm: 4, md: 3, lg: 2 }}
+            >
+              <MediaFolderCard
+                folder={folder}
+                count={folderCounts[folder.$id] ?? 0}
+                onOpen={() => setCurrentFolder(folder.$id)}
+                readOnly={Boolean(onSelect)}
+                onNewSubfolder={() =>
+                  setFolderPrompt({
+                    title: `New folder in "${folder.name}"`,
+                    value: '',
+                    action: async (name) => {
+                      await handleFolderCreate(name, folder.$id)
+                    },
+                  })
+                }
+                onRename={() =>
+                  setFolderPrompt({
+                    title: 'Rename folder',
+                    value: folder.name,
+                    action: (name) => handleFolderRename(folder, name),
+                  })
+                }
+                onDelete={() => void handleFolderDelete(folder)}
+              />
+            </Grid>
+          ))}
           {visibleItems.map((media: any) => (
             <Grid key={media.$id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
               <DraggableCard
@@ -1715,6 +1803,46 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             onClick={handleBulkTag}
           >
             {'Apply'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(folderPrompt)}
+        onClose={() => setFolderPrompt(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{folderPrompt?.title}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Name"
+            value={folderPrompt?.value ?? ''}
+            onChange={(event) =>
+              setFolderPrompt((prev) =>
+                prev ? { ...prev, value: event.target.value } : prev,
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && folderPrompt?.value.trim()) {
+                event.preventDefault()
+                void handleFolderPromptSave()
+              }
+            }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFolderPrompt(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={folderPromptBusy || !folderPrompt?.value.trim()}
+            onClick={handleFolderPromptSave}
+          >
+            {'Save'}
           </Button>
         </DialogActions>
       </Dialog>
