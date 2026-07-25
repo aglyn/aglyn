@@ -1,0 +1,254 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import type * as Aglyn from '@aglyn/aglyn'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import MoreVertIcon from '@mui/icons-material/MoreVert'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import {
+  Box,
+  Card,
+  CardMedia,
+  Checkbox,
+  IconButton,
+  Menu,
+  MenuItem,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material'
+import { type MouseEvent, useState } from 'react'
+
+export interface MediaAssetCardProps {
+  media: Aglyn.AglynHostMedia
+  /** Human-readable byte formatter shared with the library toolbar. */
+  formatBytes: (bytes: number) => string
+  /** Picker mode: clicking the card selects it; row actions are hidden. */
+  onSelect?: (media: Aglyn.AglynHostMedia) => void
+  /** Selection (non-picker multi-select). */
+  selectable?: boolean
+  selected?: boolean
+  onToggleSelect?: (checked: boolean) => void
+  /** Overflow-menu actions (non-picker). */
+  onCopyUrl?: () => void
+  onDetails?: () => void
+  onDelete?: () => void
+}
+
+/** Short type label from a content type, e.g. `image/png` → `PNG`. */
+function typeLabel(contentType: string | undefined): string {
+  const value = String(contentType ?? '')
+  if (value === 'application/pdf') return 'PDF'
+  const subtype = value.split('/')[1] ?? ''
+  return subtype ? subtype.split('+')[0].toUpperCase() : 'FILE'
+}
+
+const THUMB_HEIGHT = 116
+
+/**
+ * A single asset tile for the DAM grid (AGL-817). One consistent card used
+ * by the library and every picker: fixed-height thumbnail, filename that
+ * never wraps (tooltip on hover), a size/type caption, and — instead of the
+ * old three inline buttons that clipped in narrow cells — a single overflow
+ * menu revealed on hover. In picker mode the whole tile is the click target.
+ */
+export function MediaAssetCard(props: MediaAssetCardProps) {
+  const {
+    media,
+    formatBytes,
+    onSelect,
+    selectable,
+    selected,
+    onToggleSelect,
+    onCopyUrl,
+    onDetails,
+    onDelete,
+  } = props
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const picker = Boolean(onSelect)
+  const contentType = String(media.contentType ?? '')
+  const isVideo = contentType.startsWith('video/')
+  const isPdf = contentType === 'application/pdf'
+  const fileName = media.fileName ?? (media as any).$id
+
+  const openMenu = (event: MouseEvent<HTMLElement>) => {
+    event.stopPropagation()
+    setMenuAnchor(event.currentTarget)
+  }
+  const closeMenu = () => setMenuAnchor(null)
+  const runAction = (action?: () => void) => () => {
+    closeMenu()
+    action?.()
+  }
+
+  // The primary click: select in picker mode, open details otherwise.
+  const handlePrimary = picker
+    ? () => onSelect?.(media)
+    : onDetails
+      ? () => onDetails()
+      : undefined
+
+  const thumbSx = {
+    height: THUMB_HEIGHT,
+    objectFit: 'cover' as const,
+    cursor: handlePrimary ? 'pointer' : undefined,
+    bgcolor: 'action.hover',
+  }
+
+  return (
+    <Card
+      variant="outlined"
+      sx={{
+        position: 'relative',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        transition: (theme) =>
+          theme.transitions.create(['box-shadow', 'border-color']),
+        borderColor: selected ? 'secondary.main' : 'divider',
+        '&:hover': {
+          boxShadow: 2,
+          borderColor: selected ? 'secondary.main' : 'text.disabled',
+        },
+        // Reveal the checkbox + overflow affordances on hover/focus-within.
+        '&:hover .media-card-affordance, &:focus-within .media-card-affordance':
+          { opacity: 1 },
+      }}
+    >
+      {selectable ? (
+        <Checkbox
+          className="media-card-affordance"
+          size="small"
+          checked={Boolean(selected)}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onToggleSelect?.(event.target.checked)}
+          sx={{
+            position: 'absolute',
+            top: 2,
+            left: 2,
+            zIndex: 2,
+            p: 0.25,
+            opacity: selected ? 1 : 0,
+            transition: (theme) => theme.transitions.create('opacity'),
+            bgcolor: 'background.paper',
+            borderRadius: 1,
+            '&:hover': { bgcolor: 'background.paper' },
+          }}
+        />
+      ) : null}
+      {picker && selected ? (
+        <CheckCircleIcon
+          color="secondary"
+          sx={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
+        />
+      ) : null}
+
+      {isVideo ? (
+        <CardMedia
+          component="video"
+          src={media.url}
+          muted
+          onClick={handlePrimary}
+          sx={thumbSx}
+        />
+      ) : isPdf ? (
+        <CardMedia
+          onClick={handlePrimary}
+          sx={{
+            ...thumbSx,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'text.secondary',
+          }}
+        >
+          <PictureAsPdfIcon fontSize="large" />
+        </CardMedia>
+      ) : (
+        <CardMedia
+          component="img"
+          image={media.url}
+          alt={media.alt || fileName || ''}
+          onClick={handlePrimary}
+          sx={thumbSx}
+        />
+      )}
+
+      <Stack
+        direction="row"
+        spacing={0.5}
+        sx={{ alignItems: 'flex-start', px: 1, py: 0.75, minWidth: 0 }}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Tooltip title={fileName} enterDelay={600}>
+            <Typography variant="caption" noWrap component="div" sx={{ fontWeight: 500 }}>
+              {fileName}
+            </Typography>
+          </Tooltip>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            noWrap
+            component="div"
+          >
+            {`${typeLabel(media.contentType)} · ${formatBytes(media.sizeBytes ?? 0)}`}
+          </Typography>
+        </Box>
+        {picker ? null : (
+          <IconButton
+            className="media-card-affordance"
+            size="small"
+            aria-label="File actions"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={openMenu}
+            sx={{
+              mt: -0.25,
+              mr: -0.5,
+              opacity: { xs: 1, md: 0 },
+              transition: (theme) => theme.transitions.create('opacity'),
+            }}
+          >
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Stack>
+
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={closeMenu}>
+        {onCopyUrl ? (
+          <MenuItem onClick={runAction(onCopyUrl)}>{'Copy URL'}</MenuItem>
+        ) : null}
+        {onDetails ? (
+          <MenuItem onClick={runAction(onDetails)}>{'Details'}</MenuItem>
+        ) : null}
+        {onDelete ? (
+          <MenuItem
+            onClick={runAction(onDelete)}
+            sx={{ color: 'error.main' }}
+          >
+            {'Delete'}
+          </MenuItem>
+        ) : null}
+      </Menu>
+    </Card>
+  )
+}
+MediaAssetCard.displayName = 'MediaAssetCard'
+
+export default MediaAssetCard

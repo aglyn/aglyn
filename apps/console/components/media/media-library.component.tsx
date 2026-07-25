@@ -31,10 +31,6 @@ import {
   Box,
   Breadcrumbs,
   Button,
-  Card,
-  CardActions,
-  CardMedia,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -84,6 +80,7 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { ImageEditorDialog } from './image-editor-dialog.component'
+import { MediaAssetCard } from './media-asset-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
 
 export interface MediaLibraryComponentProps {
@@ -1415,121 +1412,34 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 mediaId={media.$id as string}
                 disabled={Boolean(onSelect)}
               >
-              <Card variant="outlined" sx={{ position: 'relative' }}>
-                {onSelect ? null : (
-                  <Checkbox
-                    size="small"
-                    checked={selected.has(media.$id as string)}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onChange={(event) =>
-                      setSelected((prev) => {
-                        const next = new Set(prev)
-                        if (event.target.checked) next.add(media.$id as string)
-                        else next.delete(media.$id as string)
-                        return next
-                      })
-                    }
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      right: 0,
-                      zIndex: 1,
-                      bgcolor: 'background.paper',
-                      borderRadius: '0 0 0 8px',
-                      p: 0.25,
-                    }}
-                  />
-                )}
-                {String(media.contentType ?? '').startsWith('video/') ? (
-                  <CardMedia
-                    component="video"
-                    src={media.url}
-                    muted
-                    onClick={onSelect ? () => onSelect(media) : undefined}
-                    sx={{
-                      height: 96,
-                      objectFit: 'cover',
-                      cursor: onSelect ? 'pointer' : undefined,
-                    }}
-                  />
-                ) : media.contentType === 'application/pdf' ? (
-                  <CardMedia
-                    onClick={onSelect ? () => onSelect(media) : undefined}
-                    sx={{
-                      height: 96,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: 'action.hover',
-                      typography: 'caption',
-                      color: 'text.secondary',
-                      cursor: onSelect ? 'pointer' : undefined,
-                    }}
-                  >
-                    {'PDF'}
-                  </CardMedia>
-                ) : (
-                  <CardMedia
-                    component="img"
-                    image={media.url}
-                    alt={media.fileName ?? ''}
-                    onClick={onSelect ? () => onSelect(media) : undefined}
-                    sx={{
-                      height: 96,
-                      objectFit: 'cover',
-                      cursor: onSelect ? 'pointer' : undefined,
-                    }}
-                  />
-                )}
-                <Box sx={{ px: 1, pt: 0.5 }}>
-                  <Typography variant="caption" noWrap component="div">
-                    {media.fileName ?? media.$id}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    component="div"
-                  >
-                    {formatBytes(media.sizeBytes ?? 0)}
-                  </Typography>
-                </Box>
-                <CardActions sx={{ pt: 0 }}>
-                  {onSelect ? (
-                    <Button size="small" onClick={() => onSelect(media)}>
-                      {'Select'}
-                    </Button>
-                  ) : (
-                    <>
-                      <Button size="small" onClick={handleCopyUrl(media)}>
-                        {'Copy URL'}
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setEditor({
-                            id: media.$id as string,
-                            media,
-                            fileName: (media as any).fileName ?? '',
-                            folderId: (media as any).folderId ?? '',
-                            tags: ((media as any).tags ?? []).join(', '),
-                            alt: (media as any).alt ?? '',
-                            description: (media as any).description ?? '',
-                          })
-                        }
-                      >
-                        {'Details'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(media)}
-                      >
-                        {'Delete'}
-                      </Button>
-                    </>
-                  )}
-                </CardActions>
-              </Card>
+                <MediaAssetCard
+                  media={media}
+                  formatBytes={formatBytes}
+                  onSelect={onSelect}
+                  selectable={!onSelect}
+                  selected={selected.has(media.$id as string)}
+                  onToggleSelect={(checked) =>
+                    setSelected((prev) => {
+                      const next = new Set(prev)
+                      if (checked) next.add(media.$id as string)
+                      else next.delete(media.$id as string)
+                      return next
+                    })
+                  }
+                  onCopyUrl={handleCopyUrl(media)}
+                  onDetails={() =>
+                    setEditor({
+                      id: media.$id as string,
+                      media,
+                      fileName: (media as any).fileName ?? '',
+                      folderId: (media as any).folderId ?? '',
+                      tags: ((media as any).tags ?? []).join(', '),
+                      alt: (media as any).alt ?? '',
+                      description: (media as any).description ?? '',
+                    })
+                  }
+                  onDelete={handleDelete(media)}
+                />
               </DraggableCard>
             </Grid>
           ))}
