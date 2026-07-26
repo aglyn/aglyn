@@ -20,6 +20,7 @@ import {
   collection,
   type Firestore,
   getDocs,
+  getDocsFromServer,
   limit,
   query,
   where,
@@ -111,15 +112,23 @@ export function useHostResolution(
       try {
         // Legacy / not-yet-backfilled / projection-unavailable: the
         // authoritative membership query (today's mechanism).
-        const authoritative = await getDocs(
-          query(
-            collection(firestore, 'hosts'),
-            where(`memberRoles.${uid}`, 'in', ['admin', 'editor', 'viewer']),
-            where('subdomain', '==', subdomain),
-            limit(1),
-          ),
+        const authoritativeQuery = query(
+          collection(firestore, 'hosts'),
+          where(`memberRoles.${uid}`, 'in', ['admin', 'editor', 'viewer']),
+          where('subdomain', '==', subdomain),
+          limit(1),
         )
+        let authoritative = await getDocs(authoritativeQuery)
         if (cancelled) return
+        // A cached-empty is NOT a confirmed miss (AGL-813/827): multi-tab
+        // IndexedDB persistence can serve a stale `noDocument` tombstone a
+        // resumed listen never re-sends, so a valid host would false-404 on a
+        // cold load. Re-read from the server before treating "not found" as
+        // real; a server error falls through to the retry/error path below.
+        if (authoritative.empty) {
+          authoritative = await getDocsFromServer(authoritativeQuery)
+          if (cancelled) return
+        }
         const host = authoritative.docs[0]
         // Only resolve if it belongs to the CURRENT org; a match in another
         // org is left for the provider's cross-org redirect (hostId stays null).
