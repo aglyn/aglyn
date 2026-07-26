@@ -416,10 +416,14 @@ export interface PlanPricing {
    */
   extraSeatMonthlyUsd: number | null
   /**
-   * Monthly price per host-member seat beyond `membersPerHost` (AGL-112);
-   * null when the plan cannot buy extra member seats.
+   * Monthly price per site-collaborator seat beyond `membersPerHost`
+   * (AGL-112, renamed AGL-888): per-site console collaborators
+   * (`hosts/{id}/members`, viewer/editor/admin) — never end-user member
+   * accounts, which are unlimited on every plan. Null when the plan sells
+   * no extra seats. Persisted/external keys keep the legacy "member"
+   * spelling (`seatAddons.members`, `STRIPE_PRICE_*_EXTRA_MEMBER`).
    */
-  extraMemberMonthlyUsd: number | null
+  extraCollaboratorMonthlyUsd: number | null
   /**
    * Monthly price per org dataset beyond `datasetsPerOrg` (AGL-132/240);
    * null when the plan cannot buy extra datasets.
@@ -451,7 +455,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     basePriceAnnualMonthlyUsd: 0,
     extraHostMonthlyUsd: null,
     extraSeatMonthlyUsd: null,
-    extraMemberMonthlyUsd: null,
+    extraCollaboratorMonthlyUsd: null,
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
@@ -461,7 +465,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     basePriceAnnualMonthlyUsd: 16,
     extraHostMonthlyUsd: 10,
     extraSeatMonthlyUsd: 5,
-    extraMemberMonthlyUsd: 3,
+    extraCollaboratorMonthlyUsd: 3,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
@@ -471,7 +475,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     basePriceAnnualMonthlyUsd: 39,
     extraHostMonthlyUsd: 8,
     extraSeatMonthlyUsd: 4,
-    extraMemberMonthlyUsd: 2,
+    extraCollaboratorMonthlyUsd: 2,
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
@@ -481,7 +485,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     basePriceAnnualMonthlyUsd: 99,
     extraHostMonthlyUsd: 5,
     extraSeatMonthlyUsd: 3,
-    extraMemberMonthlyUsd: 1,
+    extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.5,
@@ -491,7 +495,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     basePriceAnnualMonthlyUsd: 299,
     extraHostMonthlyUsd: 4,
     extraSeatMonthlyUsd: 2,
-    extraMemberMonthlyUsd: 1,
+    extraCollaboratorMonthlyUsd: 1,
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.2,
@@ -630,6 +634,10 @@ export function checkEntitlement(
  * call before creating the next resource (e.g. usage=hostCount before
  * creating another host). `remaining` never goes negative.
  */
+/**
+ * `members` = per-site collaborator seats (legacy key, AGL-888): the key
+ * matches persisted `seatAddons.members` and must not be renamed.
+ */
 export type SeatKind = 'managers' | 'members'
 
 export interface SeatQuotaResult {
@@ -658,7 +666,10 @@ export interface SeatQuotaResult {
  * Seat quota check (AGL-112): seats differ from plain quotas because orgs
  * can buy addon seats (`org.seatAddons`) up to a per-plan hard max —
  * beyond the max the only path is upgrading the plan. `managers` counts
- * org-manager seats org-wide; `members` counts host members per host.
+ * org-manager seats org-wide; `members` counts per-site COLLABORATORS
+ * (`hosts/{id}/members`, viewer/editor/admin — legacy key name, AGL-888).
+ * End-user member accounts (`siteMembers`) are unlimited and never pass
+ * through here.
  */
 export function checkSeatQuota(
   org: Partial<AglynOrgBilling> | null | undefined,
@@ -678,7 +689,7 @@ export function checkSeatQuota(
   const addonPriceUsd =
     kind === 'managers'
       ? pricing.extraSeatMonthlyUsd
-      : pricing.extraMemberMonthlyUsd
+      : pricing.extraCollaboratorMonthlyUsd
   const purchased = Math.max(0, resolvePurchasedAddons(org)[kind] ?? 0)
   const limit = Math.min(included + purchased, maxSeats)
   return {

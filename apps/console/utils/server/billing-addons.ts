@@ -117,7 +117,7 @@ export function addonUnitUsd(kind: AddonKind, plan: OrgPlan): number | null {
     case 'managers':
       return pricing.extraSeatMonthlyUsd
     case 'members':
-      return pricing.extraMemberMonthlyUsd
+      return pricing.extraCollaboratorMonthlyUsd
     case 'datasets':
       return pricing.extraDatasetMonthlyUsd
     case 'hosts':

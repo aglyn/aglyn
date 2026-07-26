@@ -233,12 +233,14 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         `max ${entitlements.maxManagersPerOrg})`
                       : ''}
                   </Typography>
+                  {/* Per-site console collaborators (AGL-888) — end-user
+                      member accounts are unlimited and listed separately. */}
                   <Typography variant="body2">
-                    {`${entitlements.membersPerHost} member${
+                    {`${entitlements.membersPerHost} site collaborator${
                       entitlements.membersPerHost === 1 ? '' : 's'
-                    } per host`}
-                    {pricing.extraMemberMonthlyUsd != null
-                      ? ` (+$${pricing.extraMemberMonthlyUsd}/extra, ` +
+                    }`}
+                    {pricing.extraCollaboratorMonthlyUsd != null
+                      ? ` (+$${pricing.extraCollaboratorMonthlyUsd}/extra, ` +
                         `max ${entitlements.maxMembersPerHost})`
                       : ''}
                   </Typography>

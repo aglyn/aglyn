@@ -117,7 +117,7 @@ async function handler(request: Request): Promise<Response> {
           Math.max(0, addons.managers ?? 0) * (pricing.extraSeatMonthlyUsd ?? 0)
         mrrUsd +=
           Math.max(0, addons.members ?? 0) *
-          (pricing.extraMemberMonthlyUsd ?? 0)
+          (pricing.extraCollaboratorMonthlyUsd ?? 0)
         mrrUsd +=
           Math.max(0, addons.datasets ?? 0) *
           (pricing.extraDatasetMonthlyUsd ?? 0)
