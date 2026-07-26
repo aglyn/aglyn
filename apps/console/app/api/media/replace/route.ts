@@ -41,14 +41,13 @@ const MAX_IMAGE_BYTES = 15 * 1024 * 1024
  * content. Images only (transforms + replace target images; video/PDF
  * replacement is out of scope). Regenerates the AGL-175 content hash, CDN
  * variants, and AGL-173 dimensions; the storage object is overwritten with
- * a fresh download token so `url` changes with the content.
+ * a fresh download token so the raw `url` changes with the content.
  *
- * CDN-URL behavior (documented per the issue): screens that reference the
- * asset by its content-hashed `cdnPath` pick up the new bytes once the doc
- * updates (the path changes with the hash); references to the OLD raw
- * download URL keep serving the old token'd object until it's replaced —
- * which this does, so raw-URL references get the new bytes too (the token
- * changes, but the object path is stable).
+ * CDN-URL behavior (AGL-829): the stable, mediaId-keyed `cdnPath`
+ * (`/api/media/cdn/{scope}/{mediaId}` — no content hash) does NOT change on
+ * replace, so every reference that uses it keeps resolving and simply
+ * serves the new bytes (the CDN route revalidates via the content-hash
+ * ETag). Only the legacy raw `url` (with its token) rotates.
  *
  * Concurrent-edit safety: an optional `expectedUpdatedAtMs` precondition
  * rejects a stale replace (409). Storage quota + type + size mirror
@@ -215,7 +214,9 @@ async function handler(request: Request): Promise<Response> {
         contentHash,
         variants,
         ...(cdnAllowed
-          ? { cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}/${contentHash}` }
+          ? // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace,
+            // so the entry keeps resolving to the new bytes automatically.
+            { cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}` }
           : { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }),
         replacedBy: decoded.uid,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),

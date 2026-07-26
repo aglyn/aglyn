@@ -24,14 +24,23 @@ export const MEDIA_CDN_VARIANT_WIDTHS = [320, 640, 1280] as const
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/
 
 /**
- * CDN media delivery (AGL-175, Option B): GET
- * `/api/media/cdn/[hostId]/[mediaId]/[contentHash]?w=[width]` streams the
- * asset (or a WebP variant) with a year-long immutable cache header —
- * safe because the content hash is part of the path, so replacing an
- * asset mints a new URL and can never serve stale bytes. The same
- * handler mounts in both the tenant and console apps so relative CDN
- * URLs resolve on tenant sites and in the editor canvas alike. Raw
- * storage URLs already embedded in screens keep working unchanged.
+ * CDN media delivery (AGL-175 / AGL-829). Two URL shapes resolve the same
+ * asset by `mediaId`, so delivery never depends on the object's storage
+ * location (folder moves don't change the URL):
+ *
+ * - **Stable** `/api/media/cdn/[scope]/[mediaId]` — always serves the
+ *   asset's CURRENT bytes, so it survives a **replace** too. Revalidated
+ *   with an ETag (the content hash) + `stale-while-revalidate`, so a
+ *   replaced asset propagates without ever breaking references. This is
+ *   the URL the console hands out.
+ * - **Immutable** `/api/media/cdn/[scope]/[mediaId]/[contentHash]` —
+ *   year-long `immutable` cache; the hash must match the current content,
+ *   so it can never serve stale bytes (older embeds keep working until the
+ *   asset is replaced, then that exact URL 404s by design).
+ *
+ * `?w=[width]` selects a generated WebP variant. The same handler mounts in
+ * both the tenant and console apps; raw storage URLs already embedded in
+ * screens keep working unchanged.
  */
 export async function serveMediaCdn(
   req: NextApiRequest,
@@ -49,11 +58,13 @@ export async function serveMediaCdn(
   // Org DAM assets serve under `org:{orgId}` (host ids otherwise).
   const isOrg = scopeSegment.startsWith('org:')
   const scopeId = isOrg ? scopeSegment.slice('org:'.length) : scopeSegment
+  // 3 segments = the immutable content-hashed URL; 2 = the stable URL.
+  const hashed = path.length === 3
   if (
-    path.length !== 3 ||
+    (path.length !== 2 && path.length !== 3) ||
     !SEGMENT.test(scopeId) ||
     !SEGMENT.test(mediaId) ||
-    !SEGMENT.test(hash)
+    (hashed && !SEGMENT.test(hash))
   ) {
     res.status(400).json({ error: 'Bad media path' })
     return
@@ -67,23 +78,45 @@ export async function serveMediaCdn(
       .collection('media')
       .doc(mediaId)
       .get()
-    if (
-      !snapshot.exists ||
-      snapshot.get('deletedAt') ||
-      snapshot.get('contentHash') !== hash
-    ) {
+    const currentHash = String(snapshot.get('contentHash') ?? '')
+    if (!snapshot.exists || snapshot.get('deletedAt')) {
       res.setHeader('Cache-Control', 'public, max-age=60')
       res.status(404).json({ error: 'Not found' })
       return
+    }
+    // The immutable form must pin the current content; a stale hash 404s so
+    // the edge never keeps serving replaced bytes under that URL.
+    if (hashed && currentHash !== hash) {
+      res.setHeader('Cache-Control', 'public, max-age=60')
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+
+    const width = Number(req.query['w'] ?? 0)
+    const variants: number[] = snapshot.get('variants') ?? []
+    const useVariant = Boolean(width) && variants.includes(width)
+
+    // Stable URL: revalidate against an ETag so a replaced asset is picked
+    // up (a conditional GET returns 304 while the content is unchanged).
+    const etag = currentHash
+      ? `"${currentHash}${useVariant ? `-w${width}` : ''}"`
+      : null
+    if (!hashed) {
+      res.setHeader(
+        'Cache-Control',
+        'public, max-age=3600, stale-while-revalidate=86400',
+      )
+      if (etag) res.setHeader('ETag', etag)
+      if (etag && req.headers['if-none-match'] === etag) {
+        res.status(304).end()
+        return
+      }
     }
 
     const bucket = firebaseAdmin
       .app()
       .storage()
       .bucket(process.env['NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET'])
-    const width = Number(req.query['w'] ?? 0)
-    const variants: number[] = snapshot.get('variants') ?? []
-    const useVariant = Boolean(width) && variants.includes(width)
     // Real folders: the doc records its object path; legacy assets fall
     // back to the flat layout.
     const basePath =
@@ -108,7 +141,9 @@ export async function serveMediaCdn(
           ),
     )
     if (metadata.size) res.setHeader('Content-Length', String(metadata.size))
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    if (hashed) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    }
 
     // Delivery volume (AGL-176): per-asset serves/bytes on the AGL-82
     // analytics day-doc, fire-and-forget. Only cache MISSES reach this

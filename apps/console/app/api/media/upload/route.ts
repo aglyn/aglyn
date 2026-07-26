@@ -254,7 +254,9 @@ async function handler(request: Request): Promise<Response> {
       variants,
       ...(cdnAllowed
         ? {
-            cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}/${contentHash}`,
+            // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so
+            // it survives replace and folder moves — references never break.
+            cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
           }
         : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
