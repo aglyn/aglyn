@@ -1,12 +1,15 @@
 {
   "version": 2,
   "functions": {
-    "api/load.js": {
-      "includeFiles": "load.html"
+    "api/load.mjs": {
+      "includeFiles": "**/load.html"
     }
   },
   "rewrites": [
-    { "source": "/load", "destination": "/api/load" },
+    {
+      "source": "/load",
+      "destination": "/api/load"
+    },
     {
       "source": "/artifacts/:path*",
       "destination": "https://app.aglyn.com/api/plugin-artifacts/:path*"
@@ -16,12 +19,18 @@
     {
       "source": "/artifacts/(.*)",
       "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
         {
           "key": "Cache-Control",
           "value": "public, max-age=31536000, immutable"
         },
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
       ]
     }
   ]

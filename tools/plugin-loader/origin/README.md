@@ -11,9 +11,11 @@ What it serves:
   which stamps a **per-manifest CSP**: `connect-src` is built from the
   version's declared `capabilities.network` (via the console's public
   listing-versions endpoint), strict-fallback to `'self'` on any lookup
-  failure. `frame-ancestors` = the console + `*.aglyn.app` sites
-  (custom-domain tenant sites are a follow-up — they need a trustworthy
-  host→domain lookup).
+  failure. `frame-ancestors` = the console + `*.aglyn.app` sites, plus the
+  framing host's VERIFIED custom domain (AGL-884): PluginFrame passes
+  `?host=`, and the loader resolves it server-side through the console's
+  `/api/plugin-host-origins/{hostId}` — the origin value never comes from
+  the caller.
 - **`/artifacts/{listingId}/{version}/{sha256}.bundle`** — edge-rewritten
   to the console's `/api/plugin-artifacts/…` route, which streams from the
   PRIVATE `aglyn-main-plugin-artifacts` bucket with immutable cache

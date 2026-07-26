@@ -208,7 +208,7 @@ export function CommunityListingContent({
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { install, installPlan, buy } = useCommunityActions(hostId)
+  const { install, installPlan, buy, uninstall } = useCommunityActions(hostId)
   const [installScope, setInstallScope] = useState<'org' | 'host'>('org')
   // Confirm before writing install pins (AGL-867): the install is deliberate
   // and site-scoped, so it names its targets before committing.
@@ -589,6 +589,11 @@ export function CommunityListingContent({
                                   listing.installCount === 1 ? '' : 's'
                                 }`
                               : ''}
+                            {/* Active pins vs the cumulative total (AGL-880). */}
+                            {typeof listing?.activeInstalls === 'number' &&
+                            listing?.installCount
+                              ? ` · ${listing.activeInstalls} active`
+                              : ''}
                           </Typography>
                         </Stack>
                         <Typography variant="body2" color="text.secondary">
@@ -649,22 +654,41 @@ export function CommunityListingContent({
                             shadows it. Showing this is the difference between
                             "Add to this site" lying and the truth. */}
                         {isPlugin && installed ? (
-                          <Alert
-                            severity="success"
-                            icon={false}
-                            sx={{ py: 0.5 }}
-                          >
-                            {pluginState.shadowed
-                              ? `Installed on this site (v${installedVersion}), ` +
-                                'overriding the organization-wide install.'
-                              : pluginState.scope === 'org'
-                                ? `Installed for the whole organization ` +
-                                  `(v${installedVersion}) — available on every site.`
-                                : `Installed on this site (v${installedVersion}).`}
-                            {pluginState.updateAvailable
-                              ? ` A newer version (v${listing?.latestVersion}) is available.`
-                              : ''}
-                          </Alert>
+                          <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+                            <Alert
+                              severity="success"
+                              icon={false}
+                              sx={{ py: 0.5, width: '100%' }}
+                            >
+                              {pluginState.shadowed
+                                ? `Installed on this site (v${installedVersion}), ` +
+                                  'overriding the organization-wide install.'
+                                : pluginState.scope === 'org'
+                                  ? `Installed for the whole organization ` +
+                                    `(v${installedVersion}) — available on every site.`
+                                  : `Installed on this site (v${installedVersion}).`}
+                              {pluginState.updateAvailable
+                                ? ` A newer version (v${listing?.latestVersion}) is available.`
+                                : ''}
+                            </Alert>
+                            {/* Uninstall from the listing too (AGL-881), not
+                                only the installed add-ons card. Targets the
+                                effective pin's scope. */}
+                            <Button
+                              size="small"
+                              color="error"
+                              onClick={() =>
+                                void uninstall(
+                                  listing,
+                                  pluginState.scope ?? undefined,
+                                )
+                              }
+                            >
+                              {pluginState.scope === 'org'
+                                ? 'Uninstall org-wide'
+                                : 'Uninstall'}
+                            </Button>
+                          </Stack>
                         ) : null}
                         {/* Install targeting (AGL-773): at org scope, choose
                             All sites vs a chosen subset. Only when NOT already

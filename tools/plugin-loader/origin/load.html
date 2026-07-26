@@ -34,11 +34,14 @@
 
       // The host frames us; every inbound message must come from an aglyn
       // app origin. The serving layer restricts frame-ancestors to the same
-      // set (vercel.json), and we echo that here as defense in depth: the
-      // console, plus every tenant site on *.aglyn.app. Tenant sites on
-      // custom domains are a follow-up — they need a dynamic lookup.
+      // set, and we echo that here as defense in depth: the console, every
+      // tenant site on *.aglyn.app, plus the framing site's VERIFIED custom
+      // domain (AGL-884) — resolved server-side by api/load.mjs (which
+      // replaces the marker below), never from caller input.
+      const EXTRA_ANCESTORS = [] // AGL-884: replaced by the serving layer
       const isAllowedAncestor = (origin) => {
         if (origin === 'https://app.aglyn.com') return true
+        if (EXTRA_ANCESTORS.includes(origin)) return true
         try {
           const url = new URL(origin)
           return (
