@@ -107,6 +107,28 @@ export async function resolveMediaScope(
   }
 }
 
+/**
+ * File extension (incl. dot) for a content type, appended to the stable
+ * cdnPath (AGL-843) so the URL carries `.png`/`.jpg`/… — the serve route
+ * strips it again before looking the doc up by id. Empty for unknowns.
+ */
+export function extForContentType(contentType: unknown): string {
+  const map: Record<string, string> = {
+    'image/png': '.png',
+    'image/jpeg': '.jpg',
+    'image/jpg': '.jpg',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/svg+xml': '.svg',
+    'image/avif': '.avif',
+    'application/pdf': '.pdf',
+    'video/mp4': '.mp4',
+    'video/webm': '.webm',
+    'video/quicktime': '.mov',
+  }
+  return map[String(contentType ?? '').toLowerCase()] ?? ''
+}
+
 /** Reserved object-metadata key we must never let callers set/clobber. */
 const RESERVED_METADATA_KEYS = new Set(['firebaseStorageDownloadTokens'])
 

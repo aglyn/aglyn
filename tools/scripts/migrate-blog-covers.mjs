@@ -147,7 +147,11 @@ for (const cover of COVERS) {
   const mediaId = mediaDoc.id
   const storagePath =
     (mediaDoc.get('storagePath')) || `hosts/${HOST}/media/${mediaId}`
-  const cdnPath = `/api/media/cdn/${HOST}/${mediaId}`
+  // Carry the file extension in the stable path (AGL-843); the serve route
+  // strips it before the id lookup.
+  const ext =
+    String(mediaDoc.get('fileName') ?? '').match(/\.[a-z0-9]+$/i)?.[0] ?? '.png'
+  const cdnPath = `/api/media/cdn/${HOST}/${mediaId}${ext}`
 
   // 2. Read the new PNG + hash it.
   const bytes = readFileSync(join(COVERS_DIR, cover.file))
@@ -199,21 +203,24 @@ for (const cover of COVERS) {
     { merge: true },
   )
 
-  // 6. Repoint the blog entry's cover to the stable URL — but only if it
-  //    isn't already pointing there (entries may already carry the absolute
-  //    stable URL, which we must NOT downgrade to a relative path).
-  const alreadyStable =
-    typeof currentCover === 'string' && currentCover.includes(cdnPath)
+  // 6. Repoint the blog entry's cover to the stable URL, preserving any
+  //    absolute origin already on it (don't downgrade to relative) and just
+  //    ensuring the path carries the extension.
+  let desiredCover = cdnPath
+  if (typeof currentCover === 'string') {
+    const idx = currentCover.indexOf('/api/media/cdn/')
+    if (idx > 0) desiredCover = currentCover.slice(0, idx) + cdnPath
+  }
   if (!entryDoc.exists) {
     console.warn(`    ! entry ${cover.entryId} not found — coverImage not set`)
-  } else if (alreadyStable) {
-    console.log('    coverImage already stable — left as-is')
+  } else if (currentCover === desiredCover) {
+    console.log('    coverImage already correct — left as-is')
   } else {
     await entryRef.set(
-      { coverImage: cdnPath, updatedAt: FieldValue.serverTimestamp() },
+      { coverImage: desiredCover, updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     )
-    console.log('    coverImage set to stable cdnPath')
+    console.log(`    coverImage → ${desiredCover}`)
   }
   console.log('    ✓ applied\n')
   applied += 1

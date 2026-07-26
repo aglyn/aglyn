@@ -32,6 +32,7 @@ import { createHash, randomUUID } from 'crypto'
 import {
   folderStoragePath,
   mediaObjectPath,
+  extForContentType,
   resolveMediaScope,
 } from '../../../../utils/server/media-scope'
 
@@ -256,7 +257,8 @@ async function handler(request: Request): Promise<Response> {
         ? {
             // Stable, mediaId-keyed CDN URL (AGL-829): no content hash, so
             // it survives replace and folder moves — references never break.
-            cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}`,
+            // Carries the file extension (AGL-843); the route strips it.
+            cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}${extForContentType(contentType)}`,
           }
         : {}),
       createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
