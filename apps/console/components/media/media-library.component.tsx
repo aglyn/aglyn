@@ -227,6 +227,21 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const usedBytes = Number(mediaCounter?.['bytes'] ?? 0)
   const totalCount = Number(mediaCounter?.['count'] ?? 0)
 
+  // Public origin for absolute Copy-URL (AGL-831): a host's own site domain
+  // (custom cname or `{subdomain}.aglyn.app`), else the current console
+  // origin — which also serves the /api/media/cdn route.
+  const { data: hostDoc } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId ?? '-none-'),
+    [firestore, hostId],
+  )
+  const assetOrigin = useMemo(() => {
+    if (hostId && hostDoc) {
+      if (hostDoc.cname) return `https://${hostDoc.cname}`
+      if (hostDoc.subdomain) return `https://${hostDoc.subdomain}.aglyn.app`
+    }
+    return typeof window !== 'undefined' ? window.location.origin : ''
+  }, [hostId, hostDoc])
+
   // Folder hierarchy (AGL-171): first-class docs replace the AGL-124
   // free-text `folder` string. Legacy strings migrate lazily below.
   const { data: folderDocs } = useFirestoreCollection<any>(
@@ -1353,10 +1368,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
 
   const handleCopyUrl = useCallback(
     (media: Aglyn.AglynHostMedia) => () => {
-      // Prefer the immutable CDN path (AGL-175) — resolves on org
-      // sites and in the editor alike and rides the edge cache. Older
-      // assets without one fall back to the raw storage URL.
-      const value = media.cdnPath ?? media.url
+      // Prefer the stable CDN path (AGL-175/829) made ABSOLUTE with the
+      // asset's public origin (AGL-831) so it's usable when pasted anywhere.
+      // Older assets without a cdnPath fall back to the raw storage URL.
+      const value = media.cdnPath
+        ? `${assetOrigin}${media.cdnPath}`
+        : media.url
       if (!value) return
       void navigator.clipboard.writeText(value)
       enqueueSnackbar('URL copied — paste it into an Image or Video element', {
@@ -1364,7 +1381,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         persist: false,
       })
     },
-    [enqueueSnackbar],
+    [assetOrigin, enqueueSnackbar],
   )
 
   const handleDelete = useCallback(
@@ -1387,8 +1404,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           payload?.references ?? []
         if (references.length) {
           referenceNote =
-            ` WARNING: it is used on ${references.length} published ` +
-            `screen/layout${references.length === 1 ? '' : 's'} (${references
+            ` WARNING: it is referenced in ${references.length} ` +
+            `place${references.length === 1 ? '' : 's'} (${references
               .map((reference) => reference.name)
               .join(', ')}).`
         }
@@ -1874,7 +1891,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   ? `Used on ${usage.references.length}: ${usage.references
                       .map((reference) => reference.name)
                       .join(', ')}`
-                  : 'Not referenced by any published screen or layout'}
+                  : 'Not referenced by any published screen, layout, or entry'}
             {usage && (usage.serves || usage.bytes)
               ? ` · ${usage.serves.toLocaleString()} origin serves / ${formatBytes(usage.bytes)} (30d, cache misses only)`
               : ''}
@@ -2043,7 +2060,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       </Drawer>
       <ImageEditorDialog
         open={imageEditorOpen}
-        src={editor?.media?.url ?? ''}
+        // Load via the same-origin cdnPath (AGL-832) so the editor canvas
+        // stays untainted/exportable — the raw storage URL lacks CORS.
+        src={editor?.media?.cdnPath ?? editor?.media?.url ?? ''}
         fileName={editor?.fileName || editor?.media?.fileName || 'image'}
         onClose={() => setImageEditorOpen(false)}
         onSave={async (result) => {
