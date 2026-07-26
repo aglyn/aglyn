@@ -24,8 +24,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
+  Avatar,
   Button,
   Chip,
+  Divider,
   Rating,
   Stack,
   TextField,
@@ -238,34 +240,64 @@ export function ListingReviews({
         )}
 
         {reviews.length ? (
-          <Stack spacing={1.5}>
-            {reviews.map((review: any) => (
-              <Stack key={review.$id} spacing={0.5}>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                >
-                  <Typography variant="body2">
-                    {review.displayName ?? 'Someone'}
-                  </Typography>
-                  {review.rating ? (
-                    <Rating value={review.rating} size="small" readOnly />
-                  ) : null}
-                  {/* Server-set, so the badge means something: it is the
-                      difference between "used it" and "walked past it". */}
-                  {review.verifiedInstaller ? (
-                    <Chip size="small" label="Installed" color="secondary" />
-                  ) : null}
-                </Stack>
-                {review.comment ? (
-                  <Typography variant="body2" color="text.secondary">
-                    {review.comment}
-                  </Typography>
-                ) : null}
-              </Stack>
-            ))}
-          </Stack>
+          <>
+            <Divider />
+            <Stack spacing={2}>
+              {reviews.map((review: any) => {
+                const name = String(review.displayName ?? 'Someone')
+                return (
+                  <Stack
+                    key={review.$id}
+                    direction="row"
+                    spacing={1.5}
+                    sx={{ alignItems: 'flex-start' }}
+                  >
+                    <Avatar
+                      sx={{ width: 32, height: 32, fontSize: 14 }}
+                    >
+                      {name.trim().charAt(0).toUpperCase() || '?'}
+                    </Avatar>
+                    <Stack spacing={0.25} sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {name}
+                        </Typography>
+                        {/* Server-set, so the badge means something: it is the
+                            difference between "used it" and "walked past it". */}
+                        {review.verifiedInstaller ? (
+                          <Chip
+                            size="small"
+                            label="Installed"
+                            color="secondary"
+                          />
+                        ) : null}
+                        {review.updatedAtMs ? (
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                          >
+                            {new Date(review.updatedAtMs).toLocaleDateString()}
+                          </Typography>
+                        ) : null}
+                      </Stack>
+                      {review.rating ? (
+                        <Rating value={review.rating} size="small" readOnly />
+                      ) : null}
+                      {review.comment ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {review.comment}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Stack>
+                )
+              })}
+            </Stack>
+          </>
         ) : null}
       </Stack>
     </CardDisplay>
