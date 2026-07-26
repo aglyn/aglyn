@@ -155,8 +155,11 @@ export interface AglynHost extends AglynDocument {
   displayName?: string
   /**
    * Normalized `displayName` for case-insensitive prefix search (AGL-835);
-   * see `nameSearchKey`. Stamped by the host create/rename write paths so the
-   * site switcher can query an org's sites by name instead of loading them all.
+   * see `nameSearchKey`. Stamped by the host create/rename write paths. Kept
+   * ready for a future bounded site switcher (AGL-844): today the switcher
+   * client-filters the org host list the router already loads, so a server
+   * name query would only add reads — this field is consumed once routing
+   * stops loading the whole list.
    */
   nameLower?: string
   /**
