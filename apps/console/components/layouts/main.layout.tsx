@@ -67,6 +67,7 @@ import { useColorScheme } from '@mui/material/styles'
 import { Fragment, useMemo } from 'react'
 import { buildDocsUrl } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
+import { useIsStaff } from '../../hooks/use-is-staff'
 import { useOrgSlug } from '../../hooks/use-org-scope'
 import { TOP_BAR_HEIGHT } from '../../constants/shared'
 import NotificationPrompt from '../notification-prompt.component'
@@ -168,6 +169,10 @@ const TopAppBar = (props: TopAppBarProps) => {
   // org has resolved yet.
   const orgSlug = useOrgSlug()
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
+  // The "Staff console" entry is a staff-only surface — hide it entirely for
+  // non-staff (AGL-846). `null` while the claim resolves keeps it hidden until
+  // we know, so it never flashes for a non-staff user.
+  const isStaff = useIsStaff()
 
   return (
     <ScrollReaction>
@@ -510,12 +515,16 @@ export function MainLayout(props: MainLayoutProps) {
                     : orgHome,
                   icon: { path: mdiAccountGroupOutline.path },
                 },
-                {
-                  children: 'Staff console',
-                  component: AppLink,
-                  href: Route.ADMIN_OVERVIEW,
-                  icon: { path: ICON_VARIANT_USER_SETTINGS.path },
-                },
+                ...(isStaff
+                  ? [
+                      {
+                        children: 'Staff console',
+                        component: AppLink,
+                        href: Route.ADMIN_OVERVIEW,
+                        icon: { path: ICON_VARIANT_USER_SETTINGS.path },
+                      },
+                    ]
+                  : []),
                 {
                   type: 'divider',
                 },
