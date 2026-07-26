@@ -169,10 +169,6 @@ const TopAppBar = (props: TopAppBarProps) => {
   // org has resolved yet.
   const orgSlug = useOrgSlug()
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
-  // The "Staff console" entry is a staff-only surface — hide it entirely for
-  // non-staff (AGL-846). `null` while the claim resolves keeps it hidden until
-  // we know, so it never flashes for a non-staff user.
-  const isStaff = useIsStaff()
 
   return (
     <ScrollReaction>
@@ -391,6 +387,10 @@ export function MainLayout(props: MainLayoutProps) {
   // to the jump page.
   const orgSlug = useOrgSlug()
   const orgHome = orgSlug ? buildRoute(Route.ORG_HOME, { orgSlug }) : '/'
+  // The "Staff console" entry is a staff-only surface — hide it entirely for
+  // non-staff (AGL-846). `null` while the claim resolves keeps it hidden until
+  // we know, so it never flashes for a non-staff user.
+  const isStaff = useIsStaff()
   const layoutTitle = useMemo(() => {
     return title ? [...(_isArr(title) ? title : [title]), 'Secure'] : 'Secure'
   }, [title])
