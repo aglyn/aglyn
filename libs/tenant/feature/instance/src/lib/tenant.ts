@@ -25,6 +25,7 @@ export * from './hooks/helpers/use-modify-doc-callback'
 
 export * from './hooks/use-firestore-collection'
 export * from './hooks/use-firestore-doc'
+export * from './hooks/use-switcher-collection'
 export * from './hooks/use-host-activity-logger'
 export * from './hooks/use-component'
 export * from './hooks/use-component-version'
