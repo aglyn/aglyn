@@ -70,7 +70,7 @@ export function UserMenu() {
   const userPhotoUrl = useUserPhoto({ gravatar: { size: '64' } })
   const orgSlug = useOrgSlug()
   const { currentOrg } = useOrgScope()
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const isStaff = useIsStaff()
   const { mode, setMode } = useColorScheme()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
@@ -86,7 +86,10 @@ export function UserMenu() {
   const name = user?.displayName || user?.email || 'Account'
   const email = user?.email ?? ''
   const plan = org?.plan
-  const showUpgrade = Boolean(orgSlug) && plan !== TOP_PLAN
+  // Only pitch an upgrade once the org doc has resolved (AGL-887) — while
+  // it's loading (or the read failed) `plan` is undefined, which would show
+  // the CTA to a top-plan workspace.
+  const showUpgrade = Boolean(orgSlug) && orgReady && plan !== TOP_PLAN
 
   const themeValue = mode ?? 'system'
 

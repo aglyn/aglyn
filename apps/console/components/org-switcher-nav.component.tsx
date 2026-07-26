@@ -62,7 +62,7 @@ const titleCase = (value?: string) =>
 export function OrgSwitcherNav() {
   const { orgs, currentOrg, orgSlug } = useOrgScope()
   // The full current-org doc carries the logo (AGL-363) and plan for the badge.
-  const { org } = useCurrentOrg()
+  const { org, ready: orgReady } = useCurrentOrg()
   const logoUrl = (org as any)?.logoUrl as string | undefined
   const plan = (org as any)?.plan as string | undefined
   const router = useRouter()
@@ -108,8 +108,10 @@ export function OrgSwitcherNav() {
   if (!currentOrg) return null
   // The pill is the BILLING TIER. Falling back to the member's role meant a
   // free org — which carries no `plan` field — showed "Owner", a role badge
-  // masquerading as a plan (AGL-646). No plan means free.
-  const currentBadge = titleCase(plan ?? 'free')
+  // masquerading as a plan (AGL-646). No plan means free — but only once the
+  // doc has actually resolved (AGL-887): a loading or failed read rendered a
+  // Business org as "Free". No answer yet = no badge.
+  const currentBadge = orgReady ? titleCase(plan ?? 'free') : undefined
 
   const orgAvatar = (url?: string) =>
     url ? (
@@ -196,9 +198,11 @@ export function OrgSwitcherNav() {
             filtered.map((item) => {
               const isCurrent = item.$id === currentOrg.$id
               // Billing tier, like the button — the current org's plan is
-              // known immediately, others resolve as the reads land.
+              // known immediately, others resolve as the reads land. Same
+              // AGL-887 guard: no resolved doc, no tier.
               const tier = titleCase(
-                plans[item.$id] ?? (isCurrent ? plan ?? 'free' : undefined),
+                plans[item.$id] ??
+                  (isCurrent && orgReady ? plan ?? 'free' : undefined),
               )
               return (
                 <MenuItem
