@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/load", "destination": "/load.html" },
+    {
+      "source": "/artifacts/:path*",
+      "destination": "https://app.aglyn.com/api/plugin-artifacts/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/load",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'none'; script-src 'unsafe-inline' blob:; connect-src 'self'; style-src 'unsafe-inline'; img-src data: blob:; frame-ancestors https://app.aglyn.com https://*.aglyn.app"
+        },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "origin" }
+      ]
+    },
+    {
+      "source": "/artifacts/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ]
+}
