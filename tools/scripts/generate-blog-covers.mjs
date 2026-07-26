@@ -126,6 +126,14 @@ function coverHtml(post) {
     justify-content: space-between;
     padding: 60px 72px;
   }
+  /* Faint white dot-grid texture across the whole card. */
+  .dots {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.055) 1px, transparent 1.4px);
+    background-size: 26px 26px;
+    background-position: 13px 13px;
+  }
   /* Solid accent disc, upper-right (dark tint of the post accent). */
   .disc {
     position: absolute;
@@ -184,6 +192,7 @@ function coverHtml(post) {
 <body>
   <div class="cover">
     <div class="disc"></div>
+    <div class="dots"></div>
     <div class="edge"></div>
     <div class="row brand">
       <span class="logo">${LOGO_SVG}</span>
