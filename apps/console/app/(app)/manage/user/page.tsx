@@ -49,7 +49,10 @@ import {
 } from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import {
+  GoogleAuthProvider,
+  linkWithPopup,
   signInWithEmailAndPassword,
+  unlink,
   updatePassword,
   updateProfile,
 } from 'firebase/auth'
@@ -214,6 +217,74 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     [enqueueSnackbar, firebaseAuth, queueLoading, user],
   )
 
+  // Connect/disconnect sign-in providers (AGL-860). link/unlink mutate the
+  // User in place; bump a tick after reload() so `providerData` re-reads.
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [, setProvidersTick] = useState(0)
+  const refreshProviders = useCallback(async () => {
+    try {
+      await user.reload()
+    } catch (error) {
+      console.error('user reload failed', error)
+    }
+    setProvidersTick((tick) => tick + 1)
+  }, [user])
+
+  const connectGoogle = useCallback(async () => {
+    setLinkBusy(true)
+    try {
+      await linkWithPopup(user, new GoogleAuthProvider())
+      await refreshProviders()
+      enqueueSnackbar('Google connected', { variant: 'success' })
+    } catch (error: any) {
+      const code = error?.code as string | undefined
+      // A closed/duplicated popup is a normal cancel — say nothing.
+      if (
+        code === 'auth/popup-closed-by-user' ||
+        code === 'auth/cancelled-popup-request'
+      ) {
+        return
+      }
+      enqueueSnackbar(
+        code === 'auth/credential-already-in-use' ||
+          code === 'auth/email-already-in-use' ||
+          code === 'auth/provider-already-linked'
+          ? 'That Google account is already linked to an Aglyn account.'
+          : 'Connecting Google failed',
+        { variant: 'warning' },
+      )
+    } finally {
+      setLinkBusy(false)
+    }
+  }, [user, refreshProviders, enqueueSnackbar])
+
+  const disconnectProvider = useCallback(
+    async (providerId: string, canRemove: boolean) => {
+      if (!canRemove) {
+        enqueueSnackbar("You can't remove your only sign-in method.", {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
+      setLinkBusy(true)
+      try {
+        await unlink(user, providerId)
+        await refreshProviders()
+        enqueueSnackbar(
+          `${PROVIDER_LABELS[providerId] ?? providerId} disconnected`,
+          { variant: 'success' },
+        )
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Disconnecting failed', { variant: 'error' })
+      } finally {
+        setLinkBusy(false)
+      }
+    },
+    [user, refreshProviders, enqueueSnackbar],
+  )
+
   // Account email & sign-in (AGL-852), now a tab (AGL-859).
   const accountCard: ReactNode = (
     <CardDisplay
@@ -226,7 +297,7 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
       contentGutterX
       contentGutterY
     >
-      <Stack spacing={2} sx={{ maxWidth: 560 }}>
+      <Stack spacing={2.5} sx={{ maxWidth: 560 }}>
         <TextField
           label="Email"
           value={user?.email ?? ''}
@@ -235,28 +306,64 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           slotProps={{ input: { readOnly: true } }}
           helperText="Set by your sign-in provider — change it there, not here."
         />
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-        >
-          <Typography variant="body2" color="text.secondary">
-            {'Sign-in:'}
+        <Chip
+          size="small"
+          variant="outlined"
+          color={user?.emailVerified ? 'success' : 'warning'}
+          label={user?.emailVerified ? 'Email verified' : 'Email unverified'}
+          sx={{ alignSelf: 'flex-start' }}
+        />
+
+        {/* Connect / disconnect sign-in providers (AGL-860). */}
+        <Box>
+          <Typography variant="subtitle2">{'Sign-in methods'}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            {'How you sign in to Aglyn. Add another for a backup way in, or ' +
+              'remove one you no longer use — keep at least one.'}
           </Typography>
+        </Box>
+        <Stack spacing={1}>
           {providerIds.length === 0 ? (
-            <Chip size="small" label="Unknown" variant="outlined" />
+            <Typography variant="body2" color="text.secondary">
+              {'No sign-in methods found.'}
+            </Typography>
           ) : (
-            providerIds.map((id) => (
-              <Chip key={id} size="small" label={PROVIDER_LABELS[id] ?? id} />
-            ))
+            providerIds.map((id) => {
+              const canRemove = providerIds.length > 1
+              return (
+                <Stack
+                  key={id}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                    {PROVIDER_LABELS[id] ?? id}
+                  </Typography>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={linkBusy || !canRemove}
+                    onClick={() => void disconnectProvider(id, canRemove)}
+                  >
+                    {'Disconnect'}
+                  </Button>
+                </Stack>
+              )
+            })
           )}
-          <Chip
+        </Stack>
+        {!providerIds.includes('google.com') ? (
+          <Button
             size="small"
             variant="outlined"
-            color={user?.emailVerified ? 'success' : 'warning'}
-            label={user?.emailVerified ? 'Verified' : 'Unverified'}
-          />
-        </Stack>
+            disabled={linkBusy}
+            onClick={() => void connectGoogle()}
+            sx={{ alignSelf: 'flex-start' }}
+          >
+            {'Connect Google'}
+          </Button>
+        ) : null}
         {!hasPassword ? (
           <Typography variant="caption" color="text.secondary">
             {'You sign in with ' +
