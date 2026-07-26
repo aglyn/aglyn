@@ -37,7 +37,15 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
-const HOST_ID = process.env.E2E_HOST ?? 'demo'
+// Org-scoped routing (AGL-825): the console routes by /[orgSlug]/… and
+// /[orgSlug]/hosts/[host]/… since the org cutover. HOST_BASE prefixes every
+// host page; ORG_SLUG prefixes every org page. Defaults match seed-e2e.mjs
+// (E2E_ORG_SLUG = 'e2e-bakery', host 'demo'). Host feature slugs that are
+// plugin-provided (bookings, contacts, marketing, …) resolve through the
+// host's [pluginSlug] route, so the same prefix covers them.
+const ORG_SLUG = process.env.E2E_ORG_SLUG ?? 'e2e-bakery'
+const HOST = process.env.E2E_HOST ?? 'demo'
+const HOST_BASE = `${ORG_SLUG}/hosts/${HOST}`
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
 const PASSWORD = process.env.E2E_PASSWORD ?? 'E2e-Password-1'
 const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
@@ -51,16 +59,16 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
 const shots = [
   {
     out: 'getting-started/console-dashboard.png',
-    path: `/${HOST_ID}`,
+    path: `/${HOST_BASE}`,
     waitFor: 'Demo Bakery',
   },
   {
     out: 'getting-started/console-chrome-annotated.png',
-    path: `/${HOST_ID}`,
+    path: `/${HOST_BASE}`,
     waitFor: 'Demo Bakery',
     annotate: [
       { rect: { x: 0, y: 0, width: 1440, height: 42 }, n: 1 },
-      { locator: 'text=e2e-owner', n: 2 },
+      { locator: 'text=E2E Bakery Co', n: 2 },
       { rect: { x: 158, y: 46, width: 1274, height: 40 }, n: 3 },
       { locator: 'text=Demo Bakery', n: 4 },
       { rect: { x: 16, y: 300, width: 1408, height: 540 }, n: 5 },
@@ -68,79 +76,79 @@ const shots = [
   },
   {
     out: 'datasets/data-page.png',
-    path: `/${HOST_ID}/data`,
+    path: `/${HOST_BASE}/data`,
     waitFor: 'Avery Quinn',
   },
   {
     out: 'media/media-page.png',
-    path: `/${HOST_ID}/media`,
+    path: `/${HOST_BASE}/media`,
     waitFor: 'hero.jpg',
     // Let the thumbnail images finish loading.
     settleMs: 4000,
   },
   {
     out: 'content/content-page.png',
-    path: `/${HOST_ID}/content`,
+    path: `/${HOST_BASE}/content`,
     waitFor: 'Blog',
   },
   {
     out: 'bookings/bookings-page.png',
-    path: `/${HOST_ID}/bookings`,
+    path: `/${HOST_BASE}/bookings`,
     waitFor: 'Grace Hopper',
   },
   {
     out: 'contacts/contacts-page.png',
-    path: `/${HOST_ID}/contacts`,
+    path: `/${HOST_BASE}/contacts`,
     waitFor: 'wholesale@example.com',
   },
   {
     out: 'marketing-overlays/marketing-page.png',
-    path: `/${HOST_ID}/marketing`,
+    path: `/${HOST_BASE}/marketing`,
     waitFor: 'At a glance',
   },
   {
     out: 'workflows-and-actions/workflows-page.png',
-    path: `/${HOST_ID}/workflows`,
+    path: `/${HOST_BASE}/workflows`,
     waitFor: 'DozenQuote',
   },
   {
     out: 'workflows-and-actions/logic-page.png',
-    path: `/${HOST_ID}/logic`,
+    path: `/${HOST_BASE}/logic`,
     waitFor: 'Reference health',
   },
   {
     out: 'billing-and-plans/billing-page.png',
-    path: '/org/billing',
+    path: `/${ORG_SLUG}/billing`,
     waitFor: 'Manage payment methods',
   },
   {
     out: 'forms/inbox-page.png',
-    path: `/${HOST_ID}/inbox`,
+    path: `/${HOST_BASE}/inbox`,
     waitFor: 'Inbox',
   },
   {
     out: 'redirects/redirects-page.png',
-    path: `/${HOST_ID}/redirects`,
+    path: `/${HOST_BASE}/redirects`,
     waitFor: 'Redirects',
   },
   {
     out: 'plugins/community-page.png',
-    path: `/${HOST_ID}/community`,
+    path: `/${HOST_BASE}/community`,
     waitFor: 'Realm demo',
   },
   {
     out: 'plugins/org-plugins-page.png',
-    path: '/org/plugins',
+    path: `/${ORG_SLUG}/plugins`,
     waitFor: 'Plugins',
   },
   {
     out: 'teams-and-roles/org-team-page.png',
-    path: '/org/team',
+    path: `/${ORG_SLUG}/team`,
     waitFor: 'Invite',
   },
   {
     out: 'getting-started/org-settings-page.png',
-    path: '/org/settings',
+    path: `/${ORG_SLUG}/settings`,
     waitFor: 'Workspace',
   },
   {
@@ -150,65 +158,65 @@ const shots = [
   },
   {
     out: 'analytics/analytics-page.png',
-    path: `/${HOST_ID}/analytics`,
+    path: `/${HOST_BASE}/analytics`,
     waitFor: 'Analytics',
   },
   {
     out: 'besigner/besigner-editor.png',
-    path: `/${HOST_ID}/screens/seed-home/versions/seed-home-v1/besigner`,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
     settleMs: 8000,
   },
   {
     out: 'getting-started/sites-page.png',
-    path: '/hosts',
+    path: `/${ORG_SLUG}/hosts`,
     waitFor: 'Demo Bakery',
   },
   {
     out: 'getting-started/screens-list.png',
-    path: `/${HOST_ID}/screens/list`,
+    path: `/${HOST_BASE}/screens/list`,
     waitFor: 'Home',
     settleMs: 2500,
   },
   {
     out: 'teams-and-roles/host-users-page.png',
-    path: `/${HOST_ID}/users`,
+    path: `/${HOST_BASE}/users`,
     waitFor: 'Site users',
   },
   {
     out: 'custom-domains/setup-domains.png',
-    path: `/${HOST_ID}/setup`,
+    path: `/${HOST_BASE}/setup`,
     waitFor: 'Custom domain',
     settleMs: 2500,
   },
   {
     out: 'multilingual/setup-languages.png',
-    path: `/${HOST_ID}/setup`,
+    path: `/${HOST_BASE}/setup`,
     waitFor: 'Custom domain',
     settleMs: 2500,
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
   },
   {
     out: 'commerce/products-page.png',
-    path: `/${HOST_ID}/products`,
+    path: `/${HOST_BASE}/products`,
     waitFor: 'Products',
     settleMs: 2500,
   },
   {
     out: 'commerce/pos-page.png',
-    path: `/${HOST_ID}/pos`,
+    path: `/${HOST_BASE}/pos`,
     waitFor: 'POS',
     settleMs: 2500,
   },
   {
     out: 'theme-builder/theme-editor.png',
-    path: `/${HOST_ID}/theme`,
+    path: `/${HOST_BASE}/theme`,
     waitFor: 'Theme',
     settleMs: 6000,
   },
   {
     out: 'besigner/components-page.png',
-    path: `/${HOST_ID}/components`,
+    path: `/${HOST_BASE}/components`,
     waitFor: 'Components',
     settleMs: 2500,
   },
@@ -234,13 +242,13 @@ const shots = [
   },
   {
     out: 'email-campaigns/campaigns-tab.png',
-    path: `/${HOST_ID}/emails`,
+    path: `/${HOST_BASE}/emails`,
     waitFor: 'Welcome to the bakery',
     settleMs: 2500,
   },
   {
     out: 'marketing-overlays/experiments-tab.png',
-    path: `/${HOST_ID}/marketing`,
+    path: `/${HOST_BASE}/marketing`,
     waitFor: 'At a glance',
     actions: [
       { click: 'text=A/B testing', waitFor: 'Hero copy test' },
@@ -248,7 +256,7 @@ const shots = [
   },
   {
     out: 'besigner/hierarchy-panel.png',
-    path: `/${HOST_ID}/screens/seed-home/versions/seed-home-v1/besigner`,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
     settleMs: 6000,
     actions: [{ click: 'text=Document', settleMs: 1200 }],
@@ -256,7 +264,7 @@ const shots = [
   },
   {
     out: 'besigner/elements-drawer.png',
-    path: `/${HOST_ID}/screens/seed-home/versions/seed-home-v1/besigner`,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
     settleMs: 6000,
     actions: [{ click: 'role=tab[name="Elements"]', settleMs: 1500 }],
@@ -264,7 +272,7 @@ const shots = [
   },
   {
     out: 'besigner/canvas-selected.png',
-    path: `/${HOST_ID}/screens/seed-home/versions/seed-home-v1/besigner`,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
     settleMs: 6000,
     actions: [
@@ -275,13 +283,13 @@ const shots = [
   },
   {
     out: 'email-campaigns/email-editor.png',
-    path: `/${HOST_ID}/screens/seed-email-welcome/versions/seed-email-v1/besigner`,
+    path: `/${HOST_BASE}/screens/seed-email-welcome/versions/seed-email-v1/besigner`,
     waitFor: 'Properties',
     settleMs: 8000,
   },
   {
     out: 'besigner/besigner-annotated.png',
-    path: `/${HOST_ID}/screens/seed-home/versions/seed-home-v1/besigner`,
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
     waitFor: 'Properties',
     settleMs: 8000,
     annotate: [
@@ -404,6 +412,20 @@ for (const shot of shots) {
         '[data-nextjs-toast]',
       ]) {
         document.querySelectorAll(selector).forEach((el) => el.remove())
+      }
+      // AGL-663 notification pre-permission modal overlays the page — drop
+      // it (and its backdrop) so shots capture the content beneath.
+      let removedModal = false
+      for (const dialog of document.querySelectorAll('[role="dialog"]')) {
+        if (/notification/i.test(dialog.textContent ?? '')) {
+          ;(dialog.closest('.MuiModal-root') ?? dialog).remove()
+          removedModal = true
+        }
+      }
+      if (removedModal) {
+        document
+          .querySelectorAll('.MuiBackdrop-root')
+          .forEach((el) => el.remove())
       }
     })
     for (const action of shot.actions ?? []) {
