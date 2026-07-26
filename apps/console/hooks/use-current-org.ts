@@ -18,7 +18,7 @@
 
 import type { AglynOrgBilling } from '@aglyn/aglyn'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
-import { doc, onSnapshot } from 'firebase/firestore'
+import { doc, getDocFromServer, onSnapshot } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import useOrgScope from './use-org-scope'
 
@@ -90,6 +90,31 @@ export function useCurrentOrg(): {
         (snapshot) => {
           if (cancelled) return
           attempt = 0
+          // A cache-served "doesn't exist" is NOT a confirmed answer
+          // (AGL-887, the AGL-813/827 tombstone class on a doc read): the
+          // multi-tab IndexedDB cache can hold a stale `noDocument`
+          // tombstone for a live org doc, and the resumed listen never
+          // re-sends the correction — the workspace then renders as Free
+          // forever. Confirm from the server before believing it; a failed
+          // confirm leaves `ready` false (no plan cue) rather than lying.
+          const fromCache = snapshot.metadata.fromCache
+          if (!snapshot.exists() && fromCache) {
+            void getDocFromServer(doc(firestore, collectionName, docId))
+              .then((server) => {
+                if (cancelled) return
+                setOrg(
+                  server.exists()
+                    ? ({
+                        $id: server.id,
+                        ...server.data(),
+                      } as Partial<AglynOrgBilling>)
+                    : undefined,
+                )
+                setReady(true)
+              })
+              .catch(() => undefined)
+            return
+          }
           setOrg(
             snapshot.exists()
               ? ({ $id: snapshot.id, ...snapshot.data() } as Partial<AglynOrgBilling>)
