@@ -442,11 +442,6 @@ const HostSetup: NextPageWithLayout<Record<string, never>> = (props) => {
       // `subdomain` is server-owned above; the rules reject it from here.
       const clientFields = { ...fields }
       delete clientFields.subdomain
-      // Keep the name-search key in sync with a renamed site (AGL-835) so the
-      // site switcher's prefix query finds it under the new name.
-      if (typeof clientFields.displayName === 'string') {
-        clientFields.nameLower = Aglyn.nameSearchKey(clientFields.displayName)
-      }
       await setDoc(clientFields, { merge: true })
         .then(() => {
           enqueueSnackbar('Saved!', { variant: 'success' })

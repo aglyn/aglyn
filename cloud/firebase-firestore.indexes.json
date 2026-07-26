@@ -277,7 +277,7 @@
       ]
     },
     {
-      "collectionGroup": "hosts",
+      "collectionGroup": "hostMemberships",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -291,7 +291,7 @@
       ]
     },
     {
-      "collectionGroup": "hosts",
+      "collectionGroup": "hostMemberships",
       "queryScope": "COLLECTION",
       "fields": [
         {

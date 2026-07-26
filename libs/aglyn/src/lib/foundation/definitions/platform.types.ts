@@ -154,15 +154,6 @@ export interface AglynHost extends AglynDocument {
   popup?: HostPopup
   displayName?: string
   /**
-   * Normalized `displayName` for case-insensitive prefix search (AGL-835);
-   * see `nameSearchKey`. Stamped by the host create/rename write paths. Kept
-   * ready for a future bounded site switcher (AGL-844): today the switcher
-   * client-filters the org host list the router already loads, so a server
-   * name query would only add reads — this field is consumed once routing
-   * stops loading the whole list.
-   */
-  nameLower?: string
-  /**
    * Site logo URL (AGL-594): the host's own brand mark, shown by the
    * tenant's navigation loader (and future chrome). Distinct from
    * `seo.entity.logo`, which is publisher-semantic JSON-LD.
