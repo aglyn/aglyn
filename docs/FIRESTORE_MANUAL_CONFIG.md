@@ -61,8 +61,8 @@ scheduled backup.
 ```bash
 gcloud firestore backups schedules create \
   --database='(default)' --project=aglyn-main \
-  --recurrence=weekly --retention=14w
-# (optionally add a daily with shorter retention)
+  --recurrence=weekly --day-of-week=SUNDAY --retention=14w
+# (--day-of-week is REQUIRED for weekly; optionally add a daily with shorter retention)
 gcloud firestore backups schedules list --database='(default)' --project=aglyn-main
 ```
 
@@ -78,10 +78,10 @@ gcloud firestore databases describe --database='(default)' --project=aglyn-main 
   --format="value(deleteProtectionState)"
 ```
 
-### Current database settings (for reference)
+### Current database settings (applied 2026-07-26)
 
 - Location `nam5` (US multi-region), Native mode, Pessimistic concurrency
-- Point-in-time recovery: **ENABLED**
-- Delete protection: **DISABLED** (see AGL-872)
-- TTL policies: **none** until AGL-870 lands
-- Backup schedules: **none** until AGL-871 lands
+- Point-in-time recovery: **ENABLED** (7-day window)
+- Delete protection: **ENABLED** (AGL-872)
+- TTL policies: **`rateLimits.expiresAt`** (AGL-870)
+- Backup schedules: **weekly (Sunday), 14-week retention** (AGL-871)
