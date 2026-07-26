@@ -1,7 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "api/load.js": {
+    "api/load.mjs": {
       "includeFiles": "**/load.html"
     }
   },
