@@ -178,8 +178,8 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                 children: (
                   <CardDisplay
                     header={'Support tickets'}
-                    help={docsHelp('billing', {
-                      anchor: '#tiers--entitlements',
+                    help={docsHelp('supportAndCommunity', {
+                      anchor: '#support-tickets',
                       excerpt:
                         'Private ticket threads with the Aglyn team — ' +
                         'included with every paid plan.',
@@ -235,8 +235,8 @@ const ManageSupport: NextPageWithLayout<Record<string, never>> = () => {
                 children: (
                   <CardDisplay
                     header={'Community forum'}
-                    help={docsHelp('billing', {
-                      anchor: '#tiers--entitlements',
+                    help={docsHelp('supportAndCommunity', {
+                      anchor: '#community-forum',
                       excerpt:
                         'The subscriber forum — ask questions and share ' +
                         'tips with other Aglyn builders on paid plans.',

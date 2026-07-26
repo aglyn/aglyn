@@ -433,6 +433,16 @@ export const DOCS_HELP_TOPICS = {
     title: 'Staff Console (internal)',
     excerpt: 'Aglyn-staff tools for managing organizations, entitlements, users, and audits.',
   },
+  supportAndCommunity: {
+    path: '/workspace-and-billing/support-and-community',
+    title: 'Support & community',
+    excerpt: 'Open a support ticket with the Aglyn team, and ask other builders in the community forum.',
+  },
+  supportQueue: {
+    path: '/staff-console/support-queue',
+    title: 'Support queue (internal)',
+    excerpt: 'Triage customer support tickets from the staff console — filter, reply as Aglyn, and close or reopen.',
+  },
   team: {
     path: '/workspace-and-billing/teams-and-roles/overview',
     title: 'Teams, Roles & Membership',
@@ -558,6 +568,8 @@ export const DOCS_HELP_ANCHORS = {
   siteProtection: ['#per-screen-passwords', '#custom-error-screens', '#maintenance-mode', '#related'],
   siteSearch: ['#how-it-works', '#what-it-searches', '#configure-it', '#related'],
   staffConsole: ['#whats-there', '#related'],
+  supportAndCommunity: ['#support-tickets', '#ticket-status', '#what-to-include', '#community-forum', '#related'],
+  supportQueue: ['#triage', '#notifications', '#related'],
   team: ['#team-roles', '#organizations', '#site-membership', '#seats', '#related'],
   templatesLibrary: ['#the-three-kinds', '#installing-from-the-marketplace', '#saving-something-as-a-template', '#using-a-template', '#where-a-template-came-from', '#first-party-starters', '#templates-are-per-site', '#deleting', '#related'],
   termReference: ['#platform--accounts', '#organization-org', '#workspace', '#tenant', '#host', '#site', '#console', '#staff-console', '#member', '#custom-role', '#publisher', '#sites--content', '#screen', '#layout', '#slug', '#version', '#redirect', '#error-screens', '#maintenance-mode', '#locale', '#site-template', '#theme', '#custom-domain', '#subdomain', '#the-node-tree', '#node', '#tree', '#tree-root', '#trunk', '#stem', '#branch', '#leaf', '#component', '#component-bundle', '#preset', '#reusable-component', '#lineal-placement-rules', '#besigner-the-editor', '#besigner', '#canvas', '#hierarchy-panel', '#drawer', '#binding', '#plugins--marketplace', '#plugin', '#add-on', '#surface', '#console-extension', '#widget', '#injection-zone', '#plugin-manifest', '#enabled-plugins', '#feature-flag', '#release-flag', '#plugin-config', '#plugin-permission', '#plugin-job', '#listing', '#install', '#realm-bundle', '#sandbox', '#host-abi', '#review-queue', '#data--logic', '#dataset', '#record', '#field', '#relation', '#contact', '#segment', '#media-library', '#variable', '#function-fx', '#form', '#automation--marketing', '#event', '#workflow', '#action', '#automation', '#overlay', '#experiment', '#email-campaign', '#designed-email', '#merge-tag', '#commerce', '#product', '#order', '#pos', '#booking', '#billing--plans', '#plan', '#entitlement', '#quota', '#seat', '#metered-usage'],

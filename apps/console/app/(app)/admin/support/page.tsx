@@ -183,7 +183,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
         breadcrumbItems={[
           { children: 'Support', href: buildRoute(Route.ADMIN_SUPPORT) },
         ]}
-        help="staffConsole"
+        help="supportQueue"
         header={{
           children: 'Support tickets',
           icon: { path: mdiLifebuoy.path },

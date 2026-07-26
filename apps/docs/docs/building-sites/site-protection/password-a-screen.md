@@ -17,6 +17,12 @@ content, without setting up full membership.
 2. Set a **password** on it.
 3. Publish. Visitors are prompted for the password before they can view the screen.
 
+Password attempts are limited to **10 per minute per screen, per visitor address**, so
+the password can't be guessed by brute force. Someone who trips it is asked to wait a
+moment and try again. The limit counts per address, so a shared office connection
+tripping it won't lock out anyone else — but if a whole team is unlocking the same
+screen at once, expect the occasional retry prompt.
+
 ## Password vs. members-only
 
 | Password | Members-only |
