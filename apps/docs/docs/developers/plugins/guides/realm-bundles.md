@@ -34,12 +34,18 @@ never loads.
 
 ## Granting trust (staff)
 
-From **Admin → Plugin reviews**, the *Grant realm trust* button signs the
-listing's latest version (super staff; adminAudit'd), or call
-`POST /api/admin/sign-plugin { listingId, version }` directly. Revoke
-with `{ action: 'revoke' }`; hard-kill with a revocation doc. Signing
-requires `PLUGIN_TRUST_PRIVATE_KEY` on the console deployment — generate
-the pair with `tools/scripts/generate-plugin-trust-key.mjs`.
+**Admin → Plugin reviews** has a **Listed plugins — realm trust** section: every
+listed and verified plugin with its recent versions, each showing a **Realm-trusted**
+or **Sandboxed** chip and a **Latest** marker, with per-version **Grant realm trust**
+and **Revoke realm trust** buttons. Trust is granted to a *specific reviewed version*,
+not to the listing — a newer version stays sandboxed until it is reviewed and granted
+in turn.
+
+Both actions are super-staff only and adminAudit'd. The equivalent API is
+`POST /api/admin/sign-plugin { listingId, version }`, with `{ action: 'revoke' }` to
+revoke; a hard-kill still needs a revocation doc. Signing requires
+`PLUGIN_TRUST_PRIVATE_KEY` on the console deployment — generate the pair with
+`tools/scripts/generate-plugin-trust-key.mjs`.
 
 ## Where realm bundles load
 

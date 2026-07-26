@@ -398,6 +398,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Responsive styling & custom CSS',
     excerpt: 'Style per breakpoint from the artboard preview, use the box stylers, custom classes, and the CSS builder.',
   },
+  sandboxSecurity: {
+    path: '/developers/plugins/reference/sandbox-security',
+    title: 'Sandbox security model',
+    excerpt: 'How sandboxed community plugins are isolated — separate origin, per-manifest CSP, pinned artifacts — and what that means when you write one.',
+  },
   saveATemplate: {
     path: '/building-sites/site-templates/save-a-template',
     title: 'Save & share a template',
@@ -561,6 +566,7 @@ export const DOCS_HELP_ANCHORS = {
   redirects: ['#manage-redirects', '#metrics', '#match-modes-v2', '#related'],
   relations: ['#reference-fields', '#many-to-many', '#using-relations', '#tips', '#related'],
   responsiveStyling: ['#style-per-breakpoint', '#box-stylers', '#style-groups', '#visibility-per-device-band', '#scheme-scoped-colors', '#custom-classes', '#custom-css-sx', '#semantic-sections--theme-mode', '#edit-json-for-one-element'],
+  sandboxSecurity: ['#a-separate-origin', '#per-manifest-network-policy', '#when-you-cant-declare-the-origin', '#pinned-immutable-artifacts', '#what-this-means-when-you-build', '#related'],
   saveATemplate: ['#start-from-a-template', '#where-to-find-it', '#save-your-site-as-a-template', '#tips', '#related'],
   screens: ['#screens--routing', '#layouts', '#nested-layouts', '#used-by', '#reusable-components', '#versions--scheduled-publishing', '#error--maintenance-screens', '#related'],
   seo: ['#per-screen-seo', '#sitemap--robots', '#social-cards', '#structured-data', '#analytics-integration', '#related'],

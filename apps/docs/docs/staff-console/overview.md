@@ -23,6 +23,10 @@ The **staff console** is where Aglyn operators manage the platform and support c
   per-org usage; plus search.
 - **[Support queue](support-queue.md)** — every organization's support tickets in one
   triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
+- **Plugin reviews & realm trust** — the marketplace review queue, plus a
+  **Listed plugins — realm trust** table for granting or revoking
+  [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
+  per version.
 - **Organization management** — audited plan and entitlement overrides, suspension,
   and GDPR-erasure flags, per organization. The directory is listed server-side with
   the Admin SDK (so it shows *every* org, not the subset client rules would return),

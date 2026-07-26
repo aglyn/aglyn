@@ -87,7 +87,8 @@ the content pin every install verifies.
 
 ## 5. Publish
 
-Publish from the console (Community → your profile) or the API — the
+Publish from **Marketplace → Publish** (choose *A plugin (upload a bundle)*) or the
+API — the
 bundle plus `manifest.json` fields and your listing content (README,
 logo, screenshots, links, license, categories — see the
 [publisher handbook](../publishing/publisher-handbook.md)). New listings
@@ -107,7 +108,9 @@ pinned install can change underneath them.
 
 ## 7. Uninstall
 
-Plugins & add-ons → Uninstall removes the pin and the switchboard entry.
+**Marketplace → Installed → Uninstall**, or the **Uninstall** button on the listing's
+own detail page (**Uninstall org-wide** for an org-scope install), removes the pin and
+the switchboard entry.
 **Data your plugin created stays untouched** — reinstalls pick up where
 they left off. Design for that: namespace your documents and tolerate
 finding old ones.

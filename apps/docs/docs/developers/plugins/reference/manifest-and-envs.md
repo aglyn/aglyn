@@ -37,7 +37,9 @@ events.
 - `communityListings/{listingId}` — public: `displayName`, `description`,
   `categories[]` (fixed taxonomy), `logoUrl`, `screenshots[]`, `readme`
   (markdown), `homepageUrl`, `repositoryUrl`, `license`, `priceUsd`,
-  `latestVersion`, `installCount`, `reviewStatus`.
+  `latestVersion`, `installCount` (cumulative installs ever),
+  `activeInstalls` (installs live right now — the detail page shows both,
+  e.g. `41 installs · 12 active`), `reviewStatus`.
 - `communityListings/{id}/pluginVersions/{version}` — **server-only**:
   `sha256`, `objectPath`, `manifest`, `changelog`, `trust?`, `signature?`.
   The buyer-safe subset (version/changelog/trust/hostAbi/date) is exposed

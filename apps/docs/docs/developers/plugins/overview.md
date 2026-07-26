@@ -31,7 +31,10 @@ are paid.
 
 ## Install & upgrade
 
-- Open **Marketplace** in the organization navigation and **Browse** the listings.
+- Open **Marketplace** in the organization navigation and **Browse** the listings. Browse
+  is a catalogue: cards link to the **detail page**, which is the only place an install
+  happens, and a confirmation dialog names exactly where it will land before anything is
+  written.
 - When you install a plugin, choose where it applies: **All sites** (organization-wide —
   including sites you add later) or **Selected sites** (a specific subset). Components,
   templates and layouts are site-scoped, so "All sites" installs them onto every current
@@ -41,7 +44,10 @@ are paid.
   components.
 - Manage everything from the marketplace's **Installed** tab: first-party plugin toggles
   (with release state), per-plugin configuration, plus every marketplace install with
-  upgrade, uninstall, and share-with-organization actions.
+  upgrade, uninstall, and share-with-organization actions. A listing's own detail page
+  also carries **Uninstall** (or **Uninstall org-wide**) once you have it installed.
+- Rating a listing needs a **verified email** and an organization that actually installed
+  it; commenting is open to any signed-in user.
 - Installing enables the plugin for the workspace automatically; uninstalling disables
   it once no site keeps its own pin. **Uninstalling never deletes the data a plugin
   created** — reinstall and it picks up where it left off.
@@ -52,6 +58,8 @@ are paid.
 - A **manifest + sandbox bridge protocol** defines what a plugin can do.
 - A **host-mediated network bridge** lets plugins make network calls without direct access
   to your environment.
+- See [Sandbox security model](reference/sandbox-security.md) for what that isolation
+  actually enforces — including the per-plugin network policy — if you're writing one.
 
 ## Configure
 
