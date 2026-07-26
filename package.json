@@ -4,8 +4,8 @@
   "version": "1.0.0-alpha.0",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
-  "repository": "github:aglyn/core",
-  "bugs": "https://github.com/aglyn/core/issues",
+  "repository": "github:aglyn/aglyn",
+  "bugs": "https://github.com/aglyn/aglyn/issues",
   "private": true,
   "engines": {
     "node": ">=24"

@@ -3,7 +3,7 @@ import type { Config } from '@docusaurus/types'
 import type * as Preset from '@docusaurus/preset-classic'
 
 // The GitHub repo docs live in — used for the "Edit this page" links.
-const editUrl = 'https://github.com/aglyn/core/tree/main/apps/docs/'
+const editUrl = 'https://github.com/aglyn/aglyn/tree/main/apps/docs/'
 
 const config: Config = {
   title: 'Aglyn Docs',
@@ -198,7 +198,7 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://github.com/aglyn/core',
+          href: 'https://github.com/aglyn/aglyn',
           label: 'GitHub',
           position: 'right',
         },
@@ -225,8 +225,8 @@ const config: Config = {
         {
           title: 'More',
           items: [
-            { label: 'GitHub', href: 'https://github.com/aglyn/core' },
-            { label: 'Contributing to docs', href: 'https://github.com/aglyn/core/blob/main/apps/docs/CONTRIBUTING.md' },
+            { label: 'GitHub', href: 'https://github.com/aglyn/aglyn' },
+            { label: 'Contributing to docs', href: 'https://github.com/aglyn/aglyn/blob/main/apps/docs/CONTRIBUTING.md' },
           ],
         },
       ],

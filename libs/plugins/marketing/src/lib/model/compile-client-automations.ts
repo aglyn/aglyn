@@ -15,12 +15,16 @@
  * limitations under the License.
  */
 
+// Import the entitlement/event predicates from the context-free actions
+// subpath, NOT the `@aglyn/aglyn` barrel: this file is in the marketing model,
+// which the plugin's SERVER graph re-exports, and the full barrel pulls client
+// React contexts (createContext) that break the RSC server build (AGL-830).
 import {
   isClientActionStep,
   isClientStepEntitled,
   isSiteEventType,
   type HostAction,
-} from '@aglyn/aglyn'
+} from '@aglyn/aglyn/app-utils/actions'
 import { overlayMatchesPath } from './overlays'
 import type { ClientAutomation } from './site-contract'
 
