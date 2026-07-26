@@ -20,6 +20,7 @@ import {
   checkEntitlement,
   checkQuota,
   createResourceUid,
+  nameSearchKey,
   type OrgEntitlements,
   type OrgFeatureFlags,
 } from '@aglyn/aglyn/server'
@@ -217,8 +218,17 @@ async function handler(request: Request): Promise<Response> {
     // hostile, and failing the create would be a worse experience than
     // ignoring a field it was never allowed to set.
     for (const field of resource.serverManagedFields ?? []) delete doc[field]
+    // Normalized search key for the name-prefix query (AGL-835). Only screens
+    // are queried by name (the switcher loads the rest client-side), so only
+    // screens carry the field — stamping it on every resource kind would be an
+    // index field nothing reads.
+    const nameLower =
+      resourceKey === 'screen' && typeof doc['displayName'] === 'string'
+        ? { nameLower: nameSearchKey(doc['displayName'] as string) }
+        : {}
     await collectionRef.doc(id).create({
       ...doc,
+      ...nameLower,
       ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
       ...(doc['createdAt'] === undefined ? { createdAt: Timestamp.now() } : {}),
       ...(doc['updatedAt'] === undefined ? { updatedAt: Timestamp.now() } : {}),

@@ -21,6 +21,7 @@ import {
   checkQuota,
   createResourceUid,
   isBlockedSubdomain,
+  nameSearchKey,
   SUBDOMAIN_PATTERN,
   suggestSubdomains,
 } from '@aglyn/aglyn/server'
@@ -148,6 +149,7 @@ async function handler(request: Request): Promise<Response> {
       .doc(hostId)
       .set({
         displayName,
+        nameLower: nameSearchKey(displayName),
         subdomain,
         orgId: orgMembership.orgId,
         screens: {},

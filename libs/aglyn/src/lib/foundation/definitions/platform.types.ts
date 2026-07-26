@@ -154,6 +154,12 @@ export interface AglynHost extends AglynDocument {
   popup?: HostPopup
   displayName?: string
   /**
+   * Normalized `displayName` for case-insensitive prefix search (AGL-835);
+   * see `nameSearchKey`. Stamped by the host create/rename write paths so the
+   * site switcher can query an org's sites by name instead of loading them all.
+   */
+  nameLower?: string
+  /**
    * Site logo URL (AGL-594): the host's own brand mark, shown by the
    * tenant's navigation loader (and future chrome). Distinct from
    * `seo.entity.logo`, which is publisher-semantic JSON-LD.
@@ -316,6 +322,13 @@ export interface AglynScreen extends AglynDocument {
   publishedAt?: ITimestamp
   deletedAt?: ITimestamp
   displayName?: string
+  /**
+   * Normalized `displayName` for case-insensitive prefix search (AGL-835);
+   * see `nameSearchKey`. Stamped by the screen create/import write paths so
+   * the besigner switcher can query screens by name instead of loading the
+   * whole collection.
+   */
+  nameLower?: string
   description?: string
   seo?: {
     title?: string

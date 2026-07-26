@@ -20,6 +20,7 @@ import {
   composeScreenRoutePath,
   findScreenIdByRoutePath,
   HostScreenVisibility,
+  nameSearchKey,
   normalizeScreenSlug,
   screenRoutePathToUrl,
   type ScreenRouteNode,
@@ -216,6 +217,9 @@ function ScreenDetails() {
     if (!editor?.displayName.trim()) return
     await updateDoc(screenRef, {
       displayName: editor.displayName.trim(),
+      // Keep the name-search key in sync on rename (AGL-835) so the switcher's
+      // prefix query finds the screen under its new name.
+      nameLower: nameSearchKey(editor.displayName.trim()),
       description: editor.description.trim(),
       updatedAt: Timestamp.now(),
     })

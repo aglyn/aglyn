@@ -19,6 +19,7 @@ import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
   effectiveDatasetModel,
+  nameSearchKey,
   rewriteBindingTokensDeep,
   validateDocument,
 } from '@aglyn/aglyn/server'
@@ -138,6 +139,11 @@ async function handler(request: Request): Promise<Response> {
         hostPatch[field] = bundle.host[field]
       }
     }
+    // Keep the host name-search key in sync with a restored displayName
+    // (AGL-835).
+    if (typeof hostPatch['displayName'] === 'string') {
+      hostPatch['nameLower'] = nameSearchKey(hostPatch['displayName'] as string)
+    }
     if (Object.keys(hostPatch).length) {
       batch.set(hostRef, hostPatch, { merge: true })
       batched += 1
@@ -180,7 +186,13 @@ async function handler(request: Request): Promise<Response> {
       for (const item of items.slice(0, EXPORT_COLLECTION_LIMITS[name])) {
         if (!item?.$id) continue
         const docRef = hostRef.collection(name).doc(String(item.$id))
-        await write(docRef, cleanDoc(item))
+        const cleaned = cleanDoc(item)
+        // Re-derive the name-search key on restore (AGL-835) — bundles may
+        // predate the field, and only screens are queried by name.
+        if (name === 'screens' && typeof cleaned['displayName'] === 'string') {
+          cleaned['nameLower'] = nameSearchKey(cleaned['displayName'] as string)
+        }
+        await write(docRef, cleaned)
         if (item.version?.$id) {
           const version = cleanDoc(item.version)
           version['nodes'] = rewriteBindingTokensDeep(
