@@ -204,6 +204,13 @@ match /orgs/{orgId} {
   allow read: if isStaff() || member() != null;
   allow update: if hasOrgRole(['owner','admin']) && notSuspended()
                 && billingKeysUntouched();   // plan/billing via Admin SDK only
+  // NOTE (AGL-878): this rule authorizes reading ONE org doc you belong to.
+  // It does NOT make a client-side `collection('orgs')` query work — a
+  // collection read is evaluated against the query, not per document, so a
+  // staff listing returned a non-deterministic subset (staff saw ~3 of 4
+  // orgs and assumed a data problem). Anything that must enumerate orgs goes
+  // through an Admin-SDK route instead: /api/admin/orgs, staff-gated,
+  // ordered by doc id and cursor-paginated.
 
   match /members/{uid}  { ... owner/admin manage; users read own doc ... }
   match /hosts/{hostId} {

@@ -59,7 +59,7 @@ matching section of these docs in a new tab.
 | **Workflows** | Workflows, automations, and webhooks. |
 | **Media** | The media library — folders, images, video, and files. |
 | **Content** | Collections, blog entries, and the inbox. |
-| **Setup** | Theme editor, custom domain, SEO, and the full activity log. |
+| **Setup** | Theme editor, custom domain, SEO, and the full activity log. Each section is deep-linkable — the `?tab=` in the URL follows you, so you can bookmark or share the exact one. |
 | **Billing** | Plan cards and usage meters. |
 
 ## Editing vs. managing
@@ -73,7 +73,8 @@ without opening the editor. When you want to design it, open the
 Opening a site lands you on its dashboard — the primary navigation tabs across the top,
 account/role management, quick controls for surfaces like the announcement bar and
 promotional popup, and the ten most recent activity entries (the full, paginated log
-lives under **Setup → Activity**).
+lives under **Setup → Activity**). Each entry names the thing that changed — "Saved the
+screen — Home" — and links straight to it.
 
 ![The Aglyn console site dashboard, showing the primary navigation tabs (Dashboard, Screens, Layouts, Media, Content, Inbox, Contacts, Bookings, Events, Data, Redirects, Workflows, Community), the Users card with the account owner listed, and Announcement bar / Promotional popup quick-edit cards](/img/getting-started/console-dashboard.png)
 
