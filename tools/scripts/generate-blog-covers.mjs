@@ -35,6 +35,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { chromium } from 'playwright-core'
+import sharp from 'sharp'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
@@ -247,7 +248,7 @@ console.log(`Output dir: ${outDir}`)
 const browser = await chromium.launch({ headless: true, ...chromeExecutable() })
 const context = await browser.newContext({
   viewport: { width: WIDTH, height: HEIGHT },
-  deviceScaleFactor: 2, // crisp @2x
+  deviceScaleFactor: 1, // 1200x630 is the standard OG/blog-cover size
 })
 
 let count = 0
@@ -262,7 +263,14 @@ for (const post of POSTS) {
       .catch(() => undefined)
     await page.waitForTimeout(400)
     const outPath = join(outDir, post.out)
-    await page.screenshot({ path: outPath, clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT } })
+    // Screenshot to a buffer, then squeeze the PNG: quantized palette keeps
+    // these flat dark designs tiny (~30-60KB) with no visible loss.
+    const raw = await page.screenshot({
+      clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT },
+    })
+    await sharp(raw)
+      .png({ compressionLevel: 9, effort: 10, palette: true, quality: 90 })
+      .toFile(outPath)
     console.log(`COVER ${post.out}`)
     count += 1
   } catch (error) {
