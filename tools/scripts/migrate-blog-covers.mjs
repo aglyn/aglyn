@@ -35,11 +35,51 @@
 // cdnPath, coverImage already correct).
 
 import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
+
+// Load admin creds from the repo's local env files so this script is
+// self-contained (the invocation is a single allow-listed `node …` command;
+// secrets are never printed). Already-set process.env wins.
+function loadLocalEnv() {
+  const roots = ['.', 'apps/console', 'cloud']
+  const names = [
+    '.env',
+    '.env.local',
+    '.env.development',
+    '.env.development.local',
+    '.env.production',
+    '.env.production.local',
+  ]
+  const files = roots.flatMap((r) => names.map((n) => `${r}/${n}`))
+  for (const file of files) {
+    if (!existsSync(file)) continue
+    let text
+    try {
+      text = readFileSync(file, 'utf8')
+    } catch {
+      continue
+    }
+    for (const line of text.split('\n')) {
+      const match = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/)
+      if (!match) continue
+      const key = match[1]
+      if (process.env[key] !== undefined) continue
+      let value = match[2].trim()
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+      process.env[key] = value
+    }
+  }
+}
+loadLocalEnv()
 
 const args = process.argv.slice(2)
 const flag = (name) => args.includes(name)
@@ -159,14 +199,21 @@ for (const cover of COVERS) {
     { merge: true },
   )
 
-  // 6. Repoint the blog entry's cover to the stable URL.
-  if (entryDoc.exists) {
+  // 6. Repoint the blog entry's cover to the stable URL — but only if it
+  //    isn't already pointing there (entries may already carry the absolute
+  //    stable URL, which we must NOT downgrade to a relative path).
+  const alreadyStable =
+    typeof currentCover === 'string' && currentCover.includes(cdnPath)
+  if (!entryDoc.exists) {
+    console.warn(`    ! entry ${cover.entryId} not found — coverImage not set`)
+  } else if (alreadyStable) {
+    console.log('    coverImage already stable — left as-is')
+  } else {
     await entryRef.set(
       { coverImage: cdnPath, updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     )
-  } else {
-    console.warn(`    ! entry ${cover.entryId} not found — coverImage not set`)
+    console.log('    coverImage set to stable cdnPath')
   }
   console.log('    ✓ applied\n')
   applied += 1
