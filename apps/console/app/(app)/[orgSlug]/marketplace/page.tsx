@@ -190,6 +190,11 @@ const OrgMarketplace: NextPageWithLayout<Record<string, never>> = () => {
                         hostId={actingHost}
                         permissions={permissions}
                         orgScoped
+                        // The URL already knows the org (AGL-867): pass it so
+                        // listing links resolve synchronously instead of via an
+                        // async hostIndex→org lookup that can come back empty
+                        // and leave the detail page unreachable from browse.
+                        orgSlug={orgSlug}
                       />
                     ),
                   },

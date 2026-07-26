@@ -600,7 +600,12 @@ export function CommunityListingContent({
       }
       return 'the selected targets'
     }
-    if (installTargetScope === 'org') {
+    // Org-only artifacts (dataset schema) always land org-wide — including on
+    // re-add, where installTargetScope isn't set (AGL-867).
+    if (
+      installTargetScope === 'org' ||
+      (installTargets.length === 1 && installTargets[0] === 'org')
+    ) {
       return 'the whole organization — every site'
     }
     return 'this site'
