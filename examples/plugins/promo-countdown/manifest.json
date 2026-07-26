@@ -1,0 +1,13 @@
+{
+  "id": "promo-countdown",
+  "name": "Promo Countdown",
+  "version": "1.0.0",
+  "entry": "plugin.bundle.mjs",
+  "hostAbi": 1,
+  "description": "A live 'sale ends in…' countdown banner. Theme-aware, emits an 'expired' event when the timer hits zero and a CTA event on click.",
+  "capabilities": {
+    "props": ["title", "targetIso", "expiredText", "accent", "ctaLabel", "ctaEvent"],
+    "events": ["expired", "cta"],
+    "size": { "height": 120 }
+  }
+}
