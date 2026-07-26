@@ -64,7 +64,8 @@ Firestore blip. Degrading to the per-instance cap keeps some protection, keeps
 sites usable, and reports which happened.
 
 Note the distinction from a fail-*open* default, the pattern the pre-release
-audit flagged as systemic: `CSRF_SECRET = process.env.CSRF_SECRET || ''` used
+audit flagged as systemic (see [`docs/CSRF.md`](CSRF.md)):
+`CSRF_SECRET = process.env.CSRF_SECRET || ''` used
 to sign with an empty key when unset, which made CSRF tokens forgeable while
 still reporting success. That one now fails closed (AGL-795). Degrading is
 only defensible here because the fallback still enforces *something*.
