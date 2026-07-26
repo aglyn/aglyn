@@ -132,6 +132,13 @@ export function useSwitcherCollection<T = DocumentData>(
 
   useEffect(() => {
     const requestId = ++requestRef.current
+    // A path segment can be momentarily empty (e.g. the uid before auth
+    // resolves); hold rather than build an invalid collection ref.
+    if (path.some((segment) => !segment)) {
+      setItems([])
+      setLoading(true)
+      return
+    }
     setLoading(true)
     const ref = collection(firestore, path[0], ...path.slice(1))
     const constraints = [

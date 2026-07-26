@@ -18,9 +18,9 @@
 
 import { collection, getDocs, limit, query, where } from 'firebase/firestore'
 import { useParams, usePathname, useRouter } from 'next/navigation'
-import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
+import { createContext, useContext, useEffect, useRef } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { useOrgHosts, type OrgHost } from '../hooks/use-org-hosts'
+import { useHostResolution } from '../hooks/use-host-resolution'
 import { useOrgScope } from '../hooks/use-org-scope'
 
 /** The resolved host DOC ID — the internal key for all host data reads. */
@@ -34,35 +34,18 @@ export const HostSubdomainContext = createContext<string | null>(null)
  */
 export const HostReadyContext = createContext<boolean>(true)
 /**
- * Whether the current org's host list gave up loading after exhausting its
- * retries (AGL-813). Distinct from "resolved to no match": the HostGuard shows
- * a retry instead of a 404 when this is set, so a transient read failure never
- * masquerades as a site that doesn't exist.
+ * Whether resolution gave up after exhausting its retries (AGL-813). Distinct
+ * from "resolved to no match": the HostGuard shows a retry instead of a 404
+ * when this is set, so a transient read failure never masquerades as a site
+ * that doesn't exist.
  */
 export const HostErrorContext = createContext<boolean>(false)
-/**
- * The org's host list, shared from this provider's single subscription.
- *
- * This provider sits in the root layout's provider stack, so its listen — and
- * the list it produces — survives every route change. Consumers that live in
- * the per-page `DashboardLayout` (the app-bar site switcher) remount on each
- * navigation; reading the list from here instead of opening their own
- * `useOrgHosts` keeps them from replaying an empty-then-loaded state on every
- * page, which is what made the switcher label flash back to "All sites"
- * (AGL-745). It also drops a duplicate Firestore listener.
- */
-export const OrgHostsContext = createContext<{
-  hosts: OrgHost[]
-  ready: boolean
-}>({ hosts: [], ready: false })
 
 export const useHostId = () => useContext(HostIdContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
 /** Whether host resolution gave up after retries (AGL-813). */
 export const useHostError = () => useContext(HostErrorContext)
-/** The org's hosts, from the provider-level subscription (never remounts). */
-export const useOrgHostsContext = () => useContext(OrgHostsContext)
 
 export function HostIdProvider({ children }) {
   const params = useParams<{ orgSlug?: string; host?: string }>()
@@ -73,29 +56,22 @@ export function HostIdProvider({ children }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Resolve the URL subdomain to a host doc id within the CURRENT org
-  // (AGL-622). Scoping the query by orgId is what the security rules allow (an
-  // unscoped all-orgs list is denied), so a subdomain that belongs to another
-  // org simply isn't found here — the in-tree HostGuard renders the designed
-  // 404, never a sign-out. (Cross-org deep-link redirect would need a global
-  // subdomain index; tracked separately.) This provider is global (above the
-  // route not-found boundaries), so it only RESOLVES and exposes state; the
-  // HostGuard inside the host route tree enforces the spinner/404.
-  const { hosts, ready, error } = useOrgHosts(
+  // Resolve the URL subdomain to a host doc id within the CURRENT org via the
+  // user's own `hostMemberships` projection (AGL-844) — two bounded reads with
+  // a legacy fallback, replacing the scan of the org's whole host list. Scoping
+  // to the current org is what the rules allow; a subdomain owned by another
+  // org resolves to nothing here and the cross-org redirect below handles it.
+  const { hostId, ready, error } = useHostResolution(
     firestore,
+    hostSubdomain,
     user?.uid,
     currentOrg?.$id ?? undefined,
   )
-  const match = hostSubdomain
-    ? hosts.find(
-        (h) => (h as { subdomain?: string }).subdomain === hostSubdomain,
-      )
-    : undefined
   const hostReady = !hostSubdomain || Boolean(currentOrg && ready)
 
   // Cross-org deep links (AGL-628). A subdomain belonging to ANOTHER org the
-  // user is a member of resolves to nothing above — the org-scoped query is
-  // all the rules allow — and the guard 404s a site they can actually open.
+  // user is a member of resolves to nothing above — the org-scoped resolution
+  // is all the rules allow — and the guard 404s a site they can actually open.
   //
   // `hostIndex` is signed-in readable and already mirrors `subdomain`, so a
   // single lookup finds the owning org without a new global index. If it is
@@ -104,7 +80,7 @@ export function HostIdProvider({ children }) {
   // cannot open. Either way we never sign anyone out (AGL-623).
   const redirectedRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!hostSubdomain || !ready || match || !currentOrg) return
+    if (!hostSubdomain || !ready || hostId || !currentOrg) return
     if (redirectedRef.current === hostSubdomain) return
     let active = true
     void getDocs(
@@ -132,7 +108,7 @@ export function HostIdProvider({ children }) {
   }, [
     hostSubdomain,
     ready,
-    match,
+    hostId,
     currentOrg,
     orgs,
     firestore,
@@ -140,16 +116,12 @@ export function HostIdProvider({ children }) {
     router,
   ])
 
-  const orgHosts = useMemo(() => ({ hosts, ready }), [hosts, ready])
-
   return (
     <HostReadyContext.Provider value={hostReady}>
       <HostErrorContext.Provider value={Boolean(hostSubdomain) && error}>
         <HostSubdomainContext.Provider value={hostSubdomain}>
-          <HostIdContext.Provider value={match?.$id ?? null}>
-            <OrgHostsContext.Provider value={orgHosts}>
-              {children}
-            </OrgHostsContext.Provider>
+          <HostIdContext.Provider value={hostId ?? null}>
+            {children}
           </HostIdContext.Provider>
         </HostSubdomainContext.Provider>
       </HostErrorContext.Provider>
