@@ -29,7 +29,6 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   mediaObjectPath,
-  extForContentType,
   resolveMediaScope,
 } from '../../../../utils/server/media-scope'
 import { createHash, randomUUID } from 'crypto'
@@ -217,8 +216,7 @@ async function handler(request: Request): Promise<Response> {
         ...(cdnAllowed
           ? // Stable, mediaId-keyed CDN URL (AGL-829): unchanged by replace,
             // so the entry keeps resolving to the new bytes automatically.
-            // Carries the file extension (AGL-843); the route strips it.
-            { cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}${extForContentType(contentType)}` }
+            { cdnPath: `/api/media/cdn/${scope.cdnScope}/${mediaId}` }
           : { cdnPath: firebaseAdmin.firestore.FieldValue.delete() }),
         replacedBy: decoded.uid,
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),

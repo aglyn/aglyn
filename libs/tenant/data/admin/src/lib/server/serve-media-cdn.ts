@@ -52,16 +52,8 @@ export async function serveMediaCdn(
     return
   }
   const path = Array.isArray(req.query['path']) ? req.query['path'] : []
-  // The last segment may carry a cosmetic file extension (AGL-843) — the id
-  // and hash themselves never contain a dot, so strip a trailing `.ext`
-  // before validating/looking up. `/…/{mediaId}.png` and `/…/{mediaId}` both
-  // resolve to the same asset.
-  const stripExt = (value: string) => {
-    const dot = value.lastIndexOf('.')
-    return dot > 0 ? value.slice(0, dot) : value
-  }
-  const [scopeSegment, mediaId, hash] = path.map((value, index) =>
-    index === path.length - 1 ? stripExt(String(value ?? '')) : String(value ?? ''),
+  const [scopeSegment, mediaId, hash] = path.map((value) =>
+    String(value ?? ''),
   )
   // Org DAM assets serve under `org:{orgId}` (host ids otherwise).
   const isOrg = scopeSegment.startsWith('org:')
