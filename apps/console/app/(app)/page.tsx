@@ -40,9 +40,11 @@ import CreateHostDialog from '../../components/create-host-dialog.component'
 import CreateOrgDialog from '../../components/create-org-dialog.component'
 import EmptyState from '../../components/empty-state.component'
 import DashboardLayout from '../../components/layouts/dashboard.layout'
+import OrgInvitesBanner from '../../components/org-invites-banner.component'
 import { buildRoute, Route } from '../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../constants/shared'
 import { useOrgScope } from '../../hooks/use-org-scope'
+import { usePendingInvites } from '../../hooks/use-pending-invites'
 
 /**
  * Org jump page (AGL-621) — the authenticated console root at `/`. Picks the
@@ -54,6 +56,10 @@ import { useOrgScope } from '../../hooks/use-org-scope'
  */
 function OrgJump() {
   const { orgs, loading } = useOrgScope()
+  // A first-time invitee has zero orgs and lands here; this is the only jump
+  // surface, so it must offer the invite (AGL-851). Without it the invite was
+  // reachable only from a hosts page, which needs an org you don't have yet.
+  const { invites, loading: invitesLoading } = usePendingInvites()
   const router = useRouter()
   const [creatingOrg, setCreatingOrg] = useState(false)
   const [creatingSite, setCreatingSite] = useState(false)
@@ -98,36 +104,73 @@ function OrgJump() {
       ) : (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
           {orgs.length === 0 ? (
-            <>
-              <EmptyState
-                iconPath={ICON_VARIANT_HOST_GROUP.path}
-                title={'Create your first site'}
-                description={
-                  'Your first site sets up your workspace automatically — no ' +
-                  'separate setup needed.'
-                }
-                action={
-                  <Stack direction="row" spacing={1.5}>
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      onClick={() => setCreatingSite(true)}
-                    >
-                      {'Create site'}
-                    </Button>
-                    <Button variant="text" onClick={() => setCreatingOrg(true)}>
-                      {'Create an organization'}
-                    </Button>
-                  </Stack>
-                }
-              />
-              <CreateHostDialog
-                open={creatingSite}
-                onClose={() => setCreatingSite(false)}
-              />
-            </>
+            invitesLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                <CircularProgress />
+              </Box>
+            ) : invites.length > 0 ? (
+              // A pending invite is the reason this person just signed up — lead
+              // with it rather than "Create your first site" (AGL-851).
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="h6" component="h1">
+                    {"You've been invited"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Accept your invitation to join the workspace, or start ' +
+                      'your own instead.'}
+                  </Typography>
+                </Box>
+                <OrgInvitesBanner />
+                <Button
+                  variant="text"
+                  sx={{ alignSelf: 'flex-start' }}
+                  onClick={() => setCreatingSite(true)}
+                >
+                  {'Create my own site instead'}
+                </Button>
+                <CreateHostDialog
+                  open={creatingSite}
+                  onClose={() => setCreatingSite(false)}
+                />
+              </Stack>
+            ) : (
+              <>
+                <EmptyState
+                  iconPath={ICON_VARIANT_HOST_GROUP.path}
+                  title={'Create your first site'}
+                  description={
+                    'Your first site sets up your workspace automatically — no ' +
+                    'separate setup needed.'
+                  }
+                  action={
+                    <Stack direction="row" spacing={1.5}>
+                      <Button
+                        variant="contained"
+                        color="secondary"
+                        onClick={() => setCreatingSite(true)}
+                      >
+                        {'Create site'}
+                      </Button>
+                      <Button
+                        variant="text"
+                        onClick={() => setCreatingOrg(true)}
+                      >
+                        {'Create an organization'}
+                      </Button>
+                    </Stack>
+                  }
+                />
+                <CreateHostDialog
+                  open={creatingSite}
+                  onClose={() => setCreatingSite(false)}
+                />
+              </>
+            )
           ) : (
             <Stack spacing={3}>
+              {/* A member of one org invited to another accepts it here too. */}
+              <OrgInvitesBanner />
               <Box>
                 <Typography variant="h6" component="h1">
                   {'Choose a workspace'}
