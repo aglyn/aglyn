@@ -7,10 +7,13 @@ serving `https://plugins.aglyn.com`.
 
 What it serves:
 
-- **`/load`** — the sandboxed plugin iframe (`load.html`), CSP-stamped via
-  `vercel.json` (`frame-ancestors` = the console + `*.aglyn.app` sites; a
-  strict static CSP with `connect-src 'self'` — per-manifest network
-  allowlists are a follow-up).
+- **`/load`** — the sandboxed plugin iframe. Served by `api/load.js`,
+  which stamps a **per-manifest CSP**: `connect-src` is built from the
+  version's declared `capabilities.network` (via the console's public
+  listing-versions endpoint), strict-fallback to `'self'` on any lookup
+  failure. `frame-ancestors` = the console + `*.aglyn.app` sites
+  (custom-domain tenant sites are a follow-up — they need a trustworthy
+  host→domain lookup).
 - **`/artifacts/{listingId}/{version}/{sha256}.bundle`** — edge-rewritten
   to the console's `/api/plugin-artifacts/…` route, which streams from the
   PRIVATE `aglyn-main-plugin-artifacts` bucket with immutable cache
@@ -23,3 +26,5 @@ No secrets live on this project — it is a static page plus edge rewrites.
 Apps point here via `NEXT_PUBLIC_PLUGIN_ORIGIN=https://plugins.aglyn.com`
 (console + tenant). The realm trust keys (`PLUGIN_TRUST_*`) are separate —
 see `docs/PLUGIN_LOADING.md`.
+
+<!-- deploy: static; project settings pin no-op build/install commands -->

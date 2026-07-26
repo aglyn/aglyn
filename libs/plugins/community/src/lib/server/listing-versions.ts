@@ -49,6 +49,19 @@ export const listingVersionsHandler: PluginApiHandler = async (req, res) => {
       ...(Number.isInteger(doc.get('manifest')?.hostAbi)
         ? { hostAbi: Number(doc.get('manifest').hostAbi) }
         : {}),
+      // Declared network allowlist (AGL-879 follow-up): the plugin origin
+      // builds the /load CSP `connect-src` from this, so the sandbox only
+      // reaches origins the manifest declared. Already buyer-visible in
+      // review ("Capabilities: network N"), so exposing the origins here
+      // leaks nothing new.
+      ...(Array.isArray(doc.get('manifest')?.capabilities?.network)
+        ? {
+            network: (doc.get('manifest').capabilities.network as unknown[])
+              .map((entry) => String(entry))
+              .filter((entry) => /^https:\/\/[^\s/]+$/.test(entry))
+              .slice(0, 20),
+          }
+        : {}),
       publishedAtMs: doc.get('publishedAt')?.toMillis?.() ?? null,
     }))
     return res.status(200).json({ versions })
