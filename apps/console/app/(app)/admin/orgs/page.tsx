@@ -653,27 +653,29 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   </TableBody>
                 </Table>
               )}
-              {/* Server-authoritative pagination (AGL-878): each page is a
-                  fresh server read, so the list never flickers from a stale
-                  cache. */}
-              {pageIndex > 0 || hasMore ? (
+              {/* Pagination (AGL-878): each page is a fresh Admin-SDK read via
+                  /api/admin/orgs, so the list is complete and never flickers.
+                  Always shown so the control is visible even on a single page. */}
+              {orgDocs.length > 0 ? (
                 <Stack
                   direction="row"
-                  spacing={1}
+                  spacing={1.5}
                   sx={{ mt: 1, alignItems: 'center' }}
                 >
                   <Button
                     size="small"
+                    variant="outlined"
                     disabled={loading || pageIndex === 0}
                     onClick={() => void loadPage(pageIndex - 1)}
                   >
                     {'Previous'}
                   </Button>
                   <Typography variant="caption" color="text.secondary">
-                    {`Page ${pageIndex + 1}`}
+                    {`Page ${pageIndex + 1} · ${orgDocs.length} shown`}
                   </Typography>
                   <Button
                     size="small"
+                    variant="outlined"
                     disabled={loading || !hasMore}
                     onClick={() => void loadPage(pageIndex + 1)}
                   >
