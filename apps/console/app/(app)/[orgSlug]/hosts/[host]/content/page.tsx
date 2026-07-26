@@ -55,7 +55,8 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { Box, Divider, Link as MuiLink } from '@mui/material'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -178,6 +179,17 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
     [collectionDocs],
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Deep-link preselect (AGL-845): a `?collection=` param (e.g. from the DAM
+  // "Used on" list) opens the content manager on that collection. Applied once,
+  // only while nothing has been picked yet, so it never fights a later click.
+  const searchParams = useSearchParams()
+  const deepLinkCollection = searchParams?.get('collection') ?? null
+  useEffect(() => {
+    if (selectedId || !deepLinkCollection) return
+    if (collections.some((item) => item.$id === deepLinkCollection)) {
+      setSelectedId(deepLinkCollection)
+    }
+  }, [selectedId, deepLinkCollection, collections])
   const selected =
     collections.find((item) => item.$id === selectedId) ?? collections[0]
 

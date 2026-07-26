@@ -17,7 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -85,6 +85,8 @@ import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
+import { buildRoute, Route } from '../../constants/route-links'
+import { useOrgSlug } from '../../hooks/use-org-scope'
 import { ImageEditorDialog } from './image-editor-dialog.component'
 import { MediaAssetCard } from './media-asset-card.component'
 import { MediaFolderCard } from './media-folder-card.component'
@@ -101,6 +103,27 @@ export interface MediaLibraryComponentProps {
 
 /** Page size for cursor pagination (AGL-174). */
 const MEDIA_PAGE_SIZE = 60
+
+/**
+ * One "Used on" reference (AGL-845) as returned by /api/media/references —
+ * carries what the client needs to deep-link back to the resource.
+ */
+interface MediaUsageRef {
+  kind: 'screen' | 'layout' | 'entry'
+  id: string
+  name: string
+  hostId: string
+  hostSubdomain: string
+  versionId?: string
+  collectionId?: string
+}
+
+/** How each reference kind is labelled in the "Used on" list. */
+const REF_KIND_LABEL: Record<MediaUsageRef['kind'], string> = {
+  screen: 'Screen',
+  layout: 'Layout',
+  entry: 'Content',
+}
 
 const formatBytes = (bytes: number) =>
   bytes >= 1024 * 1024
@@ -196,6 +219,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   const { org } = useCurrentOrg()
+  // The org is a path segment in every console route; the "Used on" deep
+  // links (AGL-845) build `/[orgSlug]/hosts/[subdomain]/…` from it.
+  const orgSlug = useOrgSlug()
   const logHostActivity = useHostActivityLogger(hostId ?? '')
   // Activity feeds are a host-dashboard feature; the org DAM skips them.
   const logActivity = hostId
@@ -1104,11 +1130,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   }, [selected, confirm, user, scopeId, enqueueSnackbar, logActivity, refresh])
 
-  // Per-asset usage (AGL-176), loaded when the drawer opens: on-demand
-  // reference scan plus 30 days of origin-serve counters from the
-  // analytics day-docs (edge cache hits aren't counted — labeled as such).
+  // Per-asset delivery stats (AGL-176), loaded when the drawer opens: 30 days
+  // of origin-serve counters from the analytics day-docs (edge cache hits
+  // aren't counted — labeled as such). Cheap (30 doc reads), so it auto-loads;
+  // the reference scan is the expensive part and stays on-demand below.
   const [usage, setUsage] = useState<{
-    references: Array<{ kind: string; id: string; name: string }> | null
     serves: number
     bytes: number
   } | null>(null)
@@ -1120,23 +1146,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
     let active = true
     void (async () => {
-      const idToken = await (user as any)?.getIdToken?.()
-      const referencesPromise = fetch('/api/media/references', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({ ...scopeBody, mediaId: editorId }),
-      })
-        .then((response) => (response.ok ? response.json() : { references: null }))
-        .catch(() => ({ references: null }))
       const dayIds = Array.from({ length: 30 }, (_, index) => {
         const date = new Date()
         date.setDate(date.getDate() - index)
         return date.toISOString().slice(0, 10)
       })
-      const statsPromise = Promise.all(
+      const stats = await Promise.all(
         dayIds.map((day) =>
           getDoc(doc(firestore, scopeCollection, scopeId, 'analytics', day))
             .then((snapshot) => {
@@ -1146,13 +1161,8 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             .catch(() => ({ serves: 0, bytes: 0 })),
         ),
       )
-      const [referencesResult, stats] = await Promise.all([
-        referencesPromise,
-        statsPromise,
-      ])
       if (!active) return
       setUsage({
-        references: referencesResult?.references ?? null,
         serves: stats.reduce((sum, stat) => sum + Number(stat.serves ?? 0), 0),
         bytes: stats.reduce((sum, stat) => sum + Number(stat.bytes ?? 0), 0),
       })
@@ -1160,7 +1170,77 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     return () => {
       active = false
     }
-  }, [editorId, user, scopeId, firestore])
+  }, [editorId, scopeId, firestore])
+
+  // "Used on" reference audit (AGL-845): scanning every published screen,
+  // layout, and content entry for this asset's URLs is expensive, so it runs
+  // ONLY when the user asks ("Find where this is used"), never on drawer open.
+  const [refsAudit, setRefsAudit] = useState<{
+    status: 'idle' | 'loading' | 'done' | 'error'
+    items: MediaUsageRef[]
+  }>({ status: 'idle', items: [] })
+  // Reset the audit whenever the drawer switches assets.
+  useEffect(() => {
+    setRefsAudit({ status: 'idle', items: [] })
+  }, [editorId])
+  const runReferenceAudit = useCallback(async () => {
+    if (!editorId) return
+    setRefsAudit({ status: 'loading', items: [] })
+    try {
+      const idToken = await (user as any)?.getIdToken?.()
+      const response = await fetch('/api/media/references', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({ ...scopeBody, mediaId: editorId }),
+      })
+      if (!response.ok) throw new Error(`Scan failed (${response.status})`)
+      const payload = await response.json()
+      setRefsAudit({
+        status: 'done',
+        items: (payload?.references ?? []) as MediaUsageRef[],
+      })
+    } catch (error) {
+      console.error('media reference audit failed', error)
+      setRefsAudit({ status: 'error', items: [] })
+    }
+  }, [editorId, user, scopeId])
+
+  // Deep link for a reference row — the `[host]` segment is the subdomain,
+  // and org assets can live on any of the org's sites (hence per-ref host).
+  const referenceHref = useCallback(
+    (reference: MediaUsageRef): string | null => {
+      if (!orgSlug || !reference.hostSubdomain) return null
+      if (reference.kind === 'screen' && reference.versionId) {
+        return buildRoute(Route.SCREEN_DETAILS, {
+          orgSlug,
+          host: reference.hostSubdomain,
+          screenId: reference.id,
+          versionId: reference.versionId,
+        })
+      }
+      if (reference.kind === 'layout') {
+        return buildRoute(Route.LAYOUT_DETAILS, {
+          orgSlug,
+          host: reference.hostSubdomain,
+          layoutId: reference.id,
+        })
+      }
+      if (reference.kind === 'entry') {
+        const base = buildRoute(Route.HOST_CONTENT, {
+          orgSlug,
+          host: reference.hostSubdomain,
+        })
+        return reference.collectionId
+          ? `${base}?collection=${encodeURIComponent(reference.collectionId)}`
+          : base
+      }
+      return null
+    },
+    [orgSlug],
+  )
 
   // Single-file upload (AGL-820): extracted from the input handler so the
   // Upload button and drag-and-drop share one path. Returns bytes added on
@@ -1884,17 +1964,10 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           />
           <Typography variant="caption" color="text.secondary" component="div">
             {usage === null
-              ? 'Checking usage…'
-              : usage.references === null
-                ? 'Usage check unavailable'
-                : usage.references.length
-                  ? `Used on ${usage.references.length}: ${usage.references
-                      .map((reference) => reference.name)
-                      .join(', ')}`
-                  : 'Not referenced by any published screen, layout, or entry'}
-            {usage && (usage.serves || usage.bytes)
-              ? ` · ${usage.serves.toLocaleString()} origin serves / ${formatBytes(usage.bytes)} (30d, cache misses only)`
-              : ''}
+              ? 'Checking delivery stats…'
+              : usage.serves || usage.bytes
+                ? `${usage.serves.toLocaleString()} origin serves / ${formatBytes(usage.bytes)} (30d, cache misses only)`
+                : 'No origin serves in the last 30 days'}
           </Typography>
           <TextField
             select
@@ -2045,6 +2118,97 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                 {'Add field'}
               </Button>
             </Stack>
+          </Box>
+          {/* "Used on" audit (AGL-845): on-demand — the scan is expensive, so
+              it runs only when the user asks, and lists each place the asset is
+              referenced with a deep link to open it. */}
+          <Box>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                mb: 0.5,
+              }}
+            >
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                component="div"
+              >
+                {'Used on'}
+              </Typography>
+              {refsAudit.status === 'done' ? (
+                <Button size="small" onClick={runReferenceAudit}>
+                  {'Rescan'}
+                </Button>
+              ) : null}
+            </Stack>
+            {refsAudit.status === 'idle' ? (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={runReferenceAudit}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                {'Find where this is used'}
+              </Button>
+            ) : refsAudit.status === 'loading' ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Scanning screens, layouts, and content…'}
+              </Typography>
+            ) : refsAudit.status === 'error' ? (
+              <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
+                <Typography variant="body2" color="warning.main">
+                  {'Could not scan for usage — this is not the same as ' +
+                    'nothing using it. Try again before deleting.'}
+                </Typography>
+                <Button size="small" onClick={runReferenceAudit}>
+                  {'Try again'}
+                </Button>
+              </Stack>
+            ) : refsAudit.items.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Not referenced by any published screen, layout, or content ' +
+                  'entry.'}
+              </Typography>
+            ) : (
+              <Stack spacing={0.75}>
+                <Typography variant="caption" color="text.secondary">
+                  {`Referenced in ${refsAudit.items.length} place${
+                    refsAudit.items.length === 1 ? '' : 's'
+                  }.`}
+                </Typography>
+                {refsAudit.items.map((reference) => {
+                  const href = referenceHref(reference)
+                  return (
+                    <Stack
+                      key={`${reference.kind}-${reference.hostId}-${reference.id}`}
+                      direction="row"
+                      spacing={1}
+                      sx={{
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      {href ? (
+                        <AppLink href={href}>{reference.name}</AppLink>
+                      ) : (
+                        <Typography variant="body2" noWrap>
+                          {reference.name}
+                        </Typography>
+                      )}
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        label={REF_KIND_LABEL[reference.kind]}
+                      />
+                    </Stack>
+                  )
+                })}
+              </Stack>
+            )}
           </Box>
           <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
             <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
