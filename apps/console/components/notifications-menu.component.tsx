@@ -23,6 +23,8 @@ import {
 import {
   mdiBellOutline,
   mdiCheckAll,
+  mdiCogOutline,
+  mdiInboxOutline,
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -31,9 +33,10 @@ import {
   Button,
   Divider,
   IconButton,
-  Menu,
-  MenuItem,
+  Popover,
   Stack,
+  Tab,
+  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -74,6 +77,9 @@ export function NotificationsMenu() {
   const router = useRouter()
   const uid = (user as any)?.uid as string | undefined
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  // Inbox = unread, Archive = already read (AGL-874) — a click marks-read,
+  // moving a notification from Inbox to Archive.
+  const [tab, setTab] = useState<'inbox' | 'archive'>('inbox')
   // Stored links predate the org-slug/subdomain routes (AGL-644), so they are
   // normalized when followed. Resolving a host's subdomain needs the current
   // org's sites; a notification for another org simply won't resolve and the
@@ -257,6 +263,16 @@ export function NotificationsMenu() {
     }
   }
 
+  const list = (recent ?? []) as Array<AglynNotification & { $id: string }>
+  const inbox = list.filter((item) => !item.readAt)
+  const archive = list.filter((item) => Boolean(item.readAt))
+  const shown = tab === 'inbox' ? inbox : archive
+  const close = () => setAnchor(null)
+  const goto = (href: string) => {
+    close()
+    void router.push(href)
+  }
+
   return (
     <>
       <Tooltip title="Notifications">
@@ -274,79 +290,187 @@ export function NotificationsMenu() {
           </Badge>
         </IconButton>
       </Tooltip>
-      <Menu
+      <Popover
         anchorEl={anchor}
         open={Boolean(anchor)}
-        onClose={() => setAnchor(null)}
-        slotProps={{ paper: { sx: { width: 360, maxWidth: '90vw' } } }}
+        onClose={close}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: 380,
+              maxWidth: '92vw',
+              mt: 0.75,
+              borderRadius: 2,
+              border: 1,
+              borderColor: 'divider',
+              backgroundColor: 'surface.main',
+              backgroundImage: 'none',
+              boxShadow: '0px 8px 24px rgba(0,0,0,0.18)',
+              overflow: 'hidden',
+            },
+          },
+        }}
       >
+        {/* Inbox / Archive tabs + settings gear. */}
         <Stack
           direction="row"
-          sx={{ px: 2, py: 0.5, alignItems: 'center' }}
+          sx={{ alignItems: 'center', pl: 1, pr: 0.5, pt: 0.5 }}
         >
-          <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
-            {'Notifications'}
-          </Typography>
-          <Tooltip title="Mark all read">
+          <Tabs
+            value={tab}
+            onChange={(_event, value) => setTab(value)}
+            sx={{ flex: 1, minHeight: 40, '& .MuiTab-root': { minHeight: 40 } }}
+          >
+            <Tab
+              value="inbox"
+              label="Inbox"
+              sx={{ textTransform: 'none', minWidth: 0, px: 1.5 }}
+            />
+            <Tab
+              value="archive"
+              label="Archive"
+              sx={{ textTransform: 'none', minWidth: 0, px: 1.5 }}
+            />
+          </Tabs>
+          <Tooltip title="Notification settings">
             <IconButton
               size="small"
-              onClick={handleMarkAll}
-              disabled={unreadCount === 0}
+              aria-label="Notification settings"
+              onClick={() => goto(buildRoute(Route.MANAGE_NOTIFICATIONS))}
             >
-              <MdiIcon path={mdiCheckAll.path} sx={{ fontSize: '1rem' }} />
+              <MdiIcon path={mdiCogOutline.path} fontSize="small" />
             </IconButton>
           </Tooltip>
         </Stack>
         <Divider />
-        {(recent ?? []).length === 0 ? (
-          <Box sx={{ px: 2, py: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              {"You're all caught up."}
-            </Typography>
-          </Box>
-        ) : (
-          (recent ?? []).map((notification) => (
-            <MenuItem
-              key={notification.$id}
-              onClick={() => handleOpenItem(notification)}
-              sx={{ whiteSpace: 'normal', alignItems: 'flex-start' }}
+
+        <Box sx={{ maxHeight: 380, overflowY: 'auto' }}>
+          {shown.length === 0 ? (
+            <Stack
+              sx={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1.5,
+                py: 6,
+                px: 2,
+              }}
             >
-              <Stack sx={{ minWidth: 0 }}>
-                <Typography
-                  variant="body2"
+              <Box
+                sx={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  bgcolor: 'action.hover',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <MdiIcon
+                  path={mdiInboxOutline.path}
+                  sx={{ color: 'text.secondary', fontSize: 24 }}
+                />
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                {tab === 'inbox'
+                  ? 'No new notifications'
+                  : 'No archived notifications'}
+              </Typography>
+            </Stack>
+          ) : (
+            shown.map((notification) => (
+              <Box
+                key={notification.$id}
+                onClick={() => handleOpenItem(notification)}
+                sx={{
+                  display: 'flex',
+                  gap: 1.25,
+                  px: 2,
+                  py: 1.25,
+                  cursor: 'pointer',
+                  borderBottom: 1,
+                  borderColor: 'divider',
+                  '&:hover': { backgroundColor: 'action.hover' },
+                }}
+              >
+                <Box
                   sx={{
-                    fontWeight: notification.readAt
-                      ? 'fontWeightRegular'
-                      : 'fontWeightMedium',
+                    width: 8,
+                    flexShrink: 0,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    pt: 0.75,
                   }}
                 >
-                  {notification.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {(NOTIFICATION_TYPE_LABELS as any)[notification.type] ??
-                    notification.type}
-                  {' · '}
-                  {notification.createdAt?.toDate?.().toLocaleString() ?? ''}
-                </Typography>
-              </Stack>
-            </MenuItem>
-          ))
-        )}
+                  {notification.readAt ? null : (
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        bgcolor: 'secondary.main',
+                      }}
+                    />
+                  )}
+                </Box>
+                <Stack sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: notification.readAt ? 400 : 600 }}
+                  >
+                    {notification.title}
+                  </Typography>
+                  {notification.body ? (
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {notification.body}
+                    </Typography>
+                  ) : null}
+                  <Typography variant="caption" color="text.secondary">
+                    {(NOTIFICATION_TYPE_LABELS as any)[notification.type] ??
+                      notification.type}
+                    {' · '}
+                    {notification.createdAt?.toDate?.().toLocaleString() ?? ''}
+                  </Typography>
+                </Stack>
+              </Box>
+            ))
+          )}
+        </Box>
+
         <Divider />
-        <Box sx={{ px: 1, py: 0.5 }}>
+        <Stack direction="row" sx={{ alignItems: 'center', p: 1, gap: 1 }}>
+          {tab === 'inbox' && inbox.length > 0 ? (
+            <Button
+              size="small"
+              startIcon={
+                <MdiIcon path={mdiCheckAll.path} sx={{ fontSize: '1rem' }} />
+              }
+              onClick={handleMarkAll}
+            >
+              {'Mark all read'}
+            </Button>
+          ) : null}
+          <Box sx={{ flex: 1 }} />
           <Button
-            fullWidth
             size="small"
             color="secondary"
-            onClick={() => {
-              setAnchor(null)
-              void router.push(buildRoute(Route.MANAGE_NOTIFICATIONS))
-            }}
+            onClick={() => goto(buildRoute(Route.MANAGE_NOTIFICATIONS))}
           >
             {'View all'}
           </Button>
-        </Box>
-      </Menu>
+        </Stack>
+      </Popover>
     </>
   )
 }
