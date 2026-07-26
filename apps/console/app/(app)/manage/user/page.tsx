@@ -43,10 +43,12 @@ import {
   Box,
   Button,
   Chip,
+  Divider,
   Stack,
   TextField,
   Typography,
 } from '@mui/material'
+import { mdiLockOutline } from '@aglyn/shared-data-mdi'
 import { logEvent } from 'firebase/analytics'
 import {
   GoogleAuthProvider,
@@ -59,7 +61,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useAnalytics, useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
@@ -112,6 +114,36 @@ const PROVIDER_LABELS: Record<string, string> = {
   'apple.com': 'Apple',
   'github.com': 'GitHub',
   'microsoft.com': 'Microsoft',
+}
+
+/** Official multicolor Google "G" (AGL-873), for the branded sign-in row/button. */
+function GoogleGlyph({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 48 48"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
+  )
 }
 
 const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
@@ -314,64 +346,128 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
           sx={{ alignSelf: 'flex-start' }}
         />
 
-        {/* Connect / disconnect sign-in providers (AGL-860). */}
+        {/* Sign-in methods (AGL-860, redesigned AGL-873). Email & password is
+            the account baseline and is never disconnectable. */}
         <Box>
           <Typography variant="subtitle2">{'Sign-in methods'}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {'How you sign in to Aglyn. Add another for a backup way in, or ' +
-              'remove one you no longer use — keep at least one.'}
+            {'How you sign in to Aglyn. Connect another for a backup way in.'}
           </Typography>
         </Box>
-        <Stack spacing={1}>
-          {providerIds.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {'No sign-in methods found.'}
-            </Typography>
-          ) : (
-            providerIds.map((id) => {
-              const canRemove = providerIds.length > 1
+        {providerIds.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {'No sign-in methods found.'}
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}
+          >
+            {providerIds.map((id, index) => {
+              const isGoogle = id === 'google.com'
+              const isPassword = id === 'password'
+              // Password is the account baseline — never removable. An OAuth
+              // provider is removable only when it isn't the last method left.
+              const canRemove =
+                !isPassword && providerIds.filter((p) => p !== id).length > 0
+              const sub = isGoogle
+                ? (user?.email ?? 'Connected')
+                : isPassword
+                  ? 'Sign in with your email and password'
+                  : 'Connected'
               return (
-                <Stack
-                  key={id}
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
-                    {PROVIDER_LABELS[id] ?? id}
-                  </Typography>
-                  <Button
-                    size="small"
-                    color="error"
-                    disabled={linkBusy || !canRemove}
-                    onClick={() => void disconnectProvider(id, canRemove)}
+                <Box key={id}>
+                  {index > 0 ? <Divider /> : null}
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    sx={{ alignItems: 'center', px: 2, py: 1.5 }}
                   >
-                    {'Disconnect'}
-                  </Button>
-                </Stack>
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        bgcolor: isGoogle ? 'common.white' : 'action.hover',
+                        border: isGoogle ? '1px solid' : 'none',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      {isGoogle ? (
+                        <GoogleGlyph />
+                      ) : (
+                        <MdiIcon
+                          path={mdiLockOutline.path}
+                          fontSize="small"
+                          sx={{ color: 'text.secondary' }}
+                        />
+                      )}
+                    </Box>
+                    <Stack sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {PROVIDER_LABELS[id] ?? id}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                      >
+                        {sub}
+                      </Typography>
+                    </Stack>
+                    {isPassword ? (
+                      <Chip size="small" variant="outlined" label="Required" />
+                    ) : (
+                      <Button
+                        size="small"
+                        color="error"
+                        disabled={linkBusy || !canRemove}
+                        onClick={() => void disconnectProvider(id, canRemove)}
+                      >
+                        {'Disconnect'}
+                      </Button>
+                    )}
+                  </Stack>
+                </Box>
               )
-            })
-          )}
-        </Stack>
+            })}
+          </Box>
+        )}
         {!providerIds.includes('google.com') ? (
           <Button
-            size="small"
             variant="outlined"
+            startIcon={<GoogleGlyph />}
             disabled={linkBusy}
             onClick={() => void connectGoogle()}
-            sx={{ alignSelf: 'flex-start' }}
+            sx={(theme) => ({
+              alignSelf: 'flex-start',
+              textTransform: 'none',
+              fontWeight: 500,
+              px: 2,
+              py: 0.75,
+              color: theme.palette.mode === 'dark' ? '#e3e3e3' : '#3c4043',
+              backgroundColor:
+                theme.palette.mode === 'dark' ? '#131314' : '#fff',
+              borderColor:
+                theme.palette.mode === 'dark' ? '#5f6368' : '#dadce0',
+              '&:hover': {
+                backgroundColor:
+                  theme.palette.mode === 'dark' ? '#1f1f20' : '#f8f9fa',
+                borderColor:
+                  theme.palette.mode === 'dark' ? '#5f6368' : '#dadce0',
+              },
+            })}
           >
-            {'Connect Google'}
+            {'Continue with Google'}
           </Button>
-        ) : null}
-        {!hasPassword ? (
-          <Typography variant="caption" color="text.secondary">
-            {'You sign in with ' +
-              (providerIds
-                .map((id) => PROVIDER_LABELS[id] ?? id)
-                .join(', ') || 'a linked provider') +
-              ' — there is no password to change here.'}
-          </Typography>
         ) : null}
       </Stack>
     </CardDisplay>
@@ -389,26 +485,44 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
       contentGutterX
       contentGutterY
     >
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{ alignItems: 'center', maxWidth: 560 }}
-      >
-        <Avatar src={photoUrl || undefined} sx={{ width: 56, height: 56 }}>
-          {(user?.displayName || user?.email || '?').slice(0, 1).toUpperCase()}
-        </Avatar>
-        <Box sx={{ flex: 1 }}>
-          <MediaUrlField
-            label="Image URL"
-            helperText="Browse the org media library or paste an https URL"
-            orgId={currentOrg?.$id ?? null}
-            value={photoUrl}
-            onChange={setPhotoUrl}
-          />
-        </Box>
-        <Button variant="outlined" onClick={() => void handlePhotoSave()}>
-          {'Save'}
-        </Button>
+      <Stack spacing={2.5} sx={{ maxWidth: 560 }}>
+        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+          <Avatar
+            src={photoUrl || undefined}
+            sx={{
+              width: 72,
+              height: 72,
+              fontSize: 28,
+              border: '1px solid',
+              borderColor: 'divider',
+            }}
+          >
+            {(user?.displayName || user?.email || '?').slice(0, 1).toUpperCase()}
+          </Avatar>
+          <Stack spacing={0.25}>
+            <Typography variant="subtitle2">{'Your avatar'}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {'Shown across the console — the app bar, comments, and team ' +
+                'lists.'}
+            </Typography>
+          </Stack>
+        </Stack>
+        <MediaUrlField
+          label="Image URL"
+          helperText="Browse the org media library or paste an https URL"
+          orgId={currentOrg?.$id ?? null}
+          value={photoUrl}
+          onChange={setPhotoUrl}
+        />
+        <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => void handlePhotoSave()}
+          >
+            {'Save'}
+          </Button>
+        </Stack>
       </Stack>
     </CardDisplay>
   )
