@@ -308,6 +308,12 @@ export interface AglynScreen extends AglynDocument {
   status?: HostScreenStatus
   createdAt?: ITimestamp
   updatedAt?: ITimestamp
+  /**
+   * When the screen's route was last published (AGL: date-published). Stamped
+   * by `publishScreenRoute` and cleared on unpublish, so it is present only
+   * while the screen is reachable — distinct from `createdAt`.
+   */
+  publishedAt?: ITimestamp
   deletedAt?: ITimestamp
   displayName?: string
   description?: string

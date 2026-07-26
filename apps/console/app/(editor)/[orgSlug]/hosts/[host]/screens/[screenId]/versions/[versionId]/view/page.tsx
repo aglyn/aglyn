@@ -587,6 +587,14 @@ function ScreenDetails() {
       icon: { path: ICON_VARIANT_DATE_TIME.path },
     },
     {
+      key: 'datePublished',
+      primary: 'Date published:',
+      // Present only while the route is live (cleared on unpublish); '--'
+      // otherwise via the ListItemText fallback below.
+      secondary: screen?.publishedAt?.toDate?.()?.toLocaleString(),
+      icon: { path: ICON_VARIANT_DATE_TIME.path },
+    },
+    {
       key: 'dateUpdated',
       primary: 'Last updated:',
       secondary: screen?.updatedAt?.toDate?.()?.toLocaleString(),

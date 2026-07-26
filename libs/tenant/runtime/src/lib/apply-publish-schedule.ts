@@ -64,6 +64,9 @@ export async function applyDuePublishSchedule(options: {
           }),
           hostRef.collection(collectionName).doc(docId).update({
             'publishSchedule.status': 'applied',
+            // Route no longer live — drop the published date to match the
+            // interactive unpublish path (constants/screen-publishing.ts).
+            publishedAt: FieldValue.delete(),
           }),
         ])
       } catch (error) {

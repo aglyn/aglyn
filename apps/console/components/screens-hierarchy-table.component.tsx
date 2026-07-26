@@ -69,6 +69,7 @@ export interface ScreenHierarchyRow {
   versionId?: string
   createdAt?: { toDate?: () => Date; seconds?: number }
   updatedAt?: { toDate?: () => Date }
+  publishedAt?: { toDate?: () => Date }
 }
 
 /**
@@ -308,7 +309,9 @@ function ScreenTableRow(props: {
       <TableCell>{path ? screenRoutePathToUrl(path) : '--'}</TableCell>
       <TableCell>{row.description || '--'}</TableCell>
       <TableCell>{row.updatedAt?.toDate?.().toLocaleString() || '--'}</TableCell>
-      <TableCell>{row.createdAt?.toDate?.().toLocaleString() || '--'}</TableCell>
+      <TableCell>
+        {row.publishedAt?.toDate?.().toLocaleString() || '--'}
+      </TableCell>
       <TableCell
         align="right"
         sx={{ whiteSpace: 'nowrap' }}
@@ -465,7 +468,7 @@ export function ScreensHierarchyTableComponent(
               <TableCell sx={{ minWidth: 120 }}>Path</TableCell>
               <TableCell sx={{ minWidth: 200 }}>Description</TableCell>
               <TableCell sx={{ minWidth: 150 }}>Updated</TableCell>
-              <TableCell sx={{ minWidth: 150 }}>Created</TableCell>
+              <TableCell sx={{ minWidth: 150 }}>Published</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>

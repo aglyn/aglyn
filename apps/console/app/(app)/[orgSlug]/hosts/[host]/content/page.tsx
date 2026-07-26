@@ -758,7 +758,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                       <TableCell>{'Title'}</TableCell>
                       <TableCell>{'Status'}</TableCell>
                       <TableCell>{'Updated'}</TableCell>
-                      <TableCell>{'Created'}</TableCell>
+                      <TableCell>{'Published'}</TableCell>
                       <TableCell align="right">{'Actions'}</TableCell>
                     </TableRow>
                   </TableHead>
@@ -796,8 +796,7 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                           <Typography
                             variant="caption"
                             color="text.secondary"
-                            component="span"
-                            sx={{ ml: 1 }}
+                            component="div"
                           >
                             {`/${selected?.slug}/${entry.slug}`}
                           </Typography>
@@ -823,7 +822,8 @@ const HostContent: NextPageWithLayout<Record<string, never>> = () => {
                           {entry.updatedAt?.toDate?.().toLocaleString() ?? '--'}
                         </TableCell>
                         <TableCell>
-                          {entry.createdAt?.toDate?.().toLocaleString() ?? '--'}
+                          {entry.publishedAt?.toDate?.().toLocaleString() ??
+                            '--'}
                         </TableCell>
                         <TableCell
                           align="right"
