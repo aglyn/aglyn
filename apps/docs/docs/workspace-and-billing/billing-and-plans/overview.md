@@ -48,10 +48,28 @@ Stripe's payment-processing fees. Upgrading is the way to reduce them.
 
 ## Seats
 
-- Team and site-member **seats** are metered and enforced per tier.
+- **Team seats** (workspace-wide) and per-site **collaborator seats** are metered and
+  enforced per tier — seats cover the people who build and manage your sites.
 - Buy **paid seat add-ons** to grow your team beyond the included seats —
   self-serve from [Billing → Add-ons](add-ons.md), alongside extra sites,
   datasets, POS registers, and the Event Calendar.
+- **Site member accounts are not seats**: visitors who sign up to your published
+  site are unlimited on every plan.
+
+## Audience (contacts)
+
+Your **contacts CRM** — form fills, member sign-ups, buyers, and bookings unified into
+one people list — is priced as an **audience band**, not a hard cap:
+
+- Each tier includes a band: Free 100, Starter 1,000, Pro 10,000, Business 100,000,
+  Advanced 1,000,000 contacts.
+- On **paid tiers**, growing past the band never blocks or drops anything — extra
+  contacts are **metered overage** on your monthly invoice: $1.00 (Starter), $0.75
+  (Pro), $0.50 (Business), or $0.25 (Advanced) per extra 1,000 contacts per month.
+  Upgrading a tier is always cheaper than sustained overage.
+- On **Free**, the band is a hard limit: new visitors past 100 keep their member
+  accounts and orders, but no CRM record is kept — the contacts page shows how many
+  were missed so you can upgrade before it matters.
 
 ## Organization data
 

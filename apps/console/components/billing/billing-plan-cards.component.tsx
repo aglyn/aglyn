@@ -248,6 +248,13 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                   <Typography variant="body2">
                     {'Unlimited member accounts'}
                   </Typography>
+                  {/* Audience band (AGL-890): paid tiers meter overage. */}
+                  <Typography variant="body2">
+                    {`${entitlements.contactsPerHost.toLocaleString()} contacts`}
+                    {pricing.extraContactsUsdPer1k != null
+                      ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+                      : ''}
+                  </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
                       `${quotaLabel(entitlements.functionsPerHost)} functions · ` +

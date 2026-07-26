@@ -37,6 +37,11 @@ Contacts are ingested from across your site:
 
 Duplicate signals from the same person are unified into one contact.
 
+Contacts are priced as an **audience band**: every tier includes a number of contacts,
+and paid tiers meter growth past the band onto your monthly invoice instead of ever
+dropping a record. Only the Free tier's band is a hard limit. See
+[Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md).
+
 ## The contacts page
 
 - Browse the **list** of contacts.

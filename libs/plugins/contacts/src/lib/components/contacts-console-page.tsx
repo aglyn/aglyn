@@ -23,6 +23,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useFirestoreDoc,
   useHostOrgId,
 } from '@aglyn/tenant-feature-instance'
 import {
@@ -107,6 +108,13 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
   // Audience bands (AGL-890): paid plans meter past the included count
   // instead of blocking; only free hard-bands (quota.allowed = false).
   const quota = checkContactQuota(org, contacts.length)
+  // Signups whose CRM record was dropped at the free band (AGL-891) —
+  // written by upsert-contact, host-scoped.
+  const { data: droppedCounter } = useFirestoreDoc<any>(
+    () => doc(firestore, 'hosts', hostId, 'counters', 'contactsDropped'),
+    [firestore, hostId],
+  )
+  const droppedTotal = Number(droppedCounter?.['total'] ?? 0)
 
   // Saved segments (AGL-199): reusable audience filters.
   const { data: segmentDocs } = useFirestoreCollection<any>(
@@ -377,7 +385,11 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                 {!quota.allowed ? (
                   <Alert severity="warning">
                     {'Contact limit reached — new visitors are no longer ' +
-                      'captured. Upgrade in Billing to keep collecting.'}
+                      'captured' +
+                      (droppedTotal > 0
+                        ? ` (${droppedTotal.toLocaleString()} missed so far)`
+                        : '') +
+                      '. Upgrade in Billing to keep collecting.'}
                   </Alert>
                 ) : quota.overageContacts > 0 &&
                   quota.overageRateUsd != null ? (
@@ -387,6 +399,12 @@ export function ContactsConsolePage(props: ConsolePluginPageProps) {
                       `metered at $${quota.overageRateUsd}/1,000 per month ` +
                       `(≈$${quota.overageMonthlyUsd.toFixed(2)} this month). ` +
                       'Upgrade in Billing for a larger included audience.'}
+                  </Alert>
+                ) : droppedTotal > 0 ? (
+                  <Alert severity="info">
+                    {`${droppedTotal.toLocaleString()} earlier visitor${
+                      droppedTotal === 1 ? ' was' : 's were'
+                    } not captured while your contact band was full.`}
                   </Alert>
                 ) : null}
                 {contacts.length === 0 ? (
