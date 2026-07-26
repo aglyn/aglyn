@@ -141,6 +141,16 @@ export async function serveMediaCdn(
           ),
     )
     if (metadata.size) res.setHeader('Content-Length', String(metadata.size))
+    // Give downloads a real filename+extension (AGL-834): the URL is
+    // mediaId-keyed and extensionless, so without this a "save image" lands
+    // as a name-less blob.
+    const downloadName = String(snapshot.get('fileName') ?? mediaId).replace(
+      /["\\\r\n]/g,
+      '',
+    )
+    if (downloadName) {
+      res.setHeader('Content-Disposition', `inline; filename="${downloadName}"`)
+    }
     if (hashed) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
     }
