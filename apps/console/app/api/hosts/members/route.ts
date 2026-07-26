@@ -111,9 +111,9 @@ async function handler(request: Request): Promise<Response> {
         if (!quota.allowed) {
           return Response.json({
             error: quota.upgradeRequired
-              ? `Member limit reached (${quota.limit}) — upgrade your plan ` +
-                'to add more members'
-              : `Member seats full (${quota.limit}) — add seats for ` +
+              ? `Collaborator limit reached (${quota.limit}) — upgrade ` +
+                'your plan to add more collaborators'
+              : `Collaborator seats full (${quota.limit}) — add seats for ` +
                 `$${quota.addonPriceUsd}/mo each from Billing`,
           }, { status: 403 })
         }

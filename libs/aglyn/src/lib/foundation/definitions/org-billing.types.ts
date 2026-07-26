@@ -142,11 +142,18 @@ export interface OrgEntitlements {
   // Firestore and Stripe lookup keys stay as they are — they are persisted.
   storagePerHostMb?: number
   totalSiteSizeMb?: number
+  /**
+   * Included per-site COLLABORATOR seats (`hosts/{id}/members`,
+   * viewer/editor/admin) — console teammates scoped to one site, not
+   * end-user member accounts (`siteMembers`), which are unlimited on
+   * every plan (AGL-888/889). Legacy key name; persisted, do not rename.
+   */
   membersPerHost?: number
   /** Seat model (AGL-112): included tenant-manager seats. */
   managersPerOrg?: number
   /** Hard seat caps incl. purchased addons; beyond these, upgrade the plan. */
   maxManagersPerOrg?: number
+  /** Hard per-site collaborator cap incl. addons (see `membersPerHost`). */
   maxMembersPerHost?: number
   bandwidthGb?: number
   /** Form submissions accepted per calendar month (Forms & Lead Capture). */
@@ -212,7 +219,11 @@ export interface OrgEntitlements {
 export interface OrgSeatAddons {
   /** Extra tenant-manager seats. */
   managers?: number
-  /** Extra host-member seats (applies per host). */
+  /**
+   * Extra per-site collaborator seats (applies per host). Legacy key name
+   * (AGL-888): the Stripe price env suffix is still `EXTRA_MEMBER` and
+   * existing org docs carry this key — persisted, do not rename.
+   */
   members?: number
   /** Extra org datasets (AGL-132/240); billed monthly per dataset. */
   datasets?: number

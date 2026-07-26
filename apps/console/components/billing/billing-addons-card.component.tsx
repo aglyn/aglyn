@@ -62,8 +62,9 @@ const ADDON_ROWS: readonly AddonRow[] = [
   },
   {
     kind: 'members',
-    label: 'Member seats',
-    description: 'Site member seats beyond the included count, per site.',
+    label: 'Collaborator seats',
+    description:
+      'Per-site collaborator (teammate) seats beyond the included count.',
   },
   {
     kind: 'datasets',

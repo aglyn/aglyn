@@ -37,12 +37,17 @@ function GuardSpinner() {
  * memberships load.
  */
 export function OrgGuard({ children }: { children?: ReactNode }) {
-  const { orgs, pathOrgSlug, loading } = useOrgScope()
+  const { orgs, pathOrgSlug, loading, confirmed } = useOrgScope()
   const known = !pathOrgSlug || orgs.some((org) => org.slug === pathOrgSlug)
 
   // Hold the child tree until memberships resolve to avoid flashing the 404
   // (or a foreign org's shell) before the slug is confirmed.
   if (loading) return <GuardSpinner />
+  // A cache-served miss is NOT a confirmed miss (AGL-886, same class as
+  // AGL-813/827/875): on a cold load the first snapshot can come from a
+  // stale IndexedDB cache and false-404 a valid workspace. Only 404 once
+  // the server has echoed the membership list; a hit renders immediately.
+  if (!known && !confirmed) return <GuardSpinner />
   if (!known) notFound()
   return <>{children}</>
 }

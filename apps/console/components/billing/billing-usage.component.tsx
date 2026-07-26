@@ -135,7 +135,7 @@ function HostUsageMeters(props: {
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'functions'),
       ).catch(() => null),
-      // Member seats (AGL-107/119).
+      // Per-site collaborator seats (AGL-107/119, renamed AGL-888).
       getCountFromServer(
         collection(firestore, 'hosts', host.$id, 'members'),
       ).catch(() => null),
@@ -221,8 +221,10 @@ function HostUsageMeters(props: {
         used={counts.layouts}
         limit={entitlements.sharedLayoutsPerHost}
       />
+      {/* Per-site console collaborators (AGL-888), not end-user member
+          accounts — those are unlimited and never metered. */}
       <UsageMeter
-        label="Members"
+        label="Site collaborators"
         used={counts.members}
         limit={memberSeatLimit}
       />

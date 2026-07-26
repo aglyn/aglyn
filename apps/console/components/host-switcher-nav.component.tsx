@@ -44,7 +44,7 @@ import {
 import { buildRoute, Route } from '../constants/route-links'
 import { hostDisplayDomain } from '../constants/tenant-links'
 import { useHostId, useHostSubdomain } from '../components/host-id-provider'
-import { useOrgScope } from '../hooks/use-org-scope'
+import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import CreateHostDialog from './create-host-dialog.component'
 import HostIcon from './host-icon.component'
@@ -67,7 +67,11 @@ export function HostSwitcherNavComponent() {
   const router = useRouter()
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { currentOrg, orgSlug } = useOrgScope()
+  const { currentOrg } = useOrgScope()
+  // The ROUTE slug (path → current org), not `useOrgScope().orgSlug` — that
+  // one is the workspace SUBDOMAIN, null on localhost and the console apex,
+  // which built literal `/<orgSlug?>/hosts/…` links (AGL-893).
+  const orgSlug = useOrgSlug()
   const uid = user?.uid
   const orgId = currentOrg?.$id
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)

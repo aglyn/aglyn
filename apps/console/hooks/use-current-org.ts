@@ -23,7 +23,13 @@ import { useEffect, useState } from 'react'
 import useOrgScope from './use-org-scope'
 
 const RETRY_DELAY_MS = 400
-const MAX_RETRIES = 5
+// Exponential backoff (AGL-887): 5 flat 400ms retries burned out in ~2s,
+// well inside a cold load's App Check/token window — the subscription then
+// silently gave up and plan-dependent UI (the switcher badge, the Upgrade
+// CTA) rendered as if the org were free. 8 doubling attempts spread the
+// same give-up point across ~1.5 minutes.
+const MAX_RETRIES = 8
+const MAX_RETRY_DELAY_MS = 15_000
 
 /**
  * The org workspace's billing doc — the entitlement source the signed-in
@@ -42,6 +48,13 @@ export function useCurrentOrg(): {
   org: Partial<AglynOrgBilling> | undefined
   /** The org the billing data came from, once orgs carry it (AGL-237). */
   orgId: string | undefined
+  /**
+   * True once a snapshot for the CURRENT org has actually arrived (AGL-887).
+   * `org === undefined` conflates "still loading / read failing" with "no
+   * org doc" — plan-dependent UI must not render a fallback tier (or an
+   * Upgrade CTA) until this is true, or a failed read masquerades as Free.
+   */
+  ready: boolean
 } {
   const firestore = useFirestore()
   const { currentOrg, loading: orgsLoading } = useOrgScope()
@@ -55,11 +68,13 @@ export function useCurrentOrg(): {
   const [org, setOrg] = useState<Partial<AglynOrgBilling> | undefined>(
     undefined,
   )
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     // Clear on every scope change (AGL-591): switching orgs must not keep
     // the previous org's name/logo in the switcher until the new doc lands.
     setOrg(undefined)
+    setReady(false)
     if (!sourcePath) {
       return
     }
@@ -80,14 +95,21 @@ export function useCurrentOrg(): {
               ? ({ $id: snapshot.id, ...snapshot.data() } as Partial<AglynOrgBilling>)
               : undefined,
           )
+          setReady(true)
         },
         () => {
           if (cancelled) return
           unsubscribe?.()
           if (attempt < MAX_RETRIES) {
+            const delay = Math.min(
+              RETRY_DELAY_MS * 2 ** attempt,
+              MAX_RETRY_DELAY_MS,
+            )
             attempt += 1
-            timer = setTimeout(subscribe, RETRY_DELAY_MS)
+            timer = setTimeout(subscribe, delay)
           }
+          // Retries exhausted: `ready` stays false, so plan-dependent UI
+          // shows nothing rather than a wrong "Free" (AGL-887).
         },
       )
     }
@@ -102,7 +124,7 @@ export function useCurrentOrg(): {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firestore, sourcePath?.[0], sourcePath?.[1]])
 
-  return { org, orgId }
+  return { org, orgId, ready }
 }
 
 export default useCurrentOrg

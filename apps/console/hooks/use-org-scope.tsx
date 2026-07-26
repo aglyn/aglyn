@@ -70,6 +70,13 @@ export interface OrgScopeContextValue {
    */
   pathOrgSlug: string | null
   loading: boolean
+  /**
+   * True once the membership list has been echoed by the SERVER (AGL-886).
+   * The first snapshot can come from the IndexedDB cache and be empty or
+   * stale on a cold load (AGL-813/827) — a miss is only real once this is
+   * true. A positive hit never needs to wait on it.
+   */
+  confirmed: boolean
 }
 
 const OrgScopeContext = createContext<OrgScopeContextValue>({
@@ -79,6 +86,7 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   orgSlug: null,
   pathOrgSlug: null,
   loading: true,
+  confirmed: false,
 })
 
 /**
@@ -99,6 +107,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     typeof params?.orgSlug === 'string' ? params.orgSlug : null
   const [orgs, setOrgs] = useState<UserOrgMembership[]>([])
   const [loading, setLoading] = useState(true)
+  const [confirmed, setConfirmed] = useState(false)
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [subdomainOrgId, setSubdomainOrgId] = useState<string | null>(null)
   const orgSlug = useMemo(subdomainSlugFromLocation, [])
@@ -107,17 +116,32 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     if (!user?.uid) {
       setOrgs([])
       setLoading(false)
+      setConfirmed(false)
       return undefined
     }
     setLoading(true)
+    setConfirmed(false)
+    // Metadata changes included so the cache→server confirmation is
+    // delivered even when the data is identical (AGL-886): without it, a
+    // cache-served empty that the server agrees with would never re-fire,
+    // and the guard below could neither 404 nor stop spinning.
+    let seeded = false
     return onSnapshot(
       query(collection(firestore, 'users', user.uid, 'orgs'), limit(50)),
+      { includeMetadataChanges: true },
       (snapshot) => {
-        setOrgs(
-          snapshot.docs.map(
-            (entry) => ({ $id: entry.id, ...entry.data() }) as UserOrgMembership,
-          ),
-        )
+        if (!snapshot.metadata.fromCache) setConfirmed(true)
+        // Metadata-only ticks carry no doc changes — skip the list write so
+        // the whole app doesn't re-render on the confirmation event.
+        if (!seeded || snapshot.docChanges().length) {
+          seeded = true
+          setOrgs(
+            snapshot.docs.map(
+              (entry) =>
+                ({ $id: entry.id, ...entry.data() }) as UserOrgMembership,
+            ),
+          )
+        }
         setLoading(false)
       },
       () => setLoading(false),
@@ -182,8 +206,9 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       orgSlug,
       pathOrgSlug,
       loading,
+      confirmed,
     }),
-    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading],
+    [orgs, currentOrg, selectOrg, orgSlug, pathOrgSlug, loading, confirmed],
   )
 
   return (

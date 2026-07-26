@@ -42,7 +42,10 @@ workspace automatically. The team features above keep working unchanged.
 
 ## Seats
 
-Team and site-member seats are metered and enforced; buy seat add-ons to grow. See
+Seats cover your **team only**: organization seats (workspace-wide) and per-site
+**collaborator seats** (teammates limited to one site). Both are metered and enforced;
+buy seat add-ons to grow. Site **member accounts** — visitors who sign up to your
+published site — are not seats and are never capped. See
 [Billing & plans](../billing-and-plans/overview.md).
 
 :::tip How-tos
