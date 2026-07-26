@@ -37,6 +37,10 @@ export type AglynNotificationType =
   | 'content.lowStock'
   // Marketplace review verdicts (AGL-432/653).
   | 'community.review'
+  // Support desk, staff audience (AGL-850): a subscriber opened or replied to
+  // a ticket. Fanned out to staff-claim holders, not org members.
+  | 'support.ticketOpened'
+  | 'support.ticketReply'
   | 'system.announcement'
 
 export interface AglynNotification {
@@ -66,6 +70,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
     'content.order': 'New order',
     'content.lowStock': 'Low stock',
     'community.review': 'Listing review',
+    'support.ticketOpened': 'New support ticket',
+    'support.ticketReply': 'Support ticket reply',
     'system.announcement': 'Announcement',
   }
 
@@ -75,6 +81,7 @@ export type NotificationCategory =
   | 'team'
   | 'content'
   | 'community'
+  | 'support'
   | 'system'
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<
@@ -85,6 +92,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<
   team: 'Team & access',
   content: 'Forms & bookings',
   community: 'Marketplace',
+  support: 'Support',
   system: 'Product & system',
 }
 
@@ -93,7 +101,9 @@ export function notificationCategory(
 ): NotificationCategory {
   const prefix = String(type).split('.')[0]
   return (
-    ['billing', 'team', 'content', 'community', 'system'].includes(prefix)
+    ['billing', 'team', 'content', 'community', 'support', 'system'].includes(
+      prefix,
+    )
       ? prefix
       : 'system'
   ) as NotificationCategory
