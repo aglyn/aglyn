@@ -54,7 +54,7 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import { doc, setDoc } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useAnalytics, useAuth, useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import CardDisplayFormTemplate from '../../../../components/card-display-form-template'
@@ -112,7 +112,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 }
 
 const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
-  const [tab, setTab] = useState('basic')
+  const [tab, setTab] = useState('account')
   const { data: user } = useUser()
   const firestore = useFirestore()
   const { currentOrg } = useOrgScope()
@@ -214,165 +214,169 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
     [enqueueSnackbar, firebaseAuth, queueLoading, user],
   )
 
-  const forms = [
-    {
-      schema: basicSchema,
-      initialValues: data,
-      onSubmit: handleBasicSave,
-    },
-    // The change-password form only makes sense for an account that has a
-    // password (AGL-852). A Google-only account has none, and its reauth threw
-    // — so drop the tab and explain sign-in via the account card instead.
+  // Account email & sign-in (AGL-852), now a tab (AGL-859).
+  const accountCard: ReactNode = (
+    <CardDisplay
+      header={'Account'}
+      help={docsHelp('account', {
+        excerpt:
+          'The email you sign in with and the providers linked to your ' +
+          'account.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack spacing={2} sx={{ maxWidth: 560 }}>
+        <TextField
+          label="Email"
+          value={user?.email ?? ''}
+          size="small"
+          fullWidth
+          slotProps={{ input: { readOnly: true } }}
+          helperText="Set by your sign-in provider — change it there, not here."
+        />
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+        >
+          <Typography variant="body2" color="text.secondary">
+            {'Sign-in:'}
+          </Typography>
+          {providerIds.length === 0 ? (
+            <Chip size="small" label="Unknown" variant="outlined" />
+          ) : (
+            providerIds.map((id) => (
+              <Chip key={id} size="small" label={PROVIDER_LABELS[id] ?? id} />
+            ))
+          )}
+          <Chip
+            size="small"
+            variant="outlined"
+            color={user?.emailVerified ? 'success' : 'warning'}
+            label={user?.emailVerified ? 'Verified' : 'Unverified'}
+          />
+        </Stack>
+        {!hasPassword ? (
+          <Typography variant="caption" color="text.secondary">
+            {'You sign in with ' +
+              (providerIds
+                .map((id) => PROVIDER_LABELS[id] ?? id)
+                .join(', ') || 'a linked provider') +
+              ' — there is no password to change here.'}
+          </Typography>
+        ) : null}
+      </Stack>
+    </CardDisplay>
+  )
+
+  // Profile image (AGL-365), now a tab (AGL-859).
+  const profileCard: ReactNode = (
+    <CardDisplay
+      header={'Profile image'}
+      help={docsHelp('account', {
+        excerpt:
+          'Your personal avatar across the console — the app bar, ' +
+          'comments, and team lists.',
+      })}
+      contentGutterX
+      contentGutterY
+    >
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{ alignItems: 'center', maxWidth: 560 }}
+      >
+        <Avatar src={photoUrl || undefined} sx={{ width: 56, height: 56 }}>
+          {(user?.displayName || user?.email || '?').slice(0, 1).toUpperCase()}
+        </Avatar>
+        <Box sx={{ flex: 1 }}>
+          <MediaUrlField
+            label="Image URL"
+            helperText="Browse the org media library or paste an https URL"
+            orgId={currentOrg?.$id ?? null}
+            value={photoUrl}
+            onChange={setPhotoUrl}
+          />
+        </Box>
+        <Button variant="outlined" onClick={() => void handlePhotoSave()}>
+          {'Save'}
+        </Button>
+      </Stack>
+    </CardDisplay>
+  )
+
+  const formPanel = (schema: FormSchema, onSubmit: (fields: any) => void) => (
+    <FormRenderer
+      FormTemplate={CardDisplayFormTemplate}
+      componentMapper={simpleComponentMapper}
+      onSubmit={onSubmit}
+      schema={schema}
+      subscription={{ values: true }}
+      initialValues={schema.id === 'basic' ? data : undefined}
+    />
+  )
+
+  // Every account area is a tab now (AGL-859) — the standalone Account and
+  // Profile cards moved into the nav. Security only when there's a password
+  // to change (AGL-852).
+  const sections: Array<{ id: string; label: string; content: ReactNode }> = [
+    { id: 'account', label: 'Account', content: accountCard },
+    { id: 'profile', label: 'Profile image', content: profileCard },
+    { id: 'basic', label: 'Basic info', content: formPanel(basicSchema, handleBasicSave) },
     ...(hasPassword
       ? [
           {
-            schema: securitySchema,
-            onSubmit: handleSecuritySave,
+            id: 'security',
+            label: 'Security',
+            content: formPanel(securitySchema, handleSecuritySave),
           },
         ]
       : []),
   ]
 
   const onTabChange = useCallback(
-    async (e, value) => {
+    async (_event: unknown, value: string) => {
       setTab(value)
-      const form = forms.find(({ schema }) => schema.id === value)
+      const section = sections.find((entry) => entry.id === value)
       logEvent(analytics, 'screen_view', {
-        firebase_screen: form.schema.title as string,
+        firebase_screen: section?.label ?? value,
         firebase_screen_class: ManageUser.displayName,
       })
     },
-    [forms, analytics],
+    [sections, analytics],
   )
 
   return (
     <>
-      <NextPageTitle screen={'Settings'} />
+      <NextPageTitle screen={'Manage Account'} />
       <DashboardLayout
         breadcrumbItems={[
           {
-            children: 'Settings',
+            children: 'Manage Account',
             href: buildRoute(Route.MANAGE_USER_SETTINGS),
           },
         ]}
         help="account"
         header={{
-          children: 'Account',
+          children: 'Manage Account',
           icon: { path: ICON_VARIANT_APP_SETTINGS.path },
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          {/* Account email & sign-in (AGL-852). Email is set by the sign-in
-              provider, so it is read-only here. */}
-          <CardDisplay
-            header={'Account'}
-            help={docsHelp('account', {
-              excerpt:
-                'The email you sign in with and the providers linked to your ' +
-                'account.',
-            })}
-            contentGutterX
-            contentGutterY
-            sx={{ mb: 3 }}
-          >
-            <Stack spacing={2} sx={{ maxWidth: 560 }}>
-              <TextField
-                label="Email"
-                value={user?.email ?? ''}
-                size="small"
-                fullWidth
-                slotProps={{ input: { readOnly: true } }}
-                helperText="Set by your sign-in provider — change it there, not here."
-              />
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  {'Sign-in:'}
-                </Typography>
-                {providerIds.length === 0 ? (
-                  <Chip size="small" label="Unknown" variant="outlined" />
-                ) : (
-                  providerIds.map((id) => (
-                    <Chip
-                      key={id}
-                      size="small"
-                      label={PROVIDER_LABELS[id] ?? id}
-                    />
-                  ))
-                )}
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  color={user?.emailVerified ? 'success' : 'warning'}
-                  label={user?.emailVerified ? 'Verified' : 'Unverified'}
-                />
-              </Stack>
-              {!hasPassword ? (
-                <Typography variant="caption" color="text.secondary">
-                  {'You sign in with ' +
-                    (providerIds
-                      .map((id) => PROVIDER_LABELS[id] ?? id)
-                      .join(', ') || 'a linked provider') +
-                    ' — there is no password to change here.'}
-                </Typography>
-              ) : null}
-            </Stack>
-          </CardDisplay>
-          {/* Profile image (AGL-365). */}
-          <CardDisplay
-            header={'Profile image'}
-            help={docsHelp('account', {
-              excerpt:
-                'Your personal avatar across the console — the app bar, ' +
-                'comments, and team lists.',
-            })}
-            contentGutterX
-            contentGutterY
-            sx={{ mb: 3 }}
-          >
-            <Stack
-              direction="row"
-              spacing={2}
-              sx={{ alignItems: 'center', maxWidth: 560 }}
-            >
-              <Avatar src={photoUrl || undefined} sx={{ width: 56, height: 56 }}>
-                {(user?.displayName || user?.email || '?')
-                  .slice(0, 1)
-                  .toUpperCase()}
-              </Avatar>
-              <Box sx={{ flex: 1 }}>
-                <MediaUrlField
-                  label="Image URL"
-                  helperText="Browse the org media library or paste an https URL"
-                  orgId={currentOrg?.$id ?? null}
-                  value={photoUrl}
-                  onChange={setPhotoUrl}
-                />
-              </Box>
-              <Button variant="outlined" onClick={() => void handlePhotoSave()}>
-                {'Save'}
-              </Button>
-            </Stack>
-          </CardDisplay>
           <TabContext value={tab}>
             <GridItems
               spacing={3}
               items={[
                 {
-                  size: {
-                    xs: 12,
-                    sm: 3,
-                  },
+                  size: { xs: 12, sm: 3 },
                   children: (
                     <CardDisplay
                       header="Navigation"
                       help={docsHelp('account', {
                         excerpt:
-                          'Sections of your personal account settings — ' +
-                          'basic info and password.',
+                          'Sections of your account — sign-in, profile ' +
+                          'image, basic info and password.',
                       })}
                     >
                       <TabList
@@ -387,11 +391,11 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                         }}
                         onChange={onTabChange}
                       >
-                        {forms.map(({ schema }) => (
+                        {sections.map((section) => (
                           <Tab
-                            key={schema.id}
-                            value={schema.id}
-                            label={schema.title}
+                            key={section.id}
+                            value={section.id}
+                            label={section.label}
                           />
                         ))}
                       </TabList>
@@ -399,26 +403,16 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
                   ),
                 },
                 {
-                  size: {
-                    xs: 12,
-                    sm: 9,
-                  },
+                  size: { xs: 12, sm: 9 },
                   children: (
                     <>
-                      {forms.map(({ initialValues, onSubmit, schema }) => (
+                      {sections.map((section) => (
                         <TabPanel
-                          key={schema.id}
-                          value={schema.id}
+                          key={section.id}
+                          value={section.id}
                           sx={{ padding: 'unset' }}
                         >
-                          <FormRenderer
-                            FormTemplate={CardDisplayFormTemplate}
-                            componentMapper={simpleComponentMapper}
-                            onSubmit={onSubmit}
-                            schema={schema}
-                            subscription={{ values: true }}
-                            initialValues={initialValues}
-                          />
+                          {section.content}
                         </TabPanel>
                       ))}
                     </>

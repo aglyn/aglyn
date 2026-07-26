@@ -31,7 +31,7 @@ export function manageNavTabItems() {
     },
     {
       id: 'nav-tab-manage-user',
-      label: 'Profile',
+      label: 'Manage Account',
       href: buildRoute(Route.MANAGE_USER_SETTINGS),
     },
   ]
