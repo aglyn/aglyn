@@ -157,7 +157,12 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
-    const membership = await resolveOrgPermissions(decoded.uid)
+    // Act on the org the client is in (AGL-868), not a guessed first-org — a
+    // member can belong to several, and the plugin publishes under one of them.
+    const requestedOrgId = String(body?.orgId ?? '').trim() || undefined
+    const membership = await resolveOrgPermissions(decoded.uid, {
+      orgId: requestedOrgId,
+    })
     if (!membership.permissions.publishToCommunity) {
       return res.status(403).json({
         error:
@@ -166,8 +171,11 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
     }
     const firestore = firebaseAdmin.app().firestore()
 
-    // Plan gate rides the caller's org doc (AGL-238).
-    const orgForUser = await getOrgForUser(decoded.uid)
+    // Plan gate rides the acting org's doc (AGL-238/868).
+    const orgForUser = await getOrgForUser(
+      decoded.uid,
+      membership.orgId ?? requestedOrgId,
+    )
     const org = orgForUser?.org ?? {}
     if (!checkEntitlement(org, 'marketplaceSelling')) {
       return res
