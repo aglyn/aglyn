@@ -122,7 +122,38 @@ async function handler(request: Request): Promise<Response> {
           }
         }),
       )
-      return Response.json({ queue }, { status: 200 })
+      // Listed/verified plugins with per-version trust (AGL-885): once a
+      // listing leaves the queue the Grant/Revoke realm-trust actions used
+      // to leave with it — revoking a live plugin's trust required a
+      // hand-crafted API call. This block keeps every listed plugin's
+      // version trust state administrable.
+      const listedSnapshot = await firestore
+        .collection('communityListings')
+        .where('type', '==', 'plugin')
+        .where('reviewStatus', 'in', ['listed', 'verified'])
+        .limit(50)
+        .get()
+      const listed = await Promise.all(
+        listedSnapshot.docs.map(async (doc) => {
+          const listing = doc.data()
+          const versionsSnapshot = await doc.ref
+            .collection('pluginVersions')
+            .orderBy('publishedAt', 'desc')
+            .limit(10)
+            .get()
+          return {
+            listingId: doc.id,
+            displayName: listing.displayName ?? doc.id,
+            reviewStatus: listing.reviewStatus,
+            latestVersion: String(listing.latestVersion ?? ''),
+            versions: versionsSnapshot.docs.map((versionDoc) => ({
+              version: String(versionDoc.get('version') ?? versionDoc.id),
+              trust: versionDoc.get('trust') ?? null,
+            })),
+          }
+        }),
+      )
+      return Response.json({ queue, listed }, { status: 200 })
     }
 
     if (method !== 'POST') {

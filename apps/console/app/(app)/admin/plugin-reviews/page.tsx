@@ -61,6 +61,15 @@ interface QueueEntry {
   } | null
 }
 
+/** A listed/verified plugin with per-version trust state (AGL-885). */
+interface ListedEntry {
+  listingId: string
+  displayName: string
+  reviewStatus: string
+  latestVersion: string
+  versions: Array<{ version: string; trust: string | null }>
+}
+
 /**
  * Marketplace review queue (AGL-432): staff move submitted plugin
  * listings through in_review → listed/verified/rejected, with the static
@@ -71,6 +80,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const [queue, setQueue] = useState<QueueEntry[]>([])
+  const [listed, setListed] = useState<ListedEntry[]>([])
   const [loaded, setLoaded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState<Record<string, string>>({})
@@ -90,6 +100,7 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
     if (response.ok) {
       const payload = await response.json()
       setQueue(payload?.queue ?? [])
+      setListed(payload?.listed ?? [])
     }
     setLoaded(true)
   }, [token])
@@ -134,9 +145,12 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
     [token, rejectReason, enqueueSnackbar, refresh],
   )
 
-  const grantRealm = useCallback(
-    async (entry: QueueEntry) => {
-      setBusy(entry.listingId)
+  // Grant or revoke realm trust for any listing+version (AGL-885) — the
+  // super-staff sign-plugin call, shared by the queue button and the
+  // listed-plugins section below.
+  const signRealm = useCallback(
+    async (listingId: string, version: string, action: 'grant' | 'revoke') => {
+      setBusy(listingId)
       try {
         const idToken = await token()
         const response = await fetch('/api/admin/sign-plugin', {
@@ -146,15 +160,19 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
           body: JSON.stringify({
-            listingId: entry.listingId,
-            version: entry.version,
+            listingId,
+            version,
+            ...(action === 'revoke' ? { action: 'revoke' } : {}),
           }),
         })
         const payload = await response.json().catch(() => ({}))
         if (response.ok) {
-          enqueueSnackbar('Realm trust granted (version signed)', {
-            variant: 'success',
-          })
+          enqueueSnackbar(
+            action === 'revoke'
+              ? 'Realm trust revoked'
+              : 'Realm trust granted (version signed)',
+            { variant: 'success' },
+          )
           await refresh()
         } else {
           enqueueSnackbar(payload?.error ?? 'Signing failed', {
@@ -167,6 +185,11 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
       }
     },
     [token, enqueueSnackbar, refresh],
+  )
+
+  const grantRealm = useCallback(
+    (entry: QueueEntry) => signRealm(entry.listingId, entry.version, 'grant'),
+    [signRealm],
   )
 
   return (
@@ -348,6 +371,101 @@ const PluginReviews: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               </CardDisplay>
             ))}
+            {/* Realm trust for LISTED plugins (AGL-885): once a listing
+                leaves the queue, its trust must stay administrable —
+                especially revoke, which pulls marketplace code back out of
+                the app realm. */}
+            {listed.length ? (
+              <CardDisplay
+                header={'Listed plugins — realm trust'}
+                contentGutterX
+                contentGutterY
+              >
+                <Stack spacing={2}>
+                  <Typography variant="body2" color="text.secondary">
+                    {'Grant signs a version to run in the app realm; revoke ' +
+                      'returns it to the sandbox on next load. Super-staff ' +
+                      'only, audited.'}
+                  </Typography>
+                  {listed.map((entry) => (
+                    <Stack key={entry.listingId} spacing={0.75}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+                      >
+                        <Typography variant="subtitle2">
+                          {entry.displayName}
+                        </Typography>
+                        <Chip size="small" label={entry.reviewStatus} />
+                        <Typography variant="caption" color="text.secondary">
+                          {entry.listingId}
+                        </Typography>
+                      </Stack>
+                      {entry.versions.map((versionEntry) => (
+                        <Stack
+                          key={versionEntry.version}
+                          direction="row"
+                          spacing={1}
+                          sx={{ alignItems: 'center', flexWrap: 'wrap', pl: 1 }}
+                        >
+                          <Typography variant="body2" sx={{ minWidth: 64 }}>
+                            {`v${versionEntry.version}`}
+                          </Typography>
+                          {versionEntry.version === entry.latestVersion ? (
+                            <Chip size="small" label="Latest" />
+                          ) : null}
+                          {versionEntry.trust === 'realm' ? (
+                            <Chip
+                              size="small"
+                              color="success"
+                              label="Realm-trusted"
+                            />
+                          ) : (
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              label="Sandboxed"
+                            />
+                          )}
+                          {versionEntry.trust === 'realm' ? (
+                            <Button
+                              size="small"
+                              color="error"
+                              disabled={busy === entry.listingId}
+                              onClick={() =>
+                                void signRealm(
+                                  entry.listingId,
+                                  versionEntry.version,
+                                  'revoke',
+                                )
+                              }
+                            >
+                              {'Revoke realm trust'}
+                            </Button>
+                          ) : (
+                            <Button
+                              size="small"
+                              color="success"
+                              disabled={busy === entry.listingId}
+                              onClick={() =>
+                                void signRealm(
+                                  entry.listingId,
+                                  versionEntry.version,
+                                  'grant',
+                                )
+                              }
+                            >
+                              {'Grant realm trust'}
+                            </Button>
+                          )}
+                        </Stack>
+                      ))}
+                    </Stack>
+                  ))}
+                </Stack>
+              </CardDisplay>
+            ) : null}
           </Stack>
           </StaffOnly>
         </Container>
