@@ -38,7 +38,15 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { TabContext, TabList, TabPanel } from '@mui/lab'
 import { Tab } from '@mui/material'
-import { Avatar, Box, Button, Stack, TextField } from '@mui/material'
+import {
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { logEvent } from 'firebase/analytics'
 import {
   signInWithEmailAndPassword,
@@ -94,6 +102,15 @@ const securitySchema: FormSchema = {
   ],
 }
 
+// Firebase providerId → a name a person recognizes (AGL-852).
+const PROVIDER_LABELS: Record<string, string> = {
+  password: 'Email & password',
+  'google.com': 'Google',
+  'apple.com': 'Apple',
+  'github.com': 'GitHub',
+  'microsoft.com': 'Microsoft',
+}
+
 const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   const [tab, setTab] = useState('basic')
   const { data: user } = useUser()
@@ -109,21 +126,45 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
   const firebaseAuth = useAuth()
   const analytics = useAnalytics()
 
+  // Which providers this account signs in with (AGL-852). Drives the email/
+  // provider card and hides the change-password form for an account that has
+  // no password to change (e.g. Google-only), which otherwise threw.
+  const providerIds = (
+    (user?.providerData ?? []) as Array<{ providerId?: string }>
+  )
+    .map((info) => info?.providerId)
+    .filter((id): id is string => Boolean(id))
+  const hasPassword = providerIds.includes('password')
+
   const handleBasicSave = useCallback(
     async (fields: any) => {
       const dequeueLoading = queueLoading()
-      await setDoc(userRef, { ...fields }, { merge: true })
-        .then(() => {
-          enqueueSnackbar('Saved!', { variant: 'success' })
-        })
-        .catch((e) => {
-          enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
-        })
-        .finally(() => {
-          dequeueLoading()
-        })
+      try {
+        await setDoc(userRef, { ...fields }, { merge: true })
+        // Keep Firebase Auth's displayName in step (AGL-852): rosters and
+        // comments read it, so without this a name edit here was invisible to
+        // teammates. Best-effort — a failed sync must not fail the save.
+        const displayName = [
+          String(fields?.[FIELD_SCHEMA_FIRST_NAME.name] ?? '').trim(),
+          String(fields?.[FIELD_SCHEMA_LAST_NAME.name] ?? '').trim(),
+        ]
+          .filter(Boolean)
+          .join(' ')
+        if (displayName && displayName !== user?.displayName) {
+          try {
+            await updateProfile(user, { displayName })
+          } catch (error) {
+            console.error('displayName sync failed', error)
+          }
+        }
+        enqueueSnackbar('Saved!', { variant: 'success' })
+      } catch (e) {
+        enqueueSnackbar(`Error: ${JSON.stringify(e)}`, { variant: 'error' })
+      } finally {
+        dequeueLoading()
+      }
     },
-    [enqueueSnackbar, queueLoading, userRef],
+    [enqueueSnackbar, queueLoading, userRef, user],
   )
   // Profile image (AGL-365): mirrors to the auth photoURL (app bar,
   // comments) and the users doc (team lists, activity).
@@ -179,10 +220,17 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
       initialValues: data,
       onSubmit: handleBasicSave,
     },
-    {
-      schema: securitySchema,
-      onSubmit: handleSecuritySave,
-    },
+    // The change-password form only makes sense for an account that has a
+    // password (AGL-852). A Google-only account has none, and its reauth threw
+    // — so drop the tab and explain sign-in via the account card instead.
+    ...(hasPassword
+      ? [
+          {
+            schema: securitySchema,
+            onSubmit: handleSecuritySave,
+          },
+        ]
+      : []),
   ]
 
   const onTabChange = useCallback(
@@ -214,6 +262,65 @@ const ManageUser: NextPageWithLayout<Record<string, never>> = (props) => {
         }}
       >
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Account email & sign-in (AGL-852). Email is set by the sign-in
+              provider, so it is read-only here. */}
+          <CardDisplay
+            header={'Account'}
+            help={docsHelp('account', {
+              excerpt:
+                'The email you sign in with and the providers linked to your ' +
+                'account.',
+            })}
+            contentGutterX
+            contentGutterY
+            sx={{ mb: 3 }}
+          >
+            <Stack spacing={2} sx={{ maxWidth: 560 }}>
+              <TextField
+                label="Email"
+                value={user?.email ?? ''}
+                size="small"
+                fullWidth
+                slotProps={{ input: { readOnly: true } }}
+                helperText="Set by your sign-in provider — change it there, not here."
+              />
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  {'Sign-in:'}
+                </Typography>
+                {providerIds.length === 0 ? (
+                  <Chip size="small" label="Unknown" variant="outlined" />
+                ) : (
+                  providerIds.map((id) => (
+                    <Chip
+                      key={id}
+                      size="small"
+                      label={PROVIDER_LABELS[id] ?? id}
+                    />
+                  ))
+                )}
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={user?.emailVerified ? 'success' : 'warning'}
+                  label={user?.emailVerified ? 'Verified' : 'Unverified'}
+                />
+              </Stack>
+              {!hasPassword ? (
+                <Typography variant="caption" color="text.secondary">
+                  {'You sign in with ' +
+                    (providerIds
+                      .map((id) => PROVIDER_LABELS[id] ?? id)
+                      .join(', ') || 'a linked provider') +
+                    ' — there is no password to change here.'}
+                </Typography>
+              ) : null}
+            </Stack>
+          </CardDisplay>
           {/* Profile image (AGL-365). */}
           <CardDisplay
             header={'Profile image'}
