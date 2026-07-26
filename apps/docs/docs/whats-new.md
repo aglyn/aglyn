@@ -10,7 +10,24 @@ description: The features Aglyn shipped most recently, grouped by area with link
 A huge wave of features shipped over the last few days. Here's the tour, grouped by area.
 Each links into its section for the how-to.
 
-## Marketplace at the organization level (newest)
+## Scalable audience pricing (newest)
+
+- **[Unlimited member accounts on every plan](workspace-and-billing/teams-and-roles/overview.md#site-membership)** —
+  visitors who sign up to your published site are never metered, capped, or charged per
+  account, on any tier including Free.
+- **[Contact audience bands](workspace-and-billing/billing-and-plans/overview.md#audience-contacts)** —
+  your contacts CRM is priced as an included band per tier. On paid plans, growing past
+  the band **never drops a record**: extra contacts bill as small metered overage
+  ($0.25–$1.00 per 1,000/month, cheaper on higher tiers). The billing page has a new
+  Contacts meter with a live overage estimate, and the contacts page tells Free
+  workspaces how many signups were missed at the band.
+- **Clearer seat language** — what plan cards used to call "members per host" is now
+  **site collaborators**: per-site teammate seats. Member accounts were never seats.
+- **[Platform fees on the plan cards](workspace-and-billing/billing-and-plans/overview.md#platform-fees)** —
+  each tier now shows its declining transaction-fee ladder, including the digital rate
+  that applies to paid memberships and gated content.
+
+## Marketplace at the organization level
 
 - **[One Marketplace for the whole organization](developers/plugins/overview.md)** — browse,
   install, manage and publish marketplace items from a single **Marketplace** destination in
