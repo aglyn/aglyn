@@ -37,6 +37,8 @@ workspace automatically. The team features above keep working unchanged.
 ## Site membership
 
 - Visitors can **sign in / sign up** to your site.
+- **Member accounts are unlimited on every plan** — including Free. Signups are never
+  metered, capped, or charged per account.
 - Gate screens as **members-only** so only signed-in members can view them.
 - New members flow into your [contacts CRM](../../content-and-data/contacts/overview.md).
 

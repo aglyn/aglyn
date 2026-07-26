@@ -244,6 +244,10 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         `max ${entitlements.maxMembersPerHost})`
                       : ''}
                   </Typography>
+                  {/* Visitor signups are never capped (AGL-889). */}
+                  <Typography variant="body2">
+                    {'Unlimited member accounts'}
+                  </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
                       `${quotaLabel(entitlements.functionsPerHost)} functions · ` +

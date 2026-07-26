@@ -58,6 +58,10 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
     if (!hostSnapshot.exists) {
       return res.status(404).json({ error: 'Unknown site' })
     }
+    // Member accounts are UNLIMITED on every plan (AGL-889) — no seat or
+    // quota check belongs here. Audience monetization happens downstream:
+    // contact bands meter the CRM projection (AGL-890) and paid
+    // memberships carry the plan's digital transaction fee (AGL-892).
     const membersRef = hostRef.collection('siteMembers')
     const existing = await membersRef
       .where('email', '==', email)
