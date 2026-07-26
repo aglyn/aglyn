@@ -19,11 +19,16 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import AddIcon from '@mui/icons-material/Add'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import { alpha } from '@mui/material/styles'
 import {
   DndContext,
   type DragEndEvent,
   PointerSensor,
   useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
@@ -31,10 +36,6 @@ import {
   Box,
   Breadcrumbs,
   Button,
-  Card,
-  CardActions,
-  CardMedia,
-  Checkbox,
   Chip,
   Dialog,
   DialogActions,
@@ -42,6 +43,7 @@ import {
   DialogTitle,
   Drawer,
   Grid,
+  IconButton,
   LinearProgress,
   Link,
   Menu,
@@ -84,6 +86,8 @@ import useFirestoreDoc from '../../hooks/use-firestore-doc'
 import useHostActivityLogger from '../../hooks/use-host-activity-logger'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { ImageEditorDialog } from './image-editor-dialog.component'
+import { MediaAssetCard } from './media-asset-card.component'
+import { MediaFolderCard } from './media-folder-card.component'
 import { MediaFolderRail } from './media-folder-rail.component'
 
 export interface MediaLibraryComponentProps {
@@ -128,6 +132,35 @@ function DraggableCard(props: {
   )
 }
 DraggableCard.displayName = 'DraggableCard'
+
+/**
+ * Breadcrumb drop target (AGL-819): dropping a dragged file/folder onto an
+ * ancestor crumb (or "All files" → root) moves it up and out. Uses the
+ * `gridfolder:` id space so it never collides with the rail's `folder:`.
+ */
+function CrumbDropZone(props: {
+  targetId: string | null
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: props.targetId === null ? 'gridfolder:root' : `gridfolder:${props.targetId}`,
+  })
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        borderRadius: 1,
+        px: 0.5,
+        transition: (theme) => theme.transitions.create(['background-color']),
+        bgcolor: isOver ? 'secondary.main' : undefined,
+        color: isOver ? 'secondary.contrastText' : undefined,
+      }}
+    >
+      {props.children}
+    </Box>
+  )
+}
+CrumbDropZone.displayName = 'CrumbDropZone'
 
 /** File → base64 (payload for the upload API). */
 function fileToBase64(file: File): Promise<string> {
@@ -452,6 +485,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     sortBy,
   ])
 
+  // Folders-as-grid-items (AGL-818): render the current level's folders as
+  // cards ahead of the files. The "parent context" is the open folder when
+  // browsing into one, else root. The explicit "No folder" view and any
+  // active search hide folder cards (you're looking at files, not nav).
+  const folderParentContext =
+    typeof currentFolder === 'string' && currentFolder !== 'all'
+      ? currentFolder
+      : null
+  const showFolderCards = currentFolder !== null && !search.trim()
+  const visibleFolders = useMemo(
+    () =>
+      showFolderCards
+        ? folderList.filter(
+            (folder) => (folder.parentId ?? null) === folderParentContext,
+          )
+        : [],
+    [showFolderCards, folderList, folderParentContext],
+  )
+
   // Rail counts via server-side count() so they stay accurate past the
   // paginated window; `root` = total minus foldered.
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({})
@@ -632,6 +684,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     ],
   )
 
+  // Folder create/rename prompt (AGL-818): a single small dialog shared by
+  // the grid toolbar's "New folder" and each folder card's overflow menu.
+  const [folderPrompt, setFolderPrompt] = useState<{
+    title: string
+    value: string
+    action: (name: string) => Promise<void>
+  } | null>(null)
+  const [folderPromptBusy, setFolderPromptBusy] = useState(false)
+  const handleFolderPromptSave = useCallback(async () => {
+    if (!folderPrompt) return
+    setFolderPromptBusy(true)
+    try {
+      await folderPrompt.action(folderPrompt.value)
+      setFolderPrompt(null)
+    } finally {
+      setFolderPromptBusy(false)
+    }
+  }, [folderPrompt])
+
   // Multi-select + move (AGL-172): checkboxes are the accessible path;
   // dragging a selected card moves the whole selection.
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -678,16 +749,35 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     (event: DragEndEvent) => {
       const activeId = String(event.active.id)
       const overId = event.over ? String(event.over.id) : null
-      if (!overId || !overId.startsWith('folder:')) return
-      const targetId = overId === 'folder:root' ? null : overId.slice(7)
+      if (!overId) return
+      // Resolve the drop target folder (null = root). The rail uses
+      // `folder:` ids; grid folder cards and breadcrumb crumbs use
+      // `gridfolder:` so the two never register duplicate droppable ids.
+      let targetId: string | null
+      if (overId === 'folder:root' || overId === 'gridfolder:root') {
+        targetId = null
+      } else if (overId.startsWith('folder:')) {
+        targetId = overId.slice(7)
+      } else if (overId.startsWith('gridfolder:')) {
+        targetId = overId.slice(11)
+      } else {
+        return
+      }
       if (activeId.startsWith('media:')) {
         const mediaId = activeId.slice(6)
         const ids = selected.has(mediaId) ? [...selected] : [mediaId]
         void moveMedia(ids, targetId)
         return
       }
-      if (activeId.startsWith('folderdrag:')) {
-        const folderId = activeId.slice(11)
+      // Folder drags come from the rail (`folderdrag:`) or a grid card
+      // (`gridfolderdrag:`).
+      const draggedFolderId = activeId.startsWith('gridfolderdrag:')
+        ? activeId.slice(15)
+        : activeId.startsWith('folderdrag:')
+          ? activeId.slice(11)
+          : null
+      if (draggedFolderId) {
+        const folderId = draggedFolderId
         if (folderId === targetId) return
         if (
           targetId &&
@@ -750,40 +840,83 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     tags: string
     alt: string
     description: string
+    // Custom metadata (AGL-822) edited as ordered rows, not a map, so
+    // blank/duplicate keys are tolerable mid-edit and reorder is stable.
+    customMeta: Array<{ key: string; value: string }>
   } | null>(null)
   const handleEditorSave = useCallback(async () => {
     if (!editor) return
     const folderId = editor.folderId || null
-    await updateDoc(doc(firestore, scopeCollection, scopeId, 'media', editor.id), {
-      folderId,
-      // Legacy string kept in sync until every reader is on folderId.
-      folder: folderId ? (folderNameById[folderId] ?? '') : '',
-      // Rename (AGL-184): display-name only; the Storage object id/URL
-      // stays stable so existing references keep resolving.
-      ...(editor.fileName.trim()
-        ? { fileName: editor.fileName.trim().slice(0, 200) }
-        : {}),
-      tags: Aglyn.normalizeMediaTags(editor.tags),
-      alt: editor.alt.trim().slice(0, Aglyn.MEDIA_ALT_MAX_LENGTH),
-      description: editor.description.trim(),
-    })
-      .then(() => {
-        enqueueSnackbar('Media details saved', {
-          variant: 'success',
-          persist: false,
-        })
-        logActivity('Updated media details', {
-          type: 'media',
-          id: editor.id,
-          name: editor.media?.fileName ?? editor.id,
-        })
-        setEditor(null)
-        refresh()
-      })
-      .catch(() =>
-        enqueueSnackbar('An error has occurred', { variant: 'error' }),
+    // Custom metadata (AGL-822): rows → record (last write wins, blank
+    // keys dropped). Only round-trips to the server route — which touches
+    // the Storage object — when it actually changed.
+    const nextMeta = Object.fromEntries(
+      editor.customMeta
+        .map((row) => [row.key.trim(), row.value] as const)
+        .filter(([key]) => key),
+    )
+    const prevMeta = (editor.media?.customMetadata ?? {}) as Record<
+      string,
+      string
+    >
+    const metaChanged =
+      JSON.stringify(Object.entries(nextMeta).sort()) !==
+      JSON.stringify(Object.entries(prevMeta).sort())
+    try {
+      await updateDoc(
+        doc(firestore, scopeCollection, scopeId, 'media', editor.id),
+        {
+          folderId,
+          // Legacy string kept in sync until every reader is on folderId.
+          folder: folderId ? (folderNameById[folderId] ?? '') : '',
+          // Rename (AGL-184): display-name only; the Storage object id/URL
+          // stays stable so existing references keep resolving.
+          ...(editor.fileName.trim()
+            ? { fileName: editor.fileName.trim().slice(0, 200) }
+            : {}),
+          tags: Aglyn.normalizeMediaTags(editor.tags),
+          alt: editor.alt.trim().slice(0, Aglyn.MEDIA_ALT_MAX_LENGTH),
+          description: editor.description.trim(),
+        },
       )
-  }, [editor, folderNameById, firestore, scopeId, enqueueSnackbar, logActivity, refresh])
+      if (metaChanged) {
+        const idToken = await (user as any)?.getIdToken?.()
+        const response = await fetch('/api/media/folders', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
+          body: JSON.stringify({
+            ...scopeBody,
+            action: 'custom-metadata',
+            mediaId: editor.id,
+            customMetadata: nextMeta,
+          }),
+        })
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}))
+          throw new Error(payload?.error ?? 'Saving custom metadata failed')
+        }
+      }
+      enqueueSnackbar('Media details saved', {
+        variant: 'success',
+        persist: false,
+      })
+      logActivity('Updated media details', {
+        type: 'media',
+        id: editor.id,
+        name: editor.media?.fileName ?? editor.id,
+      })
+      setEditor(null)
+      refresh()
+    } catch (error: any) {
+      enqueueSnackbar(error?.message ?? 'An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    }
+  }, [editor, folderNameById, firestore, scopeId, user, enqueueSnackbar, logActivity, refresh])
 
   // Asset editing (AGL-184): replace-file + image transforms.
   const replaceInputRef = useRef<HTMLInputElement>(null)
@@ -977,31 +1110,32 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     }
   }, [editorId, user, scopeId, firestore])
 
-  const handleUpload = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ''
-      if (!file) return
+  // Single-file upload (AGL-820): extracted from the input handler so the
+  // Upload button and drag-and-drop share one path. Returns bytes added on
+  // success (0 when skipped/failed) so a batch can keep a running quota
+  // estimate — the counter doc only refreshes after the whole batch.
+  const uploadOne = useCallback(
+    async (file: File, addedBytes: number): Promise<number> => {
       const allowed =
         file.type.startsWith('image/') ||
         ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type) ||
         file.type === 'application/pdf'
       if (!allowed) {
-        return void enqueueSnackbar(
-          'Supported uploads: images, mp4/webm video, PDF',
-          { variant: 'warning', persist: false },
+        enqueueSnackbar(
+          `"${file.name}" skipped — supported uploads: images, mp4/webm video, PDF`,
+          { variant: 'warning', persist: false, allowDuplicate: true },
         )
+        return 0
       }
-      const usedMb = (usedBytes + file.size) / (1024 * 1024)
+      const usedMb = (usedBytes + addedBytes + file.size) / (1024 * 1024)
       const quota = checkOrgQuota(org, 'storagePerHostMb', usedMb - 1)
       if (!quota.allowed) {
-        return void enqueueSnackbar(
+        enqueueSnackbar(
           `Storage limit reached (${quota.limit} MB) — see Billing to upgrade`,
-          { variant: 'warning', persist: false },
+          { variant: 'warning', persist: false, allowDuplicate: true },
         )
+        return 0
       }
-
-      setBusy(true)
       // Uploads land in the currently open folder (AGL-172).
       const uploadFolderId =
         typeof currentFolder === 'string' && currentFolder !== 'all'
@@ -1028,10 +1162,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           })
           const minted = await mint.json().catch(() => ({}))
           if (!mint.ok || !minted?.uploadUrl) {
-            return void enqueueSnackbar(minted?.error ?? 'Upload failed', {
+            enqueueSnackbar(minted?.error ?? `Upload failed for "${file.name}"`, {
               variant: 'error',
               allowDuplicate: true,
             })
+            return 0
           }
           const put = await fetch(minted.uploadUrl, {
             method: 'PUT',
@@ -1039,10 +1174,11 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             body: file,
           })
           if (!put.ok) {
-            return void enqueueSnackbar('Upload failed — try again', {
+            enqueueSnackbar(`Upload failed for "${file.name}" — try again`, {
               variant: 'error',
               allowDuplicate: true,
             })
+            return 0
           }
           const finalize = await fetch('/api/media/upload-url', {
             method: 'PATCH',
@@ -1059,18 +1195,18 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           })
           const finalized = await finalize.json().catch(() => ({}))
           if (!finalize.ok) {
-            return void enqueueSnackbar(
-              finalized?.error ?? 'Upload failed',
-              { variant: 'error', allowDuplicate: true },
-            )
+            enqueueSnackbar(finalized?.error ?? `Upload failed for "${file.name}"`, {
+              variant: 'error',
+              allowDuplicate: true,
+            })
+            return 0
           }
           enqueueSnackbar(`Uploaded "${file.name}"`, {
             variant: 'success',
             persist: false,
           })
           logActivity('Uploaded media', { type: 'media', name: file.name })
-          refresh()
-          return
+          return file.size
         }
         const response = await fetch('/api/media/upload', {
           method: 'POST',
@@ -1088,28 +1224,94 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         })
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
-          return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
+          enqueueSnackbar(payload?.error ?? `Upload failed for "${file.name}"`, {
             variant: 'error',
             allowDuplicate: true,
           })
+          return 0
         }
         enqueueSnackbar(`Uploaded "${file.name}"`, {
           variant: 'success',
           persist: false,
         })
         logActivity('Uploaded media', { type: 'media', name: file.name })
-        refresh()
+        return file.size
       } catch (error) {
         console.error(error)
-        enqueueSnackbar('Upload failed', {
+        enqueueSnackbar(`Upload failed for "${file.name}"`, {
           variant: 'error',
           allowDuplicate: true,
         })
-      } finally {
-        setBusy(false)
+        return 0
       }
     },
-    [user, scopeId, org, usedBytes, currentFolder, enqueueSnackbar, logActivity, refresh],
+    [user, scopeId, org, usedBytes, currentFolder, enqueueSnackbar, logActivity],
+  )
+
+  // Batch upload (AGL-820): sequential so quota + counter stay sane; one
+  // refresh at the end. Fed by the file input and by drag-and-drop.
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      if (!files.length) return
+      setBusy(true)
+      let added = 0
+      try {
+        for (const file of files) {
+          added += await uploadOne(file, added)
+        }
+      } finally {
+        setBusy(false)
+        refresh()
+      }
+    },
+    [uploadOne, refresh],
+  )
+
+  const handleUpload = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files ? Array.from(event.target.files) : []
+      event.target.value = ''
+      void handleFiles(files)
+    },
+    [handleFiles],
+  )
+
+  // Drag-and-drop upload (AGL-820): native HTML5 file drops are separate
+  // from dnd-kit's pointer-based card dragging, so they don't conflict. A
+  // depth counter tolerates dragenter/leave firing across child elements.
+  const [isFileDropActive, setIsFileDropActive] = useState(false)
+  const dropDepthRef = useRef(0)
+  const isFileDrag = (event: React.DragEvent) =>
+    Array.from(event.dataTransfer?.types ?? []).includes('Files')
+  const handleFileDragEnter = useCallback((event: React.DragEvent) => {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    dropDepthRef.current += 1
+    setIsFileDropActive(true)
+  }, [])
+  const handleFileDragOver = useCallback((event: React.DragEvent) => {
+    if (!isFileDrag(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }, [])
+  const handleFileDragLeave = useCallback((event: React.DragEvent) => {
+    if (!isFileDrag(event)) return
+    dropDepthRef.current -= 1
+    if (dropDepthRef.current <= 0) {
+      dropDepthRef.current = 0
+      setIsFileDropActive(false)
+    }
+  }, [])
+  const handleFileDrop = useCallback(
+    (event: React.DragEvent) => {
+      if (!isFileDrag(event)) return
+      event.preventDefault()
+      dropDepthRef.current = 0
+      setIsFileDropActive(false)
+      const files = Array.from(event.dataTransfer?.files ?? [])
+      void handleFiles(files)
+    },
+    [handleFiles],
   )
 
   const handleCopyUrl = useCallback(
@@ -1197,8 +1399,20 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [confirm, user, scopeId, enqueueSnackbar, logActivity, refresh],
   )
 
+  const currentFolderName =
+    typeof currentFolder === 'string' && currentFolder !== 'all'
+      ? folderNameById[currentFolder]
+      : null
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <Box
+        onDragEnter={handleFileDragEnter}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+        sx={{ position: 'relative' }}
+      >
       <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
         <MediaFolderRail
           folders={folderList as any}
@@ -1220,6 +1434,25 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         >
           {'Upload media'}
         </Button>
+        {onSelect ? null : (
+          <Button
+            variant="outlined"
+            color="secondary"
+            onClick={() =>
+              setFolderPrompt({
+                title: folderParentContext
+                  ? `New folder in "${folderNameById[folderParentContext] ?? ''}"`
+                  : 'New folder',
+                value: '',
+                action: async (name) => {
+                  await handleFolderCreate(name, folderParentContext)
+                },
+              })
+            }
+          >
+            {'New folder'}
+          </Button>
+        )}
         <Typography variant="body2" color="text.secondary">
           {`${items.length}${totalCount > items.length ? ` of ${totalCount}` : ''} file${totalCount === 1 ? '' : 's'} · ${formatBytes(usedBytes)} used`}
         </Typography>
@@ -1227,6 +1460,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           component="input"
           ref={inputRef}
           type="file"
+          multiple
           accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf"
           onChange={handleUpload}
           sx={{ display: 'none' }}
@@ -1315,31 +1549,34 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       </Stack>
       {breadcrumb.length ? (
         <Breadcrumbs>
-          <Link
-            component="button"
-            variant="body2"
-            underline="hover"
-            color="inherit"
-            onClick={() => setCurrentFolder('all')}
-          >
-            {'All files'}
-          </Link>
+          <CrumbDropZone targetId={null}>
+            <Link
+              component="button"
+              variant="body2"
+              underline="hover"
+              color="inherit"
+              onClick={() => setCurrentFolder('all')}
+            >
+              {'All files'}
+            </Link>
+          </CrumbDropZone>
           {breadcrumb.map((folder, index) =>
             index === breadcrumb.length - 1 ? (
               <Typography key={folder.$id} variant="body2">
                 {folder.name}
               </Typography>
             ) : (
-              <Link
-                key={folder.$id}
-                component="button"
-                variant="body2"
-                underline="hover"
-                color="inherit"
-                onClick={() => setCurrentFolder(folder.$id)}
-              >
-                {folder.name}
-              </Link>
+              <CrumbDropZone key={folder.$id} targetId={folder.$id}>
+                <Link
+                  component="button"
+                  variant="body2"
+                  underline="hover"
+                  color="inherit"
+                  onClick={() => setCurrentFolder(folder.$id)}
+                >
+                  {folder.name}
+                </Link>
+              </CrumbDropZone>
             ),
           )}
         </Breadcrumbs>
@@ -1401,7 +1638,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Stack>
       ) : null}
       {busy || loadingMedia ? <LinearProgress /> : null}
-      {items.length === 0 ? (
+      {visibleFolders.length === 0 && visibleItems.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           {loadingMedia
             ? 'Loading media…'
@@ -1409,127 +1646,73 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         </Typography>
       ) : (
         <Grid container spacing={2}>
+          {visibleFolders.map((folder) => (
+            <Grid
+              key={`folder-${folder.$id}`}
+              size={{ xs: 6, sm: 4, md: 3, lg: 2 }}
+            >
+              <MediaFolderCard
+                folder={folder}
+                count={folderCounts[folder.$id] ?? 0}
+                onOpen={() => setCurrentFolder(folder.$id)}
+                readOnly={Boolean(onSelect)}
+                onNewSubfolder={() =>
+                  setFolderPrompt({
+                    title: `New folder in "${folder.name}"`,
+                    value: '',
+                    action: async (name) => {
+                      await handleFolderCreate(name, folder.$id)
+                    },
+                  })
+                }
+                onRename={() =>
+                  setFolderPrompt({
+                    title: 'Rename folder',
+                    value: folder.name,
+                    action: (name) => handleFolderRename(folder, name),
+                  })
+                }
+                onDelete={() => void handleFolderDelete(folder)}
+              />
+            </Grid>
+          ))}
           {visibleItems.map((media: any) => (
             <Grid key={media.$id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
               <DraggableCard
                 mediaId={media.$id as string}
                 disabled={Boolean(onSelect)}
               >
-              <Card variant="outlined" sx={{ position: 'relative' }}>
-                {onSelect ? null : (
-                  <Checkbox
-                    size="small"
-                    checked={selected.has(media.$id as string)}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onChange={(event) =>
-                      setSelected((prev) => {
-                        const next = new Set(prev)
-                        if (event.target.checked) next.add(media.$id as string)
-                        else next.delete(media.$id as string)
-                        return next
-                      })
-                    }
-                    sx={{
-                      position: 'absolute',
-                      top: 0,
-                      right: 0,
-                      zIndex: 1,
-                      bgcolor: 'background.paper',
-                      borderRadius: '0 0 0 8px',
-                      p: 0.25,
-                    }}
-                  />
-                )}
-                {String(media.contentType ?? '').startsWith('video/') ? (
-                  <CardMedia
-                    component="video"
-                    src={media.url}
-                    muted
-                    onClick={onSelect ? () => onSelect(media) : undefined}
-                    sx={{
-                      height: 96,
-                      objectFit: 'cover',
-                      cursor: onSelect ? 'pointer' : undefined,
-                    }}
-                  />
-                ) : media.contentType === 'application/pdf' ? (
-                  <CardMedia
-                    onClick={onSelect ? () => onSelect(media) : undefined}
-                    sx={{
-                      height: 96,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      bgcolor: 'action.hover',
-                      typography: 'caption',
-                      color: 'text.secondary',
-                      cursor: onSelect ? 'pointer' : undefined,
-                    }}
-                  >
-                    {'PDF'}
-                  </CardMedia>
-                ) : (
-                  <CardMedia
-                    component="img"
-                    image={media.url}
-                    alt={media.fileName ?? ''}
-                    onClick={onSelect ? () => onSelect(media) : undefined}
-                    sx={{
-                      height: 96,
-                      objectFit: 'cover',
-                      cursor: onSelect ? 'pointer' : undefined,
-                    }}
-                  />
-                )}
-                <Box sx={{ px: 1, pt: 0.5 }}>
-                  <Typography variant="caption" noWrap component="div">
-                    {media.fileName ?? media.$id}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    component="div"
-                  >
-                    {formatBytes(media.sizeBytes ?? 0)}
-                  </Typography>
-                </Box>
-                <CardActions sx={{ pt: 0 }}>
-                  {onSelect ? (
-                    <Button size="small" onClick={() => onSelect(media)}>
-                      {'Select'}
-                    </Button>
-                  ) : (
-                    <>
-                      <Button size="small" onClick={handleCopyUrl(media)}>
-                        {'Copy URL'}
-                      </Button>
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          setEditor({
-                            id: media.$id as string,
-                            media,
-                            fileName: (media as any).fileName ?? '',
-                            folderId: (media as any).folderId ?? '',
-                            tags: ((media as any).tags ?? []).join(', '),
-                            alt: (media as any).alt ?? '',
-                            description: (media as any).description ?? '',
-                          })
-                        }
-                      >
-                        {'Details'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(media)}
-                      >
-                        {'Delete'}
-                      </Button>
-                    </>
-                  )}
-                </CardActions>
-              </Card>
+                <MediaAssetCard
+                  media={media}
+                  formatBytes={formatBytes}
+                  onSelect={onSelect}
+                  selectable={!onSelect}
+                  selected={selected.has(media.$id as string)}
+                  onToggleSelect={(checked) =>
+                    setSelected((prev) => {
+                      const next = new Set(prev)
+                      if (checked) next.add(media.$id as string)
+                      else next.delete(media.$id as string)
+                      return next
+                    })
+                  }
+                  onCopyUrl={handleCopyUrl(media)}
+                  onDetails={() =>
+                    setEditor({
+                      id: media.$id as string,
+                      media,
+                      fileName: (media as any).fileName ?? '',
+                      folderId: (media as any).folderId ?? '',
+                      tags: ((media as any).tags ?? []).join(', '),
+                      alt: (media as any).alt ?? '',
+                      description: (media as any).description ?? '',
+                      customMeta: Object.entries(
+                        (media as any).customMetadata ?? {},
+                      ).map(([key, value]) => ({ key, value: String(value) })),
+                    })
+                  }
+                  onDelete={handleDelete(media)}
+                />
               </DraggableCard>
             </Grid>
           ))}
@@ -1697,6 +1880,105 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             multiline
             minRows={2}
           />
+          <Box>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="div"
+              sx={{ mb: 0.5 }}
+            >
+              {'Custom metadata'}
+            </Typography>
+            <Stack spacing={1}>
+              {(editor?.customMeta ?? []).map((row, index) => (
+                <Stack
+                  key={index}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center' }}
+                >
+                  <TextField
+                    size="small"
+                    label="Key"
+                    value={row.key}
+                    onChange={(event) =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customMeta: prev.customMeta.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, key: event.target.value }
+                                  : item,
+                              ),
+                            }
+                          : prev,
+                      )
+                    }
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Value"
+                    value={row.value}
+                    onChange={(event) =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customMeta: prev.customMeta.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, value: event.target.value }
+                                  : item,
+                              ),
+                            }
+                          : prev,
+                      )
+                    }
+                    sx={{ flex: 1 }}
+                  />
+                  <IconButton
+                    size="small"
+                    aria-label="Remove field"
+                    onClick={() =>
+                      setEditor((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customMeta: prev.customMeta.filter(
+                                (_item, itemIndex) => itemIndex !== index,
+                              ),
+                            }
+                          : prev,
+                      )
+                    }
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              ))}
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() =>
+                  setEditor((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          customMeta: [
+                            ...prev.customMeta,
+                            { key: '', value: '' },
+                          ],
+                        }
+                      : prev,
+                  )
+                }
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                {'Add field'}
+              </Button>
+            </Stack>
+          </Box>
           <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
             <Button onClick={() => setEditor(null)}>{'Cancel'}</Button>
             <Button
@@ -1808,8 +2090,79 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog
+        open={Boolean(folderPrompt)}
+        onClose={() => setFolderPrompt(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{folderPrompt?.title}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Name"
+            value={folderPrompt?.value ?? ''}
+            onChange={(event) =>
+              setFolderPrompt((prev) =>
+                prev ? { ...prev, value: event.target.value } : prev,
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && folderPrompt?.value.trim()) {
+                event.preventDefault()
+                void handleFolderPromptSave()
+              }
+            }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFolderPrompt(null)}>{'Cancel'}</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            disabled={folderPromptBusy || !folderPrompt?.value.trim()}
+            onClick={handleFolderPromptSave}
+          >
+            {'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
         </Stack>
       </Stack>
+      {isFileDropActive ? (
+        <Box
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: (theme) => theme.zIndex.modal - 1,
+            borderRadius: 1,
+            border: '2px dashed',
+            borderColor: 'secondary.main',
+            bgcolor: (theme) =>
+              alpha(theme.palette.background.paper, 0.9),
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <Stack spacing={1} sx={{ alignItems: 'center' }}>
+            <CloudUploadIcon color="secondary" sx={{ fontSize: 56 }} />
+            <Typography variant="h6" color="secondary">
+              {'Drop files to upload'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {currentFolderName
+                ? `into "${currentFolderName}"`
+                : 'into the library'}
+            </Typography>
+          </Stack>
+        </Box>
+      ) : null}
+      </Box>
     </DndContext>
   )
 }

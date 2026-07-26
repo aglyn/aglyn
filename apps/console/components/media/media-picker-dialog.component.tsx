@@ -17,106 +17,75 @@
 'use client'
 
 import type * as Aglyn from '@aglyn/aglyn'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useHostOrgId } from '@aglyn/tenant-feature-instance'
 import {
-  Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  Tooltip,
-  Typography,
+  Tab,
+  Tabs,
 } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
-import useHostOrgId from '../../hooks/use-host-org-id'
+import { useState } from 'react'
 import MediaLibraryComponent from './media-library.component'
 
 export interface MediaPickerDialogProps {
-  hostId: string
+  /** Host scope — the site's private library. */
+  hostId?: string
+  /**
+   * Org scope — the shared library. When omitted alongside a `hostId`, the
+   * host's org is resolved so shared org media is pickable via a tab too.
+   */
+  orgId?: string
   open: boolean
   onClose: () => void
-  /** Receives the chosen media (use `media.url` for image src props). */
+  /** Receives the chosen media (use `media.url`/`media.cdnPath` for src). */
   onPick: (media: Aglyn.AglynHostMedia) => void
 }
 
 /**
- * Shared org images pickable beside the host library (AGL-237). Only
- * images surface here — the picker feeds src props.
+ * The one canonical media picker (AGL-821): a dialog around the shared
+ * MediaLibraryComponent, host- or org-scoped. When both a host and its org
+ * are in play, a tab switches between the site-private library and the
+ * organization's shared one — replacing the old hand-rolled OrgMediaStrip
+ * so every picker gets the same folders, upload, and polished grid.
  */
-function OrgMediaStrip(props: {
-  hostId: string
-  onPick: MediaPickerDialogProps['onPick']
-}) {
-  const { hostId, onPick } = props
-  const firestore = useFirestore()
-  const orgId = useHostOrgId(hostId)
-  const { data: items } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'orgs', orgId ?? '-pending-', 'media'),
-        limit(100),
-      ),
-    [firestore, orgId],
-    { idField: '$id' },
-  )
-  const images = (items ?? []).filter((item: any) =>
-    String(item.contentType ?? '').startsWith('image/'),
-  )
-  if (!orgId || images.length === 0) return null
-  return (
-    <Box sx={{ mt: 2 }}>
-      <Typography variant="subtitle2" sx={{ mb: 1 }}>
-        {'Organization media (shared)'}
-      </Typography>
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        {images.map((item: any) => (
-          <Tooltip key={item.$id} title={item.fileName}>
-            <Box
-              component="img"
-              src={item.url}
-              alt={item.fileName}
-              onClick={() => onPick(item as Aglyn.AglynHostMedia)}
-              sx={{
-                width: 84,
-                height: 84,
-                objectFit: 'cover',
-                borderRadius: 1,
-                cursor: 'pointer',
-                border: 1,
-                borderColor: 'divider',
-                '&:hover': { borderColor: 'secondary.main' },
-              }}
-            />
-          </Tooltip>
-        ))}
-      </Box>
-    </Box>
-  )
-}
-
-/** Browse/upload-and-pick dialog around the media library (AGL-73). */
 export function MediaPickerDialog(props: MediaPickerDialogProps) {
-  const { hostId, open, onClose, onPick } = props
+  const { hostId, orgId, open, onClose, onPick } = props
+  const derivedOrgId = useHostOrgId(hostId)
+  const orgScope = orgId ?? derivedOrgId
+  const showTabs = Boolean(hostId) && Boolean(orgScope)
+  const [tab, setTab] = useState<'site' | 'org'>(hostId ? 'site' : 'org')
+
+  const pick = (media: Aglyn.AglynHostMedia) => {
+    onPick(media)
+    onClose()
+  }
+
+  const showSite = Boolean(hostId) && (!showTabs || tab === 'site')
+  const showOrg = Boolean(orgScope) && (hostId ? tab === 'org' : true)
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>{'Choose media'}</DialogTitle>
       <DialogContent>
-        <MediaLibraryComponent
-          hostId={hostId}
-          onSelect={(media) => {
-            onPick(media)
-            onClose()
-          }}
-        />
-        <OrgMediaStrip
-          hostId={hostId}
-          onPick={(media) => {
-            onPick(media)
-            onClose()
-          }}
-        />
+        {showTabs ? (
+          <Tabs
+            value={tab}
+            onChange={(_event, value) => setTab(value)}
+            sx={{ mb: 2 }}
+          >
+            <Tab value="site" label="This site" />
+            <Tab value="org" label="Organization (shared)" />
+          </Tabs>
+        ) : null}
+        {showSite && hostId ? (
+          <MediaLibraryComponent hostId={hostId} onSelect={pick} />
+        ) : null}
+        {showOrg && orgScope ? (
+          <MediaLibraryComponent orgId={orgScope} onSelect={pick} />
+        ) : null}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>{'Cancel'}</Button>

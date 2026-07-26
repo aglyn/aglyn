@@ -27,14 +27,24 @@ feature; large video uploads and higher storage are gated by plan.
 
 ## Organize
 
-- Arrange media in a **folder hierarchy** with a drag-and-drop folder rail.
-- Filter by **type, date, and size**, and sort the library.
-- Capture and edit **metadata**; bulk-edit selections in a detail drawer.
+- Arrange media in a **folder hierarchy**. Folders appear as **cards in the grid
+  (folders first, before files)** as well as in a side rail — open one to browse into it,
+  and use the breadcrumb to step back out.
+- **Drag and drop to reorganize**: drag a file (or a whole selection) onto a folder to
+  move it in, drag a folder onto another to nest it, or drop onto a breadcrumb to move
+  items up and out. Nesting depth and name-collision rules are enforced automatically.
+- Filter by **type, date, and size**, search, and sort the library.
+- Capture and edit **metadata** in a detail drawer — file name, alt text, description,
+  tags, and your own **custom key/value metadata** (mirrored onto the delivered object's
+  storage metadata). Bulk-edit tags and folders across a selection.
+- Each card has an **overflow menu** (Copy URL, Details, Delete) so actions stay tidy.
 - See **per-asset usage** — where each asset is referenced, plus delivery counters.
 
 ## Upload
 
-- Upload **images**, **video**, and **PDFs**, with tiered size caps.
+- Upload **images**, **video**, and **PDFs**, with tiered size caps. Click **Upload**, or
+  **drag files straight from your desktop onto the library** — dropped files land in the
+  folder you have open.
 - Large video (up to 200MB) uses **signed-URL uploads** so big files go straight to
   storage.
 - Rename, **replace the file** behind an asset, and apply **image transforms**.
@@ -49,6 +59,11 @@ images load fast and cache well.
 - **Image** — place and bind images from the library.
 - **Video** — embed uploaded video.
 - **Favicon picker** — choose the site favicon from your media.
+
+Everywhere you pick media — the Image and Video components, the logo and favicon pickers,
+and the organization logo field — the **same media picker** opens, with **This site** and
+**Organization (shared)** tabs so you can pull from either library without leaving the
+dialog.
 
 ## Related
 
