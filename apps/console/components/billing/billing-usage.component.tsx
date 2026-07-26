@@ -18,6 +18,7 @@
 
 import {
   type AglynOrgBilling,
+  checkContactQuota,
   checkDatasetQuota,
   checkSeatQuota,
   resolveOrgEntitlements,
@@ -286,12 +287,21 @@ export function BillingUsageComponent(props: BillingUsageProps) {
   // API requests this month (AGL-635): the live per-request counter, so the
   // current month is authoritative (not the monthly rollup).
   const [apiRequests, setApiRequests] = useState<number | null>(null)
+  // Contacts audience band (AGL-890/891): org-scoped aggregate count.
+  const [contactsCount, setContactsCount] = useState<number | null>(null)
   useEffect(() => {
     if (!orgId) return
     let active = true
     void getCountFromServer(collection(firestore, 'orgs', orgId, 'members'))
       .then((snapshot) => {
         if (active) setTeamSeats(snapshot.data().count)
+      })
+      .catch(() => {
+        // Meter keeps its "not yet metered" state on failure.
+      })
+    void getCountFromServer(collection(firestore, 'orgs', orgId, 'contacts'))
+      .then((snapshot) => {
+        if (active) setContactsCount(snapshot.data().count)
       })
       .catch(() => {
         // Meter keeps its "not yet metered" state on failure.
@@ -350,6 +360,9 @@ export function BillingUsageComponent(props: BillingUsageProps) {
     }
   }, [firestore, orgId])
   const teamSeatLimit = checkSeatQuota(org, 'managers', 0).limit
+  // Contacts meter past the band on a paid plan is billing, not blocking
+  // (AGL-890) — the caption under the meter says so with the estimate.
+  const contactQuota = checkContactQuota(org, contactsCount ?? 0)
   return (
     <>
       <UsageMeter
@@ -373,6 +386,23 @@ export function BillingUsageComponent(props: BillingUsageProps) {
         limit={entitlements.dataStorageMbPerOrg}
         unit="MB"
       />
+      <UsageMeter
+        label="Contacts (organization)"
+        used={contactsCount}
+        limit={entitlements.contactsPerHost}
+      />
+      {contactQuota.overageContacts > 0 &&
+      contactQuota.overageRateUsd != null ? (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', mt: -1.5, mb: 2 }}
+        >
+          {`Audience overage: ${contactQuota.overageContacts.toLocaleString()} ` +
+            `over the included band at $${contactQuota.overageRateUsd}/1,000 ` +
+            `— ≈$${contactQuota.overageMonthlyUsd.toFixed(2)} this month.`}
+        </Typography>
+      ) : null}
       {entitlements.apiRequestsPerMonth > 0 ? (
         <UsageMeter
           label="API requests (this month)"

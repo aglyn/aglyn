@@ -244,6 +244,17 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                         `max ${entitlements.maxMembersPerHost})`
                       : ''}
                   </Typography>
+                  {/* Visitor signups are never capped (AGL-889). */}
+                  <Typography variant="body2">
+                    {'Unlimited member accounts'}
+                  </Typography>
+                  {/* Audience band (AGL-890): paid tiers meter overage. */}
+                  <Typography variant="body2">
+                    {`${entitlements.contactsPerHost.toLocaleString()} contacts`}
+                    {pricing.extraContactsUsdPer1k != null
+                      ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+                      : ''}
+                  </Typography>
                   <Typography variant="body2">
                     {`${quotaLabel(entitlements.variablesPerHost)} variables · ` +
                       `${quotaLabel(entitlements.functionsPerHost)} functions · ` +
@@ -263,6 +274,19 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                           ? ` (+$${pricing.extraApiRequestsUsdPer1k}/1k over)`
                           : '')
                       : 'No API access'}
+                  </Typography>
+                  {/* Declining platform-fee ladder (AGL-892): charged at
+                      checkout as the Stripe Connect application fee;
+                      memberships/gated content bill at the digital rate. */}
+                  <Typography variant="body2">
+                    {entitlements.features.commerce
+                      ? entitlements.transactionFeePhysicalPct > 0 ||
+                        entitlements.transactionFeeDigitalPct > 0
+                        ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
+                          `${entitlements.transactionFeeDigitalPct}% digital & ` +
+                          'membership fees'
+                        : '0% platform fees'
+                      : 'No storefront'}
                   </Typography>
                 </Stack>
                 <Stack spacing={0.5}>

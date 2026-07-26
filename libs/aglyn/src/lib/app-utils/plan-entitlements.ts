@@ -442,6 +442,12 @@ export interface PlanPricing {
    * access, so lower tiers are null (no API to meter).
    */
   extraApiRequestsUsdPer1k: number | null
+  /**
+   * Metered overage per 1,000 contacts beyond `contactsPerHost` (AGL-890):
+   * audience bands, Ghost-style. Paid plans meter (a growing audience is
+   * never dropped); free is null and hard-bands at the included count.
+   */
+  extraContactsUsdPer1k: number | null
 }
 
 /**
@@ -459,6 +465,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: null,
     extraDataGbMonthlyUsd: null,
     extraApiRequestsUsdPer1k: null,
+    extraContactsUsdPer1k: null,
   },
   starter: {
     basePriceMonthlyUsd: 25,
@@ -469,6 +476,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
+    extraContactsUsdPer1k: 1,
   },
   pro: {
     basePriceMonthlyUsd: 56,
@@ -479,6 +487,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 2,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: null,
+    extraContactsUsdPer1k: 0.75,
   },
   business: {
     basePriceMonthlyUsd: 139,
@@ -489,6 +498,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.5,
+    extraContactsUsdPer1k: 0.5,
   },
   advanced: {
     basePriceMonthlyUsd: 399,
@@ -499,6 +509,7 @@ export const PLAN_PRICING: Record<OrgPlan, PlanPricing> = {
     extraDatasetMonthlyUsd: 1,
     extraDataGbMonthlyUsd: 0.25,
     extraApiRequestsUsdPer1k: 0.2,
+    extraContactsUsdPer1k: 0.25,
   },
 }
 
@@ -853,6 +864,55 @@ export function checkApiRequestQuota(
       overageRateUsd === null
         ? 0
         : Math.round((overageRequests / 1000) * overageRateUsd * 100) / 100,
+    overageRateUsd,
+  }
+}
+
+export interface ContactQuotaResult {
+  /** Metered plans always allow; free hard-bands at the included count. */
+  allowed: boolean
+  /** Included contacts on the plan (the audience band). */
+  included: number
+  used: number
+  /** Remaining included contacts; 0 once into overage. */
+  remaining: number
+  /** Contacts beyond the included band (0 within the plan). */
+  overageContacts: number
+  /** Estimated overage this month at the plan's per-1,000 rate. */
+  overageMonthlyUsd: number
+  /** Per-1,000 overage rate; null when the plan hard-bands (free). */
+  overageRateUsd: number | null
+}
+
+/**
+ * Contacts audience-band meter (AGL-890): contacts are the CRM projection
+ * of a site's audience (signups, form fills, buyers), stored org-wide.
+ * Paid plans carry an `extraContactsUsdPer1k` rate, so contacts past the
+ * included band meter onto the monthly invoice (cost-plus, like storage
+ * and API overage — a growing audience is never dropped); free has no
+ * rate and hard-bands at the included count. End-user member ACCOUNTS are
+ * unlimited on every plan (AGL-889) — this meters only the CRM record.
+ */
+export function checkContactQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  usedContacts: number,
+): ContactQuotaResult {
+  const entitlements = resolveOrgEntitlements(org)
+  const pricing = PLAN_PRICING[resolvePlan(org)]
+  const included = entitlements.contactsPerHost
+  const overageRateUsd = pricing.extraContactsUsdPer1k
+  const used = Math.max(0, usedContacts)
+  const overageContacts = Math.max(0, used - included)
+  return {
+    allowed: overageRateUsd !== null ? true : used < included,
+    included,
+    used,
+    remaining: Math.max(0, included - used),
+    overageContacts,
+    overageMonthlyUsd:
+      overageRateUsd === null
+        ? 0
+        : Math.round((overageContacts / 1000) * overageRateUsd * 100) / 100,
     overageRateUsd,
   }
 }

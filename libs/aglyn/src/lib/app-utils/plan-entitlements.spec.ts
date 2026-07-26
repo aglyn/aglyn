@@ -17,6 +17,7 @@
 
 import {
   checkApiRequestQuota,
+  checkContactQuota,
   checkDataStorageQuota,
   checkDatasetQuota,
   checkEntitlement,
@@ -140,6 +141,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: null,
         extraDataGbMonthlyUsd: null,
         extraApiRequestsUsdPer1k: null,
+        extraContactsUsdPer1k: null,
       },
       starter: {
         basePriceMonthlyUsd: 25,
@@ -150,6 +152,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: null,
+        extraContactsUsdPer1k: 1,
       },
       pro: {
         basePriceMonthlyUsd: 56,
@@ -160,6 +163,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 2,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: null,
+        extraContactsUsdPer1k: 0.75,
       },
       business: {
         basePriceMonthlyUsd: 139,
@@ -170,6 +174,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.5,
+        extraContactsUsdPer1k: 0.5,
       },
       advanced: {
         basePriceMonthlyUsd: 399,
@@ -180,6 +185,7 @@ describe('plan entitlements', () => {
         extraDatasetMonthlyUsd: 1,
         extraDataGbMonthlyUsd: 0.25,
         extraApiRequestsUsdPer1k: 0.2,
+        extraContactsUsdPer1k: 0.25,
       },
     })
   })
@@ -456,6 +462,39 @@ describe('plan entitlements', () => {
     expect(pro.allowed).toBe(false)
     expect(pro.included).toBe(0)
     expect(pro.overageRateUsd).toBeNull()
+  })
+
+  it('checkContactQuota meters audience overage on paid plans, hard-bands free (AGL-890)', () => {
+    // Starter includes 1,000 contacts; 3,500 used → 2,500 over at $1/1k.
+    const starter = checkContactQuota({ plan: 'starter' } as any, 3_500)
+    expect(starter.allowed).toBe(true)
+    expect(starter.included).toBe(1_000)
+    expect(starter.overageContacts).toBe(2_500)
+    expect(starter.overageMonthlyUsd).toBeCloseTo(2.5)
+    expect(starter.overageRateUsd).toBe(1)
+    // Pro: 10k included at $0.75/1k over. 12k → 2k over = $1.50.
+    const pro = checkContactQuota({ plan: 'pro' } as any, 12_000)
+    expect(pro.allowed).toBe(true)
+    expect(pro.overageMonthlyUsd).toBeCloseTo(1.5)
+    // Within the band there is no overage; remaining is tracked.
+    const within = checkContactQuota({ plan: 'business' } as any, 40_000)
+    expect(within.overageContacts).toBe(0)
+    expect(within.remaining).toBe(60_000)
+    expect(within.allowed).toBe(true)
+    // Free hard-bands at 100 — no rate, blocked at the band.
+    const freeOver = checkContactQuota({ plan: 'free' } as any, 100)
+    expect(freeOver.allowed).toBe(false)
+    expect(freeOver.overageRateUsd).toBeNull()
+    expect(freeOver.overageMonthlyUsd).toBe(0)
+    const freeUnder = checkContactQuota({ plan: 'free' } as any, 40)
+    expect(freeUnder.allowed).toBe(true)
+    // A dead subscription downgrades to free's hard band (AGL-247).
+    const dead = checkContactQuota(
+      { plan: 'pro', subscription: { status: 'canceled' } } as any,
+      150,
+    )
+    expect(dead.allowed).toBe(false)
+    expect(dead.included).toBe(100)
   })
 
   it('gates commerce features per the AGL-278 matrix', () => {
