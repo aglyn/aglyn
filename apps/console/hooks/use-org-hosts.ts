@@ -18,6 +18,7 @@
 
 import {
   collection,
+  getDocsFromServer,
   onSnapshot,
   query,
   where,
@@ -27,7 +28,13 @@ import {
 import { useEffect, useState } from 'react'
 
 const RETRY_DELAY_MS = 400
-const MAX_RETRIES = 5
+// Cold loads (a refresh or a pasted deep link) restore the auth session and
+// only then attach the ID token to Firestore, so the first host listen can sit
+// in transient `permission-denied` longer than the post-sign-in click this was
+// first tuned for (AGL-216). 8 × 400ms ≈ 3.2s of headroom before we give up —
+// enough that a valid host rarely falls through to the error path below
+// (AGL-813).
+const MAX_RETRIES = 8
 
 export interface OrgHost extends DocumentData {
   $id: string
@@ -57,19 +64,27 @@ export function useOrgHosts(
    * another org's sites) and `null` for accounts with no org yet.
    */
   orgId?: string | null,
-): { hosts: OrgHost[]; ready: boolean } {
+): { hosts: OrgHost[]; ready: boolean; error: boolean } {
   const [hosts, setHosts] = useState<OrgHost[]>([])
   const [ready, setReady] = useState(false)
+  // `true` only when resolution SETTLED by exhausting retries (never from a
+  // clean empty result). It lets the HostGuard tell "couldn't load your sites"
+  // apart from "this site isn't one you can open" — the former must offer a
+  // retry, not a false 404 for a host that actually exists (AGL-813).
+  const [error, setError] = useState(false)
 
   useEffect(() => {
     setReady(false)
     setHosts([])
+    setError(false)
     if (!uid || orgId === undefined) return
 
     let cancelled = false
     let unsubscribe: (() => void) | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let attempt = 0
+    // One-shot guard for the server-confirm fallback below.
+    let serverConfirmed = false
 
     const subscribe = () => {
       // The org membership projection (AGL-233) is the only host
@@ -85,6 +100,46 @@ export function useOrgHosts(
         (snapshot) => {
           if (cancelled) return
           attempt = 0
+          // Stale-negative-cache heal (AGL-827): the console runs a persistent
+          // multi-tab IndexedDB cache. If a host briefly stopped matching this
+          // query (a create/rename/org-assign writes memberRoles + orgId in
+          // steps), a tab can cache a `noDocument` tombstone for it — and
+          // because the resumed listen only pulls DELTAS via its resume token,
+          // an unchanged host is never re-sent, so the tombstone sticks across
+          // reloads and the site vanishes from the list while existing fine on
+          // the server. So an EMPTY live result is not yet trustworthy: confirm
+          // it once against the backend with a fresh (non-resumed) query, which
+          // ignores the resume token, returns the true result set, and writes
+          // it back into the cache — dropping any stale tombstone.
+          //
+          // Crucially, do NOT settle (`ready`) on that empty result: the
+          // HostGuard 404s the moment it sees ready+no-host, which would beat
+          // the async confirm and 404 a site the server still has (AGL-813).
+          // Hold the spinner and settle only once the confirm returns — as a
+          // match if healed, a genuine 404 if truly empty, or a retry if the
+          // confirm itself failed. A populated list settles immediately and
+          // costs no extra read.
+          if (snapshot.empty && !serverConfirmed) {
+            serverConfirmed = true
+            getDocsFromServer(q)
+              .then((fresh) => {
+                if (cancelled) return
+                setHosts(
+                  fresh.docs.map((doc) => ({ $id: doc.id, ...doc.data() })),
+                )
+                setError(false)
+                setReady(true)
+              })
+              .catch(() => {
+                if (cancelled) return
+                // Couldn't confirm (offline/transient): surface a retry, never
+                // a false 404. The live listener stays the source of truth.
+                setError(true)
+                setReady(true)
+              })
+            return
+          }
+          setError(false)
           setReady(true)
           setHosts(
             snapshot.docs.map((doc) => ({ $id: doc.id, ...doc.data() })),
@@ -97,8 +152,11 @@ export function useOrgHosts(
             attempt += 1
             timer = setTimeout(subscribe, RETRY_DELAY_MS)
           } else {
-            // Give up gracefully rather than crash the app — render with an
-            // empty list once retries are exhausted.
+            // Give up gracefully rather than crash the app, but FLAG it: an
+            // empty list here means "the read never succeeded", not "no hosts".
+            // Consumers that gate a 404 on emptiness must not fire on this
+            // (AGL-813).
+            setError(true)
             setReady(true)
           }
         },
@@ -113,7 +171,7 @@ export function useOrgHosts(
     }
   }, [firestore, uid, orgId])
 
-  return { hosts, ready }
+  return { hosts, ready, error }
 }
 
 export default useOrgHosts

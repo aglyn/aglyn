@@ -34,6 +34,13 @@ export const HostSubdomainContext = createContext<string | null>(null)
  */
 export const HostReadyContext = createContext<boolean>(true)
 /**
+ * Whether the current org's host list gave up loading after exhausting its
+ * retries (AGL-813). Distinct from "resolved to no match": the HostGuard shows
+ * a retry instead of a 404 when this is set, so a transient read failure never
+ * masquerades as a site that doesn't exist.
+ */
+export const HostErrorContext = createContext<boolean>(false)
+/**
  * The org's host list, shared from this provider's single subscription.
  *
  * This provider sits in the root layout's provider stack, so its listen — and
@@ -52,6 +59,8 @@ export const OrgHostsContext = createContext<{
 export const useHostId = () => useContext(HostIdContext)
 export const useHostSubdomain = () => useContext(HostSubdomainContext)
 export const useHostReady = () => useContext(HostReadyContext)
+/** Whether host resolution gave up after retries (AGL-813). */
+export const useHostError = () => useContext(HostErrorContext)
 /** The org's hosts, from the provider-level subscription (never remounts). */
 export const useOrgHostsContext = () => useContext(OrgHostsContext)
 
@@ -72,7 +81,7 @@ export function HostIdProvider({ children }) {
   // subdomain index; tracked separately.) This provider is global (above the
   // route not-found boundaries), so it only RESOLVES and exposes state; the
   // HostGuard inside the host route tree enforces the spinner/404.
-  const { hosts, ready } = useOrgHosts(
+  const { hosts, ready, error } = useOrgHosts(
     firestore,
     user?.uid,
     currentOrg?.$id ?? undefined,
@@ -135,13 +144,15 @@ export function HostIdProvider({ children }) {
 
   return (
     <HostReadyContext.Provider value={hostReady}>
-      <HostSubdomainContext.Provider value={hostSubdomain}>
-        <HostIdContext.Provider value={match?.$id ?? null}>
-          <OrgHostsContext.Provider value={orgHosts}>
-            {children}
-          </OrgHostsContext.Provider>
-        </HostIdContext.Provider>
-      </HostSubdomainContext.Provider>
+      <HostErrorContext.Provider value={Boolean(hostSubdomain) && error}>
+        <HostSubdomainContext.Provider value={hostSubdomain}>
+          <HostIdContext.Provider value={match?.$id ?? null}>
+            <OrgHostsContext.Provider value={orgHosts}>
+              {children}
+            </OrgHostsContext.Provider>
+          </HostIdContext.Provider>
+        </HostSubdomainContext.Provider>
+      </HostErrorContext.Provider>
     </HostReadyContext.Provider>
   )
 }
