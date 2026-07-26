@@ -39,6 +39,12 @@ export interface HostResolution {
   error: boolean
 }
 
+/** Resolution state tagged with the subdomain it was computed for (AGL-894). */
+interface ResolutionState extends HostResolution {
+  /** The `subdomain` argument this state describes; null off host routes. */
+  for: string | null
+}
+
 /**
  * Resolve a URL subdomain to a host doc id within the current org (AGL-844),
  * replacing the whole-`hosts`-list scan the provider used to do. Two bounded
@@ -54,6 +60,14 @@ export interface HostResolution {
  * cross-org redirect + the HostGuard's 404 handle it exactly as before. Errors
  * retry with backoff and only then set `error`, preserving the AGL-813/827
  * "never 404 an unconfirmed empty" contract.
+ *
+ * `ready` is derived DURING RENDER from the subdomain the state was computed
+ * for, never left standing across a subdomain change (AGL-894). Effects run
+ * after paint, so a plain `ready` boolean in state stayed true for one render
+ * after a client-side navigation onto a host route — and `hostId` was still
+ * null — which is exactly the `ready && !hostId` shape HostGuard 404s on. That
+ * one render is why picking a site in the switcher landed on "This page isn't
+ * here" while a hard refresh of the same URL worked.
  */
 export function useHostResolution(
   firestore: Firestore,
@@ -61,7 +75,8 @@ export function useHostResolution(
   uid: string | undefined,
   orgId: string | undefined,
 ): HostResolution {
-  const [state, setState] = useState<HostResolution>({
+  const [state, setState] = useState<ResolutionState>({
+    for: null,
     hostId: null,
     ready: false,
     error: false,
@@ -70,12 +85,12 @@ export function useHostResolution(
   useEffect(() => {
     // Off a host route there is nothing to resolve.
     if (!subdomain) {
-      setState({ hostId: null, ready: true, error: false })
+      setState({ for: null, hostId: null, ready: true, error: false })
       return
     }
     // Hold (spinner) until we know the user and their current org.
     if (!uid || !orgId) {
-      setState({ hostId: null, ready: false, error: false })
+      setState({ for: subdomain, hostId: null, ready: false, error: false })
       return
     }
 
@@ -101,7 +116,12 @@ export function useHostResolution(
         if (cancelled) return
         const projected = projection.docs[0]
         if (projected) {
-          setState({ hostId: projected.id, ready: true, error: false })
+          setState({
+            for: subdomain,
+            hostId: projected.id,
+            ready: true,
+            error: false,
+          })
           return
         }
       } catch {
@@ -133,21 +153,26 @@ export function useHostResolution(
         // Only resolve if it belongs to the CURRENT org; a match in another
         // org is left for the provider's cross-org redirect (hostId stays null).
         if (host && host.get('orgId') === orgId) {
-          setState({ hostId: host.id, ready: true, error: false })
+          setState({
+            for: subdomain,
+            hostId: host.id,
+            ready: true,
+            error: false,
+          })
           return
         }
-        setState({ hostId: null, ready: true, error: false })
+        setState({ for: subdomain, hostId: null, ready: true, error: false })
       } catch {
         if (cancelled) return
         if (attempt < MAX_RETRIES) {
           attempt += 1
           timer = setTimeout(resolve, RETRY_DELAY_MS)
         } else {
-          setState({ hostId: null, ready: true, error: true })
+          setState({ for: subdomain, hostId: null, ready: true, error: true })
         }
       }
     }
-    setState({ hostId: null, ready: false, error: false })
+    setState({ for: subdomain, hostId: null, ready: false, error: false })
     void resolve()
 
     return () => {
@@ -156,7 +181,13 @@ export function useHostResolution(
     }
   }, [firestore, subdomain, uid, orgId])
 
-  return state
+  // State from a previous subdomain describes a different route, so it cannot
+  // stand in for this one: until the effect re-runs, the honest answer is "not
+  // ready" (a spinner), never a settled miss the guard would 404 (AGL-894).
+  if (state.for !== subdomain) {
+    return { hostId: null, ready: !subdomain, error: false }
+  }
+  return { hostId: state.hostId, ready: state.ready, error: state.error }
 }
 
 export default useHostResolution
