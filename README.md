@@ -27,7 +27,7 @@
 <p align="center">
   <a href="https://aglyn.com"><strong>aglyn.com</strong></a> &nbsp;·&nbsp;
   <a href="https://app.aglyn.com">Console</a> &nbsp;·&nbsp;
-  <a href="https://app.aglyn.com">Sign in / Sign up</a> &nbsp;·&nbsp;
+  <a href="https://docs.aglyn.com">Docs</a> &nbsp;·&nbsp;
   <a href="CONTRIBUTING.md">Contributing</a> &nbsp;·&nbsp;
   <a href="https://github.com/aglyn/aglyn/issues">Report a bug</a>
 </p>
@@ -203,7 +203,9 @@ Libraries are shareable and imported as `@aglyn/<name>` (e.g. `@aglyn/shared-ui-
 
 ## 📖 Documentation
 
-Deep-dives live in [`docs/`](docs), including:
+📚 **Full product & developer docs live at [docs.aglyn.com](https://docs.aglyn.com).**
+
+Repo-local deep-dives live in [`docs/`](docs), including:
 
 - [Multi-tenant Firestore](docs/MULTI_TENANT_FIRESTORE.md) · [Platform provisioning](docs/PLATFORM_PROVISIONING.md)
 - [Plugin loading](docs/PLUGIN_LOADING.md) · [Plugin platform gaps](docs/PLUGIN_PLATFORM_GAPS.md)
