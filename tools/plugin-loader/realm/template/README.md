@@ -42,7 +42,8 @@ npm run watch      # rebuild on save
   other imports.
 - Keep `manifest.json` in step: `id` (stable, kebab-case), `version`
   (bump every publish — artifacts are immutable), `capabilities`.
-- Publish through the Aglyn console (Community → Publish). The platform
-  content-addresses your bundle (sha256) and reviews it; staff-signed
-  listings may run in the trusted realm tier, everything else runs in the
-  sandboxed PluginFrame.
+- Publish through the Aglyn console: **Marketplace → Publish → "A plugin
+  (upload a bundle)"** — upload `dist/plugin.bundle.mjs` + this
+  `manifest.json`. The platform content-addresses your bundle (sha256)
+  and reviews it; staff-signed listings may run in the trusted realm
+  tier, everything else runs in the sandboxed PluginFrame.
