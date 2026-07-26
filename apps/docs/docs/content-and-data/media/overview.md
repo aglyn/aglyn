@@ -16,7 +16,7 @@ theme's favicon.
 flowchart LR
   U[Upload] --> Org["Organize<br/>(folders, tags, metadata)"]
   Org --> Tr["Transform<br/>(crop, resize)"]
-  Tr --> CDN["CDN delivery<br/>(hashed URLs, WebP)"]
+  Tr --> CDN["CDN delivery<br/>(stable URLs, WebP)"]
   CDN --> Site[Live site]
 ```
 
@@ -37,7 +37,9 @@ feature; large video uploads and higher storage are gated by plan.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
   tags, and your own **custom key/value metadata** (mirrored onto the delivered object's
   storage metadata). Bulk-edit tags and folders across a selection.
-- Each card has an **overflow menu** (Copy URL, Details, Delete) so actions stay tidy.
+- Each card has an **overflow menu** (Copy URL, Replace file, Details, Delete) so actions
+  stay tidy. **Copy URL** gives you a full absolute URL on the site's own domain, ready to
+  paste anywhere — including outside Aglyn.
 - See **per-asset usage**: delivery counters load automatically, and a **Used on**
   audit runs on demand — click **Find where this is used** to list every screen,
   layout, and content entry that references the asset, each a link that opens it.
@@ -49,12 +51,28 @@ feature; large video uploads and higher storage are gated by plan.
   folder you have open.
 - Large video (up to 200MB) uses **signed-URL uploads** so big files go straight to
   storage.
-- Rename, **replace the file** behind an asset, and apply **image transforms**.
+- Rename, **replace the file** behind an asset, and apply **image transforms**. Replace is
+  available from the asset's details drawer and straight from the card's overflow menu.
 
 ## Deliver over CDN
 
-Paid tiers serve media via a **CDN** with hashed URLs and automatic **WebP variants**, so
-images load fast and cache well.
+Paid tiers serve media via a **CDN** with automatic **WebP variants**, so images load fast
+and cache well.
+
+### URLs are stable
+
+A media URL is keyed to the **asset**, not to its bytes or its location. That means the
+link you copied stays correct when you:
+
+- **Replace the file** — every screen, layout, and content entry that embeds it serves
+  the new image immediately, with no re-linking.
+- **Move it between folders** — organizing your library never breaks a live page.
+
+So replacing a logo across a whole site is one upload, not a hunt for every reference.
+Links copied before this behavior shipped keep working too.
+
+When a visitor saves a delivered file, it keeps the asset's **original filename and
+extension**, even though the URL itself doesn't carry one.
 
 ## Components
 

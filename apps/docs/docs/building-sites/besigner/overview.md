@@ -23,6 +23,25 @@ It renders your screen under the real site theme, so what you see matches what p
    select, drag, and edit text inline.
 5. **Inspector** — info, attributes, and styles for the selected element.
 
+## Preview vs. canvas
+
+The canvas is an **editing** surface: hidden panels expand when you select them, so you
+can style what you can't otherwise reach, and nothing responds to hover the way a
+visitor would experience it.
+
+**Preview** (in the toolbar) renders the same draft the way the published site will:
+author-hidden panels start closed, and hover and click **interactions actually run** —
+so a mega menu, dropdown, or popup behaves exactly as it will live.
+
+Two deliberate differences from the real site:
+
+- **Links don't navigate.** You stay on the screen you're previewing.
+- **Server-side steps don't fire** — no analytics events, webhooks, or automations. A
+  preview never writes data or spends quota.
+
+Use Preview to check interaction behavior before publishing, and the canvas to edit the
+parts a visitor would never see open.
+
 :::info Plan availability
 **Free**. The Besigner is core to building; some components and actions it exposes are
 plan-gated (noted where relevant).

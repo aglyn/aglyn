@@ -112,10 +112,19 @@ function Pricing() {
               plan === 'free'
                 ? 'No selling'
                 : `${entitlements.transactionFeePhysicalPct}% physical · ` +
-                  `${entitlements.transactionFeeDigitalPct}% digital fees`
+                  `${entitlements.transactionFeeDigitalPct}% digital & ` +
+                  'membership fees'
             const bullets = [
               quota(entitlements.hostLimit, 'sites'),
               quota(entitlements.productsPerHost, 'products'),
+              // Signups are never capped (AGL-889) and the contacts band
+              // meters instead of blocking (AGL-890) — the two things a
+              // prospect compares against Squarespace/Wix.
+              'Unlimited member accounts',
+              `${entitlements.contactsPerHost.toLocaleString()} contacts` +
+                (pricing.extraContactsUsdPer1k != null
+                  ? ` (+$${pricing.extraContactsUsdPer1k}/1k over)`
+                  : ''),
               entitlements.features.pos ? 'Point of sale' : null,
               entitlements.features.storefrontSubscriptions
                 ? 'Subscriptions & paywalls'
