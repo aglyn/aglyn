@@ -168,6 +168,12 @@ removing the pin and disabling it. **Data your plugin created stays**, so
 reinstalls resume cleanly. Paid listings require purchase before install;
 you see sales in your publisher ledger.
 
+The detail page shows two install figures side by side: **installs** is
+the cumulative all-time total and only ever grows, while **active**
+counts the organizations and sites that currently hold a pin — it goes
+down when someone uninstalls. A big gap between the two is churn worth
+investigating.
+
 Every listing shows its **artifact type** as a chip — Plugin, Component,
 Site template, Layout, Dataset schema, or Email template — so buyers know
 what they're getting before they open it. Dataset schemas and email
