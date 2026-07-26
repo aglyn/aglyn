@@ -16,18 +16,17 @@
  */
 'use client'
 
-import { Alert } from '@mui/material'
+import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useIsStaff } from '../hooks/use-is-staff'
 
 /**
  * Renders its children only for a staff-claim holder (AGL-760).
  *
- * Every `/admin/*` page needs the same three states — reading the claim,
- * refusing, allowing — and had been writing its own copy of all three. The
- * refusal wording says how to get the claim rather than only that you lack
- * it, because the reader is almost always an operator who needs the script
- * name.
+ * The whole `(app)/admin` group is already gated by `StaffGuard` in its layout
+ * (AGL-847); this remains as page-level defense-in-depth for any staff-only
+ * fragment mounted elsewhere. A non-staff viewer gets the ordinary 404 rather
+ * than an alert that names the internal grant script.
  *
  * Renders nothing while the claim is still resolving, so a staff member
  * never sees the refusal flash before their own page.
@@ -35,14 +34,7 @@ import { useIsStaff } from '../hooks/use-is-staff'
 export function StaffOnly({ children }: { children?: ReactNode }) {
   const isStaff = useIsStaff()
   if (isStaff === null) return null
-  if (!isStaff) {
-    return (
-      <Alert severity="warning">
-        {'Staff only. Grant access with tools/scripts/set-staff-claim.mjs, ' +
-          'then sign out and back in to refresh the claim.'}
-      </Alert>
-    )
-  }
+  if (!isStaff) notFound()
   return <>{children}</>
 }
 StaffOnly.displayName = 'StaffOnly'
