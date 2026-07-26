@@ -29,8 +29,14 @@ are reproducible and upgrades are deliberate:
 
 1. Package your plugin against the **manifest + sandbox bridge protocol** (see
    [Plugins overview](overview.md)).
-2. Publish a **version** to the marketplace.
-3. Installers get that pinned version and choose when to **upgrade**.
+2. Verify locally: `node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs`
+   — the publish API enforces the same checks.
+3. Publish a **version** to the marketplace: **Marketplace → Publish →
+   "A plugin (upload a bundle)"** — upload the bundle and its
+   `manifest.json`, set the listing details and price. Uploads publish
+   **sandboxed**; staff review lists (and may sign) them.
+4. Installers get that pinned version and choose when to **upgrade** —
+   ship updates by bumping the manifest `version` and uploading again.
 
 ## Paid listings
 

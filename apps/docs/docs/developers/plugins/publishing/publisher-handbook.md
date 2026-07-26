@@ -19,7 +19,8 @@ the marketplace side.
    the listing belongs to your organization, not your personal account.
 2. **Plan**: publishing requires a Pro plan.
 3. **Payouts** (paid listings only): complete Stripe Connect onboarding
-   from your profile. The platform fee is 20% (30% on free plans).
+   from **Marketplace → Payouts**. The platform fee is 20% (30% on free
+   plans).
 
 ## Where to publish from
 
@@ -82,10 +83,19 @@ and rejects with the exact problem list:
 node tools/scripts/verify-plugin-bundle.mjs dist/plugin.bundle.mjs
 ```
 
+Then upload it from the console: **Marketplace → Publish**, choose
+**"A plugin (upload a bundle)"**, and pick your built
+`plugin.bundle.mjs` plus its `manifest.json` (choose the file or paste
+the JSON). Set the listing name, description, changelog, category, and
+price, and publish. Uploads always publish **sandboxed** — a reviewer
+verifies and signs a version before it can run trusted.
+
 Each publish uploads your bundle (content-addressed by sha256 —
 **immutable**; a new build is a new object), writes a version document
 with your manifest and changelog, and bumps the listing's
-`latestVersion`. There's a daily publish cap per publisher.
+`latestVersion`. To ship an update, bump `version` in the manifest and
+upload again through the same dialog. There's a daily publish cap per
+publisher.
 
 ## Review: what happens after you publish
 
@@ -107,14 +117,17 @@ Speed the review up: a real README, a license, sane `capabilities`
 ## Authoring your listing
 
 Your listing IS your storefront — it renders on the detail page every
-buyer sees. Editable at publish time or any time after (the *Edit
-listing* card on your own listing, no republish needed):
+buyer sees. Editable at publish time or any time after, no republish
+needed: open **Edit listing** on your own listing's detail page (the
+whole page becomes the editor), or use the **Edit** action on
+**Marketplace → Listings**.
 
 | Field | Guidance |
 | --- | --- |
-| README (markdown) | The main docs: what it does, setup, what it adds, data & permissions. Headings, lists, links, and images; ≤20k chars; https images only. |
-| Logo | Square, https URL. |
-| Screenshots | Up to 6, https URLs; the detail page shows a gallery. |
+| Body (About) | The main docs: what it does, setup, what it adds, data & permissions. Rich-text editor with headings, bold/italic, links, and inline images; ≤20k chars. |
+| Preview image | The hero shown on browse cards and at the top of the detail page — pick it from your media library. |
+| Logo | Square; pick from the media library or paste an https URL. |
+| Screenshots | Up to 6, from the media library or https URLs; the detail page shows a gallery with click-to-zoom. |
 | Categories | Up to 3 from the fixed taxonomy. |
 | License | Short label (e.g. `MIT`) — listings without one get flagged in review. |
 | Homepage / repository | Public links build trust; reviewers check them. |
@@ -137,11 +150,20 @@ are what overcomes it.
 
 ## How installs work (the buyer side)
 
-Browse → install pins your exact version to the site (or org-wide with
-*Share with org*), enables the plugin for the workspace, and it loads on
-their next visit. Uninstall removes the pin and disables it — **data your
-plugin created stays**, so reinstalls resume cleanly. Paid listings
-require purchase before install; you see sales in your publisher ledger.
+Browse is a catalogue — cards link to the **detail page**, which is the
+only place an install happens. The buyer picks targets (**all sites**,
+**selected sites**, or org-wide for plugins), confirms a dialog that
+names exactly where the install lands, and the pin is written: your
+exact `{version, sha256}` pinned to the site or org, the plugin enabled
+for the workspace, loaded on their next visit. Uninstall removes the pin
+and disables it — **data your plugin created stays**, so reinstalls
+resume cleanly. Paid listings require purchase before install; you see
+sales in your publisher ledger.
+
+**Ratings and comments**: any signed-in user can comment on your
+listing; star ratings are reserved for verified-email accounts in an
+organization that actually installed it. The publishing organization can
+never rate or comment on its own listing.
 
 ## Getting paid
 
