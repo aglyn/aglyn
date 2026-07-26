@@ -68,6 +68,11 @@ export interface CommunityBrowseProps {
    * page — the only place installs happen now — unreachable from browse.
    */
   orgSlug?: string
+  /**
+   * Restrict the grid to one publisher's listings (AGL-869), for the org-scope
+   * publisher page. Omitted on the main browse, which shows everyone.
+   */
+  publisherId?: string
 }
 
 /**
@@ -81,7 +86,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { orgScoped, orgSlug: orgSlugProp } = props
+  const { orgScoped, orgSlug: orgSlugProp, publisherId } = props
   const [handles, setHandles] = useState<Record<string, string>>({})
   // Listings are org-owned (AGL-652), so "is this mine" is an org comparison.
   // Resolved from the routing mirror rather than a new prop so the component
@@ -126,7 +131,11 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
         : undefined
   const publisherHref = (profileId: string) =>
     orgScoped
-      ? undefined
+      ? // Org-scope publisher storefront (AGL-869): all of one publisher's
+        // listings. Needs the URL slug, which is passed in at org scope.
+        orgSlug
+        ? buildRoute(Route.ORG_MARKETPLACE_PUBLISHER, { orgSlug, profileId })
+        : undefined
       : orgSlug && subdomain
         ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
             orgSlug,
@@ -304,6 +313,8 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
       if (!isListingBrowsable(listing) && listing.profileId !== viewerOrgId) {
         return false
       }
+      // Publisher page (AGL-869): only this publisher's listings.
+      if (publisherId && listing.profileId !== publisherId) return false
       if (category && listing.category !== category) return false
       if (!needle) return true
       return [listing.displayName, listing.description, listing.category]
@@ -323,7 +334,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
       }
       return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
     })
-  }, [listings, search, category, sort, user?.uid])
+  }, [listings, search, category, sort, publisherId, user?.uid])
 
   return (
     <CardDisplay header={'Community components'} contentGutterX contentGutterY>

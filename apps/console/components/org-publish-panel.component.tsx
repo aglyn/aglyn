@@ -36,6 +36,7 @@ import useFirestoreDoc from '../hooks/use-firestore-doc'
 import PublishArtifactDialog, {
   type PublishArtifactTarget,
 } from './templates/publish-artifact-dialog.component'
+import UploadPluginDialog from './marketplace/upload-plugin-dialog.component'
 
 type PublishKind =
   | 'component'
@@ -43,6 +44,7 @@ type PublishKind =
   | 'site'
   | 'datasetSchema'
   | 'emailTemplate'
+  | 'plugin'
 
 const artifactName = (artifact: any): string | undefined =>
   artifact?.displayName ?? artifact?.name ?? artifact?.title ?? undefined
@@ -81,6 +83,8 @@ const PICKERS: Record<
     optionLabel: (entry) => emailLabel(entry.$id),
   },
   site: { label: 'Site', empty: '', optionLabel: () => '' },
+  // Plugins don't pick an existing artifact — they're uploaded (AGL-868).
+  plugin: { label: 'Plugin', empty: '', optionLabel: () => '' },
 }
 
 /**
@@ -112,6 +116,7 @@ export function OrgPublishPanel({
   const [kind, setKind] = useState<PublishKind>('component')
   const [artifactId, setArtifactId] = useState('')
   const [target, setTarget] = useState<PublishArtifactTarget | null>(null)
+  const [uploadPluginOpen, setUploadPluginOpen] = useState(false)
 
   const { data: componentDocs } = useFirestoreCollection<any>(
     () =>
@@ -308,8 +313,14 @@ export function OrgPublishPanel({
           <MenuItem value="datasetSchema">{'A dataset schema'}</MenuItem>
           <MenuItem value="emailTemplate">{'An email template'}</MenuItem>
           <MenuItem value="site">{'This entire site (as a template)'}</MenuItem>
+          <MenuItem value="plugin">{'A plugin (upload a bundle)'}</MenuItem>
         </TextField>
-        {kind === 'site' ? (
+        {kind === 'plugin' ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Upload a self-contained plugin bundle and its manifest. It ' +
+              'publishes sandboxed and is signed after a reviewer verifies it.'}
+          </Typography>
+        ) : kind === 'site' ? (
           <Typography variant="body2" color="text.secondary">
             {'Publishes this site’s current published screens and theme as an ' +
               'installable starting point.'}
@@ -343,14 +354,23 @@ export function OrgPublishPanel({
           <Button
             variant="contained"
             color="secondary"
-            disabled={!canPublish}
-            onClick={openPublish}
+            disabled={kind === 'plugin' ? false : !canPublish}
+            onClick={
+              kind === 'plugin'
+                ? () => setUploadPluginOpen(true)
+                : openPublish
+            }
           >
-            {'Publish…'}
+            {kind === 'plugin' ? 'Upload plugin…' : 'Publish…'}
           </Button>
         </Box>
       </Stack>
       <PublishArtifactDialog target={target} onClose={() => setTarget(null)} />
+      <UploadPluginDialog
+        orgId={orgId}
+        open={uploadPluginOpen}
+        onClose={() => setUploadPluginOpen(false)}
+      />
     </CardDisplay>
   )
 }

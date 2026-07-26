@@ -17,7 +17,6 @@
 'use client'
 
 import {
-  LISTING_CATEGORIES,
   LISTING_README_MAX_CHARS,
   listingArtifactType,
   listingArtifactLabel,
@@ -160,160 +159,6 @@ function ListingReadme({ readme }: { readme: string }) {
   )
 }
 
-/**
- * Owner-only listing content editor (AGL-430/431): posts the
- * update-listing action so publishers refresh their marketplace docs
- * without republishing code.
- */
-function ListingEditCard({
-  listing,
-  listingId,
-}: {
-  listing: any
-  listingId: string
-}) {
-  const { data: user } = useUser()
-  const { enqueueSnackbar } = useSnackbar()
-  const [busy, setBusy] = useState(false)
-  const [values, setValues] = useState({
-    displayName: '',
-    description: '',
-    readme: '',
-    logoUrl: '',
-    homepageUrl: '',
-    repositoryUrl: '',
-    license: '',
-    category: '',
-    screenshots: '',
-  })
-  useEffect(() => {
-    setValues({
-      displayName: listing?.displayName ?? '',
-      description: listing?.description ?? '',
-      readme: listing?.readme ?? '',
-      logoUrl: listing?.logoUrl ?? '',
-      homepageUrl: listing?.homepageUrl ?? '',
-      repositoryUrl: listing?.repositoryUrl ?? '',
-      license: listing?.license ?? '',
-      category: listing?.categories?.[0] ?? '',
-      screenshots: (listing?.screenshots ?? []).join('\n'),
-    })
-  }, [listing?.$id])
-
-  const save = async () => {
-    setBusy(true)
-    try {
-      const idToken = await (
-        user as { getIdToken?: () => Promise<string> }
-      )?.getIdToken?.()
-      const response = await fetch('/api/community/publish-plugin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({
-          action: 'update-listing',
-          listingId,
-          displayName: values.displayName,
-          description: values.description,
-          readme: values.readme,
-          logoUrl: values.logoUrl,
-          homepageUrl: values.homepageUrl,
-          repositoryUrl: values.repositoryUrl,
-          license: values.license,
-          categories: values.category ? [values.category] : [],
-          screenshots: values.screenshots
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean),
-        }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (response.ok) {
-        enqueueSnackbar('Listing updated', { variant: 'success' })
-      } else {
-        enqueueSnackbar(payload?.error ?? 'Update failed', {
-          variant: 'error',
-          allowDuplicate: true,
-        })
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const set = (key: keyof typeof values) => (event: any) =>
-    setValues((current) => ({ ...current, [key]: event.target.value }))
-
-  return (
-    <CardDisplay header={'Edit listing'} contentGutterX contentGutterY>
-      <Stack spacing={2}>
-        <Typography variant="body2" color="text.secondary">
-          {'Shown on this page for every visitor. Markdown supported in ' +
-            'the README (headings, lists, links, images).'}
-        </Typography>
-        {/* Name and description are what browse cards show, so they are
-            editable here rather than only at publish time — correcting a typo
-            should not require shipping a version nobody asked for (AGL-793). */}
-        <TextField
-          label="Listing name"
-          value={values.displayName}
-          onChange={set('displayName')}
-          size="small"
-        />
-        <TextField
-          label="Description"
-          helperText="One line, shown on every browse card"
-          multiline
-          minRows={2}
-          value={values.description}
-          onChange={set('description')}
-          size="small"
-        />
-        <TextField
-          label="README (markdown)"
-          multiline
-          minRows={5}
-          value={values.readme}
-          onChange={set('readme')}
-        />
-        <TextField label="Logo URL (https)" value={values.logoUrl} onChange={set('logoUrl')} size="small" />
-        <TextField
-          label="Screenshot URLs (one per line, https)"
-          multiline
-          minRows={2}
-          value={values.screenshots}
-          onChange={set('screenshots')}
-          size="small"
-        />
-        <TextField label="Homepage (https)" value={values.homepageUrl} onChange={set('homepageUrl')} size="small" />
-        <TextField label="Repository (https)" value={values.repositoryUrl} onChange={set('repositoryUrl')} size="small" />
-        <TextField label="License" value={values.license} onChange={set('license')} size="small" />
-        <TextField
-          select
-          label="Category"
-          value={values.category}
-          onChange={set('category')}
-          size="small"
-        >
-          <MenuItem value="">{'None'}</MenuItem>
-          {LISTING_CATEGORIES.map((entry) => (
-            <MenuItem key={entry} value={entry}>
-              {entry}
-            </MenuItem>
-          ))}
-        </TextField>
-        <Box>
-          <Button variant="contained" size="small" disabled={busy} onClick={() => void save()}>
-            {'Save listing'}
-          </Button>
-        </Box>
-      </Stack>
-    </CardDisplay>
-  )
-}
-
 export interface CommunityListingContentProps {
   hostId: string
   listingId: string
@@ -326,6 +171,11 @@ export interface CommunityListingContentProps {
    * page being retired.
    */
   orgScoped?: boolean
+  /**
+   * The acting org's slug from the URL (AGL-869). At org scope the publisher
+   * link builds from it directly rather than the async host resolution.
+   */
+  orgSlug?: string
   /**
    * The org's sites, for the install-targeting picker (AGL-773). Present only
    * at org scope; when given (and non-empty) the CTA offers All sites vs
@@ -345,13 +195,16 @@ export function CommunityListingContent({
   listingId,
   permissions,
   orgScoped,
+  orgSlug: orgSlugProp,
   hosts,
 }: CommunityListingContentProps) {
   // The publisher link was `/{hostDocId}/community/publisher/{id}` — the
   // pre-AGL-621 shape, dead since. The sibling browse grid was fixed for
   // exactly this (AGL-673) and this file was missed; both now build the
   // route from the shared table (AGL-685).
-  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
+  const { orgSlug: resolvedOrgSlug, subdomain } = useConsoleHostRoute(hostId)
+  // Prefer the URL slug (AGL-869): synchronous and always present at org scope.
+  const orgSlug = orgSlugProp ?? resolvedOrgSlug
   const firestore = useFirestore()
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
@@ -624,7 +477,7 @@ export function CommunityListingContent({
   return (
     <>
       <NextPageTitle screen={listing?.displayName ?? 'Community listing'} />
-        <Container gutterY maxWidth="lg">
+        <Container gutterY maxWidth="xl">
           {missing ? (
             <Typography variant="body2" color="text.secondary">
               {'This listing does not exist or was unpublished.'}
@@ -956,17 +809,30 @@ export function CommunityListingContent({
                         contentGutterY
                       >
                         <Stack spacing={0.5}>
+                          {/* Link to the publisher's storefront (AGL-869):
+                              the org-scope publisher page at org scope, the
+                              per-site publisher page otherwise. */}
                           <MuiLink
                             href={
-                              orgScoped
+                              !listing?.profileId
                                 ? undefined
-                                : orgSlug && subdomain && listing?.profileId
-                                  ? buildRoute(Route.HOST_COMMUNITY_PUBLISHER, {
-                                      orgSlug,
-                                      host: subdomain,
-                                      profileId: listing.profileId,
-                                    })
-                                  : undefined
+                                : orgScoped
+                                  ? orgSlug
+                                    ? buildRoute(
+                                        Route.ORG_MARKETPLACE_PUBLISHER,
+                                        { orgSlug, profileId: listing.profileId },
+                                      )
+                                    : undefined
+                                  : orgSlug && subdomain
+                                    ? buildRoute(
+                                        Route.HOST_COMMUNITY_PUBLISHER,
+                                        {
+                                          orgSlug,
+                                          host: subdomain,
+                                          profileId: listing.profileId,
+                                        },
+                                      )
+                                    : undefined
                             }
                             color="secondary"
                             underline="hover"
@@ -1075,16 +941,9 @@ export function CommunityListingContent({
                           </Stack>
                         </CardDisplay>
                       ) : null}
-                      {/* Org comparison, not uid — see viewerOrgId above
-                          (AGL-652). Against `user.uid` this was never true,
-                          so the edit card silently never rendered. */}
-                      {listing?.profileId &&
-                      listing.profileId === viewerOrgId ? (
-                        <ListingEditCard
-                          listing={listing}
-                          listingId={listingId}
-                        />
-                      ) : null}
+                      {/* Editing moved to a full-page owner editor (AGL-869):
+                          the cramped sidebar card is gone; the console page
+                          swaps the whole detail for the editor instead. */}
                       {isPlugin && versions.length ? null : (
                       <CardDisplay
                         header={'Version history'}

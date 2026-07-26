@@ -1,0 +1,345 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+'use client'
+
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import {
+  Alert,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material'
+import { useRef, useState } from 'react'
+import { useUser } from '@aglyn/tenant-feature-instance'
+
+// Mirrors the server taxonomy; the server re-validates (see other marketplace
+// dialogs for why the console can't import the community plugin's model).
+const LISTING_CATEGORIES = [
+  'analytics',
+  'automation',
+  'commerce',
+  'communication',
+  'content',
+  'design',
+  'forms',
+  'integrations',
+  'marketing',
+  'productivity',
+  'seo',
+  'security',
+] as const
+
+/** Base64-encode file bytes without a data: prefix. */
+async function fileToBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.length; i += 1)
+    binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
+
+export interface UploadPluginDialogProps {
+  orgId: string
+  open: boolean
+  onClose: () => void
+}
+
+/**
+ * Self-service plugin upload (AGL-868). The seller uploads one self-contained
+ * JS bundle plus its manifest; the listing publishes as a **sandboxed**
+ * community plugin (the loader runs it isolated, no direct site-data access)
+ * and is realm-signed only later, during staff review. This is the safe
+ * default: nothing a seller uploads runs trusted until a human vouches for it.
+ *
+ * The bundle bytes and manifest go to `/api/community/publish-plugin`, which
+ * statically verifies the bundle (entry exports, self-containment, forbidden
+ * APIs, size), content-addresses it with sha256, and records the version.
+ */
+export function UploadPluginDialog(props: UploadPluginDialogProps) {
+  const { orgId, open, onClose } = props
+  const { data: user } = useUser()
+  const { enqueueSnackbar } = useSnackbar()
+  const [busy, setBusy] = useState(false)
+  const [problems, setProblems] = useState<string[]>([])
+
+  const bundleRef = useRef<HTMLInputElement>(null)
+  const manifestRef = useRef<HTMLInputElement>(null)
+  const [bundleFile, setBundleFile] = useState<File | null>(null)
+  const [manifestFile, setManifestFile] = useState<File | null>(null)
+  const [manifestText, setManifestText] = useState('')
+
+  const [displayName, setDisplayName] = useState('')
+  const [description, setDescription] = useState('')
+  const [category, setCategory] = useState('')
+  const [changelog, setChangelog] = useState('')
+  const [priceUsd, setPriceUsd] = useState('0')
+
+  const reset = () => {
+    setBundleFile(null)
+    setManifestFile(null)
+    setManifestText('')
+    setDisplayName('')
+    setDescription('')
+    setCategory('')
+    setChangelog('')
+    setPriceUsd('0')
+    setProblems([])
+  }
+
+  const close = () => {
+    if (busy) return
+    reset()
+    onClose()
+  }
+
+  const readManifest = async (): Promise<Record<string, unknown> | null> => {
+    // A pasted manifest wins; otherwise read the chosen file.
+    const raw = manifestText.trim()
+      ? manifestText
+      : manifestFile
+        ? await manifestFile.text()
+        : ''
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+      return null
+    }
+  }
+
+  const submit = async () => {
+    setProblems([])
+    if (!bundleFile) {
+      return void enqueueSnackbar('Choose a plugin bundle (.js) to upload', {
+        variant: 'warning',
+      })
+    }
+    const manifest = await readManifest()
+    if (!manifest) {
+      return void enqueueSnackbar(
+        'Add a valid manifest (JSON) — id, name, version, and entry',
+        { variant: 'warning' },
+      )
+    }
+    setBusy(true)
+    try {
+      const bundle = await fileToBase64(bundleFile)
+      const idToken = await (
+        user as { getIdToken?: () => Promise<string> }
+      )?.getIdToken?.()
+      const response = await fetch('/api/community/publish-plugin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          orgId,
+          bundle,
+          manifest,
+          displayName:
+            displayName.trim() || String((manifest as any).name ?? '').trim(),
+          description: description.trim(),
+          category: category || undefined,
+          changelog: changelog.trim(),
+          priceUsd: Math.max(0, Math.round(Number(priceUsd) || 0)),
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        if (Array.isArray(payload?.problems)) setProblems(payload.problems)
+        return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
+          variant: response.status === 501 ? 'info' : 'error',
+          allowDuplicate: true,
+        })
+      }
+      enqueueSnackbar(`Plugin published (v${payload?.version ?? '1'})`, {
+        variant: 'success',
+      })
+      close()
+    } catch (error) {
+      console.error(error)
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onClose={close} maxWidth="sm" fullWidth>
+      <DialogTitle>{'Upload a plugin'}</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <Alert severity="info">
+            {'Plugins publish sandboxed — they run isolated and can’t touch ' +
+              'site data directly. A reviewer verifies and signs yours before ' +
+              'it can run trusted.'}
+          </Alert>
+
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle2">{'Bundle (.js)'}</Typography>
+            <input
+              ref={bundleRef}
+              type="file"
+              accept=".js,text/javascript,application/javascript"
+              hidden
+              onChange={(event) =>
+                setBundleFile(event.target.files?.[0] ?? null)
+              }
+            />
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Button size="small" onClick={() => bundleRef.current?.click()}>
+                {'Choose bundle'}
+              </Button>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {bundleFile?.name ?? 'No file chosen'}
+              </Typography>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              {'One self-contained bundle. It’s statically checked for ' +
+                'forbidden APIs and size before publishing.'}
+            </Typography>
+          </Stack>
+
+          <Stack spacing={0.5}>
+            <Typography variant="subtitle2">
+              {'Manifest (JSON: id, name, version, entry)'}
+            </Typography>
+            <input
+              ref={manifestRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(event) =>
+                setManifestFile(event.target.files?.[0] ?? null)
+              }
+            />
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+              <Button size="small" onClick={() => manifestRef.current?.click()}>
+                {'Choose manifest.json'}
+              </Button>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {manifestFile?.name ?? 'or paste below'}
+              </Typography>
+            </Stack>
+            <TextField
+              placeholder='{ "id": "acme.widget", "name": "Widget", "version": "1.0.0", "entry": "index.js" }'
+              value={manifestText}
+              onChange={(event) => setManifestText(event.target.value)}
+              size="small"
+              multiline
+              minRows={3}
+              fullWidth
+            />
+          </Stack>
+
+          <TextField
+            label="Listing name"
+            helperText="Defaults to the manifest name"
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            size="small"
+          />
+          <TextField
+            label="Description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            size="small"
+            multiline
+            minRows={2}
+          />
+          <Stack direction="row" spacing={1}>
+            <TextField
+              label="Changelog"
+              value={changelog}
+              onChange={(event) => setChangelog(event.target.value)}
+              size="small"
+              sx={{ flex: 1 }}
+            />
+            <TextField
+              select
+              label="Category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              size="small"
+              sx={{ flex: 1 }}
+            >
+              <MenuItem value="">{'None'}</MenuItem>
+              {LISTING_CATEGORIES.map((entry) => (
+                <MenuItem key={entry} value={entry}>
+                  {entry}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          <TextField
+            label="Price (USD)"
+            helperText="0 for free. Paid listings need payouts set up."
+            type="number"
+            value={priceUsd}
+            onChange={(event) => setPriceUsd(event.target.value)}
+            size="small"
+            sx={{ maxWidth: 200 }}
+          />
+
+          {problems.length ? (
+            <Alert severity="error">
+              <Typography variant="subtitle2">
+                {'Bundle failed verification'}
+              </Typography>
+              <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                {problems.map((problem) => (
+                  <li key={problem}>
+                    <Typography variant="caption">{problem}</Typography>
+                  </li>
+                ))}
+              </ul>
+            </Alert>
+          ) : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={close} disabled={busy}>
+          {'Cancel'}
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => void submit()}
+          disabled={busy || !bundleFile}
+        >
+          {busy ? 'Publishing…' : 'Publish plugin'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+UploadPluginDialog.displayName = 'UploadPluginDialog'
+
+export default UploadPluginDialog

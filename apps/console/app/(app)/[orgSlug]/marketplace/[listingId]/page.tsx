@@ -18,12 +18,18 @@
 
 import { mdiStorefrontOutline } from '@aglyn/shared-data-mdi'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
-import { Alert } from '@mui/material'
+import { Alert, Box, Button, Stack } from '@mui/material'
 import { useParams } from 'next/navigation'
-import { useMemo } from 'react'
-import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useMemo, useState } from 'react'
+import {
+  useFirestore,
+  useFirestoreDoc,
+  useUser,
+} from '@aglyn/tenant-feature-instance'
+import { doc } from 'firebase/firestore'
 import { Container } from '@aglyn/shared-ui-jsx'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
+import ListingDetailEditor from '../../../../../components/marketplace/listing-detail-editor.component'
 import PluginWidgetSlot from '../../../../../components/plugin-widget-slot.component'
 import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { buildRoute, Route } from '../../../../../constants/route-links'
@@ -47,6 +53,19 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
   const { permissions } = useOrgPermissions()
   const params = useParams<{ listingId: string }>()
   const listingId = String(params.listingId ?? '')
+
+  // The listing itself, so the owner can edit the whole page in place
+  // (AGL-869) rather than through a cramped sidebar card.
+  const { data: listing } = useFirestoreDoc<any>(
+    () => doc(firestore, 'communityListings', listingId || '-missing-'),
+    [firestore, listingId],
+    { idField: '$id' },
+  )
+  // Listings are org-owned (AGL-652): ownership is an org comparison.
+  const isOwner = Boolean(
+    currentOrg?.$id && listing?.profileId === currentOrg.$id,
+  )
+  const [editing, setEditing] = useState(false)
 
   const { hosts } = useOrgHosts(
     firestore,
@@ -87,22 +106,69 @@ const OrgMarketplaceListing: NextPageWithLayout<Record<string, never>> = () => {
       }}
       help="plugins"
     >
-      {!actingHost ? (
+      {editing && isOwner && currentOrg?.$id && listing ? (
         <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
-          <Alert severity="info">
-            {'Add a site to your organization to view and install marketplace ' +
-              'items.'}
-          </Alert>
+          <ListingDetailEditor
+            orgId={currentOrg.$id}
+            listingId={listingId}
+            listing={listing}
+            user={user}
+            onDone={() => setEditing(false)}
+          />
+        </Container>
+      ) : !actingHost ? (
+        <Container gutterY maxWidth={CONTENT_MAX_WIDTH}>
+          {/* Owners can still edit their listing with no site of their own. */}
+          {isOwner ? (
+            <Stack spacing={2}>
+              <Box>
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  
+                  onClick={() => setEditing(true)}
+                >
+                  {'Edit listing'}
+                </Button>
+              </Box>
+              <Alert severity="info">
+                {'Add a site to your organization to install marketplace ' +
+                  'items. You can still edit this listing above.'}
+              </Alert>
+            </Stack>
+          ) : (
+            <Alert severity="info">
+              {'Add a site to your organization to view and install ' +
+                'marketplace items.'}
+            </Alert>
+          )}
         </Container>
       ) : (
-        <PluginWidgetSlot
-          slot="communityListing"
-          hostId={actingHost}
-          listingId={listingId}
-          permissions={permissions}
-          orgScoped
-          hosts={hostList}
-        />
+        <>
+          {isOwner ? (
+            <Container maxWidth={CONTENT_MAX_WIDTH}>
+              <Box sx={{ pt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  
+                  onClick={() => setEditing(true)}
+                >
+                  {'Edit listing'}
+                </Button>
+              </Box>
+            </Container>
+          ) : null}
+          <PluginWidgetSlot
+            slot="communityListing"
+            hostId={actingHost}
+            listingId={listingId}
+            permissions={permissions}
+            orgScoped
+            orgSlug={orgSlug}
+            hosts={hostList}
+          />
+        </>
       )}
     </DashboardLayout>
   )
