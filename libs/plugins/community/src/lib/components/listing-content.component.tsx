@@ -213,6 +213,8 @@ export function CommunityListingContent({
   // Confirm before writing install pins (AGL-867): the install is deliberate
   // and site-scoped, so it names its targets before committing.
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // Screenshot lightbox (AGL-869): the clicked screenshot's URL, or null.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   // Org-scope install targeting (AGL-773): All sites vs a chosen subset. Only
   // engaged at org scope with a known site list; otherwise the per-site tab's
   // simpler org/host choice (AGL-656) still applies.
@@ -616,17 +618,21 @@ export function CommunityListingContent({
                             sx={{ overflowX: 'auto', pb: 0.5 }}
                           >
                             {listing.screenshots.map((url: string) => (
+                              // Click to zoom (AGL-869) — the strip thumbnails
+                              // are too small to actually evaluate a UI from.
                               <Box
                                 key={url}
                                 component="img"
                                 src={url}
                                 alt={`${listing?.displayName} screenshot`}
                                 loading="lazy"
+                                onClick={() => setLightboxUrl(url)}
                                 sx={{
                                   height: 180,
                                   borderRadius: 1,
                                   border: 1,
                                   borderColor: 'divider',
+                                  cursor: 'zoom-in',
                                 }}
                               />
                             ))}
@@ -893,14 +899,18 @@ export function CommunityListingContent({
                           </Stack>
                         </CardDisplay>
                       ) : null}
-                      {isPlugin && versions.length ? (
-                        <CardDisplay
-                          header={'Versions & changelog'}
-                          contentGutterX
-                          contentGutterY
-                        >
+                      {/* ONE version timeline (AGL-869) — the plugin API's
+                          rich entries (changelog + trust) when present, the
+                          stored versionHistory otherwise. Two differently-
+                          shaped cards for the same idea read as unfinished. */}
+                      <CardDisplay
+                        header={'Version history'}
+                        contentGutterX
+                        contentGutterY
+                      >
+                        {isPlugin && versions.length ? (
                           <Stack spacing={1}>
-                            {versions.map((entry) => (
+                            {versions.map((entry, index) => (
                               <Stack key={entry.version} spacing={0.25}>
                                 <Stack
                                   direction="row"
@@ -910,11 +920,14 @@ export function CommunityListingContent({
                                   <Typography variant="body2">
                                     {`v${entry.version}`}
                                   </Typography>
+                                  {index === 0 ? (
+                                    <Chip size="small" label="Latest" />
+                                  ) : null}
                                   {entry.trust === 'realm' ? (
                                     <Chip
                                       size="small"
                                       color="success"
-                                      label="realm"
+                                      label="Realm-trusted"
                                     />
                                   ) : null}
                                   <Typography
@@ -939,43 +952,40 @@ export function CommunityListingContent({
                               </Stack>
                             ))}
                           </Stack>
-                        </CardDisplay>
-                      ) : null}
-                      {/* Editing moved to a full-page owner editor (AGL-869):
-                          the cramped sidebar card is gone; the console page
-                          swaps the whole detail for the editor instead. */}
-                      {isPlugin && versions.length ? null : (
-                      <CardDisplay
-                        header={'Version history'}
-                        contentGutterX
-                        contentGutterY
-                      >
-                        {versionHistory.length === 0 ? (
+                        ) : versionHistory.length === 0 ? (
                           <Typography variant="body2" color="text.secondary">
                             {`Latest version: v${listing?.latestVersion ?? '…'}`}
                           </Typography>
                         ) : (
                           <Stack spacing={0.5}>
-                            {versionHistory.map((entry) => (
-                              <Typography key={entry.version} variant="body2">
-                                {`v${entry.version}`}
+                            {versionHistory.map((entry, index) => (
+                              <Stack
+                                key={entry.version}
+                                direction="row"
+                                spacing={1}
+                                sx={{ alignItems: 'center' }}
+                              >
+                                <Typography variant="body2">
+                                  {`v${entry.version}`}
+                                </Typography>
+                                {index === 0 ? (
+                                  <Chip size="small" label="Latest" />
+                                ) : null}
                                 <Typography
-                                  component="span"
                                   variant="caption"
                                   color="text.secondary"
                                 >
                                   {entry.publishedAt?.toDate
-                                    ? ` · ${entry.publishedAt
+                                    ? entry.publishedAt
                                         .toDate()
-                                        .toLocaleDateString()}`
+                                        .toLocaleDateString()
                                     : ''}
                                 </Typography>
-                              </Typography>
+                              </Stack>
                             ))}
                           </Stack>
                         )}
                       </CardDisplay>
-                      )}
                       <ListingReviews
                         listingId={listingId}
                         listing={listing}
@@ -1026,6 +1036,27 @@ export function CommunityListingContent({
                 {installed ? 'Update' : 'Install'}
               </Button>
             </DialogActions>
+          </Dialog>
+          {/* Screenshot lightbox (AGL-869). */}
+          <Dialog
+            open={Boolean(lightboxUrl)}
+            onClose={() => setLightboxUrl(null)}
+            maxWidth="lg"
+          >
+            {lightboxUrl ? (
+              <Box
+                component="img"
+                src={lightboxUrl}
+                alt={`${listing?.displayName} screenshot`}
+                onClick={() => setLightboxUrl(null)}
+                sx={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  maxHeight: '85vh',
+                  cursor: 'zoom-out',
+                }}
+              />
+            ) : null}
           </Dialog>
         </Container>
     </>
