@@ -42,6 +42,7 @@ import {
 import {
   isListingBrowsable,
   listingArtifactType,
+  listingArtifactLabel,
   resolvePluginInstallState,
 } from '../model/community'
 import useCommunityActions from '../hooks/use-community-actions'
@@ -505,6 +506,12 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
                     >
                       {listing.displayName}
                     </MuiLink>
+                    {/* Primary classification, said first (AGL-864). */}
+                    <Chip
+                      size="small"
+                      color="primary"
+                      label={listingArtifactLabel(listing)}
+                    />
                     {listing.category ? (
                       <Chip size="small" label={listing.category} />
                     ) : null}

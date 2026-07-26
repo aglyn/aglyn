@@ -20,6 +20,7 @@ import {
   LISTING_CATEGORIES,
   LISTING_README_MAX_CHARS,
   listingArtifactType,
+  listingArtifactLabel,
   installTargetsFor,
   resolveInstallPlan,
   resolvePluginInstallState,
@@ -496,7 +497,10 @@ export function CommunityListingContent({
     return () => {
       active = false
     }
-  }, [listing?.type, listingId])
+    // Keyed on the listing's id, not its legacy `type` (AGL-864): an
+    // artifactType-only plugin has no `type`, so keying on it left the effect
+    // stuck at its undefined first value and the versions fetch never fired.
+  }, [listing?.$id, listingId])
   const latestEntry = versions[0]
   const realmTrusted = versions.some((entry) => entry.trust === 'realm')
   const abiIncompatible =
@@ -617,6 +621,18 @@ export function CommunityListingContent({
                               }}
                             />
                           ) : null}
+                          {/* What kind of thing this is, said plainly and
+                              first (AGL-864) — a plugin, a site template, a
+                              layout, etc. Filled so it reads as the primary
+                              classification, ahead of the softer category
+                              chips. */}
+                          {listing ? (
+                            <Chip
+                              size="small"
+                              color="primary"
+                              label={listingArtifactLabel(listing)}
+                            />
+                          ) : null}
                           {(listing?.categories ?? []).map((entry: string) => (
                             <Chip key={entry} size="small" label={entry} />
                           ))}
@@ -631,7 +647,7 @@ export function CommunityListingContent({
                               label={listing.license}
                             />
                           ) : null}
-                          {listing?.type === 'plugin' ? (
+                          {isPlugin ? (
                             realmTrusted ? (
                               <Chip
                                 size="small"
@@ -669,7 +685,7 @@ export function CommunityListingContent({
                         <Typography variant="body2" color="text.secondary">
                           {listing?.description ?? 'No description provided.'}
                         </Typography>
-                        {listing?.type === 'plugin' &&
+                        {isPlugin &&
                         !realmTrusted &&
                         listing?.reviewStatus !== 'verified' ? (
                           <Alert severity="info">
@@ -957,7 +973,7 @@ export function CommunityListingContent({
                           </Stack>
                         </CardDisplay>
                       ) : null}
-                      {listing?.type === 'plugin' && versions.length ? (
+                      {isPlugin && versions.length ? (
                         <CardDisplay
                           header={'Versions & changelog'}
                           contentGutterX
@@ -1015,7 +1031,7 @@ export function CommunityListingContent({
                           listingId={listingId}
                         />
                       ) : null}
-                      {listing?.type === 'plugin' && versions.length ? null : (
+                      {isPlugin && versions.length ? null : (
                       <CardDisplay
                         header={'Version history'}
                         contentGutterX
