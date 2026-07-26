@@ -61,6 +61,13 @@ export interface CommunityBrowseProps {
    * one that is being retired.
    */
   orgScoped?: boolean
+  /**
+   * The acting org's slug from the URL (AGL-867). When given at org scope,
+   * detail links build from it directly instead of the async
+   * `hostIndex`→`orgs` resolution, which can return empty and leave the detail
+   * page — the only place installs happen now — unreachable from browse.
+   */
+  orgSlug?: string
 }
 
 /**
@@ -74,7 +81,7 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { data: user } = useUser()
-  const { orgScoped } = props
+  const { orgScoped, orgSlug: orgSlugProp } = props
   const [handles, setHandles] = useState<Record<string, string>>({})
   // Listings are org-owned (AGL-652), so "is this mine" is an org comparison.
   // Resolved from the routing mirror rather than a new prop so the component
@@ -95,7 +102,11 @@ export function CommunityBrowse(props: CommunityBrowseProps) {
   // not resolved since AGL-621/622 — every listing and publisher link on
   // this grid 404'd. One shared resolution (AGL-673); null renders plain
   // text rather than a link to nowhere.
-  const { orgSlug, subdomain } = useConsoleHostRoute(hostId)
+  const { orgSlug: resolvedOrgSlug, subdomain } = useConsoleHostRoute(hostId)
+  // Prefer the URL-supplied slug (AGL-867) — synchronous and always present at
+  // org scope — over the async host resolution, which the per-site route still
+  // relies on.
+  const orgSlug = orgSlugProp ?? resolvedOrgSlug
 
   // Link targets differ by surface (AGL-772): the org marketplace resolves
   // to the org route (`/[orgSlug]/marketplace/[listingId]`), the per-site tab
