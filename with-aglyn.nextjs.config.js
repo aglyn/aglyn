@@ -308,9 +308,17 @@ const AGLYN_CONFIG = {
   /**
    * Next.js can automatically create a standalone folder which copies only
    * the necessary files for a production deployment including select files in
-   * node_modules
+   * node_modules.
+   *
+   * Self-host container builds (AGL-904): opt-in via AGLYN_STANDALONE=1 so the
+   * Docker images ship a node_modules-free server bundle, while the Vercel
+   * deployments keep their current (non-standalone) output untouched. The
+   * tracing root is pinned to the workspace root so the monorepo's shared
+   * libs get traced into the bundle.
    */
-  // output: 'standalone',
+  ...(process.env.AGLYN_STANDALONE === '1'
+    ? { output: 'standalone', outputFileTracingRoot: __dirname }
+    : {}),
 
   pageExtensions: ['mdx', 'md', 'jsx', 'js', 'tsx', 'ts'],
   generateEtags: true,
