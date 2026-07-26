@@ -13,6 +13,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const LISTING_ID = /^[A-Za-z0-9_-]{1,64}$/
 const VERSION = /^[A-Za-z0-9._-]{1,32}$/
@@ -21,7 +22,27 @@ const NETWORK_ORIGIN = /^https:\/\/[^\s/]+$/
 const BASE_FRAME_ANCESTORS =
   'frame-ancestors https://app.aglyn.com https://*.aglyn.app'
 
-const html = readFileSync(join(process.cwd(), 'load.html'), 'utf8')
+// includeFiles roots differ between builders — resolve the shipped
+// load.html wherever this bundle landed, lazily and cached.
+let cachedHtml = null
+function loadHtml() {
+  if (cachedHtml) return cachedHtml
+  const candidates = [
+    join(process.cwd(), 'load.html'),
+    fileURLToPath(new URL('../load.html', import.meta.url)),
+    fileURLToPath(new URL('./load.html', import.meta.url)),
+    join(process.cwd(), 'tools/plugin-loader/origin/load.html'),
+  ]
+  for (const candidate of candidates) {
+    try {
+      cachedHtml = readFileSync(candidate, 'utf8')
+      return cachedHtml
+    } catch {
+      // try the next location
+    }
+  }
+  throw new Error('load.html not found in bundle')
+}
 
 function csp(connectExtra) {
   const connect = ["'self'", ...connectExtra].join(' ')
@@ -67,6 +88,13 @@ export default async function handler(req, res) {
     }
   }
 
+  let html
+  try {
+    html = loadHtml()
+  } catch (error) {
+    console.error('loader html missing:', error)
+    return res.status(500).json({ error: 'Loader unavailable' })
+  }
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Content-Security-Policy', csp(network))
   res.setHeader('X-Content-Type-Options', 'nosniff')
