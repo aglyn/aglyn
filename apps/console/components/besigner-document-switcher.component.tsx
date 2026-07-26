@@ -39,21 +39,15 @@ import {
 import { collection, doc, limit, query } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { observer } from 'mobx-react-lite'
+import { type MouseEvent, useCallback, useMemo, useState } from 'react'
 import {
-  type MouseEvent,
-  type UIEvent,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+  useFirestore,
+  useSwitcherCollection,
+} from '@aglyn/tenant-feature-instance'
 import { buildRoute, Route } from '../constants/route-links'
 import { useHostSubdomain } from '../components/host-id-provider'
 import { useOrgSlug } from '../hooks/use-org-scope'
-import useFirestoreCollection, {
-  type FirestoreCollectionStatus,
-} from '../hooks/use-firestore-collection'
+import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
 import SwitcherSearchField from './switcher-search-field.component'
 
@@ -63,47 +57,28 @@ export interface BesignerDocumentSwitcherProps {
   current: { kind: 'screen' | 'layout'; id: string }
 }
 
-/** Documents fetched per page; the menu loads another page on scroll. */
-const PAGE_SIZE = 5
-
 /**
- * Holds the last successfully-loaded rows through the transient empty gap the
- * collection hook opens on every dependency change. Paging in more documents
- * grows the query's `limit`, which the hook treats as a scope change and
- * clears to `[]` before the larger snapshot lands (AGL-591) — so the raw list
- * would collapse and re-expand on each scroll, flashing the menu. A pagination
- * grow only ever yields a superset, so keeping the prior rows while `status`
- * is `loading` and adopting the new set on `success` removes the flash. The
- * `resetKey` (the host id) drops the held rows when the scope genuinely
- * changes, so a different host never shows the previous one's documents.
+ * Layouts are inherently few (plan caps: 1–3; "unlimited" is still a handful),
+ * so they load fully in one bounded read and filter client-side — no name
+ * index needed. Screens are the collection that scales, so they go through the
+ * server-search hook instead.
  */
-function useStableList<T>(
-  data: T[],
-  status: FirestoreCollectionStatus,
-  resetKey: string,
-): T[] {
-  const held = useRef<T[]>([])
-  const key = useRef(resetKey)
-  if (key.current !== resetKey) {
-    key.current = resetKey
-    held.current = []
-  }
-  if (status === 'success') held.current = data
-  return held.current
-}
+const LAYOUT_LIMIT = 25
 
 /**
  * App-bar control that shows which screen/layout the besigner is editing and
- * switches to another document from the same host (AGL-50, iterated in
- * AGL-55). It shares the org/site switcher design language (AGL-629): a text
- * button + chevron opens a `Menu` fronted by the shared filter field, with
- * grouped rows, a check on the current document, and a "view all" footer.
+ * switches to another document from the same host (AGL-50; AGL-839). It shares
+ * the org/site switcher design language (AGL-629): a text button + chevron
+ * opens a `Menu` fronted by the shared filter field, with grouped rows, a check
+ * on the current document, and a "view all" footer.
  *
- * Documents load PAGE_SIZE at a time and the list fetches more as it scrolls,
- * so hosts with many screens don't pay for a full collection read; the current
- * document is read directly so the trigger always renders. The filter narrows
- * the loaded window client-side, matching the org/site switchers. Navigating
- * with unsaved canvas changes asks for confirmation first.
+ * Screens are served by `useSwitcherCollection` (AGL-838): idle shows a
+ * recent-first window, and typing runs a Firestore name-prefix search — so a
+ * host with hundreds of screens neither loads them all to reach Layouts nor
+ * fails to find a screen that isn't in the loaded window (the old flaw). The
+ * open document is read directly so the trigger always resolves and its row
+ * shows a check even when it falls outside the window. Navigating with unsaved
+ * canvas changes asks for confirmation first.
  */
 export const BesignerDocumentSwitcherComponent = observer(
   function BesignerDocumentSwitcherComponent(
@@ -116,34 +91,32 @@ export const BesignerDocumentSwitcherComponent = observer(
     const router = useRouter()
     const { confirm } = useConfirmationContext()
     const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
-    const [pageCount, setPageCount] = useState(1)
     const [queryText, setQueryText] = useState('')
-    const fetchLimit = pageCount * PAGE_SIZE
 
-    const { data: screenDocsRaw, status: screenStatus } =
-      useFirestoreCollection<any>(
-        () =>
-          query(
-            collection(firestore, 'hosts', hostId, 'screens'),
-            limit(fetchLimit),
-          ),
-        [firestore, hostId, fetchLimit],
-        { idField: '$id' },
-      )
-    const { data: layoutDocsRaw, status: layoutStatus } =
-      useFirestoreCollection<any>(
-        () =>
-          query(
-            collection(firestore, 'hosts', hostId, 'layouts'),
-            limit(fetchLimit),
-          ),
-        [firestore, hostId, fetchLimit],
-        { idField: '$id' },
-      )
-    // Keep the loaded rows visible while a scroll-triggered page grow
-    // re-subscribes, so the menu doesn't flash empty and back (AGL-55).
-    const screenDocs = useStableList<any>(screenDocsRaw, screenStatus, hostId)
-    const layoutDocs = useStableList<any>(layoutDocsRaw, layoutStatus, hostId)
+    // Screens: recent-first window when idle, name-prefix search when typing.
+    const {
+      items: screenHits,
+      loading: screensLoading,
+      hasQuery,
+    } = useSwitcherCollection<any>({
+      firestore,
+      path: ['hosts', hostId, 'screens'],
+      query: queryText,
+      idField: '$id',
+      filter: (screen) => !screen.deletedAt && screen.kind !== 'email',
+      deps: [firestore, hostId],
+    })
+
+    // Layouts: few enough to load fully and filter client-side.
+    const { data: layoutDocs } = useFirestoreCollection<any>(
+      () =>
+        query(
+          collection(firestore, 'hosts', hostId, 'layouts'),
+          limit(LAYOUT_LIMIT),
+        ),
+      [firestore, hostId],
+      { idField: '$id' },
+    )
     const { data: currentDoc } = useFirestoreDoc<any>(
       () =>
         doc(
@@ -163,21 +136,22 @@ export const BesignerDocumentSwitcherComponent = observer(
     )
     const routingMap = hostData?.screens as Record<string, string> | undefined
 
-    // The paged window may not include the open document yet — merge it in so
-    // the trigger always resolves a name and the open row shows a check.
+    // Pin the open screen to the top of the idle window so it always shows with
+    // a check, even if it isn't among the most-recently-edited. While searching
+    // the list is just the matches (the open doc may not match the query).
     const screens = useMemo(() => {
-      const docs = (screenDocs ?? []).filter((screen: any) => !screen.deletedAt)
+      const list = [...(screenHits ?? [])]
       if (
+        !hasQuery &&
         current.kind === 'screen' &&
         currentDoc?.$id &&
-        !docs.some((screen: any) => screen.$id === currentDoc.$id)
+        !list.some((screen: any) => screen.$id === currentDoc.$id)
       ) {
-        docs.push(currentDoc)
+        list.unshift(currentDoc)
       }
-      return docs.sort((a: any, b: any) =>
-        (a.displayName ?? a.$id).localeCompare(b.displayName ?? b.$id),
-      )
-    }, [screenDocs, current.kind, currentDoc])
+      return list
+    }, [screenHits, hasQuery, current.kind, currentDoc])
+
     const layouts = useMemo(() => {
       const docs = (layoutDocs ?? []).filter((layout: any) => !layout.deletedAt)
       if (
@@ -187,15 +161,17 @@ export const BesignerDocumentSwitcherComponent = observer(
       ) {
         docs.push(currentDoc)
       }
-      return docs.sort((a: any, b: any) =>
+      const sorted = docs.sort((a: any, b: any) =>
         (a.displayName ?? a.$id).localeCompare(b.displayName ?? b.$id),
       )
-    }, [layoutDocs, current.kind, currentDoc])
-
-    // Either collection filling its window means there may be more to load.
-    const mayHaveMore =
-      (screenDocs?.length ?? 0) >= fetchLimit ||
-      (layoutDocs?.length ?? 0) >= fetchLimit
+      // Match the screens' server-side prefix semantics (name-starts-with) so
+      // both sections filter the same way, using the same normalization.
+      const key = Aglyn.nameSearchKey(queryText)
+      if (!key) return sorted
+      return sorted.filter((layout: any) =>
+        Aglyn.nameSearchKey(layout.displayName ?? layout.$id).startsWith(key),
+      )
+    }, [layoutDocs, current.kind, currentDoc, queryText])
 
     const pathLabel = useCallback(
       (screenId: string) => {
@@ -205,40 +181,10 @@ export const BesignerDocumentSwitcherComponent = observer(
       [routingMap],
     )
 
-    const filteredScreens = useMemo(() => {
-      const needle = queryText.trim().toLowerCase()
-      if (!needle) return screens
-      return screens.filter((screen: any) =>
-        [screen.displayName, pathLabel(screen.$id), screen.$id].some(
-          (field?: string) => field?.toLowerCase().includes(needle),
-        ),
-      )
-    }, [screens, queryText, pathLabel])
-    const filteredLayouts = useMemo(() => {
-      const needle = queryText.trim().toLowerCase()
-      if (!needle) return layouts
-      return layouts.filter((layout: any) =>
-        [layout.displayName, layout.$id].some((field?: string) =>
-          field?.toLowerCase().includes(needle),
-        ),
-      )
-    }, [layouts, queryText])
-
     const close = useCallback(() => {
       setAnchorEl(null)
       setQueryText('')
     }, [])
-
-    const handleScroll = useCallback(
-      (event: UIEvent<HTMLElement>) => {
-        const el = event.currentTarget
-        if (!mayHaveMore) return
-        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 48) {
-          setPageCount((count) => count + 1)
-        }
-      },
-      [mayHaveMore],
-    )
 
     const handleSelect = useCallback(
       async (kind: 'screen' | 'layout', id: string) => {
@@ -284,7 +230,9 @@ export const BesignerDocumentSwitcherComponent = observer(
     )
 
     const label = currentDoc?.displayName ?? current.id
-    const noMatches = filteredScreens.length === 0 && filteredLayouts.length === 0
+    // Don't flash "no matches" while a search request is still in flight.
+    const empty = screens.length === 0 && layouts.length === 0
+    const showEmpty = empty && !screensLoading
 
     const renderRow = (kind: 'screen' | 'layout', item: any) => {
       const isCurrent = kind === current.kind && item.$id === current.id
@@ -401,23 +349,18 @@ export const BesignerDocumentSwitcherComponent = observer(
             placeholder="Find screen or layout…"
           />
           <Divider />
-          <Box
-            onScroll={handleScroll}
-            sx={{ maxHeight: 320, overflowY: 'auto', py: 0.5 }}
-          >
-            {noMatches ? (
+          <Box sx={{ maxHeight: 320, overflowY: 'auto', py: 0.5 }}>
+            {showEmpty ? (
               <Typography
                 variant="body2"
                 color="text.secondary"
                 sx={{ px: 2, py: 1.5 }}
               >
-                {screens.length === 0 && layouts.length === 0
-                  ? 'No screens yet.'
-                  : 'No matches.'}
+                {hasQuery ? 'No matches.' : 'No screens yet.'}
               </Typography>
             ) : (
               <>
-                {filteredScreens.length > 0 ? (
+                {screens.length > 0 ? (
                   <>
                     <ListSubheader
                       disableSticky
@@ -425,12 +368,10 @@ export const BesignerDocumentSwitcherComponent = observer(
                     >
                       {'Screens'}
                     </ListSubheader>
-                    {filteredScreens.map((screen: any) =>
-                      renderRow('screen', screen),
-                    )}
+                    {screens.map((screen: any) => renderRow('screen', screen))}
                   </>
                 ) : null}
-                {filteredLayouts.length > 0 ? (
+                {layouts.length > 0 ? (
                   <>
                     <ListSubheader
                       disableSticky
@@ -438,19 +379,8 @@ export const BesignerDocumentSwitcherComponent = observer(
                     >
                       {'Layouts'}
                     </ListSubheader>
-                    {filteredLayouts.map((layout: any) =>
-                      renderRow('layout', layout),
-                    )}
+                    {layouts.map((layout: any) => renderRow('layout', layout))}
                   </>
-                ) : null}
-                {mayHaveMore ? (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ display: 'block', px: 2, py: 1 }}
-                  >
-                    {'Scroll to load more…'}
-                  </Typography>
                 ) : null}
               </>
             )}
