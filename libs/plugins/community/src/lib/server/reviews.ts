@@ -16,7 +16,7 @@
  */
 
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { canActAsPublisher } from './publisher-profile'
 
 const MAX_COMMENT_LENGTH = 2000
@@ -61,10 +61,11 @@ async function isVerifiedInstaller(
  * One review per account, keyed by uid, so re-submitting edits rather than
  * stacking. Two rules shape everything else:
  *
- * - **Rating requires having installed it.** A star rating is the signal
- *   that drives ranking, so it is reserved for accounts that actually used
- *   the thing. Commenting stays open to any signed-in account — questions
- *   before installing are useful, and a comment moves no numbers.
+ * - **Rating requires a verified email AND having installed it (AGL-865).**
+ *   A star rating is the signal that drives ranking, so it is reserved for
+ *   accounts that verified their email and actually used the thing.
+ *   Commenting stays open to any signed-in account — questions before
+ *   installing are useful, and a comment moves no numbers.
  * - **The publisher cannot review their own listing.** Org-scoped, so a
  *   second account in the same org does not slip through.
  *
@@ -139,6 +140,17 @@ export const reviewsHandler: PluginApiHandler = async (req, res) => {
       return res.status(400).json({ error: 'Add a rating or a comment' })
     }
 
+    // A star rating drives ranking, so it is reserved for accounts that both
+    // verified their email (AGL-865/479) AND actually installed the thing.
+    // Commenting stays open to any signed-in account — the checks below only
+    // guard `rating`, never `comment`. Impersonation sessions are exempt from
+    // the email gate the same way every other AGL-479 chokepoint is.
+    if (rating && !decoded.email_verified && !isImpersonationSession(decoded)) {
+      return res.status(403).json({
+        error: 'Verify your email to rate — you can still leave a comment',
+        reason: 'email-unverified',
+      })
+    }
     const installer = await isVerifiedInstaller(firestore, decoded.uid, listingId)
     if (rating && !installer.verified) {
       return res.status(403).json({
