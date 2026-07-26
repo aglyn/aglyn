@@ -53,7 +53,7 @@ const LOGO_SVG = readFileSync(
   .trim()
 
 const WIDTH = 1200
-const HEIGHT = 750
+const HEIGHT = 630
 
 /**
  * The blog posts on aglyn-marketing (host DXnRbPH4CQ, collection `blog`).
@@ -66,27 +66,31 @@ const POSTS = [
     eyebrow: 'Datasets + Forms',
     title: 'Collect survey responses in 10 minutes',
     pill: 'Guides',
+    accent: '#2dd4bf', // teal
   },
   {
     slug: 'megamenu',
     out: 'blogCoverMegamenu.png',
-    eyebrow: 'Menus + Navigation',
+    eyebrow: 'Besigner Interactions',
     title: 'A hover mega menu, zero code',
-    pill: 'Guides',
+    pill: 'Product',
+    accent: '#8b7ff5', // violet
   },
   {
     slug: 'commerce',
     out: 'blogCoverCommerce.png',
-    eyebrow: 'Commerce',
+    eyebrow: 'Storefront',
     title: 'One product page, two ways to buy',
-    pill: 'Guides',
+    pill: 'Commerce',
+    accent: '#e0a43a', // amber
   },
   {
     slug: 'members',
     out: 'blogCoverMembers.png',
-    eyebrow: 'Members + Accounts',
+    eyebrow: 'Member Accounts',
     title: 'Real accounts, not a mailing list',
     pill: 'Guides',
+    accent: '#34d399', // emerald
   },
 ]
 
@@ -109,6 +113,7 @@ function coverHtml(post) {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: ${WIDTH}px; height: ${HEIGHT}px; }
   .cover {
+    --accent: ${post.accent};
     position: relative;
     width: ${WIDTH}px;
     height: ${HEIGHT}px;
@@ -119,51 +124,58 @@ function coverHtml(post) {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    padding: 72px 80px;
+    padding: 60px 72px;
   }
-  /* Soft green glow, upper-right. */
-  .glow {
+  /* Solid accent disc, upper-right (dark tint of the post accent). */
+  .disc {
     position: absolute;
-    top: -220px;
-    right: -180px;
-    width: 720px;
-    height: 720px;
+    top: -140px;
+    right: -120px;
+    width: 560px;
+    height: 560px;
     border-radius: 50%;
-    background: radial-gradient(circle at center,
-      rgba(46, 230, 166, 0.20) 0%,
-      rgba(20, 120, 95, 0.10) 38%,
-      rgba(11, 13, 15, 0) 70%);
+    background: radial-gradient(circle at 38% 34%,
+      color-mix(in srgb, var(--accent) 26%, #0b0d0f) 0%,
+      color-mix(in srgb, var(--accent) 15%, #0b0d0f) 62%,
+      color-mix(in srgb, var(--accent) 9%, #0b0d0f) 100%);
+  }
+  /* Thin accent edge bar, full-height on the left. */
+  .edge {
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 6px;
+    background: var(--accent);
   }
   .row { position: relative; display: flex; align-items: center; }
-  .brand { gap: 14px; }
-  .brand .logo { height: 30px; display: flex; align-items: center; }
-  .brand .logo svg { height: 30px; width: auto; display: block; }
-  .brand .sep { color: #7d858c; font-size: 22px; font-weight: 500; letter-spacing: 0.2px; }
+  .brand { gap: 13px; }
+  .brand .logo { height: 27px; display: flex; align-items: center; }
+  .brand .logo svg { height: 27px; width: auto; display: block; }
+  .brand .sep { color: #7d858c; font-size: 21px; font-weight: 500; letter-spacing: 0.2px; }
   .body { position: relative; }
   .eyebrow {
-    color: #2fe3a6;
-    font-size: 21px;
+    color: var(--accent);
+    font-size: 19px;
     font-weight: 700;
     letter-spacing: 3.5px;
     text-transform: uppercase;
-    margin-bottom: 26px;
+    margin-bottom: 24px;
   }
   .title {
-    font-size: 66px;
+    font-size: 62px;
     font-weight: 800;
-    line-height: 1.06;
+    line-height: 1.05;
     letter-spacing: -1.2px;
-    max-width: 900px;
+    max-width: 860px;
     color: #f6f7f8;
   }
   .foot { position: relative; align-items: center; justify-content: space-between; }
-  .domain { color: #6b7278; font-size: 22px; font-weight: 500; }
+  .domain { color: #6b7278; font-size: 21px; font-weight: 500; }
   .pill {
-    border: 1.5px solid rgba(47, 227, 166, 0.75);
-    color: #2fe3a6;
-    font-size: 18px;
+    border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+    color: var(--accent);
+    font-size: 17px;
     font-weight: 600;
-    padding: 10px 22px;
+    padding: 9px 22px;
     border-radius: 999px;
     letter-spacing: 0.2px;
   }
@@ -171,7 +183,8 @@ function coverHtml(post) {
 </head>
 <body>
   <div class="cover">
-    <div class="glow"></div>
+    <div class="disc"></div>
+    <div class="edge"></div>
     <div class="row brand">
       <span class="logo">${LOGO_SVG}</span>
       <span class="sep">· Blog</span>
