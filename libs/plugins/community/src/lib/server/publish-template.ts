@@ -98,14 +98,13 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
     if (!publisher) {
       return res.status(412).json({
         error:
-          'Set up your organization’s publisher profile first ' +
-          '(Organization → Community)',
+          'Set up your publisher profile first — Marketplace → Profile.',
       })
     }
     if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
       return res.status(412).json({
         error:
-          'Set up payouts first (Organization → Community) to sell templates',
+          'Set up payouts first — Marketplace → Payouts — to sell templates',
       })
     }
 

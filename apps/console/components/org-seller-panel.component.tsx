@@ -106,6 +106,9 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           'Content-Type': 'application/json',
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
+        // The acting org from the URL (AGL-861) — never let the server guess
+        // which of the user's orgs is being set up for payouts.
+        body: JSON.stringify({ orgId }),
       })
       const payload = await response.json()
       if (response.status === 501) {
@@ -136,7 +139,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     } finally {
       setPayoutsBusy(false)
     }
-  }, [user, enqueueSnackbar])
+  }, [orgId, user, enqueueSnackbar])
 
   const [handle, setHandle] = useState('')
   const [displayName, setDisplayName] = useState('')

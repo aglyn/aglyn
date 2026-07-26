@@ -100,15 +100,14 @@ export const publishHandler: PluginApiHandler = async (req, res) => {
     if (!publisher) {
       return res.status(412).json({
         error:
-          'Set up your organization’s publisher profile first ' +
-          '(Organization → Community)',
+          'Set up your publisher profile first — Marketplace → Profile.',
       })
     }
     // Paid listings require completed Stripe Connect onboarding (AGL-46).
     if (priceUsd > 0 && !publisher.stripeChargesEnabled) {
       return res.status(412).json({
         error:
-          'Set up payouts first (Organization → Community) to sell components',
+          'Set up payouts first — Marketplace → Payouts — to sell components',
       })
     }
 
