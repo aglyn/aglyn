@@ -112,6 +112,10 @@ export function OrgMembersCard() {
     () => hosts.filter((host) => host['orgId'] === orgId),
     [hosts, orgId],
   )
+  // Inline email validation (AGL-853): catch a typo before the round-trip,
+  // instead of only a server-side "Invalid email" toast.
+  const trimmedEmail = email.trim()
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)
 
   // Low-level fetch that reports status + payload without side effects, so
   // callers that treat an error as an expected branch (e.g. the add/invite
@@ -266,45 +270,64 @@ export function OrgMembersCard() {
           </Typography>
         ) : null}
         {canManage ? (
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
-            <TextField
-              size="small"
-              label="Email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              sx={{ minWidth: 240 }}
-            />
-            <TextField
-              size="small"
-              select
-              label="Role"
-              value={role}
-              onChange={(event) => setRole(event.target.value as OrgRole)}
-              sx={{ width: 120 }}
+          <Stack spacing={0.75}>
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{ flexWrap: 'wrap', rowGap: 1, alignItems: 'flex-start' }}
             >
-              {ASSIGNABLE_ROLES.map((value) => (
-                <MenuItem key={value} value={value}>
-                  {value}
-                </MenuItem>
-              ))}
-            </TextField>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={allHosts}
-                  onChange={(event) => setAllHosts(event.target.checked)}
-                />
-              }
-              label="All sites"
-            />
-            <Button
-              variant="contained"
-              size="small"
-              disabled={busy || !email.trim()}
-              onClick={() => void handleAdd()}
-            >
-              {'Add or invite'}
-            </Button>
+              <TextField
+                size="small"
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                error={Boolean(trimmedEmail) && !emailValid}
+                helperText={
+                  Boolean(trimmedEmail) && !emailValid
+                    ? 'Enter a valid email address'
+                    : undefined
+                }
+                sx={{ minWidth: 240 }}
+              />
+              <TextField
+                size="small"
+                select
+                label="Role"
+                value={role}
+                onChange={(event) => setRole(event.target.value as OrgRole)}
+                sx={{ width: 120 }}
+              >
+                {ASSIGNABLE_ROLES.map((value) => (
+                  <MenuItem key={value} value={value}>
+                    {value}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={allHosts}
+                    onChange={(event) => setAllHosts(event.target.checked)}
+                  />
+                }
+                label="All sites"
+                sx={{ mt: 0.5 }}
+              />
+              <Button
+                variant="contained"
+                size="small"
+                disabled={busy || !emailValid}
+                onClick={() => void handleAdd()}
+                sx={{ mt: 0.5 }}
+              >
+                {'Add or invite'}
+              </Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary">
+              {'Already on Aglyn? They join right away. New to Aglyn? We email ' +
+                'them an invite they accept when they first sign in.'}
+            </Typography>
           </Stack>
         ) : null}
         <Table size="small">
@@ -494,6 +517,34 @@ export function OrgMembersCard() {
                 <Button
                   size="small"
                   sx={{ ml: 'auto' }}
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true)
+                    void request('/api/orgs/invites', 'POST', {
+                      orgId,
+                      action: 'resend',
+                      inviteId: invite.$id,
+                    })
+                      .then((payload) => {
+                        if (!payload) return
+                        enqueueSnackbar(
+                          payload.emailed
+                            ? `Invite re-sent to ${invite.email}`
+                            : `Couldn't email ${invite.email} — check email settings`,
+                          {
+                            variant: payload.emailed ? 'success' : 'warning',
+                            persist: false,
+                          },
+                        )
+                      })
+                      .finally(() => setBusy(false))
+                  }}
+                >
+                  {'Resend'}
+                </Button>
+                <Button
+                  size="small"
+                  color="error"
                   onClick={() =>
                     void request('/api/orgs/invites', 'POST', {
                       orgId,
