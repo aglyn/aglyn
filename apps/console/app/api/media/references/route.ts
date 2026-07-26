@@ -27,7 +27,7 @@ import {
 } from '../../../../utils/server/media-scope'
 
 export interface MediaReference {
-  kind: 'screen' | 'layout'
+  kind: 'screen' | 'layout' | 'entry'
   id: string
   name: string
 }
@@ -117,6 +117,29 @@ async function handler(request: Request): Promise<Response> {
               id: parent.id,
               name: String(parent.get('name') ?? parent.id),
             })
+          }
+        }),
+      )
+    }
+
+    // Content-collection entries (AGL-833): blog and other collections
+    // reference media via `coverImage`/`body`, not screen/layout nodes — so
+    // scan every entry's fields too.
+    for (const hostRef of hostRefs) {
+      const collections = await hostRef.collection('collections').get()
+      await Promise.all(
+        collections.docs.map(async (collection) => {
+          const entries = await collection.ref.collection('entries').get()
+          for (const entry of entries.docs) {
+            if (entry.get('deletedAt')) continue
+            const haystack = JSON.stringify(entry.data() ?? {})
+            if (needles.some((needle) => haystack.includes(needle))) {
+              references.push({
+                kind: 'entry',
+                id: entry.id,
+                name: String(entry.get('title') ?? entry.id),
+              })
+            }
           }
         }),
       )
