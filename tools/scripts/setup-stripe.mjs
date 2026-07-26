@@ -18,7 +18,7 @@
 // One-command Stripe bootstrap for Aglyn subscriptions:
 //
 //   STRIPE_SECRET_KEY=sk_... node tools/scripts/setup-stripe.mjs \
-//     [--webhook-url https://console.aglyn.com/api/billing/webhook]
+//     [--webhook-url https://app.aglyn.com/api/billing/webhook]
 //
 // Idempotent: prices are keyed by lookup_key (aglyn_{plan}), so re-running
 // finds the existing ones instead of duplicating. Prints the env block the

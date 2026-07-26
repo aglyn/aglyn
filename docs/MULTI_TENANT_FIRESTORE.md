@@ -252,7 +252,7 @@ flowchart TD
   `orgSlugs/{slug}` + the org doc; renames re-reserve and keep a redirect
   tombstone for a grace period.
 - Console paths become `/{hostId}/…` *within* the org context; on the apex
-  domain (console.aglyn.com) an org switcher (from `users/{uid}/orgs`)
+  domain (app.aglyn.com) an org switcher (from `users/{uid}/orgs`)
   redirects to the chosen subdomain. Auth: Firebase session cookies scoped
   to `.aglyn.com` so hopping subdomains doesn't re-authenticate.
 
