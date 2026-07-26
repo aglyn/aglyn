@@ -21,18 +21,24 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import { Button, Stack, TextField, Typography } from '@mui/material'
 import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
-import {
-  type ChangeEvent,
-  type ReactElement,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from 'react'
+import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../constants/docs-links'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
+import MediaPickerDialog from './media/media-picker-dialog.component'
+
+/** Absolute src for a chosen DAM asset — prefer the direct URL, fall back to
+ * the stable relative CDN path made absolute so the server's https check and
+ * off-console (social card) rendering both accept it. */
+function mediaSrc(media: { url?: string; cdnPath?: string }): string {
+  if (media.url) return media.url
+  if (media.cdnPath)
+    return typeof window === 'undefined'
+      ? media.cdnPath
+      : `${window.location.origin}${media.cdnPath}`
+  return ''
+}
 
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -190,36 +196,23 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     }
   }, [orgId, validHandle, handle, displayName, bio, user, enqueueSnackbar])
 
-  // Listing preview image (AGL-95): one shared file input; the pending
-  // listing id records which row opened the picker.
-  const previewInputRef = useRef<HTMLInputElement>(null)
-  const previewListingIdRef = useRef<string | null>(null)
+  // Listing preview image (AGL-95/863): pick from the shared DAM library
+  // rather than a raw OS file dialog. The pending listing id records which row
+  // opened the picker; a non-null id both opens the dialog and names its target.
+  const [previewPickerListingId, setPreviewPickerListingId] = useState<
+    string | null
+  >(null)
   const handlePickPreview = useCallback(
-    (listing: any) => () => {
-      previewListingIdRef.current = listing.$id
-      previewInputRef.current?.click()
-    },
+    (listing: any) => () => setPreviewPickerListingId(listing.$id),
     [],
   )
-  const handlePreviewFile = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      const listingId = previewListingIdRef.current
-      event.target.value = ''
-      if (!file || !listingId) return
-      if (!file.type.startsWith('image/')) {
-        return void enqueueSnackbar('Pick an image file', {
-          variant: 'warning',
-          persist: false,
-        })
-      }
+  const handlePreviewPicked = useCallback(
+    async (media: { url?: string; cdnPath?: string }) => {
+      const listingId = previewPickerListingId
+      setPreviewPickerListingId(null)
+      const url = mediaSrc(media)
+      if (!listingId || !url) return
       try {
-        const buffer = await file.arrayBuffer()
-        const data = btoa(
-          Array.from(new Uint8Array(buffer), (byte) =>
-            String.fromCharCode(byte),
-          ).join(''),
-        )
         const idToken = await (user as any)?.getIdToken?.()
         const response = await fetch('/api/community/preview-image', {
           method: 'POST',
@@ -227,15 +220,13 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
             'Content-Type': 'application/json',
             ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           },
-          body: JSON.stringify({
-            listingId,
-            contentType: file.type,
-            data,
-          }),
+          // An already-hosted DAM asset (AGL-863) — the server points
+          // previewImageUrl at it instead of re-uploading bytes.
+          body: JSON.stringify({ listingId, url }),
         })
         const payload = await response.json()
         if (!response.ok) {
-          return void enqueueSnackbar(payload?.error ?? 'Upload failed', {
+          return void enqueueSnackbar(payload?.error ?? 'Could not set image', {
             variant: 'error',
             allowDuplicate: true,
           })
@@ -252,7 +243,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         })
       }
     },
-    [user, enqueueSnackbar],
+    [previewPickerListingId, user, enqueueSnackbar],
   )
 
   const handleUnpublish = useCallback(
@@ -350,12 +341,11 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
           </Typography>
         ) : (
           <Stack spacing={1}>
-            <input
-              ref={previewInputRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={handlePreviewFile}
+            <MediaPickerDialog
+              orgId={orgId}
+              open={Boolean(previewPickerListingId)}
+              onClose={() => setPreviewPickerListingId(null)}
+              onPick={handlePreviewPicked}
             />
             {(listings ?? []).map((listing: any) => (
               <Stack
