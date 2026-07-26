@@ -207,7 +207,15 @@ async function createRecord(
   const coerced = coerceDocumentValues(model, (body.values as Record<string, unknown>) ?? {})
   const errors = validateDocument(model, coerced)
   if (Object.keys(errors).length) {
-    return ApiErrors.badRequest({ message: 'Record failed validation', headers: ctx.headers, code: 'validation_failed' })
+    return ApiErrors.badRequest({
+      message: 'Record failed validation',
+      headers: ctx.headers,
+      code: 'validation_failed',
+      // Name the offending fields (AGL-901): validateDocument already
+      // produces this map, and a bare 'something is wrong' on a 20-field
+      // record leaves an integrator bisecting their payload.
+      fields: errors,
+    })
   }
 
   // Idempotency: replay a prior create for the same key instead of duplicating.
@@ -262,7 +270,15 @@ async function updateRecord(
   }
   const errors = validateDocument(model, merged)
   if (Object.keys(errors).length) {
-    return ApiErrors.badRequest({ message: 'Record failed validation', headers: ctx.headers, code: 'validation_failed' })
+    return ApiErrors.badRequest({
+      message: 'Record failed validation',
+      headers: ctx.headers,
+      code: 'validation_failed',
+      // Name the offending fields (AGL-901): validateDocument already
+      // produces this map, and a bare 'something is wrong' on a 20-field
+      // record leaves an integrator bisecting their payload.
+      fields: errors,
+    })
   }
   await recordRef.update({ values: merged, updatedAt: Timestamp.now() })
   const updated = await recordRef.get()

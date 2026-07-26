@@ -165,13 +165,17 @@ single `400`:
   "error": {
     "type": "bad_request",
     "message": "Record failed validation",
-    "code": "validation_failed"
+    "code": "validation_failed",
+    "fields": {
+      "email": "Required",
+      "headcount": "Must be a whole number"
+    }
   }
 }
 ```
 
-The response doesn't yet say *which* field failed, so when you're building a payload,
-add fields incrementally rather than debugging a large one at once.
+`fields` maps each failing field id to its reason — see
+[validation errors](../conventions.md#validation-errors).
 
 Plan quotas — records per dataset, dataset storage — are **not** enforced on this
 path, so a bulk import through the API can carry an organization past its included

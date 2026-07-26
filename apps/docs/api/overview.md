@@ -102,15 +102,12 @@ What this API is and what it serves.
   "name": "Aglyn REST API",
   "version": "v1",
   "documentation": "https://docs.aglyn.com/api",
-  "resources": ["datasets", "contacts", "sites", "forms"]
+  "resources": ["datasets", "contacts", "sites"]
 }
 ```
 
-:::note
-`forms` appears in `resources` but is not a top-level path — form submissions live
-under [`/v1/sites/{siteId}/form-submissions`](resources/sites.md#list-form-submissions).
-Don't build a client off that list.
-:::
+Form submissions aren't a top-level resource — they live under
+[`/v1/sites/{siteId}/form-submissions`](resources/sites.md#list-form-submissions).
 
 ### `GET /v1/me`
 

@@ -33,8 +33,8 @@ Every response carries the current budget:
 | `X-RateLimit-Remaining` | Requests left in the current window. |
 | `X-RateLimit-Reset` | When the window resets, as a Unix timestamp in **seconds**. |
 
-Two exceptions: `401 unauthorized` and `403 plan_required` responses don't carry these
-headers, so read them defensively.
+The one exception is a `401` for a key we can't identify (missing or invalid) — there's
+no budget to report when we don't know whose it is.
 
 When you exceed the limit, the request returns `429` with a `Retry-After` header
 (seconds to wait):

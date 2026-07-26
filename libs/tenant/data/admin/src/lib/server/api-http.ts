@@ -22,14 +22,25 @@
  * is unit-tested directly.
  */
 
-/** Every error response is `{ error: { type, message, code? } }`. */
+/** Every error response is `{ error: { type, message, code?, fields? } }`. */
 export interface ApiErrorBody {
-  error: { type: string; message: string; code?: string }
+  error: {
+    type: string
+    message: string
+    code?: string
+    /** Per-field reasons on a validation failure (AGL-901). */
+    fields?: Record<string, string>
+  }
 }
 
 export interface ApiResponseInit {
   message?: string
   code?: string
+  /**
+   * Field id → reason, surfaced on `validation_failed`. Additive: clients
+   * that only read `type`/`message` are unaffected.
+   */
+  fields?: Record<string, string>
   headers?: Record<string, string>
 }
 
@@ -44,6 +55,7 @@ function errorResponse(
     message: init?.message ?? fallbackMessage,
   }
   if (init?.code) error.code = init.code
+  if (init?.fields && Object.keys(init.fields).length) error.fields = init.fields
   return Response.json({ error }, { status, headers: init?.headers })
 }
 
@@ -55,7 +67,7 @@ export const ApiErrors = {
     errorResponse(
       403,
       'plan_required',
-      'API access requires the Business plan',
+      'API access requires the Business or Advanced plan',
       init,
     ),
   insufficientScope: (scope: string, headers?: Record<string, string>) =>

@@ -65,6 +65,9 @@ lacks returns `403` `insufficient_scope`. Grant the least a key needs.
 | `sites:read` | List sites and read their details. |
 | `forms:read` | Read a site's form submissions. |
 
+Contacts are read-only over the API — they're created by the capture points on your
+sites (forms, member sign-ups, orders, bookings), so there is no `contacts:write`.
+
 ```json
 {
   "error": {
