@@ -116,6 +116,15 @@ async function handler(request: Request): Promise<Response> {
         uid: record.uid,
         email: record.email ?? null,
         displayName: record.displayName ?? null,
+        // The auth record's photo, falling back to a provider photo (e.g.
+        // Google's avatar, which lives on providerData when the top-level
+        // photoURL was never mirrored) so the identity editor shows it
+        // (AGL-877). The page reads `photoUrl`.
+        photoUrl:
+          record.photoURL ??
+          record.providerData.find((provider) => provider.photoURL)
+            ?.photoURL ??
+          null,
         disabled: record.disabled,
         staff: record.customClaims?.['staff'] === true,
         staffRole: record.customClaims?.['staffRole'] ?? null,

@@ -49,11 +49,16 @@ import {
   collection,
   deleteField,
   doc,
+  documentId,
+  getDocsFromServer,
   limit,
+  orderBy,
   query,
+  type QueryDocumentSnapshot,
   setDoc,
+  startAfter,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -62,7 +67,6 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import useFirestoreCollection from '../../../../hooks/use-firestore-collection'
 
 const PLAN_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'No plan (dark launch — everything on)' },
@@ -127,18 +131,71 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  // Pagination (AGL-359): grow the page instead of one hard 200 cap.
-  const [pageLimit, setPageLimit] = useState(50)
-  const { data: orgDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'orgs'), limit(pageLimit)),
-    [firestore, pageLimit],
-    { idField: '$id' },
+  // Server-authoritative cursor pagination (AGL-878/AGL-359). The old realtime
+  // onSnapshot served a stale/partial multi-tab cache, so orgs flickered in and
+  // out on reload (the AGL-827 negative-cache family). Read each page fresh from
+  // the SERVER instead, ordered by doc id — a stable ordering that drops no doc
+  // (an `orderBy` on a field some org docs lack would silently hide them).
+  const PAGE_SIZE = 25
+  const [orgDocs, setOrgDocs] = useState<any[]>([])
+  const [pageIndex, setPageIndex] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(true)
+  // `startAfter` cursor for the START of each page; page 0 has none.
+  const pageCursorsRef = useRef<Array<QueryDocumentSnapshot | null>>([null])
+
+  const loadPage = useCallback(
+    async (index: number) => {
+      setLoading(true)
+      try {
+        const startCursor = pageCursorsRef.current[index] ?? null
+        // One extra row tells us whether a next page exists.
+        const q = startCursor
+          ? query(
+              collection(firestore, 'orgs'),
+              orderBy(documentId()),
+              startAfter(startCursor),
+              limit(PAGE_SIZE + 1),
+            )
+          : query(
+              collection(firestore, 'orgs'),
+              orderBy(documentId()),
+              limit(PAGE_SIZE + 1),
+            )
+        const snapshot = await getDocsFromServer(q)
+        const docs = snapshot.docs
+        const more = docs.length > PAGE_SIZE
+        const pageDocs = more ? docs.slice(0, PAGE_SIZE) : docs
+        setOrgDocs(
+          pageDocs.map((docSnap) => ({ ...docSnap.data(), $id: docSnap.id })),
+        )
+        setHasMore(more)
+        // Remember where the NEXT page starts (the last doc on this one).
+        if (more) {
+          pageCursorsRef.current[index + 1] =
+            pageDocs[pageDocs.length - 1] ?? null
+        }
+        setPageIndex(index)
+      } catch (error) {
+        console.error(error)
+        enqueueSnackbar('Could not load organizations', { variant: 'error' })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [firestore, enqueueSnackbar],
   )
-  // Search/sort (AGL-135) over the fetched page.
+  // Initial load; also the target for the post-mutation refresh.
+  useEffect(() => {
+    void loadPage(0)
+  }, [loadPage])
+  const refresh = useCallback(() => void loadPage(pageIndex), [loadPage, pageIndex])
+
+  // Search/sort (AGL-135) over the current page.
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'name' | 'plan' | 'newest'>('name')
   const needle = search.trim().toLowerCase()
-  const orgs = [...(orgDocs ?? [])]
+  const orgs = [...orgDocs]
     .filter(
       (org) =>
         !needle ||
@@ -241,6 +298,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         { variant: 'success', persist: false },
       )
       setSuspender(null)
+      refresh()
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {
@@ -248,7 +306,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         allowDuplicate: true,
       })
     }
-  }, [suspender, firestore, user, enqueueSnackbar])
+  }, [suspender, firestore, user, enqueueSnackbar, refresh])
 
   // GDPR erasure request (AGL-206): sets/clears the flag only — the hard
   // delete is a deliberate, separately-run script after a 7-day hold.
@@ -311,6 +369,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
             : 'Erasure request canceled (audited)',
           { variant: 'success', persist: false },
         )
+        refresh()
       } catch (error) {
         console.error(error)
         enqueueSnackbar('An error has occurred', {
@@ -319,7 +378,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         })
       }
     },
-    [confirm, firestore, user, enqueueSnackbar],
+    [confirm, firestore, user, enqueueSnackbar, refresh],
   )
 
   const handleSave = useCallback(async () => {
@@ -371,6 +430,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         persist: false,
       })
       setEditor(null)
+      refresh()
     } catch (error) {
       console.error(error)
       enqueueSnackbar(
@@ -379,7 +439,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         { variant: 'error', allowDuplicate: true },
       )
     }
-  }, [editor, firestore, user, enqueueSnackbar])
+  }, [editor, firestore, user, enqueueSnackbar, refresh])
 
   return (
     <>
@@ -438,11 +498,14 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 </Stack>
               {orgs.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  {'No organizations yet — they are created at signup or ' +
-                    'first site.'}
+                  {loading
+                    ? 'Loading…'
+                    : needle
+                      ? 'No organizations on this page match your search.'
+                      : 'No organizations yet — they are created at signup ' +
+                        'or first site.'}
                 </Typography>
               ) : (
-                <>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -609,17 +672,35 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                     })}
                   </TableBody>
                 </Table>
-                {(orgDocs?.length ?? 0) >= pageLimit ? (
+              )}
+              {/* Server-authoritative pagination (AGL-878): each page is a
+                  fresh server read, so the list never flickers from a stale
+                  cache. */}
+              {pageIndex > 0 || hasMore ? (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ mt: 1, alignItems: 'center' }}
+                >
                   <Button
                     size="small"
-                    sx={{ mt: 1 }}
-                    onClick={() => setPageLimit((prev) => prev + 50)}
+                    disabled={loading || pageIndex === 0}
+                    onClick={() => void loadPage(pageIndex - 1)}
                   >
-                    {'Load more'}
+                    {'Previous'}
                   </Button>
-                ) : null}
-                </>
-              )}
+                  <Typography variant="caption" color="text.secondary">
+                    {`Page ${pageIndex + 1}`}
+                  </Typography>
+                  <Button
+                    size="small"
+                    disabled={loading || !hasMore}
+                    onClick={() => void loadPage(pageIndex + 1)}
+                  >
+                    {'Next'}
+                  </Button>
+                </Stack>
+              ) : null}
               </Stack>
             </CardDisplay>
           </StaffOnly>
