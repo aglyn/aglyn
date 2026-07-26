@@ -103,6 +103,22 @@ call the versioned `/v1` endpoints from anywhere. Requests are **metered per org
 Billing runs through **Stripe**. Paid features (commerce, bookings, campaigns) share the
 same Stripe integration.
 
+### Platform fees
+
+Storefront sales carry a **declining platform fee** on top of Stripe's processing fee —
+higher tiers reduce it to 0%, which is the upgrade motion for sellers:
+
+| Plan | Physical goods | Digital goods & paid memberships |
+|---|---|---|
+| Starter | 2% | 7% |
+| Pro | 0% | 5% |
+| Business | 0% | 2% |
+| Advanced | 0% | 0% |
+
+Paid **memberships and gated content** bill at the digital rate — the fee is applied at
+checkout as the Stripe Connect application fee, on one-time sales and recurring
+member subscriptions alike. Selling requires a paid plan with commerce.
+
 - **Annual billing** — a toggle on the plan cards; annual billing is the discounted
   headline price (e.g. Pro $39/mo billed annually vs $56 month-to-month).
 - **Plan switches** on an active subscription show a **prorated preview** of today's

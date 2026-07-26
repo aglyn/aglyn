@@ -275,6 +275,19 @@ export function BillingPlanCardsComponent(props: BillingPlanCardsProps) {
                           : '')
                       : 'No API access'}
                   </Typography>
+                  {/* Declining platform-fee ladder (AGL-892): charged at
+                      checkout as the Stripe Connect application fee;
+                      memberships/gated content bill at the digital rate. */}
+                  <Typography variant="body2">
+                    {entitlements.features.commerce
+                      ? entitlements.transactionFeePhysicalPct > 0 ||
+                        entitlements.transactionFeeDigitalPct > 0
+                        ? `${entitlements.transactionFeePhysicalPct}% physical · ` +
+                          `${entitlements.transactionFeeDigitalPct}% digital & ` +
+                          'membership fees'
+                        : '0% platform fees'
+                      : 'No storefront'}
+                  </Typography>
                 </Stack>
                 <Stack spacing={0.5}>
                   {FEATURE_ROWS.map(({ key, label }) => {
