@@ -140,9 +140,11 @@ for the full element reference.
 
 1. Use **Test** in the interaction dialog to confirm the open/close
    behavior against the canvas.
-2. Toggle the artboard **device preview** and **light/dark scheme** to
+2. Open **Preview** and hover the nav item — the panel opens and closes
+   exactly as it will on the published site, without publishing anything.
+3. Toggle the artboard **device preview** and **light/dark scheme** to
    check the panel at different sizes.
-3. Click **Publish**.
+4. Click **Publish**.
 
 Open your live site and hover the nav item — the panel drops open, and
 moving the pointer away closes it.
@@ -166,8 +168,11 @@ never metered.
 ## Troubleshooting
 
 - **The panel is always open in the editor.** That's expected — selecting
-  the menu or its contents expands it so you can edit. It renders closed on
-  the published site. Click empty canvas to collapse it.
+  the menu or its contents expands it as an overlay under the nav item so
+  you can edit it. It renders closed on the published site. Click empty
+  canvas to collapse it, or open
+  **[Preview](../building-sites/besigner/overview.md#preview-vs-canvas)**
+  to see it behave as published.
 - **Hover does nothing on the live site.** Confirm the interaction's
   **Trigger** is *When hovered*, the action is *Open a menu*, and the
   interaction is **enabled** (green switch on the Interactions list).

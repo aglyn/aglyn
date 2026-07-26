@@ -17,8 +17,10 @@ Aglyn emits the right tags, sitemap, and structured data automatically.
 
 ## Per-screen SEO
 
-Use the **screen-level SEO editor** to set titles, descriptions, and social metadata for
-each page. The published site emits these into the page head, deduping descriptions so you
+Open **Screen Properties** in the Besigner and use its **SEO** section to set a
+**Search title** and **Search description** for that screen, then **Save SEO** — it
+saves independently of the canvas, so you can update metadata without touching the
+design. The published site emits these into the page head, deduping descriptions so you
 never get conflicting tags.
 
 ## Sitemap & robots

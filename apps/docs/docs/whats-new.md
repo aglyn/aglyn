@@ -206,9 +206,12 @@ The newest round tightened every marketing, billing, and operations loop:
 
 ## Media
 
-- **[Media library & CDN](content-and-data/media/overview.md)** — folder organization with drag-and-drop,
-  metadata and bulk edit, image transforms, large video uploads, and **CDN delivery** with
-  WebP variants (paid).
+- **[Media library & CDN](content-and-data/media/overview.md)** — folders as grid cards with
+  drag-and-drop organizing, one shared picker everywhere, metadata (including your own
+  custom key/value pairs) and bulk edit, image transforms, replace-in-place, an on-demand
+  **Used on** audit, large video uploads, and **CDN delivery** with WebP variants (paid).
+  Media URLs are **stable**: replacing a file or moving it between folders never breaks an
+  existing embed or a link you already copied.
 
 ## Grow
 
