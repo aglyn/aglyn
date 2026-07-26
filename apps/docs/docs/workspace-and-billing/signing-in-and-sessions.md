@@ -17,6 +17,20 @@ knowing about, especially if you work across devices or multiple organization wo
   Google, sign in there, and land back on the console already authenticated. (Mobile
   browsers can't reliably hand a popup's result back to the opening page.)
 
+## Sign-in methods
+
+You can link **both** methods to one account, and then sign in either way — same
+profile, same workspaces, no duplicate account. Manage them under
+[Manage Account → Account](manage-account.md#sign-in-methods):
+
+- **Continue with Google** links Google to an account that signed up with a password.
+- **Disconnect** unlinks Google again.
+- **Email & password** is marked **Required** and can't be disconnected — it's the
+  method that always works.
+
+Your last remaining sign-in method can never be removed, so there's no way to lock
+yourself out.
+
 ## Resetting your password
 
 Forgot your password? From the sign-in screen, choose **Account recovery** and enter your
@@ -34,6 +48,10 @@ email. We email you a secure reset link, then walk you through the rest:
    password.
 
 If a link has expired or was already used, the reset screen offers to send a fresh one.
+
+If you signed up with Google and have never set a password, there's nothing to reset —
+connect **Email & password** from [Manage Account](manage-account.md#sign-in-methods)
+first.
 
 :::note Self-hosting
 Password reset uses Firebase's out-of-band email action flow. Point the Firebase console

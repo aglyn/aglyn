@@ -10,8 +10,7 @@ The **console** is where you manage a site. Here's what each part of the chrome 
 
 ![The console chrome with its main areas numbered](/img/getting-started/console-chrome-annotated.png)
 
-1. **App bar** — the Aglyn console wordmark, notifications, theme toggle,
-   and your account menu.
+1. **App bar** — the Aglyn console wordmark, notifications, and your account menu.
 2. **Workspace switcher** — jump between the organizations you belong to.
 3. **Site sections** — every area of the selected site (Dashboard,
    Screens, Media, Content, …).
@@ -20,18 +19,25 @@ The **console** is where you manage a site. Here's what each part of the chrome 
 
 ## The app bar
 
-- **Site switcher** (left) — jump between the sites you own, or create a new one.
+- **Site switcher** (left) — jump between the sites you belong to, search them by name
+  with **Find site…**, or create a new one.
 - **Breadcrumbs** — show the current site's display name and where you are.
-- **Screen switcher** — a paginated dropdown for hopping between screens without leaving
-  the editor.
+- **Screen switcher** — a searchable dropdown for hopping between screens without leaving
+  the editor: your recent screens by default, or type to find any screen or layout in the
+  site by name. **View all screens** opens the full list.
 - **Version dropdown** (right, near your avatar) — pick or schedule a
   [version](../building-sites/screens-and-layouts/overview.md#versions--scheduled-publishing) to view.
 - **Notifications** — the bell shows an unread badge and drops down your 10 most recent
-  notifications (form submissions, bookings, invoices, team changes); "View all" opens
-  the full paginated feed.
-- **Theme toggle** — cycle between light, dark, and system display mode.
-- **Account menu** — settings, billing, publisher profile, a **Documentation**
-  link that opens this docs site in a new tab, and sign-out.
+  notifications (form submissions, bookings, invoices, team changes), split across an
+  **Inbox** tab (unread) and an **Archive** tab (already read). **Mark all read** clears
+  the inbox, the gear opens your notification preferences, and **View all** opens the
+  full paginated feed.
+- **Account menu** — your avatar opens it. The header shows your name and email, with a
+  gear to [Manage Account](../workspace-and-billing/manage-account.md); below that are
+  **Manage Team**, **Billing**, **Support**, **Staff console** (Aglyn staff only), and a
+  **Documentation** link that opens this docs site in a new tab. It also holds the
+  **theme toggle** (light / system / dark), an **Upgrade plan** button unless you're
+  already on Advanced, **Sign out**, and a footer naming your current workspace and plan.
 
 ## In-context help
 

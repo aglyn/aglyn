@@ -38,8 +38,10 @@ the console suggests an available variation.
 
 ## Switching between sites
 
-Use the site switcher in the app bar at any time. Your current site's display name
-appears in the breadcrumbs so you always know which site you're editing.
+Use the site switcher in the app bar at any time. It lists your most recently used sites
+first; with more than a handful, type in the **Find site…** box to search every site you
+belong to by name, or choose **View all sites**. Your current site's display name appears
+in the breadcrumbs so you always know which site you're editing.
 
 ## Next
 

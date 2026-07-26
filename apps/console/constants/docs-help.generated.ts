@@ -283,6 +283,11 @@ export const DOCS_HELP_TOPICS = {
     title: 'Maintenance mode',
     excerpt: 'Temporarily take your site offline behind a designed 503 screen.',
   },
+  manageAccount: {
+    path: '/workspace-and-billing/manage-account',
+    title: 'Manage Account',
+    excerpt: 'Your personal account — email, sign-in methods, avatar, name, and password.',
+  },
   manifestAndEnvs: {
     path: '/developers/plugins/reference/manifest-and-envs',
     title: 'Manifests, trust lifecycle & environment',
@@ -475,7 +480,7 @@ export type DocsHelpTopicKey = keyof typeof DOCS_HELP_TOPICS
 // Heading anchors present on each topic's docs page. Only topics with H2–H4
 // headings appear; a topic absent here has no linkable anchors.
 export const DOCS_HELP_ANCHORS = {
-  account: ['#google-sign-in', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity'],
+  account: ['#google-sign-in', '#sign-in-methods', '#resetting-your-password', '#one-session-across-workspaces', '#automatic-sign-out-after-inactivity'],
   actionsBuilder: ['#create-an-action', '#triggers', '#only-run-when-a-field-matches', '#chain-multiple-conditions-andor', '#steps', '#interactions-from-the-besigner', '#when-to-use-which', '#related'],
   addALocale: ['#steps', '#tips', '#related'],
   addOns: ['#what-you-can-add', '#how-changes-bill', '#plan-switches-and-cancellation', '#related'],
@@ -520,9 +525,10 @@ export const DOCS_HELP_ANCHORS = {
   glossary: ['#the-hierarchy', '#organization-org', '#workspace', '#tenant', '#tenant-vs-host--not-the-same-thing', '#quick-reference'],
   importExport: ['#export', '#import', '#upsert-on-a-key-field', '#tips', '#related'],
   interactions: ['#fluent-interactions', '#plan-availability', '#pick-the-target-by-clicking', '#interaction-cookbook', '#custom-html-block', '#related'],
-  inviteTeammates: ['#invite-someone', '#how-team-members-act', '#activity-log', '#tips', '#related'],
+  inviteTeammates: ['#invite-someone', '#pending-invites', '#accepting-an-invite', '#how-team-members-act', '#activity-log', '#tips', '#related'],
   languageSwitcher: ['#steps', '#tips', '#related'],
   maintenanceMode: ['#turn-it-on', '#tips', '#related'],
+  manageAccount: ['#account', '#sign-in-methods', '#profile-image', '#basic-info', '#security', '#related'],
   manifestAndEnvs: ['#plugin-manifest-published-with-every-version', '#listing--version-documents', '#review--trust-lifecycle', '#environment-variables', '#pluginsconfigjson-first-party-contributors'],
   marketingOverlays: ['#announcement-bar', '#promotional-popups', '#popup-v2', '#multiple-overlays-scheduling--page-targeting', '#engagement-stats', '#related'],
   media: ['#organize', '#upload', '#deliver-over-cdn', '#components', '#related'],

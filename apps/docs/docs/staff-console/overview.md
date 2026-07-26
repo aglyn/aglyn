@@ -25,7 +25,9 @@ The **staff console** is where Aglyn operators manage the platform and support c
   and GDPR-erasure flags, per organization.
 - **Entitlement editor** — full override editor for an organization's entitlements.
 - **Users admin** — staff-claim management and disabling users, with gated listing
-  and an **exact-email lookup** for accounts beyond the loaded pages.
+  and an **exact-email lookup** for accounts beyond the loaded pages. Staff access is
+  granted to an **existing** account, so if someone isn't found, have them sign in to
+  Aglyn once and then search their email again.
   Each account opens a **detail page** showing identity/auth state, staff role, every
   organization membership with roles and per-site access, and its recent audit trail.
 - **Staff notes** — free-text support/billing context on each organization's detail
