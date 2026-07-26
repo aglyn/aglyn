@@ -404,6 +404,16 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // "My sites" reverse index (AGL-844): API-maintained mirror of each
+      // host's memberRoles, so the site switcher and subdomain routing query
+      // a user's own hosts by name without scanning the hosts collection.
+      // Owner-read, server-written; a convenience index, not an auth source.
+      match /hostMemberships/{hostId} {
+        allow read: if isStaff() ||
+          (isSignedIn() && request.auth.uid == userId);
+        allow write: if false;
+      }
+
       // In-app notifications (AGL-259): Admin-SDK-written fan-out; the
       // owner reads, marks read (update), and clears them.
       match /notifications/{notificationId} {
