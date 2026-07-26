@@ -178,6 +178,22 @@ npm run serve:console:emulated
 Default emulator hosts: Firestore `localhost:8082`, Auth `localhost:9099`. See
 [`docs/E2E_LOCAL.md`](docs/E2E_LOCAL.md) for the full local end-to-end recipe.
 
+## 🐳 Self-hosting
+
+Run the whole platform on your own infrastructure with Docker — any cloud, a
+VPS, or bare metal — pointed at **your own Firebase project** and your own
+Stripe/Resend keys:
+
+```bash
+cp .env.selfhost.example .env.selfhost   # fill it in
+docker compose up --build
+```
+
+Console on `:4200`, published sites on `:4500`, your reverse proxy in front.
+The full runbook — Firebase project setup, security-rules deploy, DNS, and the
+honest limits (Firebase is required; the in-console custom-domain flow is
+Vercel-only) — lives in [`docs/SELF_HOSTING.md`](docs/SELF_HOSTING.md).
+
 ## 🛠️ Common commands
 
 | Task | Command |
@@ -207,7 +223,7 @@ Libraries are shareable and imported as `@aglyn/<name>` (e.g. `@aglyn/shared-ui-
 
 Repo-local deep-dives live in [`docs/`](docs), including:
 
-- [Multi-tenant Firestore](docs/MULTI_TENANT_FIRESTORE.md) · [Platform provisioning](docs/PLATFORM_PROVISIONING.md)
+- [Self-hosting](docs/SELF_HOSTING.md) · [Multi-tenant Firestore](docs/MULTI_TENANT_FIRESTORE.md) · [Platform provisioning](docs/PLATFORM_PROVISIONING.md)
 - [Plugin loading](docs/PLUGIN_LOADING.md) · [Plugin platform gaps](docs/PLUGIN_PLATFORM_GAPS.md)
 - [Rate limiting](docs/RATE_LIMITING.md) · [Security content review](docs/SECURITY_CONTENT_REVIEW.md)
 - [Email setup](docs/EMAIL_SETUP.md) · [Stripe go-live](docs/STRIPE_GO_LIVE.md) · [Commerce token signing](docs/COMMERCE_TOKEN_SIGNING.md)
