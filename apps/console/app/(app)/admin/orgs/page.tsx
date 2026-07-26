@@ -49,14 +49,7 @@ import {
   collection,
   deleteField,
   doc,
-  documentId,
-  getDocsFromServer,
-  limit,
-  orderBy,
-  query,
-  type QueryDocumentSnapshot,
   setDoc,
-  startAfter,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
@@ -131,49 +124,36 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
 
-  // Server-authoritative cursor pagination (AGL-878/AGL-359). The old realtime
-  // onSnapshot served a stale/partial multi-tab cache, so orgs flickered in and
-  // out on reload (the AGL-827 negative-cache family). Read each page fresh from
-  // the SERVER instead, ordered by doc id — a stable ordering that drops no doc
-  // (an `orderBy` on a field some org docs lack would silently hide them).
-  const PAGE_SIZE = 25
+  // Staff org list via the Admin SDK API (AGL-878). Reading `collection('orgs')`
+  // from the client returned a non-deterministic subset — that list is gated by
+  // the `isStaff() || isOrgMember()` rule and rides App Check. `/api/admin/orgs`
+  // reads it with the service account (bypasses both), so staff reliably see
+  // EVERY org, with cursor pagination (`after` = the last doc id).
   const [orgDocs, setOrgDocs] = useState<any[]>([])
   const [pageIndex, setPageIndex] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
-  // `startAfter` cursor for the START of each page; page 0 has none.
-  const pageCursorsRef = useRef<Array<QueryDocumentSnapshot | null>>([null])
+  // `after` cursor (the last doc id) for the START of each page; page 0 has none.
+  const pageCursorsRef = useRef<Array<string | null>>([null])
 
   const loadPage = useCallback(
     async (index: number) => {
       setLoading(true)
       try {
-        const startCursor = pageCursorsRef.current[index] ?? null
-        // One extra row tells us whether a next page exists.
-        const q = startCursor
-          ? query(
-              collection(firestore, 'orgs'),
-              orderBy(documentId()),
-              startAfter(startCursor),
-              limit(PAGE_SIZE + 1),
-            )
-          : query(
-              collection(firestore, 'orgs'),
-              orderBy(documentId()),
-              limit(PAGE_SIZE + 1),
-            )
-        const snapshot = await getDocsFromServer(q)
-        const docs = snapshot.docs
-        const more = docs.length > PAGE_SIZE
-        const pageDocs = more ? docs.slice(0, PAGE_SIZE) : docs
-        setOrgDocs(
-          pageDocs.map((docSnap) => ({ ...docSnap.data(), $id: docSnap.id })),
+        const idToken = await (user as { getIdToken?: () => Promise<string> })
+          ?.getIdToken?.()
+        const after = pageCursorsRef.current[index] ?? ''
+        const response = await fetch(
+          `/api/admin/orgs${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+          { headers: idToken ? { Authorization: `Bearer ${idToken}` } : {} },
         )
-        setHasMore(more)
-        // Remember where the NEXT page starts (the last doc on this one).
-        if (more) {
-          pageCursorsRef.current[index + 1] =
-            pageDocs[pageDocs.length - 1] ?? null
+        const payload = await response.json()
+        if (!response.ok) throw new Error(payload?.error ?? 'Failed')
+        setOrgDocs(payload.orgs ?? [])
+        setHasMore(Boolean(payload.hasMore))
+        // Remember where the NEXT page starts (the last doc id on this one).
+        if (payload.hasMore && payload.nextCursor) {
+          pageCursorsRef.current[index + 1] = payload.nextCursor
         }
         setPageIndex(index)
       } catch (error) {
@@ -183,7 +163,7 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         setLoading(false)
       }
     },
-    [firestore, enqueueSnackbar],
+    [user, enqueueSnackbar],
   )
   // Initial load; also the target for the post-mutation refresh.
   useEffect(() => {
