@@ -429,6 +429,25 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
     createdAt: now,
   })
 }
+// A media folder (AGL-818) + a foldered asset so the docs media shot shows
+// folders rendered as grid cards (folders-first). The three fixtures above
+// stay at the root so the default view — and the specs waiting on hero.jpg —
+// are unchanged.
+await put(hostRef.collection('mediaFolders').doc('seed-folder-blog'), {
+  name: 'Blog covers',
+  parentId: null,
+  createdAt: now,
+})
+await put(hostRef.collection('media').doc('seed-blog-cover'), {
+  fileName: 'blog-cover.jpg',
+  contentType: 'image/jpeg',
+  sizeBytes: 90000,
+  url: 'https://picsum.photos/seed/blogcover/600/400',
+  folderId: 'seed-folder-blog',
+  tags: ['blog'],
+  alt: 'blog cover',
+  createdAt: now,
+})
 
 // Bookings page queries orderBy('startsAtMs', 'desc') — number required.
 await put(hostRef.collection('services').doc('seed-tasting'), {
